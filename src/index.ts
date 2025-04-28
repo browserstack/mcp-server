@@ -10,6 +10,7 @@ import addAppLiveTools from "./tools/applive";
 import addObservabilityTools from "./tools/observability";
 import addBrowserLiveTools from "./tools/live";
 import addAccessibilityTools from "./tools/accessibility";
+import addAutomateTools from "./tools/automate";
 
 function registerTools(server: McpServer) {
   addSDKTools(server);
@@ -17,6 +18,7 @@ function registerTools(server: McpServer) {
   addBrowserLiveTools(server);
   addObservabilityTools(server);
   addAccessibilityTools(server);
+  addAutomateTools(server);
 }
 
 // Create an MCP server

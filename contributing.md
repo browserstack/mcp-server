@@ -1,7 +1,3 @@
-Of course! Here's your **full README** — now integrated with your new testing instruction, and using a **hammer emoji (🔨)** for the "Quick Start" part, matching your idea for visual clarity:
-
----
-
 # 🚀 Contributing to the Browserstack MCP Server
 
 This guide will help you set up your environment and contribute effectively to the MCP (Model Context Protocol) Server.
@@ -114,8 +110,3 @@ This will automatically fill all the required values.
 🤖 Explore and interact with the server using Copilot, Cursor, or Claude
 
 📬 Raise a pull request from your fork once you're ready!
-
----
-
-Would you like me to also give you a **version with the image link already added** (just needing you to upload it somewhere like GitHub or a CDN)?  
-I can show you exactly how to insert it once you have the image ready. 🚀

@@ -57,13 +57,15 @@ export async function retrieveNetworkFailures(sessionId: string): Promise<any> {
   const networklogs: HarFile = await response.json();
 
   // Filter for failure logs
-  const failureEntries: HarEntry[] = networklogs.log.entries.filter((entry: HarEntry) => {
-    return (
-      entry.response.status === 0 || 
-      entry.response.status >= 400 ||
-      entry.response._error !== undefined 
-    );
-  });
+  const failureEntries: HarEntry[] = networklogs.log.entries.filter(
+    (entry: HarEntry) => {
+      return (
+        entry.response.status === 0 ||
+        entry.response.status >= 400 ||
+        entry.response._error !== undefined
+      );
+    },
+  );
 
   // Return only the failure entries with some context
   return {
@@ -72,15 +74,12 @@ export async function retrieveNetworkFailures(sessionId: string): Promise<any> {
       request: {
         method: entry.request?.method,
         url: entry.request?.url,
-        headers: entry.request?.headers,
         queryString: entry.request?.queryString,
       },
       response: {
         status: entry.response?.status,
         statusText: entry.response?.statusText,
         _error: entry.response?._error,
-        headers: entry.response?.headers,
-        content: entry.response?.content,
       },
       serverIPAddress: entry.serverIPAddress,
       time: entry.time,

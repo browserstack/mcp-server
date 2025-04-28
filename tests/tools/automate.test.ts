@@ -32,7 +32,7 @@ describe('getNetworkFailures', () => {
   it('should return failure logs when present', async () => {
     const result = await getNetworkFailures({ sessionId: validSessionId });
     expect(retrieveNetworkFailures).toHaveBeenCalledWith(validSessionId);
-    expect(result.content[0].text).toContain('Found 1 failure network log(s)');
+    expect(result.content[0].text).toContain('network failure(s) found for session');
     expect(result.content[0].text).toContain('"status": 404');
     expect(result.isError).toBeFalsy();
   });
@@ -41,8 +41,7 @@ describe('getNetworkFailures', () => {
     (retrieveNetworkFailures as jest.Mock).mockResolvedValue({ failures: [], totalFailures: 0 });
     const result = await getNetworkFailures({ sessionId: validSessionId });
     expect(retrieveNetworkFailures).toHaveBeenCalledWith(validSessionId);
-    expect(result.content[0].text).toContain('Found 0 failure network log(s)');
-    expect(result.content[0].text).toContain('No failure logs found.');
+    expect(result.content[0].text).toContain('No network failures found for sessio');
     expect(result.isError).toBeFalsy();
   });
 

@@ -6,11 +6,9 @@ This guide will help you set up your environment and contribute effectively to t
 
 Make sure you have the following installed:
 
-- 🟢 [Node.js](https://nodejs.org/)
-- 📦 [npm](https://www.npmjs.com/)
-- 📝 TypeScript
+- 🟢 [Node.js](https://nodejs.org/) (Recommended: LTS v22.15.0)
 - 🤖 GitHub Copilot (for VS Code or Cursor)
-- 🧠 Optionally, [Claude desktop app](https://www.anthropic.com/index/claude-desktop) for AI assistance
+- 🧠 Optionally, [Claude desktop app](https://www.anthropic.com/index/claude-desktop) for additional AI assistance
 
 ## 🛠 Getting Started
 
@@ -64,42 +62,46 @@ Make sure you have the following installed:
   }
 }
 ```
+
 ### 🔨 Quick Start from VS Code or Cursor
 
 When you open your `.vscode/mcp.json` or `.cursor/mcp.json` file,  
-you'll see a **"play" icon** (▶️) next to the server configuration.  
+you'll see a **"play" icon** (Start ▶️) next to the server configuration.  
 **Click it to instantly start your MCP server!**
 
-*(See the image below for reference:)*  
-<div>
-<img src="assets/starting-mcp-server.png" alt="Starting MCP Server" height="250">
-</div>
 
 ---
 
 ## 🧪 How to Test with MCP Inspector
 
-**MCP Inspector** is a developer tool for testing and debugging MCP servers — it's the best way to validate your server implementation.
+**MCP Inspector** is a lightweight tool for launching, testing, and validating MCP server implementations easily.
 
-### 🔹 Basic Usage
+### 🔹 Run with Config
 
-```bash
-npx @modelcontextprotocol/inspector node dist/index.js
-```
-
-This will start the server on:  
-[http://127.0.0.1:6274](http://127.0.0.1:6274)
-
-### 🔸 Using a Config File
-
-If you've set up a `.cursor/mcp.json` or `.vscode/mcp.json` config, you can run:
+If you've configured `.cursor/mcp.json` or `.vscode/mcp.json`, you can start testing by running:
 
 ```bash
 npx @modelcontextprotocol/inspector --config /PATH_TO_CONFIG/.cursor/mcp.json --server browserstack
 ```
 
-This will automatically fill all the required values.
+This will spin up your MCP server and open the Inspector at:  
+[http://127.0.0.1:6274](http://127.0.0.1:6274)
 
+<div align="center">
+<img src="assets/mcp-inspector.png" alt="MCP Inspector UI" height="300">
+</div>
+
+Inside the Inspector:
+
+- View and manage your server connection (restart, disconnect, etc.)
+- Validate your server credentials and environment variables
+- Access available tools under the **"Middle Tab"**, and run tests to see results in the **Right Panel**
+- Review past interactions easily via the **History Panel**
+
+Additionally, for every MCP server session, a log file is automatically generated at:  
+`~/Library/Logs/Claude/` — you can check detailed logs there if needed.
+
+---
 
 ## ✨ Next Steps
 

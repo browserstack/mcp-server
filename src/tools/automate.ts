@@ -13,17 +13,22 @@ export async function getNetworkFailures(args: {
 }): Promise<CallToolResult> {
   try {
     const failureLogs = await retrieveNetworkFailures(args.sessionId);
-    logger.info("Successfully fetched failure network logs for session: %s", args.sessionId);
+    logger.info(
+      "Successfully fetched failure network logs for session: %s",
+      args.sessionId,
+    );
+
+    // Check if there are any failures
+    const hasFailures = failureLogs.totalFailures > 0;
+    const text = hasFailures
+      ? `${failureLogs.totalFailures} network failure(s) found for session :\n\n${JSON.stringify(failureLogs.failures, null, 2)}`
+      : `No network failures found for session`;
 
     return {
       content: [
         {
           type: "text",
-          text:
-            `Found ${failureLogs.totalFailures} failure network log(s) for session ${args.sessionId}.\n\n` +
-            (failureLogs.totalFailures > 0
-              ? JSON.stringify(failureLogs.failures, null, 2)
-              : "No failure logs found."),
+          text,
         },
       ],
     };

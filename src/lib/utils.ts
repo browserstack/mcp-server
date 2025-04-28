@@ -14,19 +14,12 @@ export interface HarEntry {
   request: {
     method: string;
     url: string;
-    headers?: { name: string; value: string }[];
     queryString?: { name: string; value: string }[];
   };
   response: {
     status: number;
     statusText?: string;
     _error?: string;
-    headers?: { name: string; value: string }[];
-    content?: {
-      size?: number;
-      mimeType?: string;
-      comment?: string;
-    };
   };
   serverIPAddress?: string;
   time?: number;

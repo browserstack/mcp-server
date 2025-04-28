@@ -2,24 +2,28 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "../logger";
-import { downloadNetworkLogs } from "../lib/api";
+import { retrieveNetworkFailures } from "../lib/api";
 
 /**
- * Fetches network logs for a BrowserStack Automate session and saves them locally.
- * The logs are retrieved in HAR format and contain detailed network traffic information
+ * Fetches failed network requests from a BrowserStack Automate session.
+ * Returns network requests that resulted in errors or failed to complete.
  */
-export async function fetchNetworkLogs(args: {
+export async function getNetworkFailures(args: {
   sessionId: string;
 }): Promise<CallToolResult> {
   try {
-    const filePath = await downloadNetworkLogs(args.sessionId);
-    logger.info("Successfully fetched network logs: %s", filePath);
+    const failureLogs = await retrieveNetworkFailures(args.sessionId);
+    logger.info("Successfully fetched failure network logs for session: %s", args.sessionId);
 
     return {
       content: [
         {
           type: "text",
-          text: `Network logs saved to: ${filePath}`,
+          text:
+            `Found ${failureLogs.totalFailures} failure network log(s) for session ${args.sessionId}.\n\n` +
+            (failureLogs.totalFailures > 0
+              ? JSON.stringify(failureLogs.failures, null, 2)
+              : "No failure logs found."),
         },
       ],
     };
@@ -43,11 +47,11 @@ export async function fetchNetworkLogs(args: {
 
 export default function addAutomateTools(server: McpServer) {
   server.tool(
-    "fetchNetworkLogs",
-    "Use this tool to fetch network logs of a Automate session.",
+    "getNetworkFailures",
+    "Use this tool to fetch failed network requests from a BrowserStack Automate session.",
     {
       sessionId: z.string().describe("The Automate session ID."),
     },
-    fetchNetworkLogs,
+    getNetworkFailures,
   );
 }

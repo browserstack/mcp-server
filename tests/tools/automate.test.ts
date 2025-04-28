@@ -1,81 +1,65 @@
-import path from 'path';
-import { fetchNetworkLogs } from '../../src/tools/automate';
-import { downloadNetworkLogs } from '../../src/lib/api';
+import { getNetworkFailures } from '../../src/tools/automate';
+import { retrieveNetworkFailures } from '../../src/lib/api';
 
-// Mock the dependencies
-jest.mock('fs');
 jest.mock('../../src/lib/api', () => ({
-  downloadNetworkLogs: jest.fn()
+  retrieveNetworkFailures: jest.fn()
 }));
 jest.mock('../../src/logger', () => ({
   error: jest.fn(),
   info: jest.fn()
 }));
-jest.mock('../../src/config', () => ({
-  default: {
-    browserstackUsername: 'test',
-    browserstackAccessKey: 'test'
-  }
-}));
 
-describe('fetchNetworkLogs', () => {
-  const LOGS_DIR = path.join(process.cwd(), "logs", "network");
+describe('getNetworkFailures', () => {
   const validSessionId = 'valid-session-123';
+  const mockFailures = {
+    failures: [
+      {
+        startedDateTime: '2024-01-01T00:00:00Z',
+        request: { method: 'GET', url: 'https://example.com' },
+        response: { status: 404, statusText: 'Not Found' },
+        serverIPAddress: '1.2.3.4',
+        time: 123
+      }
+    ],
+    totalFailures: 1
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Default mock implementation
-    (downloadNetworkLogs as jest.Mock).mockResolvedValue(path.join(LOGS_DIR, `networklogs-${validSessionId}.har`));
+    (retrieveNetworkFailures as jest.Mock).mockResolvedValue(mockFailures);
   });
 
-  it('should fetch and save network logs successfully', async () => {
-    const result = await fetchNetworkLogs({ sessionId: validSessionId });
-    
-    expect(downloadNetworkLogs).toHaveBeenCalledWith(validSessionId);
-    expect(result.content[0].text).toBe(`Network logs saved to: ${path.join(LOGS_DIR, `networklogs-${validSessionId}.har`)}`);
+  it('should return failure logs when present', async () => {
+    const result = await getNetworkFailures({ sessionId: validSessionId });
+    expect(retrieveNetworkFailures).toHaveBeenCalledWith(validSessionId);
+    expect(result.content[0].text).toContain('Found 1 failure network log(s)');
+    expect(result.content[0].text).toContain('"status": 404');
     expect(result.isError).toBeFalsy();
   });
 
-  it('should handle invalid session ID', async () => {
-    (downloadNetworkLogs as jest.Mock).mockRejectedValue(new Error('Invalid session ID'));
+  it('should return message when no failure logs are found', async () => {
+    (retrieveNetworkFailures as jest.Mock).mockResolvedValue({ failures: [], totalFailures: 0 });
+    const result = await getNetworkFailures({ sessionId: validSessionId });
+    expect(retrieveNetworkFailures).toHaveBeenCalledWith(validSessionId);
+    expect(result.content[0].text).toContain('Found 0 failure network log(s)');
+    expect(result.content[0].text).toContain('No failure logs found.');
+    expect(result.isError).toBeFalsy();
+  });
 
-    const result = await fetchNetworkLogs({ sessionId: 'invalid-id' });
-
-    expect(downloadNetworkLogs).toHaveBeenCalledWith('invalid-id');
+  it('should handle errors from the API', async () => {
+    (retrieveNetworkFailures as jest.Mock).mockRejectedValue(new Error('Invalid session ID'));
+    const result = await getNetworkFailures({ sessionId: 'invalid-id' });
+    expect(retrieveNetworkFailures).toHaveBeenCalledWith('invalid-id');
     expect(result.content[0].text).toBe('Failed to fetch network logs: Invalid session ID');
     expect(result.content[0].isError).toBe(true);
     expect(result.isError).toBe(true);
   });
 
-  it('should handle file system errors', async () => {
-    (downloadNetworkLogs as jest.Mock).mockRejectedValue(new Error('File system error'));
-
-    const result = await fetchNetworkLogs({ sessionId: validSessionId });
-
-    expect(downloadNetworkLogs).toHaveBeenCalledWith(validSessionId);
-    expect(result.content[0].text).toBe('Failed to fetch network logs: File system error');
-    expect(result.content[0].isError).toBe(true);
-    expect(result.isError).toBe(true);
-  });
-
   it('should handle empty session ID', async () => {
-    (downloadNetworkLogs as jest.Mock).mockRejectedValue(new Error('Session ID is required'));
-
-    const result = await fetchNetworkLogs({ sessionId: '' });
-
-    expect(downloadNetworkLogs).toHaveBeenCalledWith('');
+    (retrieveNetworkFailures as jest.Mock).mockRejectedValue(new Error('Session ID is required'));
+    const result = await getNetworkFailures({ sessionId: '' });
+    expect(retrieveNetworkFailures).toHaveBeenCalledWith('');
     expect(result.content[0].text).toBe('Failed to fetch network logs: Session ID is required');
-    expect(result.content[0].isError).toBe(true);
-    expect(result.isError).toBe(true);
-  });
-
-  it('should handle network errors', async () => {
-    (downloadNetworkLogs as jest.Mock).mockRejectedValue(new Error('Network error'));
-
-    const result = await fetchNetworkLogs({ sessionId: validSessionId });
-
-    expect(downloadNetworkLogs).toHaveBeenCalledWith(validSessionId);
-    expect(result.content[0].text).toBe('Failed to fetch network logs: Network error');
     expect(result.content[0].isError).toBe(true);
     expect(result.isError).toBe(true);
   });

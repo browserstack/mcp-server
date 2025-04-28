@@ -1,9 +1,5 @@
 import config from "../config";
-import path from "path";
-import fs from "fs";
-
-const DOWNLOADS_DIR = path.join(process.cwd(), "browserstack-mcp-downloads");
-const NETWORK_LOGS_DIR = path.join(DOWNLOADS_DIR, "network");
+import { HarEntry, HarFile } from "./utils";
 
 export async function getLatestO11YBuildInfo(
   buildName: string,
@@ -33,8 +29,8 @@ export async function getLatestO11YBuildInfo(
   return buildsResponse.json();
 }
 
-// Fetches network logs for a given session ID and returns log file location if successful
-export async function downloadNetworkLogs(sessionId: string): Promise<string> {
+// Fetches network logs for a given session ID and returns only failure logs
+export async function retrieveNetworkFailures(sessionId: string): Promise<any> {
   if (!sessionId) {
     throw new Error("Session ID is required");
   }
@@ -58,18 +54,37 @@ export async function downloadNetworkLogs(sessionId: string): Promise<string> {
     throw new Error(`Failed to fetch network logs: ${response.statusText}`);
   }
 
-  const networklogs = await response.json();
-  const filePath = path.join(NETWORK_LOGS_DIR, `networklogs-${sessionId}.har`);
+  const networklogs: HarFile = await response.json();
 
-  // Create logs directory if it doesn't exist
-  fs.mkdirSync(NETWORK_LOGS_DIR, { recursive: true });
+  // Filter for failure logs
+  const failureEntries: HarEntry[] = networklogs.log.entries.filter((entry: HarEntry) => {
+    return (
+      entry.response.status === 0 || 
+      entry.response.status >= 400 ||
+      entry.response._error !== undefined 
+    );
+  });
 
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(networklogs, null, 2));
-    return filePath;
-  } catch (writeError) {
-    throw writeError instanceof Error
-      ? writeError
-      : new Error("Failed to write network logs file");
-  }
+  // Return only the failure entries with some context
+  return {
+    failures: failureEntries.map((entry: any) => ({
+      startedDateTime: entry.startedDateTime,
+      request: {
+        method: entry.request?.method,
+        url: entry.request?.url,
+        headers: entry.request?.headers,
+        queryString: entry.request?.queryString,
+      },
+      response: {
+        status: entry.response?.status,
+        statusText: entry.response?.statusText,
+        _error: entry.response?._error,
+        headers: entry.response?.headers,
+        content: entry.response?.content,
+      },
+      serverIPAddress: entry.serverIPAddress,
+      time: entry.time,
+    })),
+    totalFailures: failureEntries.length,
+  };
 }

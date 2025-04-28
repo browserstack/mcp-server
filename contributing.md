@@ -70,8 +70,6 @@ you'll see a **"play" icon** (Start ▶️) next to the server configuration.
 **Click it to instantly start your MCP server!**
 
 
----
-
 ## 🧪 How to Test with MCP Inspector
 
 **MCP Inspector** is a lightweight tool for launching, testing, and validating MCP server implementations easily.

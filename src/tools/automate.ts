@@ -12,26 +12,27 @@ export async function fetchNetworkLogs(args: {
   sessionId: string;
 }): Promise<CallToolResult> {
   try {
-    const response = await downloadNetworkLogs(args.sessionId);
+    const filePath = await downloadNetworkLogs(args.sessionId);
+    logger.info("Successfully fetched network logs: %s", filePath);
 
-    logger.info("Successfully fetched network logs: %s", response.filepath);
     return {
       content: [
         {
           type: "text",
-          text: `Network logs saved to: ${response.filepath}`,
+          text: `Network logs saved to: ${filePath}`,
         },
       ],
     };
   } catch (error) {
     const errorMessage =
-      error instanceof Error ? error.message : "Unknown error occurred";
-    logger.error("Error in fetchNetworkLogs: %s", errorMessage);
+      error instanceof Error ? error.message : "An unknown error occurred";
+    logger.error("Failed to fetch network logs: %s", errorMessage);
+
     return {
       content: [
         {
           type: "text",
-          text: `Error fetching network logs: ${errorMessage}`,
+          text: `Failed to fetch network logs: ${errorMessage}`,
           isError: true,
         },
       ],
@@ -47,24 +48,6 @@ export default function addAutomateTools(server: McpServer) {
     {
       sessionId: z.string().describe("The Automate session ID."),
     },
-    async (args) => {
-      try {
-        return await fetchNetworkLogs(args);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error occurred";
-        logger.error("Error in fetchNetworkLogs tool: %s", errorMessage);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error fetching network logs: ${errorMessage}`,
-              isError: true,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+    fetchNetworkLogs,
   );
 }

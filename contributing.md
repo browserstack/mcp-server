@@ -71,7 +71,7 @@ you'll see a **"play" icon** (▶️) next to the server configuration.
 **Click it to instantly start your MCP server!**
 
 *(See the image below for reference:)*  
-<div align="center">
+<div>
 <img src="assets/starting-mcp-server.png" alt="Starting MCP Server" height="250">
 </div>
 

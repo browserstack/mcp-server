@@ -2,7 +2,8 @@ import config from "../config";
 import path from "path";
 import fs from "fs";
 
-const LOGS_DIR = path.join(process.cwd(), "logs", "network");
+const DOWNLOADS_DIR = path.join(process.cwd(), "browserstack-mcp-downloads");
+const NETWORK_LOGS_DIR = path.join(DOWNLOADS_DIR, "network");
 
 export async function getLatestO11YBuildInfo(
   buildName: string,
@@ -53,22 +54,18 @@ export async function downloadNetworkLogs(
       },
     });
 
-    if (response.status === 404) {
-      return { success: false, error: "Session Id is not valid" };
-    }
-
     if (!response.ok) {
-      return {
-        success: false,
-        error: `HTTP error! status: ${response.status}`,
-      };
+      if (response.status === 404) {
+        throw new Error(`Session Id is not valid`);
+      }
+      throw new Error(`Failed to fetch network logs: ${response.statusText}`);
     }
 
     const networklogs = await response.json();
-    const filePath = path.join(LOGS_DIR, `networklogs-${sessionId}.har`);
+    const filePath = path.join(NETWORK_LOGS_DIR, `networklogs-${sessionId}.har`);
 
     // Create logs directory if it doesn't exist
-    fs.mkdirSync(LOGS_DIR, { recursive: true });
+    fs.mkdirSync(NETWORK_LOGS_DIR, { recursive: true });
 
     try {
       fs.writeFileSync(filePath, JSON.stringify(networklogs, null, 2));

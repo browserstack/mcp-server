@@ -14,34 +14,6 @@ export async function fetchNetworkLogs(args: {
   try {
     const response = await downloadNetworkLogs(args.sessionId);
 
-    if (!response.success) {
-      logger.error("Failed to fetch network logs: %s", response.error);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error fetching network logs: ${response.error}`,
-            isError: true,
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    if (!response.filepath) {
-      logger.error("Network logs filepath is missing in the response");
-      return {
-        content: [
-          {
-            type: "text",
-            text: "Error: Network logs filepath is missing in the response",
-            isError: true,
-          },
-        ],
-        isError: true,
-      };
-    }
-
     logger.info("Successfully fetched network logs: %s", response.filepath);
     return {
       content: [

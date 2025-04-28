@@ -166,6 +166,7 @@ Use the following prompts to run/debug/fix your **automated tests** on BrowserSt
 ## 📝 Contributing
 
 We welcome contributions! Please open an issue to discuss any changes you'd like to make.
+👉 [**Click here to view our Contributing Guidelines**](https://github.com/browserstack/mcp-server/blob/main/CONTRIBUTING.md)
 
 ## 📞 Support
 

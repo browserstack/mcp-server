@@ -187,3 +187,5 @@ Stay tuned for exciting updates! Have any suggestions? Please open an issue to d
 - [MCP Protocol Documentation](https://modelcontextprotocol.io)
 - [Device Grid](https://www.browserstack.com/list-of-browsers-and-platforms/app_live)
 - [Accessibility Testing](https://www.browserstack.com/accessibility-testing)
+
+<!-- dummy PR to test GitHub Actions -->

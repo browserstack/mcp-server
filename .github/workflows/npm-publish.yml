@@ -1,0 +1,63 @@
+name: "NPM Publish"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: "Publish to NPM"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout source code"
+        uses: actions/checkout@v2
+
+      - name: "Set up Node.js"
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22.x
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: "Install dependencies"
+        run: npm ci
+
+      - name: "Clean untracked files"
+        run: git clean -fdx
+
+      - name: "Set Git user name and email"
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+      - name: "Bump patch version"
+        run: npm version patch
+
+      - name: "Get new version"
+        id: get_version
+        run: echo "version=v$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: "Push version bump commit and tag"
+        run: |
+          git push origin HEAD
+          git push origin --tags
+
+      - name: "Publish to NPM"
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: "Create GitHub Release"
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          body: |
+            ```
+            • See CHANGELOG.md for details
+            • Published by ${{ github.actor }}
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

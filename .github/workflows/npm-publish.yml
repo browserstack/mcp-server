@@ -1,4 +1,4 @@
-name: "NPM Publish"
+name: "Release New Version"
 
 on:
   workflow_dispatch:
@@ -24,28 +24,25 @@ jobs:
       - name: "Install dependencies"
         run: npm ci
 
-      - name: "Clean untracked files"
-        run: git clean -fdx
+      - name: "Build package"
+        run: npm run build
 
       - name: "Set Git user name and email"
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-      - name: "Bump patch version"
-        run: npm version patch
-
-      - name: "Get new version"
+      - name: "Get version"
         id: get_version
         run: echo "version=v$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      - name: "Push version bump commit and tag"
+      - name: "Push tags"
         run: |
-          git push origin HEAD
+          git tag ${{ steps.get_version.outputs.version }}
           git push origin --tags
 
       - name: "Publish to NPM"
-        run: npm publish
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

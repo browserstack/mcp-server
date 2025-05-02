@@ -32,13 +32,16 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-      - name: "Get version"
+      - name: "Bump patch version"
+        run: npm version patch
+
+      - name: "Get new version"
         id: get_version
         run: echo "version=v$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      - name: "Push tags"
+      - name: "Push version bump commit and tag"
         run: |
-          git tag ${{ steps.get_version.outputs.version }}
+          git push origin HEAD
           git push origin --tags
 
       - name: "Publish to NPM"

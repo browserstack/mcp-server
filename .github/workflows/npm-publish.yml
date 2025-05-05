@@ -27,16 +27,13 @@ jobs:
       - name: "Add node_modules/.bin to PATH"
         run: echo "$(npm bin)" >> $GITHUB_PATH
 
-      - name: "Build package"
-        run: npm run build
+      - name: "Run tests"
+        run: npm test
 
       - name: "Set Git user name and email"
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-
-      - name: "Clean working directory"
-        run: git clean -fdx
       
       - name: "Bump patch version"
         run: npm version patch

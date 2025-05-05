@@ -2,7 +2,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import fs from "fs";
-import { uploadApp } from "./applive-utils/upload-app";
 import { startSession } from "./applive-utils/start-session";
 import logger from "../logger";
 
@@ -45,14 +44,8 @@ export async function startAppLiveSession(args: {
     throw new Error("The app path does not exist or is not readable.");
   }
 
-  const { app_url } = await uploadApp(args.appPath);
-
-  if (!app_url.match("bs://")) {
-    throw new Error("The app path is not a valid BrowserStack app URL.");
-  }
-
   const launchUrl = await startSession({
-    appUrl: app_url,
+    appPath: args.appPath,
     desiredPlatform: args.desiredPlatform as "android" | "ios",
     desiredPhone: args.desiredPhone,
     desiredPlatformVersion: args.desiredPlatformVersion,
@@ -81,7 +74,7 @@ export default function addAppLiveTools(server: McpServer) {
       desiredPlatformVersion: z
         .string()
         .describe(
-          "The platform version to run the app on. Example: '12.0' for Android devices or '16.0' for iOS devices",
+          "Specifies the platform version to run the app on. For example, use '12.0' for Android or '16.0' for iOS. If the user says 'latest', 'newest', or similar, normalize it to 'latest'. Likewise, convert terms like 'earliest' or 'oldest' to 'oldest'.",
         ),
       desiredPlatform: z
         .enum(["android", "ios"])

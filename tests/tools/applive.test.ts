@@ -43,23 +43,20 @@ describe('startAppLiveSession', () => {
   it('should successfully start an Android app live session', async () => {
     const result = await startAppLiveSession(validAndroidArgs);
 
-    expect(uploadApp).toHaveBeenCalledWith(validAndroidArgs.appPath);
     expect(startSession).toHaveBeenCalledWith({
-      appUrl: 'bs://123456',
+      appPath: '/path/to/app.apk',
       desiredPlatform: 'android',
       desiredPhone: validAndroidArgs.desiredPhone,
       desiredPlatformVersion: validAndroidArgs.desiredPlatformVersion
     });
     expect(result.content[0].text).toContain('Successfully started a session');
-    expect(result.content[0].text).toContain('https://app-live.browserstack.com/123456');
   });
 
   it('should successfully start an iOS app live session', async () => {
     const result = await startAppLiveSession(validiOSArgs);
 
-    expect(uploadApp).toHaveBeenCalledWith(validiOSArgs.appPath);
     expect(startSession).toHaveBeenCalledWith({
-      appUrl: 'bs://123456',
+      appPath: '/path/to/app.ipa',
       desiredPlatform: 'ios',
       desiredPhone: validiOSArgs.desiredPhone,
       desiredPlatformVersion: validiOSArgs.desiredPlatformVersion
@@ -106,13 +103,8 @@ describe('startAppLiveSession', () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
-  it('should handle upload failure', async () => {
-    (uploadApp as jest.Mock).mockRejectedValue(new Error('Upload failed'));
-    await expect(startAppLiveSession(validAndroidArgs)).rejects.toThrow('Upload failed');
-  });
-
   it('should handle session start failure', async () => {
     (startSession as jest.Mock).mockRejectedValue(new Error('Session start failed'));
     await expect(startAppLiveSession(validAndroidArgs)).rejects.toThrow('Session start failed');
   });
-}); 
+});

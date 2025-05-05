@@ -154,6 +154,14 @@ Use the following prompts to run/debug/fix your **automated tests** on BrowserSt
    }
    ```
 
+### Installing via Smithery
+
+To install BrowserStack Test Platform Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@browserstack/mcp-server):
+
+```bash
+npx -y @smithery/cli install @browserstack/mcp-server --client claude
+```
+
 ## 🤝 Recommended MCP Clients
 
 - We recommend using **Github Copilot or Cursor** for automated testing + debugging use cases.

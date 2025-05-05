@@ -11,11 +11,18 @@ function download_apps() {
     # Skip if Calculator.apk already exists
     if [ -f "Calculator.apk" ]; then
         echo "Calculator.apk already exists, skipping download"
-        return
+    else
+        local android_app_url="https://www.browserstack.com/app-automate/sample-apps/android/Calculator.apk"
+        curl -o Calculator.apk $android_app_url
     fi
 
-    local app_url="https://www.browserstack.com/app-automate/sample-apps/android/Calculator.apk"
-    curl -o Calculator.apk $app_url
+    # Skip if BrowserStack-SampleApp.ipa already exists
+    if [ -f "BrowserStack-SampleApp.ipa" ]; then
+        echo "BrowserStack-SampleApp.ipa already exists, skipping download"
+    else
+        local ios_app_url="https://www.browserstack.com/app-automate/sample-apps/ios/BrowserStack-SampleApp.ipa"
+        curl -o BrowserStack-SampleApp.ipa $ios_app_url
+    fi
 }
 
 function ensure_deps() {
@@ -86,6 +93,9 @@ function testO11YValidBuild() {
 function testAppLive() {
     echo "Testing App Live..."
     testAppLiveAndroid
+    # # echo "Sleeping for 5 seconds before starting iOS test..."
+    # # sleep 5
+    # testAppLiveiOS
 }
 
 function testAppLiveAndroid() {
@@ -97,6 +107,19 @@ function testAppLiveAndroid() {
         log_success "Successfully started Android app live session"
     else
         log_failure "Failed to start Android app live session"
+        echo "Response was: $response"
+        exit 1
+    fi
+}
+function testAppLiveiOS() {
+    realpath=$(realpath "./BrowserStack-SampleApp.ipa")
+    response=$(npx @modelcontextprotocol/inspector -e BROWSERSTACK_USERNAME=$_BROWSERSTACK_USERNAME -e BROWSERSTACK_ACCESS_KEY=$_BROWSERSTACK_ACCESS_KEY --cli node dist/index.js --method tools/call --tool-name runAppLiveSession --tool-arg desiredPlatform='ios' --tool-arg desiredPlatformVersion='17.0' --tool-arg appPath="$realpath" --tool-arg desiredPhone='iPhone 15 Pro Max')
+
+    echo "Response was: $response"
+    if echo "$response" | grep -q "Successfully started a session"; then
+        log_success "Successfully started iOS app live session"
+    else
+        log_failure "Failed to start iOS app live session"
         echo "Response was: $response"
         exit 1
     fi
@@ -170,8 +193,8 @@ echo -e "\n\t Starting manual tests...\n\n"
 
 # testO11Y
 # sleep 5
-# testAppLive
+testAppLive
 # sleep 5
 # testBrowserLive
 sleep 5
-testAccessibility
+# testAccessibility

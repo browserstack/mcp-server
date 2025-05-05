@@ -88,7 +88,7 @@ Use the following prompts to run/debug/fix your **automated tests** on BrowserSt
 
 1. **Create a BrowserStack Account**
 
-   - Sign up for [BrowserStack](https://www.browserstack.com/signup) if you don't have an account already.
+   - Sign up for [BrowserStack](https://www.browserstack.com/users/sign_up) if you don't have an account already.
 
    - ℹ️ If you have an open-source project, we'll be able to provide you with a [free plan](https://www.browserstack.com/open-source).
    <div align="center">

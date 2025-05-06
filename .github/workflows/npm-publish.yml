@@ -24,28 +24,23 @@ jobs:
       - name: "Install dependencies"
         run: npm ci
 
-      - name: "Add node_modules/.bin to PATH"
-        run: echo "$(npm bin)" >> $GITHUB_PATH
-
       - name: "Run tests"
         run: npm test
+
+      - name: "Get version from package.json"
+        id: get_version
+        run: echo "version=v$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
       - name: "Set Git user name and email"
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-      
-      - name: "Bump patch version"
-        run: npm version patch
 
-      - name: "Get new version"
-        id: get_version
-        run: echo "version=v$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      - name: "Create Git tag for version"
+        run: git tag ${{ steps.get_version.outputs.version }}
 
-      - name: "Push version bump commit and tag"
-        run: |
-          git push origin HEAD
-          git push origin --tags
+      - name: "Push tag to origin"
+        run: git push origin ${{ steps.get_version.outputs.version }}
 
       - name: "Publish to NPM"
         run: npm publish --access public

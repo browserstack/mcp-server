@@ -4,6 +4,9 @@ import { retrieveNetworkFailures } from '../../src/lib/api';
 jest.mock('../../src/lib/api', () => ({
   retrieveNetworkFailures: jest.fn()
 }));
+jest.mock('../../src/lib/instrumentation', () => ({
+  trackMCPEvent: jest.fn()
+}));
 jest.mock('../../src/logger', () => ({
   error: jest.fn(),
   info: jest.fn()

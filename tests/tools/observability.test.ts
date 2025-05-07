@@ -6,6 +6,10 @@ jest.mock('../../src/lib/api', () => ({
   getLatestO11YBuildInfo: jest.fn(),
 }));
 
+jest.mock('../../src/lib/instrumentation', () => ({
+  trackMCPEvent: jest.fn()
+}));
+
 describe('getFailuresInLastRun', () => {
   beforeEach(() => {
     jest.clearAllMocks();

@@ -56,7 +56,7 @@ export default function addAccessibilityTools(server: McpServer) {
       pageURL: z.string().describe("The URL to scan for accessibility issues"),
     },
     async (args) => {
-      trackMCPEvent("startAccessibilityScan")
+      trackMCPEvent("startAccessibilityScan");
       return runAccessibilityScan(args.name, args.pageURL);
     },
   );

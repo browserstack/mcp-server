@@ -22,6 +22,9 @@ jest.mock('../../src/config', () => ({
     browserstackAccessKey: 'fake-key',
   },
 }));
+jest.mock('../../src/lib/instrumentation', () => ({
+  trackMCPEvent: jest.fn(),
+}));
 
 describe('createTestCaseTool', () => {
   beforeEach(() => {

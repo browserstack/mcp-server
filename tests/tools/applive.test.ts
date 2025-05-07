@@ -15,6 +15,9 @@ jest.mock('../../src/tools/applive-utils/start-session', () => ({
 jest.mock('../../src/logger', () => ({
   error: jest.fn()
 }));
+jest.mock('../../src/lib/instrumentation', () => ({
+  trackMCPEvent: jest.fn()
+}));
 
 describe('startAppLiveSession', () => {
   beforeEach(() => {

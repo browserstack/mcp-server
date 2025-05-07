@@ -13,6 +13,9 @@ jest.mock('../../src/lib/local', () => ({
 jest.mock('../../src/logger', () => ({
   error: jest.fn()
 }));
+jest.mock('../../src/lib/instrumentation', () => ({
+  trackMCPEvent: jest.fn()
+}));
 
 describe('startBrowserLiveSession', () => {
   let serverMock: any;

@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { trackMCPEvent } from "../lib/instrumentation";
 import {
   createProjectOrFolder,
   CreateProjFoldSchema,
@@ -19,6 +20,7 @@ export async function createProjectOrFolderTool(
   args: z.infer<typeof CreateProjFoldSchema>,
 ): Promise<CallToolResult> {
   try {
+    trackMCPEvent("createProjectOrFolder");
     return await createProjectOrFolder(args);
   } catch (err) {
     return {
@@ -45,6 +47,7 @@ export async function createTestCaseTool(
   // Sanitize input arguments
   const cleanedArgs = sanitizeArgs(args);
   try {
+    trackMCPEvent("createTestCase");
     return await createTestCaseAPI(cleanedArgs);
   } catch (err) {
     return {

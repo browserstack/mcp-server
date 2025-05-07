@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "../logger";
 import { retrieveNetworkFailures } from "../lib/api";
+import { trackMCPEvent } from "../lib/instrumentation";
 
 /**
  * Fetches failed network requests from a BrowserStack Automate session.
@@ -57,6 +58,9 @@ export default function addAutomateTools(server: McpServer) {
     {
       sessionId: z.string().describe("The Automate session ID."),
     },
-    getNetworkFailures,
+    async (args) => {
+      trackMCPEvent("getNetworkFailures");
+      return getNetworkFailures(args);
+    },
   );
 }

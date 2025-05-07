@@ -4,6 +4,7 @@ import { z } from "zod";
 import logger from "../logger";
 import { startBrowserSession } from "./live-utils/start-session";
 import { PlatformType } from "./live-utils/types";
+import { trackMCPEvent } from "../lib/instrumentation";
 
 // Define the schema shape
 const LiveArgsShape = {
@@ -118,6 +119,7 @@ export default function addBrowserLiveTools(server: McpServer) {
     LiveArgsShape,
     async (args) => {
       try {
+        trackMCPEvent("runBrowserLiveSession");
         const result = await runBrowserSession(args);
         return result;
       } catch (error: any) {

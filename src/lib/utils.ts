@@ -24,3 +24,22 @@ export interface HarEntry {
   serverIPAddress?: string;
   time?: number;
 }
+
+export function createCustomInitializeHandler(
+  origHandler: (request: any, extra: any) => Promise<any>,
+  logger: any,
+  setClientName: (name: string) => void,
+) {
+  return async function (this: any, request: any, extra: any) {
+    const clientInfo = request.params.clientInfo;
+    if (clientInfo && clientInfo.name) {
+      setClientName(clientInfo.name);
+      logger.info(
+        `Client connected: ${clientInfo.name} (version: ${clientInfo.version})`,
+      );
+    } else {
+      logger.info("Client connected: unknown client");
+    }
+    return origHandler.call(this, request, extra);
+  };
+}

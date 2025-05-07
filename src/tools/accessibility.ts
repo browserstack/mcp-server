@@ -5,6 +5,7 @@ import {
   startAccessibilityScan,
   AccessibilityScanResponse,
 } from "./accessiblity-utils/accessibility";
+import { trackMCPEvent } from "../lib/instrumentation";
 
 async function runAccessibilityScan(
   name: string,
@@ -55,6 +56,7 @@ export default function addAccessibilityTools(server: McpServer) {
       pageURL: z.string().describe("The URL to scan for accessibility issues"),
     },
     async (args) => {
+      trackMCPEvent("startAccessibilityScan")
       return runAccessibilityScan(args.name, args.pageURL);
     },
   );

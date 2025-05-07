@@ -10,6 +10,7 @@ import {
   generateBrowserStackYMLInstructions,
   getInstructionsForProjectConfiguration,
 } from "./sdk-utils/instructions";
+import { trackMCPEvent } from "../lib/instrumentation";
 
 /**
  * BrowserStack SDK hooks into your test framework to seamlessly run tests on BrowserStack.
@@ -80,6 +81,7 @@ export default function addSDKTools(server: McpServer) {
       const desiredPlatforms = args.desiredPlatforms;
 
       try {
+        trackMCPEvent("runTestsOnBrowserStack");
         return bootstrapProjectWithSDK({
           detectedBrowserAutomationFramework,
           detectedTestingFramework,

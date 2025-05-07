@@ -12,6 +12,7 @@ import addBrowserLiveTools from "./tools/live";
 import addAccessibilityTools from "./tools/accessibility";
 import addAutomateTools from "./tools/automate";
 import addTestManagementTools from "./tools/testmanagement";
+import { createCustomInitializeHandler } from "./lib/utils";
 
 function registerTools(server: McpServer) {
   addSDKTools(server);
@@ -30,6 +31,19 @@ const server: McpServer = new McpServer({
 });
 
 registerTools(server);
+
+let clientName: string | undefined;
+
+function setClientName(name: string) {
+  clientName = name;
+}
+
+const origInitializeHandler =
+  server.server["_requestHandlers"].get("initialize");
+server.server["_requestHandlers"].set(
+  "initialize",
+  createCustomInitializeHandler(origInitializeHandler, logger, setClientName),
+);
 
 async function main() {
   logger.info(
@@ -50,3 +64,5 @@ main().catch(console.error);
 process.on("exit", () => {
   logger.flush();
 });
+
+export { clientName };

@@ -4,6 +4,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import fs from "fs";
 import { startSession } from "./applive-utils/start-session";
 import logger from "../logger";
+import { trackMCPEvent } from "../lib/instrumentation";
 
 /**
  * Launches an App Live Session on BrowserStack.
@@ -89,6 +90,7 @@ export default function addAppLiveTools(server: McpServer) {
     },
     async (args) => {
       try {
+        trackMCPEvent("runAppLiveSession");
         return startAppLiveSession(args);
       } catch (error) {
         return {

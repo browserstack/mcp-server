@@ -2,7 +2,6 @@ import logger from "../logger";
 import config from "../config";
 import packageJson from "../../package.json";
 import axios from "axios";
-import { clientName } from "../index";
 
 interface MCPEventPayload {
   event_type: string;
@@ -13,9 +12,20 @@ interface MCPEventPayload {
   };
 }
 
-export function trackMCPEvent(toolName: string): void {
+export function trackMCPEvent(
+  toolName: string,
+  clientInfo: { name?: string; version?: string },
+): void {
   const instrumentationEndpoint = "https://api.browserstack.com/sdk/v1/event";
-  const mcpClient = clientName || "unknown";
+
+  const mcpClient = clientInfo?.name || "unknown";
+  if (clientInfo?.name) {
+    logger.info(
+      `Client connected: ${clientInfo.name} (version: ${clientInfo.version})`,
+    );
+  } else {
+    logger.info("Client connected: unknown client");
+  }
 
   const event: MCPEventPayload = {
     event_type: "MCPInstrumentation",

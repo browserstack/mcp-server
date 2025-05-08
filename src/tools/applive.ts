@@ -90,7 +90,8 @@ export default function addAppLiveTools(server: McpServer) {
     },
     async (args) => {
       try {
-        trackMCPEvent("runAppLiveSession");
+        const clientInfo = server.server.getClientVersion();
+        trackMCPEvent("runAppLiveSession", clientInfo!);
         return startAppLiveSession(args);
       } catch (error) {
         return {

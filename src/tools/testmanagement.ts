@@ -13,6 +13,8 @@ import {
   CreateTestCaseSchema,
 } from "./testmanagement-utils/create-testcase";
 
+let serverInstance: McpServer;
+
 /**
  * Wrapper to call createProjectOrFolder util.
  */
@@ -20,7 +22,8 @@ export async function createProjectOrFolderTool(
   args: z.infer<typeof CreateProjFoldSchema>,
 ): Promise<CallToolResult> {
   try {
-    trackMCPEvent("createProjectOrFolder");
+    const clientInfo = serverInstance.server.getClientVersion();
+    trackMCPEvent("createProjectOrFolder", clientInfo!);
     return await createProjectOrFolder(args);
   } catch (err) {
     return {
@@ -47,7 +50,8 @@ export async function createTestCaseTool(
   // Sanitize input arguments
   const cleanedArgs = sanitizeArgs(args);
   try {
-    trackMCPEvent("createTestCase");
+    const clientInfo = serverInstance.server.getClientVersion();
+    trackMCPEvent("createTestCase", clientInfo!);
     return await createTestCaseAPI(cleanedArgs);
   } catch (err) {
     return {
@@ -69,6 +73,7 @@ export async function createTestCaseTool(
  * Registers both project/folder and test-case tools.
  */
 export default function addTestManagementTools(server: McpServer) {
+  serverInstance = server;
   server.tool(
     "createProjectOrFolder",
     "Create a project and/or folder in BrowserStack Test Management.",

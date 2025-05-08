@@ -119,7 +119,8 @@ export default function addBrowserLiveTools(server: McpServer) {
     LiveArgsShape,
     async (args) => {
       try {
-        trackMCPEvent("runBrowserLiveSession");
+        const clientInfo = server.server.getClientVersion();
+        trackMCPEvent("runBrowserLiveSession", clientInfo!);
         const result = await runBrowserSession(args);
         return result;
       } catch (error: any) {

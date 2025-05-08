@@ -59,7 +59,8 @@ export default function addAutomateTools(server: McpServer) {
       sessionId: z.string().describe("The Automate session ID."),
     },
     async (args) => {
-      trackMCPEvent("getNetworkFailures");
+      const clientInfo = server.server.getClientVersion();
+      trackMCPEvent("startAccessibilityScan", clientInfo!);
       return getNetworkFailures(args);
     },
   );

@@ -58,7 +58,8 @@ export default function addObservabilityTools(server: McpServer) {
     },
     async (args) => {
       try {
-        trackMCPEvent("getFailuresInLastRun");
+        const clientInfo = server.server.getClientVersion();
+        trackMCPEvent("getFailuresInLastRun", clientInfo!);
         return getFailuresInLastRun(args.buildName, args.projectName);
       } catch (error) {
         return {

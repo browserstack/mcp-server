@@ -81,7 +81,8 @@ export default function addSDKTools(server: McpServer) {
       const desiredPlatforms = args.desiredPlatforms;
 
       try {
-        trackMCPEvent("runTestsOnBrowserStack");
+        const clientInfo = server.server.getClientVersion();
+        trackMCPEvent("runTestsOnBrowserStack", clientInfo!);
         return bootstrapProjectWithSDK({
           detectedBrowserAutomationFramework,
           detectedTestingFramework,

@@ -43,7 +43,8 @@ export async function startAppLiveSession(args: {
   try {
     fs.accessSync(args.appPath, fs.constants.R_OK);
   } catch (error) {
-    throw new Error("The app path does not exist or is not readable");
+    logger.error("The app path does not exist or is not readable: %s", error);
+    throw new Error("The app path does not exist or is not readable.");
   }
 
   const launchUrl = await startSession({

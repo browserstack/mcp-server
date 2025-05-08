@@ -16,7 +16,8 @@ jest.mock('../../src/logger', () => ({
   error: jest.fn()
 }));
 jest.mock('../../src/lib/instrumentation', () => ({
-  trackMCPEvent: jest.fn()
+  trackMCPEvent: jest.fn(),
+  trackMCPFailure: jest.fn()
 }));
 
 describe('startAppLiveSession', () => {

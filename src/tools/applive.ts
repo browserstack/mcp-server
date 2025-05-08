@@ -37,9 +37,14 @@ export async function startAppLiveSession(args: {
   
   // check if the app path exists && is readable
   if (!fs.existsSync(args.appPath)) {
-    throw new Error("The app path does not exist.");
+    throw new Error("The app path does not exist");
   }
-  fs.accessSync(args.appPath, fs.constants.R_OK);
+  
+  try {
+    fs.accessSync(args.appPath, fs.constants.R_OK);
+  } catch (error) {
+    throw new Error("The app path does not exist or is not readable");
+  }
 
   const launchUrl = await startSession({
     appPath: args.appPath,

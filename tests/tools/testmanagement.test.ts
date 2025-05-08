@@ -29,6 +29,7 @@ jest.mock('../../src/config', () => ({
 }));
 jest.mock('../../src/lib/instrumentation', () => ({
   trackMCPEvent: jest.fn(),
+  trackMCPFailure: jest.fn()
 }));
 
 const mockServer = {

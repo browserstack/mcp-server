@@ -34,13 +34,12 @@ export async function startAppLiveSession(args: {
   if (args.desiredPlatform === "ios" && !args.appPath.endsWith(".ipa")) {
     throw new Error("You must provide a valid iOS app path.");
   }
-  
+
   // check if the app path exists && is readable
-  if (!fs.existsSync(args.appPath)) {
-    throw new Error("The app path does not exist");
-  }
-  
   try {
+    if (!fs.existsSync(args.appPath)) {
+      throw new Error("The app path does not exist.");
+    }
     fs.accessSync(args.appPath, fs.constants.R_OK);
   } catch (error) {
     logger.error("The app path does not exist or is not readable: %s", error);
@@ -96,7 +95,11 @@ export default function addAppLiveTools(server: McpServer) {
         return await startAppLiveSession(args);
       } catch (error) {
         logger.error("App live session failed: %s", error);
-        trackMCPFailure("runAppLiveSession", error, server.server.getClientVersion()!);
+        trackMCPFailure(
+          "runAppLiveSession",
+          error,
+          server.server.getClientVersion()!,
+        );
         return {
           content: [
             {

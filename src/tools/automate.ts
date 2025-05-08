@@ -12,26 +12,31 @@ import { trackMCPEvent, trackMCPFailure } from "../lib/instrumentation";
 export async function getNetworkFailures(args: {
   sessionId: string;
 }): Promise<CallToolResult> {
-  const failureLogs = await retrieveNetworkFailures(args.sessionId);
-  logger.info(
-    "Successfully fetched failure network logs for session: %s",
-    args.sessionId,
-  );
+  try {
+    const failureLogs = await retrieveNetworkFailures(args.sessionId);
+    logger.info(
+      "Successfully fetched failure network logs for session: %s",
+      args.sessionId,
+    );
 
-  // Check if there are any failures
-  const hasFailures = failureLogs.totalFailures > 0;
-  const text = hasFailures
-    ? `${failureLogs.totalFailures} network failure(s) found for session :\n\n${JSON.stringify(failureLogs.failures, null, 2)}`
-    : `No network failures found for session`;
+    // Check if there are any failures
+    const hasFailures = failureLogs.totalFailures > 0;
+    const text = hasFailures
+      ? `${failureLogs.totalFailures} network failure(s) found for session :\n\n${JSON.stringify(failureLogs.failures, null, 2)}`
+      : `No network failures found for session`;
 
-  return {
-    content: [
-      {
-        type: "text",
-        text,
-      },
-    ],
-  };
+    return {
+      content: [
+        {
+          type: "text",
+          text,
+        },
+      ],
+    };
+  } catch (error) {
+    logger.error("Failed to fetch network logs: %s", error);
+    throw new Error(error instanceof Error ? error.message : String(error));
+  }
 }
 
 export default function addAutomateTools(server: McpServer) {
@@ -46,11 +51,16 @@ export default function addAutomateTools(server: McpServer) {
         trackMCPEvent("getNetworkFailures", server.server.getClientVersion()!);
         return await getNetworkFailures(args);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         logger.error("Failed to fetch network logs: %s", errorMessage);
-        
-        trackMCPFailure("getNetworkFailures", error, server.server.getClientVersion()!);
-        
+
+        trackMCPFailure(
+          "getNetworkFailures",
+          error,
+          server.server.getClientVersion()!,
+        );
+
         return {
           content: [
             {

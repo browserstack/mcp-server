@@ -59,11 +59,18 @@ export default function addObservabilityTools(server: McpServer) {
     },
     async (args) => {
       try {
-        trackMCPEvent("getFailuresInLastRun", server.server.getClientVersion()!);
+        trackMCPEvent(
+          "getFailuresInLastRun",
+          server.server.getClientVersion()!,
+        );
         return await getFailuresInLastRun(args.buildName, args.projectName);
       } catch (error) {
         logger.error("Failed to get failures in the last run: %s", error);
-        trackMCPFailure("getFailuresInLastRun", error, server.server.getClientVersion()!);
+        trackMCPFailure(
+          "getFailuresInLastRun",
+          error,
+          server.server.getClientVersion()!,
+        );
         return {
           content: [
             {

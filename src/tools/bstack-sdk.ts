@@ -74,8 +74,11 @@ export default function addSDKTools(server: McpServer) {
     },
     async (args) => {
       try {
-        trackMCPEvent("runTestsOnBrowserStack", server.server.getClientVersion()!);
-        
+        trackMCPEvent(
+          "runTestsOnBrowserStack",
+          server.server.getClientVersion()!,
+        );
+
         return await bootstrapProjectWithSDK({
           detectedBrowserAutomationFramework:
             args.detectedBrowserAutomationFramework as SDKSupportedBrowserAutomationFramework,
@@ -85,7 +88,11 @@ export default function addSDKTools(server: McpServer) {
           desiredPlatforms: args.desiredPlatforms,
         });
       } catch (error) {
-        trackMCPFailure("runTestsOnBrowserStack", error, server.server.getClientVersion()!);
+        trackMCPFailure(
+          "runTestsOnBrowserStack",
+          error,
+          server.server.getClientVersion()!,
+        );
         return {
           content: [
             {

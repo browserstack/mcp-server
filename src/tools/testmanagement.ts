@@ -23,11 +23,18 @@ export async function createProjectOrFolderTool(
   args: z.infer<typeof CreateProjFoldSchema>,
 ): Promise<CallToolResult> {
   try {
-    trackMCPEvent("createProjectOrFolder", serverInstance.server.getClientVersion()!);
+    trackMCPEvent(
+      "createProjectOrFolder",
+      serverInstance.server.getClientVersion()!,
+    );
     return await createProjectOrFolder(args);
   } catch (err) {
     logger.error("Failed to create project/folder: %s", err);
-    trackMCPFailure("createProjectOrFolder", err, serverInstance.server.getClientVersion()!);
+    trackMCPFailure(
+      "createProjectOrFolder",
+      err,
+      serverInstance.server.getClientVersion()!,
+    );
     return {
       content: [
         {
@@ -56,7 +63,11 @@ export async function createTestCaseTool(
     return await createTestCaseAPI(cleanedArgs);
   } catch (err) {
     logger.error("Failed to create test case: %s", err);
-    trackMCPFailure("createTestCase", err, serverInstance.server.getClientVersion()!);
+    trackMCPFailure(
+      "createTestCase",
+      err,
+      serverInstance.server.getClientVersion()!,
+    );
     return {
       content: [
         {

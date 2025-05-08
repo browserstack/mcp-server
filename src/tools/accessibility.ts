@@ -5,7 +5,7 @@ import {
   startAccessibilityScan,
   AccessibilityScanResponse,
 } from "./accessiblity-utils/accessibility";
-import { trackMCPEvent, trackMCPFailure } from "../lib/instrumentation";
+import { trackMCP } from "../lib/instrumentation";
 
 async function runAccessibilityScan(
   name: string,
@@ -44,16 +44,16 @@ export default function addAccessibilityTools(server: McpServer) {
     },
     async (args) => {
       try {
-        trackMCPEvent(
+        trackMCP(
           "startAccessibilityScan",
-          server.server.getClientVersion()!,
+          server.server.getClientVersion()!
         );
         return await runAccessibilityScan(args.name, args.pageURL);
       } catch (error) {
-        trackMCPFailure(
+        trackMCP(
           "startAccessibilityScan",
-          error,
           server.server.getClientVersion()!,
+          error
         );
         return {
           content: [

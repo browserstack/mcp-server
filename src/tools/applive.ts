@@ -4,7 +4,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import fs from "fs";
 import { startSession } from "./applive-utils/start-session";
 import logger from "../logger";
-import { trackMCPEvent, trackMCPFailure } from "../lib/instrumentation";
+import { trackMCP } from "../lib/instrumentation";
 
 /**
  * Launches an App Live Session on BrowserStack.
@@ -91,14 +91,14 @@ export default function addAppLiveTools(server: McpServer) {
     },
     async (args) => {
       try {
-        trackMCPEvent("runAppLiveSession", server.server.getClientVersion()!);
+        trackMCP("runAppLiveSession", server.server.getClientVersion()!);
         return await startAppLiveSession(args);
       } catch (error) {
         logger.error("App live session failed: %s", error);
-        trackMCPFailure(
+        trackMCP(
           "runAppLiveSession",
-          error,
           server.server.getClientVersion()!,
+          error
         );
         return {
           content: [

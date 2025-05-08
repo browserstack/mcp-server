@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { trackMCPEvent, trackMCPFailure } from "../lib/instrumentation";
+import { trackMCP } from "../lib/instrumentation";
 import logger from "../logger";
 import {
   createProjectOrFolder,
@@ -23,17 +23,17 @@ export async function createProjectOrFolderTool(
   args: z.infer<typeof CreateProjFoldSchema>,
 ): Promise<CallToolResult> {
   try {
-    trackMCPEvent(
+    trackMCP(
       "createProjectOrFolder",
-      serverInstance.server.getClientVersion()!,
+      serverInstance.server.getClientVersion()!
     );
     return await createProjectOrFolder(args);
   } catch (err) {
     logger.error("Failed to create project/folder: %s", err);
-    trackMCPFailure(
+    trackMCP(
       "createProjectOrFolder",
-      err,
       serverInstance.server.getClientVersion()!,
+      err
     );
     return {
       content: [
@@ -59,14 +59,14 @@ export async function createTestCaseTool(
   // Sanitize input arguments
   const cleanedArgs = sanitizeArgs(args);
   try {
-    trackMCPEvent("createTestCase", serverInstance.server.getClientVersion()!);
+    trackMCP("createTestCase", serverInstance.server.getClientVersion()!);
     return await createTestCaseAPI(cleanedArgs);
   } catch (err) {
     logger.error("Failed to create test case: %s", err);
-    trackMCPFailure(
+    trackMCP(
       "createTestCase",
-      err,
       serverInstance.server.getClientVersion()!,
+      err
     );
     return {
       content: [

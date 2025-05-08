@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "../logger";
 import { retrieveNetworkFailures } from "../lib/api";
-import { trackMCPEvent, trackMCPFailure } from "../lib/instrumentation";
+import { trackMCP } from "../lib/instrumentation";
 
 /**
  * Fetches failed network requests from a BrowserStack Automate session.
@@ -48,17 +48,17 @@ export default function addAutomateTools(server: McpServer) {
     },
     async (args) => {
       try {
-        trackMCPEvent("getNetworkFailures", server.server.getClientVersion()!);
+        trackMCP("getNetworkFailures", server.server.getClientVersion()!);
         return await getNetworkFailures(args);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         logger.error("Failed to fetch network logs: %s", errorMessage);
 
-        trackMCPFailure(
+        trackMCP(
           "getNetworkFailures",
-          error,
           server.server.getClientVersion()!,
+          error
         );
 
         return {

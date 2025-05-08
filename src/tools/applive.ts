@@ -4,7 +4,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import fs from "fs";
 import { startSession } from "./applive-utils/start-session";
 import logger from "../logger";
-import { trackMCPEvent } from "../lib/instrumentation";
+import { trackMCPEvent, trackMCPFailure } from "../lib/instrumentation";
 
 /**
  * Launches an App Live Session on BrowserStack.
@@ -34,16 +34,12 @@ export async function startAppLiveSession(args: {
   if (args.desiredPlatform === "ios" && !args.appPath.endsWith(".ipa")) {
     throw new Error("You must provide a valid iOS app path.");
   }
+  
   // check if the app path exists && is readable
-  try {
-    if (!fs.existsSync(args.appPath)) {
-      throw new Error("The app path does not exist.");
-    }
-    fs.accessSync(args.appPath, fs.constants.R_OK);
-  } catch (error) {
-    logger.error("The app path does not exist or is not readable: %s", error);
-    throw new Error("The app path does not exist or is not readable.");
+  if (!fs.existsSync(args.appPath)) {
+    throw new Error("The app path does not exist.");
   }
+  fs.accessSync(args.appPath, fs.constants.R_OK);
 
   const launchUrl = await startSession({
     appPath: args.appPath,
@@ -90,15 +86,16 @@ export default function addAppLiveTools(server: McpServer) {
     },
     async (args) => {
       try {
-        const clientInfo = server.server.getClientVersion();
-        trackMCPEvent("runAppLiveSession", clientInfo!);
-        return startAppLiveSession(args);
+        trackMCPEvent("runAppLiveSession", server.server.getClientVersion()!);
+        return await startAppLiveSession(args);
       } catch (error) {
+        logger.error("App live session failed: %s", error);
+        trackMCPFailure("runAppLiveSession", error, server.server.getClientVersion()!);
         return {
           content: [
             {
               type: "text",
-              text: `Failed to start an app live session. Error: ${error}. Please open an issue on GitHub if the problem persists`,
+              text: `Failed to start app live session: ${error instanceof Error ? error.message : String(error)}`,
               isError: true,
             },
           ],

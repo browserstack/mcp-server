@@ -14,7 +14,29 @@ import {
   CreateTestCaseSchema,
 } from "./testmanagement-utils/create-testcase";
 
+
 let serverInstance: McpServer;
+
+import {
+  listTestCases,
+  ListTestCasesSchema,
+} from "./testmanagement-utils/list-testcases";
+
+import {
+  CreateTestRunSchema,
+  createTestRun,
+} from "./testmanagement-utils/create-testrun";
+
+import {
+  ListTestRunsSchema,
+  listTestRuns,
+} from "./testmanagement-utils/list-testruns";
+
+import {
+  UpdateTestRunSchema,
+  updateTestRun,
+} from "./testmanagement-utils/update-testrun";
+
 
 /**
  * Wrapper to call createProjectOrFolder util.
@@ -80,6 +102,105 @@ export async function createTestCaseTool(
 }
 
 /**
+ * Lists test cases in a project with optional filters (status, priority, custom fields, etc.)
+ */
+
+export async function listTestCasesTool(
+  args: z.infer<typeof ListTestCasesSchema>,
+): Promise<CallToolResult> {
+  try {
+    return await listTestCases(args);
+  } catch (err) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to list test cases: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+          isError: true,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Creates a test run in BrowserStack Test Management.
+ */
+export async function createTestRunTool(
+  args: z.infer<typeof CreateTestRunSchema>,
+): Promise<CallToolResult> {
+  try {
+    return await createTestRun(args);
+  } catch (err) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to create test run: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+          isError: true,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Lists test runs in a project with optional filters (date ranges, assignee, state, etc.)
+ */
+export async function listTestRunsTool(
+  args: z.infer<typeof ListTestRunsSchema>,
+): Promise<CallToolResult> {
+  try {
+    return await listTestRuns(args);
+  } catch (err) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to list test runs: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+          isError: true,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Updates a test run in BrowserStack Test Management.
+ * This function allows for partial updates to an existing test run.
+ * It takes the project identifier and test run ID as parameters.
+ */
+export async function updateTestRunTool(
+  args: z.infer<typeof UpdateTestRunSchema>,
+): Promise<CallToolResult> {
+  try {
+    return await updateTestRun(args);
+  } catch (err) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to update test run: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+          isError: true,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
  * Registers both project/folder and test-case tools.
  */
 export default function addTestManagementTools(server: McpServer) {
@@ -96,5 +217,32 @@ export default function addTestManagementTools(server: McpServer) {
     "Use this tool to create a test case in BrowserStack Test Management.",
     CreateTestCaseSchema.shape,
     createTestCaseTool,
+  );
+
+  server.tool(
+    "listTestCases",
+    "List test cases in a project with optional filters (status, priority, custom fields, etc.)",
+    ListTestCasesSchema.shape,
+    listTestCasesTool,
+  );
+
+  server.tool(
+    "createTestRun",
+    "Create a test run in BrowserStack Test Management.",
+    CreateTestRunSchema.shape,
+    createTestRunTool,
+  );
+
+  server.tool(
+    "listTestRuns",
+    "List test runs in a project with optional filters (date ranges, assignee, state, etc.)",
+    ListTestRunsSchema.shape,
+    listTestRunsTool,
+  );
+  server.tool(
+    "updateTestRun",
+    "Update a test run in BrowserStack Test Management.",
+    UpdateTestRunSchema.shape,
+    updateTestRunTool,
   );
 }

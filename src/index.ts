@@ -31,7 +31,6 @@ const server: McpServer = new McpServer({
 
 registerTools(server);
 
-
 async function main() {
   logger.info(
     "Launching BrowserStack MCP server, version %s",
@@ -51,4 +50,3 @@ main().catch(console.error);
 process.on("exit", () => {
   logger.flush();
 });
-

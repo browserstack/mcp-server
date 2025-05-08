@@ -2,6 +2,8 @@ import { createProjectOrFolderTool } from '../../src/tools/testmanagement';
 import { createProjectOrFolder } from '../../src/tools/testmanagement-utils/create-project-folder';
 import { createTestCaseTool } from '../../src/tools/testmanagement';
 import { createTestCase, sanitizeArgs, TestCaseCreateRequest } from '../../src/tools/testmanagement-utils/create-testcase';
+import addTestManagementTools from '../../src/tools/testmanagement';
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // Mock dependencies
 jest.mock('../../src/tools/testmanagement-utils/create-project-folder', () => ({
@@ -14,6 +16,9 @@ jest.mock('../../src/tools/testmanagement-utils/create-project-folder', () => ({
 jest.mock('../../src/tools/testmanagement-utils/create-testcase', () => ({
   createTestCase: jest.fn(),
   sanitizeArgs: jest.fn((args) => args),
+  CreateTestCaseSchema: {
+    shape: {}, 
+  },
 }));
 jest.mock('../../src/config', () => ({
   __esModule: true,
@@ -25,6 +30,18 @@ jest.mock('../../src/config', () => ({
 jest.mock('../../src/lib/instrumentation', () => ({
   trackMCPEvent: jest.fn(),
 }));
+
+const mockServer = {
+  tool: jest.fn(),
+  server: {
+    getClientVersion: jest.fn(() => ({
+      name: 'jest-client',
+      version: '1.0.0',
+    })),
+  },
+} as unknown as McpServer;
+
+addTestManagementTools(mockServer);
 
 describe('createTestCaseTool', () => {
   beforeEach(() => {

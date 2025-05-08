@@ -26,6 +26,9 @@ describe('startBrowserLiveSession', () => {
       tool: jest.fn((name, desc, schema, handler) => {
         serverMock.handler = handler;
       }),
+      server: {
+        getClientVersion: jest.fn().mockReturnValue({ version: '1.0.0' })
+      }
     };
 
     addBrowserLiveTools(serverMock);

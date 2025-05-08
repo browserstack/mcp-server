@@ -44,16 +44,13 @@ export default function addAccessibilityTools(server: McpServer) {
     },
     async (args) => {
       try {
-        trackMCP(
-          "startAccessibilityScan",
-          server.server.getClientVersion()!
-        );
+        trackMCP("startAccessibilityScan", server.server.getClientVersion()!);
         return await runAccessibilityScan(args.name, args.pageURL);
       } catch (error) {
         trackMCP(
           "startAccessibilityScan",
           server.server.getClientVersion()!,
-          error
+          error,
         );
         return {
           content: [

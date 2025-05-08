@@ -18,12 +18,12 @@ interface MCPEventPayload {
 export function trackMCP(
   toolName: string,
   clientInfo: { name?: string; version?: string },
-  error?: unknown
+  error?: unknown,
 ): void {
   const instrumentationEndpoint = "https://api.browserstack.com/sdk/v1/event";
   const isSuccess = !error;
   const mcpClient = clientInfo?.name || "unknown";
-  
+
   // Log client information
   if (clientInfo?.name) {
     logger.info(
@@ -45,8 +45,10 @@ export function trackMCP(
 
   // Add error details if applicable
   if (error) {
-    event.event_properties.error_message = error instanceof Error ? error.message : String(error);
-    event.event_properties.error_type = error instanceof Error ? error.constructor.name : "Unknown";
+    event.event_properties.error_message =
+      error instanceof Error ? error.message : String(error);
+    event.event_properties.error_type =
+      error instanceof Error ? error.constructor.name : "Unknown";
   }
 
   axios
@@ -60,14 +62,17 @@ export function trackMCP(
       timeout: 2000,
     })
     .then((response) => {
-      logger.info(`MCP ${isSuccess ? 'event' : 'failure event'} tracked successfully`, {
-        toolName,
-        response,
-      });
+      logger.info(
+        `MCP ${isSuccess ? "event" : "failure event"} tracked successfully`,
+        {
+          toolName,
+          response,
+        },
+      );
     })
     .catch((error: unknown) => {
       logger.warn(
-        `Failed to track MCP ${isSuccess ? 'event' : 'failure event'}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to track MCP ${isSuccess ? "event" : "failure event"}: ${error instanceof Error ? error.message : String(error)}`,
         {
           toolName,
         },

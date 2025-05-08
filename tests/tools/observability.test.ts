@@ -7,8 +7,7 @@ jest.mock('../../src/lib/api', () => ({
 }));
 
 jest.mock('../../src/lib/instrumentation', () => ({
-  trackMCPEvent: jest.fn(),
-  trackMCPFailure: jest.fn()
+  trackMCP: jest.fn()
 }));
 
 describe('getFailuresInLastRun', () => {

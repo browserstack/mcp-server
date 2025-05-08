@@ -95,11 +95,7 @@ export default function addAppLiveTools(server: McpServer) {
         return await startAppLiveSession(args);
       } catch (error) {
         logger.error("App live session failed: %s", error);
-        trackMCP(
-          "runAppLiveSession",
-          server.server.getClientVersion()!,
-          error
-        );
+        trackMCP("runAppLiveSession", server.server.getClientVersion()!, error);
         return {
           content: [
             {

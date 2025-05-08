@@ -58,7 +58,7 @@ export default function addAutomateTools(server: McpServer) {
         trackMCP(
           "getNetworkFailures",
           server.server.getClientVersion()!,
-          error
+          error,
         );
 
         return {

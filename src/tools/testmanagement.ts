@@ -25,7 +25,7 @@ export async function createProjectOrFolderTool(
   try {
     trackMCP(
       "createProjectOrFolder",
-      serverInstance.server.getClientVersion()!
+      serverInstance.server.getClientVersion()!,
     );
     return await createProjectOrFolder(args);
   } catch (err) {
@@ -33,7 +33,7 @@ export async function createProjectOrFolderTool(
     trackMCP(
       "createProjectOrFolder",
       serverInstance.server.getClientVersion()!,
-      err
+      err,
     );
     return {
       content: [
@@ -63,11 +63,7 @@ export async function createTestCaseTool(
     return await createTestCaseAPI(cleanedArgs);
   } catch (err) {
     logger.error("Failed to create test case: %s", err);
-    trackMCP(
-      "createTestCase",
-      serverInstance.server.getClientVersion()!,
-      err
-    );
+    trackMCP("createTestCase", serverInstance.server.getClientVersion()!, err);
     return {
       content: [
         {

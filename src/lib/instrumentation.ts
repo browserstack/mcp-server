@@ -67,21 +67,5 @@ export function trackMCP(
       },
       timeout: 2000,
     })
-    .then((response) => {
-      logger.info(
-        `MCP ${isSuccess ? "event" : "failure event"} tracked successfully`,
-        {
-          toolName,
-          response,
-        },
-      );
-    })
-    .catch((error: unknown) => {
-      logger.warn(
-        `Failed to track MCP ${isSuccess ? "event" : "failure event"}: ${error instanceof Error ? error.message : String(error)}`,
-        {
-          toolName,
-        },
-      );
-    });
+    .catch(() => {});
 }

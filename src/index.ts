@@ -43,7 +43,7 @@ async function main() {
   await server.connect(transport);
 
   logger.info("MCP server started successfully");
-  trackMCP("MCP server started successfully", server.server.getClientVersion()!);
+  trackMCP("started", server.server.getClientVersion()!);
 }
 
 main().catch(console.error);

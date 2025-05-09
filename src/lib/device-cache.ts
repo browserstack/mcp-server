@@ -6,17 +6,26 @@ const CACHE_DIR = path.join(os.homedir(), ".browserstack", "combined_cache");
 const CACHE_FILE = path.join(CACHE_DIR, "data.json");
 const TTL_MS = 24 * 60 * 60 * 1000; // 1 day
 
-const URLS = {
-  live: "https://www.browserstack.com/list-of-browsers-and-platforms/live.json",
-  app_live:
+export enum BrowserStackProducts {
+  LIVE = "live",
+  APP_LIVE = "app_live",
+  APP_AUTOMATE = "app_automate",
+}
+
+const URLS: Record<BrowserStackProducts, string> = {
+  [BrowserStackProducts.LIVE]:
+    "https://www.browserstack.com/list-of-browsers-and-platforms/live.json",
+  [BrowserStackProducts.APP_LIVE]:
     "https://www.browserstack.com/list-of-browsers-and-platforms/app_live.json",
+  [BrowserStackProducts.APP_AUTOMATE]:
+    "https://www.browserstack.com/list-of-browsers-and-platforms/app_automate.json",
 };
 
 /**
- * Fetches and caches both BrowserStack datasets (live + app_live) with a shared TTL.
+ * Fetches and caches BrowserStack datasets (live + app_live + app_automate) with a shared TTL.
  */
 export async function getDevicesAndBrowsers(
-  type: "live" | "app_live",
+  type: BrowserStackProducts,
 ): Promise<any> {
   if (!fs.existsSync(CACHE_DIR)) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
@@ -37,23 +46,19 @@ export async function getDevicesAndBrowsers(
     }
   }
 
-  const [liveRes, appLiveRes] = await Promise.all([
-    fetch(URLS.live),
-    fetch(URLS.app_live),
-  ]);
+  const liveRes = await fetch(URLS[type]);
 
-  if (!liveRes.ok || !appLiveRes.ok) {
+  if (!liveRes.ok) {
     throw new Error(
-      `Failed to fetch configuration from BrowserStack : live=${liveRes.statusText}, app_live=${appLiveRes.statusText}`,
+      `Failed to fetch configuration from BrowserStack : ${type}=${liveRes.statusText}`,
     );
   }
 
-  const [liveData, appLiveData] = await Promise.all([
-    liveRes.json(),
-    appLiveRes.json(),
-  ]);
+  const data = await liveRes.json();
 
-  cache = { live: liveData, app_live: appLiveData };
+  cache = {
+    [type]: data,
+  };
   fs.writeFileSync(CACHE_FILE, JSON.stringify(cache), "utf8");
 
   return cache[type];

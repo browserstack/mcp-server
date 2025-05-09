@@ -12,6 +12,7 @@ import addBrowserLiveTools from "./tools/live";
 import addAccessibilityTools from "./tools/accessibility";
 import addAutomateTools from "./tools/automate";
 import addTestManagementTools from "./tools/testmanagement";
+import addAppAutomationTools from "./tools/appautomate";
 import { trackMCP } from "./lib/instrumentation";
 
 function registerTools(server: McpServer) {
@@ -22,6 +23,7 @@ function registerTools(server: McpServer) {
   addAccessibilityTools(server);
   addAutomateTools(server);
   addTestManagementTools(server);
+  addAppAutomationTools(server);
 }
 
 // Create an MCP server

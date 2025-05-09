@@ -12,6 +12,7 @@ import addBrowserLiveTools from "./tools/live";
 import addAccessibilityTools from "./tools/accessibility";
 import addAutomateTools from "./tools/automate";
 import addTestManagementTools from "./tools/testmanagement";
+import { trackMCP } from "./lib/instrumentation";
 
 function registerTools(server: McpServer) {
   addSDKTools(server);
@@ -42,6 +43,7 @@ async function main() {
   await server.connect(transport);
 
   logger.info("MCP server started successfully");
+  trackMCP("started", server.server.getClientVersion()!);
 }
 
 main().catch(console.error);

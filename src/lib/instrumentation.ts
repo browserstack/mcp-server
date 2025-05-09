@@ -20,6 +20,12 @@ export function trackMCP(
   clientInfo: { name?: string; version?: string },
   error?: unknown,
 ): void {
+  
+  if (config.DEV_MODE) {
+    logger.info("Tracking MCP is disabled in dev mode");
+    return;
+  }
+
   const instrumentationEndpoint = "https://api.browserstack.com/sdk/v1/event";
   const isSuccess = !error;
   const mcpClient = clientInfo?.name || "unknown";

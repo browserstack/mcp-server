@@ -4,6 +4,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "../logger";
 import config from "../config";
 import { trackMCP } from "../lib/instrumentation";
+
 import {
   getDevicesAndBrowsers,
   BrowserStackProducts,
@@ -56,70 +57,65 @@ async function takeAppScreenshot(args: {
   appPath: string;
   desiredPhone: string;
 }): Promise<CallToolResult> {
-  validateArgs(args);
-  const { desiredPlatform, desiredPhone, appPath } = args;
-  let { desiredPlatformVersion } = args;
-
-  logger.info("Fetching available platform devices from cache...");
-  const platforms = (
-    await getDevicesAndBrowsers(BrowserStackProducts.APP_AUTOMATE)
-  ).mobile as PlatformDevices[];
-  logger.info(platforms);
-  logger.info(`Found ${platforms.length} platforms in device cache.`);
-
-  const platformData = platforms.find(
-    (p) => p.os === desiredPlatform.toLowerCase(),
-  );
-  if (!platformData) {
-    throw new Error(`Platform ${desiredPlatform} not found in device cache.`);
-  }
-
-  const matchingDevices = findMatchingDevice(
-    platformData.devices,
-    desiredPhone,
-  );
-  const availableVersions = getDeviceVersions(matchingDevices);
-
-  desiredPlatformVersion = resolveVersion(
-    availableVersions,
-    desiredPlatformVersion,
-  );
-  const selectedDevice = matchingDevices.find(
-    (d) => d.os_version === desiredPlatformVersion,
-  );
-
-  if (!selectedDevice) {
-    throw new Error(
-      `Device "${desiredPhone}" with version ${desiredPlatformVersion} not found.`,
-    );
-  }
-
-  logger.info(
-    `Selected device: ${selectedDevice.device} with version ${selectedDevice.os_version}`,
-  );
-
-  const automationName =
-    desiredPlatform === Platform.ANDROID ? "uiautomator2" : "xcuitest";
-
-  const app_url = await uploadApp(appPath);
-  logger.info(`App uploaded. URL: ${app_url}`);
-
-  const capabilities = {
-    platformName: desiredPlatform,
-    "appium:platformVersion": selectedDevice.os_version,
-    "appium:deviceName": selectedDevice.device,
-    "appium:app": app_url,
-    "appium:automationName": automationName,
-    "appium:autoGrantPermissions": true,
-    "bstack:options": {
-      userName: config.browserstackUsername,
-      accessKey: config.browserstackAccessKey,
-      appiumVersion: "2.0.1",
-    },
-  };
-
   let driver;
   try {
+    validateArgs(args);
+    const { desiredPlatform, desiredPhone, appPath } = args;
+    let { desiredPlatformVersion } = args;
+
+    const platforms = (
+      await getDevicesAndBrowsers(BrowserStackProducts.APP_AUTOMATE)
+    ).mobile as PlatformDevices[];
+
+    const platformData = platforms.find(
+      (p) => p.os === desiredPlatform.toLowerCase(),
+    );
+
+    if (!platformData) {
+      throw new Error(`Platform ${desiredPlatform} not found in device cache.`);
+    }
+
+    const matchingDevices = findMatchingDevice(
+      platformData.devices,
+      desiredPhone,
+    );
+
+    const availableVersions = getDeviceVersions(matchingDevices);
+    desiredPlatformVersion = resolveVersion(
+      availableVersions,
+      desiredPlatformVersion,
+    );
+
+    const selectedDevice = matchingDevices.find(
+      (d) => d.os_version === desiredPlatformVersion,
+    );
+
+    if (!selectedDevice) {
+      throw new Error(
+        `Device "${desiredPhone}" with version ${desiredPlatformVersion} not found.`,
+      );
+    }
+
+    const automationName =
+      desiredPlatform === Platform.ANDROID ? "uiautomator2" : "xcuitest";
+
+    const app_url = await uploadApp(appPath);
+    logger.info(`App uploaded. URL: ${app_url}`);
+
+    const capabilities = {
+      platformName: desiredPlatform,
+      "appium:platformVersion": selectedDevice.os_version,
+      "appium:deviceName": selectedDevice.device,
+      "appium:app": app_url,
+      "appium:automationName": automationName,
+      "appium:autoGrantPermissions": true,
+      "bstack:options": {
+        userName: config.browserstackUsername,
+        accessKey: config.browserstackAccessKey,
+        appiumVersion: "2.0.1",
+      },
+    };
+
     logger.info("Starting WebDriver session on BrowserStack...");
     driver = await wdio.remote({
       protocol: "https",
@@ -128,8 +124,7 @@ async function takeAppScreenshot(args: {
       path: "/wd/hub",
       capabilities,
     });
-    logger.info(driver);
-    logger.info("Taking screenshot of the app...");
+
     const screenshotBase64 = await driver.takeScreenshot();
 
     return {

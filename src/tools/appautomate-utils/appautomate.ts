@@ -122,7 +122,7 @@ export function validateArgs(args: {
 }
 
 /**
- * Uploads an application file to Automate and returns the app URL
+ * Uploads an application file to AppAutomate and returns the app URL
  */
 export async function uploadApp(appPath: string): Promise<string> {
   const filePath = appPath;

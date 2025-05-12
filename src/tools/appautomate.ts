@@ -96,9 +96,6 @@ async function takeAppScreenshot(args: {
       );
     }
 
-    const automationName =
-      desiredPlatform === Platform.ANDROID ? "uiautomator2" : "xcuitest";
-
     const app_url = await uploadApp(appPath);
     logger.info(`App uploaded. URL: ${app_url}`);
 
@@ -107,7 +104,6 @@ async function takeAppScreenshot(args: {
       "appium:platformVersion": selectedDevice.os_version,
       "appium:deviceName": selectedDevice.device,
       "appium:app": app_url,
-      "appium:automationName": automationName,
       "appium:autoGrantPermissions": true,
       "bstack:options": {
         userName: config.browserstackUsername,

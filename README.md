@@ -87,7 +87,7 @@ Use the following prompts to run/debug/fix your **automated tests** on BrowserSt
 
 ### 📋 Test Management 
 
-Use the following prompts to utlise capabilities of BrowserStack's [Test Management](https://www.browserstack.com/test-management) with MCP server.
+Use the following prompts to utilise capabilities of BrowserStack's [Test Management](https://www.browserstack.com/test-management) with MCP server.
 
 ```bash
 # Create project & folder structure

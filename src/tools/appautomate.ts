@@ -4,6 +4,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "../logger";
 import config from "../config";
 import { trackMCP } from "../lib/instrumentation";
+import { maybeCompressBase64 } from "../lib/utils";
 
 import {
   getDevicesAndBrowsers,
@@ -122,13 +123,15 @@ async function takeAppScreenshot(args: {
     });
 
     const screenshotBase64 = await driver.takeScreenshot();
+    const compressed = await maybeCompressBase64(screenshotBase64);
 
     return {
       content: [
         {
           type: "image",
-          data: screenshotBase64,
+          data: compressed,
           mimeType: "image/png",
+          name: `screenshot-${selectedDevice.device}-${Date.now()}`,
         },
       ],
     };

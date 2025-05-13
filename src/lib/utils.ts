@@ -27,6 +27,26 @@ export interface HarEntry {
   time?: number;
 }
 
+export async function assertOkResponse(response: Response, action: string) {
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`Invalid session ID for ${action}`);
+    }
+    throw new Error(`Failed to fetch logs for ${action}: ${response.statusText}`);
+  }
+}
+
+export function filterLinesByKeywords(logText: string, keywords: string[]): string[] {
+  return logText
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line =>
+      keywords.some(keyword =>
+        line.toLowerCase().includes(keyword)
+      )
+    );
+}
+
 /**
  * Compresses a base64 image intelligently to keep it under 1 MB if needed.
  */

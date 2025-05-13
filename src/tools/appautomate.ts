@@ -5,6 +5,7 @@ import logger from "../logger";
 import config from "../config";
 import { trackMCP } from "../lib/instrumentation";
 import { maybeCompressBase64 } from "../lib/utils";
+const { remote } = require('webdriverio');
 
 import {
   getDevicesAndBrowsers,
@@ -41,13 +42,6 @@ enum Platform {
   ANDROID = "android",
   IOS = "ios",
 }
-
-// Initialize WebDriverIO dynamically to avoid top-level import issues
-let wdio: WebDriver;
-(async () => {
-  const { remote } = await import("webdriverio");
-  wdio = { remote };
-})();
 
 /**
  * Launches an app on a selected BrowserStack device and takes a screenshot.
@@ -114,7 +108,7 @@ async function takeAppScreenshot(args: {
     };
 
     logger.info("Starting WebDriver session on BrowserStack...");
-    driver = await wdio.remote({
+    driver = await remote({
       protocol: "https",
       hostname: "hub.browserstack.com",
       port: 443,

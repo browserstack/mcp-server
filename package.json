@@ -1,6 +1,6 @@
 {
   "name": "@browserstack/mcp-server",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "BrowserStack's Official MCP Server",
   "main": "dist/index.js",
   "repository": {
@@ -41,6 +41,7 @@
     "form-data": "^4.0.2",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
+    "webdriverio": "^9.13.0",
     "zod": "^3.24.3"
   },
   "devDependencies": {

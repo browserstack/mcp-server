@@ -38,7 +38,9 @@ export async function getDevicesAndBrowsers(
     if (Date.now() - stats.mtimeMs < TTL_MS) {
       try {
         cache = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
-        return cache[type];
+        if (cache[type]) {
+          return cache[type];
+        }
       } catch (error) {
         console.error("Error parsing cache file:", error);
         // Continue with fetching fresh data

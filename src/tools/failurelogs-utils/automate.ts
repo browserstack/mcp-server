@@ -34,24 +34,21 @@ export async function retrieveNetworkFailures(sessionId: string): Promise<any> {
   );
 
   // Return only the failure entries with some context
-  return {
-    failures: failureEntries.map((entry: any) => ({
-      startedDateTime: entry.startedDateTime,
-      request: {
-        method: entry.request?.method,
-        url: entry.request?.url,
-        queryString: entry.request?.queryString,
-      },
-      response: {
-        status: entry.response?.status,
-        statusText: entry.response?.statusText,
-        _error: entry.response?._error,
-      },
-      serverIPAddress: entry.serverIPAddress,
-      time: entry.time,
-    })),
-    totalFailures: failureEntries.length,
-  };
+  return failureEntries.map((entry: any) => ({
+    startedDateTime: entry.startedDateTime,
+    request: {
+      method: entry.request?.method,
+      url: entry.request?.url,
+      queryString: entry.request?.queryString,
+    },
+    response: {
+      status: entry.response?.status,
+      statusText: entry.response?.statusText,
+      _error: entry.response?._error,
+    },
+    serverIPAddress: entry.serverIPAddress,
+    time: entry.time,
+  }));
 }
 
 // SESSION LOGS

@@ -1,19 +1,19 @@
-import logger from "../../logger";
+import logger from "../../logger.js";
 import childProcess from "child_process";
-import { filterDesktop } from "./desktop-filter";
-import { filterMobile } from "./mobile-filter";
+import { filterDesktop } from "./desktop-filter.js";
+import { filterMobile } from "./mobile-filter.js";
 import {
   DesktopSearchArgs,
   MobileSearchArgs,
   DesktopEntry,
   MobileEntry,
   PlatformType,
-} from "./types";
+} from "./types.js";
 import {
   isLocalURL,
   ensureLocalBinarySetup,
   killExistingBrowserStackLocalProcesses,
-} from "../../lib/local";
+} from "../../lib/local.js";
 
 /**
  * Prepares local tunnel setup based on URL type

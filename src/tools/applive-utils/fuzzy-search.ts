@@ -1,5 +1,5 @@
-import { customFuzzySearch } from "../../lib/fuzzy";
-import { DeviceEntry } from "./start-session";
+import { customFuzzySearch } from "../../lib/fuzzy.js";
+import { DeviceEntry } from "./start-session.js";
 
 /**
  * Fuzzy searches App Live device entries by name.

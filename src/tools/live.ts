@@ -1,10 +1,10 @@
 // File: src/tools/live.ts
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import logger from "../logger";
-import { startBrowserSession } from "./live-utils/start-session";
-import { PlatformType } from "./live-utils/types";
-import { trackMCP } from "../lib/instrumentation";
+import logger from "../logger.js";
+import { startBrowserSession } from "./live-utils/start-session.js";
+import { PlatformType } from "./live-utils/types.js";
+import { trackMCP } from "../lib/instrumentation.js";
 
 // Define the schema shape
 const LiveArgsShape = {

@@ -1,9 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { getLatestO11YBuildInfo } from "../lib/api";
-import { trackMCP } from "../lib/instrumentation";
-import logger from "../logger";
+import { getLatestO11YBuildInfo } from "../lib/api.js";
+import { trackMCP } from "../lib/instrumentation.js";
+import logger from "../logger.js";
 
 export async function getFailuresInLastRun(
   buildName: string,

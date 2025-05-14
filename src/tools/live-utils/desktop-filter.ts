@@ -1,10 +1,10 @@
 import {
   getDevicesAndBrowsers,
   BrowserStackProducts,
-} from "../../lib/device-cache";
-import { resolveVersion } from "./version-resolver";
-import { customFuzzySearch } from "../../lib/fuzzy";
-import { DesktopSearchArgs, DesktopEntry } from "./types";
+} from "../../lib/device-cache.js";
+import { resolveVersion } from "./version-resolver.js";
+import { customFuzzySearch } from "../../lib/fuzzy.js";
+import { DesktopSearchArgs, DesktopEntry } from "./types.js";
 
 export async function filterDesktop(
   args: DesktopSearchArgs,

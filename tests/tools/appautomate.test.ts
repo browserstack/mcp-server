@@ -4,9 +4,11 @@ import {
   resolveVersion,
   validateArgs,
 } from '../../src/tools/appautomate-utils/appautomate';
+import { beforeEach, it, expect, describe, vi } from 'vitest'
+
 
 // Mock only the external dependencies
-jest.mock('../../src/config', () => ({
+vi.mock('../../src/config', () => ({
   __esModule: true,
   default: {
     browserstackUsername: 'fake-user',
@@ -14,14 +16,19 @@ jest.mock('../../src/config', () => ({
   },
 }));
 
-jest.mock('fs');
-jest.mock('../../src/logger', () => ({
-  error: jest.fn(),
-  info: jest.fn(),
-}));
+vi.mock('fs');
+vi.mock('../../src/logger', () => {
+  return {
+    default: {
+      error: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn()
+    }
+  }
+});
 
-jest.mock('../../src/lib/instrumentation', () => ({
-  trackMCP: jest.fn(),
+vi.mock('../../src/lib/instrumentation', () => ({
+  trackMCP: vi.fn(),
 }));
 
 describe('appautomate utils', () => {
@@ -40,7 +47,7 @@ describe('appautomate utils', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('validateArgs', () => {

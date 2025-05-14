@@ -1,10 +1,10 @@
 import {
   getDevicesAndBrowsers,
   BrowserStackProducts,
-} from "../../lib/device-cache";
-import { resolveVersion } from "./version-resolver";
-import { customFuzzySearch } from "../../lib/fuzzy";
-import { MobileSearchArgs, MobileEntry } from "./types";
+} from "../../lib/device-cache.js";
+import { resolveVersion } from "./version-resolver.js";
+import { customFuzzySearch } from "../../lib/fuzzy.js";
+import { MobileSearchArgs, MobileEntry } from "./types.js";
 
 // Extract all mobile entries from the data
 function getAllMobileEntries(data: any): MobileEntry[] {

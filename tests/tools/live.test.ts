@@ -2,40 +2,49 @@ import { startBrowserSession } from '../../src/tools/live-utils/start-session';
 import * as local from '../../src/lib/local';
 import logger from '../../src/logger';
 import addBrowserLiveTools from '../../src/tools/live';
+import { beforeEach, it, expect, describe, vi, Mock } from 'vitest'
 
-jest.mock('../../src/tools/live-utils/start-session', () => ({
-  startBrowserSession: jest.fn()
+vi.mock('../../src/tools/live-utils/start-session', () => ({
+  startBrowserSession: vi.fn()
 }));
-jest.mock('../../src/lib/local', () => ({
-  isLocalURL: jest.fn(),
-  killExistingBrowserStackLocalProcesses: jest.fn(),
+vi.mock('../../src/lib/local', () => ({
+  isLocalURL: vi.fn(),
+  killExistingBrowserStackLocalProcesses: vi.fn(),
 }));
-jest.mock('../../src/logger', () => ({
-  error: jest.fn()
-}));
-jest.mock('../../src/lib/instrumentation', () => ({
-  trackMCP: jest.fn()
+
+vi.mock('../../src/logger', () => {
+  return {
+    default: {
+      error: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn()
+    }
+  }
+});
+
+vi.mock('../../src/lib/instrumentation', () => ({
+  trackMCP: vi.fn()
 }));
 
 describe('startBrowserLiveSession', () => {
   let serverMock: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     serverMock = {
-      tool: jest.fn((name, desc, schema, handler) => {
+      tool: vi.fn((name, desc, schema, handler) => {
         serverMock.handler = handler;
       }),
       server: {
-        getClientVersion: jest.fn().mockReturnValue({ version: '1.0.0' })
+        getClientVersion: vi.fn().mockReturnValue({ version: '1.0.0' })
       }
     };
 
     addBrowserLiveTools(serverMock);
 
-    (startBrowserSession as jest.Mock).mockResolvedValue('https://live.browserstack.com/123456');
-    (local.isLocalURL as jest.Mock).mockReturnValue(false);
-    (local.killExistingBrowserStackLocalProcesses as jest.Mock).mockResolvedValue(undefined);
+    (startBrowserSession as Mock).mockResolvedValue('https://live.browserstack.com/123456');
+    (local.isLocalURL as Mock).mockReturnValue(false);
+    (local.killExistingBrowserStackLocalProcesses as Mock).mockResolvedValue(undefined);
   });
 
   const validDesktopArgs = {
@@ -70,7 +79,7 @@ describe('startBrowserLiveSession', () => {
   });
 
   it('should handle session start failure', async () => {
-    (startBrowserSession as jest.Mock).mockRejectedValue(new Error('Session start failed'));
+    (startBrowserSession as Mock).mockRejectedValue(new Error('Session start failed'));
     const result = await serverMock.handler(validDesktopArgs);
     expect(logger.error).toHaveBeenCalled();
     expect(result.content[0].text).toContain('Failed to start a browser live session');

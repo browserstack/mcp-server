@@ -1,5 +1,5 @@
-import { ConfigMapping } from "./types";
-import config from "../../config";
+import { ConfigMapping } from "./types.js";
+import config from "../../config.js";
 
 const nodejsInstructions = `
 - Ensure that \`browserstack-node-sdk\` is present in package.json, use the latest version.

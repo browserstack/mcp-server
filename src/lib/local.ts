@@ -1,7 +1,7 @@
-import logger from "../logger";
+import logger from "../logger.js";
 import { execSync } from "child_process";
 import { Local } from "browserstack-local";
-import config from "../config";
+import config from "../config.js";
 
 async function isBrowserStackLocalRunning() {
   // Check if BrowserStackLocal binary is already running

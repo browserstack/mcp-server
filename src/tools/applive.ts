@@ -2,9 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import fs from "fs";
-import { startSession } from "./applive-utils/start-session";
-import logger from "../logger";
-import { trackMCP } from "../lib/instrumentation";
+import { startSession } from "./applive-utils/start-session.js";
+import logger from "../logger.js";
+import { trackMCP } from "../lib/instrumentation.js";
 
 /**
  * Launches an App Live Session on BrowserStack.

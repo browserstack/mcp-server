@@ -1,12 +1,12 @@
 import childProcess from "child_process";
-import logger from "../../logger";
+import logger from "../../logger.js";
 import {
   BrowserStackProducts,
   getDevicesAndBrowsers,
-} from "../../lib/device-cache";
-import { fuzzySearchDevices } from "./fuzzy-search";
-import { sanitizeUrlParam } from "../../lib/utils";
-import { uploadApp } from "./upload-app";
+} from "../../lib/device-cache.js";
+import { fuzzySearchDevices } from "./fuzzy-search.js";
+import { sanitizeUrlParam } from "../../lib/utils.js";
+import { uploadApp } from "./upload-app.js";
 
 export interface DeviceEntry {
   device: string;

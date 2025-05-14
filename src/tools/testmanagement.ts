@@ -1,45 +1,45 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { trackMCP } from "../lib/instrumentation";
-import logger from "../logger";
+import { trackMCP } from "../lib/instrumentation.js";
+import logger from "../logger.js";
 import {
   createProjectOrFolder,
   CreateProjFoldSchema,
-} from "./testmanagement-utils/create-project-folder";
+} from "./testmanagement-utils/create-project-folder.js";
 import {
   createTestCase as createTestCaseAPI,
   TestCaseCreateRequest,
   sanitizeArgs,
   CreateTestCaseSchema,
-} from "./testmanagement-utils/create-testcase";
+} from "./testmanagement-utils/create-testcase.js";
 
 let serverInstance: McpServer;
 
 import {
   listTestCases,
   ListTestCasesSchema,
-} from "./testmanagement-utils/list-testcases";
+} from "./testmanagement-utils/list-testcases.js";
 
 import {
   CreateTestRunSchema,
   createTestRun,
-} from "./testmanagement-utils/create-testrun";
+} from "./testmanagement-utils/create-testrun.js";
 
 import {
   ListTestRunsSchema,
   listTestRuns,
-} from "./testmanagement-utils/list-testruns";
+} from "./testmanagement-utils/list-testruns.js";
 
 import {
   UpdateTestRunSchema,
   updateTestRun,
-} from "./testmanagement-utils/update-testrun";
+} from "./testmanagement-utils/update-testrun.js";
 
 import {
   addTestResult,
   AddTestResultSchema,
-} from "./testmanagement-utils/add-test-result";
+} from "./testmanagement-utils/add-test-result.js";
 
 /**
  * Wrapper to call createProjectOrFolder util.

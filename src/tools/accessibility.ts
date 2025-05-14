@@ -4,8 +4,8 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   startAccessibilityScan,
   AccessibilityScanResponse,
-} from "./accessiblity-utils/accessibility";
-import { trackMCP } from "../lib/instrumentation";
+} from "./accessiblity-utils/accessibility.js";
+import { trackMCP } from "../lib/instrumentation.js";
 
 async function runAccessibilityScan(
   name: string,

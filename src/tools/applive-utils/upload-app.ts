@@ -1,7 +1,7 @@
 import axios, { AxiosError } from "axios";
 import FormData from "form-data";
 import fs from "fs";
-import config from "../../config";
+import config from "../../config.js";
 
 interface UploadResponse {
   app_url: string;

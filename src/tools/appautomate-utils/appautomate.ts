@@ -1,8 +1,8 @@
 import fs from "fs";
 import axios from "axios";
-import config from "../../config";
+import config from "../../config.js";
 import FormData from "form-data";
-import { customFuzzySearch } from "../../lib/fuzzy";
+import { customFuzzySearch } from "../../lib/fuzzy.js";
 
 interface Device {
   device: string;

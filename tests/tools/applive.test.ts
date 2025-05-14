@@ -3,30 +3,39 @@ import { startSession } from '../../src/tools/applive-utils/start-session';
 import { uploadApp } from '../../src/tools/applive-utils/upload-app';
 import logger from '../../src/logger';
 import { startAppLiveSession } from '../../src/tools/applive';
+import { beforeEach, it, expect, describe, vi, Mock } from 'vitest'
 
 // Mock the dependencies
-jest.mock('fs');
-jest.mock('../../src/tools/applive-utils/upload-app', () => ({
-  uploadApp: jest.fn()
+vi.mock('fs');
+vi.mock('../../src/tools/applive-utils/upload-app', () => ({
+  uploadApp: vi.fn()
 }));
-jest.mock('../../src/tools/applive-utils/start-session', () => ({
-  startSession: jest.fn()
+vi.mock('../../src/tools/applive-utils/start-session', () => ({
+  startSession: vi.fn()
 }));
-jest.mock('../../src/logger', () => ({
-  error: jest.fn()
+
+vi.mock('../../src/lib/instrumentation', () => ({
+  trackMCP: vi.fn()
 }));
-jest.mock('../../src/lib/instrumentation', () => ({
-  trackMCP: jest.fn()
-}));
+
+vi.mock('../../src/logger', () => {
+  return {
+    default: {
+      error: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn()
+    }
+  }
+});
 
 describe('startAppLiveSession', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Default mock implementations
-    (fs.existsSync as jest.Mock).mockReturnValue(true);
-    (fs.accessSync as jest.Mock).mockReturnValue(undefined);
-    (uploadApp as jest.Mock).mockResolvedValue({ app_url: 'bs://123456' });
-    (startSession as jest.Mock).mockResolvedValue('https://app-live.browserstack.com/123456');
+    (fs.existsSync as Mock).mockReturnValue(true);
+    (fs.accessSync as Mock).mockReturnValue(undefined);
+    (uploadApp as Mock).mockResolvedValue({ app_url: 'bs://123456' });
+    (startSession as Mock).mockResolvedValue('https://app-live.browserstack.com/123456');
   });
 
   const validAndroidArgs = {
@@ -93,13 +102,13 @@ describe('startAppLiveSession', () => {
   });
 
   it('should fail if app file does not exist', async () => {
-    (fs.existsSync as jest.Mock).mockReturnValue(false);
+    (fs.existsSync as Mock).mockReturnValue(false);
     await expect(startAppLiveSession(validAndroidArgs)).rejects.toThrow('The app path does not exist');
     expect(logger.error).toHaveBeenCalled();
   });
 
   it('should fail if app file is not readable', async () => {
-    (fs.accessSync as jest.Mock).mockImplementation(() => {
+    (fs.accessSync as Mock).mockImplementation(() => {
       throw new Error('EACCES: permission denied');
     });
     await expect(startAppLiveSession(validAndroidArgs)).rejects.toThrow('The app path does not exist or is not readable');
@@ -107,7 +116,7 @@ describe('startAppLiveSession', () => {
   });
 
   it('should handle session start failure', async () => {
-    (startSession as jest.Mock).mockRejectedValue(new Error('Session start failed'));
+    (startSession as Mock).mockRejectedValue(new Error('Session start failed'));
     await expect(startAppLiveSession(validAndroidArgs)).rejects.toThrow('Session start failed');
   });
 });

@@ -2,18 +2,18 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import packageJson from "../package.json";
+import packageJson from "../package.json" with { type: "json" };
 import "dotenv/config";
-import logger from "./logger";
-import addSDKTools from "./tools/bstack-sdk";
-import addAppLiveTools from "./tools/applive";
-import addObservabilityTools from "./tools/observability";
-import addBrowserLiveTools from "./tools/live";
-import addAccessibilityTools from "./tools/accessibility";
-import addTestManagementTools from "./tools/testmanagement";
-import addAppAutomationTools from "./tools/appautomate";
-import addFailureLogsTools from "./tools/getFailureLogs";
-import { trackMCP } from "./lib/instrumentation";
+import logger from "./logger.js";
+import addSDKTools from "./tools/bstack-sdk.js";
+import addAppLiveTools from "./tools/applive.js";
+import addObservabilityTools from "./tools/observability.js";
+import addBrowserLiveTools from "./tools/live.js";
+import addAccessibilityTools from "./tools/accessibility.js";
+import addAutomateTools from "./tools/automate.js";
+import addTestManagementTools from "./tools/testmanagement.js";
+import addAppAutomationTools from "./tools/appautomate.js";
+import { trackMCP } from "./lib/instrumentation.js";
 
 function registerTools(server: McpServer) {
   addSDKTools(server);

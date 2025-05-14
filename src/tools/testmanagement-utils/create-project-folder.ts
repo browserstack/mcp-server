@@ -1,8 +1,8 @@
 import axios from "axios";
-import config from "../../config";
+import config from "../../config.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { formatAxiosError } from "../../lib/error"; // or correct path
+import { formatAxiosError } from "../../lib/error.js"; // or correct path
 
 // Schema for combined project/folder creation
 export const CreateProjFoldSchema = z.object({

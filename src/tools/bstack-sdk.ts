@@ -5,12 +5,12 @@ import {
   SDKSupportedBrowserAutomationFramework,
   SDKSupportedLanguage,
   SDKSupportedTestingFramework,
-} from "./sdk-utils/types";
+} from "./sdk-utils/types.js";
 import {
   generateBrowserStackYMLInstructions,
   getInstructionsForProjectConfiguration,
-} from "./sdk-utils/instructions";
-import { trackMCP } from "../lib/instrumentation";
+} from "./sdk-utils/instructions.js";
+import { trackMCP } from "../lib/instrumentation.js";
 
 /**
  * BrowserStack SDK hooks into your test framework to seamlessly run tests on BrowserStack.

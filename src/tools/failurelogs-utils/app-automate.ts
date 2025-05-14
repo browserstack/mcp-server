@@ -1,5 +1,5 @@
-import config from "../../config";
-import { assertOkResponse, filterLinesByKeywords } from "../../lib/utils";
+import config from "../../config.js";
+import { assertOkResponse, filterLinesByKeywords } from "../../lib/utils.js";
 
 const auth = Buffer.from(
   `${config.browserstackUsername}:${config.browserstackAccessKey}`,

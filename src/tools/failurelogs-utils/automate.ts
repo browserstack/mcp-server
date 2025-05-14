@@ -1,6 +1,6 @@
-import config from "../../config";
-import { HarEntry, HarFile } from "../../lib/utils";
-import { assertOkResponse, filterLinesByKeywords } from "../../lib/utils";
+import config from "../../config.js";
+import { HarEntry, HarFile } from "../../lib/utils.js";
+import { assertOkResponse, filterLinesByKeywords } from "../../lib/utils.js";
 
 const auth = Buffer.from(
   `${config.browserstackUsername}:${config.browserstackAccessKey}`,

@@ -10,9 +10,9 @@ import addAppLiveTools from "./tools/applive.js";
 import addObservabilityTools from "./tools/observability.js";
 import addBrowserLiveTools from "./tools/live.js";
 import addAccessibilityTools from "./tools/accessibility.js";
-import addAutomateTools from "./tools/automate.js";
 import addTestManagementTools from "./tools/testmanagement.js";
 import addAppAutomationTools from "./tools/appautomate.js";
+import addFailureLogsTools from "./tools/getFailureLogs.js";
 import { trackMCP } from "./lib/instrumentation.js";
 
 function registerTools(server: McpServer) {

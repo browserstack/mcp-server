@@ -1,8 +1,9 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getFailureLogs } from '../../src/tools/getFailureLogs';
 import * as automate from '../../src/tools/failurelogs-utils/automate';
 import * as appAutomate from '../../src/tools/failurelogs-utils/app-automate';
 
-jest.mock('../../src/config', () => ({
+vi.mock('../../src/config', () => ({
   __esModule: true,
   default: {
     browserstackUsername: 'fake-user',
@@ -10,16 +11,16 @@ jest.mock('../../src/config', () => ({
   },
 }));
 
-jest.mock('../../src/lib/instrumentation', () => ({
-  trackMCP: jest.fn()
+vi.mock('../../src/lib/instrumentation', () => ({
+  trackMCP: vi.fn()
 }));
 
 // Mock the utility functions with implementations
-jest.mock('../../src/tools/failurelogs-utils/automate', () => ({
-  retrieveNetworkFailures: jest.fn(),
-  retrieveSessionFailures: jest.fn(),
-  retrieveConsoleFailures: jest.fn(),
-  filterSessionFailures: jest.fn((text: string) => {
+vi.mock('../../src/tools/failurelogs-utils/automate', () => ({
+  retrieveNetworkFailures: vi.fn(),
+  retrieveSessionFailures: vi.fn(),
+  retrieveConsoleFailures: vi.fn(),
+  filterSessionFailures: vi.fn((text: string) => {
     const lines = text.split('\n');
     return lines.filter((line: string) => 
       line.includes('ERROR') || 
@@ -27,7 +28,7 @@ jest.mock('../../src/tools/failurelogs-utils/automate', () => ({
       line.includes('FATAL')
     );
   }),
-  filterConsoleFailures: jest.fn((text: string) => {
+  filterConsoleFailures: vi.fn((text: string) => {
     const lines = text.split('\n');
     return lines.filter((line: string) => 
       line.includes('Failed to load resource') || 
@@ -36,31 +37,30 @@ jest.mock('../../src/tools/failurelogs-utils/automate', () => ({
   }),
 }));
 
-jest.mock('../../src/tools/failurelogs-utils/app-automate', () => ({
-  retrieveDeviceLogs: jest.fn(),
-  retrieveAppiumLogs: jest.fn(),
-  retrieveCrashLogs: jest.fn(),
-  filterDeviceFailures: jest.fn(() => []),
-  filterAppiumFailures: jest.fn(() => []),
-  filterCrashFailures: jest.fn(() => []),
+vi.mock('../../src/tools/failurelogs-utils/app-automate', () => ({
+  retrieveDeviceLogs: vi.fn(),
+  retrieveAppiumLogs: vi.fn(),
+  retrieveCrashLogs: vi.fn(),
+  filterDeviceFailures: vi.fn(() => []),
+  filterAppiumFailures: vi.fn(() => []),
+  filterCrashFailures: vi.fn(() => []),
 }));
 
 // Mock fetch
-const mockFetch = jest.fn();
+const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
 describe('BrowserStack Failure Logs', () => {
   const mockSessionId = 'test-session-id';
   const mockBuildId = 'test-build-id';
-  const auth = Buffer.from('fake-user:fake-key').toString('base64');
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockFetch.mockClear();
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('getFailureLogs - Input Validation', () => {
@@ -124,12 +124,12 @@ describe('BrowserStack Failure Logs', () => {
 
     beforeEach(() => {
       // Reset all mocks
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       
       // Setup mock implementations with resolved values
-      jest.mocked(automate.retrieveNetworkFailures).mockResolvedValue(mockNetworkFailures);
-      jest.mocked(automate.retrieveSessionFailures).mockResolvedValue(['[ERROR] Test failed']);
-      jest.mocked(automate.retrieveConsoleFailures).mockResolvedValue(['Uncaught TypeError']);
+      vi.mocked(automate.retrieveNetworkFailures).mockResolvedValue(mockNetworkFailures);
+      vi.mocked(automate.retrieveSessionFailures).mockResolvedValue(['[ERROR] Test failed']);
+      vi.mocked(automate.retrieveConsoleFailures).mockResolvedValue(['Uncaught TypeError']);
     });
 
     it('should fetch network logs successfully', async () => {
@@ -141,7 +141,7 @@ describe('BrowserStack Failure Logs', () => {
           response: { status: 404, statusText: 'Not Found' }
         }
       ];
-      jest.mocked(automate.retrieveNetworkFailures).mockResolvedValue(mockFailures);
+      vi.mocked(automate.retrieveNetworkFailures).mockResolvedValue(mockFailures);
 
       const result = await getFailureLogs({
         sessionId: mockSessionId,
@@ -185,9 +185,9 @@ describe('BrowserStack Failure Logs', () => {
     const mockCrashLogs = ['Application crashed due to signal 11'];
 
     beforeEach(() => {
-      jest.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue(mockDeviceLogs);
-      jest.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue(mockAppiumLogs);
-      jest.mocked(appAutomate.retrieveCrashLogs).mockResolvedValue(mockCrashLogs);
+      vi.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue(mockDeviceLogs);
+      vi.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue(mockAppiumLogs);
+      vi.mocked(appAutomate.retrieveCrashLogs).mockResolvedValue(mockCrashLogs);
     });
 
     it('should fetch device logs successfully', async () => {
@@ -232,7 +232,7 @@ describe('BrowserStack Failure Logs', () => {
 
   describe('Error Handling', () => {
     it('should handle empty log responses', async () => {
-      jest.mocked(automate.retrieveNetworkFailures).mockResolvedValue([]);
+      vi.mocked(automate.retrieveNetworkFailures).mockResolvedValue([]);
 
       const result = await getFailureLogs({
         sessionId: mockSessionId,
@@ -247,7 +247,7 @@ describe('BrowserStack Failure Logs', () => {
   describe('Log Filtering', () => {
     beforeEach(() => {
       // Reset mock implementations before each test
-      jest.mocked(automate.filterSessionFailures).mockImplementation((text: string) => {
+      vi.mocked(automate.filterSessionFailures).mockImplementation((text: string) => {
         const lines = text.split('\n');
         return lines.filter((line: string) => 
           line.includes('ERROR') || 
@@ -256,7 +256,7 @@ describe('BrowserStack Failure Logs', () => {
         );
       });
       
-      jest.mocked(automate.filterConsoleFailures).mockImplementation((text: string) => {
+      vi.mocked(automate.filterConsoleFailures).mockImplementation((text: string) => {
         const lines = text.split('\n');
         return lines.filter((line: string) => 
           line.includes('Failed to load resource') || 
@@ -264,9 +264,9 @@ describe('BrowserStack Failure Logs', () => {
         );
       });
 
-      jest.mocked(appAutomate.filterDeviceFailures).mockReturnValue([]);
-      jest.mocked(appAutomate.filterAppiumFailures).mockReturnValue([]);
-      jest.mocked(appAutomate.filterCrashFailures).mockReturnValue([]);
+      vi.mocked(appAutomate.filterDeviceFailures).mockReturnValue([]);
+      vi.mocked(appAutomate.filterAppiumFailures).mockReturnValue([]);
+      vi.mocked(appAutomate.filterCrashFailures).mockReturnValue([]);
     });
 
     it('should filter session logs correctly', () => {
@@ -279,7 +279,7 @@ describe('BrowserStack Failure Logs', () => {
 [INFO] Test completed
 `;
 
-      const result = jest.mocked(automate.filterSessionFailures)(logText);
+      const result = vi.mocked(automate.filterSessionFailures)(logText);
       expect(result).toEqual([
         '[ERROR] Test failed',
         '[EXCEPTION] NullPointerException',
@@ -295,7 +295,7 @@ console.info('Test progress')
 console.error('Uncaught TypeError')
 `;
 
-      const result = jest.mocked(automate.filterConsoleFailures)(logText);
+      const result = vi.mocked(automate.filterConsoleFailures)(logText);
       expect(result).toEqual([
         "console.error('Failed to load resource')",
         "console.error('Uncaught TypeError')"
@@ -304,11 +304,11 @@ console.error('Uncaught TypeError')
 
     it('should handle empty inputs in filters', () => {
       const emptyResult: string[] = [];
-      jest.mocked(automate.filterSessionFailures).mockReturnValue(emptyResult);
-      jest.mocked(automate.filterConsoleFailures).mockReturnValue(emptyResult);
-      jest.mocked(appAutomate.filterDeviceFailures).mockReturnValue(emptyResult);
-      jest.mocked(appAutomate.filterAppiumFailures).mockReturnValue(emptyResult);
-      jest.mocked(appAutomate.filterCrashFailures).mockReturnValue(emptyResult);
+      vi.mocked(automate.filterSessionFailures).mockReturnValue(emptyResult);
+      vi.mocked(automate.filterConsoleFailures).mockReturnValue(emptyResult);
+      vi.mocked(appAutomate.filterDeviceFailures).mockReturnValue(emptyResult);
+      vi.mocked(appAutomate.filterAppiumFailures).mockReturnValue(emptyResult);
+      vi.mocked(appAutomate.filterCrashFailures).mockReturnValue(emptyResult);
 
       expect(automate.filterSessionFailures('')).toEqual([]);
       expect(automate.filterConsoleFailures('')).toEqual([]);

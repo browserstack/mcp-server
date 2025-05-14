@@ -1,20 +1,20 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import logger from "../logger";
+import logger from "../logger.js";
 
 import {
   retrieveNetworkFailures,
   retrieveSessionFailures,
   retrieveConsoleFailures,
-} from "./failurelogs-utils/automate";
+} from "./failurelogs-utils/automate.js";
 
 import {
   retrieveDeviceLogs,
   retrieveAppiumLogs,
   retrieveCrashLogs,
-} from "./failurelogs-utils/app-automate";
-import { trackMCP } from "../lib/instrumentation";
+} from "./failurelogs-utils/app-automate.js";
+import { trackMCP } from "../lib/instrumentation.js";
 
 const AutomateLogType = {
   NetworkLogs: "networkLogs",

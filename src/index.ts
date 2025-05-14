@@ -10,9 +10,9 @@ import addAppLiveTools from "./tools/applive";
 import addObservabilityTools from "./tools/observability";
 import addBrowserLiveTools from "./tools/live";
 import addAccessibilityTools from "./tools/accessibility";
-import addAutomateTools from "./tools/automate";
 import addTestManagementTools from "./tools/testmanagement";
 import addAppAutomationTools from "./tools/appautomate";
+import addFailureLogsTools from "./tools/getFailureLogs";
 import { trackMCP } from "./lib/instrumentation";
 
 function registerTools(server: McpServer) {
@@ -21,9 +21,9 @@ function registerTools(server: McpServer) {
   addBrowserLiveTools(server);
   addObservabilityTools(server);
   addAccessibilityTools(server);
-  addAutomateTools(server);
   addTestManagementTools(server);
   addAppAutomationTools(server);
+  addFailureLogsTools(server);
 }
 
 // Create an MCP server

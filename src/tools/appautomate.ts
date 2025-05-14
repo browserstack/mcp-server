@@ -5,7 +5,8 @@ import logger from "../logger";
 import config from "../config";
 import { trackMCP } from "../lib/instrumentation";
 import { maybeCompressBase64 } from "../lib/utils";
-const { remote } = require('webdriverio');
+//eslint-disable-next-line
+const { remote } = require("webdriverio");
 
 import {
   getDevicesAndBrowsers,
@@ -32,10 +33,6 @@ interface PlatformDevices {
   os: string;
   os_display_name: string;
   devices: Device[];
-}
-
-interface WebDriver {
-  remote(options: any): Promise<any>;
 }
 
 enum Platform {

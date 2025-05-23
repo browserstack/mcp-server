@@ -2,7 +2,7 @@ import {
   getDevicesAndBrowsers,
   BrowserStackProducts,
 } from "../../lib/device-cache.js";
-import { resolveVersion } from "./version-resolver.js";
+import { resolveVersion } from "../../lib/version-resolver.js";
 import { customFuzzySearch } from "../../lib/fuzzy.js";
 import { MobileSearchArgs, MobileEntry } from "./types.js";
 

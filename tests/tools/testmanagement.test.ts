@@ -6,7 +6,8 @@ import {
   listTestRunsTool,
   updateTestRunTool,
   uploadProductRequirementFileTool,
-  createTestCasesFromFileTool
+  createTestCasesFromFileTool,
+  createLCAStepsTool
 } from '../../src/tools/testmanagement';
 import addTestManagementTools from '../../src/tools/testmanagement';
 import { createProjectOrFolder } from '../../src/tools/testmanagement-utils/create-project-folder';
@@ -17,6 +18,7 @@ import { addTestResult } from '../../src/tools/testmanagement-utils/add-test-res
 import { listTestRuns } from '../../src/tools/testmanagement-utils/list-testruns';
 import { updateTestRun } from '../../src/tools/testmanagement-utils/update-testrun';
 import { createTestCasesFromFile } from '../../src/tools/testmanagement-utils/testcase-from-file';
+import { createLCASteps } from '../../src/tools/testmanagement-utils/create-lca-steps';
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import axios from 'axios';
 import { beforeEach, it, expect, describe, Mocked} from 'vitest';
@@ -42,6 +44,18 @@ vi.mock('../../src/tools/testmanagement-utils/create-testcase', () => ({
 
 vi.mock('../../src/tools/testmanagement-utils/testcase-from-file', () => ({
   createTestCasesFromFile: vi.fn(),
+}));
+
+vi.mock('../../src/tools/testmanagement-utils/create-lca-steps', () => ({
+  createLCASteps: vi.fn(),
+  CreateLCAStepsSchema: {
+    parse: (args: any) => args,
+    shape: {},
+  },
+}));
+
+vi.mock('../../src/tools/testmanagement-utils/poll-lca-status', () => ({
+  pollLCAStatus: vi.fn(),
 }));
 vi.mock('../../src/config', () => ({
   __esModule: true,
@@ -525,5 +539,109 @@ describe("createTestCasesFromFileTool", () => {
     const res = await createTestCasesFromFileTool(args as any, mockContext);
     expect(res.isError ?? false).toBe(false);
     expect(res.content?.[0]?.text).toContain("test cases created");
+  });
+});
+
+// Tests for createLCAStepsTool
+describe("createLCAStepsTool", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  const mockContext = { 
+    sendNotification: vi.fn(), 
+    _meta: { progressToken: "test-lca-progress-token" } 
+  };
+
+  const validArgs = {
+    project_identifier: "PR-123",
+    test_case_identifier: "TC-456",
+    base_url: "google.com",
+    credentials: {
+      username: "test@example.com",
+      password: "password123",
+    },
+    local_enabled: false,
+    test_name: "Sample LCA Test",
+    test_case_details: {
+      name: "Test Case Name",
+      description: "Test case description",
+      preconditions: "Test preconditions",
+      test_case_steps: [
+        { step: "Step 1", result: "Expected result 1" },
+        { step: "Step 2", result: "Expected result 2" },
+      ],
+    },
+    version: "v2",
+  };
+
+  it("creates LCA steps successfully", async () => {
+    const mockResponse = {
+      content: [
+        { type: "text", text: "Successfully created LCA steps for test case TC-456" },
+        { type: "text", text: JSON.stringify({ success: true }, null, 2) },
+      ],
+      isError: false,
+    };
+
+    (createLCASteps as Mock).mockResolvedValue(mockResponse);
+
+    const result = await createLCAStepsTool(validArgs as any, mockContext);
+
+    expect(createLCASteps).toHaveBeenCalledWith(validArgs, mockContext);
+    expect(result).toBe(mockResponse);
+    expect(result.isError).toBe(false);
+  });
+
+  it("handles errors when creating LCA steps", async () => {
+    (createLCASteps as Mock).mockRejectedValue(new Error("API Error"));
+
+    const result = await createLCAStepsTool(validArgs as any, mockContext);
+
+    expect(result.isError).toBe(true);
+    expect(result.content?.[0]?.text).toContain("Failed to create LCA steps: API Error");
+  });
+
+  it("handles unknown errors when creating LCA steps", async () => {
+    (createLCASteps as Mock).mockRejectedValue("unexpected error");
+
+    const result = await createLCAStepsTool(validArgs as any, mockContext);
+
+    expect(result.isError).toBe(true);
+    expect(result.content?.[0]?.text).toContain("Failed to create LCA steps: Unknown error");
+  });
+
+  it("creates LCA steps with wait_for_completion disabled", async () => {
+    const argsWithoutWait = { ...validArgs, wait_for_completion: false };
+    const mockResponse = {
+      content: [
+        { type: "text", text: "LCA steps creation initiated for test case TC-456" },
+        { type: "text", text: "LCA build started. Check the BrowserStack Test Management UI for completion status." },
+      ],
+      isError: false,
+    };
+
+    (createLCASteps as Mock).mockResolvedValue(mockResponse);
+
+    const result = await createLCAStepsTool(argsWithoutWait as any, mockContext);
+
+    expect(createLCASteps).toHaveBeenCalledWith(argsWithoutWait, mockContext);
+    expect(result.content?.[1]?.text).toContain("Check the BrowserStack Test Management UI");
+  });
+
+  it("creates LCA steps with custom max wait time", async () => {
+    const argsWithCustomWait = { ...validArgs, max_wait_minutes: 5 };
+    const mockResponse = {
+      content: [
+        { type: "text", text: "LCA steps creation initiated for test case TC-456" },
+        { type: "text", text: "Warning: LCA build did not complete within 5 minutes." },
+      ],
+      isError: false,
+    };
+
+    (createLCASteps as Mock).mockResolvedValue(mockResponse);
+
+    const result = await createLCAStepsTool(argsWithCustomWait as any, mockContext);
+
+    expect(createLCASteps).toHaveBeenCalledWith(argsWithCustomWait, mockContext);
+    expect(result.content?.[1]?.text).toContain("within 5 minutes");
   });
 });

@@ -80,11 +80,17 @@ export async function createTestCasesFromFile(
 
   signedUrlMap.delete(args.documentId);
 
+  const dashboardURL = `https://test-management.browserstack.com/projects/${args.projectReferenceId}/folder/${args.folderId}/test-cases`;
+
   return {
     content: [
       {
         type: "text",
         text: resultString,
+      },
+      {
+        type: "text",
+        text: `Dashboard URL: ${dashboardURL}`,
       },
     ],
   };

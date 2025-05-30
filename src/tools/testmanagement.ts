@@ -49,6 +49,11 @@ import {
 import { createTestCasesFromFile } from "./testmanagement-utils/testcase-from-file.js";
 import { CreateTestCasesFromFileSchema } from "./testmanagement-utils/TCG-utils/types.js";
 
+import {
+  createLCASteps,
+  CreateLCAStepsSchema,
+} from "./testmanagement-utils/create-lca-steps.js";
+
 //TODO: Moving the traceMCP and catch block to the parent(server) function
 
 /**
@@ -315,6 +320,33 @@ export async function createTestCasesFromFileTool(
 }
 
 /**
+ * Creates LCA (Low Code Automation) steps for a test case in BrowserStack Test Management.
+ */
+export async function createLCAStepsTool(
+  args: z.infer<typeof CreateLCAStepsSchema>,
+  context: any,
+): Promise<CallToolResult> {
+  try {
+    trackMCP("createLCASteps", serverInstance.server.getClientVersion()!);
+    return await createLCASteps(args, context);
+  } catch (err) {
+    trackMCP("createLCASteps", serverInstance.server.getClientVersion()!, err);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to create LCA steps: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+          isError: true,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
  * Registers both project/folder and test-case tools.
  */
 export default function addTestManagementTools(server: McpServer) {
@@ -368,14 +400,20 @@ export default function addTestManagementTools(server: McpServer) {
 
   server.tool(
     "uploadProductRequirementFile",
-    "Upload files such as PDRs or PDFs to BrowserStack Test Management and get file mapping ID back. Its Used for generating test cases from file.",
+    "Upload files (e.g., PDRs, PDFs) to BrowserStack Test Management and retrieve a file mapping ID. This is utilized for generating test cases from files and is part of the Test Case Generator AI Agent in BrowserStack.",
     UploadFileSchema.shape,
     uploadProductRequirementFileTool,
   );
   server.tool(
     "createTestCasesFromFile",
-    "Create test cases from a file in BrowserStack Test Management.",
+    "Generate test cases from a file in BrowserStack Test Management using the Test Case Generator AI Agent.",
     CreateTestCasesFromFileSchema.shape,
     createTestCasesFromFileTool,
+  );
+  server.tool(
+    "createLCASteps",
+    "Generate Low Code Automation (LCA) steps for a test case in BrowserStack Test Management using the Low Code Automation Agent.",
+    CreateLCAStepsSchema.shape,
+    createLCAStepsTool,
   );
 }

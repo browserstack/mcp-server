@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { getSelfHealSelectors } from "./selfheal-utils/selfheal.js";
 import logger from "../logger.js";
+import { trackMCP } from "../lib/instrumentation.js";
 
 // Tool function that fetches self-healing selectors
 export async function fetchSelfHealSelectorTool(args: {
@@ -36,8 +37,14 @@ export default function addSelfHealTools(server: McpServer) {
     },
     async (args) => {
       try {
+        trackMCP("fetchSelfHealedSelectors", server.server.getClientVersion()!);
         return await fetchSelfHealSelectorTool(args);
       } catch (error) {
+        trackMCP(
+          "fetchSelfHealedSelectors",
+          server.server.getClientVersion()!,
+          error,
+        );
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
         return {

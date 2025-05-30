@@ -1,4 +1,6 @@
 import sharp from "sharp";
+import path from "path";
+import { fileURLToPath } from "url";
 
 export function sanitizeUrlParam(param: string): string {
   // Remove any characters that could be used for command injection
@@ -33,4 +35,11 @@ export async function assertOkResponse(response: Response, action: string) {
       `Failed to fetch logs for ${action}: ${response.statusText}`,
     );
   }
+}
+
+export function isRunningViaNpx() {
+  const scriptPath = fileURLToPath(import.meta.url);
+  const normalizedPath = path.normalize(scriptPath);
+  const npxPattern = path.sep + "_npx" + path.sep;
+  return normalizedPath.includes(npxPattern);
 }

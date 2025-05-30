@@ -1,6 +1,7 @@
 import logger from "../logger.js";
 import config from "../config.js";
 import { createRequire } from "module";
+import { isRunningViaNpx } from "./utils.js";
 const require = createRequire(import.meta.url);
 const packageJson = require("../../package.json");
 import axios from "axios";
@@ -12,6 +13,7 @@ interface MCPEventPayload {
     tool_name: string;
     mcp_client: string;
     success?: boolean;
+    mode?: string;
     error_message?: string;
     error_type?: string;
   };
@@ -56,6 +58,12 @@ export function trackMCP(
       error instanceof Error ? error.message : String(error);
     event.event_properties.error_type =
       error instanceof Error ? error.constructor.name : "Unknown";
+  }
+
+  if (isRunningViaNpx()) {
+    event.event_properties.mode = "npx";
+  } else {
+    event.event_properties.mode = "local";
   }
 
   axios

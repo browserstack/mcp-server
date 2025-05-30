@@ -138,3 +138,80 @@ export function filterConsoleFailures(logText: string): string[] {
   ];
   return filterLinesByKeywords(logText, keywords);
 }
+
+export function filterSDKFailures(logText: string): string[] {
+  const keywords = [
+    "fail",
+    "error",
+    "exception",
+    "fatal",
+    "unable to",
+    "not found",
+    "timeout",
+    "crash",
+    "rejected",
+    "denied",
+    "broken",
+    "unsuccessful",
+    "panic",
+  ];
+  return filterLinesByKeywords(logText, keywords);
+}
+
+export function filterHookRunFailures(logText: string): string[] {
+  const keywords = [
+    "except block error",
+    "unable to",
+    "cannot find module",
+    "doesn't exist",
+    "error while loading",
+    "error:",
+    "failed to",
+    "not found",
+    "missing",
+    "rejected",
+    "no such file",
+    "npm ERR!",
+    "stderr",
+    "fatal",
+  ];
+
+  return filterLinesByKeywords(logText, keywords);
+}
+
+export function filterSeleniumFailures(logText: string): string[] {
+  const keywords = [
+    "NoSuchElementException",
+    "TimeoutException",
+    "StaleElementReferenceException",
+    "ElementNotInteractableException",
+    "ElementClickInterceptedException",
+    "InvalidSelectorException",
+    "SessionNotCreatedException",
+    "InvalidSessionIdException",
+    "WebDriverException",
+    "error",
+    "exception",
+    "fail"
+  ];
+  return filterLinesByKeywords(logText, keywords);
+}
+
+
+export function filterPlaywrightFailures(logText: string): string[] {
+  const keywords = [
+    "TimeoutError",
+    "page crashed",
+    "browser closed",
+    "navigation timeout",
+    "element handle is detached",
+    "protocol error",
+    "execution context was destroyed",
+    "strict mode violation",
+    "network error",
+    "error",
+    "exception",
+    "fail"
+  ];
+  return filterLinesByKeywords(logText, keywords);
+}

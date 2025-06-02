@@ -1,8 +1,9 @@
 import axios from "axios";
-import config from "../../config";
+import config from "../../config.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { formatAxiosError } from "../../lib/error"; // or correct
+import { formatAxiosError } from "../../lib/error.js"; // or correct
+import { projectIdentifierToId } from "./TCG-utils/api.js";
 
 interface TestCaseStep {
   step: string;
@@ -174,13 +175,22 @@ export async function createTestCase(
     }
 
     const tc = data.test_case;
+    const projectId = await projectIdentifierToId(params.project_identifier);
+
     return {
       content: [
         {
           type: "text",
-          text: `Successfully created test case ${tc.identifier}: ${tc.title}`,
+          text: `Test case successfully created:
+            - Identifier: ${tc.identifier}
+            - Title: ${tc.title}
+
+          You can view it here: https://test-management.browserstack.com/projects/${projectId}/folder/search?q=${tc.identifier}`,
         },
-        { type: "text", text: JSON.stringify(tc, null, 2) },
+        {
+          type: "text",
+          text: JSON.stringify(tc, null, 2),
+        },
       ],
     };
   } catch (err) {

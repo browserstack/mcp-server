@@ -2,8 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import fs from "fs";
-import { startSession } from "./applive-utils/start-session";
-import logger from "../logger";
+import { startSession } from "./applive-utils/start-session.js";
+import logger from "../logger.js";
+import { trackMCP } from "../lib/instrumentation.js";
 
 /**
  * Launches an App Live Session on BrowserStack.
@@ -33,6 +34,7 @@ export async function startAppLiveSession(args: {
   if (args.desiredPlatform === "ios" && !args.appPath.endsWith(".ipa")) {
     throw new Error("You must provide a valid iOS app path.");
   }
+
   // check if the app path exists && is readable
   try {
     if (!fs.existsSync(args.appPath)) {
@@ -89,13 +91,16 @@ export default function addAppLiveTools(server: McpServer) {
     },
     async (args) => {
       try {
-        return startAppLiveSession(args);
+        trackMCP("runAppLiveSession", server.server.getClientVersion()!);
+        return await startAppLiveSession(args);
       } catch (error) {
+        logger.error("App live session failed: %s", error);
+        trackMCP("runAppLiveSession", server.server.getClientVersion()!, error);
         return {
           content: [
             {
               type: "text",
-              text: `Failed to start an app live session. Error: ${error}. Please open an issue on GitHub if the problem persists`,
+              text: `Failed to start app live session: ${error instanceof Error ? error.message : String(error)}`,
               isError: true,
             },
           ],

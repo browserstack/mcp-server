@@ -1,47 +1,109 @@
-import { sanitizeUrlParam } from "../../lib/utils";
-import logger from "../../logger";
+import logger from "../../logger.js";
 import childProcess from "child_process";
+import { filterDesktop } from "./desktop-filter.js";
+import { filterMobile } from "./mobile-filter.js";
+import {
+  DesktopSearchArgs,
+  MobileSearchArgs,
+  DesktopEntry,
+  MobileEntry,
+  PlatformType,
+} from "./types.js";
+import {
+  isLocalURL,
+  ensureLocalBinarySetup,
+  killExistingBrowserStackLocalProcesses,
+} from "../../lib/local.js";
 
-interface StartSessionArgs {
-  browser: string;
-  os: string;
-  osVersion: string;
-  url: string;
-  browserVersion: string;
-  isLocal: boolean;
+/**
+ * Prepares local tunnel setup based on URL type
+ */
+async function prepareLocalTunnel(url: string): Promise<boolean> {
+  const isLocal = isLocalURL(url);
+  if (isLocal) {
+    await ensureLocalBinarySetup();
+  } else {
+    await killExistingBrowserStackLocalProcesses();
+  }
+  return isLocal;
 }
 
+/**
+ * Entrypoint: detects platformType & delegates.
+ */
 export async function startBrowserSession(
-  args: StartSessionArgs,
+  args: DesktopSearchArgs | MobileSearchArgs,
 ): Promise<string> {
-  // Sanitize all input parameters
-  const sanitizedArgs = {
-    browser: sanitizeUrlParam(args.browser),
-    os: sanitizeUrlParam(args.os),
-    osVersion: sanitizeUrlParam(args.osVersion),
-    url: sanitizeUrlParam(args.url),
-    browserVersion: sanitizeUrlParam(args.browserVersion),
-    isLocal: args.isLocal,
-  };
+  const entry =
+    args.platformType === PlatformType.DESKTOP
+      ? await filterDesktop(args as DesktopSearchArgs)
+      : await filterMobile(args as MobileSearchArgs);
 
-  // Construct URL with encoded parameters
+  const isLocal = await prepareLocalTunnel(args.url);
+
+  const url =
+    args.platformType === PlatformType.DESKTOP
+      ? buildDesktopUrl(
+          args as DesktopSearchArgs,
+          entry as DesktopEntry,
+          isLocal,
+        )
+      : buildMobileUrl(args as MobileSearchArgs, entry as MobileEntry, isLocal);
+
+  openBrowser(url);
+  return entry.notes ? `${url}, ${entry.notes}` : url;
+}
+
+function buildDesktopUrl(
+  args: DesktopSearchArgs,
+  e: DesktopEntry,
+  isLocal: boolean,
+): string {
   const params = new URLSearchParams({
-    os: sanitizedArgs.os,
-    os_version: sanitizedArgs.osVersion,
-    browser: sanitizedArgs.browser,
-    browser_version: sanitizedArgs.browserVersion,
+    os: e.os,
+    os_version: e.os_version,
+    browser: e.browser,
+    browser_version: e.browser_version,
+    url: args.url,
     scale_to_fit: "true",
-    url: sanitizedArgs.url,
     resolution: "responsive-mode",
     speed: "1",
-    local: sanitizedArgs.isLocal ? "true" : "false",
+    local: isLocal ? "true" : "false",
     start: "true",
   });
+  return `https://live.browserstack.com/dashboard#${params.toString()}`;
+}
 
-  const launchUrl = `https://live.browserstack.com/dashboard#${params.toString()}`;
+function buildMobileUrl(
+  args: MobileSearchArgs,
+  d: MobileEntry,
+  isLocal: boolean,
+): string {
+  const os_map = {
+    android: "Android",
+    ios: "iOS",
+    winphone: "Winphone",
+  };
+  const os = os_map[d.os as keyof typeof os_map] || d.os;
 
+  const params = new URLSearchParams({
+    os: os,
+    os_version: d.os_version,
+    device: d.display_name,
+    device_browser: args.browser,
+    url: args.url,
+    scale_to_fit: "true",
+    speed: "1",
+    local: isLocal ? "true" : "false",
+    start: "true",
+  });
+  return `https://live.browserstack.com/dashboard#${params.toString()}`;
+}
+
+// ——— Open a browser window ———
+
+function openBrowser(launchUrl: string): void {
   try {
-    // Use platform-specific commands with proper escaping
     const command =
       process.platform === "darwin"
         ? ["open", launchUrl]
@@ -54,22 +116,11 @@ export async function startBrowserSession(
       stdio: "ignore",
       detached: true,
     });
-
-    // Handle process errors
-    child.on("error", (error) => {
-      logger.error(
-        `Failed to open browser automatically: ${error}. Please open this URL manually: ${launchUrl}`,
-      );
-    });
-
-    // Unref the child process to allow the parent to exit
-    child.unref();
-
-    return launchUrl;
-  } catch (error) {
-    logger.error(
-      `Failed to open browser automatically: ${error}. Please open this URL manually: ${launchUrl}`,
+    child.on("error", (err) =>
+      logger.error(`Failed to open browser: ${err}. URL: ${launchUrl}`),
     );
-    return launchUrl;
+    child.unref();
+  } catch (err) {
+    logger.error(`Failed to launch browser: ${err}. URL: ${launchUrl}`);
   }
 }

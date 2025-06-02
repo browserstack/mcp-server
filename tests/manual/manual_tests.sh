@@ -134,9 +134,19 @@ function testBrowserLive() {
 
 function testBrowserLiveChrome() {
     desiredURL="https://www.whatsmybrowser.org/"
-    response=$(npx @modelcontextprotocol/inspector -e BROWSERSTACK_USERNAME=$_BROWSERSTACK_USERNAME -e BROWSERSTACK_ACCESS_KEY=$_BROWSERSTACK_ACCESS_KEY --cli node dist/index.js --method tools/call --tool-name runBrowserLiveSession --tool-arg desiredBrowser='Chrome' --tool-arg desiredOSVersion='11' --tool-arg desiredURL="$desiredURL" --tool-arg desiredOS='Windows' --tool-arg desiredBrowserVersion='133.0')
-
-    if echo "$response" | grep -q "Successfully started a browser session"; then
+    response=$(npx @modelcontextprotocol/inspector \
+        -e BROWSERSTACK_USERNAME=$_BROWSERSTACK_USERNAME \
+        -e BROWSERSTACK_ACCESS_KEY=$_BROWSERSTACK_ACCESS_KEY \
+        --cli node dist/index.js \
+        --method tools/call \
+        --tool-name runBrowserLiveSession \
+        --tool-arg platformType='desktop' \
+        --tool-arg desiredBrowser='chrome' \
+        --tool-arg desiredOSVersion='11' \
+        --tool-arg desiredURL=$desiredURL \
+        --tool-arg desiredOS='Windows' \
+        --tool-arg desiredBrowserVersion='133.0')
+    if echo "$response" | grep -q "Session started"; then
         log_success "Successfully started Chrome browser session"
     else
         log_failure "Failed to start Chrome browser session"

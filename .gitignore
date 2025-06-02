@@ -5,3 +5,4 @@ tests.md
 *.apk
 *.ipa
 .npmrc
+.vscode/

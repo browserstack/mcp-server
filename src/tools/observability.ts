@@ -1,7 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { getLatestO11YBuildInfo } from "../lib/api";
+import { getLatestO11YBuildInfo } from "../lib/api.js";
+import { trackMCP } from "../lib/instrumentation.js";
+import logger from "../logger.js";
 
 export async function getFailuresInLastRun(
   buildName: string,
@@ -57,8 +59,15 @@ export default function addObservabilityTools(server: McpServer) {
     },
     async (args) => {
       try {
-        return getFailuresInLastRun(args.buildName, args.projectName);
+        trackMCP("getFailuresInLastRun", server.server.getClientVersion()!);
+        return await getFailuresInLastRun(args.buildName, args.projectName);
       } catch (error) {
+        logger.error("Failed to get failures in the last run: %s", error);
+        trackMCP(
+          "getFailuresInLastRun",
+          server.server.getClientVersion()!,
+          error,
+        );
         return {
           content: [
             {

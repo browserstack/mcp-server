@@ -2,25 +2,32 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import packageJson from "../package.json";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const packageJson = require("../package.json");
 import "dotenv/config";
-import logger from "./logger";
-import addSDKTools from "./tools/bstack-sdk";
-import addAppLiveTools from "./tools/applive";
-import addObservabilityTools from "./tools/observability";
-import addBrowserLiveTools from "./tools/live";
-import addAccessibilityTools from "./tools/accessibility";
-import addAutomateTools from "./tools/automate";
-import addTestManagementTools from "./tools/testmanagement";
+import logger from "./logger.js";
+import addSDKTools from "./tools/bstack-sdk.js";
+import addAppLiveTools from "./tools/applive.js";
+import addBrowserLiveTools from "./tools/live.js";
+import addAccessibilityTools from "./tools/accessibility.js";
+import addTestManagementTools from "./tools/testmanagement.js";
+import addAppAutomationTools from "./tools/appautomate.js";
+import addFailureLogsTools from "./tools/getFailureLogs.js";
+import addAutomateTools from "./tools/automate.js";
+import addSelfHealTools from "./tools/selfheal.js";
+import { setupOnInitialized } from "./oninitialized.js";
 
 function registerTools(server: McpServer) {
   addSDKTools(server);
   addAppLiveTools(server);
   addBrowserLiveTools(server);
-  addObservabilityTools(server);
   addAccessibilityTools(server);
-  addAutomateTools(server);
   addTestManagementTools(server);
+  addAppAutomationTools(server);
+  addFailureLogsTools(server);
+  addAutomateTools(server);
+  addSelfHealTools(server);
 }
 
 // Create an MCP server
@@ -28,6 +35,8 @@ const server: McpServer = new McpServer({
   name: "BrowserStack MCP Server",
   version: packageJson.version,
 });
+
+setupOnInitialized(server);
 
 registerTools(server);
 
@@ -40,8 +49,6 @@ async function main() {
   // Start receiving messages on stdin and sending messages on stdout
   const transport = new StdioServerTransport();
   await server.connect(transport);
-
-  logger.info("MCP server started successfully");
 }
 
 main().catch(console.error);

@@ -1,7 +1,7 @@
-import { SUPPORTED_CONFIGURATIONS } from "./constants";
-import { SDKSupportedLanguage } from "./types";
-import { SDKSupportedBrowserAutomationFramework } from "./types";
-import { SDKSupportedTestingFramework } from "./types";
+import { SUPPORTED_CONFIGURATIONS } from "./constants.js";
+import { SDKSupportedLanguage } from "./types.js";
+import { SDKSupportedBrowserAutomationFramework } from "./types.js";
+import { SDKSupportedTestingFramework } from "./types.js";
 
 const errorMessageSuffix =
   "Please open an issue at our Github repo: https://github.com/browserstack/browserstack-mcp-server/issues to request support for your project configuration";

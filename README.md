@@ -84,6 +84,28 @@ Use the following prompts to run/debug/fix your **automated tests** on BrowserSt
 - Run tests written in Jest, Playwright, Selenium, and more on BrowserStack's [Test Platform](https://www.browserstack.com/test-platform)
 - **Accessibility Testing**: Ensure WCAG and ADA compliance with our [Accessibility Testing](https://www.browserstack.com/accessibility-testing) tool
 
+
+### 📋 Test Management 
+
+Use the following prompts to utilise capabilities of BrowserStack's [Test Management](https://www.browserstack.com/test-management) with MCP server.
+
+```bash
+# Create project & folder structure
+"create new Test management project named My Demo Project with two sub folders - Login & Checkout"
+
+# Add test cases
+"add invalid login test case in Test Management project named My Demo Project"
+
+# List added test cases 
+"list high priority Login test cases from Test Management project - My Demo Project"
+
+# Create test run
+"create a test run for Login tests from Test Management project - My Demo Project"
+
+# Update test results
+"update test results as passed for Login tests test run from My Demo Project"
+```
+
 ## 🛠️ Installation
 
 1. **Create a BrowserStack Account**

@@ -8,12 +8,12 @@ permissions:
 
 jobs:
   publish:
-    name: "Publish to NPM"
     runs-on: ubuntu-latest
-
     steps:
       - name: "Checkout source code"
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
       - name: "Set up Node.js"
         uses: actions/setup-node@v3
@@ -24,31 +24,79 @@ jobs:
       - name: "Install dependencies"
         run: npm ci
 
-      - name: "Add node_modules/.bin to PATH"
-        run: echo "$(npm bin)" >> $GITHUB_PATH
-
-      - name: "Build package"
+      - name: "Create build"
         run: npm run build
+
+      - name: "Get version from package.json"
+        id: get_version
+        run: |
+          VERSION="v$(node -p 'require("./package.json").version')"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Get previous Git tag
+        id: get_previous_tag
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          PREV_TAG=$(git tag --sort=-creatordate | grep '^v' | grep -v "$VERSION" | head -n 1)
+          echo "previous_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+
+      - name: Fetch and categorize merged PRs
+        id: fetch_prs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          PREVIOUS_TAG=${{ steps.get_previous_tag.outputs.previous_tag }}
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "pr_list=No previous tag found to compare PRs." >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          PREVIOUS_SHA=$(git rev-list -n 1 $PREVIOUS_TAG)
+          PREVIOUS_DATE=$(git show -s --format=%cI $PREVIOUS_SHA)
+          CURRENT_DATE=$(git show -s --format=%cI HEAD)
+          echo "Fetching PRs merged between $PREVIOUS_DATE and $CURRENT_DATE"
+          
+          RAW_PRS=$(gh pr list --state merged --search "merged:${PREVIOUS_DATE}..${CURRENT_DATE}" \
+            --json number,title,url \
+            --jq '.[] | "- [#\(.number)](\(.url)) \(.title)"')
+      
+          if [ -z "$RAW_PRS" ]; then
+            echo "pr_list=No pull requests were merged during this release." >> $GITHUB_OUTPUT
+            exit 0
+          fi
+      
+          ADDED=""
+          FIXED=""
+          while IFS= read -r pr; do
+            if echo "$pr" | grep -iq "fix"; then
+              FIXED+="$pr"$'\n'
+            else
+              ADDED+="$pr"$'\n'
+            fi
+          done <<< "$RAW_PRS"
+      
+          BODY=""
+          if [ -n "$ADDED" ]; then
+            BODY="$BODY### Added"$'\n'"$ADDED"
+          fi
+          if [ -n "$FIXED" ]; then
+            BODY="$BODY"$'\n'"### Fixed"$'\n'"$FIXED"
+          fi
+      
+          echo "pr_list<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: "Set Git user name and email"
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-      - name: "Clean working directory"
-        run: git clean -fdx
-      
-      - name: "Bump patch version"
-        run: npm version patch
+      - name: "Create Git tag for version"
+        run: git tag ${{ steps.get_version.outputs.version }}
 
-      - name: "Get new version"
-        id: get_version
-        run: echo "version=v$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-
-      - name: "Push version bump commit and tag"
-        run: |
-          git push origin HEAD
-          git push origin --tags
+      - name: "Push tag to origin"
+        run: git push origin ${{ steps.get_version.outputs.version }}
 
       - name: "Publish to NPM"
         run: npm publish --access public
@@ -59,11 +107,10 @@ jobs:
         uses: actions/create-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          release_name: Release ${{ steps.get_version.outputs.version }}
+          release_name: ${{ steps.get_version.outputs.version }}
           body: |
-            ```
-            • See CHANGELOG.md for details
-            • Published by ${{ github.actor }}
-            ```
+            ${{ steps.fetch_prs.outputs.pr_list }}
+
+            Published by ${{ github.actor }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

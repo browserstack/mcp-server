@@ -1,8 +1,9 @@
 import axios from "axios";
-import config from "../../config";
+import config from "../../config.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { formatAxiosError } from "../../lib/error"; // or correct path
+import { formatAxiosError } from "../../lib/error.js"; // or correct path
+import { projectIdentifierToId } from "../testmanagement-utils/TCG-utils/api.js";
 
 // Schema for combined project/folder creation
 export const CreateProjFoldSchema = z.object({
@@ -112,11 +113,17 @@ export async function createProjectOrFolder(
       // Folder created successfully
 
       const folder = res.data.folder;
+      const projectId = await projectIdentifierToId(projId);
+
       return {
         content: [
           {
             type: "text",
-            text: `Folder created: ID=${folder.id}, name=${folder.name} in project with identifier ${projId}`,
+            text: `Folder successfully created:
+              - ID: ${folder.id}
+              - Name: ${folder.name}
+              - Project Identifier: ${projId}
+            Access it here: https://test-management.browserstack.com/projects/${projectId}/folder/${folder.id}/`,
           },
         ],
       };

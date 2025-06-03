@@ -33,6 +33,39 @@ browserstack-sdk python <path-to-test-file>
 \`\`\`
 `;
 
+
+const javaInstructions = `
+Add the following dependency to your pom.xml:
+\`\`\`xml
+<dependency>
+    <groupId>com.browserstack</groupId>
+    <artifactId>browserstack-java-sdk</artifactId>
+    <version>LATEST</version>
+    <scope>compile</scope>
+</dependency>
+\`\`\`
+
+For Gradle projects, add to build.gradle:
+\`\`\`groovy
+dependencies {
+    implementation 'com.browserstack:browserstack-java-sdk:LATEST'
+}
+\`\`\`
+
+Inform user to export BROWSERSTACK_USERNAME=${config.browserstackUsername} and 
+BROWSERSTACK_ACCESS_KEY=${config.browserstackAccessKey} as environment variables.
+
+Run tests using:
+\`\`\`bash
+mvn clean test 
+\`\`\`
+
+Or for Gradle:
+\`\`\`bash
+gradle clean test
+\`\`\`
+`;
+
 export const SUPPORTED_CONFIGURATIONS: ConfigMapping = {
   nodejs: {
     playwright: {
@@ -57,6 +90,13 @@ export const SUPPORTED_CONFIGURATIONS: ConfigMapping = {
       pytest: { instructions: pythonInstructions },
       robot: { instructions: pythonInstructions },
       behave: { instructions: pythonInstructions },
+    },
+  },
+  java: {
+    playwright: {},
+    selenium: {
+      testng: { instructions: javaInstructions },
+      cucumber: { instructions: javaInstructions },
     },
   },
 };

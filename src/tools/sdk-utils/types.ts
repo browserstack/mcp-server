@@ -1,4 +1,4 @@
-export type SDKSupportedLanguage = "nodejs" | "python";
+export type SDKSupportedLanguage = "nodejs" | "python" | "java";
 export type SDKSupportedBrowserAutomationFramework = "playwright" | "selenium";
 export type SDKSupportedTestingFramework =
   | "jest"
@@ -10,7 +10,8 @@ export type SDKSupportedTestingFramework =
   | "cucumber"
   | "nightwatch"
   | "webdriverio"
-  | "mocha";
+  | "mocha"
+  | "testng";
 
 export type ConfigMapping = Record<
   SDKSupportedLanguage,

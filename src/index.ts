@@ -6,29 +6,11 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json");
 import "dotenv/config";
+import config from "./config.js";
 import logger from "./logger.js";
-import addSDKTools from "./tools/bstack-sdk.js";
-import addAppLiveTools from "./tools/applive.js";
-import addBrowserLiveTools from "./tools/live.js";
-import addAccessibilityTools from "./tools/accessibility.js";
-import addTestManagementTools from "./tools/testmanagement.js";
-import addAppAutomationTools from "./tools/appautomate.js";
-import addFailureLogsTools from "./tools/getFailureLogs.js";
-import addAutomateTools from "./tools/automate.js";
-import addSelfHealTools from "./tools/selfheal.js";
 import { setupOnInitialized } from "./oninitialized.js";
-
-function registerTools(server: McpServer) {
-  addSDKTools(server);
-  addAppLiveTools(server);
-  addBrowserLiveTools(server);
-  addAccessibilityTools(server);
-  addTestManagementTools(server);
-  addAppAutomationTools(server);
-  addFailureLogsTools(server);
-  addAutomateTools(server);
-  addSelfHealTools(server);
-}
+import { registerStaticTools } from "./lib/static-tools.js";
+import { registerDynamicTools } from "./lib/dynamic-tools.js";
 
 // Create an MCP server
 const server: McpServer = new McpServer({
@@ -38,7 +20,12 @@ const server: McpServer = new McpServer({
 
 setupOnInitialized(server);
 
-registerTools(server);
+// Choose registration mode based on config
+if (config.DYNAMIC_SERVER) {
+  registerDynamicTools(server);
+} else {
+  registerStaticTools(server);
+}
 
 async function main() {
   logger.info(

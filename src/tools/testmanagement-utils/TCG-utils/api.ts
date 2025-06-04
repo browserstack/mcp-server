@@ -13,6 +13,7 @@ import {
 } from "./types.js";
 import { createTestCasePayload } from "./helpers.js";
 import config from "../../../config.js";
+import { DOMAINS } from "../../../lib/domains.js";
 
 /**
  * Fetch default and custom form fields for a project.
@@ -46,7 +47,7 @@ export async function triggerTestCaseGeneration(
       folderId,
       projectId,
       source,
-      webhookUrl: `https://test-management.browserstack.com/api/v1/projects/${projectId}/folder/${folderId}/webhooks/tcg`,
+      webhookUrl: `${DOMAINS.TEST_MANAGEMENT}/api/v1/projects/${projectId}/folder/${folderId}/webhooks/tcg`,
     },
     {
       headers: {
@@ -343,7 +344,7 @@ export async function bulkCreateTestCases(
 export async function projectIdentifierToId(
   projectId: string,
 ): Promise<string> {
-  const url = `https://test-management.browserstack.com/api/v1/projects/?q=${projectId}`;
+  const url = `${DOMAINS.TEST_MANAGEMENT}/api/v1/projects/?q=${projectId}`;
 
   const response = await axios.get(url, {
     headers: {

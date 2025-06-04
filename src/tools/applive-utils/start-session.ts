@@ -9,6 +9,7 @@ import { uploadApp } from "./upload-app.js";
 import { findDeviceByName } from "./device-search.js";
 import { pickVersion } from "./version-utils.js";
 import { DeviceEntry } from "./types.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 interface StartSessionArgs {
   appPath: string;
@@ -76,7 +77,7 @@ export async function startSession(args: StartSessionArgs): Promise<string> {
     speed: "1",
     start: "true",
   });
-  const launchUrl = `https://app-live.browserstack.com/dashboard#${params.toString()}&device=${deviceParam}`;
+  const launchUrl = `${DOMAINS.APP_LIVE}/dashboard#${params.toString()}&device=${deviceParam}`;
 
   openBrowser(launchUrl);
   return launchUrl + note;

@@ -3,6 +3,7 @@ import axios from "axios";
 import config from "../../config.js";
 import FormData from "form-data";
 import { customFuzzySearch } from "../../lib/fuzzy.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 interface Device {
   device: string;
@@ -135,7 +136,7 @@ export async function uploadApp(appPath: string): Promise<string> {
   formData.append("file", fs.createReadStream(filePath));
 
   const response = await axios.post<UploadResponse>(
-    "https://api-cloud.browserstack.com/app-automate/upload",
+    `${DOMAINS.API_CLOUD}/app-automate/upload`,
     formData,
     {
       headers: {

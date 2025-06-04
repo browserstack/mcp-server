@@ -1,5 +1,6 @@
 import axios from "axios";
 import config from "../../config.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 interface ReportInitResponse {
   success: true;
@@ -21,7 +22,7 @@ export class AccessibilityReportFetcher {
 
   async getReportLink(scanId: string, scanRunId: string): Promise<string> {
     // Initiate CSV link generation
-    const initUrl = `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?scan_run_id=${scanRunId}`;
+    const initUrl = `${DOMAINS.API_ACCESSIBILITY}/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?scan_run_id=${scanRunId}`;
     const initResp = await axios.get<ReportInitResponse>(initUrl, {
       auth: this.auth,
     });
@@ -33,7 +34,7 @@ export class AccessibilityReportFetcher {
     const taskId = initResp.data.data.task_id;
 
     // Fetch the generated CSV link
-    const reportUrl = `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?task_id=${encodeURIComponent(
+    const reportUrl = `${DOMAINS.API_ACCESSIBILITY}/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?task_id=${encodeURIComponent(
       taskId,
     )}`;
     const reportResp = await axios.get<ReportResponse>(reportUrl, {

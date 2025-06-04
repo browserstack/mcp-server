@@ -3,6 +3,7 @@ import config from "../../config.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { formatAxiosError } from "../../lib/error.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 /**
  * Schema for creating a test run.
@@ -64,7 +65,7 @@ export async function createTestRun(
     };
     const args = CreateTestRunSchema.parse(inputArgs);
 
-    const url = `https://test-management.browserstack.com/api/v2/projects/${encodeURIComponent(
+    const url = `${DOMAINS.TEST_MANAGEMENT}/api/v2/projects/${encodeURIComponent(
       args.project_identifier,
     )}/test-runs`;
 

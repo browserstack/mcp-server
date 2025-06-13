@@ -16,18 +16,111 @@ import addAppAutomationTools from "./tools/appautomate.js";
 import addFailureLogsTools from "./tools/getFailureLogs.js";
 import addAutomateTools from "./tools/automate.js";
 import addSelfHealTools from "./tools/selfheal.js";
+import addObservabilityTools from "./tools/observability.js";
 import { setupOnInitialized } from "./oninitialized.js";
+import { z } from "zod";
+import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-function registerTools(server: McpServer) {
-  addSDKTools(server);
-  addAppLiveTools(server);
-  addBrowserLiveTools(server);
-  addAccessibilityTools(server);
-  addTestManagementTools(server);
-  addAppAutomationTools(server);
-  addFailureLogsTools(server);
-  addAutomateTools(server);
-  addSelfHealTools(server);
+// Product categories and their associated tool registration functions
+const PRODUCT_TOOLS = {
+  automate: [addAutomateTools, addFailureLogsTools, addObservabilityTools],
+  "app-automate": [addAppAutomationTools, addFailureLogsTools],
+  live: [addBrowserLiveTools],
+  "app-live": [addAppLiveTools],
+  accessibility: [addAccessibilityTools],
+  "test-management": [addTestManagementTools],
+  sdk: [addSDKTools],
+  "self-heal": [addSelfHealTools],
+} as const;
+
+type ProductName = keyof typeof PRODUCT_TOOLS;
+
+// Track enabled products and registered tools
+const enabledProducts: Set<ProductName> = new Set();
+
+// Reference to the server instance for use in enableProductsTool
+let serverInstance: McpServer;
+
+async function enableProductsTool(args: {
+  products: ProductName[];
+}): Promise<CallToolResult> {
+  const { products } = args;
+
+  // Validate products
+  const validProducts = Object.keys(PRODUCT_TOOLS) as ProductName[];
+  const invalidProducts = products.filter((p) => !validProducts.includes(p));
+
+  if (invalidProducts.length > 0) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Invalid products: ${invalidProducts.join(", ")}. Valid products are: ${validProducts.join(", ")}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  // Track newly enabled products
+  const newProducts = products.filter((p) => !enabledProducts.has(p));
+
+  if (newProducts.length === 0) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `All specified products are already enabled. Currently enabled: ${Array.from(enabledProducts).join(", ")}`,
+        },
+      ],
+    };
+  }
+
+  // Register tools for new products
+  for (const product of newProducts) {
+    const toolRegisters = PRODUCT_TOOLS[product];
+    for (const registerFn of toolRegisters) {
+      registerFn(serverInstance);
+    }
+    enabledProducts.add(product);
+  }
+
+  return {
+    content: [
+      {
+        type: "text",
+        text: `Successfully enabled products: ${newProducts.join(", ")}. Total enabled products: ${Array.from(enabledProducts).join(", ")}`,
+      },
+    ],
+  };
+}
+
+function registerInitialTools(server: McpServer) {
+  // Store server reference for later use
+  serverInstance = server;
+
+  // Only register the enableProducts tool initially
+  server.tool(
+    "enableProducts",
+    "Enable tools for specific BrowserStack products. This must be called before using any other tools.",
+    {
+      products: z
+        .array(
+          z.enum([
+            "automate",
+            "app-automate",
+            "live",
+            "app-live",
+            "accessibility",
+            "test-management",
+            "sdk",
+            "self-heal",
+          ]),
+        )
+        .describe("List of BrowserStack products to enable tools for"),
+    },
+    enableProductsTool,
+  );
 }
 
 // Create an MCP server
@@ -38,7 +131,7 @@ const server: McpServer = new McpServer({
 
 setupOnInitialized(server);
 
-registerTools(server);
+registerInitialTools(server);
 
 async function main() {
   logger.info(

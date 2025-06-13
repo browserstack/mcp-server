@@ -1,4 +1,6 @@
 import sharp from "sharp";
+import path from "path";
+import { fileURLToPath } from "url";
 
 export function sanitizeUrlParam(param: string): string {
   // Remove any characters that could be used for command injection
@@ -32,5 +34,16 @@ export async function assertOkResponse(response: Response, action: string) {
     throw new Error(
       `Failed to fetch logs for ${action}: ${response.statusText}`,
     );
+  }
+}
+
+export function detectRunMode(): "npx" | "local" | "unknown" {
+  try {
+    const scriptPath = fileURLToPath(import.meta.url);
+    const normalizedPath = path.normalize(scriptPath);
+    const npxPattern = path.sep + "_npx" + path.sep;
+    return normalizedPath.includes(npxPattern) ? "npx" : "local";
+  } catch {
+    return "unknown";
   }
 }

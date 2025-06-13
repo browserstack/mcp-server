@@ -2,7 +2,7 @@ import axios, { AxiosError } from "axios";
 import FormData from "form-data";
 import fs from "fs";
 import config from "../../config.js";
-
+import { DOMAINS } from "../../lib/domains.js";
 interface UploadResponse {
   app_url: string;
 }
@@ -17,7 +17,7 @@ export async function uploadApp(filePath: string): Promise<UploadResponse> {
 
   try {
     const response = await axios.post<UploadResponse>(
-      "https://api-cloud.browserstack.com/app-live/upload",
+      `${DOMAINS.API_CLOUD}/app-live/upload`,
       formData,
       {
         headers: {

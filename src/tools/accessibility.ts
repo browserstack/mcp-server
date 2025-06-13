@@ -5,6 +5,7 @@ import { AccessibilityScanner } from "./accessiblity-utils/scanner.js";
 import { AccessibilityReportFetcher } from "./accessiblity-utils/report-fetcher.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { parseAccessibilityReportFromCSV } from "./accessiblity-utils/report-parser.js";
+import { DOMAINS } from "../lib/domains.js";
 
 const scanner = new AccessibilityScanner();
 const reportFetcher = new AccessibilityReportFetcher();
@@ -37,7 +38,7 @@ async function runAccessibilityScan(
       content: [
         {
           type: "text",
-          text: `❌ Accessibility scan "${name}" failed with status: ${status} , check the BrowserStack dashboard for more details [https://scanner.browserstack.com/site-scanner/scan-details/${name}].`,
+          text: `❌ Accessibility scan "${name}" failed with status: ${status} , check the BrowserStack dashboard for more details [${DOMAINS.SCANNER}/site-scanner/scan-details/${name}].`,
           isError: true,
         },
       ],
@@ -55,7 +56,7 @@ async function runAccessibilityScan(
     content: [
       {
         type: "text",
-        text: `✅ Accessibility scan "${name}" completed. check the BrowserStack dashboard for more details [https://scanner.browserstack.com/site-scanner/scan-details/${name}].`,
+        text: `✅ Accessibility scan "${name}" completed. check the BrowserStack dashboard for more details [${DOMAINS.SCANNER}/site-scanner/scan-details/${name}].`,
       },
       {
         type: "text",

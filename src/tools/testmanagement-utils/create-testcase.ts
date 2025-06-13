@@ -4,6 +4,7 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { formatAxiosError } from "../../lib/error.js"; // or correct
 import { projectIdentifierToId } from "./TCG-utils/api.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 interface TestCaseStep {
   step: string;
@@ -145,7 +146,7 @@ export async function createTestCase(
 
   try {
     const response = await axios.post<TestCaseResponse>(
-      `https://test-management.browserstack.com/api/v2/projects/${encodeURIComponent(
+      `${DOMAINS.TEST_MANAGEMENT}/api/v2/projects/${encodeURIComponent(
         params.project_identifier,
       )}/folders/${encodeURIComponent(params.folder_id)}/test-cases`,
       body,
@@ -185,7 +186,7 @@ export async function createTestCase(
             - Identifier: ${tc.identifier}
             - Title: ${tc.title}
 
-          You can view it here: https://test-management.browserstack.com/projects/${projectId}/folder/search?q=${tc.identifier}`,
+          You can view it here: ${DOMAINS.TEST_MANAGEMENT}/projects/${projectId}/folder/search?q=${tc.identifier}`,
         },
         {
           type: "text",

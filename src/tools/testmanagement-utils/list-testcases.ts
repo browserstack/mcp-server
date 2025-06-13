@@ -3,6 +3,7 @@ import config from "../../config.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { formatAxiosError } from "../../lib/error.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 /**
  * Schema for listing test cases with optional filters.
@@ -47,7 +48,7 @@ export async function listTestCases(
     if (args.priority) params.append("priority", args.priority);
     if (args.p !== undefined) params.append("p", args.p.toString());
 
-    const url = `https://test-management.browserstack.com/api/v2/projects/${encodeURIComponent(
+    const url = `${DOMAINS.TEST_MANAGEMENT}/api/v2/projects/${encodeURIComponent(
       args.project_identifier,
     )}/test-cases?${params.toString()}`;
 

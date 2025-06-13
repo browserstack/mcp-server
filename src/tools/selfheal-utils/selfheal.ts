@@ -1,6 +1,6 @@
 import { assertOkResponse } from "../../lib/utils.js";
 import config from "../../config.js";
-
+import { DOMAINS } from "../../lib/domains.js";
 interface SelectorMapping {
   originalSelector: string;
   healedSelector: string;
@@ -13,7 +13,7 @@ interface SelectorMapping {
 export async function getSelfHealSelectors(sessionId: string) {
   const credentials = `${config.browserstackUsername}:${config.browserstackAccessKey}`;
   const auth = Buffer.from(credentials).toString("base64");
-  const url = `https://api.browserstack.com/automate/sessions/${sessionId}/logs`;
+  const url = `${DOMAINS.API_CLOUD}/automate/sessions/${sessionId}/logs`;
 
   const response = await fetch(url, {
     headers: {

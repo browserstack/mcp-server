@@ -6,6 +6,7 @@ import {
   ensureLocalBinarySetup,
   killExistingBrowserStackLocalProcesses,
 } from "../../lib/local.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 export interface AccessibilityScanResponse {
   success: boolean;
@@ -74,7 +75,7 @@ export class AccessibilityScanner {
 
     try {
       const { data } = await axios.post<AccessibilityScanResponse>(
-        "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans",
+        `${DOMAINS.API_ACCESSIBILITY}/api/website-scanner/v1/scans`,
         requestBody,
         { auth: this.auth },
       );
@@ -104,7 +105,7 @@ export class AccessibilityScanner {
   ): Promise<AccessibilityScanStatus> {
     try {
       const { data } = await axios.get<AccessibilityScanStatus>(
-        `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
+        `${DOMAINS.API_ACCESSIBILITY}/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
         { auth: this.auth },
       );
       if (!data.success)

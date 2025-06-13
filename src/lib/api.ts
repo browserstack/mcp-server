@@ -1,10 +1,11 @@
 import config from "../config.js";
+import { DOMAINS } from "./domains.js";
 
 export async function getLatestO11YBuildInfo(
   buildName: string,
   projectName: string,
 ) {
-  const buildsUrl = `https://api-observability.browserstack.com/ext/v1/builds/latest?build_name=${encodeURIComponent(
+  const buildsUrl = `${DOMAINS.API_OBSERVABILITY}/ext/v1/builds/latest?build_name=${encodeURIComponent(
     buildName,
   )}&project_name=${encodeURIComponent(projectName)}`;
 

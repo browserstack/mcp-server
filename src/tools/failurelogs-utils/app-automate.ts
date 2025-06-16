@@ -1,5 +1,6 @@
 import config from "../../config.js";
 import { filterLinesByKeywords, validateLogResponse } from "./utils.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 const auth = Buffer.from(
   `${config.browserstackUsername}:${config.browserstackAccessKey}`,
@@ -10,7 +11,7 @@ export async function retrieveDeviceLogs(
   sessionId: string,
   buildId: string,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/deviceLogs`;
+  const url = `${DOMAINS.API}/app-automate/builds/${buildId}/sessions/${sessionId}/deviceLogs`;
 
   const response = await fetch(url, {
     headers: {
@@ -34,7 +35,7 @@ export async function retrieveAppiumLogs(
   sessionId: string,
   buildId: string,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/appiumlogs`;
+  const url = `${DOMAINS.API}/app-automate/builds/${buildId}/sessions/${sessionId}/appiumlogs`;
 
   const response = await fetch(url, {
     headers: {
@@ -58,7 +59,7 @@ export async function retrieveCrashLogs(
   sessionId: string,
   buildId: string,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/crashlogs`;
+  const url = `${DOMAINS.API}/app-automate/builds/${buildId}/sessions/${sessionId}/crashlogs`;
 
   const response = await fetch(url, {
     headers: {

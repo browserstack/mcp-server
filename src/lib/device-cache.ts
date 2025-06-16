@@ -1,6 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { DOMAINS } from "./domains.js";
 
 const CACHE_DIR = path.join(os.homedir(), ".browserstack", "combined_cache");
 const CACHE_FILE = path.join(CACHE_DIR, "data.json");
@@ -13,12 +14,9 @@ export enum BrowserStackProducts {
 }
 
 const URLS: Record<BrowserStackProducts, string> = {
-  [BrowserStackProducts.LIVE]:
-    "https://www.browserstack.com/list-of-browsers-and-platforms/live.json",
-  [BrowserStackProducts.APP_LIVE]:
-    "https://www.browserstack.com/list-of-browsers-and-platforms/app_live.json",
-  [BrowserStackProducts.APP_AUTOMATE]:
-    "https://www.browserstack.com/list-of-browsers-and-platforms/app_automate.json",
+  [BrowserStackProducts.LIVE]: `${DOMAINS.WWW}/list-of-browsers-and-platforms/live.json`,
+  [BrowserStackProducts.APP_LIVE]: `${DOMAINS.WWW}/list-of-browsers-and-platforms/app_live.json`,
+  [BrowserStackProducts.APP_AUTOMATE]: `${DOMAINS.WWW}/list-of-browsers-and-platforms/app_automate.json`,
 };
 
 /**

@@ -3,6 +3,7 @@ import config from "../../config.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { formatAxiosError } from "../../lib/error.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 /**
  * Schema for updating a test run with partial fields.
@@ -38,7 +39,7 @@ export async function updateTestRun(
 ): Promise<CallToolResult> {
   try {
     const body = { test_run: args.test_run };
-    const url = `https://test-management.browserstack.com/api/v2/projects/${encodeURIComponent(
+    const url = `${DOMAINS.TEST_MANAGEMENT}/api/v2/projects/${encodeURIComponent(
       args.project_identifier,
     )}/test-runs/${encodeURIComponent(args.test_run_id)}/update`;
 

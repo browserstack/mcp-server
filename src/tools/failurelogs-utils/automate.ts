@@ -5,6 +5,7 @@ import {
   filterLinesByKeywords,
   validateLogResponse,
 } from "./utils.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 const auth = Buffer.from(
   `${config.browserstackUsername}:${config.browserstackAccessKey}`,
@@ -14,7 +15,7 @@ const auth = Buffer.from(
 export async function retrieveNetworkFailures(
   sessionId: string,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/automate/sessions/${sessionId}/networklogs`;
+  const url = `${DOMAINS.API}/automate/sessions/${sessionId}/networklogs`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -62,7 +63,7 @@ export async function retrieveNetworkFailures(
 export async function retrieveSessionFailures(
   sessionId: string,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/automate/sessions/${sessionId}/logs`;
+  const url = `${DOMAINS.API}/automate/sessions/${sessionId}/logs`;
 
   const response = await fetch(url, {
     headers: {
@@ -85,7 +86,7 @@ export async function retrieveSessionFailures(
 export async function retrieveConsoleFailures(
   sessionId: string,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/automate/sessions/${sessionId}/consolelogs`;
+  const url = `${DOMAINS.API}/automate/sessions/${sessionId}/consolelogs`;
 
   const response = await fetch(url, {
     headers: {

@@ -2,8 +2,9 @@ import axios from "axios";
 import config from "../../config.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { formatAxiosError } from "../../lib/error.js"; // or correct path
+import { formatAxiosError } from "../../lib/error.js";
 import { projectIdentifierToId } from "../testmanagement-utils/TCG-utils/api.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 // Schema for combined project/folder creation
 export const CreateProjFoldSchema = z.object({
@@ -59,7 +60,7 @@ export async function createProjectOrFolder(
   if (project_name) {
     try {
       const res = await axios.post(
-        "https://test-management.browserstack.com/api/v2/projects",
+        `${DOMAINS.TEST_MANAGEMENT}/api/v2/projects`,
         { project: { name: project_name, description: project_description } },
         {
           auth: {
@@ -88,7 +89,7 @@ export async function createProjectOrFolder(
       throw new Error("Cannot create folder without project_identifier.");
     try {
       const res = await axios.post(
-        `https://test-management.browserstack.com/api/v2/projects/${encodeURIComponent(
+        `${DOMAINS.TEST_MANAGEMENT}/api/v2/projects/${encodeURIComponent(
           projId,
         )}/folders`,
         {
@@ -123,7 +124,7 @@ export async function createProjectOrFolder(
               - ID: ${folder.id}
               - Name: ${folder.name}
               - Project Identifier: ${projId}
-            Access it here: https://test-management.browserstack.com/projects/${projectId}/folder/${folder.id}/`,
+            Access it here: ${DOMAINS.TEST_MANAGEMENT}/projects/${projectId}/folder/${folder.id}/`,
           },
         ],
       };

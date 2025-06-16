@@ -1,6 +1,7 @@
 import config from "../../config.js";
 import { assertOkResponse, maybeCompressBase64 } from "../../lib/utils.js";
 import { SessionType } from "../../lib/constants.js";
+import { DOMAINS } from "../../lib/domains.js";
 
 //Extracts screenshot URLs from BrowserStack session logs
 async function extractScreenshotUrls(
@@ -10,7 +11,7 @@ async function extractScreenshotUrls(
   const credentials = `${config.browserstackUsername}:${config.browserstackAccessKey}`;
   const auth = Buffer.from(credentials).toString("base64");
 
-  const baseUrl = `https://api.browserstack.com/${sessionType === SessionType.Automate ? "automate" : "app-automate"}`;
+  const baseUrl = `${DOMAINS.API}/${sessionType === SessionType.Automate ? "automate" : "app-automate"}`;
 
   const url = `${baseUrl}/sessions/${sessionId}/logs`;
   const response = await fetch(url, {

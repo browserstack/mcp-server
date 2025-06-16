@@ -1,6 +1,7 @@
 import logger from "../logger.js";
 import config from "../config.js";
 import { createRequire } from "module";
+import { DOMAINS } from "./domains.js";
 const require = createRequire(import.meta.url);
 const packageJson = require("../../package.json");
 import axios from "axios";
@@ -27,7 +28,7 @@ export function trackMCP(
     return;
   }
 
-  const instrumentationEndpoint = "https://api.browserstack.com/sdk/v1/event";
+  const instrumentationEndpoint = `${DOMAINS.API}/sdk/v1/event`;
   const isSuccess = !error;
   const mcpClient = clientInfo?.name || "unknown";
 

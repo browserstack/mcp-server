@@ -2,6 +2,7 @@ import logger from "../../logger.js";
 import childProcess from "child_process";
 import { filterDesktop } from "./desktop-filter.js";
 import { filterMobile } from "./mobile-filter.js";
+import { DOMAINS } from "../../lib/domains.js";
 import {
   DesktopSearchArgs,
   MobileSearchArgs,
@@ -71,7 +72,7 @@ function buildDesktopUrl(
     local: isLocal ? "true" : "false",
     start: "true",
   });
-  return `https://live.browserstack.com/dashboard#${params.toString()}`;
+  return `${DOMAINS.LIVE}/dashboard#${params.toString()}`;
 }
 
 function buildMobileUrl(
@@ -97,7 +98,7 @@ function buildMobileUrl(
     local: isLocal ? "true" : "false",
     start: "true",
   });
-  return `https://live.browserstack.com/dashboard#${params.toString()}`;
+  return `${DOMAINS.LIVE}/dashboard#${params.toString()}`;
 }
 
 // ——— Open a browser window ———

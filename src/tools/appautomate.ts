@@ -6,6 +6,7 @@ import config from "../config.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { maybeCompressBase64 } from "../lib/utils.js";
 import { remote } from "webdriverio";
+import { AppTestPlatform } from "./appautomate-utils/types.js";
 
 import {
   getDevicesAndBrowsers,
@@ -18,6 +19,9 @@ import {
   resolveVersion,
   validateArgs,
   uploadApp,
+  uploadEspressoApp,
+  uploadEspressoTestSuite,
+  triggerEspressoBuild,
 } from "./appautomate-utils/appautomate.js";
 
 // Types
@@ -143,9 +147,50 @@ async function takeAppScreenshot(args: {
   }
 }
 
-/**
- * Registers the `takeAppScreenshot` tool with the MCP server.
- */
+//Runs AppAutomate tests on BrowserStack by uploading app and test suite, then triggering a test run.
+async function runAppTestsOnBrowserStack(args: {
+  appPath: string;
+  testSuitePath: string;
+  devices: string[];
+  project: string;
+  detectedAutomationFramework: string;
+}): Promise<CallToolResult> {
+  switch (args.detectedAutomationFramework) {
+    case AppTestPlatform.ESPRESSO: {
+      try {
+        const app_url = await uploadEspressoApp(args.appPath);
+        const test_suite_url = await uploadEspressoTestSuite(
+          args.testSuitePath,
+        );
+        const build_id = await triggerEspressoBuild(
+          app_url,
+          test_suite_url,
+          args.devices,
+          args.project,
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ Test run started successfully!\n\n🔧 Build ID: ${build_id}\n🔗 View your build: https://app-automate.browserstack.com/builds/${build_id}`,
+            },
+          ],
+        };
+      } catch (err) {
+        logger.error("Error running App Automate test", err);
+        throw err;
+      }
+    }
+
+    default:
+      throw new Error(
+        `Unsupported automation framework: ${args.detectedAutomationFramework}`,
+      );
+  }
+}
+
+// Registers automation tools with the MCP server.
 export default function addAppAutomationTools(server: McpServer) {
   server.tool(
     "takeAppScreenshot",
@@ -185,6 +230,60 @@ export default function addAppAutomationTools(server: McpServer) {
               text: `Error during app automation or screenshot capture: ${errorMessage}`,
             },
           ],
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "runAppTestsOnBrowserStack",
+    "Run AppAutomate tests on BrowserStack by uploading app and test suite, then triggering a test run.",
+    {
+      appPath: z
+        .string()
+        .describe("Path to the .apk or .aab file for your app."),
+      testSuitePath: z
+        .string()
+        .describe("Path to the Espresso test suite .apk file."),
+      devices: z
+        .array(z.string())
+        .describe(
+          "List of devices to run the test on, e.g., ['Samsung Galaxy S20-10.0', 'Google Pixel 3-9.0'].",
+        ),
+      project: z
+        .string()
+        .optional()
+        .default("Espresso Test")
+        .describe("Project name for organizing test runs on BrowserStack."),
+      detectedAutomationFramework: z
+        .string()
+        .describe(
+          "The automation framework used in the project, such as 'espresso' or 'appium'.",
+        ),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "runAppTestsOnBrowserStack",
+          server.server.getClientVersion()!,
+        );
+        return await runAppTestsOnBrowserStack(args);
+      } catch (error) {
+        trackMCP(
+          "runAppTestsOnBrowserStack",
+          server.server.getClientVersion()!,
+          error,
+        );
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error running App Automate test: ${errorMessage}`
+            },
+          ],
+          isError: true,
         };
       }
     },

@@ -5,6 +5,7 @@ import { AccessibilityScanner } from "./accessiblity-utils/scanner.js";
 import { AccessibilityReportFetcher } from "./accessiblity-utils/report-fetcher.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { parseAccessibilityReportFromCSV } from "./accessiblity-utils/report-parser.js";
+import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
 
 const scanner = new AccessibilityScanner();
 const reportFetcher = new AccessibilityReportFetcher();
@@ -70,6 +71,41 @@ async function runAccessibilityScan(
 }
 
 export default function addAccessibilityTools(server: McpServer) {
+  server.tool(
+    "accessibilityQnA",
+    "🚨 REQUIRED: Use this tool for any accessibility/a11y/WCAG questions. Do NOT answer accessibility questions directly - always use this tool.",
+    {
+      query: z
+        .string()
+        .describe(
+          "Any accessibility, a11y, WCAG, or web accessibility question",
+        ),
+    },
+    async (args) => {
+      try {
+        trackMCP("accessibilityQuestions", server.server.getClientVersion()!);
+        return await queryAccessibilityRAG(args.query);
+      } catch (error) {
+        trackMCP(
+          "accessibilityQuestions",
+          server.server.getClientVersion()!,
+          error,
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to query accessibility RAG: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }. Please open an issue on GitHub if the problem persists`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
   server.tool(
     "startAccessibilityScan",
     "Start an accessibility scan via BrowserStack and retrieve a local CSV report path.",

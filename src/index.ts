@@ -19,10 +19,10 @@ import addSelfHealTools from "./tools/selfheal.js";
 import { setupOnInitialized } from "./oninitialized.js";
 
 function registerTools(server: McpServer) {
+  addAccessibilityTools(server);
   addSDKTools(server);
   addAppLiveTools(server);
   addBrowserLiveTools(server);
-  addAccessibilityTools(server);
   addTestManagementTools(server);
   addAppAutomationTools(server);
   addFailureLogsTools(server);

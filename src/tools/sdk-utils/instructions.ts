@@ -40,16 +40,16 @@ export const getInstructionsForProjectConfiguration = (
 
 export function generateBrowserStackYMLInstructions(
   desiredPlatforms: string[],
+  enablePercy: boolean = false,
 ) {
-  return `
-      Create a browserstack.yml file in the project root. The file should be in the following format:
-
-      \`\`\`yaml
+  let ymlContent = `
 # ======================
 # BrowserStack Reporting
 # ======================
-projectName: BrowserStack MCP Runs
-build: mcp-run
+# A single name for your project to organize all your tests. This is required for Percy.
+projectName: BrowserStack Sample
+# A name for the group of tests you are running
+buildName: mcp-run
 
 # =======================================
 # Platforms (Browsers / Devices to test)
@@ -74,13 +74,33 @@ platforms:
 # Example 2 - If you have configured 1 platform and set \`parallelsPerPlatform\` as 5, a total of 5 (1 * 5) parallel threads will be used on BrowserStack
 parallelsPerPlatform: 1
 
+# =================
+# Local Testing
+# =================
+# Set to true to test local
 browserstackLocal: true
 
 # ===================
 # Debugging features
 # ===================
-debug: true
-testObservability: true
+debug: true # Visual logs, text logs, etc.
+testObservability: true # For Test Observability`;
+
+  if (enablePercy) {
+    ymlContent += `
+
+# =====================
+# Percy Visual Testing
+# =====================
+# Set percy to true to enable visual testing.
+# Set percyCaptureMode to 'manual' to control when screenshots are taken.
+percy: true
+percyCaptureMode: manual`;
+  }
+  return `
+      Create a browserstack.yml file in the project root. The file should be in the following format:
+
+      \`\`\`yaml${ymlContent}
       \`\`\`
       \n`;
 }

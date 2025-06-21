@@ -1,23 +1,49 @@
-export type SDKSupportedLanguage = "nodejs" | "python" | "java";
-export type SDKSupportedBrowserAutomationFramework = "playwright" | "selenium";
+export enum SDKSupportedLanguageEnum {
+  nodejs = "nodejs",
+  python = "python",
+  java = "java",
+  csharp = "csharp",
+}
+export type SDKSupportedLanguage = keyof typeof SDKSupportedLanguageEnum;
+
+export enum SDKSupportedBrowserAutomationFrameworkEnum {
+  playwright = "playwright",
+  selenium = "selenium",
+  cypress = "cypress",
+}
+export type SDKSupportedBrowserAutomationFramework =
+  keyof typeof SDKSupportedBrowserAutomationFrameworkEnum;
+
+export enum SDKSupportedTestingFrameworkEnum {
+  jest = "jest",
+  codeceptjs = "codeceptjs",
+  playwright = "playwright",
+  pytest = "pytest",
+  robot = "robot",
+  behave = "behave",
+  cucumber = "cucumber",
+  nightwatch = "nightwatch",
+  webdriverio = "webdriverio",
+  mocha = "mocha",
+  junit4 = "junit4",
+  junit5 = "junit5",
+  testng = "testng",
+  cypress = "cypress",
+  nunit = "nunit",
+  mstest = "mstest",
+  xunit = "xunit",
+}
 export type SDKSupportedTestingFramework =
-  | "jest"
-  | "codeceptjs"
-  | "playwright"
-  | "pytest"
-  | "robot"
-  | "behave"
-  | "cucumber"
-  | "nightwatch"
-  | "webdriverio"
-  | "mocha"
-  | "junit"
-  | "testng";
+  keyof typeof SDKSupportedTestingFrameworkEnum;
 
 export type ConfigMapping = Record<
-  SDKSupportedLanguage,
-  Record<
-    SDKSupportedBrowserAutomationFramework,
-    Partial<Record<SDKSupportedTestingFramework, { instructions: string }>>
+  SDKSupportedLanguageEnum,
+  Partial<
+    Record<
+      SDKSupportedBrowserAutomationFrameworkEnum,
+      Partial<
+        Record<SDKSupportedTestingFrameworkEnum, { instructions: string }>
+      >
+    >
   >
 >;

@@ -1,6 +1,7 @@
 import logger from "../logger.js";
 import config from "../config.js";
 import { createRequire } from "module";
+import { detectRunMode } from "./utils.js";
 const require = createRequire(import.meta.url);
 const packageJson = require("../../package.json");
 import axios from "axios";
@@ -12,6 +13,7 @@ interface MCPEventPayload {
     tool_name: string;
     mcp_client: string;
     success?: boolean;
+    mode?: string;
     error_message?: string;
     error_type?: string;
   };
@@ -57,6 +59,8 @@ export function trackMCP(
     event.event_properties.error_type =
       error instanceof Error ? error.constructor.name : "Unknown";
   }
+
+  event.event_properties.mode = detectRunMode();
 
   axios
     .post(instrumentationEndpoint, event, {

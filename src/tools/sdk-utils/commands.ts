@@ -28,7 +28,18 @@ export function getSDKPrefixCommand(
 ): string {
   switch (language) {
     case "nodejs":
-      return `Install BrowserStack Node SDK\nusing command | npm i -D browserstack-node-sdk@latest\n| and then run following command to setup browserstack sdk:\n npx setup --username ${process.env.BROWSERSTACK_USERNAME} --key ${process.env.BROWSERSTACK_ACCESS_KEY}\n\n. This will create browserstack.yml file in the project root. Edit the file to add your desired platforms and browsers. If the file is not created :\n`;
+      return `---STEP---
+Install BrowserStack Node SDK using command:
+\`\`\`bash
+npm i -D browserstack-node-sdk@latest
+\`\`\`
+---STEP---
+Run the following command to setup browserstack sdk:
+\`\`\`bash
+npx setup --username ${process.env.BROWSERSTACK_USERNAME} --key ${process.env.BROWSERSTACK_ACCESS_KEY}
+\`\`\`
+---STEP---
+Edit the browserstack.yml file that was created in the project root to add your desired platforms and browsers.`;
 
     case "java": {
       const mavenFramework = getJavaFrameworkForMaven(framework);
@@ -45,11 +56,14 @@ export function getSDKPrefixCommand(
 
       const platformLabel = isWindows ? "Windows" : "macOS/Linux";
 
-      return `Install BrowserStack Java SDK
+      return `---STEP---
+Install BrowserStack Java SDK
 
 **Maven command for ${framework} (${platformLabel}):**
 Run the command, it is required to generate the browserstack-sdk-archetype-integrate project:
 ${mavenCommand}
+
+Alternative setup for Gradle users:
 ${GRADLE_SETUP_INSTRUCTIONS}`;
     }
 

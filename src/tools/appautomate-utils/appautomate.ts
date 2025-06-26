@@ -4,6 +4,11 @@ import config from "../../config.js";
 import FormData from "form-data";
 import { customFuzzySearch } from "../../lib/fuzzy.js";
 
+const auth = {
+  username: config.browserstackUsername,
+  password: config.browserstackAccessKey,
+};
+
 interface Device {
   device: string;
   display_name: string;
@@ -138,13 +143,8 @@ export async function uploadApp(appPath: string): Promise<string> {
     "https://api-cloud.browserstack.com/app-automate/upload",
     formData,
     {
-      headers: {
-        ...formData.getHeaders(),
-      },
-      auth: {
-        username: config.browserstackUsername,
-        password: config.browserstackAccessKey,
-      },
+      headers: formData.getHeaders(),
+      auth,
     },
   );
 
@@ -153,4 +153,127 @@ export async function uploadApp(appPath: string): Promise<string> {
   } else {
     throw new Error(`Failed to upload app: ${response.data}`);
   }
+}
+
+// Helper to upload a file to a given BrowserStack endpoint and return a specific property from the response.
+async function uploadFileToBrowserStack(
+  filePath: string,
+  endpoint: string,
+  responseKey: string,
+): Promise<string> {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`File not found at path: ${filePath}`);
+  }
+
+  const formData = new FormData();
+  formData.append("file", fs.createReadStream(filePath));
+
+  const response = await axios.post(endpoint, formData, {
+    headers: formData.getHeaders(),
+    auth,
+  });
+
+  if (response.data[responseKey]) {
+    return response.data[responseKey];
+  }
+
+  throw new Error(`Failed to upload file: ${JSON.stringify(response.data)}`);
+}
+
+//Uploads an Android app (.apk or .aab) to BrowserStack Espresso endpoint and returns the app_url
+export async function uploadEspressoApp(appPath: string): Promise<string> {
+  return uploadFileToBrowserStack(
+    appPath,
+    "https://api-cloud.browserstack.com/app-automate/espresso/v2/app",
+    "app_url",
+  );
+}
+
+//Uploads an Espresso test suite (.apk) to BrowserStack and returns the test_suite_url
+export async function uploadEspressoTestSuite(
+  testSuitePath: string,
+): Promise<string> {
+  return uploadFileToBrowserStack(
+    testSuitePath,
+    "https://api-cloud.browserstack.com/app-automate/espresso/v2/test-suite",
+    "test_suite_url",
+  );
+}
+
+//Uploads an iOS app (.ipa) to BrowserStack XCUITest endpoint and returns the app_url
+export async function uploadXcuiApp(appPath: string): Promise<string> {
+  return uploadFileToBrowserStack(
+    appPath,
+    "https://api-cloud.browserstack.com/app-automate/xcuitest/v2/app",
+    "app_url",
+  );
+}
+
+//Uploads an XCUITest test suite (.zip) to BrowserStack and returns the test_suite_url
+export async function uploadXcuiTestSuite(
+  testSuitePath: string,
+): Promise<string> {
+  return uploadFileToBrowserStack(
+    testSuitePath,
+    "https://api-cloud.browserstack.com/app-automate/xcuitest/v2/test-suite",
+    "test_suite_url",
+  );
+}
+
+// Triggers an Espresso test run on BrowserStack and returns the build_id
+export async function triggerEspressoBuild(
+  app_url: string,
+  test_suite_url: string,
+  devices: string[],
+  project: string,
+): Promise<string> {
+  const response = await axios.post(
+    "https://api-cloud.browserstack.com/app-automate/espresso/v2/build",
+    {
+      app: app_url,
+      testSuite: test_suite_url,
+      devices,
+      project,
+    },
+    {
+      auth,
+    },
+  );
+
+  if (response.data.build_id) {
+    return response.data.build_id;
+  }
+
+  throw new Error(
+    `Failed to trigger Espresso build: ${JSON.stringify(response.data)}`,
+  );
+}
+
+// Triggers an XCUITest run on BrowserStack and returns the build_id
+export async function triggerXcuiBuild(
+  app_url: string,
+  test_suite_url: string,
+  devices: string[],
+  project: string,
+): Promise<string> {
+  const response = await axios.post(
+    "https://api-cloud.browserstack.com/app-automate/xcuitest/v2/build",
+    {
+      app: app_url,
+      testSuite: test_suite_url,
+      devices,
+      project,
+    },
+    {
+      auth,
+    },
+  );
+
+  if (response.data.build_id) {
+    return response.data.build_id;
+  }
+
+  throw new Error(
+    `Failed to trigger XCUITest build: ${JSON.stringify(response.data)}`,
+  );
 }

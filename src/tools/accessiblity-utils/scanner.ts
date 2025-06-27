@@ -35,6 +35,12 @@ export class AccessibilityScanner {
     const localHosts = new Set(["127.0.0.1", "localhost", "0.0.0.0"]);
     const BS_LOCAL_DOMAIN = "bs-local.com";
 
+    if (config.USE_OWN_LOCAL_BINARY_PROCESS && hasLocal) {
+      throw new Error(
+        "Cannot start scan with local URLs when using own BrowserStack Local binary process. Please set USE_OWN_LOCAL_BINARY_PROCESS to false.",
+      );
+    }
+
     if (hasLocal) {
       await ensureLocalBinarySetup(localIdentifier);
     } else {

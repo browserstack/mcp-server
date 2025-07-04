@@ -6,3 +6,4 @@ tests.md
 *.ipa
 .npmrc
 .vscode/
+.env

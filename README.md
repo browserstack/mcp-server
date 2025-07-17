@@ -25,10 +25,13 @@
       <img src="assets/thumbnail.webp">
     </a>
   </div>
+
   
 Manage test cases, execute manual or automated tests, debug issues, and even fix code—directly within tools like Cursor, Claude, or any MCP-enabled client, using plain English.
 #### Test from anywhere:
 Easily connect the BrowserStack Test Platform to your favourite AI tools, such as IDEs, LLMs, or agentic workflows.
+#### Test with natural language:
+Manage, execute, debug tests, and even fix code using plain English prompts.
 #### Reduced context switching:
 Stay in flow—keep all project context in one place and trigger actions directly from your IDE or LLM.
 

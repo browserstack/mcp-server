@@ -1,8 +1,15 @@
+export enum PercyIntegrationTypeEnum {
+  WEB = "web",
+  AUTOMATE = "automate",
+}
+
 export enum SDKSupportedLanguageEnum {
   nodejs = "nodejs",
+  javascript = "javascript",
   python = "python",
   java = "java",
   csharp = "csharp",
+  ruby = "ruby",
 }
 export type SDKSupportedLanguage = keyof typeof SDKSupportedLanguageEnum;
 
@@ -28,28 +35,50 @@ export enum SDKSupportedTestingFrameworkEnum {
   junit4 = "junit4",
   junit5 = "junit5",
   testng = "testng",
-  serenity = "serenity",
   cypress = "cypress",
   nunit = "nunit",
   mstest = "mstest",
   xunit = "xunit",
   specflow = "specflow",
   reqnroll = "reqnroll",
+  rspec = "rspec",
 }
 export type SDKSupportedTestingFramework =
   keyof typeof SDKSupportedTestingFrameworkEnum;
 
-export type ConfigMapping = Record<
-  SDKSupportedLanguageEnum,
-  Partial<
-    Record<
-      SDKSupportedBrowserAutomationFrameworkEnum,
-      Partial<
-        Record<
-          SDKSupportedTestingFrameworkEnum,
-          { instructions: (username: string, accessKey: string) => string }
+export type ConfigMapping = Partial<
+  Record<
+    SDKSupportedLanguageEnum,
+    Partial<
+      Record<
+        SDKSupportedBrowserAutomationFrameworkEnum,
+        Partial<
+          Record<
+            SDKSupportedTestingFrameworkEnum,
+            {
+              instructions: (
+                username: string,
+                accessKey: string,
+              ) => { setup: string; run: string };
+            }
+          >
         >
       >
     >
   >
 >;
+
+// Common interfaces for instruction results
+export interface RunTestsStep {
+  type: "instruction" | "error" | "warning";
+  title: string;
+  content: string;
+  isError?: boolean;
+}
+
+export interface RunTestsInstructionResult {
+  steps: RunTestsStep[];
+  requiresPercy: boolean;
+  missingDependencies: string[];
+  shouldSkipFormatting?: boolean;
+}

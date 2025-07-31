@@ -168,8 +168,8 @@ export default function addSDKTools(
   config: BrowserStackConfig,
 ) {
   server.tool(
-    "runTestsOnBrowserStack",
-    "Use this tool to get instructions for running tests on BrowserStack and BrowserStack Percy. It sets up the BrowserStack SDK and runs your test cases on BrowserStack.",
+    "setupBrowserStackAutomateTests",
+    "Set up and run automated web-based tests on BrowserStack using the BrowserStack SDK. Use for functional or integration tests on BrowserStack, with optional Percy visual testing for supported frameworks. Example prompts: run this test on browserstack; run this test on browserstack with Percy; set up this project for browserstack with Percy. Integrate BrowserStack SDK into your project",
     {
       detectedBrowserAutomationFramework: z
         .nativeEnum(SDKSupportedBrowserAutomationFrameworkEnum)

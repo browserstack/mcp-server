@@ -138,6 +138,8 @@ Generate test cases from PRDs, convert manual tests to low-code automation, and 
 
 ## 🛠️ Installation
 
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](http://mcp.browserstack.com/one-click-setup?client=vscode) &nbsp; [![Install in Cursor](https://img.shields.io/badge/Cursor-Install_Server-24bfa5?style=flat-square&color=000000&logo=visualstudiocode&logoColor=white)](http://mcp.browserstack.com/one-click-setup?client=cursor)
+
 1. **Create a BrowserStack Account**
 
    - Sign up for [BrowserStack](https://www.browserstack.com/users/sign_up) if you don't have an account already.

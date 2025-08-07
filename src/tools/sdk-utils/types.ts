@@ -10,6 +10,7 @@ export enum SDKSupportedBrowserAutomationFrameworkEnum {
   playwright = "playwright",
   selenium = "selenium",
   cypress = "cypress",
+  webdriverio = "webdriverio",
 }
 export type SDKSupportedBrowserAutomationFramework =
   keyof typeof SDKSupportedBrowserAutomationFrameworkEnum;

@@ -1,5 +1,6 @@
 import { trackMCP } from "./lib/instrumentation.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { shouldSendStartedEvent } from "./lib/device-cache.js";
 
 export function setupOnInitialized(server: McpServer, config?: any) {
   const nodeVersion = process.versions.node;
@@ -12,6 +13,8 @@ export function setupOnInitialized(server: McpServer, config?: any) {
   }
 
   server.server.oninitialized = () => {
-    trackMCP("started", server.server.getClientVersion()!, undefined, config);
+    if (shouldSendStartedEvent()) {
+      trackMCP("started", server.server.getClientVersion()!, undefined, config);
+    }
   };
 }

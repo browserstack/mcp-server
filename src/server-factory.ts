@@ -7,6 +7,8 @@ const require = createRequire(import.meta.url);
 const packageJson = require("../package.json");
 import logger from "./logger.js";
 import addSDKTools from "./tools/bstack-sdk.js";
+import addPercyTools from "./tools/percy-sdk.js";
+import addSimulatePercyChangeTool from "./tools/simulate-percy.js";
 import addBrowserLiveTools from "./tools/live.js";
 import addAccessibilityTools from "./tools/accessibility.js";
 import addTestManagementTools from "./tools/testmanagement.js";
@@ -15,6 +17,8 @@ import addFailureLogsTools from "./tools/get-failure-logs.js";
 import addAutomateTools from "./tools/automate.js";
 import addSelfHealTools from "./tools/selfheal.js";
 import addAppLiveTools from "./tools/applive.js";
+import addListTestFilesTool from "./tools/list-test-files.js";
+import addPercySnapshotTools from "./tools/add-percy-snapshots.js";
 import { setupOnInitialized } from "./oninitialized.js";
 import { BrowserStackConfig } from "./lib/types.js";
 
@@ -48,6 +52,8 @@ export class BrowserStackMcpServer {
     const toolAdders = [
       addAccessibilityTools,
       addSDKTools,
+      addPercyTools,
+      addSimulatePercyChangeTool,
       addAppLiveTools,
       addBrowserLiveTools,
       addTestManagementTools,
@@ -55,6 +61,8 @@ export class BrowserStackMcpServer {
       addFailureLogsTools,
       addAutomateTools,
       addSelfHealTools,
+      addListTestFilesTool,
+      addPercySnapshotTools,
     ];
 
     toolAdders.forEach((adder) => {

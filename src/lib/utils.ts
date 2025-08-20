@@ -1,4 +1,6 @@
 import sharp from "sharp";
+import path from "path";
+import { fileURLToPath } from "url";
 import type { ApiResponse } from "./apiClient.js";
 
 export function sanitizeUrlParam(param: string): string {
@@ -36,5 +38,16 @@ export async function assertOkResponse(
     throw new Error(
       `Failed to fetch logs for ${action}: ${response.statusText}`,
     );
+  }
+}
+
+export function detectRunMode(): "npx" | "local" | "unknown" {
+  try {
+    const scriptPath = fileURLToPath(import.meta.url);
+    const normalizedPath = path.normalize(scriptPath);
+    const npxPattern = path.sep + "_npx" + path.sep;
+    return normalizedPath.includes(npxPattern) ? "npx" : "local";
+  } catch {
+    return "unknown";
   }
 }

@@ -1,8 +1,8 @@
 import fs from "fs";
 import FormData from "form-data";
-import { apiClient } from "../../lib/apiClient.js";
-import { customFuzzySearch } from "../../lib/fuzzy.js";
-import { BrowserStackConfig } from "../../lib/types.js";
+import { apiClient } from "../../../lib/apiClient.js";
+import { customFuzzySearch } from "../../../lib/fuzzy.js";
+import { BrowserStackConfig } from "../../../lib/types.js";
 
 interface Device {
   device: string;

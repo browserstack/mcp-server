@@ -34,37 +34,41 @@ export async function getDevicesAndBrowsers(
     fs.mkdirSync(CACHE_DIR, { recursive: true });
   }
 
-  let cache: any = {};
+  let cache: Record<string, any> = {};
 
+  // Load existing cache
   if (fs.existsSync(CACHE_FILE)) {
-    const stats = fs.statSync(CACHE_FILE);
-    if (Date.now() - stats.mtimeMs < TTL_MS) {
-      try {
-        cache = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
-        if (cache[type]) {
-          return cache[type];
-        }
-      } catch (error) {
-        console.error("Error parsing cache file:", error);
-        // Continue with fetching fresh data
-      }
+    try {
+      cache = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
+    } catch (err) {
+      console.error("Error parsing cache file:", err);
+      cache = {};
+    }
+
+    // Check per-product TTL
+    const cachedEntry = cache[type];
+    if (cachedEntry?.timestamp && Date.now() - cachedEntry.timestamp < TTL_MS) {
+      return cachedEntry.data;
     }
   }
 
+  // Fetch fresh data from BrowserStack
   const liveRes = await apiClient.get({ url: URLS[type], raise_error: false });
-
   if (!liveRes.ok) {
     throw new Error(
-      `Failed to fetch configuration from BrowserStack : ${type}=${liveRes.statusText}`,
+      `Failed to fetch configuration from BrowserStack: ${type} = ${liveRes.statusText}`,
     );
   }
 
-  cache = {
-    [type]: liveRes.data,
+  // Save to cache with timestamp and data directly under product key
+  cache[type] = {
+    timestamp: Date.now(),
+    data: liveRes.data,
   };
-  fs.writeFileSync(CACHE_FILE, JSON.stringify(cache), "utf8");
 
-  return cache[type];
+  fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2), "utf8");
+
+  return liveRes.data;
 }
 
 // Rate limiter for started event (3H)

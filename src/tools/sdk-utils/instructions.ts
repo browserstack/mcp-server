@@ -88,7 +88,15 @@ browserstackLocal: true
 # Debugging features
 # ===================
 debug: true # Visual logs, text logs, etc.
-testObservability: true # For Test Observability`;
+testObservability: true # For Test Observability
+
+# Optional settings (uncomment only if explicitly required)
+# geoLocation: "US"        # Simulate tests from a specific country (Default: null)
+# timezone: "New_York"     # Run tests in custom timezone
+# retryOnFailure: 2        # Retries failed tests (Default: 0)
+# idleTimeout: 30          # Max idle time in seconds (Default: 30, Range: 0-300)
+# commandTimeout: 180      # Max time to wait for a command (Default: 180)
+# deviceOrientation: portrait # For mobile, choose portrait or landscape (Default: portrait)`;
 
   if (enablePercy) {
     ymlContent += `

@@ -1,10 +1,10 @@
-import { PercyConfigMapping } from "./types.js";
+import { PERCY_SNAPSHOT_INSTRUCTION } from "../common/constants.js";
 
-const javaSeleniumInstructions = `
+export const javaSeleniumInstructions = `
 Import the BrowserStack Percy SDK in your test script:
 Add the Percy import to your test file.
 
----STEP---
+${PERCY_SNAPSHOT_INSTRUCTION}
 
 Add screenshot capture method at required points:
 Use the \`PercySDK.screenshot(driver, name)\` method at points in your test script where you want to capture screenshots.
@@ -35,6 +35,8 @@ export const nodejsSeleniumInstructions = `
 Import the BrowserStack Percy SDK in your test script:
 Add the Percy import to your test file.
 
+${PERCY_SNAPSHOT_INSTRUCTION}
+
 ---STEP---
 
 Add screenshot capture method at required points:
@@ -47,20 +49,20 @@ describe("sample Test", () => {
   
   test("my test", async () => {
     // ....
-    await percy.snapshot(driver, "My Snapshot")
+    await percy.screenshot(driver, "My Snapshot")
     // ....
   });
 })
 \`\`\`
 `;
 
-const webdriverioPercyInstructions = `
+export const webdriverioPercyInstructions = `
 Enable Percy in \`wdio.conf.js\`:
 In your WebdriverIO configuration file, modify the 'browserstack' service options to enable Percy.
 
 - Set \`percy: true\`.
 - Set a \`projectName\`. This is required and will be used for both your Automate and Percy projects.
-- Set \`percyCaptureMode\`. The default \`auto\` mode is recommended, which captures screenshots on events like clicks. Other modes are \`testcase\`, \`click\`, \`screenshot\`, and \`manual\`.
+- Set \`percyCaptureMode\`. The default \`manual\` as we are adding screenshot commands manually.
 
 Here's how to modify the service configuration:
 \`\`\`javascript
@@ -74,7 +76,7 @@ exports.config = {
       { 
         // ... other service options
         percy: true,
-        percyCaptureMode: 'auto' // or 'manual', 'testcase', etc.
+        percyCaptureMode: 'manual' // or 'auto', etc.
       },
     ],
   ],
@@ -88,6 +90,8 @@ exports.config = {
   // ... rest of your config
 };
 \`\`\`
+
+${PERCY_SNAPSHOT_INSTRUCTION}
 
 ---STEP---
 
@@ -117,11 +121,11 @@ describe("My WebdriverIO Test", () => {
 \`\`\`
 `;
 
-const csharpSeleniumInstructions = `
+export const csharpSeleniumInstructions = `
 Import the BrowserStack Percy SDK in your test script:
 Add the Percy import to your test file.
 
----STEP---
+${PERCY_SNAPSHOT_INSTRUCTION}
 
 Add screenshot capture method at required points:
 Use the \`PercySDK.Screenshot(driver, name)\` method at points in your test script where you want to capture screenshots.
@@ -130,8 +134,6 @@ Here's an example:
 
 \`\`\`csharp
 using BrowserStackSDK.Percy;
-using NUnit.Framework;
-
 namespace Tests;
 
 public class MyTest
@@ -151,33 +153,3 @@ public class MyTest
 }
 \`\`\`
 `;
-
-export const PERCY_INSTRUCTIONS: PercyConfigMapping = {
-  java: {
-    selenium: {
-      testng: { script_updates: javaSeleniumInstructions },
-      cucumber: { script_updates: javaSeleniumInstructions },
-      junit4: { script_updates: javaSeleniumInstructions },
-      junit5: { script_updates: javaSeleniumInstructions },
-      serenity: { script_updates: javaSeleniumInstructions },
-    },
-  },
-  csharp: {
-    selenium: {
-      nunit: { script_updates: csharpSeleniumInstructions },
-    },
-  },
-  nodejs: {
-    selenium: {
-      mocha: {
-        script_updates: nodejsSeleniumInstructions,
-      },
-      jest: {
-        script_updates: nodejsSeleniumInstructions,
-      },
-      webdriverio: {
-        script_updates: webdriverioPercyInstructions,
-      },
-    },
-  },
-};

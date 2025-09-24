@@ -58,7 +58,7 @@ export function registerPercyTools(
       };
     },
   );
-  
+
   tools.percyVisualTestIntegrationAgent = server.tool(
     "percyVisualTestIntegrationAgent",
     SIMULATE_PERCY_CHANGE_DESCRIPTION,

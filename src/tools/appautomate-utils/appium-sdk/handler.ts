@@ -3,6 +3,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { getBrowserStackAuth } from "../../../lib/get-auth.js";
 import { validateAppAutomateDevices } from "../../sdk-utils/common/device-validator.js";
+import { normalizeMobileDevice } from "../../../schemas/device-types.js";
 
 import {
   getAppUploadInstruction,
@@ -38,18 +39,40 @@ export async function setupAppAutomateHandler(
   const testingFramework =
     input.detectedTestingFramework as AppSDKSupportedTestingFramework;
   const language = input.detectedLanguage as AppSDKSupportedLanguage;
-  const inputDevices = (input.devices as Array<Array<string>>) ?? [];
   const appPath = input.appPath as string;
   const framework = input.detectedFramework as SupportedFramework;
 
   //Validating if supported framework or not
   validateSupportforAppAutomate(framework, language, testingFramework);
 
+  // Normalize devices from either format (tuple or object) to tuple format for validation
+  const inputDevices = input.devices ?? [];
+  const normalizedDevices = inputDevices.map((device: unknown) => {
+    const normalized = normalizeMobileDevice(device);
+    // Convert object to tuple format for validation function
+    if (
+      normalized &&
+      typeof normalized === "object" &&
+      !Array.isArray(normalized) &&
+      "platform" in normalized &&
+      "deviceName" in normalized &&
+      "osVersion" in normalized
+    ) {
+      const deviceObj = normalized as {
+        platform: string;
+        deviceName: string;
+        osVersion: string;
+      };
+      return [deviceObj.platform, deviceObj.deviceName, deviceObj.osVersion];
+    }
+    return device;
+  }) as Array<Array<string>>;
+
   // Use default mobile devices when array is empty
   const devices =
-    inputDevices.length === 0
+    normalizedDevices.length === 0
       ? [["android", "Samsung Galaxy S24", "latest"]]
-      : inputDevices;
+      : normalizedDevices;
 
   // Validate devices against real BrowserStack device data
   const validatedEnvironments = await validateAppAutomateDevices(devices);

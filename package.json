@@ -35,7 +35,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.18.1",
+    "@modelcontextprotocol/sdk": "^1.21.1",
     "@types/form-data": "^2.5.2",
     "axios": "^1.8.4",
     "browserstack-local": "^1.5.6",

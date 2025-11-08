@@ -93,12 +93,20 @@ export function normalizeBrowserDevice(device: unknown) {
         browserVersion: rest[2],
       };
     }
-    if (normalizedPlatform === "android" || normalizedPlatform === "ios") {
+    if (normalizedPlatform === "android") {
       return {
-        platform: normalizedPlatform,
+        platform: "android",
         deviceName: rest[0],
         osVersion: rest[1],
-        browser: rest[2],
+        browser: rest[2] || "chrome",
+      };
+    }
+    if (normalizedPlatform === "ios") {
+      return {
+        platform: "ios",
+        deviceName: rest[0],
+        osVersion: rest[1],
+        browser: rest[2] || "safari",
       };
     }
     if (normalizedPlatform === "mac" || normalizedPlatform === "macos") {

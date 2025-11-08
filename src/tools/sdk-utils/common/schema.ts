@@ -6,8 +6,8 @@ import {
   SDKSupportedLanguageEnum,
 } from "./types.js";
 import {
-  MobileAppDevice,
-  normalizeMobileDevice,
+  BrowserDevice,
+  normalizeBrowserDevice,
 } from "../../../schemas/device-types.js";
 
 // Platform enums for better validation
@@ -65,15 +65,19 @@ export const RunTestsOnBrowserStackParamsShape = {
     .preprocess(
       (devices) => {
         if (Array.isArray(devices)) {
-          return devices.map((device) => normalizeMobileDevice(device));
+          return devices.map((device) => normalizeBrowserDevice(device));
         }
         return devices;
       },
-      z.array(MobileAppDevice).max(3).default([]),
+      z.array(BrowserDevice).max(3).default([]),
     )
     .describe(
-      "Target mobile devices configuration. Add device only when user asks explicitly for it. Defaults to []. " +
-        "Supports both tuple ['android', 'Galaxy S24', '14'] and object {platform: 'android', deviceName: 'Galaxy S24', osVersion: '14'} formats"
+      "Target browser automation devices configuration (desktop and mobile). Add device only when user asks explicitly for it. Defaults to []. " +
+        "Supports both tuple and object formats for all platforms. Examples: " +
+        "Android (object): {platform: 'android', deviceName: 'Galaxy S24', osVersion: '14', browser: 'chrome'}; " +
+        "Windows (object): {platform: 'windows', osVersion: '11', browser: 'chrome', browserVersion: 'latest'}; " +
+        "macOS (object): {platform: 'macos', osVersion: 'Ventura', browser: 'firefox', browserVersion: 'latest'}; " +
+        "iOS (object): {platform: 'ios', deviceName: 'iPhone 15', osVersion: '17', browser: 'safari'}"
     ),
 };
 

@@ -7,7 +7,10 @@ import { generateBrowserStackYMLInstructions } from "./configUtils.js";
 import { getInstructionsForProjectConfiguration } from "../common/instructionUtils.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { validateDevices } from "../common/device-validator.js";
-import { normalizeBrowserDevice } from "../../../schemas/device-types.js";
+import {
+  normalizeBrowserDevice,
+  denormalizeBrowserDevice,
+} from "../../../schemas/device-types.js";
 import {
   SDKSupportedBrowserAutomationFramework,
   SDKSupportedTestingFramework,
@@ -23,51 +26,9 @@ export async function runBstackSDKOnly(
   const authString = getBrowserStackAuth(config);
   const [username, accessKey] = authString.split(":");
 
-  // Normalize devices from either format (tuple or object) to tuple format for validation
+  // Convert device objects to tuples for the validation function
   const inputDevices = input.devices ?? [];
-  const normalizedDevices = inputDevices.map((device: unknown) => {
-    const normalized = normalizeBrowserDevice(device);
-    // Convert object to tuple format for validation function
-    if (
-      normalized &&
-      typeof normalized === "object" &&
-      !Array.isArray(normalized) &&
-      "platform" in normalized
-    ) {
-      const deviceObj = normalized as {
-        platform: string;
-        osVersion?: string;
-        browser?: string;
-        browserVersion?: string;
-        deviceName?: string;
-      };
-      if (deviceObj.platform === "windows") {
-        return [
-          deviceObj.platform,
-          deviceObj.osVersion || "",
-          deviceObj.browser || "",
-          deviceObj.browserVersion || "",
-        ];
-      }
-      if (deviceObj.platform === "android" || deviceObj.platform === "ios") {
-        return [
-          deviceObj.platform,
-          deviceObj.deviceName || "",
-          deviceObj.osVersion || "",
-          deviceObj.browser || "",
-        ];
-      }
-      if (deviceObj.platform === "macos") {
-        return [
-          deviceObj.platform,
-          deviceObj.osVersion || "",
-          deviceObj.browser || "",
-          deviceObj.browserVersion || "",
-        ];
-      }
-    }
-    return device;
-  }) as Array<Array<string>>;
+  const normalizedDevices = inputDevices.map(denormalizeBrowserDevice);
 
   // Validate devices against real BrowserStack device data
   const validatedEnvironments = await validateDevices(

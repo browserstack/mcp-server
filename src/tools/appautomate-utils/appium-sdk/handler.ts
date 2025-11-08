@@ -3,7 +3,10 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { getBrowserStackAuth } from "../../../lib/get-auth.js";
 import { validateAppAutomateDevices } from "../../sdk-utils/common/device-validator.js";
-import { normalizeMobileDevice } from "../../../schemas/device-types.js";
+import {
+  normalizeMobileDevice,
+  denormalizeMobileDevice,
+} from "../../../schemas/device-types.js";
 
 import {
   getAppUploadInstruction,
@@ -45,28 +48,9 @@ export async function setupAppAutomateHandler(
   //Validating if supported framework or not
   validateSupportforAppAutomate(framework, language, testingFramework);
 
-  // Normalize devices from either format (tuple or object) to tuple format for validation
+  // Convert device objects to tuples for the validation function
   const inputDevices = input.devices ?? [];
-  const normalizedDevices = inputDevices.map((device: unknown) => {
-    const normalized = normalizeMobileDevice(device);
-    // Convert object to tuple format for validation function
-    if (
-      normalized &&
-      typeof normalized === "object" &&
-      !Array.isArray(normalized) &&
-      "platform" in normalized &&
-      "deviceName" in normalized &&
-      "osVersion" in normalized
-    ) {
-      const deviceObj = normalized as {
-        platform: string;
-        deviceName: string;
-        osVersion: string;
-      };
-      return [deviceObj.platform, deviceObj.deviceName, deviceObj.osVersion];
-    }
-    return device;
-  }) as Array<Array<string>>;
+  const normalizedDevices = inputDevices.map(denormalizeMobileDevice);
 
   // Use default mobile devices when array is empty
   const devices =

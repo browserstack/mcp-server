@@ -69,12 +69,12 @@ export const BrowserDevice = z.discriminatedUnion("platform", [
 ]);
 
 // ============================================================================
-// BACKWARD COMPATIBILITY HELPERS
+// BACKWARD COMPATIBILITY HELPERS (Tuple to Object)
 // ============================================================================
 
 export function normalizeMobileDevice(device: unknown) {
   if (Array.isArray(device)) {
-    const [platform, deviceName, osVersion] = device;
+    const [platform = "", deviceName = "", osVersion = ""] = device;
     return { platform, deviceName, osVersion };
   }
   return device;
@@ -83,40 +83,47 @@ export function normalizeMobileDevice(device: unknown) {
 export function normalizeBrowserDevice(device: unknown) {
   if (Array.isArray(device)) {
     const [platform, ...rest] = device;
-    const normalizedPlatform = platform?.toLowerCase();
+    const normalizedPlatform =
+      typeof platform === "string" ? platform.toLowerCase() : "";
 
     if (normalizedPlatform === "windows") {
       return {
         platform: "windows",
-        osVersion: rest[0],
-        browser: rest[1],
-        browserVersion: rest[2],
+        osVersion: rest[0] || "",
+        browser: rest[1] || "",
+        browserVersion: rest[2] || "",
       };
     }
     if (normalizedPlatform === "android") {
       return {
         platform: "android",
-        deviceName: rest[0],
-        osVersion: rest[1],
+        deviceName: rest[0] || "",
+        osVersion: rest[1] || "",
         browser: rest[2] || "chrome",
       };
     }
     if (normalizedPlatform === "ios") {
       return {
         platform: "ios",
-        deviceName: rest[0],
-        osVersion: rest[1],
+        deviceName: rest[0] || "",
+        osVersion: rest[1] || "",
         browser: rest[2] || "safari",
       };
     }
     if (normalizedPlatform === "mac" || normalizedPlatform === "macos") {
       return {
         platform: "macos",
-        osVersion: rest[0],
-        browser: rest[1],
-        browserVersion: rest[2],
+        osVersion: rest[0] || "",
+        browser: rest[1] || "",
+        browserVersion: rest[2] || "",
       };
     }
+    // Handle unknown platforms gracefully by returning a partial object
+    // This ensures the return type is consistent, and Zod will catch the invalid platform
+    return {
+      platform: normalizedPlatform,
+      ...rest,
+    };
   }
   // If already an object, normalize "mac" to "macos" if present
   if (device && typeof device === "object" && !Array.isArray(device)) {
@@ -126,4 +133,43 @@ export function normalizeBrowserDevice(device: unknown) {
     }
   }
   return device;
+}
+
+// ============================================================================
+// FORWARD COMPATIBILITY HELPERS (Object to Tuple)
+// ============================================================================
+
+export function denormalizeMobileDevice(device: {
+  platform: string;
+  deviceName: string;
+  osVersion: string;
+}): string[] {
+  return [device.platform, device.deviceName, device.osVersion];
+}
+
+export function denormalizeBrowserDevice(device: {
+  platform: string;
+  osVersion?: string;
+  browser?: string;
+  browserVersion?: string;
+  deviceName?: string;
+}): string[] {
+  const platform = device.platform.toLowerCase();
+  if (platform === "windows" || platform === "macos" || platform === "mac") {
+    return [
+      platform,
+      device.osVersion || "",
+      device.browser || "",
+      device.browserVersion || "",
+    ];
+  }
+  if (platform === "android" || platform === "ios") {
+    return [
+      platform,
+      device.deviceName || "",
+      device.osVersion || "",
+      device.browser || "",
+    ];
+  }
+  return []; // Should not happen with validated data
 }

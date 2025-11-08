@@ -39,7 +39,10 @@ import {
   uploadXcuiTestSuite,
   triggerXcuiBuild,
 } from "./appautomate-utils/native-execution/appautomate.js";
-import { normalizeMobileDevice } from "../schemas/device-types.js";
+import {
+  normalizeMobileDevice,
+  denormalizeMobileDevice,
+} from "../schemas/device-types.js";
 import {
   RUN_APP_AUTOMATE_DESCRIPTION,
   RUN_APP_AUTOMATE_SCHEMA,
@@ -177,9 +180,7 @@ async function runAppTestsOnBrowserStack(
     testSuitePath?: string;
     browserstackAppUrl?: string;
     browserstackTestSuiteUrl?: string;
-    devices:
-      | Array<Array<string>>
-      | Array<{ platform: string; deviceName: string; osVersion: string }>;
+    devices: Array<{ platform: string; deviceName: string; osVersion: string }>;
     project: string;
     detectedAutomationFramework: string;
   },
@@ -197,27 +198,8 @@ async function runAppTestsOnBrowserStack(
     );
   }
 
-  // Normalize devices from either format (tuple or object) to tuple format for validation
-  const normalizedDevices = args.devices.map((device: unknown) => {
-    const normalized = normalizeMobileDevice(device);
-    // Convert object to tuple format for validation function
-    if (
-      normalized &&
-      typeof normalized === "object" &&
-      !Array.isArray(normalized) &&
-      "platform" in normalized &&
-      "deviceName" in normalized &&
-      "osVersion" in normalized
-    ) {
-      const deviceObj = normalized as {
-        platform: string;
-        deviceName: string;
-        osVersion: string;
-      };
-      return [deviceObj.platform, deviceObj.deviceName, deviceObj.osVersion];
-    }
-    return device;
-  }) as Array<Array<string>>;
+  // Convert device objects to tuples for the validation function
+  const normalizedDevices = args.devices.map(denormalizeMobileDevice);
 
   // Validate devices against real BrowserStack device data
   await validateAppAutomateDevices(normalizedDevices);

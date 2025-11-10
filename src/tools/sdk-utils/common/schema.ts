@@ -48,6 +48,33 @@ export const SetUpPercyParamsShape = {
     ),
 };
 
+// Device schema for BrowserStack Automate (supports desktop and mobile)
+const DeviceSchema = z
+  .object({
+    platform: z
+      .enum(["windows", "macos", "android", "ios"])
+      .describe("Platform name, e.g. 'windows', 'macos', 'android', 'ios'"),
+    deviceName: z
+      .string()
+      .optional()
+      .describe(
+        "Device name for mobile platforms, e.g. 'iPhone 15', 'Samsung Galaxy S24'",
+      ),
+    osVersion: z
+      .string()
+      .describe("OS version, e.g. '11', 'Sequoia', '14', '17', 'latest'"),
+    browser: z
+      .string()
+      .optional()
+      .describe("Browser name, e.g. 'chrome', 'safari', 'edge', 'firefox'"),
+    browserVersion: z
+      .string()
+      .optional()
+      .describe(
+        "Browser version for desktop platforms only (windows, macos), e.g. '132', 'latest', 'oldest'. Not used for mobile devices (android, ios).",
+      ),
+  });
+
 export const RunTestsOnBrowserStackParamsShape = {
   projectName: z
     .string()
@@ -58,54 +85,11 @@ export const RunTestsOnBrowserStackParamsShape = {
   ),
   detectedTestingFramework: z.nativeEnum(SDKSupportedTestingFrameworkEnum),
   devices: z
-    .array(
-      z.union([
-        // Windows: [windows, osVersion, browser, browserVersion]
-        z.tuple([
-          z
-            .nativeEnum(WindowsPlatformEnum)
-            .describe("Platform identifier: 'windows'"),
-          z.string().describe("Windows version, e.g. '10', '11'"),
-          z.string().describe("Browser name, e.g. 'chrome', 'firefox', 'edge'"),
-          z
-            .string()
-            .describe("Browser version, e.g. '132', 'latest', 'oldest'"),
-        ]),
-        // Android: [android, name, model, osVersion, browser]
-        z.tuple([
-          z
-            .literal(PlatformEnum.ANDROID)
-            .describe("Platform identifier: 'android'"),
-          z
-            .string()
-            .describe(
-              "Device name, e.g. 'Samsung Galaxy S24', 'Google Pixel 8'",
-            ),
-          z.string().describe("Android version, e.g. '14', '16', 'latest'"),
-          z.string().describe("Browser name, e.g. 'chrome', 'samsung browser'"),
-        ]),
-        // iOS: [ios, name, model, osVersion, browser]
-        z.tuple([
-          z.literal(PlatformEnum.IOS).describe("Platform identifier: 'ios'"),
-          z.string().describe("Device name, e.g. 'iPhone 12 Pro'"),
-          z.string().describe("iOS version, e.g. '17', 'latest'"),
-          z.string().describe("Browser name, typically 'safari'"),
-        ]),
-        // macOS: [mac|macos, name, model, browser, browserVersion]
-        z.tuple([
-          z
-            .nativeEnum(MacOSPlatformEnum)
-            .describe("Platform identifier: 'mac' or 'macos'"),
-          z.string().describe("macOS version name, e.g. 'Sequoia', 'Ventura'"),
-          z.string().describe("Browser name, e.g. 'safari', 'chrome'"),
-          z.string().describe("Browser version, e.g. 'latest'"),
-        ]),
-      ]),
-    )
+    .array(DeviceSchema)
     .max(3)
     .default([])
     .describe(
-      "Preferred tuples of target devices.Add device only when user asks explicitly for it. Defaults to [] . Example: [['windows', '11', 'chrome', 'latest']]",
+      "Device objects array. Use the object format directly - no transformation needed. Add only when user explicitly requests devices. Examples: [{ platform: 'windows', osVersion: '11', browser: 'chrome', browserVersion: 'latest' }] or [{ platform: 'android', deviceName: 'Samsung Galaxy S24', osVersion: '14', browser: 'chrome' }].",
     ),
 };
 

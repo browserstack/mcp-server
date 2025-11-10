@@ -4,6 +4,7 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { formatAxiosError } from "../../lib/error.js";
 import { BrowserStackConfig } from "../../lib/types.js";
+import { getTMBaseURL } from "../../lib/tm-base-url.js";
 
 /**
  * Schema for updating a test run with partial fields.
@@ -40,7 +41,8 @@ export async function updateTestRun(
 ): Promise<CallToolResult> {
   try {
     const body = { test_run: args.test_run };
-    const url = `https://test-management.browserstack.com/api/v2/projects/${encodeURIComponent(
+    const tmBaseUrl = await getTMBaseURL(config);
+    const url = `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
       args.project_identifier,
     )}/test-runs/${encodeURIComponent(args.test_run_id)}/update`;
 

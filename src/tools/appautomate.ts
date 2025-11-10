@@ -378,7 +378,13 @@ export default function addAppAutomationTools(
           undefined,
           config,
         );
-        return await runAppTestsOnBrowserStack(args, config);
+        const devicesAsArrays: Array<Array<string>> = args.devices.map(
+          (device) => [device.platform, device.deviceName, device.osVersion],
+        );
+        return await runAppTestsOnBrowserStack(
+          { ...args, devices: devicesAsArrays },
+          config,
+        );
       } catch (error) {
         trackMCP(
           "runAppTestsOnBrowserStack",

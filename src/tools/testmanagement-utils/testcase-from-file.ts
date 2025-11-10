@@ -14,6 +14,7 @@ import { signedUrlMap } from "../../lib/inmemory-store.js";
 import logger from "../../logger.js";
 import { projectIdentifierToId } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
+import { getTMBaseURL } from "../../lib/tm-base-url.js";
 
 export async function createTestCasesFromFile(
   args: CreateTestCasesFromFileArgs,
@@ -87,7 +88,8 @@ export async function createTestCasesFromFile(
 
   signedUrlMap.delete(args.documentId);
 
-  const dashboardURL = `https://test-management.browserstack.com/projects/${args.projectReferenceId}/folder/${args.folderId}/test-cases`;
+  const tmBaseUrl = await getTMBaseURL(config);
+  const dashboardURL = `${tmBaseUrl}/projects/${args.projectReferenceId}/folder/${args.folderId}/test-cases`;
 
   return {
     content: [

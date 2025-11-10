@@ -34,7 +34,7 @@ Process files in STRICT sequential order using tool addPercySnapshotCommands() w
 export const PERCY_SIMULATE_INSTRUCTION = `
 MANDATORY: Aggressive, Accurate Percy Snapshots Integration
 
-Prerequisite: Before making any code changes in the user's repository, create and switch to a new branch named browserstack-simulation. Stage all changes but do not commit them. If the repository has not been initialized yet, run git init first.
+Prerequisite: Before making any code changes in the user's repository, create and switch to a new branch named percy-integration. Stage all changes but do not commit them. If the repository has not been initialized yet, run git init first.
 
 You MUST follow these steps with NO EXCEPTIONS:
 1. Identify 4-5 key test files in the project that are critical for visual testing.
@@ -52,7 +52,7 @@ STEP 1: At this case we have added Percy snapshot commands to the test files at 
 - Do NOT add any popup injection or visual changes yet.
 - Do NOT run any Percy builds at this stage.
 
-STEP 2: Run ONE comprehensive baseline Percy build that executes ALL tests containing Percy snapshots in a SINGLE build. This creates one baseline build with all snapshots for comparison. Use a command like: npx percy exec --label=mcp -- python -m pytest tests/ -k 'test_name1 or test_name2 or test_name3' -v to run multiple specific tests in one build."
+STEP 2: Run ONE comprehensive baseline Percy build that executes ALL tests containing Percy snapshots in a SINGLE build. This creates one baseline build with all snapshots for comparison. Use a command like: npx percy exec --labels=mcp -- python -m pytest tests/ -k 'test_name1 or test_name2 or test_name3' -v to run multiple specific tests in one build."
 
 STEP 3: Modify your test to inject a visible UI change (such as a popup) IMMEDIATELY BEFORE an EXISTING snapshot command (e.g., before percy_snapshot(self.driver, "screenshot name")).
 - Do NOT add a new snapshot name for the popup.
@@ -83,7 +83,7 @@ STEP 4: Run a second Percy build with same label and same test command as the ba
 
 STEP 5: Compare the two Percy builds to see the detected visual difference.
 
-STEP 6: Now ask user if they want to expand percy for other testcases? If yes, call the "expandPercyVisualTesting" tool to enable complete coverage for the entire project.
+STEP 6: Now ask user if they want to expand percy for other testcases? If yes, call the "expandPercyVisualTesting" tool to expand the coverage for the project.
 
 CONSTRAINTS:
 - Do NOT run any builds until explicitly instructed in the steps.

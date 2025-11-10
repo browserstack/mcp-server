@@ -5,6 +5,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { projectIdentifierToId } from "../testmanagement-utils/TCG-utils/api.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
+import { getTMBaseURL } from "../../lib/tm-base-url.js";
 
 // Schema for combined project/folder creation
 export const CreateProjFoldSchema = z.object({
@@ -65,8 +66,9 @@ export async function createProjectOrFolder(
     try {
       const authString = getBrowserStackAuth(config);
       const [username, password] = authString.split(":");
+      const tmBaseUrl = await getTMBaseURL(config);
       const res = await apiClient.post({
-        url: "https://test-management.browserstack.com/api/v2/projects",
+        url: `${tmBaseUrl}/api/v2/projects`,
         headers: {
           "Content-Type": "application/json",
           Authorization:
@@ -95,8 +97,9 @@ export async function createProjectOrFolder(
     if (!projId)
       throw new Error("Cannot create folder without project_identifier.");
     try {
+      const tmBaseUrl = await getTMBaseURL(config);
       const res = await apiClient.post({
-        url: `https://test-management.browserstack.com/api/v2/projects/${encodeURIComponent(
+        url: `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
           projId,
         )}/folders`,
         headers: {
@@ -130,7 +133,7 @@ export async function createProjectOrFolder(
               - ID: ${folder.id}
               - Name: ${folder.name}
               - Project Identifier: ${projId}
-            Access it here: https://test-management.browserstack.com/projects/${projectId}/folder/${folder.id}/`,
+            Access it here: ${tmBaseUrl}/projects/${projectId}/folder/${folder.id}/`,
           },
         ],
       };

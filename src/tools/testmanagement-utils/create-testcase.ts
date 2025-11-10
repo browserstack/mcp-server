@@ -4,6 +4,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { formatAxiosError } from "../../lib/error.js";
 import { projectIdentifierToId } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
+import { getTMBaseURL } from "../../lib/tm-base-url.js";
 
 interface TestCaseStep {
   step: string;
@@ -157,8 +158,9 @@ export async function createTestCase(
   const [username, password] = authString.split(":");
 
   try {
+    const tmBaseUrl = await getTMBaseURL(config);
     const response = await apiClient.post({
-      url: `https://test-management.browserstack.com/api/v2/projects/${encodeURIComponent(
+      url: `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
         params.project_identifier,
       )}/folders/${encodeURIComponent(params.folder_id)}/test-cases`,
       headers: {
@@ -199,7 +201,7 @@ export async function createTestCase(
             - Identifier: ${tc.identifier}
             - Title: ${tc.title}
 
-          You can view it here: https://test-management.browserstack.com/projects/${projectId}/folder/search?q=${tc.identifier}`,
+          You can view it here: ${tmBaseUrl}/projects/${projectId}/folder/search?q=${tc.identifier}`,
         },
         {
           type: "text",

@@ -38,7 +38,12 @@ export async function setupAppAutomateHandler(
   const testingFramework =
     input.detectedTestingFramework as AppSDKSupportedTestingFramework;
   const language = input.detectedLanguage as AppSDKSupportedLanguage;
-  const inputDevices = (input.devices as Array<Array<string>>) ?? [];
+  const inputDevices: Array<Array<string>> =
+    input.devices?.map((device) => [
+      device.platform,
+      device.deviceName,
+      device.osVersion,
+    ]) ?? [];
   const appPath = input.appPath as string;
   const framework = input.detectedFramework as SupportedFramework;
 

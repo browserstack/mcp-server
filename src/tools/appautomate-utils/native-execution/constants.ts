@@ -1,8 +1,19 @@
 import { z } from "zod";
 import { AppTestPlatform } from "./types.js";
-import { AppSDKSupportedPlatformEnum } from "../appium-sdk/types.js";
 
 export const RUN_APP_AUTOMATE_DESCRIPTION = `Execute pre-built native mobile test suites (Espresso for Android, XCUITest for iOS) by direct upload to BrowserStack. ONLY for compiled .apk/.ipa test files. This is NOT for SDK integration or Appium tests. For Appium-based testing with SDK setup, use 'setupBrowserStackAppAutomateTests' instead.`;
+
+export const MobileDeviceSchema = z.object({
+  platform: z
+    .enum(["android", "ios"])
+    .describe("Platform name: 'android' or 'ios'"),
+  deviceName: z
+    .string()
+    .describe(
+      "Device name, e.g. 'Samsung Galaxy S24', 'Google Pixel 8', 'iPhone 15', 'iPhone 14 Pro'",
+    ),
+  osVersion: z.string().describe("OS version, e.g. '14', '16', '17', 'latest'"),
+});
 
 export const RUN_APP_AUTOMATE_SCHEMA = {
   appPath: z
@@ -30,30 +41,7 @@ export const RUN_APP_AUTOMATE_SCHEMA = {
         "If in other directory, provide existing test file path",
     ),
   devices: z
-    .array(
-      z.union([
-        // Android: [android, deviceName, osVersion]
-        z.tuple([
-          z
-            .literal(AppSDKSupportedPlatformEnum.android)
-            .describe("Platform identifier: 'android'"),
-          z
-            .string()
-            .describe(
-              "Device name, e.g. 'Samsung Galaxy S24', 'Google Pixel 8'",
-            ),
-          z.string().describe("Android version, e.g. '14', '16', 'latest'"),
-        ]),
-        // iOS: [ios, deviceName, osVersion]
-        z.tuple([
-          z
-            .literal(AppSDKSupportedPlatformEnum.ios)
-            .describe("Platform identifier: 'ios'"),
-          z.string().describe("Device name, e.g. 'iPhone 15', 'iPhone 14 Pro'"),
-          z.string().describe("iOS version, e.g. '17', '16', 'latest'"),
-        ]),
-      ]),
-    )
+    .array(MobileDeviceSchema)
     .max(3)
     .default([])
     .describe(

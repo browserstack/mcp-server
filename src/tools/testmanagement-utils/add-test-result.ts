@@ -3,6 +3,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { BrowserStackConfig } from "../../lib/types.js";
+import { getTMBaseURL } from "../../lib/tm-base-url.js";
 
 /**
  * Schema for adding a test result to a test run.
@@ -37,7 +38,8 @@ export async function addTestResult(
 ): Promise<CallToolResult> {
   try {
     const args = AddTestResultSchema.parse(rawArgs);
-    const url = `https://test-management.browserstack.com/api/v2/projects/${encodeURIComponent(
+    const tmBaseUrl = await getTMBaseURL(config);
+    const url = `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
       args.project_identifier,
     )}/test-runs/${encodeURIComponent(args.test_run_id)}/results`;
 

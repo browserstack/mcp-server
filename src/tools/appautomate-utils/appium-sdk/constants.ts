@@ -3,7 +3,6 @@ import {
   AppSDKSupportedFrameworkEnum,
   AppSDKSupportedTestingFrameworkEnum,
   AppSDKSupportedLanguageEnum,
-  AppSDKSupportedPlatformEnum,
 } from "./index.js";
 
 // App Automate specific device configurations
@@ -25,6 +24,18 @@ export const STEP_DELIMITER = "---STEP---";
 
 // Default app path for examples
 export const DEFAULT_APP_PATH = "bs://sample.app";
+
+export const MobileDeviceSchema = z.object({
+  platform: z
+    .enum(["android", "ios"])
+    .describe("Platform name: 'android' or 'ios'"),
+  deviceName: z
+    .string()
+    .describe(
+      "Device name, e.g. 'Samsung Galaxy S24', 'Google Pixel 8', 'iPhone 15', 'iPhone 14 Pro'",
+    ),
+  osVersion: z.string().describe("OS version, e.g. '14', '16', '17', 'latest'"),
+});
 
 // Tool description and schema for setupBrowserStackAppAutomateTests
 export const SETUP_APP_AUTOMATE_DESCRIPTION =
@@ -50,30 +61,7 @@ export const SETUP_APP_AUTOMATE_SCHEMA = {
     ),
 
   devices: z
-    .array(
-      z.union([
-        // Android: [android, deviceName, osVersion]
-        z.tuple([
-          z
-            .literal(AppSDKSupportedPlatformEnum.android)
-            .describe("Platform identifier: 'android'"),
-          z
-            .string()
-            .describe(
-              "Device name, e.g. 'Samsung Galaxy S24', 'Google Pixel 8'",
-            ),
-          z.string().describe("Android version, e.g. '14', '16', 'latest'"),
-        ]),
-        // iOS: [ios, deviceName, osVersion]
-        z.tuple([
-          z
-            .literal(AppSDKSupportedPlatformEnum.ios)
-            .describe("Platform identifier: 'ios'"),
-          z.string().describe("Device name, e.g. 'iPhone 15', 'iPhone 14 Pro'"),
-          z.string().describe("iOS version, e.g. '17', '16', 'latest'"),
-        ]),
-      ]),
-    )
+    .array(MobileDeviceSchema)
     .max(3)
     .default([])
     .describe(

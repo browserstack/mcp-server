@@ -8,6 +8,7 @@ import {
 import { pollLCAStatus } from "./poll-lca-status.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
+import { getTMBaseURL } from "../../lib/tm-base-url.js";
 
 /**
  * Schema for creating LCA steps for a test case
@@ -81,7 +82,8 @@ export async function createLCASteps(
       config,
     );
 
-    const url = `https://test-management.browserstack.com/api/v1/projects/${projectId}/test-cases/${testCaseId}/lcnc`;
+    const tmBaseUrl = await getTMBaseURL(config);
+    const url = `${tmBaseUrl}/api/v1/projects/${projectId}/test-cases/${testCaseId}/lcnc`;
 
     const payload = {
       base_url: args.base_url,
@@ -90,7 +92,7 @@ export async function createLCASteps(
       test_name: args.test_name,
       test_case_details: args.test_case_details,
       version: "v2",
-      webhook_path: `https://test-management.browserstack.com/api/v1/projects/${projectId}/test-cases/${testCaseId}/webhooks/lcnc`,
+      webhook_path: `${tmBaseUrl}/api/v1/projects/${projectId}/test-cases/${testCaseId}/webhooks/lcnc`,
     };
 
     await apiClient.post({

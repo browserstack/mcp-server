@@ -15,6 +15,12 @@ import {
 } from "./testmanagement-utils/create-testcase.js";
 
 import {
+  updateTestCase as updateTestCaseAPI,
+  TestCaseUpdateRequest,
+  UpdateTestCaseSchema,
+} from "./testmanagement-utils/update-testcase.js";
+
+import {
   listTestCases,
   ListTestCasesSchema,
 } from "./testmanagement-utils/list-testcases.js";
@@ -120,6 +126,40 @@ export async function createTestCaseTool(
         {
           type: "text",
           text: `Failed to create test case: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+          isError: true,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Updates an existing test case in BrowserStack Test Management.
+ */
+export async function updateTestCaseTool(
+  args: TestCaseUpdateRequest,
+  config: BrowserStackConfig,
+  server: McpServer,
+): Promise<CallToolResult> {
+  try {
+    trackMCP(
+      "updateTestCase",
+      server.server.getClientVersion()!,
+      undefined,
+      config,
+    );
+    return await updateTestCaseAPI(args, config);
+  } catch (err) {
+    logger.error("Failed to update test case: %s", err);
+    trackMCP("updateTestCase", server.server.getClientVersion()!, err, config);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to update test case: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
           isError: true,
@@ -424,6 +464,13 @@ export default function addTestManagementTools(
     "Use this tool to create a test case in BrowserStack Test Management.",
     CreateTestCaseSchema.shape,
     (args) => createTestCaseTool(args, config, server),
+  );
+
+  tools.updateTestCase = server.tool(
+    "updateTestCase",
+    "Use this tool to update an existing test case in BrowserStack Test Management. Allows editing test case details like name, description, steps, owner, priority, and more.",
+    UpdateTestCaseSchema.shape,
+    (args) => updateTestCaseTool(args, config, server),
   );
 
   tools.listTestCases = server.tool(

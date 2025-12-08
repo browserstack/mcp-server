@@ -1,6 +1,6 @@
 {
   "name": "@browserstack/mcp-server",
-  "version": "1.2.8",
+  "version": "1.2.9",
   "description": "BrowserStack's Official MCP Server",
   "mcpName": "io.github.browserstack/mcp-server",
   "main": "dist/index.js",

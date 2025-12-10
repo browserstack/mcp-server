@@ -1,5 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
+import { getA11yBaseURL } from "../../lib/a11y-base-url.js";
+import { BrowserStackConfig } from "../../lib/types.js";
 
 export interface AuthConfigResponse {
   success: boolean;
@@ -34,6 +36,11 @@ export interface BasicAuthData {
 
 export class AccessibilityAuthConfig {
   private auth: { username: string; password: string } | undefined;
+  private config: BrowserStackConfig;
+
+  constructor(config: BrowserStackConfig) {
+    this.config = config;
+  }
 
   public setAuth(auth: { username: string; password: string }): void {
     this.auth = auth;
@@ -171,8 +178,9 @@ export class AccessibilityAuthConfig {
     }
 
     try {
+      const baseUrl = await getA11yBaseURL(this.config);
       const response = await apiClient.get<AuthConfigResponse>({
-        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/auth_configs/${configId}`,
+        url: `${baseUrl}/api/website-scanner/v1/auth_configs/${configId}`,
         headers: {
           Authorization:
             "Basic " +

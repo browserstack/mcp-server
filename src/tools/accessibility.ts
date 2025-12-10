@@ -104,7 +104,7 @@ async function notifyScanProgress(
 async function initializeScanner(
   config: BrowserStackConfig,
 ): Promise<AccessibilityScanner> {
-  const scanner = new AccessibilityScanner();
+  const scanner = new AccessibilityScanner(config);
   const auth = setupAuth(config);
   scanner.setAuth(auth);
   return scanner;
@@ -113,7 +113,7 @@ async function initializeScanner(
 async function initializeReportFetcher(
   config: BrowserStackConfig,
 ): Promise<AccessibilityReportFetcher> {
-  const reportFetcher = new AccessibilityReportFetcher();
+  const reportFetcher = new AccessibilityReportFetcher(config);
   const auth = setupAuth(config);
   reportFetcher.setAuth(auth);
   return reportFetcher;
@@ -236,7 +236,7 @@ async function createAuthConfig(
   args: AuthConfigArgs,
   config: BrowserStackConfig,
 ): Promise<any> {
-  const authConfig = new AccessibilityAuthConfig();
+  const authConfig = new AccessibilityAuthConfig(config);
   const auth = setupAuth(config);
   authConfig.setAuth(auth);
 
@@ -312,7 +312,7 @@ async function executeGetAuthConfig(
       config,
     );
 
-    const authConfig = new AccessibilityAuthConfig();
+    const authConfig = new AccessibilityAuthConfig(config);
     const auth = setupAuth(config);
     authConfig.setAuth(auth);
 

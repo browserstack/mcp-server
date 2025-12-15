@@ -1,5 +1,4 @@
 import { assertOkResponse } from "../../lib/utils.js";
-import logger from "../../logger.js";
 
 interface SelectorMapping {
   originalSelector: string;
@@ -29,10 +28,6 @@ export async function getSelfHealSelectors(
     sessionType === "app-automate" ? "app-automate" : "automate";
   const url = `https://api.browserstack.com/${productPath}/sessions/${sessionId}/logs`;
 
-  logger.info(
-    `Fetching self-heal selectors - SessionType: ${sessionType}, ProductPath: ${productPath}, URL: ${url}`,
-  );
-
   const response = await apiClient.get({
     url,
     headers: {
@@ -40,8 +35,6 @@ export async function getSelfHealSelectors(
       Authorization: `Basic ${auth}`,
     },
   });
-
-  logger.info(`Response status: ${response.status}, OK: ${response.ok}`);
 
   await assertOkResponse(response, "session logs");
   const logText =

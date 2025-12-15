@@ -4,6 +4,9 @@
   "description": "BrowserStack's Official MCP Server",
   "mcpName": "io.github.browserstack/mcp-server",
   "main": "dist/index.js",
+  "overrides": {
+    "glob": "11.1.0"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/browserstack/mcp-server.git"

@@ -1,8 +1,11 @@
 import { assertOkResponse } from "../../lib/utils.js";
+import logger from "../../logger.js";
 
 interface SelectorMapping {
   originalSelector: string;
   healedSelector: string;
+  selectorType: string;
+  healedSelectorType: string;
   context: {
     before: string;
     after: string;
@@ -13,13 +16,22 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 
+type SessionType = "automate" | "app-automate";
+
 export async function getSelfHealSelectors(
   sessionId: string,
   config: BrowserStackConfig,
+  sessionType: SessionType = "automate",
 ) {
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
-  const url = `https://api.browserstack.com/automate/sessions/${sessionId}/logs`;
+  const productPath =
+    sessionType === "app-automate" ? "app-automate" : "automate";
+  const url = `https://api.browserstack.com/${productPath}/sessions/${sessionId}/logs`;
+
+  logger.info(
+    `Fetching self-heal selectors - SessionType: ${sessionType}, ProductPath: ${productPath}, URL: ${url}`,
+  );
 
   const response = await apiClient.get({
     url,
@@ -28,6 +40,8 @@ export async function getSelfHealSelectors(
       Authorization: `Basic ${auth}`,
     },
   });
+
+  logger.info(`Response status: ${response.status}, OK: ${response.ok}`);
 
   await assertOkResponse(response, "session logs");
   const logText =
@@ -43,41 +57,85 @@ function extractHealedSelectors(logText: string): SelectorMapping[] {
 
   // Pattern to match successful SELFHEAL entries only
   const selfhealPattern =
-    /SELFHEAL\s*{\s*"status":"true",\s*"data":\s*{\s*"using":"css selector",\s*"value":"(.*?)"}/;
-
-  // Pattern to match preceding selector requests
-  const requestPattern =
-    /POST \/session\/[^/]+\/element.*?"using":"css selector","value":"(.*?)"/;
+    /SELFHEAL\s*{\s*"status":"true",\s*"data":\s*{\s*"using":"([^"]+)",\s*"value":"(.*?)"}/;
 
   // Find all successful healed selectors with their line numbers and context
   const healedMappings: SelectorMapping[] = [];
 
   for (let i = 0; i < logLines.length; i++) {
     const match = logLines[i].match(selfhealPattern);
-    if (match) {
-      const beforeLine = i > 0 ? logLines[i - 1] : "";
-      const afterLine = i < logLines.length - 1 ? logLines[i + 1] : "";
-
-      // Look backwards to find the most recent original selector request
-      let originalSelector = "UNKNOWN";
-      for (let j = i - 1; j >= 0; j--) {
-        const requestMatch = logLines[j].match(requestPattern);
-        if (requestMatch) {
-          originalSelector = requestMatch[1];
-          break;
-        }
-      }
-
-      healedMappings.push({
-        originalSelector,
-        healedSelector: match[1],
-        context: {
-          before: beforeLine,
-          after: afterLine,
-        },
-      });
+    if (!match) {
+      continue;
     }
+
+    const beforeLine = i > 0 ? logLines[i - 1] : "";
+    const afterLine = i < logLines.length - 1 ? logLines[i + 1] : "";
+
+    const healedSelectorType = normalizeSelectorType(match[1]);
+    const healedSelector = cleanSelectorValue(match[2]);
+
+    const requestLine = findClosestRequestLine(logLines, i);
+    const requestSelector = requestLine
+      ? extractSelectorFromRequest(requestLine)
+      : {
+          selector: "UNKNOWN",
+          selectorType: "unknown",
+        };
+
+    healedMappings.push({
+      originalSelector: requestSelector.selector,
+      healedSelector,
+      selectorType: requestSelector.selectorType,
+      healedSelectorType,
+      context: {
+        before: beforeLine,
+        after: afterLine,
+      },
+    });
   }
 
   return healedMappings;
+}
+
+function findClosestRequestLine(
+  logLines: string[],
+  currentIndex: number,
+): string | undefined {
+  for (let i = currentIndex - 1; i >= 0; i--) {
+    const line = logLines[i];
+    if (line.includes("REQUEST") && line.includes('"using"')) {
+      return line;
+    }
+
+    if (line.includes("SELFHEAL")) {
+      break;
+    }
+  }
+
+  return undefined;
+}
+
+function extractSelectorFromRequest(line: string) {
+  const usingMatch = line.match(/"using":"([^"]+)"/);
+  const valueMatch = line.match(/"value":"(.*?)"/);
+
+  if (usingMatch && valueMatch) {
+    return {
+      selector: cleanSelectorValue(valueMatch[1]),
+      selectorType: normalizeSelectorType(usingMatch[1]),
+    };
+  }
+
+  return {
+    selector: "UNKNOWN",
+    selectorType: "unknown",
+  };
+}
+
+function cleanSelectorValue(value: string) {
+  return value.replace(/\\\\/g, "\\");
+}
+
+function normalizeSelectorType(value: string) {
+  return value ? value.toLowerCase() : "unknown";
 }

@@ -7,12 +7,18 @@ import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
 
 // Tool function that fetches self-healing selectors
+type SessionType = "automate" | "app-automate";
+
 export async function fetchSelfHealSelectorTool(
-  args: { sessionId: string },
+  args: { sessionId: string; sessionType?: SessionType },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const selectors = await getSelfHealSelectors(args.sessionId, config);
+    const selectors = await getSelfHealSelectors(
+      args.sessionId,
+      config,
+      args.sessionType ?? "automate",
+    );
     return {
       content: [
         {
@@ -38,9 +44,15 @@ export default function addSelfHealTools(
 
   tools.fetchSelfHealedSelectors = server.tool(
     "fetchSelfHealedSelectors",
-    "Retrieves AI-generated, self-healed selectors for a BrowserStack Automate session to resolve flaky tests caused by dynamic DOM changes.",
+    "Retrieves AI-generated, self-healed selectors for a BrowserStack Automate or App Automate session to resolve flaky tests caused by dynamic DOM changes.",
     {
       sessionId: z.string().describe("The session ID of the test run"),
+      sessionType: z
+        .enum(["automate", "app-automate"])
+        .describe(
+          "BrowserStack product to query; defaults to automate when omitted.",
+        )
+        .optional(),
     },
     async (args) => {
       try {

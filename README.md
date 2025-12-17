@@ -288,19 +288,9 @@ Select the “Installed” tab. Click the “Configure MCP Servers” button at 
    }
    ```
 
-### Installing via Smithery
-
-To install BrowserStack Test Platform Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@browserstack/mcp-server):
-
-```bash
-npx -y @smithery/cli install @browserstack/mcp-server --client claude
-```
-
-
 ### 💡 List of BrowserStack MCP Tools
 
 As of now we support 20 tools.
-
 
 ---
 

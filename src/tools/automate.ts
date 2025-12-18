@@ -36,10 +36,9 @@ export async function fetchAutomationScreenshotsTool(
 
     const results = screenshots.map((screenshot, index) => ({
       type: "image" as const,
-      text: `Screenshot ${index + 1}`,
       data: screenshot.base64,
       mimeType: "image/png",
-      metadata: { url: screenshot.url },
+      _meta: { url: screenshot.url, index: index + 1 },
     }));
 
     return {

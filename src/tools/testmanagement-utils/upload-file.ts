@@ -42,7 +42,6 @@ export async function uploadFile(
           {
             type: "text",
             text: `File ${file_path} does not exist.`,
-            isError: true,
           },
         ],
         isError: true,
@@ -122,7 +121,6 @@ export async function uploadFile(
           text: `Failed to upload file: ${
             error instanceof Error ? error.message : "Unknown error"
           }. Please check your credentials and try again.`,
-          isError: true,
         },
       ],
       isError: true,

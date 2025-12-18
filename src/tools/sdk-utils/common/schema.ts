@@ -49,31 +49,30 @@ export const SetUpPercyParamsShape = {
 };
 
 // Device schema for BrowserStack Automate (supports desktop and mobile)
-const DeviceSchema = z
-  .object({
-    platform: z
-      .enum(["windows", "macos", "android", "ios"])
-      .describe("Platform name, e.g. 'windows', 'macos', 'android', 'ios'"),
-    deviceName: z
-      .string()
-      .optional()
-      .describe(
-        "Device name for mobile platforms, e.g. 'iPhone 15', 'Samsung Galaxy S24'",
-      ),
-    osVersion: z
-      .string()
-      .describe("OS version, e.g. '11', 'Sequoia', '14', '17', 'latest'"),
-    browser: z
-      .string()
-      .optional()
-      .describe("Browser name, e.g. 'chrome', 'safari', 'edge', 'firefox'"),
-    browserVersion: z
-      .string()
-      .optional()
-      .describe(
-        "Browser version for desktop platforms only (windows, macos), e.g. '132', 'latest', 'oldest'. Not used for mobile devices (android, ios).",
-      ),
-  });
+const DeviceSchema = z.object({
+  platform: z
+    .enum(["windows", "macos", "android", "ios"])
+    .describe("Platform name, e.g. 'windows', 'macos', 'android', 'ios'"),
+  deviceName: z
+    .string()
+    .optional()
+    .describe(
+      "Device name for mobile platforms, e.g. 'iPhone 15', 'Samsung Galaxy S24'",
+    ),
+  osVersion: z
+    .string()
+    .describe("OS version, e.g. '11', 'Sequoia', '14', '17', 'latest'"),
+  browser: z
+    .string()
+    .optional()
+    .describe("Browser name, e.g. 'chrome', 'safari', 'edge', 'firefox'"),
+  browserVersion: z
+    .string()
+    .optional()
+    .describe(
+      "Browser version for desktop platforms only (windows, macos), e.g. '132', 'latest', 'oldest'. Not used for mobile devices (android, ios).",
+    ),
+});
 
 export const RunTestsOnBrowserStackParamsShape = {
   projectName: z

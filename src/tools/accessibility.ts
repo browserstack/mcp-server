@@ -50,16 +50,15 @@ function setupAuth(config: BrowserStackConfig): AuthCredentials {
   return { username, password };
 }
 
-function createErrorResponse(message: string, isError = true): CallToolResult {
+function createErrorResponse(message: string): CallToolResult {
   return {
     content: [
       {
         type: "text",
         text: message,
-        isError,
       },
     ],
-    isError,
+    isError: true,
   };
 }
 

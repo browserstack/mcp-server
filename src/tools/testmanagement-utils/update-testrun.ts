@@ -66,7 +66,6 @@ export async function updateTestRun(
           {
             type: "text",
             text: `Failed to update test run: ${JSON.stringify(data)}`,
-            isError: true,
           },
         ],
         isError: true,

@@ -154,7 +154,6 @@ async function takeAppScreenshot(args: {
           type: "image",
           data: compressed,
           mimeType: "image/png",
-          name: `screenshot-${selectedDevice.device}-${Date.now()}`,
         },
       ],
     };
@@ -422,7 +421,6 @@ export default function addAppAutomationTools(
             {
               type: "text",
               text: `Failed to bootstrap project with BrowserStack App Automate SDK. Error: ${error_message}. Please open an issue on GitHub if the problem persists`,
-              isError: true,
             },
           ],
           isError: true,

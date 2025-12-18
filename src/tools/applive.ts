@@ -128,7 +128,6 @@ export default function addAppLiveTools(
             {
               type: "text",
               text: `Failed to start app live session: ${error instanceof Error ? error.message : String(error)}`,
-              isError: true,
             },
           ],
           isError: true,

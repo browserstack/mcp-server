@@ -154,7 +154,7 @@ async function takeAppScreenshot(args: {
           type: "image",
           data: compressed,
           mimeType: "image/png",
-          name: `screenshot-${selectedDevice.device}-${Date.now()}`,
+          _meta: { name: `screenshot-${selectedDevice.device}-${Date.now()}` },
         },
       ],
     };

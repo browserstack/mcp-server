@@ -90,7 +90,7 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'automate'
       }, mockServer);
 
-      expect(result.content?.[0]?.isError).toBe(true);
+      expect(result.content?.[0]?._meta?.error).toBe(true);;
       expect(result.content?.[0]?.text).toContain('Invalid log type');
     });
 
@@ -109,8 +109,8 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(automateResult.content?.[0]?.isError).toBe(true);
-      expect(appAutomateResult.content?.[0]?.isError).toBe(true);
+      expect(automateResult.content?.[0]?._meta?.error).toBe(true);
+      expect(appAutomateResult.content?.[0]?._meta?.error).toBe(true);
     });
   });
 

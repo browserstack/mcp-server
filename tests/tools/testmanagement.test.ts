@@ -27,6 +27,10 @@ import { signedUrlMap } from '../../src/lib/inmemory-store';
 import { uploadFile } from '../../src/tools/testmanagement-utils/upload-file';
 
 
+function expectToolError(result: any) {
+  expect(result.content?.[0]?._meta?.error).toBe(true);
+}
+
 // Mock dependencies
 vi.mock('../../src/tools/testmanagement-utils/create-project-folder', () => ({
   createProjectOrFolder: vi.fn(),
@@ -186,14 +190,14 @@ describe('createTestCaseTool', () => {
   it('should handle API errors while creating test case', async () => {
     (createTestCase as Mock).mockRejectedValue(new Error('API Error'));
     const result = await createTestCaseTool(validArgs, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain('Failed to create test case: API Error');
   });
 
   it('should handle unknown error while creating test case', async () => {
     (createTestCase as Mock).mockRejectedValue('unexpected');
     const result = await createTestCaseTool(validArgs, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain('Unknown error');
   });
 });
@@ -239,7 +243,7 @@ describe('createProjectOrFolderTool', () => {
   it('should handle error while creating project or folder', async () => {
     (createProjectOrFolder as Mock).mockRejectedValue(new Error('Failed to create project/folder'));
     const result = await createProjectOrFolderTool(validProjectArgs, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain(
       'Failed to create project/folder: Failed to create project/folder. Please open an issue on GitHub if the problem persists'
     );
@@ -247,7 +251,7 @@ describe('createProjectOrFolderTool', () => {
   it('should handle unknown error while creating project or folder', async () => {
     (createProjectOrFolder as Mock).mockRejectedValue('some unknown error');
     const result = await createProjectOrFolderTool(validProjectArgs, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain(
       'Failed to create project/folder: Unknown error. Please open an issue on GitHub if the problem persists'
     );
@@ -282,12 +286,11 @@ describe('listTestCases util', () => {
   it('should handle API errors gracefully', async () => {
     (listTestCases as Mock).mockResolvedValue({
       content: [
-        { type: 'text', text: 'Failed to list test cases: Network Error', isError: true },
+        { type: 'text', text: 'Failed to list test cases: Network Error', _meta: { error: true },},
       ],
-      isError: true,
     });
     const result = await listTestCasesTool({ project_identifier: 'PR-1' } as any, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain('Failed to list test cases: Network Error');
   });
 });
@@ -337,7 +340,7 @@ describe('createTestRunTool', () => {
       }
     };
     const result = await createTestRunTool(runArgs, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain('Failed to create test run: API Error');
   });
 
@@ -353,7 +356,7 @@ describe('createTestRunTool', () => {
       }
     };
     const result = await createTestRunTool(runArgs, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain('Unknown error');
   });
 });
@@ -386,7 +389,7 @@ describe('listTestRunsTool', () => {
   it('should handle errors', async () => {
     (listTestRuns as Mock).mockRejectedValue(new Error('Network Error'));
     const result = await listTestRunsTool({ project_identifier: projectId }, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain('Failed to list test runs: Network Error');
   });
 });
@@ -436,7 +439,7 @@ describe('updateTestRunTool', () => {
       }
     };
     const result = await updateTestRunTool(updateArgs, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain('Failed to update test run: API Error');
   });
 });
@@ -474,7 +477,7 @@ describe('addTestResultTool', () => {
   it('should handle unknown errors gracefully', async () => {
     (addTestResult as Mock).mockRejectedValue('unexpected');
     const result = await addTestResultTool(validArgs, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain('Unknown error');
   });
 });
@@ -532,7 +535,7 @@ describe("createTestCasesFromFileTool", () => {
     (createTestCasesFromFile as Mock).mockRejectedValue(new Error("Re-Upload the file"));
     const args = { documentId: testDocumentId, folderId: testFolderId, projectReferenceId: testProjectId };
     const res = await createTestCasesFromFileTool(args as any, mockContext, mockConfig, mockServer);
-    expect(res.isError).toBe(true);
+    expectToolError(res);
     expect(res.content?.[0]?.text).toContain("Re-Upload the file");
   });
   it("creates test cases from a file successfully", async () => {
@@ -623,7 +626,7 @@ describe("createLCAStepsTool", () => {
 
     const result = await createLCAStepsTool(validArgs as any, mockContext, mockConfig, mockServer);
 
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain("Failed to create LCA steps: API Error");
   });
 
@@ -632,7 +635,7 @@ describe("createLCAStepsTool", () => {
 
     const result = await createLCAStepsTool(validArgs as any, mockContext, mockConfig, mockServer);
 
-    expect(result.isError).toBe(true);
+    expectToolError(result);
     expect(result.content?.[0]?.text).toContain("Failed to create LCA steps: Unknown error");
   });
 

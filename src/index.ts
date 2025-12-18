@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);

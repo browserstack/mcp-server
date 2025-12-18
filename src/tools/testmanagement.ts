@@ -92,10 +92,11 @@ export async function createProjectOrFolderTool(
           text: `Failed to create project/folder: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }
@@ -128,10 +129,11 @@ export async function createTestCaseTool(
           text: `Failed to create test case: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }
@@ -162,10 +164,11 @@ export async function updateTestCaseTool(
           text: `Failed to update test case: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }
@@ -196,10 +199,11 @@ export async function listTestCasesTool(
           text: `Failed to list test cases: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }
@@ -229,10 +233,11 @@ export async function createTestRunTool(
           text: `Failed to create test run: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }
@@ -262,10 +267,11 @@ export async function listTestRunsTool(
           text: `Failed to list test runs: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }
@@ -297,10 +303,11 @@ export async function updateTestRunTool(
           text: `Failed to update test run: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }
@@ -330,10 +337,11 @@ export async function addTestResultTool(
           text: `Failed to add test result: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }
@@ -368,10 +376,11 @@ export async function uploadProductRequirementFileTool(
           text: `Failed to upload file: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }
@@ -401,10 +410,11 @@ export async function createTestCasesFromFileTool(
           text: `Failed to create test cases from file: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }
@@ -435,10 +445,11 @@ export async function createLCAStepsTool(
           text: `Failed to create LCA steps: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
 }

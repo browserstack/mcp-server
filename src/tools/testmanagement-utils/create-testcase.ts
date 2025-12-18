@@ -180,10 +180,11 @@ export async function createTestCase(
             text: `Failed to create test case: ${JSON.stringify(
               response.data,
             )}`,
-            isError: true,
+            _meta: {
+              error: true,
+            },
           },
         ],
-        isError: true,
       };
     }
 

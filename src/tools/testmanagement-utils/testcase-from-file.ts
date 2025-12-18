@@ -45,10 +45,11 @@ export async function createTestCasesFromFile(
         {
           type: "text",
           text: `Document with ID ${args.documentId} not found.`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
-      isError: true,
     };
   }
   const documentId = (documentObj as { fileId: number }).fileId;

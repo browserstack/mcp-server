@@ -187,10 +187,11 @@ export async function createLCASteps(
             {
               type: "text",
               text: `Error: ${error.message}. Please verify that the project identifier "${args.project_identifier}" and test case identifier "${args.test_case_identifier}" are correct.`,
-              isError: true,
+              _meta: {
+                error: true,
+              },
             },
           ],
-          isError: true,
         };
       }
     }

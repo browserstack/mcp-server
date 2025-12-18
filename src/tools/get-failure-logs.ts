@@ -89,7 +89,9 @@ export async function getFailureLogs(
         {
           type: "text",
           text: `No valid log types found for ${args.sessionType} session.\nErrors encountered:\n${errors.join("\n")}`,
-          isError: true,
+          _meta: {
+            error: true,
+          },
         },
       ],
     };
@@ -156,7 +158,9 @@ export async function getFailureLogs(
     results.push({
       type: "text",
       text: `Errors encountered:\n${errors.join("\n")}`,
-      isError: true,
+      _meta: {
+        error: true,
+      },
     });
   }
 

@@ -7,6 +7,8 @@ import {
   killExistingBrowserStackLocalProcesses,
 } from "../../lib/local.js";
 import config from "../../config.js";
+import { getA11yBaseURL } from "../../lib/a11y-base-url.js";
+import { BrowserStackConfig } from "../../lib/types.js";
 
 export interface AccessibilityScanResponse {
   success: boolean;
@@ -22,6 +24,11 @@ export interface AccessibilityScanStatus {
 
 export class AccessibilityScanner {
   private auth: { username: string; password: string } | undefined;
+  private config: BrowserStackConfig;
+
+  constructor(config: BrowserStackConfig) {
+    this.config = config;
+  }
 
   public setAuth(auth: { username: string; password: string }): void {
     this.auth = auth;
@@ -98,8 +105,9 @@ export class AccessibilityScanner {
     }
 
     try {
+      const baseUrl = await getA11yBaseURL(this.config);
       const response = await apiClient.post<AccessibilityScanResponse>({
-        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans",
+        url: `${baseUrl}/api/website-scanner/v1/scans`,
         headers: {
           Authorization:
             "Basic " +
@@ -135,8 +143,9 @@ export class AccessibilityScanner {
     scanRunId: string,
   ): Promise<AccessibilityScanStatus> {
     try {
+      const baseUrl = await getA11yBaseURL(this.config);
       const response = await apiClient.get<AccessibilityScanStatus>({
-        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
+        url: `${baseUrl}/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
         headers: {
           Authorization:
             "Basic " +

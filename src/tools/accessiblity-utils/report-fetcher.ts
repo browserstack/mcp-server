@@ -1,4 +1,6 @@
 import { apiClient } from "../../lib/apiClient.js";
+import { getA11yBaseURL } from "../../lib/a11y-base-url.js";
+import { BrowserStackConfig } from "../../lib/types.js";
 
 interface ReportInitResponse {
   success: true;
@@ -14,6 +16,11 @@ interface ReportResponse {
 
 export class AccessibilityReportFetcher {
   private auth: { username: string; password: string } | undefined;
+  private config: BrowserStackConfig;
+
+  constructor(config: BrowserStackConfig) {
+    this.config = config;
+  }
 
   public setAuth(auth: { username: string; password: string }): void {
     this.auth = auth;
@@ -21,7 +28,8 @@ export class AccessibilityReportFetcher {
 
   async getReportLink(scanId: string, scanRunId: string): Promise<string> {
     // Initiate CSV link generation
-    const initUrl = `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?scan_run_id=${scanRunId}`;
+    const baseUrl = await getA11yBaseURL(this.config);
+    const initUrl = `${baseUrl}/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?scan_run_id=${scanRunId}`;
 
     let basicAuthHeader = undefined;
     if (this.auth) {
@@ -42,7 +50,7 @@ export class AccessibilityReportFetcher {
     const taskId = initData.data.task_id;
 
     // Fetch the generated CSV link
-    const reportUrl = `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?task_id=${encodeURIComponent(
+    const reportUrl = `${baseUrl}/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?task_id=${encodeURIComponent(
       taskId,
     )}`;
     // Use apiClient for the report link request as well

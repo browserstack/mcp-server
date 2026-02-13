@@ -18,6 +18,7 @@ export interface TestCaseUpdateRequest {
     step: string;
     result: string;
   }>;
+  test_case_bdd?: { feature: string; scenario: string; background?: string };
 }
 
 export const UpdateTestCaseSchema = z.object({
@@ -49,6 +50,14 @@ export const UpdateTestCaseSchema = z.object({
     )
     .optional()
     .describe("Updated list of test case steps with expected results."),
+  test_case_bdd: z
+    .object({
+      feature: z.string().describe("Updated feature description for BDD test cases."),
+      scenario: z.string().describe("Updated Gherkin scenario with Given/When/Then steps."),
+      background: z.string().optional().describe("Updated background steps for BDD test cases."),
+    })
+    .optional()
+    .describe("BDD/Gherkin template fields. Mutually exclusive with test_case_steps."),
 });
 
 /**
@@ -78,6 +87,13 @@ export async function updateTestCase(
 
   if (params.test_case_steps !== undefined) {
     testCaseBody.steps = params.test_case_steps;
+  }
+
+  if (params.test_case_bdd !== undefined) {
+    testCaseBody.template = "test_case_bdd";
+    testCaseBody.feature = params.test_case_bdd.feature;
+    testCaseBody.scenario = params.test_case_bdd.scenario;
+    if (params.test_case_bdd.background) testCaseBody.background = params.test_case_bdd.background;
   }
 
   const body = { test_case: testCaseBody };

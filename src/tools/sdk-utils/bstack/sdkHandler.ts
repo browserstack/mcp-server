@@ -52,7 +52,7 @@ export async function runBstackSDKOnly(
   // Handle frameworks with unique setup instructions that don't use browserstack.yml
   if (
     input.detectedBrowserAutomationFramework === "cypress" ||
-    input.detectedTestingFramework === "webdriverio"
+    input.detectedBrowserAutomationFramework === "webdriverio"
   ) {
     const frameworkInstructions = getInstructionsForProjectConfiguration(
       input.detectedBrowserAutomationFramework as SDKSupportedBrowserAutomationFramework,

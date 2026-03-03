@@ -41,19 +41,33 @@ export class AccessibilityReportFetcher {
     }
     const taskId = initData.data.task_id;
 
-    // Fetch the generated CSV link
+    // Poll for the generated CSV link (task is async, may take a few seconds)
     const reportUrl = `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?task_id=${encodeURIComponent(
       taskId,
     )}`;
-    // Use apiClient for the report link request as well
-    const reportResp = await apiClient.get({
-      url: reportUrl,
-      headers: basicAuthHeader ? { Authorization: basicAuthHeader } : undefined,
-    });
-    const reportData: ReportResponse = reportResp.data;
-    if (!reportData.success) {
-      throw new Error(`Failed to fetch report: ${reportData.error}`);
+    const maxAttempts = 3;
+    const pollIntervalMs = 2000;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const reportResp = await apiClient.get({
+        url: reportUrl,
+        headers: basicAuthHeader
+          ? { Authorization: basicAuthHeader }
+          : undefined,
+      });
+      const reportData: ReportResponse = reportResp.data;
+      if (!reportData.success) {
+        throw new Error(`Failed to fetch report: ${reportData.error}`);
+      }
+      const link = reportData.data?.reportLink;
+      if (link) {
+        return link;
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
-    return reportData.data.reportLink;
+
+    throw new Error(
+      `Report link was not available after ${maxAttempts} attempts. The CSV generation may still be in progress.`,
+    );
   }
 }

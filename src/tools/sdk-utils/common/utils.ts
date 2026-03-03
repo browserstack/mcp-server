@@ -80,7 +80,7 @@ export async function formatToolResult(
   if (runType != "percy-web") {
     finalContent.push({
       type: "text",
-      text: "CRITICAL: After the build is run, you MUST explicitly ask the user if they want to perform RCA (Root Cause Analysis) for any failed tests. This step is mandatory and should not be skipped.",
+      text: "CRITICAL: After the build is run, you MUST explicitly ask the user if they want to perform RCA (Root Cause Analysis) for any failed tests using the RCA tool. This step is mandatory and should not be skipped.",
     });
   }
 

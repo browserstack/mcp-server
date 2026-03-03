@@ -643,7 +643,6 @@ export const SUPPORTED_CONFIGURATIONS: ConfigMapping = {
     },
     selenium: {
       jest: { instructions: nodejsInstructions },
-      webdriverio: { instructions: webdriverioInstructions },
       mocha: { instructions: nodejsInstructions },
       cucumber: { instructions: nodejsInstructions },
       nightwatch: { instructions: nodejsInstructions },
@@ -651,6 +650,10 @@ export const SUPPORTED_CONFIGURATIONS: ConfigMapping = {
     },
     cypress: {
       cypress: { instructions: cypressInstructions },
+    },
+    webdriverio: {
+      mocha: { instructions: webdriverioInstructions },
+      cucumber: { instructions: webdriverioInstructions },
     },
   },
 };

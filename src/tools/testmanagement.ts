@@ -26,6 +26,11 @@ import {
 } from "./testmanagement-utils/list-testcases.js";
 
 import {
+  getTestCase,
+  GetTestCaseSchema,
+} from "./testmanagement-utils/get-testcase.js";
+
+import {
   CreateTestRunSchema,
   createTestRun,
 } from "./testmanagement-utils/create-testrun.js";
@@ -191,6 +196,38 @@ export async function listTestCasesTool(
         {
           type: "text",
           text: `Failed to list test cases: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Gets a specific test case by ID from BrowserStack Test Management.
+ */
+export async function getTestCaseTool(
+  args: z.infer<typeof GetTestCaseSchema>,
+  config: BrowserStackConfig,
+  server: McpServer,
+): Promise<CallToolResult> {
+  try {
+    trackMCP(
+      "getTestCase",
+      server.server.getClientVersion()!,
+      undefined,
+      config,
+    );
+    return await getTestCase(args, config);
+  } catch (err) {
+    trackMCP("getTestCase", server.server.getClientVersion()!, err, config);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to get test case: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
         },
@@ -467,6 +504,13 @@ export default function addTestManagementTools(
     "List test cases in a project with optional filters (status, priority, custom fields, etc.)",
     ListTestCasesSchema.shape,
     (args) => listTestCasesTool(args, config, server),
+  );
+
+  tools.getTestCase = server.tool(
+    "getTestCase",
+    "Get a specific test case by ID from BrowserStack Test Management. Returns full details including steps, description, preconditions, and metadata.",
+    GetTestCaseSchema.shape,
+    (args) => getTestCaseTool(args, config, server),
   );
 
   tools.createTestRun = server.tool(

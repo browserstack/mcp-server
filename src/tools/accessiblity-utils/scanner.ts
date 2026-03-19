@@ -31,6 +31,7 @@ export class AccessibilityScanner {
     name: string,
     urlList: string[],
     authConfigId?: number,
+    advancedRules?: boolean,
   ): Promise<AccessibilityScanResponse> {
     if (!this.auth?.username || !this.auth?.password) {
       throw new Error(
@@ -84,6 +85,9 @@ export class AccessibilityScanner {
       urlList: transformedUrlList,
       recurring: false,
       ...(authConfigId && { authConfigId }),
+      ...(advancedRules !== undefined && {
+        scanSettings: { advancedRules },
+      }),
     };
 
     let requestBody = baseRequestBody;

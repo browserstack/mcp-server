@@ -24,6 +24,7 @@ export interface TestCaseCreateRequest {
   owner?: string;
   preconditions?: string;
   test_case_steps: TestCaseStep[];
+  test_case_bdd?: { feature: string; scenario: string; background?: string };
   issues?: string[];
   issue_tracker?: IssueTracker;
   tags?: string[];
@@ -93,6 +94,14 @@ export const CreateTestCaseSchema = z.object({
       }),
     )
     .describe("List of steps and expected results."),
+  test_case_bdd: z
+    .object({
+      feature: z.string().describe("Feature description for BDD/Gherkin test cases."),
+      scenario: z.string().describe("Gherkin scenario with Given/When/Then steps."),
+      background: z.string().optional().describe("Optional background steps shared across scenarios."),
+    })
+    .optional()
+    .describe("BDD/Gherkin template fields. Mutually exclusive with test_case_steps."),
   issues: z
     .array(z.string())
     .optional()
@@ -153,7 +162,15 @@ export async function createTestCase(
   params: TestCaseCreateRequest,
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const body = { test_case: params };
+  const { test_case_bdd, ...rest } = params;
+  const testCase: Record<string, any> = { ...rest };
+  if (test_case_bdd) {
+    testCase.template = "test_case_bdd";
+    testCase.feature = test_case_bdd.feature;
+    testCase.scenario = test_case_bdd.scenario;
+    if (test_case_bdd.background) testCase.background = test_case_bdd.background;
+  }
+  const body = { test_case: testCase };
   const authString = getBrowserStackAuth(config);
   const [username, password] = authString.split(":");
 

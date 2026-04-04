@@ -76,14 +76,15 @@ export async function percyBranchlineOperations(
     await client.post(`/branchline/${action}`, body);
 
     const lines: string[] = [];
-    lines.push(`## Branchline ${action.charAt(0).toUpperCase() + action.slice(1)} Complete`);
+    lines.push(
+      `## Branchline ${action.charAt(0).toUpperCase() + action.slice(1)} Complete`,
+    );
     lines.push("");
     if (build_id) lines.push(`**Build:** ${build_id}`);
     if (project_id) lines.push(`**Project:** ${project_id}`);
     if (target_branch_filter)
       lines.push(`**Target Branch Filter:** ${target_branch_filter}`);
-    if (snapshot_ids)
-      lines.push(`**Snapshot IDs:** ${snapshot_ids}`);
+    if (snapshot_ids) lines.push(`**Snapshot IDs:** ${snapshot_ids}`);
 
     return { content: [{ type: "text", text: lines.join("\n") }] };
   } catch (error) {

@@ -31,7 +31,9 @@ export async function percyManageTokens(
 
     if (tokens.length === 0) {
       return {
-        content: [{ type: "text", text: "_No tokens found for this project._" }],
+        content: [
+          { type: "text", text: "_No tokens found for this project._" },
+        ],
       };
     }
 
@@ -46,9 +48,7 @@ export async function percyManageTokens(
       const tokenRole = attrs.role ?? attrs["token-role"] ?? "unknown";
       const tokenValue = attrs.token ?? attrs["token-value"] ?? "";
       const masked =
-        tokenValue.length > 4
-          ? `****${tokenValue.slice(-4)}`
-          : "****";
+        tokenValue.length > 4 ? `****${tokenValue.slice(-4)}` : "****";
       lines.push(`| ${tokenRole} | ${masked} | ${token.id ?? "?"} |`);
     }
 
@@ -93,8 +93,7 @@ export async function percyManageTokens(
 
       const attrs = (result?.data as any)?.attributes ?? result?.data ?? {};
       const newToken = attrs.token ?? attrs["token-value"] ?? "";
-      const masked =
-        newToken.length > 4 ? `****${newToken.slice(-4)}` : "****";
+      const masked = newToken.length > 4 ? `****${newToken.slice(-4)}` : "****";
 
       return {
         content: [
@@ -107,9 +106,7 @@ export async function percyManageTokens(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
-        content: [
-          { type: "text", text: `Failed to rotate token: ${message}` },
-        ],
+        content: [{ type: "text", text: `Failed to rotate token: ${message}` }],
         isError: true,
       };
     }

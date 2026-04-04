@@ -62,7 +62,7 @@ export async function percyManageVisualMonitoring(
       const name = attrs.name ?? "Unnamed";
       const urlCount = Array.isArray(attrs.urls)
         ? attrs.urls.length
-        : attrs["url-count"] ?? "?";
+        : (attrs["url-count"] ?? "?");
       const cronSchedule = attrs.cron ?? attrs["cron-schedule"] ?? "—";
       const status = attrs.enabled ?? attrs.status ?? "—";
       lines.push(
@@ -85,7 +85,10 @@ export async function percyManageVisualMonitoring(
     }
 
     const urlArray = urls
-      ? urls.split(",").map((u) => u.trim()).filter(Boolean)
+      ? urls
+          .split(",")
+          .map((u) => u.trim())
+          .filter(Boolean)
       : [];
 
     const attrs: Record<string, unknown> = {};
@@ -108,10 +111,9 @@ export async function percyManageVisualMonitoring(
     try {
       const result = (await client.post<{
         data: Record<string, unknown> | null;
-      }>(
-        `/organizations/${org_id}/visual_monitoring_projects`,
-        body,
-      )) as { data: Record<string, unknown> | null };
+      }>(`/organizations/${org_id}/visual_monitoring_projects`, body)) as {
+        data: Record<string, unknown> | null;
+      };
 
       const id = (result?.data as any)?.id ?? "?";
       return {
@@ -152,7 +154,10 @@ export async function percyManageVisualMonitoring(
 
     const attrs: Record<string, unknown> = {};
     if (urls) {
-      attrs.urls = urls.split(",").map((u) => u.trim()).filter(Boolean);
+      attrs.urls = urls
+        .split(",")
+        .map((u) => u.trim())
+        .filter(Boolean);
     }
     if (cron) attrs.cron = cron;
     if (schedule !== undefined) attrs.enabled = schedule;
@@ -166,10 +171,7 @@ export async function percyManageVisualMonitoring(
     };
 
     try {
-      await client.patch(
-        `/visual_monitoring_projects/${project_id}`,
-        body,
-      );
+      await client.patch(`/visual_monitoring_projects/${project_id}`, body);
       return {
         content: [
           {

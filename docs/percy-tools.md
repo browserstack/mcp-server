@@ -1,1086 +1,2443 @@
-# Percy MCP Tools Documentation
+# Percy MCP Tools — Complete Reference
 
-> 27 visual testing tools for AI agents, built into `@browserstack/mcp-server`
+> 41 visual testing tools for AI agents
 
-Percy MCP tools give AI agents full programmatic access to Percy visual testing -- querying builds and snapshots, creating builds with screenshots, running AI-powered analysis, diagnosing failures, and approving changes. All tools return structured markdown suitable for LLM consumption.
+Percy MCP gives AI agents (Claude Code, Cursor, Windsurf, etc.) direct access to Percy's visual testing platform — query builds, analyze diffs, create builds, manage projects, and automate visual review workflows.
+
+## Table of Contents
+
+- [Setup](#setup)
+- [Authentication (1 tool)](#authentication-1-tool)
+- [Core Query (6 tools)](#core-query-6-tools)
+- [Build Approval (1 tool)](#build-approval-1-tool)
+- [Web Build Creation (5 tools)](#web-build-creation-5-tools)
+- [App/BYOS Build Creation (4 tools)](#appbyos-build-creation-4-tools)
+- [AI Intelligence (6 tools)](#ai-intelligence-6-tools)
+- [Diagnostics (4 tools)](#diagnostics-4-tools)
+- [Composite Workflows (4 tools)](#composite-workflows-4-tools)
+- [Project Management (7 tools)](#project-management-7-tools)
+- [Advanced (3 tools)](#advanced-3-tools)
+- [Quick Reference — Common Prompts](#quick-reference--common-prompts)
 
 ---
 
-## Quick Start
+## Setup
 
-### Configuration
-
-Add to your MCP config (`.mcp.json`, Claude Code settings, or Cursor MCP config):
+Add this to your MCP client configuration (e.g., `.claude/settings.json` or `mcp.json`):
 
 ```json
 {
   "mcpServers": {
-    "browserstack": {
-      "command": "node",
-      "args": ["path/to/mcp-server/dist/index.js"],
+    "browserstack-percy": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/browserstack-mcp"],
       "env": {
-        "BROWSERSTACK_USERNAME": "your-username",
-        "BROWSERSTACK_ACCESS_KEY": "your-access-key",
-        "PERCY_TOKEN": "your-percy-project-token",
-        "PERCY_ORG_TOKEN": "your-percy-org-token"
+        "PERCY_TOKEN": "<your-percy-write-token>",
+        "PERCY_FULL_ACCESS_TOKEN": "<your-percy-full-access-token>",
+        "PERCY_ORG_TOKEN": "<your-percy-org-token>"
       }
     }
   }
 }
 ```
 
-### Authentication
-
-Percy tools support three authentication paths, resolved in priority order:
-
-1. **`PERCY_TOKEN`** (project-scoped) -- Full-access token tied to a specific Percy project. Required for build creation, snapshot uploads, and all project-level operations. Set this for most use cases.
-
-2. **`PERCY_ORG_TOKEN`** (org-scoped) -- Token scoped to your Percy organization. Used for cross-project operations like `percy_list_projects`. Falls back as secondary for project operations when `PERCY_TOKEN` is not set.
-
-3. **BrowserStack credentials fallback** -- If neither Percy token is set, the server attempts to fetch a token automatically via the BrowserStack API using `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY`.
-
-**Token precedence by operation type:**
-- Project operations (builds, snapshots, comparisons) --> `PERCY_TOKEN` > `PERCY_ORG_TOKEN` > BrowserStack fallback
-- Org operations (list projects) --> `PERCY_ORG_TOKEN` > `PERCY_TOKEN` > BrowserStack fallback
-- Auto scope --> `PERCY_TOKEN` > `PERCY_ORG_TOKEN` > BrowserStack fallback
-
-Use `percy_auth_status` to verify which tokens are configured and valid.
-
----
-
-## Tool Reference
-
-### Core Query Tools
-
-These tools read data from existing Percy builds, snapshots, and comparisons.
-
----
-
-#### `percy_list_projects`
-
-List Percy projects in an organization. Returns project names, types, and settings.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `org_id` | string | No | Percy organization ID. If not provided, uses token scope. |
-| `search` | string | No | Filter projects by name (substring match). |
-| `limit` | number | No | Max results (default 10, max 50). |
-
-**Returns:** Markdown table with columns: #, Name, ID, Type, Default Branch.
-
-**Example prompt:** "List all Percy projects that contain 'dashboard' in their name"
-
-**Example output:**
-```
-## Percy Projects (3)
-
-| # | Name | ID | Type | Default Branch |
-|---|------|----|------|----------------|
-| 1 | dashboard-web | 12345 | web | main |
-| 2 | dashboard-mobile | 12346 | app | develop |
-| 3 | dashboard-components | 12347 | web | main |
-```
-
----
-
-#### `percy_list_builds`
-
-List Percy builds for a project with filtering by branch, state, or commit SHA. Returns build numbers, states, review status, and AI metrics.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `project_id` | string | No | Percy project ID. If not provided, uses `PERCY_TOKEN` scope. |
-| `branch` | string | No | Filter by branch name. |
-| `state` | string | No | Filter by state: `pending`, `processing`, `finished`, `failed`. |
-| `sha` | string | No | Filter by commit SHA. |
-| `limit` | number | No | Max results (default 10, max 30). |
-
-**Returns:** Markdown list of builds with formatted status lines (build number, state, branch, commit, review status).
-
-**Example prompt:** "Show me the last 5 Percy builds on the main branch"
-
-**Example output:**
-```
-## Percy Builds (5)
-
-- Build #142 finished (approved) on main @ abc1234 (ID: 98765)
-- Build #141 finished (changes_requested) on main @ def5678 (ID: 98764)
-- Build #140 finished (approved) on main @ ghi9012 (ID: 98763)
-- Build #139 failed on main @ jkl3456 (ID: 98762)
-- Build #138 finished (approved) on main @ mno7890 (ID: 98761)
-```
-
----
-
-#### `percy_get_build`
-
-Get detailed Percy build information including state, review status, snapshot counts, AI analysis metrics, and build summary.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID. |
-
-**Returns:** Formatted build details including: build number, state, branch, commit SHA, snapshot counts (total/changed/new/removed), review state, AI details (comparisons analyzed, potential bugs, diff reduction), and browser configuration.
-
-**Example prompt:** "Get details for Percy build 98765"
-
-**Example output:**
-```
-## Build #142
-
-**State:** finished | **Review:** approved
-**Branch:** main | **SHA:** abc1234def5678
-**Snapshots:** 48 total | 3 changed | 1 new | 0 removed
-
-### AI Details
-- Comparisons analyzed: 52
-- Potential bugs: 0
-- AI jobs completed: yes
-- Summary status: completed
-```
-
----
-
-#### `percy_get_build_items`
-
-List snapshots in a Percy build filtered by category. Returns snapshot names with diff ratios and AI flags.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID. |
-| `category` | string | No | Filter category: `changed`, `new`, `removed`, `unchanged`, `failed`. |
-| `sort_by` | string | No | Sort field (e.g., `diff-ratio`, `name`). |
-| `limit` | number | No | Max results (default 20, max 100). |
-
-**Returns:** Markdown table with columns: #, Snapshot Name, ID, Diff, AI Diff, Status.
-
-**Example prompt:** "Show me all changed snapshots in build 98765, sorted by diff ratio"
-
-**Example output:**
-```
-## Build Snapshots (changed) -- 3 items
-
-| # | Snapshot Name | ID | Diff | AI Diff | Status |
-|---|---------------|----|----- |---------|--------|
-| 1 | Login Page | 55001 | 12.3% | 8.1% | unreviewed |
-| 2 | Settings Panel | 55002 | 3.4% | 0.0% | unreviewed |
-| 3 | Header Nav | 55003 | 0.8% | 0.2% | unreviewed |
-```
-
----
-
-#### `percy_get_snapshot`
-
-Get a Percy snapshot with all its comparisons, screenshots, and diff data across browsers and widths.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `snapshot_id` | string | **Yes** | Percy snapshot ID. |
-
-**Returns:** Formatted snapshot header (name, state, review status) followed by detailed comparison data for each browser/width combination, including diff ratios, AI analysis regions, and screenshot references.
-
-**Example prompt:** "Show me snapshot 55001 with all its comparison details"
-
-**Example output:**
-```
-## Snapshot: Login Page
-
-**State:** finished | **Review:** unreviewed
-
----
-
-### Comparison Details
-
-#### Chrome 1280px
-**Diff:** 12.3% | **AI Diff:** 8.1%
-Regions:
-1. **Button color change** (style) -- Primary button changed from blue to green
-2. ~~Font rendering~~ (ignored by AI)
-
-#### Firefox 1280px
-**Diff:** 11.8% | **AI Diff:** 7.9%
-...
-```
-
----
-
-#### `percy_get_comparison`
-
-Get detailed Percy comparison data including diff ratios, AI analysis regions, screenshot URLs, and browser info.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `comparison_id` | string | **Yes** | Percy comparison ID. |
-| `include_images` | boolean | No | Include screenshot image URLs in response (default `false`). |
-
-**Returns:** Formatted comparison with diff metrics, browser/width info, and AI regions. When `include_images` is `true`, also includes URLs for base, head, diff, and AI diff screenshots.
-
-**Example prompt:** "Get comparison 77001 with image URLs"
-
-**Example output:**
-```
-## Comparison #77001 -- Chrome @ 1280px
-
-**Diff:** 12.3% | **AI Diff:** 8.1%
-**State:** finished
-
-### Regions (2)
-1. **Button color change** (style)
-   Primary CTA button changed from #2563eb to #16a34a
-2. ~~Subpixel shift~~ (ignored by AI)
-
-### Screenshot URLs
-- **Base:** https://percy.io/api/v1/screenshots/...
-- **Head:** https://percy.io/api/v1/screenshots/...
-- **Diff:** https://percy.io/api/v1/screenshots/...
-- **AI Diff:** https://percy.io/api/v1/screenshots/...
-```
-
----
-
-### Build Approval
-
----
-
-#### `percy_approve_build`
-
-Approve, request changes, unapprove, or reject a Percy build. Requires a user token (`PERCY_TOKEN`). The `request_changes` action works at snapshot level only.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID to review. |
-| `action` | enum | **Yes** | Review action: `approve`, `request_changes`, `unapprove`, `reject`. |
-| `snapshot_ids` | string | No | Comma-separated snapshot IDs (required for `request_changes`). |
-| `reason` | string | No | Optional reason for the review action. |
-
-**Returns:** Confirmation message with the resulting review state.
-
-**Example prompt:** "Approve Percy build 98765"
-
-**Example output:**
-```
-Build #98765 approve successful. Review state: approved
-```
-
-**Example prompt:** "Request changes on snapshots 55001,55002 in build 98765"
-
-**Example output:**
-```
-Build #98765 request_changes successful. Review state: changes_requested
-```
-
----
-
-### Build Creation -- Web Flow
-
-Web builds use a multi-step protocol where the agent provides DOM snapshots (HTML + CSS + JS resources) and Percy renders them in cloud browsers.
-
-**Protocol:**
-1. **`percy_create_build`** -- Create a build container, get `build_id`
-2. **`percy_create_snapshot`** -- Add a snapshot with resource references, get `snapshot_id` + list of missing resources
-3. **`percy_upload_resource`** -- Upload only the resources Percy doesn't already have (deduplicated by SHA-256)
-4. **`percy_finalize_snapshot`** -- Signal that all resources are uploaded, triggering rendering
-5. **`percy_finalize_build`** -- Signal that all snapshots are complete, triggering processing and diffing
-
-```
-create_build --> create_snapshot (x N) --> upload_resource (x M) --> finalize_snapshot (x N) --> finalize_build
-```
-
----
-
-#### `percy_create_build`
-
-Create a new Percy build for visual testing. Returns the build ID for subsequent snapshot uploads.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `project_id` | string | **Yes** | Percy project ID. |
-| `branch` | string | **Yes** | Git branch name. |
-| `commit_sha` | string | **Yes** | Git commit SHA. |
-| `commit_message` | string | No | Git commit message. |
-| `pull_request_number` | string | No | Pull request number. |
-| `type` | string | No | Project type: `web`, `app`, `automate`, `generic`. |
-
-**Returns:** Build ID and finalize URL.
-
-**Example prompt:** "Create a Percy build for project 12345 on branch feature/login with commit abc123"
-
-**Example output:**
-```
-Build #99001 created. Finalize URL: /builds/99001/finalize
-```
-
----
-
-#### `percy_create_snapshot`
-
-Create a snapshot in a Percy build with DOM resources. Returns the snapshot ID and a list of missing resources that need uploading.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID. |
-| `name` | string | **Yes** | Snapshot name. |
-| `widths` | string | No | Comma-separated viewport widths, e.g., `'375,768,1280'`. |
-| `enable_javascript` | boolean | No | Enable JavaScript execution during rendering. |
-| `resources` | string | No | JSON array of resources: `[{"id":"sha256","resource-url":"/index.html","is-root":true}]`. |
-
-**Returns:** Snapshot ID and count/SHAs of missing resources.
-
-**Example prompt:** "Create a snapshot named 'Homepage' in build 99001 at widths 375, 1280"
-
-**Example output:**
-```
-Snapshot 'Homepage' created (ID: 66001). Missing resources: 2. Upload them with percy_upload_resource. Missing SHAs: a1b2c3d4..., e5f6g7h8...
-```
-
----
-
-#### `percy_upload_resource`
-
-Upload a resource (CSS, JS, image, HTML) to a Percy build. Only upload resources the server reports as missing after `percy_create_snapshot`.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID. |
-| `sha` | string | **Yes** | SHA-256 hash of the resource content. |
-| `base64_content` | string | **Yes** | Base64-encoded resource content. |
-
-**Returns:** Confirmation of successful upload.
-
-**Example output:**
-```
-Resource a1b2c3d4... uploaded successfully.
-```
-
----
-
-#### `percy_finalize_snapshot`
-
-Finalize a Percy snapshot after all resources are uploaded. Triggers rendering in Percy's cloud browsers.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `snapshot_id` | string | **Yes** | Percy snapshot ID. |
-
-**Returns:** Confirmation that rendering will begin.
-
-**Example output:**
-```
-Snapshot 66001 finalized. Rendering will begin.
-```
-
----
-
-#### `percy_finalize_build`
-
-Finalize a Percy build after all snapshots are complete. Triggers processing, diffing, and AI analysis.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID. |
-
-**Returns:** Confirmation that processing will begin.
-
-**Example output:**
-```
-Build 99001 finalized. Processing will begin.
-```
-
----
-
-### Build Creation -- App/BYOS Flow
-
-App and Bring-Your-Own-Screenshots (BYOS) builds skip DOM rendering. Instead, the agent uploads pre-captured screenshot images (PNG or JPEG) with device/browser metadata.
-
-**Protocol:**
-1. **`percy_create_build`** -- Create a build container, get `build_id`
-2. **`percy_create_app_snapshot`** -- Create a snapshot (no resources needed), get `snapshot_id`
-3. **`percy_create_comparison`** -- Create a comparison with device tag and tile metadata, get `comparison_id`
-4. **`percy_upload_tile`** -- Upload the screenshot PNG/JPEG
-5. **`percy_finalize_comparison`** -- Signal tiles are uploaded, triggering diff processing
-6. **`percy_finalize_build`** -- Signal all snapshots are complete
-
-```
-create_build --> create_app_snapshot (x N) --> create_comparison (x M) --> upload_tile (x M) --> finalize_comparison (x M) --> finalize_build
-```
-
----
-
-#### `percy_create_app_snapshot`
-
-Create a snapshot for App Percy or BYOS builds. No resources needed -- screenshots are uploaded via comparisons/tiles.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID. |
-| `name` | string | **Yes** | Snapshot name. |
-| `test_case` | string | No | Test case name. |
-
-**Returns:** Snapshot ID.
-
-**Example output:**
-```
-App snapshot 'Login Screen' created (ID: 66002). Create comparisons with percy_create_comparison.
-```
-
----
-
-#### `percy_create_comparison`
-
-Create a comparison with device/browser tag and tile metadata for screenshot-based builds.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `snapshot_id` | string | **Yes** | Percy snapshot ID. |
-| `tag_name` | string | **Yes** | Device/browser name, e.g., `'iPhone 13'`. |
-| `tag_width` | number | **Yes** | Tag width in pixels. |
-| `tag_height` | number | **Yes** | Tag height in pixels. |
-| `tag_os_name` | string | No | OS name, e.g., `'iOS'`. |
-| `tag_os_version` | string | No | OS version, e.g., `'16.0'`. |
-| `tag_browser_name` | string | No | Browser name, e.g., `'Safari'`. |
-| `tag_orientation` | string | No | `portrait` or `landscape`. |
-| `tiles` | string | **Yes** | JSON array of tiles: `[{"sha":"abc123","status-bar-height":44,"nav-bar-height":34}]`. |
-
-**Returns:** Comparison ID.
-
-**Example output:**
-```
-Comparison created (ID: 77002). Upload tiles with percy_upload_tile.
-```
-
----
-
-#### `percy_upload_tile`
-
-Upload a screenshot tile (PNG or JPEG) to a Percy comparison. Validates the image format (checks PNG/JPEG magic bytes).
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `comparison_id` | string | **Yes** | Percy comparison ID. |
-| `base64_content` | string | **Yes** | Base64-encoded PNG or JPEG screenshot. |
-
-**Returns:** Confirmation of successful upload.
-
-**Example output:**
-```
-Tile uploaded to comparison 77002.
-```
-
----
-
-#### `percy_finalize_comparison`
-
-Finalize a Percy comparison after all tiles are uploaded. Triggers diff processing.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `comparison_id` | string | **Yes** | Percy comparison ID. |
-
-**Returns:** Confirmation that diff processing will begin.
-
-**Example output:**
-```
-Comparison 77002 finalized. Diff processing will begin.
-```
-
----
-
-### AI Intelligence
-
-These tools leverage Percy's AI-powered analysis to explain visual changes, detect bugs, and summarize builds.
-
----
-
-#### `percy_get_ai_analysis`
-
-Get Percy AI-powered visual diff analysis. Operates in two modes:
-
-1. **Single comparison** (`comparison_id`) -- Returns AI regions with change types, descriptions, bug classifications, and diff reduction metrics.
-2. **Build aggregate** (`build_id`) -- Returns overall AI metrics: comparisons analyzed, potential bugs, diff reduction, and job status.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `comparison_id` | string | No* | Get AI analysis for a single comparison. |
-| `build_id` | string | No* | Get aggregated AI analysis for an entire build. |
-
-*At least one of `comparison_id` or `build_id` is required.
-
-**Returns (comparison mode):** AI diff ratio vs raw diff ratio, potential bug count, and numbered list of AI regions with labels, types, descriptions, and ignored status.
-
-**Returns (build mode):** Aggregate stats: comparisons analyzed, potential bugs, total AI diffs, diff reduction, job completion status, summary status.
-
-**Example prompt:** "What did Percy AI find in comparison 77001?"
-
-**Example output (comparison):**
-```
-## AI Analysis -- Comparison #77001
-
-**AI Diff Ratio:** 8.1% (raw: 12.3%)
-
-### Regions (3):
-1. **Button color change** (style)
-   Primary CTA changed from blue to green
-2. **New badge added** (content)
-   "Beta" badge added next to feature name
-3. ~~Font rendering~~ (ignored by AI)
-```
-
-**Example output (build):**
-```
-## AI Analysis -- Build #142
-
-- Comparisons analyzed: 52
-- Potential bugs: 1
-- Total AI visual diffs: 12
-- Diff reduction: 38.5% -> 14.2%
-- AI jobs completed: yes
-- Summary status: completed
-```
-
----
-
-#### `percy_get_build_summary`
-
-Get an AI-generated natural language summary of all visual changes in a Percy build.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID. |
-
-**Returns:** The AI-generated summary text, or a status message if the summary is still processing or was skipped.
-
-**Example prompt:** "Summarize the visual changes in build 98765"
-
-**Example output:**
-```
-## Build Summary -- Build #142
-
-This build introduces a redesigned login page with updated button colors
-and spacing. The settings panel shows minor layout adjustments. All other
-pages remain unchanged. No visual regressions detected.
-```
-
----
-
-#### `percy_get_ai_quota`
-
-Check Percy AI quota status -- daily regeneration quota and usage. Derives quota information from the latest build's AI details.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| *(none)* | | | |
-
-**Returns:** Daily regeneration usage and limits, plan type, and latest build AI stats.
-
-**Example prompt:** "How much Percy AI quota do I have left?"
-
-**Example output:**
-```
-## Percy AI Quota Status
-
-**Daily Regenerations:** 3 / 25 used
-**Plan:** enterprise
-
-### Latest Build AI Stats
-- Build #142
-- Comparisons analyzed: 52
-- Potential bugs detected: 0
-- AI jobs completed: yes
-```
-
----
-
-#### `percy_get_rca`
-
-Trigger and retrieve Percy Root Cause Analysis -- maps visual diffs back to specific DOM/CSS changes with XPath paths and attribute diffs. Automatically triggers RCA if not yet run (configurable). Polls with exponential backoff for up to 2 minutes.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `comparison_id` | string | **Yes** | Percy comparison ID. |
-| `trigger_if_missing` | boolean | No | Auto-trigger RCA if not yet run (default `true`). |
-
-**Returns:** Categorized DOM changes: Changed Elements (with XPath, attribute diffs showing before/after values), Removed Elements, and Added Elements.
-
-**Example prompt:** "What DOM changes caused the visual diff in comparison 77001?"
-
-**Example output:**
-```
-## Root Cause Analysis -- Comparison #77001
-
-**Status:** finished
-
-### Changed Elements (2)
-
-1. **button** (DIFF)
-   XPath: `/html/body/div[1]/main/form/button`
-   class: `btn btn-primary` -> `btn btn-success`
-   style: `padding: 8px 16px` -> `padding: 12px 24px`
-
-2. **span** (DIFF)
-   XPath: `/html/body/div[1]/header/nav/span[2]`
-   class: `hidden` -> `badge badge-info`
-
-### Added Elements (1)
-
-1. **div** -- added in head
-   XPath: `/html/body/div[1]/main/div[3]`
-```
-
----
-
-### Diagnostics
-
----
-
-#### `percy_get_suggestions`
-
-Get Percy build failure suggestions -- rule-engine-analyzed diagnostics with categorized issues, actionable fix steps, and documentation links.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID. |
-| `reference_type` | string | No | Filter: `build`, `snapshot`, or `comparison`. |
-| `reference_id` | string | No | Specific snapshot or comparison ID to scope suggestions. |
-
-**Returns:** Formatted suggestions with issue categories, descriptions, and recommended fixes.
-
-**Example prompt:** "Why did build 98762 fail? Show me the suggestions."
-
-**Example output:**
-```
-## Diagnostic Suggestions
-
-### Missing Resources (Critical)
-Some assets failed to load during rendering.
-
-**Affected snapshots:** Login Page, Dashboard
-
-**Recommended fixes:**
-- Check that all CSS/JS assets are accessible from Percy's rendering environment
-- Add failing hostnames to `networkIdleIgnore` in Percy config
-- See: https://docs.percy.io/docs/debugging-sdks#missing-resources
-```
-
----
-
-#### `percy_get_network_logs`
-
-Get parsed network request logs for a Percy comparison -- shows per-URL status for base vs head, identifying which assets loaded, failed, or were cached.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `comparison_id` | string | **Yes** | Percy comparison ID. |
-
-**Returns:** Formatted network log table showing URL, base status, and head status for each request.
-
-**Example prompt:** "Show me the network requests for comparison 77001"
-
-**Example output:**
-```
-## Network Logs -- Comparison #77001
-
-| URL | Base | Head |
-|-----|------|------|
-| /styles/main.css | 200 | 200 |
-| /scripts/app.js | 200 | 200 |
-| /images/hero.png | 200 | 404 |
-| /api/config | NA | 200 |
-```
-
----
-
-### Composite Workflows
-
-These are the highest-value tools -- single calls that combine multiple API queries with domain logic to produce actionable reports. They internally call core query tools, AI analysis, diagnostics, and network logs, then synthesize the results.
-
----
-
-#### `percy_pr_visual_report`
-
-Get a complete visual regression report for a PR. Finds the Percy build by branch or SHA, ranks snapshots by risk, shows AI analysis, and recommends actions. **This is the single best tool for checking visual status of a PR.**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `project_id` | string | No | Percy project ID (optional if `PERCY_TOKEN` is project-scoped). |
-| `branch` | string | No | Git branch name to find the build. |
-| `sha` | string | No | Git commit SHA to find the build. |
-| `build_id` | string | No | Direct Percy build ID (skips search). |
-
-*Provide at least one of `branch`, `sha`, or `build_id` to locate the build.*
-
-**Returns:** Full visual regression report with:
-- Build header (state, branch, commit, snapshot counts)
-- AI build summary (if available)
-- Changed snapshots ranked by risk tier:
-  - **CRITICAL** -- Potential bugs flagged by AI
-  - **REVIEW REQUIRED** -- High diff ratio (>15%)
-  - **EXPECTED CHANGES** -- Moderate diff ratio (0.5-15%)
-  - **NOISE** -- Negligible diff ratio (<0.5%)
-- Actionable recommendation
-
-**Example prompt:** "What's the visual status of my PR on branch feature/login?"
-
-**Example output:**
-```
-# Percy Visual Regression Report
-
-## Build #142
-
-**State:** finished | **Review:** unreviewed
-**Branch:** feature/login | **SHA:** abc1234def5678
-**Snapshots:** 48 total | 3 changed | 1 new | 0 removed
-
-### AI Build Summary
-
-> Login page redesign with updated CTA colors
-
-- Button styling updated across login flow
-- New "Beta" badge added to feature navigation
-
-### Changed Snapshots (3)
-
-**CRITICAL -- Potential Bugs (1):**
-1. **Checkout Form** -- 18.5% diff, 1 bug(s) flagged
-
-**REVIEW REQUIRED (1):**
-1. **Login Page** -- 12.3% diff
-
-**EXPECTED CHANGES (1):**
-1. Settings Panel -- 3.4% diff
-
-### Recommendation
-
-Review 1 critical item(s) before approving. 1 item(s) need manual review.
-```
-
----
-
-#### `percy_auto_triage`
-
-Automatically categorize all visual changes in a Percy build into Critical, Review Required, Auto-Approvable, and Noise tiers. Helps prioritize visual review.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID. |
-| `noise_threshold` | number | No | Diff ratio below this is noise (default `0.005` = 0.5%). |
-| `review_threshold` | number | No | Diff ratio above this needs review (default `0.15` = 15%). |
-
-**Returns:** Categorized snapshot list with counts per tier and a recommended action.
-
-**Triage logic:**
-- **Critical** -- Any snapshot with AI-flagged potential bugs
-- **Auto-Approvable** -- AI-filtered diffs (IntelliIgnore) or diff ratio between noise and review thresholds
-- **Review Required** -- Diff ratio above `review_threshold` without bug flags
-- **Noise** -- Diff ratio at or below `noise_threshold`
-
-**Example prompt:** "Triage the visual changes in build 98765"
-
-**Example output:**
-```
-## Auto-Triage -- Build #98765
-
-**Total changed:** 12 | Critical: 1 | Review: 2 | Auto-approvable: 6 | Noise: 3
-
-### CRITICAL -- Potential Bugs (1)
-1. **Checkout Form** -- 18.5% diff, 1 bug(s)
-
-### REVIEW REQUIRED (2)
-1. **Login Page** -- 22.1% diff
-2. **Pricing Table** -- 16.8% diff
-
-### AUTO-APPROVABLE (6)
-1. Settings Panel -- AI-filtered (IntelliIgnore)
-2. Profile Page -- Low diff ratio
-3. Help Center -- Low diff ratio
-...
-
-### NOISE (3)
-Footer, Sidebar, Breadcrumb
-
-### Recommended Action
-
-Investigate 1 critical item(s) before approving.
-```
-
----
-
-#### `percy_debug_failed_build`
-
-Diagnose a Percy build failure. Cross-references error buckets, suggestions, failed snapshots, and network logs to provide actionable fix commands.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `build_id` | string | **Yes** | Percy build ID. |
-
-**Returns:** Comprehensive debug report including:
-- Build details and failure reason
-- Rule-engine diagnostic suggestions with fix steps
-- List of failed snapshots
-- Network logs for the top 3 failed snapshots (showing failed asset requests)
-- Suggested fix commands based on failure reason
-
-**Example prompt:** "Why did Percy build 98762 fail?"
-
-**Example output:**
-```
-## Build Debug Report -- #98762
-
-## Build #139
-
-**State:** failed | **Failure Reason:** missing_resources
-**Branch:** main | **SHA:** jkl3456
-...
-
-## Diagnostic Suggestions
-
-### Missing Resources (Critical)
-...
-
-### Failed Snapshots (3)
-
-1. **Login Page**
-2. **Dashboard**
-3. **Settings**
-
-#### Network Issues -- Login Page
-
-| URL | Base | Head |
-|-----|------|------|
-| /fonts/custom.woff2 | 200 | 404 |
-
-### Suggested Fix Commands
-
-percy config set networkIdleIgnore "<failing-hostname>"
-percy config set allowedHostnames "<required-hostname>"
-```
-
----
-
-#### `percy_diff_explain`
-
-Explain visual changes in plain English. Supports three depth levels for progressive detail.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `comparison_id` | string | **Yes** | Percy comparison ID. |
-| `depth` | enum | No | Analysis depth: `summary`, `detailed` (default), `full_rca`. |
-
-**Depth levels:**
-- **`summary`** -- AI descriptions only (region titles and types)
-- **`detailed`** -- AI descriptions + change reasons + diff region coordinates
-- **`full_rca`** -- All of the above + DOM/CSS changes with XPath (triggers RCA if needed, polls up to 30s)
-
-**Returns:** Progressive explanation of visual changes based on selected depth.
-
-**Example prompt:** "Explain what changed in comparison 77001 with full root cause analysis"
-
-**Example output:**
-```
-## Visual Diff Explanation -- Comparison #77001
-
-**Diff:** 12.3% | **AI Diff:** 8.1% (34% noise filtered)
-
-### What Changed (3 regions)
-
-1. **Button color change** (style)
-   Primary CTA changed from blue to green
-   *Reason: Intentional brand color update*
-
-2. **New badge added** (content)
-   "Beta" badge added next to feature name
-   *Reason: New feature flag enabled*
-
-3. ~~Font rendering~~ (unknown) -- *ignored by AI*
-
-### Diff Regions (coordinates)
-
-1. (340, 520) -> (480, 560)
-2. (120, 45) -> (210, 70)
-
-### Root Cause Analysis
-
-1. **button** -- `/html/body/div[1]/main/form/button`
-   class: `btn btn-primary` -> `btn btn-success`
-
-2. **span** -- `/html/body/div[1]/header/nav/span[2]`
-   class: `hidden` -> `badge badge-info`
-```
-
----
-
-### Auth Diagnostic
-
----
-
-#### `percy_auth_status`
-
-Check Percy authentication status -- shows which tokens are configured, validates them, and reports project/org scope.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| *(none)* | | | |
-
-**Returns:** Token configuration table (set/not set with masked values), validation results for project and org scope, and setup guidance if no tokens are configured.
-
-**Example prompt:** "Check my Percy authentication status"
-
-**Example output:**
-```
-## Percy Auth Status
-
-**API URL:** https://percy.io/api/v1
-
-### Token Configuration
-
-| Token | Status | Value |
-|-------|--------|-------|
-| PERCY_TOKEN | Set | ****a1b2 |
-| PERCY_ORG_TOKEN | Not set | -- |
-| BrowserStack Credentials | Set | username + access key |
-
-### Validation
-
-**Project scope:** Valid -- project "my-web-app"
-**Latest build:** #142 (finished)
-```
-
----
-
-## Common Workflows
-
-### "What's the visual status of my PR?"
-
-Ask your agent: _"Check the Percy visual status for my branch feature/login"_
-
-The agent calls `percy_pr_visual_report` with `branch: "feature/login"`, which:
-1. Finds the latest build for that branch
-2. Fetches AI summary and changed snapshots
-3. Ranks changes by risk
-4. Returns a full report with recommendations
-
-### "Why did my Percy build fail?"
-
-Ask your agent: _"Debug Percy build 98762"_
-
-The agent calls `percy_debug_failed_build` with `build_id: "98762"`, which:
-1. Fetches build details and failure reason
-2. Pulls diagnostic suggestions from the rule engine
-3. Lists failed snapshots
-4. Checks network logs for the worst failures
-5. Suggests specific fix commands
-
-### "Explain what changed in this visual diff"
-
-Ask your agent: _"Explain comparison 77001 with full root cause analysis"_
-
-The agent calls `percy_diff_explain` with `comparison_id: "77001"` and `depth: "full_rca"`, which:
-1. Fetches AI analysis regions with descriptions
-2. Gets diff coordinates
-3. Triggers and polls RCA for DOM/CSS changes
-4. Maps visual diffs to specific element attribute changes
-
-### "Create a Percy build for my web app"
-
-The agent sequences multiple tools:
-1. `percy_create_build` -- create the build
-2. `percy_create_snapshot` -- add snapshots with HTML/CSS resource references
-3. `percy_upload_resource` -- upload only the missing resources
-4. `percy_finalize_snapshot` -- trigger rendering per snapshot
-5. `percy_finalize_build` -- trigger processing
-
-### "Upload mobile screenshots to Percy"
-
-The agent sequences the app/BYOS flow:
-1. `percy_create_build` -- create the build
-2. `percy_create_app_snapshot` -- create snapshot per screen
-3. `percy_create_comparison` -- attach device metadata (iPhone 13, 390x844, iOS 16)
-4. `percy_upload_tile` -- upload the screenshot PNG
-5. `percy_finalize_comparison` -- trigger diff per comparison
-6. `percy_finalize_build` -- trigger processing
-
-### "Approve all visual changes"
-
-Ask your agent: _"Approve Percy build 98765"_
-
-The agent calls `percy_approve_build` with `build_id: "98765"` and `action: "approve"`.
-
-For selective review: _"Request changes on snapshot 55001 in build 98765 because the button color is wrong"_
-
-The agent calls `percy_approve_build` with `action: "request_changes"`, `snapshot_ids: "55001"`, and `reason: "Button color regression"`.
-
----
-
-## Architecture
-
-```
-src/
-  lib/percy-api/
-    auth.ts         -- Token resolution (env vars + BrowserStack fallback), header generation
-    client.ts       -- PercyClient HTTP client with JSON:API deserialization, rate limiting (429 + exponential backoff), retry logic
-    cache.ts        -- In-memory cache for cross-tool data sharing (e.g., build data reused by composite workflows)
-    polling.ts      -- Exponential backoff polling utility for async operations (RCA, AI processing)
-    formatter.ts    -- Markdown formatters for builds, comparisons, snapshots, suggestions, network logs
-    errors.ts       -- Error enrichment: maps HTTP status codes and Percy error codes to actionable messages
-    types.ts        -- TypeScript interfaces for Percy API responses
-
-  tools/percy-mcp/
-    index.ts        -- Tool registrar: defines all 27 tools with names, descriptions, Zod schemas, and wires handlers
-    core/           -- Query tools: list-projects, list-builds, get-build, get-build-items, get-snapshot, get-comparison, approve-build
-    creation/       -- Build creation: create-build, create-snapshot, upload-resource, finalize-snapshot, finalize-build, create-app-snapshot, create-comparison, upload-tile, finalize-comparison
-    intelligence/   -- AI tools: get-ai-analysis, get-build-summary, get-ai-quota, get-rca
-    diagnostics/    -- Debug tools: get-suggestions, get-network-logs
-    workflows/      -- Composite tools: pr-visual-report, auto-triage, debug-failed-build, diff-explain
-    auth/           -- Auth diagnostic: auth-status
-```
-
-**Registration flow:** `server-factory.ts` calls `registerPercyMcpTools(server, config)` which registers all 27 tools on the MCP server instance. Each tool validates arguments via Zod schemas, tracks usage via `trackMCP()`, and delegates to its handler function.
-
-**JSON:API handling:** The `PercyClient` automatically deserializes JSON:API envelopes (`data` + `included` + `relationships`) into flat camelCase objects. Handlers work with plain objects, not raw API responses.
-
----
-
-## Troubleshooting
-
 ### Token Types
 
-| Token Type | Source | Scope | Capabilities |
-|-----------|--------|-------|--------------|
-| Write-only token | Percy project settings | Project | Create builds, upload snapshots. Cannot read builds or comparisons. |
-| Full-access token | Percy project settings | Project | All operations: read, write, approve, AI analysis. |
-| Org token | Percy org settings | Organization | List projects, cross-project queries. Cannot create builds. |
+| Token | Env Var | Scope | Used For |
+|-------|---------|-------|----------|
+| Write-only token | `PERCY_TOKEN` | Single project | Creating builds, uploading snapshots, finalizing |
+| Full-access token | `PERCY_FULL_ACCESS_TOKEN` | Single project | Querying builds, approvals, AI analysis, diagnostics |
+| Org token | `PERCY_ORG_TOKEN` | Organization-wide | Listing projects across org, usage stats, cross-project queries |
 
-Most tools require a **full-access project token**. If you only have a write-only token, query tools like `percy_list_builds` and `percy_get_build` will fail with 401/403 errors.
+### Verify Setup
 
-### Common Errors
+In Claude Code, type `/mcp` to see connected servers, then ask:
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `Percy token is invalid or expired` (401) | Token doesn't match any Percy project | Verify `PERCY_TOKEN` value in Percy project settings |
-| `Insufficient permissions` (403, `project_rbac_access_denied`) | Token lacks write access | Use a full-access token, not read-only |
-| `This build has been deleted` (403, `build_deleted`) | Build was removed from Percy | Use a different build ID |
-| `This build is outside your plan's history limit` (403, `plan_history_exceeded`) | Build is too old for your plan tier | Upgrade plan or use a more recent build |
-| `Resource not found` (404) | Invalid build/snapshot/comparison ID | Double-check the ID value |
-| `Invalid request` (422) | Malformed request body | Check parameter format (e.g., JSON arrays for `resources` and `tiles`) |
-| `Rate limit exceeded` (429) | Too many API requests | The client retries automatically with exponential backoff (up to 3 retries). If persistent, add delays between tool calls. |
-| `RCA requires DOM metadata` (422) | Comparison type doesn't support RCA | RCA only works for web builds with DOM snapshots, not app/BYOS screenshot builds |
-| `Failed to fetch Percy token via BrowserStack API` | BrowserStack credentials are wrong or API is down | Set `PERCY_TOKEN` directly instead of relying on fallback |
+> "Check my Percy authentication"
 
-### Rate Limiting
+This calls `percy_auth_status` and reports which tokens are valid and their scope.
 
-The Percy API enforces rate limits. The `PercyClient` handles 429 responses automatically:
+---
 
-1. Reads `Retry-After` header if present
-2. Falls back to exponential backoff: 1s, 2s, 4s
-3. Retries up to 3 times before throwing
+## Authentication (1 tool)
 
-Network errors (DNS failures, timeouts) also trigger the same retry loop.
+### `percy_auth_status`
 
-### Debugging Authentication Issues
+**Description:** Check Percy authentication status — shows which tokens are configured, validates them, and reports project/org scope.
 
-Run `percy_auth_status` first. It will:
-- Show which tokens are set (masked)
-- Validate project scope by fetching the latest build
-- Validate org scope by listing projects
-- Provide setup guidance if nothing is configured
+**Parameters:**
 
-If tokens are set but validation fails, the token may be expired or belong to a different project/org than expected.
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| *(none)* | — | — | No parameters required |
+
+**Example prompt:**
+> "Check my Percy authentication"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_auth_status",
+  "params": {}
+}
+```
+
+**Example output:**
+```
+## Percy Authentication Status
+
+PERCY_TOKEN: Configured (project-scoped)
+  Project: my-web-app (ID: 12345)
+  Role: write
+
+PERCY_FULL_ACCESS_TOKEN: Configured (project-scoped)
+  Project: my-web-app (ID: 12345)
+  Role: full_access
+
+PERCY_ORG_TOKEN: Not configured
+  Tip: Set PERCY_ORG_TOKEN to list projects across your organization.
+```
+
+---
+
+## Core Query (6 tools)
+
+### `percy_list_projects`
+
+**Description:** List Percy projects in an organization. Returns project names, types, and settings.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| org_id | string | No | Percy organization ID. If not provided, uses token scope. |
+| search | string | No | Filter projects by name (substring match) |
+| limit | number | No | Max results (default 10, max 50) |
+
+**Example prompt:**
+> "List all my Percy projects"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_list_projects",
+  "params": {
+    "search": "web-app",
+    "limit": 5
+  }
+}
+```
+
+**Example output:**
+```
+## Percy Projects (3 found)
+
+1. **my-web-app** (ID: 12345)
+   Type: web | Branches: main, develop
+   Last build: #142 — 2 days ago
+
+2. **mobile-app** (ID: 12346)
+   Type: app | Branches: main
+   Last build: #89 — 1 week ago
+
+3. **design-system** (ID: 12347)
+   Type: web | Branches: main, feature/tokens
+   Last build: #231 — 3 hours ago
+```
+
+---
+
+### `percy_list_builds`
+
+**Description:** List Percy builds for a project with filtering by branch, state, SHA. Returns build numbers, states, review status, and AI metrics.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| project_id | string | No | Percy project ID. If not provided, uses PERCY_TOKEN scope. |
+| branch | string | No | Filter by branch name |
+| state | string | No | Filter by state: pending, processing, finished, failed |
+| sha | string | No | Filter by commit SHA |
+| limit | number | No | Max results (default 10, max 30) |
+
+**Example prompt:**
+> "Show me recent Percy builds on the develop branch"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_list_builds",
+  "params": {
+    "branch": "develop",
+    "state": "finished",
+    "limit": 5
+  }
+}
+```
+
+**Example output:**
+```
+## Percy Builds — develop branch (5 shown)
+
+| # | State | Review | Changed | SHA | Age |
+|---|-------|--------|---------|-----|-----|
+| 142 | finished | approved | 3 snapshots | abc1234 | 2h ago |
+| 141 | finished | unreviewed | 12 snapshots | def5678 | 1d ago |
+| 140 | finished | approved | 0 snapshots | ghi9012 | 2d ago |
+| 139 | failed | — | — | jkl3456 | 3d ago |
+| 138 | finished | changes_requested | 7 snapshots | mno7890 | 4d ago |
+```
+
+---
+
+### `percy_get_build`
+
+**Description:** Get detailed Percy build information including state, review status, snapshot counts, AI analysis metrics, and build summary.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+
+**Example prompt:**
+> "Show me details for Percy build 12345"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_build",
+  "params": {
+    "build_id": "12345"
+  }
+}
+```
+
+**Example output:**
+```
+## Build #142 — FINISHED
+**Branch:** develop | **SHA:** abc1234
+**Review:** unreviewed | **Approved by:** —
+**Created:** 2024-01-15 10:30 UTC
+
+### Snapshot Counts
+- Total: 45
+- Changed: 3
+- New: 1
+- Removed: 0
+- Unchanged: 41
+
+### AI Analysis
+- Comparisons analyzed: 8/8
+- Auto-approved by AI: 5
+- Flagged for review: 3
+- Diff reduction: 62%
+```
+
+---
+
+### `percy_get_build_items`
+
+**Description:** List snapshots in a Percy build filtered by category (changed/new/removed/unchanged/failed). Returns snapshot names with diff ratios and AI flags.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+| category | string | No | Filter category: changed, new, removed, unchanged, failed |
+| sort_by | string | No | Sort field (e.g. diff-ratio, name) |
+| limit | number | No | Max results (default 20, max 100) |
+
+**Example prompt:**
+> "Show me all changed snapshots in build 12345, sorted by diff ratio"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_build_items",
+  "params": {
+    "build_id": "12345",
+    "category": "changed",
+    "sort_by": "diff-ratio",
+    "limit": 10
+  }
+}
+```
+
+**Example output:**
+```
+## Build #142 — Changed Snapshots (3 of 3)
+
+1. **Homepage — Desktop** (snapshot: 99001)
+   Diff ratio: 0.42 (42%) | AI: flagged_for_review
+   Comparisons: Chrome 1280px, Firefox 1280px
+
+2. **Checkout — Mobile** (snapshot: 99002)
+   Diff ratio: 0.08 (8%) | AI: auto_approved
+   Comparisons: Chrome 375px
+
+3. **Settings Page** (snapshot: 99003)
+   Diff ratio: 0.003 (0.3%) | AI: auto_approved
+   Comparisons: Chrome 1280px, Chrome 768px
+```
+
+---
+
+### `percy_get_snapshot`
+
+**Description:** Get a Percy snapshot with all its comparisons, screenshots, and diff data across browsers and widths.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| snapshot_id | string | Yes | Percy snapshot ID |
+
+**Example prompt:**
+> "Get details for snapshot 99001"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_snapshot",
+  "params": {
+    "snapshot_id": "99001"
+  }
+}
+```
+
+**Example output:**
+```
+## Snapshot: Homepage — Desktop
+
+**Build:** #142 (ID: 12345)
+**Widths:** 1280, 768
+
+### Comparisons
+
+1. **Chrome @ 1280px** (comparison: 55001)
+   Diff ratio: 0.42 | State: finished
+   Base screenshot: https://percy.io/...
+   Head screenshot: https://percy.io/...
+
+2. **Firefox @ 1280px** (comparison: 55002)
+   Diff ratio: 0.38 | State: finished
+   Base screenshot: https://percy.io/...
+   Head screenshot: https://percy.io/...
+```
+
+---
+
+### `percy_get_comparison`
+
+**Description:** Get detailed Percy comparison data including diff ratios, AI analysis regions, screenshot URLs, and browser info.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| comparison_id | string | Yes | Percy comparison ID |
+| include_images | boolean | No | Include screenshot image URLs in response (default false) |
+
+**Example prompt:**
+> "Show me comparison 55001 with screenshot URLs"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_comparison",
+  "params": {
+    "comparison_id": "55001",
+    "include_images": true
+  }
+}
+```
+
+**Example output:**
+```
+## Comparison: Chrome @ 1280px
+
+**Snapshot:** Homepage — Desktop (99001)
+**Diff ratio:** 0.42 (42%)
+**State:** finished
+
+### AI Analysis Regions
+1. Region at (120, 340, 400, 200): "Hero banner image replaced"
+   Classification: intentional_change
+2. Region at (0, 0, 1280, 60): "Navigation bar color shifted"
+   Classification: potential_bug
+
+### Screenshots
+- Base: https://percy.io/screenshots/base/...
+- Head: https://percy.io/screenshots/head/...
+- Diff: https://percy.io/screenshots/diff/...
+```
+
+---
+
+## Build Approval (1 tool)
+
+### `percy_approve_build`
+
+**Description:** Approve, request changes, unapprove, or reject a Percy build. Requires a user token (PERCY_TOKEN). request_changes works at snapshot level only.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID to review |
+| action | enum | Yes | Review action: `approve`, `request_changes`, `unapprove`, `reject` |
+| snapshot_ids | string | No | Comma-separated snapshot IDs (required for request_changes) |
+| reason | string | No | Optional reason for the review action |
+
+**Example prompt — approve:**
+> "Approve Percy build 12345"
+
+**Example tool call — approve:**
+```json
+{
+  "tool": "percy_approve_build",
+  "params": {
+    "build_id": "12345",
+    "action": "approve"
+  }
+}
+```
+
+**Example output — approve:**
+```
+## Build #142 — APPROVED
+Build approved successfully.
+```
+
+**Example prompt — request changes:**
+> "Request changes on snapshots 99001 and 99002 in build 12345"
+
+**Example tool call — request changes:**
+```json
+{
+  "tool": "percy_approve_build",
+  "params": {
+    "build_id": "12345",
+    "action": "request_changes",
+    "snapshot_ids": "99001,99002",
+    "reason": "Hero banner has wrong color and checkout button is misaligned"
+  }
+}
+```
+
+**Example output — request changes:**
+```
+## Build #142 — CHANGES REQUESTED
+Requested changes on 2 snapshots:
+- Homepage — Desktop (99001)
+- Checkout — Mobile (99002)
+Reason: Hero banner has wrong color and checkout button is misaligned
+```
+
+**Example prompt — reject:**
+> "Reject Percy build 12345 because of broken layout"
+
+**Example tool call — reject:**
+```json
+{
+  "tool": "percy_approve_build",
+  "params": {
+    "build_id": "12345",
+    "action": "reject",
+    "reason": "Layout is completely broken on mobile viewports"
+  }
+}
+```
+
+**Example output — reject:**
+```
+## Build #142 — REJECTED
+Reason: Layout is completely broken on mobile viewports
+```
+
+---
+
+## Web Build Creation (5 tools)
+
+These tools are used together to create web-based Percy builds. The workflow is:
+1. `percy_create_build` — start a build
+2. `percy_create_snapshot` — declare a snapshot with resources
+3. `percy_upload_resource` — upload missing resources (CSS, JS, images, HTML)
+4. `percy_finalize_snapshot` — mark snapshot complete
+5. `percy_finalize_build` — mark build complete, trigger processing
+
+### `percy_create_build`
+
+**Description:** Create a new Percy build for visual testing. Returns build ID for snapshot uploads.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| project_id | string | Yes | Percy project ID |
+| branch | string | Yes | Git branch name |
+| commit_sha | string | Yes | Git commit SHA |
+| commit_message | string | No | Git commit message |
+| pull_request_number | string | No | Pull request number |
+| type | string | No | Project type: web, app, automate, generic |
+
+**Example prompt:**
+> "Create a Percy build for branch feature-login on project 12345"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_create_build",
+  "params": {
+    "project_id": "12345",
+    "branch": "feature-login",
+    "commit_sha": "abc123def456",
+    "commit_message": "Add login page redesign",
+    "pull_request_number": "42"
+  }
+}
+```
+
+**Example output:**
+```
+## Build Created
+**Build ID:** 67890
+**Build number:** #143
+**Project:** my-web-app (12345)
+**Branch:** feature-login
+**State:** pending
+
+Next steps:
+1. Create snapshots with percy_create_snapshot
+2. Upload missing resources with percy_upload_resource
+3. Finalize each snapshot with percy_finalize_snapshot
+4. Finalize the build with percy_finalize_build
+```
+
+---
+
+### `percy_create_snapshot`
+
+**Description:** Create a snapshot in a Percy build with DOM resources. Returns missing resource list for upload.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+| name | string | Yes | Snapshot name |
+| widths | string | No | Comma-separated viewport widths, e.g. '375,768,1280' |
+| enable_javascript | boolean | No | Enable JavaScript execution during rendering |
+| resources | string | No | JSON array of resources: `[{"id":"sha","resource-url":"url","is-root":true}]` |
+
+**Example prompt:**
+> "Create a snapshot called 'Homepage' in build 67890 at mobile and desktop widths"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_create_snapshot",
+  "params": {
+    "build_id": "67890",
+    "name": "Homepage",
+    "widths": "375,768,1280",
+    "resources": "[{\"id\":\"sha256abc\",\"resource-url\":\"/index.html\",\"is-root\":true},{\"id\":\"sha256def\",\"resource-url\":\"/styles.css\",\"is-root\":false}]"
+  }
+}
+```
+
+**Example output:**
+```
+## Snapshot Created
+**Snapshot ID:** 99010
+**Name:** Homepage
+**Widths:** 375, 768, 1280
+
+### Missing Resources (need upload)
+- sha256def — /styles.css
+
+Upload missing resources with percy_upload_resource, then finalize with percy_finalize_snapshot.
+```
+
+---
+
+### `percy_upload_resource`
+
+**Description:** Upload a resource (CSS, JS, image, HTML) to a Percy build. Only upload resources the server doesn't have.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+| sha | string | Yes | SHA-256 hash of the resource content |
+| base64_content | string | Yes | Base64-encoded resource content |
+
+**Example prompt:**
+> "Upload the missing CSS resource to build 67890"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_upload_resource",
+  "params": {
+    "build_id": "67890",
+    "sha": "sha256def",
+    "base64_content": "Ym9keSB7IGJhY2tncm91bmQ6IHdoaXRlOyB9"
+  }
+}
+```
+
+**Example output:**
+```
+## Resource Uploaded
+**SHA:** sha256def
+**Build:** 67890
+Upload successful.
+```
+
+---
+
+### `percy_finalize_snapshot`
+
+**Description:** Finalize a Percy snapshot after all resources are uploaded. Triggers rendering.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| snapshot_id | string | Yes | Percy snapshot ID |
+
+**Example prompt:**
+> "Finalize snapshot 99010"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_finalize_snapshot",
+  "params": {
+    "snapshot_id": "99010"
+  }
+}
+```
+
+**Example output:**
+```
+## Snapshot Finalized
+**Snapshot ID:** 99010
+**Name:** Homepage
+Rendering triggered for 3 widths x 1 browser = 3 comparisons.
+```
+
+---
+
+### `percy_finalize_build`
+
+**Description:** Finalize a Percy build after all snapshots are complete. Triggers processing.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+
+**Example prompt:**
+> "Finalize build 67890"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_finalize_build",
+  "params": {
+    "build_id": "67890"
+  }
+}
+```
+
+**Example output:**
+```
+## Build Finalized
+**Build ID:** 67890
+**Build number:** #143
+State changed to: processing
+Percy is now rendering and comparing snapshots. Check status with percy_get_build.
+```
+
+---
+
+## App/BYOS Build Creation (4 tools)
+
+These tools are for App Percy or Bring-Your-Own-Screenshots (BYOS) builds where you upload pre-rendered screenshots instead of DOM resources. The workflow is:
+1. `percy_create_build` — start a build (same tool as web)
+2. `percy_create_app_snapshot` — create a snapshot (no resources needed)
+3. `percy_create_comparison` — define device/browser tag and tile metadata
+4. `percy_upload_tile` — upload the screenshot image
+5. `percy_finalize_comparison` — mark comparison complete
+
+### `percy_create_app_snapshot`
+
+**Description:** Create a snapshot for App Percy or BYOS builds (no resources needed). Returns snapshot ID.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+| name | string | Yes | Snapshot name |
+| test_case | string | No | Test case name |
+
+**Example prompt:**
+> "Create an app snapshot called 'Login Screen' in build 67890"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_create_app_snapshot",
+  "params": {
+    "build_id": "67890",
+    "name": "Login Screen",
+    "test_case": "login_flow_test"
+  }
+}
+```
+
+**Example output:**
+```
+## App Snapshot Created
+**Snapshot ID:** 99020
+**Name:** Login Screen
+**Test case:** login_flow_test
+
+Next: Create comparisons with percy_create_comparison.
+```
+
+---
+
+### `percy_create_comparison`
+
+**Description:** Create a comparison with device/browser tag and tile metadata for screenshot-based builds.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| snapshot_id | string | Yes | Percy snapshot ID |
+| tag_name | string | Yes | Device/browser name, e.g. 'iPhone 13' |
+| tag_width | number | Yes | Tag width in pixels |
+| tag_height | number | Yes | Tag height in pixels |
+| tag_os_name | string | No | OS name, e.g. 'iOS' |
+| tag_os_version | string | No | OS version, e.g. '16.0' |
+| tag_browser_name | string | No | Browser name, e.g. 'Safari' |
+| tag_orientation | string | No | portrait or landscape |
+| tiles | string | Yes | JSON array of tiles: `[{sha, status-bar-height?, nav-bar-height?}]` |
+
+**Example prompt:**
+> "Create an iPhone 13 comparison for snapshot 99020"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_create_comparison",
+  "params": {
+    "snapshot_id": "99020",
+    "tag_name": "iPhone 13",
+    "tag_width": 390,
+    "tag_height": 844,
+    "tag_os_name": "iOS",
+    "tag_os_version": "16.0",
+    "tag_orientation": "portrait",
+    "tiles": "[{\"sha\":\"tile_sha_abc\",\"status-bar-height\":47,\"nav-bar-height\":34}]"
+  }
+}
+```
+
+**Example output:**
+```
+## Comparison Created
+**Comparison ID:** 55010
+**Device:** iPhone 13 (390x844, portrait)
+**OS:** iOS 16.0
+
+Missing tiles to upload:
+- tile_sha_abc
+
+Upload with percy_upload_tile, then finalize with percy_finalize_comparison.
+```
+
+---
+
+### `percy_upload_tile`
+
+**Description:** Upload a screenshot tile (PNG or JPEG) to a Percy comparison.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| comparison_id | string | Yes | Percy comparison ID |
+| base64_content | string | Yes | Base64-encoded PNG or JPEG screenshot |
+
+**Example prompt:**
+> "Upload the screenshot tile for comparison 55010"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_upload_tile",
+  "params": {
+    "comparison_id": "55010",
+    "base64_content": "iVBORw0KGgoAAAANSUhEUgAA..."
+  }
+}
+```
+
+**Example output:**
+```
+## Tile Uploaded
+**Comparison ID:** 55010
+Upload successful.
+```
+
+---
+
+### `percy_finalize_comparison`
+
+**Description:** Finalize a Percy comparison after all tiles are uploaded. Triggers diff processing.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| comparison_id | string | Yes | Percy comparison ID |
+
+**Example prompt:**
+> "Finalize comparison 55010"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_finalize_comparison",
+  "params": {
+    "comparison_id": "55010"
+  }
+}
+```
+
+**Example output:**
+```
+## Comparison Finalized
+**Comparison ID:** 55010
+Diff processing triggered. Check status with percy_get_comparison.
+```
+
+---
+
+## AI Intelligence (6 tools)
+
+### `percy_get_ai_analysis`
+
+**Description:** Get Percy AI-powered visual diff analysis. Provides change types, descriptions, bug classifications, and diff reduction metrics per comparison or aggregated per build.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| comparison_id | string | No | Get AI analysis for a single comparison |
+| build_id | string | No | Get aggregated AI analysis for an entire build |
+
+> Note: Provide either `comparison_id` or `build_id`, not both.
+
+**Example prompt:**
+> "Show me the AI analysis for build 12345"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_ai_analysis",
+  "params": {
+    "build_id": "12345"
+  }
+}
+```
+
+**Example output:**
+```
+## AI Analysis — Build #142
+
+### Summary
+- Total comparisons: 8
+- AI-analyzed: 8
+- Auto-approved: 5
+- Flagged for review: 3
+- Diff reduction: 62%
+
+### Flagged Changes
+1. **Homepage — Chrome 1280px** (comparison: 55001)
+   - "Navigation bar color shifted from #333 to #444" — potential_bug
+   - "Hero image replaced with new campaign banner" — intentional_change
+
+2. **Checkout — Chrome 375px** (comparison: 55003)
+   - "Submit button moved 20px down" — potential_bug
+```
+
+---
+
+### `percy_get_build_summary`
+
+**Description:** Get AI-generated natural language summary of all visual changes in a Percy build.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+
+**Example prompt:**
+> "Summarize the visual changes in build 12345"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_build_summary",
+  "params": {
+    "build_id": "12345"
+  }
+}
+```
+
+**Example output:**
+```
+## AI Build Summary — Build #142
+
+This build introduces visual changes across 3 snapshots. The most significant
+change is a new hero banner on the Homepage that replaces the previous campaign
+image. The navigation bar shows a subtle color shift that may be unintentional.
+On mobile, the checkout button has shifted position which could affect the user
+experience. 5 of 8 comparisons were auto-approved as expected visual noise.
+
+**Recommendation:** Review the navigation color change and checkout button
+position before approving.
+```
+
+---
+
+### `percy_get_ai_quota`
+
+**Description:** Check Percy AI quota status — daily regeneration quota and usage.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| *(none)* | — | — | No parameters required |
+
+**Example prompt:**
+> "How many AI regenerations do I have left today?"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_ai_quota",
+  "params": {}
+}
+```
+
+**Example output:**
+```
+## Percy AI Quota
+
+Daily regeneration limit: 100
+Used today: 23
+Remaining: 77
+Resets at: 00:00 UTC
+```
+
+---
+
+### `percy_get_rca`
+
+**Description:** Trigger and retrieve Percy Root Cause Analysis — maps visual diffs back to specific DOM/CSS changes with XPath paths and attribute diffs.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| comparison_id | string | Yes | Percy comparison ID |
+| trigger_if_missing | boolean | No | Auto-trigger RCA if not yet run (default true) |
+
+**Example prompt:**
+> "What DOM changes caused the visual diff in comparison 55001?"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_rca",
+  "params": {
+    "comparison_id": "55001",
+    "trigger_if_missing": true
+  }
+}
+```
+
+**Example output:**
+```
+## Root Cause Analysis — Comparison 55001
+
+### DOM Changes Found: 3
+
+1. **Element:** /html/body/nav/div[1]
+   Attribute: style.background-color
+   Base: #333333
+   Head: #444444
+   Impact: Navigation bar color change
+
+2. **Element:** /html/body/main/section[1]/img
+   Attribute: src
+   Base: /images/campaign-old.jpg
+   Head: /images/campaign-new.jpg
+   Impact: Hero image replacement
+
+3. **Element:** /html/body/main/section[1]/img
+   Attribute: style.height
+   Base: 400px
+   Head: 450px
+   Impact: Hero section height increase
+```
+
+---
+
+### `percy_trigger_ai_recompute`
+
+**Description:** Re-run Percy AI analysis on comparisons with a custom prompt. Use to customize what the AI ignores or highlights in visual diffs.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | No | Percy build ID (for bulk recompute) |
+| comparison_id | string | No | Single comparison ID to recompute |
+| prompt | string | No | Custom prompt for AI (max 400 chars), e.g. 'Ignore font rendering differences' |
+| mode | enum | No | `ignore` = hide matching diffs, `unignore` = show matching diffs |
+
+**Example prompt — ignore noise:**
+> "Re-run AI analysis on build 12345 and ignore font rendering differences"
+
+**Example tool call — ignore noise:**
+```json
+{
+  "tool": "percy_trigger_ai_recompute",
+  "params": {
+    "build_id": "12345",
+    "prompt": "Ignore font rendering and anti-aliasing differences",
+    "mode": "ignore"
+  }
+}
+```
+
+**Example output — ignore noise:**
+```
+## AI Recompute Triggered
+**Build:** 12345
+**Prompt:** "Ignore font rendering and anti-aliasing differences"
+**Mode:** ignore
+**Comparisons queued:** 8
+
+AI analysis will re-run on all comparisons. Check results with percy_get_ai_analysis.
+```
+
+**Example prompt — single comparison:**
+> "Re-analyze comparison 55001 and highlight layout shifts"
+
+**Example tool call — single comparison:**
+```json
+{
+  "tool": "percy_trigger_ai_recompute",
+  "params": {
+    "comparison_id": "55001",
+    "prompt": "Highlight any layout shifts or element repositioning",
+    "mode": "unignore"
+  }
+}
+```
+
+**Example output — single comparison:**
+```
+## AI Recompute Triggered
+**Comparison:** 55001
+**Prompt:** "Highlight any layout shifts or element repositioning"
+**Mode:** unignore
+Recompute queued. Check results with percy_get_ai_analysis.
+```
+
+---
+
+### `percy_suggest_prompt`
+
+**Description:** Get an AI-generated prompt suggestion for specific diff regions. The AI analyzes the selected regions and suggests a prompt to ignore or highlight similar changes.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| comparison_id | string | Yes | Percy comparison ID |
+| region_ids | string | Yes | Comma-separated region IDs to analyze |
+| ignore_change | boolean | No | true = suggest ignore prompt, false = suggest show prompt (default true) |
+
+**Example prompt:**
+> "Suggest a prompt to ignore the font changes in comparison 55001"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_suggest_prompt",
+  "params": {
+    "comparison_id": "55001",
+    "region_ids": "reg_001,reg_002",
+    "ignore_change": true
+  }
+}
+```
+
+**Example output:**
+```
+## Suggested Prompt
+
+Based on regions reg_001 and reg_002, here is a suggested ignore prompt:
+
+"Ignore sub-pixel font rendering differences and text anti-aliasing
+variations across browser versions"
+
+Use this with percy_trigger_ai_recompute to apply.
+```
+
+---
+
+## Diagnostics (4 tools)
+
+### `percy_get_suggestions`
+
+**Description:** Get Percy build failure suggestions — rule-engine-analyzed diagnostics with categorized issues, actionable fix steps, and documentation links.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+| reference_type | string | No | Filter: build, snapshot, or comparison |
+| reference_id | string | No | Specific snapshot or comparison ID |
+
+**Example prompt:**
+> "Why did build 12345 fail? Give me suggestions."
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_suggestions",
+  "params": {
+    "build_id": "12345"
+  }
+}
+```
+
+**Example output:**
+```
+## Build Suggestions — Build #142
+
+### Issue 1: Missing Resources (HIGH)
+Category: resource_loading
+3 snapshots have missing CSS resources that failed to load.
+
+**Fix steps:**
+1. Check that all CSS files are accessible from the Percy rendering environment
+2. Ensure relative URLs are correct (Percy renders from a different origin)
+3. Use percy_get_network_logs on affected comparisons to see specific failures
+
+**Docs:** https://docs.percy.io/docs/debugging-missing-resources
+
+### Issue 2: JavaScript Timeout (MEDIUM)
+Category: rendering
+2 snapshots timed out during JavaScript execution.
+
+**Fix steps:**
+1. Add `data-percy-loading` attributes to async-loaded content
+2. Increase snapshot timeout if content loads slowly
+3. Consider disabling JavaScript for static pages
+```
+
+---
+
+### `percy_get_network_logs`
+
+**Description:** Get parsed network request logs for a Percy comparison — shows per-URL status for base vs head, identifying which assets loaded, failed, or were cached.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| comparison_id | string | Yes | Percy comparison ID |
+
+**Example prompt:**
+> "Show me the network logs for comparison 55001"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_network_logs",
+  "params": {
+    "comparison_id": "55001"
+  }
+}
+```
+
+**Example output:**
+```
+## Network Logs — Comparison 55001
+
+### Base Snapshot
+| URL | Status | Size |
+|-----|--------|------|
+| /index.html | 200 | 12KB |
+| /styles.css | 200 | 45KB |
+| /app.js | 200 | 180KB |
+| /images/hero.jpg | 200 | 320KB |
+
+### Head Snapshot
+| URL | Status | Size |
+|-----|--------|------|
+| /index.html | 200 | 13KB |
+| /styles.css | 200 | 48KB |
+| /app.js | 200 | 185KB |
+| /images/hero-new.jpg | 404 | — |
+
+### Differences
+- /images/hero-new.jpg: FAILED (404) in head — missing resource
+```
+
+---
+
+### `percy_get_build_logs`
+
+**Description:** Download and filter Percy build logs (CLI, renderer, jackproxy). Shows raw log output for debugging rendering and asset issues.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+| service | string | No | Filter by service: cli, renderer, jackproxy |
+| reference_type | string | No | Reference scope: build, snapshot, comparison |
+| reference_id | string | No | Specific snapshot or comparison ID |
+| level | string | No | Filter by log level: error, warn, info, debug |
+
+**Example prompt:**
+> "Show me renderer error logs for build 12345"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_build_logs",
+  "params": {
+    "build_id": "12345",
+    "service": "renderer",
+    "level": "error"
+  }
+}
+```
+
+**Example output:**
+```
+## Build Logs — Build #142 (renderer/error)
+
+[2024-01-15 10:31:42] ERROR renderer: Failed to load resource https://example.com/fonts/custom.woff2
+  Status: 404 | Snapshot: Homepage — Desktop
+[2024-01-15 10:31:43] ERROR renderer: JavaScript execution timeout after 30000ms
+  Snapshot: Dashboard — Desktop
+[2024-01-15 10:31:45] ERROR renderer: DOM snapshot exceeded 25MB limit
+  Snapshot: Reports — Full Page
+```
+
+---
+
+### `percy_analyze_logs_realtime`
+
+**Description:** Analyze raw log data in real-time without a stored build. Pass CLI logs as JSON and get instant diagnostics with fix suggestions.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| logs | string | Yes | JSON array of log entries: `[{"message":"...","level":"error","meta":{}}]` |
+
+**Example prompt:**
+> "Analyze these Percy CLI logs and tell me what went wrong"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_analyze_logs_realtime",
+  "params": {
+    "logs": "[{\"message\":\"Snapshot command failed: page crashed\",\"level\":\"error\",\"meta\":{\"snapshot\":\"Homepage\"}},{\"message\":\"Asset discovery took 45000ms\",\"level\":\"warn\",\"meta\":{\"url\":\"https://example.com\"}}]"
+  }
+}
+```
+
+**Example output:**
+```
+## Real-Time Log Analysis
+
+### Findings
+
+1. **Page Crash** (CRITICAL)
+   Log: "Snapshot command failed: page crashed"
+   Snapshot: Homepage
+   **Fix:** This usually indicates the page uses too much memory. Reduce DOM size
+   or disable JavaScript with `enable_javascript: false`.
+
+2. **Slow Asset Discovery** (WARNING)
+   Log: "Asset discovery took 45000ms"
+   URL: https://example.com
+   **Fix:** Large pages slow down asset discovery. Use `discovery.networkIdleTimeout`
+   to adjust, or add `data-percy-css` to inline critical styles.
+```
+
+---
+
+## Composite Workflows (4 tools)
+
+These tools combine multiple API calls into high-level workflows.
+
+### `percy_pr_visual_report`
+
+**Description:** Get a complete visual regression report for a PR. Finds the Percy build by branch/SHA, ranks snapshots by risk, shows AI analysis, and recommends actions. The single best tool for checking visual status.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| project_id | string | No | Percy project ID (optional if PERCY_TOKEN is project-scoped) |
+| branch | string | No | Git branch name to find the build |
+| sha | string | No | Git commit SHA to find the build |
+| build_id | string | No | Direct Percy build ID (skips search) |
+
+> Note: Provide `branch`, `sha`, or `build_id` to identify the build.
+
+**Example prompt:**
+> "What's the visual status of my PR on branch feature-login?"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_pr_visual_report",
+  "params": {
+    "branch": "feature-login"
+  }
+}
+```
+
+**Example output:**
+```
+## Visual Regression Report — feature-login
+
+**Build:** #143 (ID: 67890) | **State:** finished | **Review:** unreviewed
+**Branch:** feature-login | **SHA:** abc123def456 | **PR:** #42
+
+### Risk Summary
+- CRITICAL: 1 snapshot
+- REVIEW NEEDED: 2 snapshots
+- AUTO-APPROVED: 5 snapshots
+- NOISE: 0 snapshots
+
+### Critical Changes (action required)
+1. **Checkout — Mobile** (snapshot: 99002)
+   Diff: 8% | AI: potential_bug
+   "Submit button repositioned — may affect tap target"
+
+### Review Needed
+2. **Homepage — Desktop** (snapshot: 99001)
+   Diff: 42% | AI: intentional_change
+   "Hero banner replaced with new campaign image"
+
+3. **Settings Page** (snapshot: 99003)
+   Diff: 0.3% | AI: review_needed
+   "Minor spacing change in form layout"
+
+### Recommendation
+Review the checkout mobile snapshot — the button repositioning may be a bug.
+The homepage change appears intentional. Consider approving after verifying
+the checkout fix.
+```
+
+---
+
+### `percy_auto_triage`
+
+**Description:** Automatically categorize all visual changes in a Percy build into Critical (bugs), Review Required, Auto-Approvable, and Noise. Helps prioritize visual review.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+| noise_threshold | number | No | Diff ratio below this is noise (default 0.005 = 0.5%) |
+| review_threshold | number | No | Diff ratio above this needs review (default 0.15 = 15%) |
+
+**Example prompt:**
+> "Categorize and triage the changes in build 12345"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_auto_triage",
+  "params": {
+    "build_id": "12345",
+    "noise_threshold": 0.01,
+    "review_threshold": 0.10
+  }
+}
+```
+
+**Example output:**
+```
+## Auto-Triage — Build #142
+
+### Critical (1) — AI flagged as potential bugs
+- **Checkout — Mobile** (snapshot: 99002) — 8% diff
+  "Submit button repositioned outside expected bounds"
+
+### Review Required (1) — High diff ratio
+- **Homepage — Desktop** (snapshot: 99001) — 42% diff
+  "Large visual change — hero section redesign"
+
+### Auto-Approvable (1) — Low diff, AI-approved
+- **Settings Page** (snapshot: 99003) — 0.3% diff
+  "Minor spacing adjustment"
+
+### Noise (0) — Below threshold
+
+### Recommendation
+1 critical issue needs attention. 1 snapshot can be auto-approved.
+```
+
+---
+
+### `percy_debug_failed_build`
+
+**Description:** Diagnose a Percy build failure. Cross-references error buckets, log analysis, failed snapshots, and network logs to provide actionable fix commands.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | Yes | Percy build ID |
+
+**Example prompt:**
+> "Why did Percy build 12345 fail?"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_debug_failed_build",
+  "params": {
+    "build_id": "12345"
+  }
+}
+```
+
+**Example output:**
+```
+## Build Failure Diagnosis — Build #142
+
+**State:** failed | **Error:** render_timeout
+**Failed snapshots:** 3 of 45
+
+### Root Causes
+
+1. **JavaScript Timeout** (3 snapshots)
+   Snapshots: Dashboard, Reports — Full Page, Analytics
+   The page JavaScript did not reach idle state within 30s.
+
+   **Fix:**
+   ```
+   await percySnapshot('Dashboard', {
+     enableJavaScript: true,
+     discovery: { networkIdleTimeout: 500 }
+   });
+   ```
+
+2. **Oversized DOM** (1 snapshot)
+   Snapshot: Reports — Full Page
+   DOM snapshot is 28MB (limit: 25MB).
+
+   **Fix:** Paginate or lazy-load table rows. Use `domTransformation`
+   to remove non-visible content before snapshotting.
+
+### Network Issues
+- /api/dashboard/data: Timeout (base OK, head failed)
+- /api/reports/export: 500 Internal Server Error
+
+### Suggested Next Steps
+1. Fix JavaScript timeouts with explicit wait conditions
+2. Reduce DOM size for Reports page
+3. Mock or stub flaky API endpoints
+```
+
+---
+
+### `percy_diff_explain`
+
+**Description:** Explain visual changes in plain English. Supports depth levels: summary (AI descriptions), detailed (+ coordinates), full_rca (+ DOM/CSS changes with XPath).
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| comparison_id | string | Yes | Percy comparison ID |
+| depth | enum | No | Analysis depth: `summary`, `detailed`, `full_rca` (default: detailed) |
+
+**Example prompt — summary:**
+> "Give me a quick summary of what changed in comparison 55001"
+
+**Example tool call — summary:**
+```json
+{
+  "tool": "percy_diff_explain",
+  "params": {
+    "comparison_id": "55001",
+    "depth": "summary"
+  }
+}
+```
+
+**Example output — summary:**
+```
+## Diff Explanation — Comparison 55001 (summary)
+
+**Snapshot:** Homepage — Desktop | **Browser:** Chrome @ 1280px
+**Diff ratio:** 42%
+
+### Changes
+1. Hero banner image replaced with new campaign creative
+2. Navigation bar background color slightly darker
+```
+
+**Example prompt — full RCA:**
+> "Explain the visual diff in comparison 55001 with full root cause analysis"
+
+**Example tool call — full RCA:**
+```json
+{
+  "tool": "percy_diff_explain",
+  "params": {
+    "comparison_id": "55001",
+    "depth": "full_rca"
+  }
+}
+```
+
+**Example output — full RCA:**
+```
+## Diff Explanation — Comparison 55001 (full_rca)
+
+**Snapshot:** Homepage — Desktop | **Browser:** Chrome @ 1280px
+**Diff ratio:** 42%
+
+### Change 1: Hero Banner Replacement
+**Region:** (120, 340) to (520, 540)
+**AI classification:** intentional_change
+**Description:** Hero banner image replaced with new campaign creative
+
+**DOM Changes:**
+- /html/body/main/section[1]/img
+  src: /images/campaign-old.jpg -> /images/campaign-new.jpg
+  height: 400px -> 450px
+
+### Change 2: Navigation Color Shift
+**Region:** (0, 0) to (1280, 60)
+**AI classification:** potential_bug
+**Description:** Navigation bar background color slightly darker
+
+**DOM Changes:**
+- /html/body/nav/div[1]
+  style.background-color: #333333 -> #444444
+```
+
+---
+
+## Project Management (7 tools)
+
+### `percy_manage_project_settings`
+
+**Description:** View or update Percy project settings including diff sensitivity, auto-approve branches, IntelliIgnore, and AI enablement. High-risk changes require confirmation.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| project_id | string | Yes | Percy project ID |
+| settings | string | No | JSON string of attributes to update, e.g. `'{"diff-sensitivity":0.1,"auto-approve-branch-filter":"main"}'` |
+| confirm_destructive | boolean | No | Set to true to confirm high-risk changes (auto-approve/approval-required branch filters) |
+
+**Example prompt — view settings:**
+> "Show me the settings for project 12345"
+
+**Example tool call — view settings:**
+```json
+{
+  "tool": "percy_manage_project_settings",
+  "params": {
+    "project_id": "12345"
+  }
+}
+```
+
+**Example output — view settings:**
+```
+## Project Settings — my-web-app (12345)
+
+| Setting | Value |
+|---------|-------|
+| Diff sensitivity | 0.02 |
+| Auto-approve branch filter | (none) |
+| Approval-required branch filter | main |
+| IntelliIgnore enabled | true |
+| AI review enabled | true |
+| Default widths | 375, 768, 1280 |
+```
+
+**Example prompt — update settings:**
+> "Enable auto-approve for the develop branch on project 12345"
+
+**Example tool call — update settings:**
+```json
+{
+  "tool": "percy_manage_project_settings",
+  "params": {
+    "project_id": "12345",
+    "settings": "{\"auto-approve-branch-filter\":\"develop\"}",
+    "confirm_destructive": true
+  }
+}
+```
+
+**Example output — update settings:**
+```
+## Project Settings Updated — my-web-app (12345)
+
+Changed:
+- Auto-approve branch filter: (none) -> develop
+
+WARNING: Builds on the "develop" branch will now be auto-approved.
+```
+
+---
+
+### `percy_manage_browser_targets`
+
+**Description:** List, add, or remove browser targets for a Percy project (Chrome, Firefox, Safari, Edge).
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| project_id | string | Yes | Percy project ID |
+| action | enum | No | Action to perform: `list`, `add`, `remove` (default: list) |
+| browser_family | string | No | Browser family ID to add or project-browser-target ID to remove |
+
+**Example prompt — list browsers:**
+> "What browsers are configured for project 12345?"
+
+**Example tool call — list:**
+```json
+{
+  "tool": "percy_manage_browser_targets",
+  "params": {
+    "project_id": "12345",
+    "action": "list"
+  }
+}
+```
+
+**Example output — list:**
+```
+## Browser Targets — my-web-app (12345)
+
+| Browser | Family ID | Target ID |
+|---------|-----------|-----------|
+| Chrome | chrome | bt_001 |
+| Firefox | firefox | bt_002 |
+
+Available to add: Safari (safari), Edge (edge)
+```
+
+**Example prompt — add browser:**
+> "Add Safari to project 12345"
+
+**Example tool call — add:**
+```json
+{
+  "tool": "percy_manage_browser_targets",
+  "params": {
+    "project_id": "12345",
+    "action": "add",
+    "browser_family": "safari"
+  }
+}
+```
+
+**Example output — add:**
+```
+## Browser Target Added
+Safari added to my-web-app (12345).
+New target ID: bt_003
+```
+
+**Example prompt — remove browser:**
+> "Remove Firefox from project 12345"
+
+**Example tool call — remove:**
+```json
+{
+  "tool": "percy_manage_browser_targets",
+  "params": {
+    "project_id": "12345",
+    "action": "remove",
+    "browser_family": "bt_002"
+  }
+}
+```
+
+**Example output — remove:**
+```
+## Browser Target Removed
+Firefox (bt_002) removed from my-web-app (12345).
+```
+
+---
+
+### `percy_manage_tokens`
+
+**Description:** List or rotate Percy project tokens. Token values are masked for security — only last 4 characters shown.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| project_id | string | Yes | Percy project ID |
+| action | enum | No | Action to perform: `list`, `rotate` (default: list) |
+| role | string | No | Token role for rotation (e.g., 'write', 'read') |
+
+**Example prompt — list tokens:**
+> "Show me the tokens for project 12345"
+
+**Example tool call — list:**
+```json
+{
+  "tool": "percy_manage_tokens",
+  "params": {
+    "project_id": "12345",
+    "action": "list"
+  }
+}
+```
+
+**Example output — list:**
+```
+## Project Tokens — my-web-app (12345)
+
+| Role | Token (masked) | Created |
+|------|----------------|---------|
+| write | ****a1b2 | 2024-01-01 |
+| read | ****c3d4 | 2024-01-01 |
+| full_access | ****e5f6 | 2024-01-01 |
+```
+
+**Example prompt — rotate token:**
+> "Rotate the write token for project 12345"
+
+**Example tool call — rotate:**
+```json
+{
+  "tool": "percy_manage_tokens",
+  "params": {
+    "project_id": "12345",
+    "action": "rotate",
+    "role": "write"
+  }
+}
+```
+
+**Example output — rotate:**
+```
+## Token Rotated — my-web-app (12345)
+Role: write
+New token (masked): ****x7y8
+Old token has been invalidated. Update your CI environment variables.
+```
+
+---
+
+### `percy_manage_webhooks`
+
+**Description:** Create, update, list, or delete webhooks for Percy build events.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| project_id | string | Yes | Percy project ID |
+| action | enum | No | Action to perform: `list`, `create`, `update`, `delete` (default: list) |
+| webhook_id | string | No | Webhook ID (required for update/delete) |
+| url | string | No | Webhook URL (required for create) |
+| events | string | No | Comma-separated event types, e.g. 'build:finished,build:failed' |
+| description | string | No | Human-readable webhook description |
+
+**Example prompt — list webhooks:**
+> "Show me all webhooks for project 12345"
+
+**Example tool call — list:**
+```json
+{
+  "tool": "percy_manage_webhooks",
+  "params": {
+    "project_id": "12345",
+    "action": "list"
+  }
+}
+```
+
+**Example output — list:**
+```
+## Webhooks — my-web-app (12345)
+
+1. **Slack Notifications** (ID: wh_001)
+   URL: https://hooks.slack.com/services/...
+   Events: build:finished, build:failed
+   Status: active
+
+2. **CI Pipeline** (ID: wh_002)
+   URL: https://ci.example.com/percy-webhook
+   Events: build:finished
+   Status: active
+```
+
+**Example prompt — create webhook:**
+> "Create a webhook for build failures on project 12345"
+
+**Example tool call — create:**
+```json
+{
+  "tool": "percy_manage_webhooks",
+  "params": {
+    "project_id": "12345",
+    "action": "create",
+    "url": "https://hooks.slack.com/services/T00/B00/xxx",
+    "events": "build:failed",
+    "description": "Slack alert on build failure"
+  }
+}
+```
+
+**Example output — create:**
+```
+## Webhook Created
+**ID:** wh_003
+**URL:** https://hooks.slack.com/services/T00/B00/xxx
+**Events:** build:failed
+**Description:** Slack alert on build failure
+```
+
+**Example prompt — delete webhook:**
+> "Delete webhook wh_002 from project 12345"
+
+**Example tool call — delete:**
+```json
+{
+  "tool": "percy_manage_webhooks",
+  "params": {
+    "project_id": "12345",
+    "action": "delete",
+    "webhook_id": "wh_002"
+  }
+}
+```
+
+**Example output — delete:**
+```
+## Webhook Deleted
+Webhook wh_002 (CI Pipeline) has been removed.
+```
+
+---
+
+### `percy_manage_ignored_regions`
+
+**Description:** Create, list, save, or delete ignored regions on Percy comparisons. Supports bounding box, XPath, CSS selector, and fullpage types.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| comparison_id | string | No | Percy comparison ID (required for list/create) |
+| action | enum | No | Action to perform: `list`, `create`, `save`, `delete` (default: list) |
+| region_id | string | No | Region revision ID (required for delete) |
+| type | string | No | Region type: raw, xpath, css, full_page |
+| coordinates | string | No | JSON bounding box for raw type: `{"x":0,"y":0,"width":100,"height":100}` |
+| selector | string | No | XPath or CSS selector string |
+
+**Example prompt — list ignored regions:**
+> "Show me ignored regions for comparison 55001"
+
+**Example tool call — list:**
+```json
+{
+  "tool": "percy_manage_ignored_regions",
+  "params": {
+    "comparison_id": "55001",
+    "action": "list"
+  }
+}
+```
+
+**Example output — list:**
+```
+## Ignored Regions — Comparison 55001
+
+1. **Dynamic banner** (ID: ir_001)
+   Type: raw
+   Coordinates: (0, 0, 1280, 100)
+
+2. **Timestamp** (ID: ir_002)
+   Type: css
+   Selector: .footer-timestamp
+```
+
+**Example prompt — create bounding box region:**
+> "Ignore the ad banner area at the top of comparison 55001"
+
+**Example tool call — create raw region:**
+```json
+{
+  "tool": "percy_manage_ignored_regions",
+  "params": {
+    "comparison_id": "55001",
+    "action": "create",
+    "type": "raw",
+    "coordinates": "{\"x\":0,\"y\":0,\"width\":1280,\"height\":90}"
+  }
+}
+```
+
+**Example output — create raw region:**
+```
+## Ignored Region Created
+**ID:** ir_003
+**Type:** raw
+**Coordinates:** (0, 0, 1280, 90)
+This region will be excluded from future diff calculations.
+```
+
+**Example prompt — create CSS selector region:**
+> "Ignore the dynamic timestamp element in comparison 55001"
+
+**Example tool call — create CSS region:**
+```json
+{
+  "tool": "percy_manage_ignored_regions",
+  "params": {
+    "comparison_id": "55001",
+    "action": "create",
+    "type": "css",
+    "selector": ".dynamic-timestamp"
+  }
+}
+```
+
+**Example output — create CSS region:**
+```
+## Ignored Region Created
+**ID:** ir_004
+**Type:** css
+**Selector:** .dynamic-timestamp
+This region will be excluded from future diff calculations.
+```
+
+**Example prompt — delete region:**
+> "Remove ignored region ir_001"
+
+**Example tool call — delete:**
+```json
+{
+  "tool": "percy_manage_ignored_regions",
+  "params": {
+    "action": "delete",
+    "region_id": "ir_001"
+  }
+}
+```
+
+**Example output — delete:**
+```
+## Ignored Region Deleted
+Region ir_001 has been removed. This area will be included in future diff calculations.
+```
+
+---
+
+### `percy_manage_comments`
+
+**Description:** List, create, or close comment threads on Percy snapshots.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| build_id | string | No | Percy build ID (required for list) |
+| snapshot_id | string | No | Percy snapshot ID (required for create) |
+| action | enum | No | Action to perform: `list`, `create`, `close` (default: list) |
+| thread_id | string | No | Comment thread ID (required for close) |
+| body | string | No | Comment body text (required for create) |
+
+**Example prompt — list comments:**
+> "Show me all comments on build 12345"
+
+**Example tool call — list:**
+```json
+{
+  "tool": "percy_manage_comments",
+  "params": {
+    "build_id": "12345",
+    "action": "list"
+  }
+}
+```
+
+**Example output — list:**
+```
+## Comments — Build #142
+
+1. **Thread on Homepage — Desktop** (thread: ct_001)
+   Author: jane@example.com | Status: open
+   "The hero image looks stretched on wide viewports"
+   Replies: 2
+
+2. **Thread on Checkout — Mobile** (thread: ct_002)
+   Author: john@example.com | Status: open
+   "Button alignment looks off — is this intentional?"
+   Replies: 0
+```
+
+**Example prompt — create comment:**
+> "Add a comment on snapshot 99001 about the color change"
+
+**Example tool call — create:**
+```json
+{
+  "tool": "percy_manage_comments",
+  "params": {
+    "snapshot_id": "99001",
+    "action": "create",
+    "body": "The navigation bar color change from #333 to #444 looks unintentional. Please verify this is correct."
+  }
+}
+```
+
+**Example output — create:**
+```
+## Comment Created
+**Thread ID:** ct_003
+**Snapshot:** Homepage — Desktop (99001)
+**Body:** The navigation bar color change from #333 to #444 looks unintentional. Please verify this is correct.
+```
+
+**Example prompt — close thread:**
+> "Close comment thread ct_001"
+
+**Example tool call — close:**
+```json
+{
+  "tool": "percy_manage_comments",
+  "params": {
+    "action": "close",
+    "thread_id": "ct_001"
+  }
+}
+```
+
+**Example output — close:**
+```
+## Comment Thread Closed
+Thread ct_001 on Homepage — Desktop has been resolved.
+```
+
+---
+
+### `percy_get_usage_stats`
+
+**Description:** Get Percy screenshot usage, quota limits, and AI comparison counts for an organization.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| org_id | string | Yes | Percy organization ID |
+| product | string | No | Filter by product type (e.g., 'percy', 'app_percy') |
+
+**Example prompt:**
+> "How many Percy screenshots has our org used this month?"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_get_usage_stats",
+  "params": {
+    "org_id": "org_001",
+    "product": "percy"
+  }
+}
+```
+
+**Example output:**
+```
+## Usage Stats — My Organization
+
+### Screenshot Usage
+- Used: 12,450 / 50,000
+- Remaining: 37,550
+- Usage: 24.9%
+
+### AI Comparisons
+- AI-analyzed: 8,200
+- Auto-approved: 6,150 (75%)
+- Flagged: 2,050
+
+### Billing Period
+- Start: 2024-01-01
+- End: 2024-01-31
+- Days remaining: 16
+```
+
+---
+
+## Advanced (3 tools)
+
+### `percy_manage_visual_monitoring`
+
+**Description:** Create, update, or list Visual Monitoring projects with URL lists, cron schedules, and auth configuration.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| org_id | string | No | Percy organization ID (required for list/create) |
+| project_id | string | No | Visual Monitoring project ID (required for update) |
+| action | enum | No | Action to perform: `list`, `create`, `update` (default: list) |
+| urls | string | No | Comma-separated URLs to monitor, e.g. 'https://example.com,https://example.com/about' |
+| cron | string | No | Cron expression for monitoring schedule, e.g. '0 */6 * * *' |
+| schedule | boolean | No | Enable or disable the monitoring schedule |
+
+**Example prompt — list monitoring projects:**
+> "Show me all visual monitoring projects"
+
+**Example tool call — list:**
+```json
+{
+  "tool": "percy_manage_visual_monitoring",
+  "params": {
+    "org_id": "org_001",
+    "action": "list"
+  }
+}
+```
+
+**Example output — list:**
+```
+## Visual Monitoring Projects
+
+1. **Production Monitor** (ID: vm_001)
+   URLs: https://example.com, https://example.com/pricing
+   Schedule: Every 6 hours (0 */6 * * *)
+   Status: active
+
+2. **Staging Check** (ID: vm_002)
+   URLs: https://staging.example.com
+   Schedule: Daily at midnight (0 0 * * *)
+   Status: paused
+```
+
+**Example prompt — create monitoring project:**
+> "Set up visual monitoring for our homepage and pricing page every 6 hours"
+
+**Example tool call — create:**
+```json
+{
+  "tool": "percy_manage_visual_monitoring",
+  "params": {
+    "org_id": "org_001",
+    "action": "create",
+    "urls": "https://example.com,https://example.com/pricing",
+    "cron": "0 */6 * * *",
+    "schedule": true
+  }
+}
+```
+
+**Example output — create:**
+```
+## Visual Monitoring Project Created
+**ID:** vm_003
+**URLs:** https://example.com, https://example.com/pricing
+**Schedule:** 0 */6 * * * (every 6 hours)
+**Status:** active
+First run will start within the next scheduled window.
+```
+
+**Example prompt — pause monitoring:**
+> "Pause the visual monitoring for project vm_001"
+
+**Example tool call — update:**
+```json
+{
+  "tool": "percy_manage_visual_monitoring",
+  "params": {
+    "project_id": "vm_001",
+    "action": "update",
+    "schedule": false
+  }
+}
+```
+
+**Example output — update:**
+```
+## Visual Monitoring Updated
+**Project:** vm_001
+Schedule: disabled (paused)
+```
+
+---
+
+### `percy_branchline_operations`
+
+**Description:** Sync, merge, or unmerge Percy branch baselines. Sync copies approved baselines to target branches.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| action | enum | Yes | Branchline operation to perform: `sync`, `merge`, `unmerge` |
+| project_id | string | No | Percy project ID |
+| build_id | string | No | Percy build ID |
+| target_branch_filter | string | No | Target branch pattern for sync (e.g., 'main', 'release/*') |
+| snapshot_ids | string | No | Comma-separated snapshot IDs to include |
+
+**Example prompt — sync baselines:**
+> "Sync approved baselines from build 12345 to the main branch"
+
+**Example tool call — sync:**
+```json
+{
+  "tool": "percy_branchline_operations",
+  "params": {
+    "action": "sync",
+    "build_id": "12345",
+    "target_branch_filter": "main"
+  }
+}
+```
+
+**Example output — sync:**
+```
+## Branchline Sync
+**Build:** #142 (12345)
+**Target:** main
+**Snapshots synced:** 45
+
+Approved baselines from build #142 have been copied to the main branch baseline.
+```
+
+**Example prompt — merge baselines:**
+> "Merge baselines from build 12345"
+
+**Example tool call — merge:**
+```json
+{
+  "tool": "percy_branchline_operations",
+  "params": {
+    "action": "merge",
+    "build_id": "12345"
+  }
+}
+```
+
+**Example output — merge:**
+```
+## Branchline Merge
+**Build:** #142 (12345)
+Baselines merged successfully. Future builds on this branch will use the
+merged baseline as the comparison base.
+```
+
+**Example prompt — unmerge baselines:**
+> "Unmerge baselines for build 12345"
+
+**Example tool call — unmerge:**
+```json
+{
+  "tool": "percy_branchline_operations",
+  "params": {
+    "action": "unmerge",
+    "build_id": "12345"
+  }
+}
+```
+
+**Example output — unmerge:**
+```
+## Branchline Unmerge
+**Build:** #142 (12345)
+Baselines unmerged. The branch will revert to its previous baseline state.
+```
+
+---
+
+### `percy_manage_variants`
+
+**Description:** List, create, or update A/B testing variants for Percy snapshot comparisons.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| comparison_id | string | No | Percy comparison ID (required for list) |
+| snapshot_id | string | No | Percy snapshot ID (required for create) |
+| action | enum | No | Action to perform: `list`, `create`, `update` (default: list) |
+| variant_id | string | No | Variant ID (required for update) |
+| name | string | No | Variant name (required for create) |
+| state | string | No | Variant state (for update) |
+
+**Example prompt — list variants:**
+> "Show me variants for comparison 55001"
+
+**Example tool call — list:**
+```json
+{
+  "tool": "percy_manage_variants",
+  "params": {
+    "comparison_id": "55001",
+    "action": "list"
+  }
+}
+```
+
+**Example output — list:**
+```
+## Variants — Comparison 55001
+
+1. **Variant A — Control** (ID: var_001)
+   State: active
+
+2. **Variant B — New CTA** (ID: var_002)
+   State: active
+```
+
+**Example prompt — create variant:**
+> "Create a variant called 'Dark Mode' for snapshot 99001"
+
+**Example tool call — create:**
+```json
+{
+  "tool": "percy_manage_variants",
+  "params": {
+    "snapshot_id": "99001",
+    "action": "create",
+    "name": "Dark Mode"
+  }
+}
+```
+
+**Example output — create:**
+```
+## Variant Created
+**ID:** var_003
+**Name:** Dark Mode
+**Snapshot:** Homepage — Desktop (99001)
+**State:** active
+```
+
+**Example prompt — update variant:**
+> "Deactivate variant var_002"
+
+**Example tool call — update:**
+```json
+{
+  "tool": "percy_manage_variants",
+  "params": {
+    "action": "update",
+    "variant_id": "var_002",
+    "state": "inactive"
+  }
+}
+```
+
+**Example output — update:**
+```
+## Variant Updated
+**ID:** var_002
+**Name:** Variant B — New CTA
+**State:** inactive
+```
+
+---
+
+## Quick Reference — Common Prompts
+
+| What you want to do | Say this | Tool called |
+|---------------------|----------|-------------|
+| Check auth setup | "Check my Percy authentication" | `percy_auth_status` |
+| List projects | "Show me my Percy projects" | `percy_list_projects` |
+| List builds | "Show recent builds for project 12345" | `percy_list_builds` |
+| Get build details | "Show me build 12345" | `percy_get_build` |
+| List snapshots | "Show changed snapshots in build 12345" | `percy_get_build_items` |
+| Get snapshot details | "Get details for snapshot 99001" | `percy_get_snapshot` |
+| Get comparison details | "Show comparison 55001 with images" | `percy_get_comparison` |
+| Check PR visual status | "What's the visual status of my PR on branch feature-x?" | `percy_pr_visual_report` |
+| Triage all changes | "Categorize changes in build 12345" | `percy_auto_triage` |
+| Approve a build | "Approve Percy build 12345" | `percy_approve_build` |
+| Request changes | "Request changes on snapshot 99001 in build 12345" | `percy_approve_build` |
+| Reject a build | "Reject build 12345 because of layout bugs" | `percy_approve_build` |
+| Debug a failure | "Why did Percy build 12345 fail?" | `percy_debug_failed_build` |
+| Explain a diff | "What changed in comparison 55001?" | `percy_diff_explain` |
+| Get AI analysis | "Show AI analysis for build 12345" | `percy_get_ai_analysis` |
+| Get build summary | "Summarize visual changes in build 12345" | `percy_get_build_summary` |
+| Check AI quota | "How many AI regenerations do I have left?" | `percy_get_ai_quota` |
+| Find root cause | "What DOM changes caused the diff in comparison 55001?" | `percy_get_rca` |
+| Re-run AI with prompt | "Re-analyze build 12345, ignore font diffs" | `percy_trigger_ai_recompute` |
+| Get prompt suggestion | "Suggest a prompt for regions in comparison 55001" | `percy_suggest_prompt` |
+| View failure suggestions | "Give me fix suggestions for build 12345" | `percy_get_suggestions` |
+| Check network logs | "Show network logs for comparison 55001" | `percy_get_network_logs` |
+| View build logs | "Show renderer error logs for build 12345" | `percy_get_build_logs` |
+| Analyze CLI logs | "Analyze these Percy logs" | `percy_analyze_logs_realtime` |
+| Create a web build | "Create a Percy build for branch main" | `percy_create_build` |
+| Create a snapshot | "Create a snapshot called Homepage in build 67890" | `percy_create_snapshot` |
+| Upload a resource | "Upload the missing CSS to build 67890" | `percy_upload_resource` |
+| Finalize a snapshot | "Finalize snapshot 99010" | `percy_finalize_snapshot` |
+| Finalize a build | "Finalize build 67890" | `percy_finalize_build` |
+| Create app snapshot | "Create an app snapshot for Login Screen" | `percy_create_app_snapshot` |
+| Create comparison | "Create an iPhone 13 comparison" | `percy_create_comparison` |
+| Upload screenshot tile | "Upload the screenshot for comparison 55010" | `percy_upload_tile` |
+| Finalize comparison | "Finalize comparison 55010" | `percy_finalize_comparison` |
+| View project settings | "Show settings for project 12345" | `percy_manage_project_settings` |
+| Update diff sensitivity | "Set diff sensitivity to 0.05 for project 12345" | `percy_manage_project_settings` |
+| List browser targets | "What browsers are configured for project 12345?" | `percy_manage_browser_targets` |
+| Add browser | "Add Firefox to project 12345" | `percy_manage_browser_targets` |
+| List tokens | "Show tokens for project 12345" | `percy_manage_tokens` |
+| Rotate token | "Rotate the write token for project 12345" | `percy_manage_tokens` |
+| Manage webhooks | "Create a webhook for build failures" | `percy_manage_webhooks` |
+| Ignore a region | "Ignore the ad banner in comparison 55001" | `percy_manage_ignored_regions` |
+| Add a comment | "Comment on snapshot 99001 about the color change" | `percy_manage_comments` |
+| Check usage | "How many screenshots have we used this month?" | `percy_get_usage_stats` |
+| Set up monitoring | "Monitor our homepage every 6 hours" | `percy_manage_visual_monitoring` |
+| Sync baselines | "Sync baselines from build 12345 to main" | `percy_branchline_operations` |
+| Manage A/B variants | "Create a Dark Mode variant for snapshot 99001" | `percy_manage_variants` |

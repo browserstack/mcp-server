@@ -20,8 +20,14 @@ export async function percyManageVariants(
   args: ManageVariantsArgs,
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const { comparison_id, snapshot_id, action = "list", variant_id, name, state } =
-    args;
+  const {
+    comparison_id,
+    snapshot_id,
+    action = "list",
+    variant_id,
+    name,
+    state,
+  } = args;
   const client = new PercyClient(config);
 
   // ---- List ----

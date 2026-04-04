@@ -58,7 +58,7 @@ export async function percyManageWebhooks(
       const wUrl = attrs.url ?? "?";
       const wEvents = Array.isArray(attrs.events)
         ? attrs.events.join(", ")
-        : attrs.events ?? "?";
+        : (attrs.events ?? "?");
       const wDesc = attrs.description ?? "";
       lines.push(`| ${webhook.id ?? "?"} | ${wUrl} | ${wEvents} | ${wDesc} |`);
     }
@@ -78,7 +78,10 @@ export async function percyManageWebhooks(
     }
 
     const eventArray = events
-      ? events.split(",").map((e) => e.trim()).filter(Boolean)
+      ? events
+          .split(",")
+          .map((e) => e.trim())
+          .filter(Boolean)
       : [];
 
     const body = {
@@ -125,7 +128,10 @@ export async function percyManageWebhooks(
     if (!webhook_id) {
       return {
         content: [
-          { type: "text", text: "webhook_id is required for the 'update' action." },
+          {
+            type: "text",
+            text: "webhook_id is required for the 'update' action.",
+          },
         ],
         isError: true,
       };
@@ -134,7 +140,10 @@ export async function percyManageWebhooks(
     const attrs: Record<string, unknown> = {};
     if (url) attrs.url = url;
     if (events) {
-      attrs.events = events.split(",").map((e) => e.trim()).filter(Boolean);
+      attrs.events = events
+        .split(",")
+        .map((e) => e.trim())
+        .filter(Boolean);
     }
     if (description) attrs.description = description;
 
@@ -172,7 +181,10 @@ export async function percyManageWebhooks(
     if (!webhook_id) {
       return {
         content: [
-          { type: "text", text: "webhook_id is required for the 'delete' action." },
+          {
+            type: "text",
+            text: "webhook_id is required for the 'delete' action.",
+          },
         ],
         isError: true,
       };

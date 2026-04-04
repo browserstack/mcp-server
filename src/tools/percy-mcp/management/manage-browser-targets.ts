@@ -22,7 +22,9 @@ export async function percyManageBrowserTargets(
   // ---- List ----
   if (action === "list") {
     const [families, targets] = await Promise.all([
-      client.get<{ data: Record<string, unknown>[] | null }>("/browser-families"),
+      client.get<{ data: Record<string, unknown>[] | null }>(
+        "/browser-families",
+      ),
       client.get<{ data: Record<string, unknown>[] | null }>(
         `/projects/${project_id}/project-browser-targets`,
       ),
@@ -44,7 +46,11 @@ export async function percyManageBrowserTargets(
       lines.push("|---------------|-----|");
       for (const target of targetList) {
         const attrs = (target as any).attributes ?? target;
-        const name = attrs.browserFamilySlug ?? attrs["browser-family-slug"] ?? attrs.name ?? "unknown";
+        const name =
+          attrs.browserFamilySlug ??
+          attrs["browser-family-slug"] ??
+          attrs.name ??
+          "unknown";
         lines.push(`| ${name} | ${target.id ?? "?"} |`);
       }
     }
@@ -82,7 +88,9 @@ export async function percyManageBrowserTargets(
         type: "project-browser-targets",
         relationships: {
           project: { data: { type: "projects", id: project_id } },
-          "browser-family": { data: { type: "browser-families", id: browser_family } },
+          "browser-family": {
+            data: { type: "browser-families", id: browser_family },
+          },
         },
       },
     };

@@ -71,7 +71,15 @@ export async function percyGetUsageStats(
     for (const [key, value] of Object.entries(attrs)) {
       if (
         typeof value === "number" &&
-        !["currentUsage", "current-usage", "usage", "quota", "screenshot-quota", "aiComparisons", "ai-comparisons"].includes(key)
+        ![
+          "currentUsage",
+          "current-usage",
+          "usage",
+          "quota",
+          "screenshot-quota",
+          "aiComparisons",
+          "ai-comparisons",
+        ].includes(key)
       ) {
         lines.push(`| ${key} | ${value} |`);
       }

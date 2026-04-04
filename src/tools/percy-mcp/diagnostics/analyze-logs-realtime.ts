@@ -74,9 +74,7 @@ export async function percyAnalyzeLogsRealtime(
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     return {
-      content: [
-        { type: "text", text: `Log analysis failed: ${message}` },
-      ],
+      content: [{ type: "text", text: `Log analysis failed: ${message}` }],
       isError: true,
     };
   }

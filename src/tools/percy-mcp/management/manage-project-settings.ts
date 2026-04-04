@@ -90,9 +90,7 @@ export async function percyManageProjectSettings(
       lines.push(`- **${key}**: \`${JSON.stringify(parsed[key])}\``);
     }
     lines.push("");
-    lines.push(
-      "Set `confirm_destructive=true` to apply these changes.",
-    );
+    lines.push("Set `confirm_destructive=true` to apply these changes.");
 
     return { content: [{ type: "text", text: lines.join("\n") }] };
   }

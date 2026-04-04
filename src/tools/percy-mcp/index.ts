@@ -906,9 +906,7 @@ export function registerPercyMcpTools(
     "Get an AI-generated prompt suggestion for specific diff regions. The AI analyzes the selected regions and suggests a prompt to ignore or highlight similar changes.",
     {
       comparison_id: z.string().describe("Percy comparison ID"),
-      region_ids: z
-        .string()
-        .describe("Comma-separated region IDs to analyze"),
+      region_ids: z.string().describe("Comma-separated region IDs to analyze"),
       ignore_change: z
         .boolean()
         .optional()
@@ -1130,10 +1128,7 @@ export function registerPercyMcpTools(
         .string()
         .optional()
         .describe("Webhook ID (required for update/delete)"),
-      url: z
-        .string()
-        .optional()
-        .describe("Webhook URL (required for create)"),
+      url: z.string().optional().describe("Webhook URL (required for create)"),
       events: z
         .string()
         .optional()
@@ -1188,10 +1183,7 @@ export function registerPercyMcpTools(
         .describe(
           'JSON bounding box for raw type: {"x":0,"y":0,"width":100,"height":100}',
         ),
-      selector: z
-        .string()
-        .optional()
-        .describe("XPath or CSS selector string"),
+      selector: z.string().optional().describe("XPath or CSS selector string"),
     },
     async (args) => {
       try {
@@ -1309,7 +1301,9 @@ export function registerPercyMcpTools(
       cron: z
         .string()
         .optional()
-        .describe("Cron expression for monitoring schedule, e.g. '0 */6 * * *'"),
+        .describe(
+          "Cron expression for monitoring schedule, e.g. '0 */6 * * *'",
+        ),
       schedule: z
         .boolean()
         .optional()
@@ -1344,14 +1338,8 @@ export function registerPercyMcpTools(
       action: z
         .enum(["sync", "merge", "unmerge"])
         .describe("Branchline operation to perform"),
-      project_id: z
-        .string()
-        .optional()
-        .describe("Percy project ID"),
-      build_id: z
-        .string()
-        .optional()
-        .describe("Percy build ID"),
+      project_id: z.string().optional().describe("Percy project ID"),
+      build_id: z.string().optional().describe("Percy build ID"),
       target_branch_filter: z
         .string()
         .optional()
@@ -1407,10 +1395,7 @@ export function registerPercyMcpTools(
         .string()
         .optional()
         .describe("Variant name (required for create)"),
-      state: z
-        .string()
-        .optional()
-        .describe("Variant state (for update)"),
+      state: z.string().optional().describe("Variant state (for update)"),
     },
     async (args) => {
       try {

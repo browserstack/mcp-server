@@ -35,18 +35,14 @@ export async function percyGetBuildLogs(
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     return {
-      content: [
-        { type: "text", text: `Failed to fetch logs: ${message}` },
-      ],
+      content: [{ type: "text", text: `Failed to fetch logs: ${message}` }],
       isError: true,
     };
   }
 
   if (!data) {
     return {
-      content: [
-        { type: "text", text: "No logs available for this build." },
-      ],
+      content: [{ type: "text", text: "No logs available for this build." }],
     };
   }
 
@@ -58,13 +54,12 @@ export async function percyGetBuildLogs(
   // Parse log data — format depends on service
   const record = data as Record<string, unknown>;
   const rendererLogs = record?.renderer as Record<string, unknown> | undefined;
-  const rawLogs =
-    Array.isArray(data)
-      ? data
-      : (record?.logs as unknown[]) ||
-        (record?.clilogs as unknown[]) ||
-        (rendererLogs?.logs as unknown[]) ||
-        [];
+  const rawLogs = Array.isArray(data)
+    ? data
+    : (record?.logs as unknown[]) ||
+      (record?.clilogs as unknown[]) ||
+      (rendererLogs?.logs as unknown[]) ||
+      [];
 
   const logs = Array.isArray(rawLogs) ? rawLogs : [];
 

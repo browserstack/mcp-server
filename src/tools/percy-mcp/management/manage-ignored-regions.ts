@@ -37,7 +37,10 @@ export async function percyManageIgnoredRegions(
     if (!comparison_id) {
       return {
         content: [
-          { type: "text", text: "comparison_id is required for the 'list' action." },
+          {
+            type: "text",
+            text: "comparison_id is required for the 'list' action.",
+          },
         ],
         isError: true,
       };
@@ -104,7 +107,7 @@ export async function percyManageIgnoredRegions(
           content: [
             {
               type: "text",
-              text: "Invalid coordinates JSON. Expected format: {\"x\":0,\"y\":0,\"width\":100,\"height\":100}",
+              text: 'Invalid coordinates JSON. Expected format: {"x":0,"y":0,"width":100,"height":100}',
             },
           ],
           isError: true,
@@ -157,7 +160,10 @@ export async function percyManageIgnoredRegions(
       await client.patch("/region-revisions/bulk-save", {});
       return {
         content: [
-          { type: "text", text: "Ignored regions saved (bulk save completed)." },
+          {
+            type: "text",
+            text: "Ignored regions saved (bulk save completed).",
+          },
         ],
       };
     } catch (error) {

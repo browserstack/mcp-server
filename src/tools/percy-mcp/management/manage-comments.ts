@@ -57,9 +57,7 @@ export async function percyManageComments(
       const status = closed ? "Closed" : "Open";
       const commentCount =
         attrs.commentsCount ?? attrs["comments-count"] ?? "?";
-      lines.push(
-        `### Thread #${id} (${status}, ${commentCount} comments)`,
-      );
+      lines.push(`### Thread #${id} (${status}, ${commentCount} comments)`);
       lines.push("");
     }
 
@@ -166,9 +164,7 @@ export async function percyManageComments(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
-        content: [
-          { type: "text", text: `Failed to close thread: ${message}` },
-        ],
+        content: [{ type: "text", text: `Failed to close thread: ${message}` }],
         isError: true,
       };
     }

@@ -20,7 +20,7 @@ interface ResolveTokenOptions {
  * Masks a token for safe display in error messages.
  * Shows only the last 4 characters.
  */
-function maskToken(token: string): string {
+export function maskToken(token: string): string {
   if (token.length <= 4) {
     return "****";
   }

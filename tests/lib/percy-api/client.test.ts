@@ -286,8 +286,10 @@ describe("PercyClient", () => {
     };
 
     fetchSpy.mockResolvedValueOnce(mockFetchResponse(errorBody, 401));
+    const promise = client.get("/builds/123");
+    await expect(promise).rejects.toThrow(PercyApiError);
 
-    await expect(client.get("/builds/123")).rejects.toThrow(PercyApiError);
+    fetchSpy.mockResolvedValueOnce(mockFetchResponse(errorBody, 401));
     await expect(client.get("/builds/123")).rejects.toMatchObject({
       statusCode: 401,
     });
@@ -316,13 +318,19 @@ describe("PercyClient", () => {
         mockFetchResponse(errorBody, 429, { "Retry-After": "0.01" }),
       );
 
-    await expect(client.get("/builds")).rejects.toThrow(PercyApiError);
+    const promise = client.get("/builds");
+    await expect(promise).rejects.toThrow(PercyApiError);
+
+    // Re-mock for the second assertion call
+    fetchSpy
+      .mockResolvedValueOnce(mockFetchResponse(errorBody, 429, { "Retry-After": "0.01" }))
+      .mockResolvedValueOnce(mockFetchResponse(errorBody, 429, { "Retry-After": "0.01" }))
+      .mockResolvedValueOnce(mockFetchResponse(errorBody, 429, { "Retry-After": "0.01" }))
+      .mockResolvedValueOnce(mockFetchResponse(errorBody, 429, { "Retry-After": "0.01" }));
+
     await expect(client.get("/builds")).rejects.toMatchObject({
       statusCode: 429,
     });
-
-    // Should have made 4 attempts (1 initial + 3 retries)
-    // Note: each expect(client.get) makes its own calls, so check the first batch
   });
 
   // -------------------------------------------------------------------------

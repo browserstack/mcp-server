@@ -1,7 +1,7 @@
 /**
  * Percy MCP tools — query and creation tools for Percy visual testing.
  *
- * Registers 27 tools:
+ * Registers 41 tools:
  *   Query: percy_list_projects, percy_list_builds, percy_get_build,
  *          percy_get_build_items, percy_get_snapshot, percy_get_comparison
  *   Web Creation: percy_create_build, percy_create_snapshot, percy_upload_resource,
@@ -15,6 +15,12 @@
  *   Workflows: percy_pr_visual_report, percy_auto_triage, percy_debug_failed_build,
  *              percy_diff_explain
  *   Auth: percy_auth_status
+ *   Management: percy_manage_project_settings, percy_manage_browser_targets,
+ *               percy_manage_tokens, percy_manage_webhooks,
+ *               percy_manage_ignored_regions, percy_manage_comments,
+ *               percy_get_usage_stats
+ *   Advanced: percy_manage_visual_monitoring, percy_branchline_operations,
+ *             percy_manage_variants
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -61,6 +67,18 @@ import { percyDebugFailedBuild } from "./workflows/debug-failed-build.js";
 import { percyDiffExplain } from "./workflows/diff-explain.js";
 
 import { percyAuthStatus } from "./auth/auth-status.js";
+
+import { percyManageProjectSettings } from "./management/manage-project-settings.js";
+import { percyManageBrowserTargets } from "./management/manage-browser-targets.js";
+import { percyManageTokens } from "./management/manage-tokens.js";
+import { percyManageWebhooks } from "./management/manage-webhooks.js";
+import { percyManageIgnoredRegions } from "./management/manage-ignored-regions.js";
+import { percyManageComments } from "./management/manage-comments.js";
+import { percyGetUsageStats } from "./management/get-usage-stats.js";
+
+import { percyManageVisualMonitoring } from "./advanced/manage-visual-monitoring.js";
+import { percyBranchlineOperations } from "./advanced/branchline-operations.js";
+import { percyManageVariants } from "./advanced/manage-variants.js";
 
 export function registerPercyMcpTools(
   server: McpServer,
@@ -979,6 +997,431 @@ export function registerPercyMcpTools(
           config,
           error,
         );
+      }
+    },
+  );
+
+  // =========================================================================
+  // PHASE 3 TOOLS
+  // =========================================================================
+
+  // -------------------------------------------------------------------------
+  // percy_manage_project_settings
+  // -------------------------------------------------------------------------
+  tools.percy_manage_project_settings = server.tool(
+    "percy_manage_project_settings",
+    "View or update Percy project settings including diff sensitivity, auto-approve branches, IntelliIgnore, and AI enablement. High-risk changes require confirmation.",
+    {
+      project_id: z.string().describe("Percy project ID"),
+      settings: z
+        .string()
+        .optional()
+        .describe(
+          'JSON string of attributes to update, e.g. \'{"diff-sensitivity":0.1,"auto-approve-branch-filter":"main"}\'',
+        ),
+      confirm_destructive: z
+        .boolean()
+        .optional()
+        .describe(
+          "Set to true to confirm high-risk changes (auto-approve/approval-required branch filters)",
+        ),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_manage_project_settings",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageProjectSettings(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_manage_project_settings",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_manage_browser_targets
+  // -------------------------------------------------------------------------
+  tools.percy_manage_browser_targets = server.tool(
+    "percy_manage_browser_targets",
+    "List, add, or remove browser targets for a Percy project (Chrome, Firefox, Safari, Edge).",
+    {
+      project_id: z.string().describe("Percy project ID"),
+      action: z
+        .enum(["list", "add", "remove"])
+        .optional()
+        .describe("Action to perform (default: list)"),
+      browser_family: z
+        .string()
+        .optional()
+        .describe(
+          "Browser family ID to add or project-browser-target ID to remove",
+        ),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_manage_browser_targets",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageBrowserTargets(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_manage_browser_targets",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_manage_tokens
+  // -------------------------------------------------------------------------
+  tools.percy_manage_tokens = server.tool(
+    "percy_manage_tokens",
+    "List or rotate Percy project tokens. Token values are masked for security — only last 4 characters shown.",
+    {
+      project_id: z.string().describe("Percy project ID"),
+      action: z
+        .enum(["list", "rotate"])
+        .optional()
+        .describe("Action to perform (default: list)"),
+      role: z
+        .string()
+        .optional()
+        .describe("Token role for rotation (e.g., 'write', 'read')"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_manage_tokens",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageTokens(args, config);
+      } catch (error) {
+        return handleMCPError("percy_manage_tokens", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_manage_webhooks
+  // -------------------------------------------------------------------------
+  tools.percy_manage_webhooks = server.tool(
+    "percy_manage_webhooks",
+    "Create, update, list, or delete webhooks for Percy build events.",
+    {
+      project_id: z.string().describe("Percy project ID"),
+      action: z
+        .enum(["list", "create", "update", "delete"])
+        .optional()
+        .describe("Action to perform (default: list)"),
+      webhook_id: z
+        .string()
+        .optional()
+        .describe("Webhook ID (required for update/delete)"),
+      url: z
+        .string()
+        .optional()
+        .describe("Webhook URL (required for create)"),
+      events: z
+        .string()
+        .optional()
+        .describe(
+          "Comma-separated event types, e.g. 'build:finished,build:failed'",
+        ),
+      description: z
+        .string()
+        .optional()
+        .describe("Human-readable webhook description"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_manage_webhooks",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageWebhooks(args, config);
+      } catch (error) {
+        return handleMCPError("percy_manage_webhooks", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_manage_ignored_regions
+  // -------------------------------------------------------------------------
+  tools.percy_manage_ignored_regions = server.tool(
+    "percy_manage_ignored_regions",
+    "Create, list, save, or delete ignored regions on Percy comparisons. Supports bounding box, XPath, CSS selector, and fullpage types.",
+    {
+      comparison_id: z
+        .string()
+        .optional()
+        .describe("Percy comparison ID (required for list/create)"),
+      action: z
+        .enum(["list", "create", "save", "delete"])
+        .optional()
+        .describe("Action to perform (default: list)"),
+      region_id: z
+        .string()
+        .optional()
+        .describe("Region revision ID (required for delete)"),
+      type: z
+        .string()
+        .optional()
+        .describe("Region type: raw, xpath, css, full_page"),
+      coordinates: z
+        .string()
+        .optional()
+        .describe(
+          'JSON bounding box for raw type: {"x":0,"y":0,"width":100,"height":100}',
+        ),
+      selector: z
+        .string()
+        .optional()
+        .describe("XPath or CSS selector string"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_manage_ignored_regions",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageIgnoredRegions(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_manage_ignored_regions",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_manage_comments
+  // -------------------------------------------------------------------------
+  tools.percy_manage_comments = server.tool(
+    "percy_manage_comments",
+    "List, create, or close comment threads on Percy snapshots.",
+    {
+      build_id: z
+        .string()
+        .optional()
+        .describe("Percy build ID (required for list)"),
+      snapshot_id: z
+        .string()
+        .optional()
+        .describe("Percy snapshot ID (required for create)"),
+      action: z
+        .enum(["list", "create", "close"])
+        .optional()
+        .describe("Action to perform (default: list)"),
+      thread_id: z
+        .string()
+        .optional()
+        .describe("Comment thread ID (required for close)"),
+      body: z
+        .string()
+        .optional()
+        .describe("Comment body text (required for create)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_manage_comments",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageComments(args, config);
+      } catch (error) {
+        return handleMCPError("percy_manage_comments", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_usage_stats
+  // -------------------------------------------------------------------------
+  tools.percy_get_usage_stats = server.tool(
+    "percy_get_usage_stats",
+    "Get Percy screenshot usage, quota limits, and AI comparison counts for an organization.",
+    {
+      org_id: z.string().describe("Percy organization ID"),
+      product: z
+        .string()
+        .optional()
+        .describe("Filter by product type (e.g., 'percy', 'app_percy')"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_usage_stats",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetUsageStats(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_usage_stats", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_manage_visual_monitoring
+  // -------------------------------------------------------------------------
+  tools.percy_manage_visual_monitoring = server.tool(
+    "percy_manage_visual_monitoring",
+    "Create, update, or list Visual Monitoring projects with URL lists, cron schedules, and auth configuration.",
+    {
+      org_id: z
+        .string()
+        .optional()
+        .describe("Percy organization ID (required for list/create)"),
+      project_id: z
+        .string()
+        .optional()
+        .describe("Visual Monitoring project ID (required for update)"),
+      action: z
+        .enum(["list", "create", "update"])
+        .optional()
+        .describe("Action to perform (default: list)"),
+      urls: z
+        .string()
+        .optional()
+        .describe(
+          "Comma-separated URLs to monitor, e.g. 'https://example.com,https://example.com/about'",
+        ),
+      cron: z
+        .string()
+        .optional()
+        .describe("Cron expression for monitoring schedule, e.g. '0 */6 * * *'"),
+      schedule: z
+        .boolean()
+        .optional()
+        .describe("Enable or disable the monitoring schedule"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_manage_visual_monitoring",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageVisualMonitoring(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_manage_visual_monitoring",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_branchline_operations
+  // -------------------------------------------------------------------------
+  tools.percy_branchline_operations = server.tool(
+    "percy_branchline_operations",
+    "Sync, merge, or unmerge Percy branch baselines. Sync copies approved baselines to target branches.",
+    {
+      action: z
+        .enum(["sync", "merge", "unmerge"])
+        .describe("Branchline operation to perform"),
+      project_id: z
+        .string()
+        .optional()
+        .describe("Percy project ID"),
+      build_id: z
+        .string()
+        .optional()
+        .describe("Percy build ID"),
+      target_branch_filter: z
+        .string()
+        .optional()
+        .describe("Target branch pattern for sync (e.g., 'main', 'release/*')"),
+      snapshot_ids: z
+        .string()
+        .optional()
+        .describe("Comma-separated snapshot IDs to include"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_branchline_operations",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyBranchlineOperations(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_branchline_operations",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_manage_variants
+  // -------------------------------------------------------------------------
+  tools.percy_manage_variants = server.tool(
+    "percy_manage_variants",
+    "List, create, or update A/B testing variants for Percy snapshot comparisons.",
+    {
+      comparison_id: z
+        .string()
+        .optional()
+        .describe("Percy comparison ID (required for list)"),
+      snapshot_id: z
+        .string()
+        .optional()
+        .describe("Percy snapshot ID (required for create)"),
+      action: z
+        .enum(["list", "create", "update"])
+        .optional()
+        .describe("Action to perform (default: list)"),
+      variant_id: z
+        .string()
+        .optional()
+        .describe("Variant ID (required for update)"),
+      name: z
+        .string()
+        .optional()
+        .describe("Variant name (required for create)"),
+      state: z
+        .string()
+        .optional()
+        .describe("Variant state (for update)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_manage_variants",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageVariants(args, config);
+      } catch (error) {
+        return handleMCPError("percy_manage_variants", server, config, error);
       }
     },
   );

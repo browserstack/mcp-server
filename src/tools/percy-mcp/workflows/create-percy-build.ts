@@ -79,7 +79,7 @@ async function getGitSha(): Promise<string> {
 async function ensureProject(
   projectName: string,
   config: BrowserStackConfig,
-  type: string = "web",
+  type?: string,
 ): Promise<string> {
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
@@ -404,16 +404,16 @@ export async function percyCreatePercyBuild(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   const projectName = args.project_name;
-  const projectType = args.type || "web";
 
   // Auto-detect branch and SHA
   const branch = args.branch || (await getGitBranch());
   const commitSha = args.commit_sha || (await getGitSha());
 
   // Ensure project exists and get token
+  // Only pass type if explicitly provided — BrowserStack API auto-detects otherwise
   let token: string;
   try {
-    token = await ensureProject(projectName, config, projectType);
+    token = await ensureProject(projectName, config, args.type);
   } catch (e: any) {
     return {
       content: [

@@ -1,7 +1,7 @@
 /**
  * Percy MCP tools — query and creation tools for Percy visual testing.
  *
- * Registers 19 tools:
+ * Registers 23 tools:
  *   Query: percy_list_projects, percy_list_builds, percy_get_build,
  *          percy_get_build_items, percy_get_snapshot, percy_get_comparison
  *   Web Creation: percy_create_build, percy_create_snapshot, percy_upload_resource,
@@ -10,6 +10,10 @@
  *                      percy_upload_tile, percy_finalize_comparison
  *   Intelligence: percy_get_ai_analysis, percy_get_build_summary, percy_get_ai_quota,
  *                 percy_get_rca
+ *   Diagnostics: percy_get_suggestions, percy_get_network_logs
+ *   Workflows: percy_pr_visual_report, percy_auto_triage, percy_debug_failed_build,
+ *              percy_diff_explain
+ *   Auth: percy_auth_status
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -47,6 +51,11 @@ import { percyGetSuggestions } from "./diagnostics/get-suggestions.js";
 import { percyGetNetworkLogs } from "./diagnostics/get-network-logs.js";
 
 import { percyPrVisualReport } from "./workflows/pr-visual-report.js";
+import { percyAutoTriage } from "./workflows/auto-triage.js";
+import { percyDebugFailedBuild } from "./workflows/debug-failed-build.js";
+import { percyDiffExplain } from "./workflows/diff-explain.js";
+
+import { percyAuthStatus } from "./auth/auth-status.js";
 
 export function registerPercyMcpTools(
   server: McpServer,
@@ -693,6 +702,83 @@ export function registerPercyMcpTools(
         return await percyPrVisualReport(args, config);
       } catch (error) {
         return handleMCPError("percy_pr_visual_report", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_auto_triage
+  // -------------------------------------------------------------------------
+  tools.percy_auto_triage = server.tool(
+    "percy_auto_triage",
+    "Automatically categorize all visual changes in a Percy build into Critical (bugs), Review Required, Auto-Approvable, and Noise. Helps prioritize visual review.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+      noise_threshold: z.number().optional().describe("Diff ratio below this is noise (default 0.005 = 0.5%)"),
+      review_threshold: z.number().optional().describe("Diff ratio above this needs review (default 0.15 = 15%)"),
+    },
+    async (args) => {
+      try {
+        trackMCP("percy_auto_triage", server.server.getClientVersion()!, config);
+        return await percyAutoTriage(args, config);
+      } catch (error) {
+        return handleMCPError("percy_auto_triage", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_debug_failed_build
+  // -------------------------------------------------------------------------
+  tools.percy_debug_failed_build = server.tool(
+    "percy_debug_failed_build",
+    "Diagnose a Percy build failure. Cross-references error buckets, log analysis, failed snapshots, and network logs to provide actionable fix commands.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP("percy_debug_failed_build", server.server.getClientVersion()!, config);
+        return await percyDebugFailedBuild(args, config);
+      } catch (error) {
+        return handleMCPError("percy_debug_failed_build", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_diff_explain
+  // -------------------------------------------------------------------------
+  tools.percy_diff_explain = server.tool(
+    "percy_diff_explain",
+    "Explain visual changes in plain English. Supports depth levels: summary (AI descriptions), detailed (+ coordinates), full_rca (+ DOM/CSS changes with XPath).",
+    {
+      comparison_id: z.string().describe("Percy comparison ID"),
+      depth: z.enum(["summary", "detailed", "full_rca"]).optional().describe("Analysis depth (default: detailed)"),
+    },
+    async (args) => {
+      try {
+        trackMCP("percy_diff_explain", server.server.getClientVersion()!, config);
+        return await percyDiffExplain(args, config);
+      } catch (error) {
+        return handleMCPError("percy_diff_explain", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_auth_status
+  // -------------------------------------------------------------------------
+  tools.percy_auth_status = server.tool(
+    "percy_auth_status",
+    "Check Percy authentication status — shows which tokens are configured, validates them, and reports project/org scope.",
+    {},
+    async () => {
+      try {
+        trackMCP("percy_auth_status", server.server.getClientVersion()!, config);
+        return await percyAuthStatus({}, config);
+      } catch (error) {
+        return handleMCPError("percy_auth_status", server, config, error);
       }
     },
   );

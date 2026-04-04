@@ -1,7 +1,7 @@
 /**
  * Percy MCP tools — query and creation tools for Percy visual testing.
  *
- * Registers 23 tools:
+ * Registers 27 tools:
  *   Query: percy_list_projects, percy_list_builds, percy_get_build,
  *          percy_get_build_items, percy_get_snapshot, percy_get_comparison
  *   Web Creation: percy_create_build, percy_create_snapshot, percy_upload_resource,
@@ -9,8 +9,9 @@
  *   App/BYOS Creation: percy_create_app_snapshot, percy_create_comparison,
  *                      percy_upload_tile, percy_finalize_comparison
  *   Intelligence: percy_get_ai_analysis, percy_get_build_summary, percy_get_ai_quota,
- *                 percy_get_rca
- *   Diagnostics: percy_get_suggestions, percy_get_network_logs
+ *                 percy_get_rca, percy_trigger_ai_recompute, percy_suggest_prompt
+ *   Diagnostics: percy_get_suggestions, percy_get_network_logs,
+ *                percy_get_build_logs, percy_analyze_logs_realtime
  *   Workflows: percy_pr_visual_report, percy_auto_triage, percy_debug_failed_build,
  *              percy_diff_explain
  *   Auth: percy_auth_status
@@ -46,9 +47,13 @@ import { percyGetAiAnalysis } from "./intelligence/get-ai-analysis.js";
 import { percyGetBuildSummary } from "./intelligence/get-build-summary.js";
 import { percyGetAiQuota } from "./intelligence/get-ai-quota.js";
 import { percyGetRca } from "./intelligence/get-rca.js";
+import { percyTriggerAiRecompute } from "./intelligence/trigger-ai-recompute.js";
+import { percySuggestPrompt } from "./intelligence/suggest-prompt.js";
 
 import { percyGetSuggestions } from "./diagnostics/get-suggestions.js";
 import { percyGetNetworkLogs } from "./diagnostics/get-network-logs.js";
+import { percyGetBuildLogs } from "./diagnostics/get-build-logs.js";
+import { percyAnalyzeLogsRealtime } from "./diagnostics/analyze-logs-realtime.js";
 
 import { percyPrVisualReport } from "./workflows/pr-visual-report.js";
 import { percyAutoTriage } from "./workflows/auto-triage.js";
@@ -820,6 +825,160 @@ export function registerPercyMcpTools(
         return await percyAuthStatus({}, config);
       } catch (error) {
         return handleMCPError("percy_auth_status", server, config, error);
+      }
+    },
+  );
+
+  // =========================================================================
+  // PHASE 2 TOOLS
+  // =========================================================================
+
+  // -------------------------------------------------------------------------
+  // percy_trigger_ai_recompute
+  // -------------------------------------------------------------------------
+  tools.percy_trigger_ai_recompute = server.tool(
+    "percy_trigger_ai_recompute",
+    "Re-run Percy AI analysis on comparisons with a custom prompt. Use to customize what the AI ignores or highlights in visual diffs.",
+    {
+      build_id: z
+        .string()
+        .optional()
+        .describe("Percy build ID (for bulk recompute)"),
+      comparison_id: z
+        .string()
+        .optional()
+        .describe("Single comparison ID to recompute"),
+      prompt: z
+        .string()
+        .optional()
+        .describe(
+          "Custom prompt for AI (max 400 chars), e.g. 'Ignore font rendering differences'",
+        ),
+      mode: z
+        .enum(["ignore", "unignore"])
+        .optional()
+        .describe(
+          "ignore = hide matching diffs, unignore = show matching diffs",
+        ),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_trigger_ai_recompute",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyTriggerAiRecompute(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_trigger_ai_recompute",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_suggest_prompt
+  // -------------------------------------------------------------------------
+  tools.percy_suggest_prompt = server.tool(
+    "percy_suggest_prompt",
+    "Get an AI-generated prompt suggestion for specific diff regions. The AI analyzes the selected regions and suggests a prompt to ignore or highlight similar changes.",
+    {
+      comparison_id: z.string().describe("Percy comparison ID"),
+      region_ids: z
+        .string()
+        .describe("Comma-separated region IDs to analyze"),
+      ignore_change: z
+        .boolean()
+        .optional()
+        .describe(
+          "true = suggest ignore prompt, false = suggest show prompt (default true)",
+        ),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_suggest_prompt",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percySuggestPrompt(args, config);
+      } catch (error) {
+        return handleMCPError("percy_suggest_prompt", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_build_logs
+  // -------------------------------------------------------------------------
+  tools.percy_get_build_logs = server.tool(
+    "percy_get_build_logs",
+    "Download and filter Percy build logs (CLI, renderer, jackproxy). Shows raw log output for debugging rendering and asset issues.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+      service: z
+        .string()
+        .optional()
+        .describe("Filter by service: cli, renderer, jackproxy"),
+      reference_type: z
+        .string()
+        .optional()
+        .describe("Reference scope: build, snapshot, comparison"),
+      reference_id: z
+        .string()
+        .optional()
+        .describe("Specific snapshot or comparison ID"),
+      level: z
+        .string()
+        .optional()
+        .describe("Filter by log level: error, warn, info, debug"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_build_logs",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetBuildLogs(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_build_logs", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_analyze_logs_realtime
+  // -------------------------------------------------------------------------
+  tools.percy_analyze_logs_realtime = server.tool(
+    "percy_analyze_logs_realtime",
+    "Analyze raw log data in real-time without a stored build. Pass CLI logs as JSON and get instant diagnostics with fix suggestions.",
+    {
+      logs: z
+        .string()
+        .describe(
+          'JSON array of log entries: [{"message":"...","level":"error","meta":{}}]',
+        ),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_analyze_logs_realtime",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyAnalyzeLogsRealtime(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_analyze_logs_realtime",
+          server,
+          config,
+          error,
+        );
       }
     },
   );

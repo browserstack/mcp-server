@@ -68,6 +68,7 @@ import { percyDiffExplain } from "./workflows/diff-explain.js";
 
 import { percyAuthStatus } from "./auth/auth-status.js";
 
+import { percyCreateProject } from "./management/create-project.js";
 import { percyManageProjectSettings } from "./management/manage-project-settings.js";
 import { percyManageBrowserTargets } from "./management/manage-browser-targets.js";
 import { percyManageTokens } from "./management/manage-tokens.js";
@@ -1002,6 +1003,43 @@ export function registerPercyMcpTools(
   // =========================================================================
   // PHASE 3 TOOLS
   // =========================================================================
+
+  // -------------------------------------------------------------------------
+  // percy_create_project
+  // -------------------------------------------------------------------------
+  tools.percy_create_project = server.tool(
+    "percy_create_project",
+    "Create a new Percy project in an organization. Returns project ID, slug, and next steps for configuring browsers and creating builds.",
+    {
+      org_id: z.string().describe("Percy organization ID"),
+      name: z.string().describe("Project name"),
+      type: z
+        .enum(["web", "app", "automate", "generic"])
+        .optional()
+        .describe("Project type (default: web)"),
+      slug: z.string().optional().describe("URL-friendly project slug"),
+      default_base_branch: z
+        .string()
+        .optional()
+        .describe("Default base branch for comparisons (default: main)"),
+      auto_approve_branch_filter: z
+        .string()
+        .optional()
+        .describe("Regex pattern for branches to auto-approve"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_create_project",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyCreateProject(args, config);
+      } catch (error) {
+        return handleMCPError("percy_create_project", server, config, error);
+      }
+    },
+  );
 
   // -------------------------------------------------------------------------
   // percy_manage_project_settings

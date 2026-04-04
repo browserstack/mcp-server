@@ -1,63 +1,75 @@
-import { PercyClient } from "../../../lib/percy-api/client.js";
+import { getBrowserStackAuth } from "../../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
+/**
+ * Creates a Percy project using the BrowserStack API.
+ *
+ * Uses `api.browserstack.com/api/app_percy/get_project_token` which:
+ * - Creates the project if it doesn't exist
+ * - Returns a project token for the project
+ * - Requires BrowserStack Basic Auth (username + access key)
+ */
 export async function percyCreateProject(
   args: {
-    org_id: string;
     name: string;
     type?: string;
-    slug?: string;
-    default_base_branch?: string;
-    auto_approve_branch_filter?: string;
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const client = new PercyClient(config, { scope: "org" });
+  const authString = getBrowserStackAuth(config);
+  const auth = Buffer.from(authString).toString("base64");
 
-  const attributes: Record<string, unknown> = {
-    name: args.name,
-    type: args.type || "web",
-  };
+  const params = new URLSearchParams({ name: args.name });
+  if (args.type) {
+    params.append("type", args.type);
+  }
 
-  if (args.slug) attributes["slug"] = args.slug;
-  if (args.default_base_branch)
-    attributes["default-base-branch"] = args.default_base_branch;
-  if (args.auto_approve_branch_filter)
-    attributes["auto-approve-branch-filter"] = args.auto_approve_branch_filter;
+  const url = `https://api.browserstack.com/api/app_percy/get_project_token?${params.toString()}`;
 
-  const body = {
-    data: {
-      type: "projects",
-      attributes,
-      relationships: {
-        organization: {
-          data: { type: "organizations", id: args.org_id },
-        },
-      },
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${auth}`,
+      "Content-Type": "application/json",
     },
-  };
+  });
 
-  const project = await client.post<any>("/projects", body);
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(
+      `Failed to create Percy project (${response.status}): ${errorText || response.statusText}`,
+    );
+  }
 
-  const id = project?.id || "unknown";
-  const name = project?.name || args.name;
-  const slug = project?.slug || args.slug || "unknown";
-  const projectType = project?.type || args.type || "web";
+  const data = await response.json();
 
-  let output = `## Project Created Successfully\n\n`;
+  if (!data?.success) {
+    throw new Error(
+      data?.message ||
+        "Project creation failed — check the project name and type.",
+    );
+  }
+
+  const token = data.token || "unknown";
+  const tokenPrefix = token.split("_")[0] || "unknown";
+  const maskedToken =
+    token.length > 8 ? `${token.slice(0, 8)}...${token.slice(-4)}` : "****";
+
+  let output = `## Percy Project Created\n\n`;
   output += `| Field | Value |\n`;
   output += `|-------|-------|\n`;
-  output += `| **ID** | ${id} |\n`;
-  output += `| **Name** | ${name} |\n`;
-  output += `| **Slug** | ${slug} |\n`;
-  output += `| **Type** | ${projectType} |\n`;
-  if (args.default_base_branch)
-    output += `| **Default Branch** | ${args.default_base_branch} |\n`;
-  output += `\n### Next Steps\n\n`;
-  output += `1. **Get project token:** Use \`percy_manage_tokens\` with project_id \`${id}\` to view tokens\n`;
-  output += `2. **Create a build:** Use \`percy_create_build\` with project_id \`${id}\`\n`;
-  output += `3. **Configure browsers:** Use \`percy_manage_browser_targets\` to add Chrome, Firefox, etc.\n`;
+  output += `| **Name** | ${args.name} |\n`;
+  output += `| **Type** | ${args.type || "auto (default)"} |\n`;
+  output += `| **Token** | \`${maskedToken}\` |\n`;
+  output += `| **Token type** | ${tokenPrefix} |\n`;
+  output += `| **Capture mode** | ${data.percy_capture_mode || "auto"} |\n`;
+  output += `\n### Project Token\n\n`;
+  output += `\`\`\`\n${token}\n\`\`\`\n\n`;
+  output += `> Save this token — set it as \`PERCY_TOKEN\` env var to use with other Percy tools.\n\n`;
+  output += `### Next Steps\n\n`;
+  output += `1. Set the token: \`export PERCY_TOKEN=${token}\`\n`;
+  output += `2. Create a build: \`percy_create_build\` with project_id from Percy dashboard\n`;
+  output += `3. Or run Percy CLI: \`percy exec -- your-test-command\`\n`;
 
   return { content: [{ type: "text", text: output }] };
 }

@@ -298,7 +298,12 @@ export function registerPercyMcpTools(
     "percy_create_build",
     "Create a new Percy build for visual testing. Returns build ID for snapshot uploads.",
     {
-      project_id: z.string().describe("Percy project ID"),
+      project_id: z
+        .string()
+        .optional()
+        .describe(
+          "Percy project ID (optional if PERCY_TOKEN is project-scoped)",
+        ),
       branch: z.string().describe("Git branch name"),
       commit_sha: z.string().describe("Git commit SHA"),
       commit_message: z.string().optional().describe("Git commit message"),
@@ -1009,23 +1014,15 @@ export function registerPercyMcpTools(
   // -------------------------------------------------------------------------
   tools.percy_create_project = server.tool(
     "percy_create_project",
-    "Create a new Percy project in an organization. Returns project ID, slug, and next steps for configuring browsers and creating builds.",
+    "Create a new Percy project. Uses BrowserStack credentials to auto-create the project and returns a project token. The project is created if it doesn't exist.",
     {
-      org_id: z.string().describe("Percy organization ID"),
-      name: z.string().describe("Project name"),
+      name: z.string().describe("Project name (e.g. 'my-web-app')"),
       type: z
-        .enum(["web", "app", "automate", "generic"])
+        .enum(["web", "automate"])
         .optional()
-        .describe("Project type (default: web)"),
-      slug: z.string().optional().describe("URL-friendly project slug"),
-      default_base_branch: z
-        .string()
-        .optional()
-        .describe("Default base branch for comparisons (default: main)"),
-      auto_approve_branch_filter: z
-        .string()
-        .optional()
-        .describe("Regex pattern for branches to auto-approve"),
+        .describe(
+          "Project type: 'web' for Percy Web, 'automate' for Percy Automate (default: auto-detect)",
+        ),
     },
     async (args) => {
       try {

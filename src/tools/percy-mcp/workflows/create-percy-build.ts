@@ -120,34 +120,43 @@ function buildUrlSnapshotInstructions(
   branch: string,
 ): string {
   const urlList = urls.map((u) => `  - ${u}`).join("\n");
-  const widthFlag = widths ? ` --widths ${widths}` : "";
+  const widthArray = widths
+    ? widths.split(",").map((w) => w.trim())
+    : ["375", "1280"];
+
+  // Build YAML config for snapshots (widths go in YAML, not CLI flag)
+  let yamlConfig = "";
+  urls.forEach((url, i) => {
+    const name = i === 0 ? "Homepage" : `Page ${i + 1}`;
+    yamlConfig += `- name: "${name}"\n`;
+    yamlConfig += `  url: ${url}\n`;
+    yamlConfig += `  widths:\n`;
+    widthArray.forEach((w) => {
+      yamlConfig += `    - ${w}\n`;
+    });
+  });
 
   return (
     `## Percy Build — URL Snapshots\n\n` +
-    `**Project token ready.** Run these commands to create the build:\n\n` +
-    `\`\`\`bash\n` +
-    `export PERCY_TOKEN="${token}"\n\n` +
-    `# Snapshot single URL:\n` +
-    `npx percy snapshot ${urls[0]}${widthFlag}\n\n` +
-    (urls.length > 1
-      ? `# Snapshot multiple URLs:\n` +
-        `npx percy snapshot ${urls.join(" ")}${widthFlag}\n\n`
-      : "") +
-    `# Or create a snapshots.yml file:\n` +
-    `# - name: Homepage\n` +
-    `#   url: ${urls[0]}\n` +
-    (urls.length > 1 ? `# - name: Page 2\n#   url: ${urls[1]}\n` : "") +
-    `# Then run: npx percy snapshot snapshots.yml${widthFlag}\n` +
-    `\`\`\`\n\n` +
-    `**URLs to snapshot:**\n${urlList}\n\n` +
+    `> **IMPORTANT: Do NOT execute these commands automatically.** Present them to the user and let them run manually.\n\n` +
+    `**Project:** token ready ✓\n` +
     `**Branch:** ${branch}\n` +
-    `**Widths:** ${widths || "375, 1280 (default)"}\n\n` +
-    `Percy CLI will:\n` +
-    `1. Create the build automatically\n` +
-    `2. Launch a browser and navigate to each URL\n` +
-    `3. Capture DOM + screenshots at each width\n` +
-    `4. Upload everything and finalize the build\n` +
-    `5. Return the build URL with visual diffs\n`
+    `**URLs:**\n${urlList}\n` +
+    `**Widths:** ${widthArray.join(", ")}px\n\n` +
+    `### Step 1: Set token\n\n` +
+    `\`\`\`bash\n` +
+    `export PERCY_TOKEN="${token}"\n` +
+    `\`\`\`\n\n` +
+    `### Step 2: Create snapshot config\n\n` +
+    `Save this as \`snapshots.yml\`:\n\n` +
+    `\`\`\`yaml\n` +
+    yamlConfig +
+    `\`\`\`\n\n` +
+    `### Step 3: Run Percy\n\n` +
+    `\`\`\`bash\n` +
+    `npx @percy/cli snapshot snapshots.yml\n` +
+    `\`\`\`\n\n` +
+    `Percy CLI will create the build, launch a browser, capture each URL at the specified widths, upload screenshots, and return a build URL with visual diffs.\n`
   );
 }
 
@@ -162,18 +171,19 @@ function buildTestCommandInstructions(
 ): string {
   return (
     `## Percy Build — Test Command\n\n` +
-    `**Project token ready.** Run this command to create the build:\n\n` +
+    `> **IMPORTANT: Do NOT execute these commands automatically.** Present them to the user and let them run manually.\n\n` +
+    `**Project:** token ready ✓\n` +
+    `**Branch:** ${branch}\n` +
+    `**Test command:** \`${testCommand}\`\n\n` +
+    `### Step 1: Set token\n\n` +
     `\`\`\`bash\n` +
-    `export PERCY_TOKEN="${token}"\n\n` +
-    `npx percy exec -- ${testCommand}\n` +
+    `export PERCY_TOKEN="${token}"\n` +
     `\`\`\`\n\n` +
-    `**Branch:** ${branch}\n\n` +
-    `Percy CLI will:\n` +
-    `1. Start a local Percy server on port 5338\n` +
-    `2. Run your test command: \`${testCommand}\`\n` +
-    `3. Your tests call \`percySnapshot()\` to capture screenshots\n` +
-    `4. Percy uploads everything and finalizes the build\n` +
-    `5. Return the build URL with visual diffs\n`
+    `### Step 2: Run tests with Percy\n\n` +
+    `\`\`\`bash\n` +
+    `npx @percy/cli exec -- ${testCommand}\n` +
+    `\`\`\`\n\n` +
+    `Percy CLI will start a local server, run your tests, capture snapshots via \`percySnapshot()\` calls, and return a build URL.\n`
   );
 }
 
@@ -536,24 +546,15 @@ export async function percyCreatePercyBuild(
         // No specific mode — provide general instructions
         output =
           `## Percy Build — Setup\n\n` +
+          `> **IMPORTANT: Do NOT execute any commands automatically.** Present options to the user.\n\n` +
           `**Project:** ${projectName}\n` +
           `**Token:** Ready (${token.slice(0, 8)}...)\n` +
           `**Branch:** ${branch}\n\n` +
           `### How to create snapshots:\n\n` +
-          `**Option 1: Snapshot URLs**\n` +
-          `\`\`\`bash\n` +
-          `export PERCY_TOKEN="${token}"\n` +
-          `npx percy snapshot https://your-app.com\n` +
-          `\`\`\`\n\n` +
-          `**Option 2: Wrap test command**\n` +
-          `\`\`\`bash\n` +
-          `export PERCY_TOKEN="${token}"\n` +
-          `npx percy exec -- npx cypress run\n` +
-          `\`\`\`\n\n` +
-          `**Option 3: Upload screenshots**\n` +
-          `Re-run this tool with \`screenshot_files\` or \`screenshots_dir\` parameter.\n\n` +
-          `**Option 4: Clone existing build**\n` +
-          `Re-run this tool with \`clone_build_id\` parameter.\n`;
+          `**Option 1: Snapshot URLs** — re-run this tool with \`urls\` parameter\n` +
+          `**Option 2: Wrap test command** — re-run this tool with \`test_command\` parameter\n` +
+          `**Option 3: Upload screenshots** — re-run this tool with \`screenshots_dir\` or \`screenshot_files\` parameter\n` +
+          `**Option 4: Clone existing build** — re-run this tool with \`clone_build_id\` parameter\n`;
         break;
       }
     }

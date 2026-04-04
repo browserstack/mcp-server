@@ -62,6 +62,7 @@ import { percyGetBuildLogs } from "./diagnostics/get-build-logs.js";
 import { percyAnalyzeLogsRealtime } from "./diagnostics/analyze-logs-realtime.js";
 
 import { percyPrVisualReport } from "./workflows/pr-visual-report.js";
+import { percyCreatePercyBuild } from "./workflows/create-percy-build.js";
 import { percyAutoTriage } from "./workflows/auto-triage.js";
 import { percyDebugFailedBuild } from "./workflows/debug-failed-build.js";
 import { percyDiffExplain } from "./workflows/diff-explain.js";
@@ -742,6 +743,88 @@ export function registerPercyMcpTools(
         return await percyPrVisualReport(args, config);
       } catch (error) {
         return handleMCPError("percy_pr_visual_report", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_create_percy_build — THE unified build creation tool
+  // -------------------------------------------------------------------------
+  tools.percy_create_percy_build = server.tool(
+    "percy_create_percy_build",
+    "Create a complete Percy build with snapshots. Handles everything automatically: project creation, URL snapshotting, screenshot uploads, test wrapping, or build cloning. Just provide a project name and ONE of: URLs to snapshot, screenshot files, a test command, or a build ID to clone. Branch and commit SHA are auto-detected from git.",
+    {
+      project_name: z
+        .string()
+        .describe("Percy project name (auto-creates if doesn't exist)"),
+      urls: z
+        .string()
+        .optional()
+        .describe(
+          "Comma-separated URLs to snapshot, e.g. 'http://localhost:3000,http://localhost:3000/about'",
+        ),
+      screenshots_dir: z
+        .string()
+        .optional()
+        .describe("Directory path containing PNG/JPG screenshots to upload"),
+      screenshot_files: z
+        .string()
+        .optional()
+        .describe("Comma-separated file paths to PNG/JPG screenshots"),
+      test_command: z
+        .string()
+        .optional()
+        .describe(
+          "Test command to wrap with Percy, e.g. 'npx cypress run' or 'npm test'",
+        ),
+      clone_build_id: z
+        .string()
+        .optional()
+        .describe("Build ID to clone snapshots from"),
+      branch: z
+        .string()
+        .optional()
+        .describe("Git branch (auto-detected from git if not provided)"),
+      commit_sha: z
+        .string()
+        .optional()
+        .describe("Git commit SHA (auto-detected from git if not provided)"),
+      widths: z
+        .string()
+        .optional()
+        .describe(
+          "Comma-separated viewport widths, e.g. '375,768,1280' (default: 375,1280)",
+        ),
+      snapshot_names: z
+        .string()
+        .optional()
+        .describe(
+          "Comma-separated snapshot names (for screenshots — defaults to filename)",
+        ),
+      test_case: z
+        .string()
+        .optional()
+        .describe("Test case name to associate snapshots with"),
+      type: z
+        .enum(["web", "app", "automate"])
+        .optional()
+        .describe("Project type (default: web)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_create_percy_build",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyCreatePercyBuild(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_create_percy_build",
+          server,
+          config,
+          error,
+        );
       }
     },
   );

@@ -77,8 +77,7 @@ export async function resolvePercyToken(
       const token = await fetchPercyToken(resolvedProjectName, auth, {});
       return token;
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
       throw new Error(
         `Failed to fetch Percy token via BrowserStack API: ${message}. ` +
           `Set PERCY_TOKEN or PERCY_ORG_TOKEN environment variable as an alternative.`,

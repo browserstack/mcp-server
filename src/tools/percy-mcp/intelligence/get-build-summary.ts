@@ -19,19 +19,15 @@ export async function percyGetBuildSummary(
 
   const response = await client.get<{
     data: Record<string, unknown> | null;
-  }>(
-    `/builds/${args.build_id}`,
-    { "include-metadata": "true" },
-    ["build-summary"],
-  );
+  }>(`/builds/${args.build_id}`, { "include-metadata": "true" }, [
+    "build-summary",
+  ]);
 
   const build = response.data as any;
 
   if (!build) {
     return {
-      content: [
-        { type: "text", text: `_Build ${args.build_id} not found._` },
-      ],
+      content: [{ type: "text", text: `_Build ${args.build_id} not found._` }],
     };
   }
 
@@ -91,9 +87,7 @@ export async function percyGetBuildSummary(
 
     if (status === "skipped") {
       const reason =
-        ai.summaryReason ??
-        ai.summarySkipReason ??
-        "unknown reason";
+        ai.summaryReason ?? ai.summarySkipReason ?? "unknown reason";
       return {
         content: [
           {
@@ -106,8 +100,6 @@ export async function percyGetBuildSummary(
   }
 
   return {
-    content: [
-      { type: "text", text: "No build summary available." },
-    ],
+    content: [{ type: "text", text: "No build summary available." }],
   };
 }

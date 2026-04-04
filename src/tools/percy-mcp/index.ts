@@ -78,10 +78,7 @@ export function registerPercyMcpTools(
         .string()
         .optional()
         .describe("Filter projects by name (substring match)"),
-      limit: z
-        .number()
-        .optional()
-        .describe("Max results (default 10, max 50)"),
+      limit: z.number().optional().describe("Max results (default 10, max 50)"),
     },
     async (args) => {
       try {
@@ -107,21 +104,14 @@ export function registerPercyMcpTools(
       project_id: z
         .string()
         .optional()
-        .describe(
-          "Percy project ID. If not provided, uses PERCY_TOKEN scope.",
-        ),
+        .describe("Percy project ID. If not provided, uses PERCY_TOKEN scope."),
       branch: z.string().optional().describe("Filter by branch name"),
       state: z
         .string()
         .optional()
-        .describe(
-          "Filter by state: pending, processing, finished, failed",
-        ),
+        .describe("Filter by state: pending, processing, finished, failed"),
       sha: z.string().optional().describe("Filter by commit SHA"),
-      limit: z
-        .number()
-        .optional()
-        .describe("Max results (default 10, max 30)"),
+      limit: z.number().optional().describe("Max results (default 10, max 30)"),
     },
     async (args) => {
       try {
@@ -148,11 +138,7 @@ export function registerPercyMcpTools(
     },
     async (args) => {
       try {
-        trackMCP(
-          "percy_get_build",
-          server.server.getClientVersion()!,
-          config,
-        );
+        trackMCP("percy_get_build", server.server.getClientVersion()!, config);
         return await percyGetBuild(args, config);
       } catch (error) {
         return handleMCPError("percy_get_build", server, config, error);
@@ -171,9 +157,7 @@ export function registerPercyMcpTools(
       category: z
         .string()
         .optional()
-        .describe(
-          "Filter category: changed, new, removed, unchanged, failed",
-        ),
+        .describe("Filter category: changed, new, removed, unchanged, failed"),
       sort_by: z
         .string()
         .optional()
@@ -231,9 +215,7 @@ export function registerPercyMcpTools(
       include_images: z
         .boolean()
         .optional()
-        .describe(
-          "Include screenshot image URLs in response (default false)",
-        ),
+        .describe("Include screenshot image URLs in response (default false)"),
     },
     async (args) => {
       try {
@@ -363,9 +345,7 @@ export function registerPercyMcpTools(
     {
       build_id: z.string().describe("Percy build ID"),
       sha: z.string().describe("SHA-256 hash of the resource content"),
-      base64_content: z
-        .string()
-        .describe("Base64-encoded resource content"),
+      base64_content: z.string().describe("Base64-encoded resource content"),
     },
     async (args) => {
       try {
@@ -447,7 +427,12 @@ export function registerPercyMcpTools(
         );
         return await percyCreateAppSnapshot(args, config);
       } catch (error) {
-        return handleMCPError("percy_create_app_snapshot", server, config, error);
+        return handleMCPError(
+          "percy_create_app_snapshot",
+          server,
+          config,
+          error,
+        );
       }
     },
   );
@@ -460,24 +445,16 @@ export function registerPercyMcpTools(
     "Create a comparison with device/browser tag and tile metadata for screenshot-based builds.",
     {
       snapshot_id: z.string().describe("Percy snapshot ID"),
-      tag_name: z
-        .string()
-        .describe("Device/browser name, e.g. 'iPhone 13'"),
+      tag_name: z.string().describe("Device/browser name, e.g. 'iPhone 13'"),
       tag_width: z.number().describe("Tag width in pixels"),
       tag_height: z.number().describe("Tag height in pixels"),
       tag_os_name: z.string().optional().describe("OS name, e.g. 'iOS'"),
-      tag_os_version: z
-        .string()
-        .optional()
-        .describe("OS version, e.g. '16.0'"),
+      tag_os_version: z.string().optional().describe("OS version, e.g. '16.0'"),
       tag_browser_name: z
         .string()
         .optional()
         .describe("Browser name, e.g. 'Safari'"),
-      tag_orientation: z
-        .string()
-        .optional()
-        .describe("portrait or landscape"),
+      tag_orientation: z.string().optional().describe("portrait or landscape"),
       tiles: z
         .string()
         .describe(
@@ -542,7 +519,12 @@ export function registerPercyMcpTools(
         );
         return await percyFinalizeComparison(args, config);
       } catch (error) {
-        return handleMCPError("percy_finalize_comparison", server, config, error);
+        return handleMCPError(
+          "percy_finalize_comparison",
+          server,
+          config,
+          error,
+        );
       }
     },
   );
@@ -652,12 +634,22 @@ export function registerPercyMcpTools(
     "Get Percy build failure suggestions — rule-engine-analyzed diagnostics with categorized issues, actionable fix steps, and documentation links.",
     {
       build_id: z.string().describe("Percy build ID"),
-      reference_type: z.string().optional().describe("Filter: build, snapshot, or comparison"),
-      reference_id: z.string().optional().describe("Specific snapshot or comparison ID"),
+      reference_type: z
+        .string()
+        .optional()
+        .describe("Filter: build, snapshot, or comparison"),
+      reference_id: z
+        .string()
+        .optional()
+        .describe("Specific snapshot or comparison ID"),
     },
     async (args) => {
       try {
-        trackMCP("percy_get_suggestions", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_get_suggestions",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyGetSuggestions(args, config);
       } catch (error) {
         return handleMCPError("percy_get_suggestions", server, config, error);
@@ -676,7 +668,11 @@ export function registerPercyMcpTools(
     },
     async (args) => {
       try {
-        trackMCP("percy_get_network_logs", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_get_network_logs",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyGetNetworkLogs(args, config);
       } catch (error) {
         return handleMCPError("percy_get_network_logs", server, config, error);
@@ -691,14 +687,29 @@ export function registerPercyMcpTools(
     "percy_pr_visual_report",
     "Get a complete visual regression report for a PR. Finds the Percy build by branch/SHA, ranks snapshots by risk, shows AI analysis, and recommends actions. The single best tool for checking visual status.",
     {
-      project_id: z.string().optional().describe("Percy project ID (optional if PERCY_TOKEN is project-scoped)"),
-      branch: z.string().optional().describe("Git branch name to find the build"),
+      project_id: z
+        .string()
+        .optional()
+        .describe(
+          "Percy project ID (optional if PERCY_TOKEN is project-scoped)",
+        ),
+      branch: z
+        .string()
+        .optional()
+        .describe("Git branch name to find the build"),
       sha: z.string().optional().describe("Git commit SHA to find the build"),
-      build_id: z.string().optional().describe("Direct Percy build ID (skips search)"),
+      build_id: z
+        .string()
+        .optional()
+        .describe("Direct Percy build ID (skips search)"),
     },
     async (args) => {
       try {
-        trackMCP("percy_pr_visual_report", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_pr_visual_report",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyPrVisualReport(args, config);
       } catch (error) {
         return handleMCPError("percy_pr_visual_report", server, config, error);
@@ -714,12 +725,22 @@ export function registerPercyMcpTools(
     "Automatically categorize all visual changes in a Percy build into Critical (bugs), Review Required, Auto-Approvable, and Noise. Helps prioritize visual review.",
     {
       build_id: z.string().describe("Percy build ID"),
-      noise_threshold: z.number().optional().describe("Diff ratio below this is noise (default 0.005 = 0.5%)"),
-      review_threshold: z.number().optional().describe("Diff ratio above this needs review (default 0.15 = 15%)"),
+      noise_threshold: z
+        .number()
+        .optional()
+        .describe("Diff ratio below this is noise (default 0.005 = 0.5%)"),
+      review_threshold: z
+        .number()
+        .optional()
+        .describe("Diff ratio above this needs review (default 0.15 = 15%)"),
     },
     async (args) => {
       try {
-        trackMCP("percy_auto_triage", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_auto_triage",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyAutoTriage(args, config);
       } catch (error) {
         return handleMCPError("percy_auto_triage", server, config, error);
@@ -738,10 +759,19 @@ export function registerPercyMcpTools(
     },
     async (args) => {
       try {
-        trackMCP("percy_debug_failed_build", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_debug_failed_build",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyDebugFailedBuild(args, config);
       } catch (error) {
-        return handleMCPError("percy_debug_failed_build", server, config, error);
+        return handleMCPError(
+          "percy_debug_failed_build",
+          server,
+          config,
+          error,
+        );
       }
     },
   );
@@ -754,11 +784,18 @@ export function registerPercyMcpTools(
     "Explain visual changes in plain English. Supports depth levels: summary (AI descriptions), detailed (+ coordinates), full_rca (+ DOM/CSS changes with XPath).",
     {
       comparison_id: z.string().describe("Percy comparison ID"),
-      depth: z.enum(["summary", "detailed", "full_rca"]).optional().describe("Analysis depth (default: detailed)"),
+      depth: z
+        .enum(["summary", "detailed", "full_rca"])
+        .optional()
+        .describe("Analysis depth (default: detailed)"),
     },
     async (args) => {
       try {
-        trackMCP("percy_diff_explain", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_diff_explain",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyDiffExplain(args, config);
       } catch (error) {
         return handleMCPError("percy_diff_explain", server, config, error);
@@ -775,7 +812,11 @@ export function registerPercyMcpTools(
     {},
     async () => {
       try {
-        trackMCP("percy_auth_status", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_auth_status",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyAuthStatus({}, config);
       } catch (error) {
         return handleMCPError("percy_auth_status", server, config, error);

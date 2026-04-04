@@ -9,7 +9,7 @@
 
 import { BrowserStackConfig } from "../types.js";
 import { getPercyHeaders, getPercyApiBaseUrl } from "./auth.js";
-import { PercyApiError, enrichPercyError } from "./errors.js";
+import { enrichPercyError } from "./errors.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,7 +28,12 @@ interface JsonApiResource {
   attributes?: Record<string, unknown>;
   relationships?: Record<
     string,
-    { data: { id: string; type: string } | Array<{ id: string; type: string }> | null }
+    {
+      data:
+        | { id: string; type: string }
+        | Array<{ id: string; type: string }>
+        | null;
+    }
   >;
 }
 
@@ -58,7 +63,9 @@ function camelCaseKeys(obj: unknown): unknown {
     for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
       const camelKey = kebabToCamel(key);
       result[camelKey] =
-        value !== null && typeof value === "object" ? camelCaseKeys(value) : value;
+        value !== null && typeof value === "object"
+          ? camelCaseKeys(value)
+          : value;
     }
     return result;
   }
@@ -120,11 +127,14 @@ function resolveRelationships(
       resolved[camelName] = null;
     } else if (Array.isArray(data)) {
       resolved[camelName] = data.map(
-        (ref) => index.get(`${ref.type}:${ref.id}`) ?? { id: ref.id, type: ref.type },
+        (ref) =>
+          index.get(`${ref.type}:${ref.id}`) ?? { id: ref.id, type: ref.type },
       );
     } else {
-      resolved[camelName] =
-        index.get(`${data.type}:${data.id}`) ?? { id: data.id, type: data.type };
+      resolved[camelName] = index.get(`${data.type}:${data.id}`) ?? {
+        id: data.id,
+        type: data.type,
+      };
     }
   }
 

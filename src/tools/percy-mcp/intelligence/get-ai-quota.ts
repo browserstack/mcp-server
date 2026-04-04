@@ -61,9 +61,7 @@ export async function percyGetAiQuota(
   const plan = ai.planType ?? ai.plan ?? ai.tier;
 
   if (used != null && total != null) {
-    lines.push(
-      `**Daily Regenerations:** ${used} / ${total} used`,
-    );
+    lines.push(`**Daily Regenerations:** ${used} / ${total} used`);
   } else if (total != null) {
     lines.push(`**Daily Regeneration Limit:** ${total}`);
   } else {
@@ -86,9 +84,7 @@ export async function percyGetAiQuota(
       lines.push(`- Potential bugs detected: ${ai.potentialBugs}`);
     }
     if (ai.aiJobsCompleted != null) {
-      lines.push(
-        `- AI jobs completed: ${ai.aiJobsCompleted ? "yes" : "no"}`,
-      );
+      lines.push(`- AI jobs completed: ${ai.aiJobsCompleted ? "yes" : "no"}`);
     }
   }
 

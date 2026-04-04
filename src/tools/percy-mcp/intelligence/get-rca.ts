@@ -16,7 +16,7 @@ export async function percyGetRca(
 
   let rcaData: any;
   try {
-    rcaData = await client.get("/rca", { "comparison_id": args.comparison_id });
+    rcaData = await client.get("/rca", { comparison_id: args.comparison_id });
   } catch (e: any) {
     // 404 means RCA not started
     if (e.statusCode === 404 && triggerIfMissing) {
@@ -25,18 +25,33 @@ export async function percyGetRca(
         await client.post("/rca", {
           data: {
             type: "rca",
-            attributes: { "comparison-id": args.comparison_id }
-          }
+            attributes: { "comparison-id": args.comparison_id },
+          },
         });
       } catch (triggerError: any) {
         if (triggerError.statusCode === 422) {
-          return { content: [{ type: "text", text: "RCA requires DOM metadata. This comparison type does not support RCA." }], isError: true };
+          return {
+            content: [
+              {
+                type: "text",
+                text: "RCA requires DOM metadata. This comparison type does not support RCA.",
+              },
+            ],
+            isError: true,
+          };
         }
         throw triggerError;
       }
       rcaData = { status: "pending" };
     } else if (e.statusCode === 404) {
-      return { content: [{ type: "text", text: "RCA not yet triggered for this comparison. Set trigger_if_missing=true to start it." }] };
+      return {
+        content: [
+          {
+            type: "text",
+            text: "RCA not yet triggered for this comparison. Set trigger_if_missing=true to start it.",
+          },
+        ],
+      };
     } else {
       throw e;
     }
@@ -44,21 +59,41 @@ export async function percyGetRca(
 
   // Step 3: Poll if pending
   if (rcaData?.status === "pending") {
-    const result = await pollUntil(async () => {
-      const data = await client.get<any>("/rca", { "comparison_id": args.comparison_id });
-      if (data?.status === "finished") return { done: true, result: data };
-      if (data?.status === "failed") return { done: true, result: data };
-      return { done: false };
-    }, { initialDelayMs: 500, maxDelayMs: 5000, maxTimeoutMs: 120000 });
+    const result = await pollUntil(
+      async () => {
+        const data = await client.get<any>("/rca", {
+          comparison_id: args.comparison_id,
+        });
+        if (data?.status === "finished") return { done: true, result: data };
+        if (data?.status === "failed") return { done: true, result: data };
+        return { done: false };
+      },
+      { initialDelayMs: 500, maxDelayMs: 5000, maxTimeoutMs: 120000 },
+    );
 
     if (!result) {
-      return { content: [{ type: "text", text: "RCA analysis timed out after 2 minutes. The analysis may still be processing — try again later." }] };
+      return {
+        content: [
+          {
+            type: "text",
+            text: "RCA analysis timed out after 2 minutes. The analysis may still be processing — try again later.",
+          },
+        ],
+      };
     }
     rcaData = result;
   }
 
   if (rcaData?.status === "failed") {
-    return { content: [{ type: "text", text: "RCA analysis failed. The comparison may not have sufficient DOM metadata." }], isError: true };
+    return {
+      content: [
+        {
+          type: "text",
+          text: "RCA analysis failed. The comparison may not have sufficient DOM metadata.",
+        },
+      ],
+      isError: true,
+    };
   }
 
   // Step 4: Format diff nodes
@@ -77,13 +112,21 @@ export async function percyGetRca(
       const head = diff.head || {};
       const tag = head.tagName || base.tagName || "unknown";
       const xpath = head.xpath || base.xpath || "";
-      const diffType = head.diff_type === 1 ? "DIFF" : head.diff_type === 2 ? "IGNORED" : "unknown";
+      const diffType =
+        head.diff_type === 1
+          ? "DIFF"
+          : head.diff_type === 2
+            ? "IGNORED"
+            : "unknown";
       output += `${i + 1}. **${tag}** (${diffType})\n`;
       if (xpath) output += `   XPath: \`${xpath}\`\n`;
       // Show attribute differences
       const baseAttrs = base.attributes || {};
       const headAttrs = head.attributes || {};
-      const allKeys = new Set([...Object.keys(baseAttrs), ...Object.keys(headAttrs)]);
+      const allKeys = new Set([
+        ...Object.keys(baseAttrs),
+        ...Object.keys(headAttrs),
+      ]);
       for (const key of allKeys) {
         if (JSON.stringify(baseAttrs[key]) !== JSON.stringify(headAttrs[key])) {
           output += `   ${key}: \`${baseAttrs[key] ?? "N/A"}\` → \`${headAttrs[key] ?? "N/A"}\`\n`;
@@ -113,7 +156,11 @@ export async function percyGetRca(
     });
   }
 
-  if (commonDiffs.length === 0 && extraBase.length === 0 && extraHead.length === 0) {
+  if (
+    commonDiffs.length === 0 &&
+    extraBase.length === 0 &&
+    extraHead.length === 0
+  ) {
     output += "No DOM differences found.\n";
   }
 

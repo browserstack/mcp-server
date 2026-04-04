@@ -59,10 +59,7 @@ export async function percyUploadTile(
     },
   };
 
-  await client.post(
-    `/comparisons/${args.comparison_id}/tiles`,
-    body,
-  );
+  await client.post(`/comparisons/${args.comparison_id}/tiles`, body);
 
   return {
     content: [

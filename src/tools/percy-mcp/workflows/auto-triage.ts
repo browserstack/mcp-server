@@ -1,15 +1,18 @@
 import { PercyClient } from "../../../lib/percy-api/client.js";
-import { percyCache } from "../../../lib/percy-api/cache.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 export async function percyAutoTriage(
-  args: { build_id: string; noise_threshold?: number; review_threshold?: number },
+  args: {
+    build_id: string;
+    noise_threshold?: number;
+    review_threshold?: number;
+  },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   const client = new PercyClient(config);
-  const noiseThreshold = args.noise_threshold ?? 0.005;  // 0.5%
-  const reviewThreshold = args.review_threshold ?? 0.15;  // 15%
+  const noiseThreshold = args.noise_threshold ?? 0.005; // 0.5%
+  const reviewThreshold = args.review_threshold ?? 0.15; // 15%
 
   // Get all changed build items (limit to 90 = 3 pages max)
   const items = await client.get<any>("/build-items", {
@@ -28,7 +31,8 @@ export async function percyAutoTriage(
     const name = item.name || item.snapshotName || "Unknown";
     const diffRatio = item.diffRatio ?? item.maxDiffRatio ?? 0;
     const potentialBugs = item.totalPotentialBugs || 0;
-    const aiIgnored = item.aiDiffRatio !== undefined && item.aiDiffRatio === 0 && diffRatio > 0;
+    const aiIgnored =
+      item.aiDiffRatio !== undefined && item.aiDiffRatio === 0 && diffRatio > 0;
     const entry = { name, diffRatio, potentialBugs };
 
     if (potentialBugs > 0) {
@@ -72,7 +76,7 @@ export async function percyAutoTriage(
   }
   if (noise.length > 0) {
     output += `### NOISE (${noise.length})\n`;
-    output += noise.map(e => e.name).join(", ") + "\n\n";
+    output += noise.map((e) => e.name).join(", ") + "\n\n";
   }
 
   output += `### Recommended Action\n\n`;

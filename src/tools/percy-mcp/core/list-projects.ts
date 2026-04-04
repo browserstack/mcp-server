@@ -64,7 +64,8 @@ export async function percyListProjects(
   });
 
   if (response.meta) {
-    const total = (response.meta as any).totalPages ?? (response.meta as any).total;
+    const total =
+      (response.meta as any).totalPages ?? (response.meta as any).total;
     if (total != null) {
       lines.push("");
       lines.push(`_Showing ${projects.length} of ${total} projects._`);

@@ -67,9 +67,7 @@ async function analyzeComparison(
   const aiDiff = comparison.aiDiffRatio;
   const rawDiff = comparison.diffRatio;
   if (aiDiff != null || rawDiff != null) {
-    lines.push(
-      `**AI Diff Ratio:** ${pct(aiDiff)} (raw: ${pct(rawDiff)})`,
-    );
+    lines.push(`**AI Diff Ratio:** ${pct(aiDiff)} (raw: ${pct(rawDiff)})`);
   }
 
   // AI processing state
@@ -87,9 +85,7 @@ async function analyzeComparison(
   const regions: any[] = comparison.appliedRegions ?? [];
   const bugCount = regions.filter(
     (r: any) =>
-      r.isBug === true ||
-      r.classification === "bug" ||
-      r.type === "bug",
+      r.isBug === true || r.classification === "bug" || r.type === "bug",
   ).length;
 
   if (bugCount > 0) {
@@ -106,8 +102,7 @@ async function analyzeComparison(
       const label = na(region.label ?? region.name);
       const type = region.type ?? region.changeType ?? "unknown";
       const desc = region.description ?? "";
-      const ignored =
-        region.ignored === true || region.state === "ignored";
+      const ignored = region.ignored === true || region.state === "ignored";
 
       let line: string;
       if (ignored) {
@@ -144,9 +139,7 @@ async function analyzeBuild(
 
   if (!build) {
     return {
-      content: [
-        { type: "text", text: `_Build ${buildId} not found._` },
-      ],
+      content: [{ type: "text", text: `_Build ${buildId} not found._` }],
     };
   }
 
@@ -184,21 +177,14 @@ async function analyzeBuild(
   }
 
   const jobsCompleted =
-    ai.aiJobsCompleted != null
-      ? ai.aiJobsCompleted
-        ? "yes"
-        : "no"
-      : "N/A";
+    ai.aiJobsCompleted != null ? (ai.aiJobsCompleted ? "yes" : "no") : "N/A";
   lines.push(`- AI jobs completed: ${jobsCompleted}`);
 
   const summaryStatus = na(ai.summaryStatus ?? ai.aiSummaryStatus);
   lines.push(`- Summary status: ${summaryStatus}`);
 
   // Warning if AI is still processing
-  if (
-    ai.aiJobsCompleted === false ||
-    ai.summaryStatus === "processing"
-  ) {
+  if (ai.aiJobsCompleted === false || ai.summaryStatus === "processing") {
     lines.push("");
     lines.push(
       "> ⚠ AI analysis is still in progress. Some metrics may be incomplete. Re-run for final results.",

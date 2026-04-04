@@ -66,7 +66,8 @@ export async function percyCreateComparison(
 
   if (args.tag_os_name) tagAttributes["os-name"] = args.tag_os_name;
   if (args.tag_os_version) tagAttributes["os-version"] = args.tag_os_version;
-  if (args.tag_browser_name) tagAttributes["browser-name"] = args.tag_browser_name;
+  if (args.tag_browser_name)
+    tagAttributes["browser-name"] = args.tag_browser_name;
   if (args.tag_orientation) tagAttributes["orientation"] = args.tag_orientation;
 
   // Build tiles data

@@ -74,11 +74,14 @@ export async function percyGetBuildItems(
     const diff = pct(item.diffRatio);
     const aiDiff = pct(item.aiDiffRatio);
     const status = na(item.reviewState ?? item.state);
-    lines.push(`| ${i + 1} | ${name} | ${id} | ${diff} | ${aiDiff} | ${status} |`);
+    lines.push(
+      `| ${i + 1} | ${name} | ${id} | ${diff} | ${aiDiff} | ${status} |`,
+    );
   });
 
   if (response.meta) {
-    const total = (response.meta as any).totalEntries ?? (response.meta as any).total;
+    const total =
+      (response.meta as any).totalEntries ?? (response.meta as any).total;
     if (total != null && total > items.length) {
       lines.push("");
       lines.push(`_Showing ${items.length} of ${total} snapshots._`);

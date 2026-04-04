@@ -19,11 +19,10 @@ export async function percyGetBuild(
 
   const response = await client.get<{
     data: Record<string, unknown> | null;
-  }>(
-    `/builds/${args.build_id}`,
-    { "include-metadata": "true" },
-    ["build-summary", "browsers"],
-  );
+  }>(`/builds/${args.build_id}`, { "include-metadata": "true" }, [
+    "build-summary",
+    "browsers",
+  ]);
 
   const build = response.data;
 

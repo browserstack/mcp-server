@@ -36,7 +36,9 @@ export async function percyGetSnapshot(
 
   if (!snapshot) {
     return {
-      content: [{ type: "text", text: `_Snapshot ${args.snapshot_id} not found._` }],
+      content: [
+        { type: "text", text: `_Snapshot ${args.snapshot_id} not found._` },
+      ],
     };
   }
 

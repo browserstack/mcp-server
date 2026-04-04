@@ -17,7 +17,12 @@ export async function percyGetSuggestions(
 
   if (!data || (Array.isArray(data) && data.length === 0)) {
     return {
-      content: [{ type: "text", text: "No diagnostic suggestions available for this build." }],
+      content: [
+        {
+          type: "text",
+          text: "No diagnostic suggestions available for this build.",
+        },
+      ],
     };
   }
 

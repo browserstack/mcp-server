@@ -33,9 +33,7 @@ export function enrichPercyError(
 ): PercyApiError {
   const prefix = context ? `${context}: ` : "";
   const errorBody = body as Record<string, unknown> | undefined;
-  const errors = (errorBody?.errors ?? []) as Array<
-    Record<string, unknown>
-  >;
+  const errors = (errorBody?.errors ?? []) as Array<Record<string, unknown>>;
   const firstError = errors[0];
   const errorCode = (firstError?.code ?? firstError?.source) as
     | string

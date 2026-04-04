@@ -1,4 +1,4 @@
-import { resolvePercyToken, getPercyApiBaseUrl, maskToken } from "../../../lib/percy-api/auth.js";
+import { getPercyApiBaseUrl, maskToken } from "../../../lib/percy-api/auth.js";
 import { PercyClient } from "../../../lib/percy-api/client.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -14,7 +14,9 @@ export async function percyAuthStatus(
   // Check PERCY_TOKEN
   const percyToken = process.env.PERCY_TOKEN;
   const orgToken = process.env.PERCY_ORG_TOKEN;
-  const hasBstackCreds = !!(config["browserstack-username"] && config["browserstack-access-key"]);
+  const hasBstackCreds = !!(
+    config["browserstack-username"] && config["browserstack-access-key"]
+  );
 
   output += `### Token Configuration\n\n`;
   output += `| Token | Status | Value |\n`;
@@ -33,7 +35,10 @@ export async function percyAuthStatus(
       const buildList = Array.isArray(builds) ? builds : [];
 
       if (buildList.length > 0) {
-        const projectName = buildList[0]?.project?.name || buildList[0]?.project?.slug || "unknown";
+        const projectName =
+          buildList[0]?.project?.name ||
+          buildList[0]?.project?.slug ||
+          "unknown";
         output += `**Project scope:** Valid — project "${projectName}"\n`;
         output += `**Latest build:** #${buildList[0]?.buildNumber || buildList[0]?.id} (${buildList[0]?.state || "unknown"})\n`;
       } else {
@@ -48,7 +53,7 @@ export async function percyAuthStatus(
     try {
       const client = new PercyClient(config, { scope: "org" });
       // Try listing projects with org token
-      const projects = await client.get<any>("/projects", { "page[limit]": "1" });
+      await client.get<any>("/projects", { "page[limit]": "1" });
       output += `**Org scope:** Valid\n`;
     } catch (e: any) {
       output += `**Org scope:** Failed — ${e.message}\n`;

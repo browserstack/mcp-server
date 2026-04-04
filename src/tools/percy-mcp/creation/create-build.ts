@@ -21,7 +21,14 @@ export async function percyCreateBuild(
   args: CreateBuildArgs,
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const { project_id, branch, commit_sha, commit_message, pull_request_number, type } = args;
+  const {
+    project_id,
+    branch,
+    commit_sha,
+    commit_message,
+    pull_request_number,
+    type,
+  } = args;
 
   const body = {
     data: {
@@ -30,7 +37,9 @@ export async function percyCreateBuild(
         branch,
         "commit-sha": commit_sha,
         ...(commit_message ? { "commit-message": commit_message } : {}),
-        ...(pull_request_number ? { "pull-request-number": pull_request_number } : {}),
+        ...(pull_request_number
+          ? { "pull-request-number": pull_request_number }
+          : {}),
         ...(type ? { type } : {}),
       },
       relationships: {},

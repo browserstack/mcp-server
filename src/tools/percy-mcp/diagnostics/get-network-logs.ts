@@ -15,7 +15,12 @@ export async function percyGetNetworkLogs(
 
   if (!data || (Array.isArray(data) && data.length === 0)) {
     return {
-      content: [{ type: "text", text: "No network requests recorded for this comparison." }],
+      content: [
+        {
+          type: "text",
+          text: "No network requests recorded for this comparison.",
+        },
+      ],
     };
   }
 

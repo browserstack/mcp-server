@@ -59,15 +59,11 @@ export async function percyGetComparison(
     imageLines.push("### Screenshot URLs");
 
     const baseUrl =
-      comparison.baseScreenshot?.image?.url ??
-      comparison.baseScreenshot?.url;
+      comparison.baseScreenshot?.image?.url ?? comparison.baseScreenshot?.url;
     const headUrl =
-      comparison.headScreenshot?.image?.url ??
-      comparison.headScreenshot?.url;
-    const diffUrl =
-      comparison.diffImage?.url;
-    const aiDiffUrl =
-      comparison.aiDiffImage?.url;
+      comparison.headScreenshot?.image?.url ?? comparison.headScreenshot?.url;
+    const diffUrl = comparison.diffImage?.url;
+    const aiDiffUrl = comparison.aiDiffImage?.url;
 
     if (baseUrl) imageLines.push(`- **Base:** ${baseUrl}`);
     if (headUrl) imageLines.push(`- **Head:** ${headUrl}`);

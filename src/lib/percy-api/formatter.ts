@@ -20,7 +20,10 @@ function na(value: unknown): string {
   return String(value);
 }
 
-function formatDuration(startIso: string | null, endIso: string | null): string {
+function formatDuration(
+  startIso: string | null,
+  endIso: string | null,
+): string {
   if (!startIso || !endIso) return "N/A";
   const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
   if (Number.isNaN(ms) || ms < 0) return "N/A";
@@ -174,7 +177,9 @@ export function formatSnapshot(snapshot: any, comparisons?: any[]): string {
       const diff = pct(c.diffRatio);
       const aiDiff = pct(c.aiDiffRatio);
       const aiStatus = na(c.aiProcessingState);
-      lines.push(`| ${browser} | ${width} | ${diff} | ${aiDiff} | ${aiStatus} |`);
+      lines.push(
+        `| ${browser} | ${width} | ${diff} | ${aiDiff} | ${aiStatus} |`,
+      );
     }
   }
 
@@ -300,7 +305,9 @@ export function formatNetworkLogs(logs: any[]): string {
     const headStatus = na(log.headStatus ?? log.headStatusCode);
     const type = na(log.resourceType ?? log.type);
     const issue = na(log.issue ?? log.error);
-    lines.push(`| ${url} | ${baseStatus} | ${headStatus} | ${type} | ${issue} |`);
+    lines.push(
+      `| ${url} | ${baseStatus} | ${headStatus} | ${type} | ${issue} |`,
+    );
   }
 
   return lines.join("\n");

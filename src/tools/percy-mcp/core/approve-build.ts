@@ -13,7 +13,12 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 // Constants
 // ---------------------------------------------------------------------------
 
-const VALID_ACTIONS = ["approve", "request_changes", "unapprove", "reject"] as const;
+const VALID_ACTIONS = [
+  "approve",
+  "request_changes",
+  "unapprove",
+  "reject",
+] as const;
 type ReviewAction = (typeof VALID_ACTIONS)[number];
 
 // ---------------------------------------------------------------------------
@@ -104,8 +109,7 @@ export async function percyApproveBuild(
       ],
     };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
     return {
       content: [
         {

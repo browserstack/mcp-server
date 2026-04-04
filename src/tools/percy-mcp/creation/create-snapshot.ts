@@ -25,11 +25,16 @@ export async function percyCreateSnapshot(
 
   // Parse widths from comma-separated string to int array
   const parsedWidths = widths
-    ? widths.split(",").map((w) => parseInt(w.trim(), 10)).filter((w) => !isNaN(w))
+    ? widths
+        .split(",")
+        .map((w) => parseInt(w.trim(), 10))
+        .filter((w) => !isNaN(w))
     : undefined;
 
   // Parse resources from JSON string
-  let parsedResources: Array<{ id: string; "resource-url": string; "is-root": boolean }> | undefined;
+  let parsedResources:
+    | Array<{ id: string; "resource-url": string; "is-root": boolean }>
+    | undefined;
   if (resources) {
     try {
       parsedResources = JSON.parse(resources);
@@ -88,7 +93,9 @@ export async function percyCreateSnapshot(
 
     // Extract missing resources from relationships
     const missingResources = (result?.data as any)?.missingResources ?? [];
-    const missingCount = Array.isArray(missingResources) ? missingResources.length : 0;
+    const missingCount = Array.isArray(missingResources)
+      ? missingResources.length
+      : 0;
     const missingShas = Array.isArray(missingResources)
       ? missingResources.map((r: any) => r.id ?? r).join(", ")
       : "";

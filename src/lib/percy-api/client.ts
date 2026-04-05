@@ -355,7 +355,18 @@ export class PercyClient {
       // If the response has a JSON:API `data` key, deserialize it
       if (json && typeof json === "object" && "data" in json) {
         const deserialized = deserialize(json as JsonApiEnvelope);
-        return deserialized as T;
+
+        // Unwrap: return the data directly (single object or array)
+        // Attach meta as a non-enumerable property so it's accessible but doesn't clutter
+        const result = deserialized.data;
+        if (result && typeof result === "object" && deserialized.meta) {
+          Object.defineProperty(result, "__meta", {
+            value: deserialized.meta,
+            enumerable: false,
+            writable: false,
+          });
+        }
+        return result as T;
       }
 
       // Non-JSON:API response — return as-is

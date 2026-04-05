@@ -91,14 +91,13 @@ export async function percyApproveBuild(
 
   try {
     const client = new PercyClient(config);
-    const result = (await client.post("/reviews", body)) as {
-      data: Record<string, unknown> | null;
-    };
+    const result = (await client.post("/reviews", body)) as Record<
+      string,
+      unknown
+    >;
 
     const reviewState =
-      (result?.data as Record<string, unknown>)?.reviewState ??
-      (result?.data as Record<string, unknown>)?.["review-state"] ??
-      action;
+      result?.reviewState ?? result?.["review-state"] ?? action;
 
     return {
       content: [

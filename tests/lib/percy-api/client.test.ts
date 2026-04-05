@@ -105,17 +105,17 @@ describe("PercyClient", () => {
     expect(calledUrl).toContain("include=project");
 
     // Verify deserialized data
-    expect(result.data.id).toBe("123");
-    expect(result.data.type).toBe("builds");
-    expect(result.data.state).toBe("finished");
-    expect(result.data.buildNumber).toBe(42);
-    expect(result.data.reviewState).toBe("approved");
+    expect(result.id).toBe("123");
+    expect(result.type).toBe("builds");
+    expect(result.state).toBe("finished");
+    expect(result.buildNumber).toBe(42);
+    expect(result.reviewState).toBe("approved");
 
     // Verify resolved relationship
-    expect(result.data.project).toBeDefined();
-    expect(result.data.project.id).toBe("p1");
-    expect(result.data.project.name).toBe("My Project");
-    expect(result.data.project.slug).toBe("my-project");
+    expect(result.project).toBeDefined();
+    expect(result.project.id).toBe("p1");
+    expect(result.project.name).toBe("My Project");
+    expect(result.project.slug).toBe("my-project");
   });
 
   // -------------------------------------------------------------------------
@@ -147,8 +147,8 @@ describe("PercyClient", () => {
     expect(JSON.parse(fetchOpts.body)).toEqual(requestBody);
 
     // Verify deserialized response
-    expect(result.data.id).toBe("r1");
-    expect(result.data.reviewState).toBe("approved");
+    expect(result.id).toBe("r1");
+    expect(result.reviewState).toBe("approved");
   });
 
   // -------------------------------------------------------------------------
@@ -172,10 +172,10 @@ describe("PercyClient", () => {
 
     const result = await client.get<any>("/comparisons/c1");
 
-    expect(result.data.aiProcessingState).toBe("finished");
-    expect(result.data.diffRatio).toBe(0.05);
-    expect(result.data.aiDiffRatio).toBe(0.02);
-    expect(result.data.state).toBe("finished");
+    expect(result.aiProcessingState).toBe("finished");
+    expect(result.diffRatio).toBe(0.05);
+    expect(result.aiDiffRatio).toBe(0.02);
+    expect(result.state).toBe("finished");
   });
 
   // -------------------------------------------------------------------------
@@ -202,11 +202,10 @@ describe("PercyClient", () => {
 
     const result = await client.get<any>("/builds");
 
-    expect(Array.isArray(result.data)).toBe(true);
-    expect(result.data).toHaveLength(2);
-    expect(result.data[0].id).toBe("b1");
-    expect(result.data[1].branch).toBe("dev");
-    expect(result.meta).toEqual({ "total-count": 2 });
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe("b1");
+    expect(result[1].branch).toBe("dev");
   });
 
   // -------------------------------------------------------------------------
@@ -236,8 +235,8 @@ describe("PercyClient", () => {
     const result = await client.get<any>("/builds/b1");
 
     // Not in included index — should return the raw ref
-    expect(result.data.project).toEqual({ id: "p99", type: "projects" });
-    expect(result.data.browsers).toEqual([
+    expect(result.project).toEqual({ id: "p99", type: "projects" });
+    expect(result.browsers).toEqual([
       { id: "br1", type: "browsers" },
       { id: "br2", type: "browsers" },
     ]);
@@ -269,12 +268,12 @@ describe("PercyClient", () => {
     const result = await client.get<any>("/builds/b1");
 
     // ai-details should be preserved as a nested object (keys camelCased)
-    expect(result.data.aiDetails).toBeDefined();
-    expect(result.data.aiDetails.aiSummary).toBe(
+    expect(result.aiDetails).toBeDefined();
+    expect(result.aiDetails.aiSummary).toBe(
       "No visual changes detected",
     );
-    expect(result.data.aiDetails.confidence).toBe(0.95);
-    expect(result.data.aiDetails.regions).toHaveLength(1);
+    expect(result.aiDetails.confidence).toBe(0.95);
+    expect(result.aiDetails.regions).toHaveLength(1);
   });
 
   // -------------------------------------------------------------------------

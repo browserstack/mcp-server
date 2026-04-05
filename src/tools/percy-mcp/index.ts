@@ -71,6 +71,7 @@ import { percyAnalyzeLogsRealtime } from "./diagnostics/analyze-logs-realtime.js
 
 import { percyPrVisualReport } from "./workflows/pr-visual-report.js";
 import { percyCreatePercyBuild } from "./workflows/create-percy-build.js";
+import { percyCloneBuild } from "./workflows/clone-build.js";
 import { percyAutoTriage } from "./workflows/auto-triage.js";
 import { percyDebugFailedBuild } from "./workflows/debug-failed-build.js";
 import { percyDiffExplain } from "./workflows/diff-explain.js";
@@ -349,6 +350,48 @@ export function registerPercyMcpTools(
         return await percyCreateComparison(args, config);
       } catch (error) {
         return handleMCPError("percy_create_comparison", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_clone_build — Cross-project build cloning
+  // -------------------------------------------------------------------------
+  tools.percy_clone_build = server.tool(
+    "percy_clone_build",
+    "Clone snapshots from one Percy build to another project. Downloads screenshots from source and re-uploads to target. Works across different projects and orgs. Handles the entire flow: read source → create target build → clone each snapshot with comparisons → finalize.",
+    {
+      source_build_id: z
+        .string()
+        .describe("Build ID to clone FROM (the source)"),
+      target_project_name: z
+        .string()
+        .describe("Project name to clone INTO (auto-creates if doesn't exist)"),
+      source_token: z
+        .string()
+        .optional()
+        .describe(
+          "Percy token for reading the source build (if different from PERCY_TOKEN). Must be a full-access web_* or auto_* token.",
+        ),
+      branch: z
+        .string()
+        .optional()
+        .describe("Branch for the new build (auto-detected from git)"),
+      commit_sha: z
+        .string()
+        .optional()
+        .describe("Commit SHA for the new build (auto-detected from git)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_clone_build",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyCloneBuild(args, config);
+      } catch (error) {
+        return handleMCPError("percy_clone_build", server, config, error);
       }
     },
   );

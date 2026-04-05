@@ -1,22 +1,98 @@
 # Percy MCP Tools — Complete Reference
 
-> 41 visual testing tools for AI agents
+> 43 visual testing tools for AI agents
 
 Percy MCP gives AI agents (Claude Code, Cursor, Windsurf, etc.) direct access to Percy's visual testing platform — query builds, analyze diffs, create builds, manage projects, and automate visual review workflows.
+
+## Quick Start — Two Essential Commands
+
+### Create a Build with Snapshots
+
+```
+Use percy_create_percy_build with project_name "my-app" and urls "http://localhost:3000"
+```
+
+This single command:
+- Auto-creates the project if it doesn't exist
+- Gets/creates a project token
+- Auto-detects git branch and SHA
+- Returns ready-to-run Percy CLI commands
+
+### Check Visual Regression Status
+
+```
+Use percy_pr_visual_report with branch "feature-x"
+```
+
+Returns a complete visual regression report with risk-ranked snapshots and AI analysis.
+
+---
+
+## Tools by Category (43 tools)
+
+### CREATE (6 tools)
+- `percy_create_project` — Create a new Percy project
+- `percy_create_percy_build` — **THE primary build creation tool** (URL scanning, screenshot upload, test wrapping, or build cloning)
+- `percy_create_build` — Create an empty build (low-level)
+- `percy_create_snapshot` — Create a snapshot with DOM resources (low-level)
+- `percy_create_app_snapshot` — Create a snapshot for App/BYOS builds (low-level)
+- `percy_create_comparison` — Create a comparison with device/browser tag (low-level)
+
+### READ (17 tools)
+- `percy_list_projects` — List projects in an organization
+- `percy_list_builds` — List builds with filtering by branch, state, SHA
+- `percy_get_build` — Get detailed build info including AI metrics
+- `percy_get_build_items` — List snapshots filtered by category
+- `percy_get_snapshot` — Get snapshot with all comparisons and screenshots
+- `percy_get_comparison` — Get comparison with diff ratios and AI regions
+- `percy_get_ai_analysis` — Get AI-powered visual diff analysis
+- `percy_get_build_summary` — Get AI-generated natural language build summary
+- `percy_get_ai_quota` — Check AI quota status
+- `percy_get_rca` — Get Root Cause Analysis (DOM/CSS changes)
+- `percy_get_suggestions` — Get build failure diagnostics and fix steps
+- `percy_get_network_logs` — Get parsed network request logs
+- `percy_get_build_logs` — Download and filter build logs
+- `percy_get_usage_stats` — Get screenshot usage and quota limits
+- `percy_auth_status` — Check authentication status
+- `percy_analyze_logs_realtime` — Analyze raw log data without a stored build
+- `percy_pr_visual_report` — **THE primary read tool** (complete visual regression report)
+
+### UPDATE (12 tools)
+- `percy_approve_build` — Approve, reject, or request changes on a build
+- `percy_manage_project_settings` — View or update project settings
+- `percy_manage_browser_targets` — List, add, or remove browser targets
+- `percy_manage_tokens` — List or rotate project tokens
+- `percy_manage_webhooks` — Create, update, list, or delete webhooks
+- `percy_manage_ignored_regions` — Create, list, save, or delete ignored regions
+- `percy_manage_comments` — List, create, or close comment threads
+- `percy_manage_variants` — List, create, or update A/B testing variants
+- `percy_manage_visual_monitoring` — Create, update, or list Visual Monitoring projects
+- `percy_trigger_ai_recompute` — Re-run AI analysis with a custom prompt
+- `percy_suggest_prompt` — Get AI-generated prompt suggestion for diff regions
+- `percy_branchline_operations` — Sync, merge, or unmerge branch baselines
+
+### FINALIZE / UPLOAD (5 tools)
+- `percy_finalize_build` — Finalize a build after all snapshots are complete
+- `percy_finalize_snapshot` — Finalize a snapshot after resources are uploaded
+- `percy_finalize_comparison` — Finalize a comparison after tiles are uploaded
+- `percy_upload_resource` — Upload a resource (CSS, JS, image, HTML) to a build
+- `percy_upload_tile` — Upload a screenshot tile (PNG/JPEG) to a comparison
+
+### WORKFLOWS (3 composites)
+- `percy_auto_triage` — Auto-categorize all visual changes (Critical/Review/Noise)
+- `percy_debug_failed_build` — Diagnose a build failure with actionable fix commands
+- `percy_diff_explain` — Explain visual changes in plain English (summary/detailed/full_rca)
+
+---
 
 ## Table of Contents
 
 - [Setup](#setup)
-- [Authentication (1 tool)](#authentication-1-tool)
-- [Core Query (6 tools)](#core-query-6-tools)
-- [Build Approval (1 tool)](#build-approval-1-tool)
-- [Web Build Creation (5 tools)](#web-build-creation-5-tools)
-- [App/BYOS Build Creation (4 tools)](#appbyos-build-creation-4-tools)
-- [AI Intelligence (6 tools)](#ai-intelligence-6-tools)
-- [Diagnostics (4 tools)](#diagnostics-4-tools)
-- [Composite Workflows (4 tools)](#composite-workflows-4-tools)
-- [Project Management (7 tools)](#project-management-7-tools)
-- [Advanced (3 tools)](#advanced-3-tools)
+- [CREATE Tools](#create-tools)
+- [READ Tools](#read-tools)
+- [UPDATE Tools](#update-tools)
+- [FINALIZE / UPLOAD Tools](#finalize--upload-tools)
+- [WORKFLOW Tools](#workflow-tools)
 - [Quick Reference — Common Prompts](#quick-reference--common-prompts)
 
 ---
@@ -59,7 +135,141 @@ This calls `percy_auth_status` and reports which tokens are valid and their scop
 
 ---
 
-## Authentication (1 tool)
+## CREATE Tools
+
+### `percy_create_project`
+
+**Description:** Create a new Percy project. Auto-creates if it doesn't exist, returns project token.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| name | string | Yes | Project name (e.g. 'my-web-app') |
+| type | enum | No | Project type: `web` or `automate` (default: web) |
+
+**Example prompt:**
+> "Create a Percy project called my-web-app"
+
+**Example tool call:**
+```json
+{
+  "tool": "percy_create_project",
+  "params": {
+    "name": "my-web-app",
+    "type": "web"
+  }
+}
+```
+
+**Example output:**
+```
+## Project Created
+**Name:** my-web-app
+**Project ID:** 12345
+**Type:** web
+**Token:** ****a1b2 (write)
+
+The project is ready. Use percy_create_percy_build to start a build.
+```
+
+---
+
+### `percy_create_percy_build`
+
+**Description:** Create a complete Percy build with snapshots. Supports URL scanning, screenshot upload, test wrapping, or build cloning. **The primary build creation tool.**
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| project_name | string | Yes | Percy project name (auto-creates if doesn't exist) |
+| urls | string | No | Comma-separated URLs to snapshot, e.g. 'http://localhost:3000,http://localhost:3000/about' |
+| screenshots_dir | string | No | Directory path containing PNG/JPG screenshots to upload |
+| screenshot_files | string | No | Comma-separated file paths to PNG/JPG screenshots |
+| test_command | string | No | Test command to wrap with Percy, e.g. 'npx cypress run' or 'npm test' |
+| clone_build_id | string | No | Build ID to clone snapshots from |
+| branch | string | No | Git branch (auto-detected from git if not provided) |
+| commit_sha | string | No | Git commit SHA (auto-detected from git if not provided) |
+| widths | string | No | Comma-separated viewport widths, e.g. '375,768,1280' (default: 375,1280) |
+| snapshot_names | string | No | Comma-separated snapshot names (for screenshots — defaults to filename) |
+| test_case | string | No | Test case name to associate snapshots with |
+| type | enum | No | Project type: `web`, `app`, or `automate` (default: web) |
+
+**5 Modes of Operation:**
+
+1. **URL Snapshots** — Provide `urls` to snapshot live pages:
+   > "Create a Percy build for my-app snapshotting http://localhost:3000 and http://localhost:3000/about"
+
+2. **Screenshot Upload from Directory** — Provide `screenshots_dir`:
+   > "Create a Percy build for my-app uploading screenshots from ./screenshots/"
+
+3. **Screenshot Upload from Files** — Provide `screenshot_files`:
+   > "Create a Percy build for my-app with screenshots login.png and dashboard.png"
+
+4. **Test Command Wrapping** — Provide `test_command`:
+   > "Create a Percy build for my-app running 'npx cypress run'"
+
+5. **Build Cloning** — Provide `clone_build_id`:
+   > "Create a Percy build for my-app cloning build 67890"
+
+**Example tool call — URL snapshots:**
+```json
+{
+  "tool": "percy_create_percy_build",
+  "params": {
+    "project_name": "my-web-app",
+    "urls": "http://localhost:3000,http://localhost:3000/about",
+    "widths": "375,768,1280"
+  }
+}
+```
+
+**Example output:**
+```
+## Percy Build Created
+**Project:** my-web-app (auto-created)
+**Build ID:** 67890
+**Branch:** feature-login (auto-detected)
+**SHA:** abc123def456 (auto-detected)
+
+### Snapshots
+1. Homepage — 375px, 768px, 1280px
+2. About — 375px, 768px, 1280px
+
+Build finalized and processing. Check status with percy_get_build.
+```
+
+**Example tool call — screenshot upload:**
+```json
+{
+  "tool": "percy_create_percy_build",
+  "params": {
+    "project_name": "my-mobile-app",
+    "screenshots_dir": "./screenshots/",
+    "type": "app"
+  }
+}
+```
+
+**Example tool call — test command:**
+```json
+{
+  "tool": "percy_create_percy_build",
+  "params": {
+    "project_name": "my-web-app",
+    "test_command": "npx cypress run"
+  }
+}
+```
+
+---
+
+Now continues the low-level build creation tools (used by `percy_create_percy_build` internally, or for advanced custom workflows):
+
+---
+
+## READ Tools
 
 ### `percy_auth_status`
 
@@ -99,8 +309,6 @@ PERCY_ORG_TOKEN: Not configured
 ```
 
 ---
-
-## Core Query (6 tools)
 
 ### `percy_list_projects`
 
@@ -377,7 +585,7 @@ PERCY_ORG_TOKEN: Not configured
 
 ---
 
-## Build Approval (1 tool)
+## UPDATE Tools
 
 ### `percy_approve_build`
 
@@ -460,18 +668,27 @@ Reason: Layout is completely broken on mobile viewports
 
 ---
 
-## Web Build Creation (5 tools)
+## Low-Level Build Creation (CREATE continued)
 
-These tools are used together to create web-based Percy builds. The workflow is:
+These low-level tools are used together for custom build workflows. For most use cases, prefer `percy_create_percy_build` above.
+
+**Web build workflow:**
 1. `percy_create_build` — start a build
 2. `percy_create_snapshot` — declare a snapshot with resources
-3. `percy_upload_resource` — upload missing resources (CSS, JS, images, HTML)
+3. `percy_upload_resource` — upload missing resources
 4. `percy_finalize_snapshot` — mark snapshot complete
-5. `percy_finalize_build` — mark build complete, trigger processing
+5. `percy_finalize_build` — mark build complete
+
+**App/BYOS build workflow:**
+1. `percy_create_build` — start a build
+2. `percy_create_app_snapshot` — create a snapshot (no resources needed)
+3. `percy_create_comparison` — define device/browser tag
+4. `percy_upload_tile` — upload screenshot image
+5. `percy_finalize_comparison` — mark comparison complete
 
 ### `percy_create_build`
 
-**Description:** Create a new Percy build for visual testing. Returns build ID for snapshot uploads.
+**Description:** Create an empty Percy build (low-level). Use `percy_create_percy_build` for full automation.
 
 **Parameters:**
 
@@ -521,7 +738,7 @@ Next steps:
 
 ### `percy_create_snapshot`
 
-**Description:** Create a snapshot in a Percy build with DOM resources. Returns missing resource list for upload.
+**Description:** Create a snapshot in a Percy build with DOM resources (low-level). Returns missing resource list for upload.
 
 **Parameters:**
 
@@ -667,15 +884,6 @@ Percy is now rendering and comparing snapshots. Check status with percy_get_buil
 ```
 
 ---
-
-## App/BYOS Build Creation (4 tools)
-
-These tools are for App Percy or Bring-Your-Own-Screenshots (BYOS) builds where you upload pre-rendered screenshots instead of DOM resources. The workflow is:
-1. `percy_create_build` — start a build (same tool as web)
-2. `percy_create_app_snapshot` — create a snapshot (no resources needed)
-3. `percy_create_comparison` — define device/browser tag and tile metadata
-4. `percy_upload_tile` — upload the screenshot image
-5. `percy_finalize_comparison` — mark comparison complete
 
 ### `percy_create_app_snapshot`
 
@@ -835,7 +1043,7 @@ Diff processing triggered. Check status with percy_get_comparison.
 
 ---
 
-## AI Intelligence (6 tools)
+## READ Tools (continued) — AI Intelligence
 
 ### `percy_get_ai_analysis`
 
@@ -1115,7 +1323,7 @@ Use this with percy_trigger_ai_recompute to apply.
 
 ---
 
-## Diagnostics (4 tools)
+## READ Tools (continued) — Diagnostics
 
 ### `percy_get_suggestions`
 
@@ -1305,7 +1513,7 @@ Category: rendering
 
 ---
 
-## Composite Workflows (4 tools)
+## WORKFLOW Tools
 
 These tools combine multiple API calls into high-level workflows.
 
@@ -1566,7 +1774,7 @@ the checkout fix.
 
 ---
 
-## Project Management (7 tools)
+## UPDATE Tools (continued) — Project Management
 
 ### `percy_manage_project_settings`
 
@@ -2121,7 +2329,7 @@ Thread ct_001 on Homepage — Desktop has been resolved.
 
 ---
 
-## Advanced (3 tools)
+## UPDATE Tools (continued) — Advanced
 
 ### `percy_manage_visual_monitoring`
 
@@ -2395,6 +2603,9 @@ Baselines unmerged. The branch will revert to its previous baseline state.
 
 | What you want to do | Say this | Tool called |
 |---------------------|----------|-------------|
+| **Create a build (recommended)** | "Create a Percy build for my-app snapshotting localhost:3000" | `percy_create_percy_build` |
+| **Check PR visual status** | "What's the visual status of my PR on branch feature-x?" | `percy_pr_visual_report` |
+| Create a project | "Create a Percy project called my-web-app" | `percy_create_project` |
 | Check auth setup | "Check my Percy authentication" | `percy_auth_status` |
 | List projects | "Show me my Percy projects" | `percy_list_projects` |
 | List builds | "Show recent builds for project 12345" | `percy_list_builds` |
@@ -2402,7 +2613,6 @@ Baselines unmerged. The branch will revert to its previous baseline state.
 | List snapshots | "Show changed snapshots in build 12345" | `percy_get_build_items` |
 | Get snapshot details | "Get details for snapshot 99001" | `percy_get_snapshot` |
 | Get comparison details | "Show comparison 55001 with images" | `percy_get_comparison` |
-| Check PR visual status | "What's the visual status of my PR on branch feature-x?" | `percy_pr_visual_report` |
 | Triage all changes | "Categorize changes in build 12345" | `percy_auto_triage` |
 | Approve a build | "Approve Percy build 12345" | `percy_approve_build` |
 | Request changes | "Request changes on snapshot 99001 in build 12345" | `percy_approve_build` |
@@ -2419,7 +2629,7 @@ Baselines unmerged. The branch will revert to its previous baseline state.
 | Check network logs | "Show network logs for comparison 55001" | `percy_get_network_logs` |
 | View build logs | "Show renderer error logs for build 12345" | `percy_get_build_logs` |
 | Analyze CLI logs | "Analyze these Percy logs" | `percy_analyze_logs_realtime` |
-| Create a web build | "Create a Percy build for branch main" | `percy_create_build` |
+| Create a build (low-level) | "Create an empty Percy build for project 12345" | `percy_create_build` |
 | Create a snapshot | "Create a snapshot called Homepage in build 67890" | `percy_create_snapshot` |
 | Upload a resource | "Upload the missing CSS to build 67890" | `percy_upload_resource` |
 | Finalize a snapshot | "Finalize snapshot 99010" | `percy_finalize_snapshot` |

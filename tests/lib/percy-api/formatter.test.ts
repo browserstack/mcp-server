@@ -23,18 +23,19 @@ const finishedBuildWithAi = {
   totalSnapshots: 42,
   totalComparisons: 42,
   totalComparisonsDiff: 5,
-  totalSnapshotsNew: 2,
-  totalSnapshotsRemoved: 1,
-  totalSnapshotsUnchanged: 34,
+  totalSnapshotsUnreviewed: 3,
   failureReason: null,
   createdAt: "2024-01-15T10:00:00Z",
   finishedAt: "2024-01-15T10:02:34Z",
   errorBuckets: null,
   aiDetails: {
-    comparisonsAnalyzed: 42,
-    potentialBugs: 2,
-    originalDiffPercent: 0.85,
-    aiDiffPercent: 0.23,
+    aiEnabled: true,
+    totalComparisonsWithAi: 42,
+    totalPotentialBugs: 2,
+    totalDiffsReducedCapped: 15,
+    totalAiVisualDiffs: 8,
+    allAiJobsCompleted: true,
+    summaryStatus: "completed",
   },
 };
 
@@ -101,18 +102,15 @@ describe("formatBuild", () => {
     expect(result).toContain("## Build #142 — FINISHED");
     expect(result).toContain("**Branch:** main | **SHA:** abc1234");
     expect(result).toContain("**Review:** unreviewed");
-    expect(result).toContain("42 total");
-    expect(result).toContain("5 changed");
-    expect(result).toContain("2 new");
-    expect(result).toContain("1 removed");
-    expect(result).toContain("34 unchanged");
+    expect(result).toContain("42 snapshots");
+    expect(result).toContain("42 comparisons");
+    expect(result).toContain("5 with diffs");
     expect(result).toContain("**Duration:** 2m 34s");
     // AI section
     expect(result).toContain("### AI Analysis");
-    expect(result).toContain("Comparisons analyzed: 42");
+    expect(result).toContain("Comparisons analyzed by AI: 42");
     expect(result).toContain("Potential bugs: 2");
-    expect(result).toContain("85.0%");
-    expect(result).toContain("23.0%");
+    expect(result).toContain("Diffs reduced by AI: 15");
   });
 
   it("SUCCESS: build with no changes shows no visual changes message", () => {

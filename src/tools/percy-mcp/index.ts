@@ -1,26 +1,34 @@
 /**
- * Percy MCP tools — query and creation tools for Percy visual testing.
+ * Percy MCP tools — CRUD-organized tools for Percy visual testing.
  *
- * Registers 41 tools:
- *   Query: percy_list_projects, percy_list_builds, percy_get_build,
- *          percy_get_build_items, percy_get_snapshot, percy_get_comparison
- *   Web Creation: percy_create_build, percy_create_snapshot, percy_upload_resource,
- *                 percy_finalize_snapshot, percy_finalize_build
- *   App/BYOS Creation: percy_create_app_snapshot, percy_create_comparison,
- *                      percy_upload_tile, percy_finalize_comparison
- *   Intelligence: percy_get_ai_analysis, percy_get_build_summary, percy_get_ai_quota,
- *                 percy_get_rca, percy_trigger_ai_recompute, percy_suggest_prompt
- *   Diagnostics: percy_get_suggestions, percy_get_network_logs,
- *                percy_get_build_logs, percy_analyze_logs_realtime
- *   Workflows: percy_pr_visual_report, percy_auto_triage, percy_debug_failed_build,
- *              percy_diff_explain
- *   Auth: percy_auth_status
- *   Management: percy_manage_project_settings, percy_manage_browser_targets,
- *               percy_manage_tokens, percy_manage_webhooks,
- *               percy_manage_ignored_regions, percy_manage_comments,
- *               percy_get_usage_stats
- *   Advanced: percy_manage_visual_monitoring, percy_branchline_operations,
- *             percy_manage_variants
+ * Registers 41 tools organized by CRUD action:
+ *
+ * === CREATE (6) ===
+ *   percy_create_project, percy_create_percy_build, percy_create_build,
+ *   percy_create_snapshot, percy_create_app_snapshot, percy_create_comparison
+ *
+ * === READ (17) ===
+ *   percy_list_projects, percy_list_builds, percy_get_build,
+ *   percy_get_build_items, percy_get_snapshot, percy_get_comparison,
+ *   percy_get_ai_analysis, percy_get_build_summary, percy_get_ai_quota,
+ *   percy_get_rca, percy_get_suggestions, percy_get_network_logs,
+ *   percy_get_build_logs, percy_get_usage_stats, percy_auth_status
+ *
+ * === UPDATE (12) ===
+ *   percy_approve_build, percy_manage_project_settings,
+ *   percy_manage_browser_targets, percy_manage_tokens,
+ *   percy_manage_webhooks, percy_manage_ignored_regions,
+ *   percy_manage_comments, percy_manage_variants,
+ *   percy_manage_visual_monitoring, percy_trigger_ai_recompute,
+ *   percy_suggest_prompt, percy_branchline_operations
+ *
+ * === FINALIZE / UPLOAD (6) ===
+ *   percy_finalize_build, percy_finalize_snapshot, percy_finalize_comparison,
+ *   percy_upload_resource, percy_upload_tile, percy_analyze_logs_realtime
+ *
+ * === WORKFLOWS (4) ===
+ *   percy_pr_visual_report, percy_auto_triage,
+ *   percy_debug_failed_build, percy_diff_explain
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -88,671 +96,45 @@ export function registerPercyMcpTools(
 ) {
   const tools: Record<string, any> = {};
 
-  // -------------------------------------------------------------------------
-  // percy_list_projects
-  // -------------------------------------------------------------------------
-  tools.percy_list_projects = server.tool(
-    "percy_list_projects",
-    "List Percy projects in an organization. Returns project names, types, and settings.",
-    {
-      org_id: z
-        .string()
-        .optional()
-        .describe("Percy organization ID. If not provided, uses token scope."),
-      search: z
-        .string()
-        .optional()
-        .describe("Filter projects by name (substring match)"),
-      limit: z.number().optional().describe("Max results (default 10, max 50)"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_list_projects",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyListProjects(args, config);
-      } catch (error) {
-        return handleMCPError("percy_list_projects", server, config, error);
-      }
-    },
-  );
+  // =========================================================================
+  // === CREATE ===
+  // =========================================================================
 
   // -------------------------------------------------------------------------
-  // percy_list_builds
+  // percy_create_project
   // -------------------------------------------------------------------------
-  tools.percy_list_builds = server.tool(
-    "percy_list_builds",
-    "List Percy builds for a project with filtering by branch, state, SHA. Returns build numbers, states, review status, and AI metrics.",
+  tools.percy_create_project = server.tool(
+    "percy_create_project",
+    "Create a new Percy project. Auto-creates if doesn't exist, returns project token.",
     {
-      project_id: z
-        .string()
-        .optional()
-        .describe("Percy project ID. If not provided, uses PERCY_TOKEN scope."),
-      branch: z.string().optional().describe("Filter by branch name"),
-      state: z
-        .string()
-        .optional()
-        .describe("Filter by state: pending, processing, finished, failed"),
-      sha: z.string().optional().describe("Filter by commit SHA"),
-      limit: z.number().optional().describe("Max results (default 10, max 30)"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_list_builds",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyListBuilds(args, config);
-      } catch (error) {
-        return handleMCPError("percy_list_builds", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_get_build
-  // -------------------------------------------------------------------------
-  tools.percy_get_build = server.tool(
-    "percy_get_build",
-    "Get detailed Percy build information including state, review status, snapshot counts, AI analysis metrics, and build summary.",
-    {
-      build_id: z.string().describe("Percy build ID"),
-    },
-    async (args) => {
-      try {
-        trackMCP("percy_get_build", server.server.getClientVersion()!, config);
-        return await percyGetBuild(args, config);
-      } catch (error) {
-        return handleMCPError("percy_get_build", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_get_build_items
-  // -------------------------------------------------------------------------
-  tools.percy_get_build_items = server.tool(
-    "percy_get_build_items",
-    "List snapshots in a Percy build filtered by category (changed/new/removed/unchanged/failed). Returns snapshot names with diff ratios and AI flags.",
-    {
-      build_id: z.string().describe("Percy build ID"),
-      category: z
-        .string()
-        .optional()
-        .describe("Filter category: changed, new, removed, unchanged, failed"),
-      sort_by: z
-        .string()
-        .optional()
-        .describe("Sort field (e.g. diff-ratio, name)"),
-      limit: z
-        .number()
-        .optional()
-        .describe("Max results (default 20, max 100)"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_get_build_items",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyGetBuildItems(args, config);
-      } catch (error) {
-        return handleMCPError("percy_get_build_items", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_get_snapshot
-  // -------------------------------------------------------------------------
-  tools.percy_get_snapshot = server.tool(
-    "percy_get_snapshot",
-    "Get a Percy snapshot with all its comparisons, screenshots, and diff data across browsers and widths.",
-    {
-      snapshot_id: z.string().describe("Percy snapshot ID"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_get_snapshot",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyGetSnapshot(args, config);
-      } catch (error) {
-        return handleMCPError("percy_get_snapshot", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_get_comparison
-  // -------------------------------------------------------------------------
-  tools.percy_get_comparison = server.tool(
-    "percy_get_comparison",
-    "Get detailed Percy comparison data including diff ratios, AI analysis regions, screenshot URLs, and browser info.",
-    {
-      comparison_id: z.string().describe("Percy comparison ID"),
-      include_images: z
-        .boolean()
-        .optional()
-        .describe("Include screenshot image URLs in response (default false)"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_get_comparison",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyGetComparison(args, config);
-      } catch (error) {
-        return handleMCPError("percy_get_comparison", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_approve_build
-  // -------------------------------------------------------------------------
-  tools.percy_approve_build = server.tool(
-    "percy_approve_build",
-    "Approve, request changes, unapprove, or reject a Percy build. Requires a user token (PERCY_TOKEN). request_changes works at snapshot level only.",
-    {
-      build_id: z.string().describe("Percy build ID to review"),
-      action: z
-        .enum(["approve", "request_changes", "unapprove", "reject"])
-        .describe("Review action"),
-      snapshot_ids: z
-        .string()
-        .optional()
-        .describe(
-          "Comma-separated snapshot IDs (required for request_changes)",
-        ),
-      reason: z
-        .string()
-        .optional()
-        .describe("Optional reason for the review action"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_approve_build",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyApproveBuild(args, config);
-      } catch (error) {
-        return handleMCPError("percy_approve_build", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_create_build
-  // -------------------------------------------------------------------------
-  tools.percy_create_build = server.tool(
-    "percy_create_build",
-    "Create a new Percy build for visual testing. Returns build ID for snapshot uploads.",
-    {
-      project_id: z
-        .string()
-        .optional()
-        .describe(
-          "Percy project ID (optional if PERCY_TOKEN is project-scoped)",
-        ),
-      branch: z.string().describe("Git branch name"),
-      commit_sha: z.string().describe("Git commit SHA"),
-      commit_message: z.string().optional().describe("Git commit message"),
-      pull_request_number: z
-        .string()
-        .optional()
-        .describe("Pull request number"),
+      name: z.string().describe("Project name (e.g. 'my-web-app')"),
       type: z
-        .string()
-        .optional()
-        .describe("Project type: web, app, automate, generic"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_create_build",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyCreateBuild(args, config);
-      } catch (error) {
-        return handleMCPError("percy_create_build", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_create_snapshot
-  // -------------------------------------------------------------------------
-  tools.percy_create_snapshot = server.tool(
-    "percy_create_snapshot",
-    "Create a snapshot in a Percy build with DOM resources. Returns missing resource list for upload.",
-    {
-      build_id: z.string().describe("Percy build ID"),
-      name: z.string().describe("Snapshot name"),
-      widths: z
-        .string()
-        .optional()
-        .describe("Comma-separated viewport widths, e.g. '375,768,1280'"),
-      enable_javascript: z.boolean().optional(),
-      resources: z
-        .string()
+        .enum(["web", "automate"])
         .optional()
         .describe(
-          'JSON array of resources: [{"id":"sha","resource-url":"url","is-root":true}]',
+          "Project type: 'web' for Percy Web, 'automate' for Percy Automate (default: auto-detect)",
         ),
     },
     async (args) => {
       try {
         trackMCP(
-          "percy_create_snapshot",
+          "percy_create_project",
           server.server.getClientVersion()!,
           config,
         );
-        return await percyCreateSnapshot(args, config);
+        return await percyCreateProject(args, config);
       } catch (error) {
-        return handleMCPError("percy_create_snapshot", server, config, error);
+        return handleMCPError("percy_create_project", server, config, error);
       }
     },
   );
 
   // -------------------------------------------------------------------------
-  // percy_upload_resource
-  // -------------------------------------------------------------------------
-  tools.percy_upload_resource = server.tool(
-    "percy_upload_resource",
-    "Upload a resource (CSS, JS, image, HTML) to a Percy build. Only upload resources the server doesn't have.",
-    {
-      build_id: z.string().describe("Percy build ID"),
-      sha: z.string().describe("SHA-256 hash of the resource content"),
-      base64_content: z.string().describe("Base64-encoded resource content"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_upload_resource",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyUploadResource(args, config);
-      } catch (error) {
-        return handleMCPError("percy_upload_resource", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_finalize_snapshot
-  // -------------------------------------------------------------------------
-  tools.percy_finalize_snapshot = server.tool(
-    "percy_finalize_snapshot",
-    "Finalize a Percy snapshot after all resources are uploaded. Triggers rendering.",
-    {
-      snapshot_id: z.string().describe("Percy snapshot ID"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_finalize_snapshot",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyFinalizeSnapshot(args, config);
-      } catch (error) {
-        return handleMCPError("percy_finalize_snapshot", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_finalize_build
-  // -------------------------------------------------------------------------
-  tools.percy_finalize_build = server.tool(
-    "percy_finalize_build",
-    "Finalize a Percy build after all snapshots are complete. Triggers processing.",
-    {
-      build_id: z.string().describe("Percy build ID"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_finalize_build",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyFinalizeBuild(args, config);
-      } catch (error) {
-        return handleMCPError("percy_finalize_build", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_create_app_snapshot
-  // -------------------------------------------------------------------------
-  tools.percy_create_app_snapshot = server.tool(
-    "percy_create_app_snapshot",
-    "Create a snapshot for App Percy or BYOS builds (no resources needed). Returns snapshot ID.",
-    {
-      build_id: z.string().describe("Percy build ID"),
-      name: z.string().describe("Snapshot name"),
-      test_case: z.string().optional().describe("Test case name"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_create_app_snapshot",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyCreateAppSnapshot(args, config);
-      } catch (error) {
-        return handleMCPError(
-          "percy_create_app_snapshot",
-          server,
-          config,
-          error,
-        );
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_create_comparison
-  // -------------------------------------------------------------------------
-  tools.percy_create_comparison = server.tool(
-    "percy_create_comparison",
-    "Create a comparison with device/browser tag and tile metadata for screenshot-based builds.",
-    {
-      snapshot_id: z.string().describe("Percy snapshot ID"),
-      tag_name: z.string().describe("Device/browser name, e.g. 'iPhone 13'"),
-      tag_width: z.number().describe("Tag width in pixels"),
-      tag_height: z.number().describe("Tag height in pixels"),
-      tag_os_name: z.string().optional().describe("OS name, e.g. 'iOS'"),
-      tag_os_version: z.string().optional().describe("OS version, e.g. '16.0'"),
-      tag_browser_name: z
-        .string()
-        .optional()
-        .describe("Browser name, e.g. 'Safari'"),
-      tag_orientation: z.string().optional().describe("portrait or landscape"),
-      tiles: z
-        .string()
-        .describe(
-          "JSON array of tiles: [{sha, status-bar-height?, nav-bar-height?}]",
-        ),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_create_comparison",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyCreateComparison(args, config);
-      } catch (error) {
-        return handleMCPError("percy_create_comparison", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_upload_tile
-  // -------------------------------------------------------------------------
-  tools.percy_upload_tile = server.tool(
-    "percy_upload_tile",
-    "Upload a screenshot tile (PNG or JPEG) to a Percy comparison.",
-    {
-      comparison_id: z.string().describe("Percy comparison ID"),
-      base64_content: z
-        .string()
-        .describe("Base64-encoded PNG or JPEG screenshot"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_upload_tile",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyUploadTile(args, config);
-      } catch (error) {
-        return handleMCPError("percy_upload_tile", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_finalize_comparison
-  // -------------------------------------------------------------------------
-  tools.percy_finalize_comparison = server.tool(
-    "percy_finalize_comparison",
-    "Finalize a Percy comparison after all tiles are uploaded. Triggers diff processing.",
-    {
-      comparison_id: z.string().describe("Percy comparison ID"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_finalize_comparison",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyFinalizeComparison(args, config);
-      } catch (error) {
-        return handleMCPError(
-          "percy_finalize_comparison",
-          server,
-          config,
-          error,
-        );
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_get_ai_analysis
-  // -------------------------------------------------------------------------
-  tools.percy_get_ai_analysis = server.tool(
-    "percy_get_ai_analysis",
-    "Get Percy AI-powered visual diff analysis. Provides change types, descriptions, bug classifications, and diff reduction metrics per comparison or aggregated per build.",
-    {
-      comparison_id: z
-        .string()
-        .optional()
-        .describe("Get AI analysis for a single comparison"),
-      build_id: z
-        .string()
-        .optional()
-        .describe("Get aggregated AI analysis for an entire build"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_get_ai_analysis",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyGetAiAnalysis(args, config);
-      } catch (error) {
-        return handleMCPError("percy_get_ai_analysis", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_get_build_summary
-  // -------------------------------------------------------------------------
-  tools.percy_get_build_summary = server.tool(
-    "percy_get_build_summary",
-    "Get AI-generated natural language summary of all visual changes in a Percy build.",
-    {
-      build_id: z.string().describe("Percy build ID"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_get_build_summary",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyGetBuildSummary(args, config);
-      } catch (error) {
-        return handleMCPError("percy_get_build_summary", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_get_ai_quota
-  // -------------------------------------------------------------------------
-  tools.percy_get_ai_quota = server.tool(
-    "percy_get_ai_quota",
-    "Check Percy AI quota status — daily regeneration quota and usage.",
-    {},
-    async () => {
-      try {
-        trackMCP(
-          "percy_get_ai_quota",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyGetAiQuota({}, config);
-      } catch (error) {
-        return handleMCPError("percy_get_ai_quota", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_get_rca
-  // -------------------------------------------------------------------------
-  tools.percy_get_rca = server.tool(
-    "percy_get_rca",
-    "Trigger and retrieve Percy Root Cause Analysis — maps visual diffs back to specific DOM/CSS changes with XPath paths and attribute diffs.",
-    {
-      comparison_id: z.string().describe("Percy comparison ID"),
-      trigger_if_missing: z
-        .boolean()
-        .optional()
-        .describe("Auto-trigger RCA if not yet run (default true)"),
-    },
-    async (args) => {
-      try {
-        trackMCP("percy_get_rca", server.server.getClientVersion()!, config);
-        return await percyGetRca(args, config);
-      } catch (error) {
-        return handleMCPError("percy_get_rca", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_get_suggestions
-  // -------------------------------------------------------------------------
-  tools.percy_get_suggestions = server.tool(
-    "percy_get_suggestions",
-    "Get Percy build failure suggestions — rule-engine-analyzed diagnostics with categorized issues, actionable fix steps, and documentation links.",
-    {
-      build_id: z.string().describe("Percy build ID"),
-      reference_type: z
-        .string()
-        .optional()
-        .describe("Filter: build, snapshot, or comparison"),
-      reference_id: z
-        .string()
-        .optional()
-        .describe("Specific snapshot or comparison ID"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_get_suggestions",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyGetSuggestions(args, config);
-      } catch (error) {
-        return handleMCPError("percy_get_suggestions", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_get_network_logs
-  // -------------------------------------------------------------------------
-  tools.percy_get_network_logs = server.tool(
-    "percy_get_network_logs",
-    "Get parsed network request logs for a Percy comparison — shows per-URL status for base vs head, identifying which assets loaded, failed, or were cached.",
-    {
-      comparison_id: z.string().describe("Percy comparison ID"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_get_network_logs",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyGetNetworkLogs(args, config);
-      } catch (error) {
-        return handleMCPError("percy_get_network_logs", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_pr_visual_report
-  // -------------------------------------------------------------------------
-  tools.percy_pr_visual_report = server.tool(
-    "percy_pr_visual_report",
-    "Get a complete visual regression report for a PR. Finds the Percy build by branch/SHA, ranks snapshots by risk, shows AI analysis, and recommends actions. The single best tool for checking visual status.",
-    {
-      project_id: z
-        .string()
-        .optional()
-        .describe(
-          "Percy project ID (optional if PERCY_TOKEN is project-scoped)",
-        ),
-      branch: z
-        .string()
-        .optional()
-        .describe("Git branch name to find the build"),
-      sha: z.string().optional().describe("Git commit SHA to find the build"),
-      build_id: z
-        .string()
-        .optional()
-        .describe("Direct Percy build ID (skips search)"),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_pr_visual_report",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyPrVisualReport(args, config);
-      } catch (error) {
-        return handleMCPError("percy_pr_visual_report", server, config, error);
-      }
-    },
-  );
-
-  // -------------------------------------------------------------------------
-  // percy_create_percy_build — THE unified build creation tool
+  // percy_create_percy_build
   // -------------------------------------------------------------------------
   tools.percy_create_percy_build = server.tool(
     "percy_create_percy_build",
-    "Create a complete Percy build with snapshots. Handles everything automatically: project creation, URL snapshotting, screenshot uploads, test wrapping, or build cloning. Just provide a project name and ONE of: URLs to snapshot, screenshot files, a test command, or a build ID to clone. Branch and commit SHA are auto-detected from git.",
+    "Create a complete Percy build with snapshots. Supports URL scanning, screenshot upload, test wrapping, or build cloning. The primary build creation tool.",
     {
       project_name: z
         .string()
@@ -830,56 +212,101 @@ export function registerPercyMcpTools(
   );
 
   // -------------------------------------------------------------------------
-  // percy_auto_triage
+  // percy_create_build
   // -------------------------------------------------------------------------
-  tools.percy_auto_triage = server.tool(
-    "percy_auto_triage",
-    "Automatically categorize all visual changes in a Percy build into Critical (bugs), Review Required, Auto-Approvable, and Noise. Helps prioritize visual review.",
+  tools.percy_create_build = server.tool(
+    "percy_create_build",
+    "Create an empty Percy build (low-level). Use percy_create_percy_build for full automation.",
     {
-      build_id: z.string().describe("Percy build ID"),
-      noise_threshold: z
-        .number()
+      project_id: z
+        .string()
         .optional()
-        .describe("Diff ratio below this is noise (default 0.005 = 0.5%)"),
-      review_threshold: z
-        .number()
+        .describe(
+          "Percy project ID (optional if PERCY_TOKEN is project-scoped)",
+        ),
+      branch: z.string().describe("Git branch name"),
+      commit_sha: z.string().describe("Git commit SHA"),
+      commit_message: z.string().optional().describe("Git commit message"),
+      pull_request_number: z
+        .string()
         .optional()
-        .describe("Diff ratio above this needs review (default 0.15 = 15%)"),
+        .describe("Pull request number"),
+      type: z
+        .string()
+        .optional()
+        .describe("Project type: web, app, automate, generic"),
     },
     async (args) => {
       try {
         trackMCP(
-          "percy_auto_triage",
+          "percy_create_build",
           server.server.getClientVersion()!,
           config,
         );
-        return await percyAutoTriage(args, config);
+        return await percyCreateBuild(args, config);
       } catch (error) {
-        return handleMCPError("percy_auto_triage", server, config, error);
+        return handleMCPError("percy_create_build", server, config, error);
       }
     },
   );
 
   // -------------------------------------------------------------------------
-  // percy_debug_failed_build
+  // percy_create_snapshot
   // -------------------------------------------------------------------------
-  tools.percy_debug_failed_build = server.tool(
-    "percy_debug_failed_build",
-    "Diagnose a Percy build failure. Cross-references error buckets, log analysis, failed snapshots, and network logs to provide actionable fix commands.",
+  tools.percy_create_snapshot = server.tool(
+    "percy_create_snapshot",
+    "Create a snapshot in a Percy build with DOM resources (low-level web flow).",
     {
       build_id: z.string().describe("Percy build ID"),
+      name: z.string().describe("Snapshot name"),
+      widths: z
+        .string()
+        .optional()
+        .describe("Comma-separated viewport widths, e.g. '375,768,1280'"),
+      enable_javascript: z.boolean().optional(),
+      resources: z
+        .string()
+        .optional()
+        .describe(
+          'JSON array of resources: [{"id":"sha","resource-url":"url","is-root":true}]',
+        ),
     },
     async (args) => {
       try {
         trackMCP(
-          "percy_debug_failed_build",
+          "percy_create_snapshot",
           server.server.getClientVersion()!,
           config,
         );
-        return await percyDebugFailedBuild(args, config);
+        return await percyCreateSnapshot(args, config);
+      } catch (error) {
+        return handleMCPError("percy_create_snapshot", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_create_app_snapshot
+  // -------------------------------------------------------------------------
+  tools.percy_create_app_snapshot = server.tool(
+    "percy_create_app_snapshot",
+    "Create a snapshot for App Percy / screenshot builds (low-level app flow).",
+    {
+      build_id: z.string().describe("Percy build ID"),
+      name: z.string().describe("Snapshot name"),
+      test_case: z.string().optional().describe("Test case name"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_create_app_snapshot",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyCreateAppSnapshot(args, config);
       } catch (error) {
         return handleMCPError(
-          "percy_debug_failed_build",
+          "percy_create_app_snapshot",
           server,
           config,
           error,
@@ -889,130 +316,362 @@ export function registerPercyMcpTools(
   );
 
   // -------------------------------------------------------------------------
-  // percy_diff_explain
+  // percy_create_comparison
   // -------------------------------------------------------------------------
-  tools.percy_diff_explain = server.tool(
-    "percy_diff_explain",
-    "Explain visual changes in plain English. Supports depth levels: summary (AI descriptions), detailed (+ coordinates), full_rca (+ DOM/CSS changes with XPath).",
+  tools.percy_create_comparison = server.tool(
+    "percy_create_comparison",
+    "Create a comparison with device tag and tiles for screenshot builds (low-level).",
     {
-      comparison_id: z.string().describe("Percy comparison ID"),
-      depth: z
-        .enum(["summary", "detailed", "full_rca"])
+      snapshot_id: z.string().describe("Percy snapshot ID"),
+      tag_name: z.string().describe("Device/browser name, e.g. 'iPhone 13'"),
+      tag_width: z.number().describe("Tag width in pixels"),
+      tag_height: z.number().describe("Tag height in pixels"),
+      tag_os_name: z.string().optional().describe("OS name, e.g. 'iOS'"),
+      tag_os_version: z.string().optional().describe("OS version, e.g. '16.0'"),
+      tag_browser_name: z
+        .string()
         .optional()
-        .describe("Analysis depth (default: detailed)"),
+        .describe("Browser name, e.g. 'Safari'"),
+      tag_orientation: z.string().optional().describe("portrait or landscape"),
+      tiles: z
+        .string()
+        .describe(
+          "JSON array of tiles: [{sha, status-bar-height?, nav-bar-height?}]",
+        ),
     },
     async (args) => {
       try {
         trackMCP(
-          "percy_diff_explain",
+          "percy_create_comparison",
           server.server.getClientVersion()!,
           config,
         );
-        return await percyDiffExplain(args, config);
+        return await percyCreateComparison(args, config);
       } catch (error) {
-        return handleMCPError("percy_diff_explain", server, config, error);
+        return handleMCPError("percy_create_comparison", server, config, error);
+      }
+    },
+  );
+
+  // =========================================================================
+  // === READ ===
+  // =========================================================================
+
+  // -------------------------------------------------------------------------
+  // percy_list_projects
+  // -------------------------------------------------------------------------
+  tools.percy_list_projects = server.tool(
+    "percy_list_projects",
+    "List all Percy projects in your organization.",
+    {
+      org_id: z
+        .string()
+        .optional()
+        .describe("Percy organization ID. If not provided, uses token scope."),
+      search: z
+        .string()
+        .optional()
+        .describe("Filter projects by name (substring match)"),
+      limit: z.number().optional().describe("Max results (default 10, max 50)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_list_projects",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyListProjects(args, config);
+      } catch (error) {
+        return handleMCPError("percy_list_projects", server, config, error);
       }
     },
   );
 
   // -------------------------------------------------------------------------
-  // percy_auth_status
+  // percy_list_builds
   // -------------------------------------------------------------------------
-  tools.percy_auth_status = server.tool(
-    "percy_auth_status",
-    "Check Percy authentication status — shows which tokens are configured, validates them, and reports project/org scope.",
+  tools.percy_list_builds = server.tool(
+    "percy_list_builds",
+    "List Percy builds with filters (branch, state, SHA, tags).",
+    {
+      project_id: z
+        .string()
+        .optional()
+        .describe("Percy project ID. If not provided, uses PERCY_TOKEN scope."),
+      branch: z.string().optional().describe("Filter by branch name"),
+      state: z
+        .string()
+        .optional()
+        .describe("Filter by state: pending, processing, finished, failed"),
+      sha: z.string().optional().describe("Filter by commit SHA"),
+      limit: z.number().optional().describe("Max results (default 10, max 30)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_list_builds",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyListBuilds(args, config);
+      } catch (error) {
+        return handleMCPError("percy_list_builds", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_build
+  // -------------------------------------------------------------------------
+  tools.percy_get_build = server.tool(
+    "percy_get_build",
+    "Get full Percy build details: state, snapshots, AI metrics, summary.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP("percy_get_build", server.server.getClientVersion()!, config);
+        return await percyGetBuild(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_build", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_build_items
+  // -------------------------------------------------------------------------
+  tools.percy_get_build_items = server.tool(
+    "percy_get_build_items",
+    "List snapshots in a build by category: changed, new, removed, unchanged, failed.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+      category: z
+        .string()
+        .optional()
+        .describe("Filter category: changed, new, removed, unchanged, failed"),
+      sort_by: z
+        .string()
+        .optional()
+        .describe("Sort field (e.g. diff-ratio, name)"),
+      limit: z
+        .number()
+        .optional()
+        .describe("Max results (default 20, max 100)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_build_items",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetBuildItems(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_build_items", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_snapshot
+  // -------------------------------------------------------------------------
+  tools.percy_get_snapshot = server.tool(
+    "percy_get_snapshot",
+    "Get snapshot with all comparisons, screenshots, and diff data.",
+    {
+      snapshot_id: z.string().describe("Percy snapshot ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_snapshot",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetSnapshot(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_snapshot", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_comparison
+  // -------------------------------------------------------------------------
+  tools.percy_get_comparison = server.tool(
+    "percy_get_comparison",
+    "Get comparison details: diff ratio, AI analysis, screenshot URLs.",
+    {
+      comparison_id: z.string().describe("Percy comparison ID"),
+      include_images: z
+        .boolean()
+        .optional()
+        .describe("Include screenshot image URLs in response (default false)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_comparison",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetComparison(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_comparison", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_ai_analysis
+  // -------------------------------------------------------------------------
+  tools.percy_get_ai_analysis = server.tool(
+    "percy_get_ai_analysis",
+    "Get AI visual diff analysis: change types, bug classifications, diff reduction.",
+    {
+      comparison_id: z
+        .string()
+        .optional()
+        .describe("Get AI analysis for a single comparison"),
+      build_id: z
+        .string()
+        .optional()
+        .describe("Get aggregated AI analysis for an entire build"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_ai_analysis",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetAiAnalysis(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_ai_analysis", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_build_summary
+  // -------------------------------------------------------------------------
+  tools.percy_get_build_summary = server.tool(
+    "percy_get_build_summary",
+    "Get AI-generated natural language summary of all visual changes.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_build_summary",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetBuildSummary(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_build_summary", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_ai_quota
+  // -------------------------------------------------------------------------
+  tools.percy_get_ai_quota = server.tool(
+    "percy_get_ai_quota",
+    "Check AI regeneration quota: daily usage and limits.",
     {},
     async () => {
       try {
         trackMCP(
-          "percy_auth_status",
+          "percy_get_ai_quota",
           server.server.getClientVersion()!,
           config,
         );
-        return await percyAuthStatus({}, config);
+        return await percyGetAiQuota({}, config);
       } catch (error) {
-        return handleMCPError("percy_auth_status", server, config, error);
-      }
-    },
-  );
-
-  // =========================================================================
-  // PHASE 2 TOOLS
-  // =========================================================================
-
-  // -------------------------------------------------------------------------
-  // percy_trigger_ai_recompute
-  // -------------------------------------------------------------------------
-  tools.percy_trigger_ai_recompute = server.tool(
-    "percy_trigger_ai_recompute",
-    "Re-run Percy AI analysis on comparisons with a custom prompt. Use to customize what the AI ignores or highlights in visual diffs.",
-    {
-      build_id: z
-        .string()
-        .optional()
-        .describe("Percy build ID (for bulk recompute)"),
-      comparison_id: z
-        .string()
-        .optional()
-        .describe("Single comparison ID to recompute"),
-      prompt: z
-        .string()
-        .optional()
-        .describe(
-          "Custom prompt for AI (max 400 chars), e.g. 'Ignore font rendering differences'",
-        ),
-      mode: z
-        .enum(["ignore", "unignore"])
-        .optional()
-        .describe(
-          "ignore = hide matching diffs, unignore = show matching diffs",
-        ),
-    },
-    async (args) => {
-      try {
-        trackMCP(
-          "percy_trigger_ai_recompute",
-          server.server.getClientVersion()!,
-          config,
-        );
-        return await percyTriggerAiRecompute(args, config);
-      } catch (error) {
-        return handleMCPError(
-          "percy_trigger_ai_recompute",
-          server,
-          config,
-          error,
-        );
+        return handleMCPError("percy_get_ai_quota", server, config, error);
       }
     },
   );
 
   // -------------------------------------------------------------------------
-  // percy_suggest_prompt
+  // percy_get_rca
   // -------------------------------------------------------------------------
-  tools.percy_suggest_prompt = server.tool(
-    "percy_suggest_prompt",
-    "Get an AI-generated prompt suggestion for specific diff regions. The AI analyzes the selected regions and suggests a prompt to ignore or highlight similar changes.",
+  tools.percy_get_rca = server.tool(
+    "percy_get_rca",
+    "Get Root Cause Analysis: maps visual diffs to DOM/CSS changes.",
     {
       comparison_id: z.string().describe("Percy comparison ID"),
-      region_ids: z.string().describe("Comma-separated region IDs to analyze"),
-      ignore_change: z
+      trigger_if_missing: z
         .boolean()
         .optional()
-        .describe(
-          "true = suggest ignore prompt, false = suggest show prompt (default true)",
-        ),
+        .describe("Auto-trigger RCA if not yet run (default true)"),
+    },
+    async (args) => {
+      try {
+        trackMCP("percy_get_rca", server.server.getClientVersion()!, config);
+        return await percyGetRca(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_rca", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_suggestions
+  // -------------------------------------------------------------------------
+  tools.percy_get_suggestions = server.tool(
+    "percy_get_suggestions",
+    "Get build failure diagnostics: categorized issues with fix steps.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+      reference_type: z
+        .string()
+        .optional()
+        .describe("Filter: build, snapshot, or comparison"),
+      reference_id: z
+        .string()
+        .optional()
+        .describe("Specific snapshot or comparison ID"),
     },
     async (args) => {
       try {
         trackMCP(
-          "percy_suggest_prompt",
+          "percy_get_suggestions",
           server.server.getClientVersion()!,
           config,
         );
-        return await percySuggestPrompt(args, config);
+        return await percyGetSuggestions(args, config);
       } catch (error) {
-        return handleMCPError("percy_suggest_prompt", server, config, error);
+        return handleMCPError("percy_get_suggestions", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_get_network_logs
+  // -------------------------------------------------------------------------
+  tools.percy_get_network_logs = server.tool(
+    "percy_get_network_logs",
+    "Get network request logs: per-URL status comparison (base vs head).",
+    {
+      comparison_id: z.string().describe("Percy comparison ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_network_logs",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetNetworkLogs(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_network_logs", server, config, error);
       }
     },
   );
@@ -1022,7 +681,7 @@ export function registerPercyMcpTools(
   // -------------------------------------------------------------------------
   tools.percy_get_build_logs = server.tool(
     "percy_get_build_logs",
-    "Download and filter Percy build logs (CLI, renderer, jackproxy). Shows raw log output for debugging rendering and asset issues.",
+    "Get raw build logs (CLI, renderer, proxy) with level filtering.",
     {
       build_id: z.string().describe("Percy build ID"),
       service: z
@@ -1057,66 +716,89 @@ export function registerPercyMcpTools(
   );
 
   // -------------------------------------------------------------------------
-  // percy_analyze_logs_realtime
+  // percy_get_usage_stats
   // -------------------------------------------------------------------------
-  tools.percy_analyze_logs_realtime = server.tool(
-    "percy_analyze_logs_realtime",
-    "Analyze raw log data in real-time without a stored build. Pass CLI logs as JSON and get instant diagnostics with fix suggestions.",
+  tools.percy_get_usage_stats = server.tool(
+    "percy_get_usage_stats",
+    "Get organization usage: screenshot counts, quotas, AI comparisons.",
     {
-      logs: z
+      org_id: z.string().describe("Percy organization ID"),
+      product: z
         .string()
-        .describe(
-          'JSON array of log entries: [{"message":"...","level":"error","meta":{}}]',
-        ),
+        .optional()
+        .describe("Filter by product type (e.g., 'percy', 'app_percy')"),
     },
     async (args) => {
       try {
         trackMCP(
-          "percy_analyze_logs_realtime",
+          "percy_get_usage_stats",
           server.server.getClientVersion()!,
           config,
         );
-        return await percyAnalyzeLogsRealtime(args, config);
+        return await percyGetUsageStats(args, config);
       } catch (error) {
-        return handleMCPError(
-          "percy_analyze_logs_realtime",
-          server,
+        return handleMCPError("percy_get_usage_stats", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_auth_status
+  // -------------------------------------------------------------------------
+  tools.percy_auth_status = server.tool(
+    "percy_auth_status",
+    "Check Percy auth: which tokens are set, validated, and their scope.",
+    {},
+    async () => {
+      try {
+        trackMCP(
+          "percy_auth_status",
+          server.server.getClientVersion()!,
           config,
-          error,
         );
+        return await percyAuthStatus({}, config);
+      } catch (error) {
+        return handleMCPError("percy_auth_status", server, config, error);
       }
     },
   );
 
   // =========================================================================
-  // PHASE 3 TOOLS
+  // === UPDATE ===
   // =========================================================================
 
   // -------------------------------------------------------------------------
-  // percy_create_project
+  // percy_approve_build
   // -------------------------------------------------------------------------
-  tools.percy_create_project = server.tool(
-    "percy_create_project",
-    "Create a new Percy project. Uses BrowserStack credentials to auto-create the project and returns a project token. The project is created if it doesn't exist.",
+  tools.percy_approve_build = server.tool(
+    "percy_approve_build",
+    "Approve, reject, or request changes on a Percy build.",
     {
-      name: z.string().describe("Project name (e.g. 'my-web-app')"),
-      type: z
-        .enum(["web", "automate"])
+      build_id: z.string().describe("Percy build ID to review"),
+      action: z
+        .enum(["approve", "request_changes", "unapprove", "reject"])
+        .describe("Review action"),
+      snapshot_ids: z
+        .string()
         .optional()
         .describe(
-          "Project type: 'web' for Percy Web, 'automate' for Percy Automate (default: auto-detect)",
+          "Comma-separated snapshot IDs (required for request_changes)",
         ),
+      reason: z
+        .string()
+        .optional()
+        .describe("Optional reason for the review action"),
     },
     async (args) => {
       try {
         trackMCP(
-          "percy_create_project",
+          "percy_approve_build",
           server.server.getClientVersion()!,
           config,
         );
-        return await percyCreateProject(args, config);
+        return await percyApproveBuild(args, config);
       } catch (error) {
-        return handleMCPError("percy_create_project", server, config, error);
+        return handleMCPError("percy_approve_build", server, config, error);
       }
     },
   );
@@ -1126,7 +808,7 @@ export function registerPercyMcpTools(
   // -------------------------------------------------------------------------
   tools.percy_manage_project_settings = server.tool(
     "percy_manage_project_settings",
-    "View or update Percy project settings including diff sensitivity, auto-approve branches, IntelliIgnore, and AI enablement. High-risk changes require confirmation.",
+    "Update Percy project settings: diff sensitivity, auto-approve, IntelliIgnore.",
     {
       project_id: z.string().describe("Percy project ID"),
       settings: z
@@ -1166,7 +848,7 @@ export function registerPercyMcpTools(
   // -------------------------------------------------------------------------
   tools.percy_manage_browser_targets = server.tool(
     "percy_manage_browser_targets",
-    "List, add, or remove browser targets for a Percy project (Chrome, Firefox, Safari, Edge).",
+    "Add or remove browser targets (Chrome, Firefox, Safari, Edge).",
     {
       project_id: z.string().describe("Percy project ID"),
       action: z
@@ -1204,7 +886,7 @@ export function registerPercyMcpTools(
   // -------------------------------------------------------------------------
   tools.percy_manage_tokens = server.tool(
     "percy_manage_tokens",
-    "List or rotate Percy project tokens. Token values are masked for security — only last 4 characters shown.",
+    "View (masked) or rotate Percy project tokens.",
     {
       project_id: z.string().describe("Percy project ID"),
       action: z
@@ -1235,7 +917,7 @@ export function registerPercyMcpTools(
   // -------------------------------------------------------------------------
   tools.percy_manage_webhooks = server.tool(
     "percy_manage_webhooks",
-    "Create, update, list, or delete webhooks for Percy build events.",
+    "Create, update, or delete webhooks for build events.",
     {
       project_id: z.string().describe("Percy project ID"),
       action: z
@@ -1277,7 +959,7 @@ export function registerPercyMcpTools(
   // -------------------------------------------------------------------------
   tools.percy_manage_ignored_regions = server.tool(
     "percy_manage_ignored_regions",
-    "Create, list, save, or delete ignored regions on Percy comparisons. Supports bounding box, XPath, CSS selector, and fullpage types.",
+    "Create, save, or delete ignored regions on comparisons.",
     {
       comparison_id: z
         .string()
@@ -1327,7 +1009,7 @@ export function registerPercyMcpTools(
   // -------------------------------------------------------------------------
   tools.percy_manage_comments = server.tool(
     "percy_manage_comments",
-    "List, create, or close comment threads on Percy snapshots.",
+    "Create or close comment threads on snapshots.",
     {
       build_id: z
         .string()
@@ -1365,28 +1047,44 @@ export function registerPercyMcpTools(
   );
 
   // -------------------------------------------------------------------------
-  // percy_get_usage_stats
+  // percy_manage_variants
   // -------------------------------------------------------------------------
-  tools.percy_get_usage_stats = server.tool(
-    "percy_get_usage_stats",
-    "Get Percy screenshot usage, quota limits, and AI comparison counts for an organization.",
+  tools.percy_manage_variants = server.tool(
+    "percy_manage_variants",
+    "Create or update A/B testing variants.",
     {
-      org_id: z.string().describe("Percy organization ID"),
-      product: z
+      comparison_id: z
         .string()
         .optional()
-        .describe("Filter by product type (e.g., 'percy', 'app_percy')"),
+        .describe("Percy comparison ID (required for list)"),
+      snapshot_id: z
+        .string()
+        .optional()
+        .describe("Percy snapshot ID (required for create)"),
+      action: z
+        .enum(["list", "create", "update"])
+        .optional()
+        .describe("Action to perform (default: list)"),
+      variant_id: z
+        .string()
+        .optional()
+        .describe("Variant ID (required for update)"),
+      name: z
+        .string()
+        .optional()
+        .describe("Variant name (required for create)"),
+      state: z.string().optional().describe("Variant state (for update)"),
     },
     async (args) => {
       try {
         trackMCP(
-          "percy_get_usage_stats",
+          "percy_manage_variants",
           server.server.getClientVersion()!,
           config,
         );
-        return await percyGetUsageStats(args, config);
+        return await percyManageVariants(args, config);
       } catch (error) {
-        return handleMCPError("percy_get_usage_stats", server, config, error);
+        return handleMCPError("percy_manage_variants", server, config, error);
       }
     },
   );
@@ -1396,7 +1094,7 @@ export function registerPercyMcpTools(
   // -------------------------------------------------------------------------
   tools.percy_manage_visual_monitoring = server.tool(
     "percy_manage_visual_monitoring",
-    "Create, update, or list Visual Monitoring projects with URL lists, cron schedules, and auth configuration.",
+    "Create or update Visual Monitoring projects.",
     {
       org_id: z
         .string()
@@ -1447,11 +1145,88 @@ export function registerPercyMcpTools(
   );
 
   // -------------------------------------------------------------------------
+  // percy_trigger_ai_recompute
+  // -------------------------------------------------------------------------
+  tools.percy_trigger_ai_recompute = server.tool(
+    "percy_trigger_ai_recompute",
+    "Re-run AI analysis with a custom prompt.",
+    {
+      build_id: z
+        .string()
+        .optional()
+        .describe("Percy build ID (for bulk recompute)"),
+      comparison_id: z
+        .string()
+        .optional()
+        .describe("Single comparison ID to recompute"),
+      prompt: z
+        .string()
+        .optional()
+        .describe(
+          "Custom prompt for AI (max 400 chars), e.g. 'Ignore font rendering differences'",
+        ),
+      mode: z
+        .enum(["ignore", "unignore"])
+        .optional()
+        .describe(
+          "ignore = hide matching diffs, unignore = show matching diffs",
+        ),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_trigger_ai_recompute",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyTriggerAiRecompute(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_trigger_ai_recompute",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_suggest_prompt
+  // -------------------------------------------------------------------------
+  tools.percy_suggest_prompt = server.tool(
+    "percy_suggest_prompt",
+    "Get AI-suggested prompt for specific diff regions.",
+    {
+      comparison_id: z.string().describe("Percy comparison ID"),
+      region_ids: z.string().describe("Comma-separated region IDs to analyze"),
+      ignore_change: z
+        .boolean()
+        .optional()
+        .describe(
+          "true = suggest ignore prompt, false = suggest show prompt (default true)",
+        ),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_suggest_prompt",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percySuggestPrompt(args, config);
+      } catch (error) {
+        return handleMCPError("percy_suggest_prompt", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
   // percy_branchline_operations
   // -------------------------------------------------------------------------
   tools.percy_branchline_operations = server.tool(
     "percy_branchline_operations",
-    "Sync, merge, or unmerge Percy branch baselines. Sync copies approved baselines to target branches.",
+    "Sync, merge, or unmerge branch baselines.",
     {
       action: z
         .enum(["sync", "merge", "unmerge"])
@@ -1486,45 +1261,290 @@ export function registerPercyMcpTools(
     },
   );
 
+  // =========================================================================
+  // === FINALIZE / UPLOAD ===
+  // =========================================================================
+
   // -------------------------------------------------------------------------
-  // percy_manage_variants
+  // percy_finalize_build
   // -------------------------------------------------------------------------
-  tools.percy_manage_variants = server.tool(
-    "percy_manage_variants",
-    "List, create, or update A/B testing variants for Percy snapshot comparisons.",
+  tools.percy_finalize_build = server.tool(
+    "percy_finalize_build",
+    "Finalize a Percy build (triggers processing).",
     {
-      comparison_id: z
-        .string()
-        .optional()
-        .describe("Percy comparison ID (required for list)"),
-      snapshot_id: z
-        .string()
-        .optional()
-        .describe("Percy snapshot ID (required for create)"),
-      action: z
-        .enum(["list", "create", "update"])
-        .optional()
-        .describe("Action to perform (default: list)"),
-      variant_id: z
-        .string()
-        .optional()
-        .describe("Variant ID (required for update)"),
-      name: z
-        .string()
-        .optional()
-        .describe("Variant name (required for create)"),
-      state: z.string().optional().describe("Variant state (for update)"),
+      build_id: z.string().describe("Percy build ID"),
     },
     async (args) => {
       try {
         trackMCP(
-          "percy_manage_variants",
+          "percy_finalize_build",
           server.server.getClientVersion()!,
           config,
         );
-        return await percyManageVariants(args, config);
+        return await percyFinalizeBuild(args, config);
       } catch (error) {
-        return handleMCPError("percy_manage_variants", server, config, error);
+        return handleMCPError("percy_finalize_build", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_finalize_snapshot
+  // -------------------------------------------------------------------------
+  tools.percy_finalize_snapshot = server.tool(
+    "percy_finalize_snapshot",
+    "Finalize a snapshot (triggers rendering).",
+    {
+      snapshot_id: z.string().describe("Percy snapshot ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_finalize_snapshot",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyFinalizeSnapshot(args, config);
+      } catch (error) {
+        return handleMCPError("percy_finalize_snapshot", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_finalize_comparison
+  // -------------------------------------------------------------------------
+  tools.percy_finalize_comparison = server.tool(
+    "percy_finalize_comparison",
+    "Finalize a comparison (triggers diff processing).",
+    {
+      comparison_id: z.string().describe("Percy comparison ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_finalize_comparison",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyFinalizeComparison(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_finalize_comparison",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_upload_resource
+  // -------------------------------------------------------------------------
+  tools.percy_upload_resource = server.tool(
+    "percy_upload_resource",
+    "Upload a resource to a Percy build (CSS, JS, HTML, images).",
+    {
+      build_id: z.string().describe("Percy build ID"),
+      sha: z.string().describe("SHA-256 hash of the resource content"),
+      base64_content: z.string().describe("Base64-encoded resource content"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_upload_resource",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyUploadResource(args, config);
+      } catch (error) {
+        return handleMCPError("percy_upload_resource", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_upload_tile
+  // -------------------------------------------------------------------------
+  tools.percy_upload_tile = server.tool(
+    "percy_upload_tile",
+    "Upload a screenshot tile to a comparison (PNG/JPEG).",
+    {
+      comparison_id: z.string().describe("Percy comparison ID"),
+      base64_content: z
+        .string()
+        .describe("Base64-encoded PNG or JPEG screenshot"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_upload_tile",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyUploadTile(args, config);
+      } catch (error) {
+        return handleMCPError("percy_upload_tile", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_analyze_logs_realtime
+  // -------------------------------------------------------------------------
+  tools.percy_analyze_logs_realtime = server.tool(
+    "percy_analyze_logs_realtime",
+    "Analyze raw logs in real-time without a stored build.",
+    {
+      logs: z
+        .string()
+        .describe(
+          'JSON array of log entries: [{"message":"...","level":"error","meta":{}}]',
+        ),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_analyze_logs_realtime",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyAnalyzeLogsRealtime(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_analyze_logs_realtime",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // =========================================================================
+  // === WORKFLOWS (Composite — highest value) ===
+  // =========================================================================
+
+  // -------------------------------------------------------------------------
+  // percy_pr_visual_report
+  // -------------------------------------------------------------------------
+  tools.percy_pr_visual_report = server.tool(
+    "percy_pr_visual_report",
+    "Get a complete PR visual regression report: risk-ranked changes with AI analysis and recommendations. THE tool for checking PR status.",
+    {
+      project_id: z
+        .string()
+        .optional()
+        .describe(
+          "Percy project ID (optional if PERCY_TOKEN is project-scoped)",
+        ),
+      branch: z
+        .string()
+        .optional()
+        .describe("Git branch name to find the build"),
+      sha: z.string().optional().describe("Git commit SHA to find the build"),
+      build_id: z
+        .string()
+        .optional()
+        .describe("Direct Percy build ID (skips search)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_pr_visual_report",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyPrVisualReport(args, config);
+      } catch (error) {
+        return handleMCPError("percy_pr_visual_report", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_auto_triage
+  // -------------------------------------------------------------------------
+  tools.percy_auto_triage = server.tool(
+    "percy_auto_triage",
+    "Auto-categorize all visual changes: Critical, Review Required, Auto-Approvable, Noise.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+      noise_threshold: z
+        .number()
+        .optional()
+        .describe("Diff ratio below this is noise (default 0.005 = 0.5%)"),
+      review_threshold: z
+        .number()
+        .optional()
+        .describe("Diff ratio above this needs review (default 0.15 = 15%)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_auto_triage",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyAutoTriage(args, config);
+      } catch (error) {
+        return handleMCPError("percy_auto_triage", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_debug_failed_build
+  // -------------------------------------------------------------------------
+  tools.percy_debug_failed_build = server.tool(
+    "percy_debug_failed_build",
+    "Diagnose a failed build: cross-references logs, suggestions, and network issues with fix commands.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_debug_failed_build",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyDebugFailedBuild(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_debug_failed_build",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_diff_explain
+  // -------------------------------------------------------------------------
+  tools.percy_diff_explain = server.tool(
+    "percy_diff_explain",
+    "Explain visual changes in plain English at 3 depth levels (summary/detailed/full_rca).",
+    {
+      comparison_id: z.string().describe("Percy comparison ID"),
+      depth: z
+        .enum(["summary", "detailed", "full_rca"])
+        .optional()
+        .describe("Analysis depth (default: detailed)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_diff_explain",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyDiffExplain(args, config);
+      } catch (error) {
+        return handleMCPError("percy_diff_explain", server, config, error);
       }
     },
   );

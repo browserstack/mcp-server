@@ -68,20 +68,25 @@ export function formatBuild(build: any): string {
     lines.push(`**Review:** ${build.reviewState}`);
   }
 
-  // Snapshot stats
-  const total = build.totalSnapshots;
-  const changed = build.totalComparisonsDiff;
-  const newSnaps = build.totalSnapshotsNew ?? null;
-  const removed = build.totalSnapshotsRemoved ?? null;
-  const unchanged = build.totalSnapshotsUnchanged ?? null;
+  // Snapshot stats — handle both camelCase and kebab-case
+  const total = build.totalSnapshots ?? build["total-snapshots"];
+  const changed = build.totalComparisonsDiff ?? build["total-comparisons-diff"];
+  const totalComparisons = build.totalComparisons ?? build["total-comparisons"];
+  const unreviewed =
+    build.totalSnapshotsUnreviewed ?? build["total-snapshots-unreviewed"];
+  const newSnaps = null; // Not in API — derived from build-items category
+  const removed = null; // Not in API — derived from build-items category
+  const unchanged = null; // Not in API — derived from build-items category
 
   if (total != null) {
-    const parts = [`${total} total`];
-    if (changed != null) parts.push(`${changed} changed`);
+    const parts = [`${total} snapshots`];
+    if (totalComparisons != null) parts.push(`${totalComparisons} comparisons`);
+    if (changed != null) parts.push(`${changed} with diffs`);
+    if (unreviewed != null) parts.push(`${unreviewed} unreviewed`);
     if (newSnaps != null) parts.push(`${newSnaps} new`);
     if (removed != null) parts.push(`${removed} removed`);
     if (unchanged != null) parts.push(`${unchanged} unchanged`);
-    lines.push(`**Snapshots:** ${parts.join(" | ")}`);
+    lines.push(`**Stats:** ${parts.join(" | ")}`);
   }
 
   // Duration
@@ -118,36 +123,71 @@ export function formatBuild(build: any): string {
     }
   }
 
-  // AI analysis
-  const ai = build.aiDetails;
+  // AI analysis — handle both camelCase (from deserializer) and kebab-case keys
+  const ai = build.aiDetails || build["ai-details"];
   if (ai && build.state !== "failed") {
-    lines.push("");
-    lines.push("### AI Analysis");
-    if (ai.comparisonsAnalyzed != null) {
-      lines.push(`- Comparisons analyzed: ${ai.comparisonsAnalyzed}`);
-    }
-    if (ai.potentialBugs != null) {
-      lines.push(`- Potential bugs: ${ai.potentialBugs}`);
-    }
-    if (ai.diffReduction != null) {
-      lines.push(`- Diff reduction: ${ai.diffReduction}`);
-    } else if (ai.originalDiffPercent != null && ai.aiDiffPercent != null) {
-      lines.push(
-        `- Diff reduction: ${pct(ai.originalDiffPercent)} → ${pct(ai.aiDiffPercent)}`,
-      );
+    const aiEnabled = ai.aiEnabled ?? ai["ai-enabled"] ?? false;
+    if (aiEnabled) {
+      lines.push("");
+      lines.push("### AI Analysis");
+      const compsWithAi =
+        ai.totalComparisonsWithAi ?? ai["total-comparisons-with-ai"];
+      const bugs = ai.totalPotentialBugs ?? ai["total-potential-bugs"];
+      const diffsReduced =
+        ai.totalDiffsReducedCapped ?? ai["total-diffs-reduced-capped"];
+      const aiVisualDiffs =
+        ai.totalAiVisualDiffs ?? ai["total-ai-visual-diffs"];
+      const allCompleted = ai.allAiJobsCompleted ?? ai["all-ai-jobs-completed"];
+      const summaryStatus = ai.summaryStatus ?? ai["summary-status"];
+
+      if (compsWithAi != null) {
+        lines.push(`- Comparisons analyzed by AI: ${compsWithAi}`);
+      }
+      if (bugs != null && bugs > 0) {
+        lines.push(`- **Potential bugs: ${bugs}**`);
+      }
+      if (diffsReduced != null && diffsReduced > 0) {
+        lines.push(`- Diffs reduced by AI: ${diffsReduced}`);
+      }
+      if (aiVisualDiffs != null) {
+        lines.push(`- AI visual diffs: ${aiVisualDiffs}`);
+      }
+      if (allCompleted != null) {
+        lines.push(`- AI jobs: ${allCompleted ? "completed" : "in progress"}`);
+      }
+      if (summaryStatus) {
+        lines.push(`- Summary: ${summaryStatus}`);
+      }
     }
   }
 
-  // Build summary
-  if (build.summary) {
+  // Build summary — from included build-summary relationship
+  const buildSummary = build.buildSummary;
+  const summaryText = buildSummary?.summary || build.summary;
+  if (summaryText) {
     lines.push("");
-    lines.push("### Summary");
-    lines.push(
-      build.summary
-        .split("\n")
-        .map((l: string) => `> ${l}`)
-        .join("\n"),
-    );
+    lines.push("### Build Summary");
+    try {
+      const parsed =
+        typeof summaryText === "string" ? JSON.parse(summaryText) : summaryText;
+      if (parsed?.title) {
+        lines.push(`> ${parsed.title}`);
+      }
+      if (Array.isArray(parsed?.items)) {
+        parsed.items.forEach((item: any) => {
+          lines.push(`- ${item.title || item}`);
+        });
+      }
+    } catch {
+      // Not JSON — treat as plain text
+      const text = String(summaryText);
+      lines.push(
+        text
+          .split("\n")
+          .map((l: string) => `> ${l}`)
+          .join("\n"),
+      );
+    }
   }
 
   return lines.join("\n");

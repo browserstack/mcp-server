@@ -1,0 +1,11 @@
+# Percy MCP Configuration
+#
+# Copy this file to 'config' and fill in your credentials:
+#   cp config.example config
+#
+# NEVER commit the 'config' file — it's gitignored.
+
+export BROWSERSTACK_USERNAME="your-username"
+export BROWSERSTACK_ACCESS_KEY="your-access-key"
+export PERCY_TOKEN="your-percy-token"
+# export PERCY_ORG_TOKEN="your-org-token"

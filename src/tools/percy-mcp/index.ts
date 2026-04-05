@@ -366,7 +366,15 @@ export function registerPercyMcpTools(
         .describe("Build ID to clone FROM (the source)"),
       target_project_name: z
         .string()
-        .describe("Project name to clone INTO (auto-creates if doesn't exist)"),
+        .describe(
+          "Project name to clone INTO. Use the EXACT project name from Percy dashboard. If project doesn't exist, a new one is created.",
+        ),
+      target_token: z
+        .string()
+        .optional()
+        .describe(
+          "Percy token for the TARGET project. Use this to clone into an existing project without creating a new one. Get it from project settings.",
+        ),
       source_token: z
         .string()
         .optional()

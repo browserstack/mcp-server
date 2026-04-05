@@ -2,19 +2,19 @@
  * percy_clone_build — Clone snapshots from a source build to a new build,
  * even across different projects.
  *
- * How it works:
- * 1. Reads all snapshots + comparisons from the source build
- * 2. Creates a new build in the target project
- * 3. For each snapshot: creates snapshot in target, creates comparisons
- *    with same tiles/screenshots, uploads tile data, finalizes
- * 4. Finalizes the target build
- *
- * Images/resources are globally stored by SHA in Percy — so cross-project
- * cloning reuses the same storage (no re-upload needed for images that exist).
+ * Flow:
+ * 1. Read build-items to get snapshot IDs
+ * 2. For each snapshot: fetch raw JSON:API with includes to get image URLs
+ * 3. Create target build + snapshots + comparisons with downloaded screenshots
+ * 4. Finalize
  */
 
-import { PercyClient } from "../../../lib/percy-api/client.js";
 import { getBrowserStackAuth } from "../../../lib/get-auth.js";
+import {
+  getPercyHeaders,
+  getPercyApiBaseUrl,
+} from "../../../lib/percy-api/auth.js";
+import { PercyClient } from "../../../lib/percy-api/client.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createHash } from "crypto";
@@ -49,26 +49,16 @@ async function getProjectToken(
 ): Promise<string> {
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
-  const params = new URLSearchParams({ name: projectName });
-  const url = `https://api.browserstack.com/api/app_percy/get_project_token?${params.toString()}`;
-
+  const url = `https://api.browserstack.com/api/app_percy/get_project_token?name=${encodeURIComponent(projectName)}`;
   const response = await fetch(url, {
     headers: { Authorization: `Basic ${auth}` },
   });
-
-  if (!response.ok) {
-    throw new Error(`Failed to get token for project "${projectName}"`);
-  }
-
+  if (!response.ok) throw new Error(`Failed to get token for "${projectName}"`);
   const data = await response.json();
-  if (!data?.token || !data?.success) {
-    throw new Error(`No token returned for project "${projectName}"`);
-  }
-
+  if (!data?.token || !data?.success)
+    throw new Error(`No token returned for "${projectName}"`);
   return data.token;
 }
-
-// ── Fetch screenshot image as base64 ────────────────────────────────────────
 
 async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
   try {
@@ -81,12 +71,117 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
   }
 }
 
+/**
+ * Fetch a snapshot with RAW JSON:API response to manually walk the
+ * included chain: comparison → head-screenshot → image → url
+ */
+async function fetchSnapshotRaw(
+  snapshotId: string,
+  config: BrowserStackConfig,
+): Promise<{
+  name: string;
+  comparisons: Array<{
+    width: number;
+    height: number;
+    tagName: string;
+    osName: string;
+    browserName: string;
+    imageUrl: string | null;
+  }>;
+} | null> {
+  const headers = await getPercyHeaders(config);
+  const baseUrl = getPercyApiBaseUrl();
+  const url = `${baseUrl}/snapshots/${snapshotId}?include=comparisons.head-screenshot.image,comparisons.comparison-tag`;
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) return null;
+
+  const json = await response.json();
+  const data = json.data;
+  const included = json.included || [];
+
+  if (!data) return null;
+
+  const name = data.attributes?.name || "Unknown";
+
+  // Build lookup maps from included
+  const byTypeId = new Map<string, any>();
+  for (const item of included) {
+    byTypeId.set(`${item.type}:${item.id}`, item);
+  }
+
+  // Get comparison IDs from snapshot relationships
+  const compRefs = data.relationships?.comparisons?.data || [];
+
+  const comparisons: Array<{
+    width: number;
+    height: number;
+    tagName: string;
+    osName: string;
+    browserName: string;
+    imageUrl: string | null;
+  }> = [];
+
+  for (const compRef of compRefs) {
+    const comp = byTypeId.get(`comparisons:${compRef.id}`);
+    if (!comp) continue;
+
+    const width = comp.attributes?.width || 1280;
+
+    // Walk: comparison → head-screenshot → image
+    const hsRef = comp.relationships?.["head-screenshot"]?.data;
+    let imageUrl: string | null = null;
+    let height = 800;
+
+    if (hsRef) {
+      const screenshot = byTypeId.get(`screenshots:${hsRef.id}`);
+      if (screenshot) {
+        const imgRef = screenshot.relationships?.image?.data;
+        if (imgRef) {
+          const image = byTypeId.get(`images:${imgRef.id}`);
+          if (image) {
+            imageUrl = image.attributes?.url || null;
+            height = image.attributes?.height || 800;
+          }
+        }
+      }
+    }
+
+    // Get comparison tag
+    const tagRef = comp.relationships?.["comparison-tag"]?.data;
+    let tagName = "Screenshot";
+    let osName = "Clone";
+    let browserName = "Screenshot";
+
+    if (tagRef) {
+      const tag = byTypeId.get(`comparison-tags:${tagRef.id}`);
+      if (tag) {
+        tagName = tag.attributes?.name || "Screenshot";
+        osName = tag.attributes?.["os-name"] || "Clone";
+        browserName = tag.attributes?.["browser-name"] || "Screenshot";
+      }
+    }
+
+    comparisons.push({
+      width,
+      height,
+      tagName,
+      osName,
+      browserName,
+      imageUrl,
+    });
+  }
+
+  return { name, comparisons };
+}
+
 // ── Main handler ────────────────────────────────────────────────────────────
 
 interface CloneBuildArgs {
   source_build_id: string;
   source_token?: string;
   target_project_name: string;
+  target_token?: string;
   branch?: string;
   commit_sha?: string;
 }
@@ -104,14 +199,13 @@ export async function percyCloneBuild(
   output += `**Target project:** ${target_project_name}\n`;
   output += `**Branch:** ${branch}\n\n`;
 
-  // ── Step 1: Set up source client ──────────────────────────────────────
+  // ── Step 1: Set up source token ───────────────────────────────────────
 
-  let sourceToken: string;
+  const originalToken = process.env.PERCY_TOKEN;
+
   if (args.source_token) {
-    sourceToken = args.source_token;
-  } else if (process.env.PERCY_TOKEN) {
-    sourceToken = process.env.PERCY_TOKEN;
-  } else {
+    process.env.PERCY_TOKEN = args.source_token;
+  } else if (!process.env.PERCY_TOKEN) {
     return {
       content: [
         {
@@ -123,285 +217,256 @@ export async function percyCloneBuild(
     };
   }
 
-  // Source client uses the source token
-  process.env.PERCY_TOKEN = sourceToken;
   const sourceClient = new PercyClient(config);
 
   // ── Step 2: Read source build ─────────────────────────────────────────
 
-  output += `### Reading source build...\n\n`;
-
   let sourceBuild: any;
   try {
-    sourceBuild = await sourceClient.get<any>(`/builds/${source_build_id}`, {
-      "include-metadata": "true",
-    });
+    sourceBuild = await sourceClient.get<any>(`/builds/${source_build_id}`);
   } catch (e: any) {
+    process.env.PERCY_TOKEN = originalToken || "";
     return {
       content: [
         {
           type: "text",
-          text: `Failed to read source build #${source_build_id}: ${e.message}\n\nMake sure the source token has read access. Use a \`web_*\` or \`auto_*\` token, not a CI token.`,
+          text: `Failed to read source build: ${e.message}\n\nUse a full-access token (web_* or auto_*), not a CI token.`,
         },
       ],
       isError: true,
     };
   }
 
-  const sourceState = sourceBuild?.state || "unknown";
-  output += `Source build state: **${sourceState}**\n`;
+  output += `Source: **${sourceBuild?.state || "unknown"}** — ${sourceBuild?.totalSnapshots || "?"} snapshots, ${sourceBuild?.totalComparisons || "?"} comparisons\n\n`;
 
-  // ── Step 3: Get source snapshots ──────────────────────────────────────
+  // ── Step 3: Get snapshot IDs from build-items ─────────────────────────
 
-  let snapshots: any[] = [];
+  let allSnapshotIds: string[] = [];
   try {
     const items = await sourceClient.get<any>("/build-items", {
       "filter[build-id]": source_build_id,
       "page[limit]": "30",
     });
-    snapshots = Array.isArray(items) ? items : [];
+    const itemList = Array.isArray(items) ? items : [];
+
+    // Extract all snapshot IDs from build-items (grouped format)
+    for (const item of itemList) {
+      if (item.snapshotIds && Array.isArray(item.snapshotIds)) {
+        allSnapshotIds.push(...item.snapshotIds.map((id: any) => String(id)));
+      } else if (item.coverSnapshotId) {
+        allSnapshotIds.push(String(item.coverSnapshotId));
+      }
+    }
+
+    // Deduplicate
+    allSnapshotIds = [...new Set(allSnapshotIds)];
   } catch (e: any) {
+    process.env.PERCY_TOKEN = originalToken || "";
     return {
       content: [
         {
           type: "text",
-          text: `Failed to read source snapshots: ${e.message}`,
+          text: `Failed to read build items: ${e.message}`,
         },
       ],
       isError: true,
     };
   }
 
-  output += `Source snapshots: **${snapshots.length}**\n\n`;
+  output += `Found **${allSnapshotIds.length}** snapshot(s) to clone.\n\n`;
 
-  if (snapshots.length === 0) {
-    output += `No snapshots found in source build. Nothing to clone.\n`;
+  if (allSnapshotIds.length === 0) {
+    process.env.PERCY_TOKEN = originalToken || "";
+    output += "No snapshots found. Nothing to clone.\n";
     return { content: [{ type: "text", text: output }] };
   }
 
-  // ── Step 4: Get detailed snapshot data with comparisons ───────────────
+  // ── Step 4: Fetch each snapshot with raw JSON:API ─────────────────────
 
-  output += `### Fetching snapshot details...\n\n`;
+  output += `### Reading snapshot details...\n\n`;
 
-  const snapshotDetails: any[] = [];
-  for (const snap of snapshots.slice(0, 20)) {
-    // Limit to 20 snapshots
-    const snapId = snap.id || snap.snapshotId || snap.snapshot?.id;
-    if (!snapId) continue;
+  // Limit to 20 snapshots to avoid timeout
+  const snapshotsToClone = allSnapshotIds.slice(0, 20);
+  const snapshotData: Array<
+    NonNullable<Awaited<ReturnType<typeof fetchSnapshotRaw>>>
+  > = [];
 
-    try {
-      const detail = await sourceClient.get<any>(`/snapshots/${snapId}`, {}, [
-        "comparisons.head-screenshot.image",
-        "comparisons.comparison-tag",
-        "comparisons.browser.browser-family",
-      ]);
-      snapshotDetails.push(detail);
-    } catch {
+  for (const snapId of snapshotsToClone) {
+    const detail = await fetchSnapshotRaw(snapId, config);
+    if (detail) {
+      snapshotData.push(detail);
+    } else {
       output += `- ⚠ Could not read snapshot ${snapId}\n`;
     }
   }
 
-  output += `Read ${snapshotDetails.length} snapshot(s) with comparison data.\n\n`;
+  output += `Read ${snapshotData.length} snapshot(s) with ${snapshotData.reduce((s, d) => s + d.comparisons.length, 0)} comparison(s).\n\n`;
 
-  // ── Step 5: Get target project token ──────────────────────────────────
+  // ── Step 5: Create target project and build ───────────────────────────
 
-  output += `### Setting up target project...\n\n`;
+  output += `### Creating target build...\n\n`;
 
   let targetToken: string;
-  try {
-    targetToken = await getProjectToken(target_project_name, config);
-  } catch (e: any) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Failed to create/access target project "${target_project_name}": ${e.message}`,
-        },
-      ],
-      isError: true,
-    };
+  if (args.target_token) {
+    // Use provided token — clones into existing project
+    targetToken = args.target_token;
+    output += `Using provided target token for project "${target_project_name}".\n`;
+  } else {
+    // Auto-create/get project via BrowserStack API
+    try {
+      targetToken = await getProjectToken(target_project_name, config);
+    } catch (e: any) {
+      process.env.PERCY_TOKEN = originalToken || "";
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to create/access target project: ${e.message}\n\nTip: To clone into an existing project, provide its token via the \`target_token\` parameter.`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 
-  // Switch to target token
+  // Switch to target token for writes
   process.env.PERCY_TOKEN = targetToken;
   const targetClient = new PercyClient(config);
 
-  // ── Step 6: Create target build ───────────────────────────────────────
-
-  let targetBuild: any;
+  let targetBuildId: string;
+  let targetBuildUrl = "";
   try {
-    targetBuild = await targetClient.post<any>("/builds", {
+    const build = await targetClient.post<any>("/builds", {
       data: {
         type: "builds",
-        attributes: {
-          branch,
-          "commit-sha": commitSha,
-        },
+        attributes: { branch, "commit-sha": commitSha },
         relationships: { resources: { data: [] } },
       },
     });
+    targetBuildId = build?.id || (build?.data || build)?.id;
+    targetBuildUrl =
+      build?.webUrl ||
+      build?.["web-url"] ||
+      (build?.data || build)?.webUrl ||
+      "";
   } catch (e: any) {
+    process.env.PERCY_TOKEN = originalToken || "";
     return {
       content: [
-        {
-          type: "text",
-          text: `Failed to create target build: ${e.message}`,
-        },
+        { type: "text", text: `Failed to create target build: ${e.message}` },
       ],
       isError: true,
     };
   }
 
-  const targetBuildData = targetBuild?.data || targetBuild;
-  const targetBuildId = targetBuildData?.id;
-  const targetBuildUrl =
-    targetBuildData?.webUrl || targetBuildData?.["web-url"] || "";
-
-  output += `Target build created: **#${targetBuildId}**\n`;
+  output += `Target build: **#${targetBuildId}**\n`;
   if (targetBuildUrl) output += `URL: ${targetBuildUrl}\n`;
-  output += "\n";
+  output += "\n### Cloning snapshots...\n\n";
 
-  // ── Step 7: Clone each snapshot ───────────────────────────────────────
-
-  output += `### Cloning snapshots...\n\n`;
+  // ── Step 6: Clone each snapshot ───────────────────────────────────────
 
   let clonedCount = 0;
   let failedCount = 0;
 
-  for (const detail of snapshotDetails) {
-    const snapName = detail?.name || "Unknown";
-    const comparisons = detail?.comparisons || [];
+  for (const snap of snapshotData) {
+    const comparisonsWithImages = snap.comparisons.filter((c) => c.imageUrl);
+
+    if (comparisonsWithImages.length === 0) {
+      output += `- ⚠ **${snap.name}** — no downloadable screenshots (web/DOM build)\n`;
+      failedCount++;
+      continue;
+    }
 
     try {
-      // For app/screenshot builds: create snapshot + comparisons with tiles
-      if (comparisons.length > 0) {
-        // Check if comparisons have screenshots (app/screenshot build)
-        const hasScreenshots = comparisons.some(
-          (c: any) => c?.headScreenshot?.image?.url,
-        );
+      // Create snapshot in target
+      const snapResult = await targetClient.post<any>(
+        `/builds/${targetBuildId}/snapshots`,
+        { data: { type: "snapshots", attributes: { name: snap.name } } },
+      );
+      const newSnapId = snapResult?.id || (snapResult?.data || snapResult)?.id;
 
-        if (hasScreenshots) {
-          // App/screenshot build — create snapshot and comparisons
-          const snapResult = await targetClient.post<any>(
-            `/builds/${targetBuildId}/snapshots`,
+      if (!newSnapId) {
+        output += `- ✗ **${snap.name}** — failed to create snapshot\n`;
+        failedCount++;
+        continue;
+      }
+
+      let compCloned = 0;
+
+      for (const comp of comparisonsWithImages) {
+        // Download screenshot
+        const base64 = await fetchImageAsBase64(comp.imageUrl!);
+        if (!base64) {
+          output += `  ⚠ Could not download image for ${comp.tagName} ${comp.width}px\n`;
+          continue;
+        }
+
+        const imageBuffer = Buffer.from(base64, "base64");
+        const sha = createHash("sha256").update(imageBuffer).digest("hex");
+
+        try {
+          // Create comparison with tile
+          const compResult = await targetClient.post<any>(
+            `/snapshots/${newSnapId}/comparisons`,
             {
               data: {
-                type: "snapshots",
-                attributes: { name: snapName },
+                type: "comparisons",
+                attributes: {},
+                relationships: {
+                  tag: {
+                    data: {
+                      type: "tag",
+                      attributes: {
+                        name: comp.tagName,
+                        width: comp.width,
+                        height: comp.height,
+                        "os-name": comp.osName,
+                        "browser-name": comp.browserName,
+                      },
+                    },
+                  },
+                  tiles: {
+                    data: [{ type: "tiles", attributes: { sha } }],
+                  },
+                },
               },
             },
           );
-          const newSnapData = snapResult?.data || snapResult;
-          const newSnapId = newSnapData?.id;
+          const newCompId =
+            compResult?.id || (compResult?.data || compResult)?.id;
 
-          if (!newSnapId) {
-            output += `- ✗ ${snapName}: failed to create snapshot\n`;
-            failedCount++;
-            continue;
+          if (newCompId) {
+            // Upload tile
+            await targetClient.post<any>(`/comparisons/${newCompId}/tiles`, {
+              data: {
+                type: "tiles",
+                attributes: { "base64-content": base64 },
+              },
+            });
+
+            // Finalize comparison
+            await targetClient.post<any>(
+              `/comparisons/${newCompId}/finalize`,
+              {},
+            );
+            compCloned++;
           }
-
-          // Create comparison for each source comparison
-          for (const comp of comparisons) {
-            const tag = comp?.comparisonTag || comp?.["comparison-tag"] || {};
-            const headImage = comp?.headScreenshot?.image;
-            const imageUrl = headImage?.url;
-
-            if (!imageUrl) continue;
-
-            // Download the screenshot
-            const base64 = await fetchImageAsBase64(imageUrl);
-            if (!base64) {
-              output += `- ⚠ ${snapName}: could not download screenshot\n`;
-              continue;
-            }
-
-            // Compute SHA
-            const imageBuffer = Buffer.from(base64, "base64");
-            const sha = createHash("sha256").update(imageBuffer).digest("hex");
-
-            const tagWidth =
-              tag?.width || headImage?.width || comp?.width || 1280;
-            const tagHeight = tag?.height || headImage?.height || 800;
-
-            // Create comparison with tile
-            try {
-              const compResult = await targetClient.post<any>(
-                `/snapshots/${newSnapId}/comparisons`,
-                {
-                  data: {
-                    type: "comparisons",
-                    attributes: {},
-                    relationships: {
-                      tag: {
-                        data: {
-                          type: "tag",
-                          attributes: {
-                            name: tag?.name || "Cloned",
-                            width: tagWidth,
-                            height: tagHeight,
-                            "os-name":
-                              tag?.osName || tag?.["os-name"] || "Clone",
-                            "browser-name":
-                              tag?.browserName ||
-                              tag?.["browser-name"] ||
-                              "Screenshot",
-                          },
-                        },
-                      },
-                      tiles: {
-                        data: [{ type: "tiles", attributes: { sha } }],
-                      },
-                    },
-                  },
-                },
-              );
-
-              const newCompData = compResult?.data || compResult;
-              const newCompId = newCompData?.id;
-
-              if (newCompId) {
-                // Upload the tile
-                await targetClient.post<any>(
-                  `/comparisons/${newCompId}/tiles`,
-                  {
-                    data: {
-                      type: "tiles",
-                      attributes: { "base64-content": base64 },
-                    },
-                  },
-                );
-
-                // Finalize comparison
-                await targetClient.post<any>(
-                  `/comparisons/${newCompId}/finalize`,
-                  {},
-                );
-              }
-            } catch (compError: any) {
-              output += `- ⚠ ${snapName}: comparison failed — ${compError.message}\n`;
-            }
-          }
-
-          clonedCount++;
-          output += `- ✓ **${snapName}** — ${comparisons.length} comparison(s) cloned\n`;
-        } else {
-          // Web/rendering build — snapshots need DOM resources, can't easily clone
-          // Just log the snapshot info for the user
-          output += `- ⚠ **${snapName}** — web build snapshot (DOM-based, cannot clone images directly)\n`;
-          output += `    Re-snapshot this URL with: \`percy_create_percy_build\` with urls\n`;
-          failedCount++;
+        } catch (compErr: any) {
+          output += `  ⚠ ${comp.tagName} ${comp.width}px: ${compErr.message}\n`;
         }
       }
+
+      clonedCount++;
+      output += `- ✓ **${snap.name}** — ${compCloned}/${comparisonsWithImages.length} comparisons\n`;
     } catch (e: any) {
-      output += `- ✗ ${snapName}: ${e.message}\n`;
+      output += `- ✗ **${snap.name}** — ${e.message}\n`;
       failedCount++;
     }
   }
 
-  // ── Step 8: Finalize target build ─────────────────────────────────────
+  // ── Step 7: Finalize ──────────────────────────────────────────────────
 
   output += "\n";
-
   try {
     await targetClient.post<any>(`/builds/${targetBuildId}/finalize`, {});
     output += `### Build finalized ✓\n\n`;
@@ -409,27 +474,20 @@ export async function percyCloneBuild(
     output += `### Build finalize failed: ${e.message}\n\n`;
   }
 
-  // ── Summary ───────────────────────────────────────────────────────────
-
+  // Summary
   output += `### Summary\n\n`;
-  output += `| | Count |\n`;
-  output += `|---|---|\n`;
+  output += `| | Count |\n|---|---|\n`;
   output += `| Snapshots cloned | ${clonedCount} |\n`;
   output += `| Failed/skipped | ${failedCount} |\n`;
   output += `| Target build | #${targetBuildId} |\n`;
   if (targetBuildUrl) output += `| View results | ${targetBuildUrl} |\n`;
 
-  if (failedCount > 0 && clonedCount === 0) {
-    output +=
-      "\n> **Note:** Web/rendering builds store DOM, not screenshots. " +
-      "To clone web builds, re-snapshot the same URLs using `percy_create_percy_build` " +
-      "with the `urls` parameter.\n";
+  if (allSnapshotIds.length > 20) {
+    output += `\n> Note: Cloned first 20 of ${allSnapshotIds.length} snapshots.\n`;
   }
 
-  // Restore original token
-  if (sourceToken) {
-    process.env.PERCY_TOKEN = sourceToken;
-  }
+  // Restore token
+  process.env.PERCY_TOKEN = originalToken || "";
 
   return { content: [{ type: "text", text: output }] };
 }

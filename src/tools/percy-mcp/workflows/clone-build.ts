@@ -406,16 +406,18 @@ export async function percyCloneBuild(
 
         try {
           // Create comparison with tile
+          // NOTE: attributes must have content (not empty {}) or API returns 400
           const compResult = await targetClient.post<any>(
             `/snapshots/${newSnapId}/comparisons`,
             {
               data: {
-                type: "comparisons",
-                attributes: {},
+                attributes: {
+                  "external-debug-url": null,
+                  "dom-info-sha": null,
+                },
                 relationships: {
                   tag: {
                     data: {
-                      type: "tag",
                       attributes: {
                         name: comp.tagName,
                         width: comp.width,
@@ -426,7 +428,15 @@ export async function percyCloneBuild(
                     },
                   },
                   tiles: {
-                    data: [{ type: "tiles", attributes: { sha } }],
+                    data: [
+                      {
+                        attributes: {
+                          sha,
+                          "status-bar-height": 0,
+                          "nav-bar-height": 0,
+                        },
+                      },
+                    ],
                   },
                 },
               },
@@ -439,7 +449,6 @@ export async function percyCloneBuild(
             // Upload tile
             await targetClient.post<any>(`/comparisons/${newCompId}/tiles`, {
               data: {
-                type: "tiles",
                 attributes: { "base64-content": base64 },
               },
             });

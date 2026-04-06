@@ -75,6 +75,8 @@ import { percyCloneBuild } from "./workflows/clone-build.js";
 import { percyAutoTriage } from "./workflows/auto-triage.js";
 import { percyDebugFailedBuild } from "./workflows/debug-failed-build.js";
 import { percyDiffExplain } from "./workflows/diff-explain.js";
+import { percySnapshotUrls } from "./workflows/snapshot-urls.js";
+import { percyRunTests } from "./workflows/run-tests.js";
 
 import { percyAuthStatus } from "./auth/auth-status.js";
 
@@ -1596,6 +1598,66 @@ export function registerPercyMcpTools(
         return await percyDiffExplain(args, config);
       } catch (error) {
         return handleMCPError("percy_diff_explain", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_snapshot_urls — Actually render URLs locally via Percy CLI
+  // -------------------------------------------------------------------------
+  tools.percy_snapshot_urls = server.tool(
+    "percy_snapshot_urls",
+    "Snapshot URLs locally using Percy CLI. Launches a browser, captures screenshots at specified widths, and uploads to Percy. Runs in background — returns build URL immediately. Requires @percy/cli installed.",
+    {
+      project_name: z
+        .string()
+        .describe("Percy project name (auto-creates if doesn't exist)"),
+      urls: z
+        .string()
+        .describe(
+          "Comma-separated URLs to snapshot, e.g. 'http://localhost:3000,http://localhost:3000/about'",
+        ),
+      widths: z
+        .string()
+        .optional()
+        .describe("Comma-separated widths (default: 375,1280)"),
+      type: z.string().optional().describe("Project type: web or automate"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_snapshot_urls",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percySnapshotUrls(args, config);
+      } catch (error) {
+        return handleMCPError("percy_snapshot_urls", server, config, error);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // percy_run_tests — Run tests with Percy visual testing
+  // -------------------------------------------------------------------------
+  tools.percy_run_tests = server.tool(
+    "percy_run_tests",
+    "Run a test command with Percy visual testing. Wraps your test command with percy exec to capture snapshots during test execution. Runs in background — returns build URL immediately. Requires @percy/cli installed.",
+    {
+      project_name: z
+        .string()
+        .describe("Percy project name (auto-creates if doesn't exist)"),
+      test_command: z
+        .string()
+        .describe("Test command to run, e.g. 'npx cypress run' or 'npm test'"),
+      type: z.string().optional().describe("Project type: web or automate"),
+    },
+    async (args) => {
+      try {
+        trackMCP("percy_run_tests", server.server.getClientVersion()!, config);
+        return await percyRunTests(args, config);
+      } catch (error) {
+        return handleMCPError("percy_run_tests", server, config, error);
       }
     },
   );

@@ -11,10 +11,18 @@ export async function percyFigmaLink(
   if (args.comparison_id) params.comparison_id = args.comparison_id;
 
   const result = await percyGet("/design/figma/figma-link", config, params);
-  const link = result?.data?.attributes?.["figma-url"] || result?.figma_url || null;
+  const link =
+    result?.data?.attributes?.["figma-url"] || result?.figma_url || null;
 
   if (!link) {
-    return { content: [{ type: "text", text: "No Figma link found for this snapshot/comparison." }] };
+    return {
+      content: [
+        {
+          type: "text",
+          text: "No Figma link found for this snapshot/comparison.",
+        },
+      ],
+    };
   }
 
   let output = `## Figma Link\n\n`;

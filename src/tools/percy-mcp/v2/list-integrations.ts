@@ -7,13 +7,16 @@ export async function percyListIntegrations(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   const response = await percyGet(`/organizations/${args.org_id}`, config, {
-    include: "version-control-integrations,slack-integrations,msteams-integrations,email-integration"
+    include:
+      "version-control-integrations,slack-integrations,msteams-integrations,email-integration",
   });
 
   const included = response?.included || [];
   let output = `## Integrations for Organization\n\n`;
 
-  const vcs = included.filter((i: any) => i.type === "version-control-integrations");
+  const vcs = included.filter(
+    (i: any) => i.type === "version-control-integrations",
+  );
   const slack = included.filter((i: any) => i.type === "slack-integrations");
   const teams = included.filter((i: any) => i.type === "msteams-integrations");
   const email = included.filter((i: any) => i.type === "email-integrations");
@@ -28,12 +31,16 @@ export async function percyListIntegrations(
   }
   if (slack.length) {
     output += `### Slack (${slack.length})\n`;
-    slack.forEach((s: any) => { output += `- ${s.attributes?.["channel-name"] || "channel"}\n`; });
+    slack.forEach((s: any) => {
+      output += `- ${s.attributes?.["channel-name"] || "channel"}\n`;
+    });
     output += "\n";
   }
   if (teams.length) {
     output += `### MS Teams (${teams.length})\n`;
-    teams.forEach((t: any) => { output += `- ${t.attributes?.["channel-name"] || "channel"}\n`; });
+    teams.forEach((t: any) => {
+      output += `- ${t.attributes?.["channel-name"] || "channel"}\n`;
+    });
     output += "\n";
   }
   if (email.length) {

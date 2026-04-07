@@ -11,7 +11,11 @@ export async function percyGetInsights(
     product: args.product || "web",
   };
 
-  const response = await percyGet(`/insights/metrics/${args.org_slug}`, config, params);
+  const response = await percyGet(
+    `/insights/metrics/${args.org_slug}`,
+    config,
+    params,
+  );
   const data = response?.data?.attributes || response?.data || {};
 
   let output = `## Percy Testing Insights — ${args.org_slug}\n\n`;
@@ -22,10 +26,14 @@ export async function percyGetInsights(
   if (review) {
     output += `### Review Efficiency\n`;
     output += `| Metric | Value |\n|---|---|\n`;
-    if (review.meaningfulReviewTimeRatio != null) output += `| Meaningful review ratio | ${(review.meaningfulReviewTimeRatio * 100).toFixed(0)}% |\n`;
-    if (review.totalReviews != null) output += `| Total reviews | ${review.totalReviews} |\n`;
-    if (review.noisyReviews != null) output += `| Noisy reviews | ${review.noisyReviews} |\n`;
-    if (review.medianReviewTimeSeconds != null) output += `| Median review time | ${review.medianReviewTimeSeconds}s |\n`;
+    if (review.meaningfulReviewTimeRatio != null)
+      output += `| Meaningful review ratio | ${(review.meaningfulReviewTimeRatio * 100).toFixed(0)}% |\n`;
+    if (review.totalReviews != null)
+      output += `| Total reviews | ${review.totalReviews} |\n`;
+    if (review.noisyReviews != null)
+      output += `| Noisy reviews | ${review.noisyReviews} |\n`;
+    if (review.medianReviewTimeSeconds != null)
+      output += `| Median review time | ${review.medianReviewTimeSeconds}s |\n`;
     output += "\n";
   }
 
@@ -34,8 +42,10 @@ export async function percyGetInsights(
   if (roi) {
     output += `### ROI & Time Savings\n`;
     output += `| Metric | Value |\n|---|---|\n`;
-    if (roi.totalTimeSaved != null) output += `| Total time saved | ${roi.totalTimeSaved} min |\n`;
-    if (roi.noDiffPercentage != null) output += `| No-diff percentage | ${(roi.noDiffPercentage * 100).toFixed(0)}% |\n`;
+    if (roi.totalTimeSaved != null)
+      output += `| Total time saved | ${roi.totalTimeSaved} min |\n`;
+    if (roi.noDiffPercentage != null)
+      output += `| No-diff percentage | ${(roi.noDiffPercentage * 100).toFixed(0)}% |\n`;
     if (roi.buildsCount != null) output += `| Builds | ${roi.buildsCount} |\n`;
     output += "\n";
   }
@@ -45,8 +55,10 @@ export async function percyGetInsights(
   if (coverage) {
     output += `### Coverage\n`;
     output += `| Metric | Value |\n|---|---|\n`;
-    if (coverage.coveragePercentage != null) output += `| Coverage | ${coverage.coveragePercentage.toFixed(0)}% |\n`;
-    if (coverage.activeSnapshotsCount != null) output += `| Active snapshots | ${coverage.activeSnapshotsCount} |\n`;
+    if (coverage.coveragePercentage != null)
+      output += `| Coverage | ${coverage.coveragePercentage.toFixed(0)}% |\n`;
+    if (coverage.activeSnapshotsCount != null)
+      output += `| Active snapshots | ${coverage.activeSnapshotsCount} |\n`;
     output += "\n";
   }
 

@@ -20,7 +20,9 @@ export async function percyGetDevices(
   // Get device details if build_id provided
   if (args.build_id) {
     try {
-      const devices = await percyGet("/discovery/device-details", config, { build_id: args.build_id });
+      const devices = await percyGet("/discovery/device-details", config, {
+        build_id: args.build_id,
+      });
       const deviceList = devices?.data || devices || [];
       if (Array.isArray(deviceList) && deviceList.length) {
         output += `\n### Devices for Build ${args.build_id}\n\n`;
@@ -30,7 +32,9 @@ export async function percyGetDevices(
           output += `| ${attrs.name || "?"} | ${attrs.width || "?"} | ${attrs.height || "?"} |\n`;
         });
       }
-    } catch { /* device details may not be available */ }
+    } catch {
+      /* device details may not be available */
+    }
   }
 
   return { content: [{ type: "text", text: output }] };

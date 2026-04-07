@@ -12,7 +12,11 @@ export async function percyGetTestCases(
   const testCases = response?.data || [];
 
   if (!testCases.length) {
-    return { content: [{ type: "text", text: "No test cases found for this project." }] };
+    return {
+      content: [
+        { type: "text", text: "No test cases found for this project." },
+      ],
+    };
   }
 
   let output = `## Test Cases (${testCases.length})\n\n`;
@@ -24,7 +28,9 @@ export async function percyGetTestCases(
 
   // If build_id provided, get executions
   if (args.build_id) {
-    const execResponse = await percyGet("/test-case-executions", config, { build_id: args.build_id });
+    const execResponse = await percyGet("/test-case-executions", config, {
+      build_id: args.build_id,
+    });
     const executions = execResponse?.data || [];
     if (executions.length) {
       output += `\n### Executions for Build ${args.build_id}\n\n`;

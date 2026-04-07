@@ -10,22 +10,29 @@ export async function percyDiscoverUrls(
 
   if (action === "create" && args.sitemap_url) {
     const result = await percyPost("/sitemaps", config, {
-      data: { type: "sitemaps", attributes: { url: args.sitemap_url, "project-id": args.project_id } }
+      data: {
+        type: "sitemaps",
+        attributes: { url: args.sitemap_url, "project-id": args.project_id },
+      },
     });
-    const urls = result?.included?.filter((i: any) => i.type === "sitemap-urls") || [];
+    const urls =
+      result?.included?.filter((i: any) => i.type === "sitemap-urls") || [];
     let output = `## URLs Discovered from Sitemap\n\n`;
     output += `**Sitemap:** ${args.sitemap_url}\n`;
     output += `**URLs found:** ${urls.length}\n\n`;
     urls.forEach((u: any, i: number) => {
       output += `${i + 1}. ${u.attributes?.url || u.url || "?"}\n`;
     });
-    if (urls.length === 0) output += `No URLs found in sitemap. Check the URL.\n`;
+    if (urls.length === 0)
+      output += `No URLs found in sitemap. Check the URL.\n`;
     output += `\nUse these URLs with \`percy_create_build\` to snapshot them.\n`;
     return { content: [{ type: "text", text: output }] };
   }
 
   // List existing sitemaps
-  const response = await percyGet("/sitemaps", config, { project_id: args.project_id });
+  const response = await percyGet("/sitemaps", config, {
+    project_id: args.project_id,
+  });
   const sitemaps = response?.data || [];
   let output = `## Sitemaps for Project\n\n`;
   if (!sitemaps.length) {

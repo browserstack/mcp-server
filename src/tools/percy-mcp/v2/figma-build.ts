@@ -8,12 +8,21 @@ export async function percyFigmaBuild(
 ): Promise<CallToolResult> {
   // Step 1: Fetch design from Figma URL
   const fetchResult = await percyPost("/design/figma/fetch-design", config, {
-    data: { attributes: { "figma-url": args.figma_url } }
+    data: { attributes: { "figma-url": args.figma_url } },
   });
 
-  const nodes = fetchResult?.data?.attributes?.nodes || fetchResult?.nodes || [];
+  const nodes =
+    fetchResult?.data?.attributes?.nodes || fetchResult?.nodes || [];
   if (!nodes.length && !fetchResult?.data) {
-    return { content: [{ type: "text", text: `No design nodes found at ${args.figma_url}. Check the Figma URL and ensure it points to a frame or component.` }], isError: true };
+    return {
+      content: [
+        {
+          type: "text",
+          text: `No design nodes found at ${args.figma_url}. Check the Figma URL and ensure it points to a frame or component.`,
+        },
+      ],
+      isError: true,
+    };
   }
 
   // Step 2: Create build from design data
@@ -25,8 +34,8 @@ export async function percyFigmaBuild(
         "project-slug": args.project_slug,
         "figma-url": args.figma_url,
         "figma-data": figmaData,
-      }
-    }
+      },
+    },
   });
 
   const buildId = buildResult?.data?.id || "unknown";

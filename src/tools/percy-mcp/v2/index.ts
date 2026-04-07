@@ -219,13 +219,25 @@ export function registerPercyMcpToolsV2(
     "percy_figma_build",
     "Create a Percy build from Figma design files. Extracts design nodes and creates visual comparisons.",
     {
-      project_slug: z.string().describe("Project slug (e.g., 'org-id/project-slug')"),
+      project_slug: z
+        .string()
+        .describe("Project slug (e.g., 'org-id/project-slug')"),
       branch: z.string().describe("Branch name"),
-      figma_url: z.string().describe("Figma file URL (e.g., 'https://www.figma.com/file/...')"),
+      figma_url: z
+        .string()
+        .describe("Figma file URL (e.g., 'https://www.figma.com/file/...')"),
     },
     async (args) => {
-      try { trackMCP("percy_figma_build", server.server.getClientVersion()!, config); return await percyFigmaBuild(args, config); }
-      catch (error) { return handleMCPError("percy_figma_build", server, config, error); }
+      try {
+        trackMCP(
+          "percy_figma_build",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyFigmaBuild(args, config);
+      } catch (error) {
+        return handleMCPError("percy_figma_build", server, config, error);
+      }
     },
   );
 
@@ -238,8 +250,16 @@ export function registerPercyMcpToolsV2(
       build_id: z.string().describe("Build ID to use as new baseline"),
     },
     async (args) => {
-      try { trackMCP("percy_figma_baseline", server.server.getClientVersion()!, config); return await percyFigmaBaseline(args, config); }
-      catch (error) { return handleMCPError("percy_figma_baseline", server, config, error); }
+      try {
+        trackMCP(
+          "percy_figma_baseline",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyFigmaBaseline(args, config);
+      } catch (error) {
+        return handleMCPError("percy_figma_baseline", server, config, error);
+      }
     },
   );
 
@@ -251,8 +271,12 @@ export function registerPercyMcpToolsV2(
       comparison_id: z.string().optional().describe("Comparison ID"),
     },
     async (args) => {
-      try { trackMCP("percy_figma_link", server.server.getClientVersion()!, config); return await percyFigmaLink(args, config); }
-      catch (error) { return handleMCPError("percy_figma_link", server, config, error); }
+      try {
+        trackMCP("percy_figma_link", server.server.getClientVersion()!, config);
+        return await percyFigmaLink(args, config);
+      } catch (error) {
+        return handleMCPError("percy_figma_link", server, config, error);
+      }
     },
   );
 
@@ -263,12 +287,26 @@ export function registerPercyMcpToolsV2(
     "Get testing health metrics: review efficiency, ROI, coverage, change quality. By period and product.",
     {
       org_slug: z.string().describe("Organization slug"),
-      period: z.enum(["last_7_days", "last_30_days", "last_90_days"]).optional().describe("Time period (default: last_30_days)"),
-      product: z.enum(["web", "app"]).optional().describe("Product type (default: web)"),
+      period: z
+        .enum(["last_7_days", "last_30_days", "last_90_days"])
+        .optional()
+        .describe("Time period (default: last_30_days)"),
+      product: z
+        .enum(["web", "app"])
+        .optional()
+        .describe("Product type (default: web)"),
     },
     async (args) => {
-      try { trackMCP("percy_get_insights", server.server.getClientVersion()!, config); return await percyGetInsights(args, config); }
-      catch (error) { return handleMCPError("percy_get_insights", server, config, error); }
+      try {
+        trackMCP(
+          "percy_get_insights",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetInsights(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_insights", server, config, error);
+      }
     },
   );
 
@@ -277,13 +315,29 @@ export function registerPercyMcpToolsV2(
     "Configure weekly insights email recipients for an organization.",
     {
       org_id: z.string().describe("Organization ID"),
-      action: z.enum(["get", "create", "update"]).optional().describe("Action (default: get)"),
+      action: z
+        .enum(["get", "create", "update"])
+        .optional()
+        .describe("Action (default: get)"),
       emails: z.string().optional().describe("Comma-separated email addresses"),
       enabled: z.boolean().optional().describe("Enable/disable emails"),
     },
     async (args) => {
-      try { trackMCP("percy_manage_insights_email", server.server.getClientVersion()!, config); return await percyManageInsightsEmail(args, config); }
-      catch (error) { return handleMCPError("percy_manage_insights_email", server, config, error); }
+      try {
+        trackMCP(
+          "percy_manage_insights_email",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageInsightsEmail(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_manage_insights_email",
+          server,
+          config,
+          error,
+        );
+      }
     },
   );
 
@@ -294,11 +348,22 @@ export function registerPercyMcpToolsV2(
     "List test cases for a project with optional execution details per build.",
     {
       project_id: z.string().describe("Project ID"),
-      build_id: z.string().optional().describe("Build ID for execution details"),
+      build_id: z
+        .string()
+        .optional()
+        .describe("Build ID for execution details"),
     },
     async (args) => {
-      try { trackMCP("percy_get_test_cases", server.server.getClientVersion()!, config); return await percyGetTestCases(args, config); }
-      catch (error) { return handleMCPError("percy_get_test_cases", server, config, error); }
+      try {
+        trackMCP(
+          "percy_get_test_cases",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetTestCases(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_test_cases", server, config, error);
+      }
     },
   );
 
@@ -309,8 +374,21 @@ export function registerPercyMcpToolsV2(
       test_case_id: z.string().describe("Test case ID"),
     },
     async (args) => {
-      try { trackMCP("percy_get_test_case_history", server.server.getClientVersion()!, config); return await percyGetTestCaseHistory(args, config); }
-      catch (error) { return handleMCPError("percy_get_test_case_history", server, config, error); }
+      try {
+        trackMCP(
+          "percy_get_test_case_history",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetTestCaseHistory(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_get_test_case_history",
+          server,
+          config,
+          error,
+        );
+      }
     },
   );
 
@@ -322,11 +400,22 @@ export function registerPercyMcpToolsV2(
     {
       project_id: z.string().describe("Project ID"),
       sitemap_url: z.string().optional().describe("Sitemap XML URL to crawl"),
-      action: z.enum(["create", "list"]).optional().describe("create = crawl new sitemap, list = show existing"),
+      action: z
+        .enum(["create", "list"])
+        .optional()
+        .describe("create = crawl new sitemap, list = show existing"),
     },
     async (args) => {
-      try { trackMCP("percy_discover_urls", server.server.getClientVersion()!, config); return await percyDiscoverUrls(args, config); }
-      catch (error) { return handleMCPError("percy_discover_urls", server, config, error); }
+      try {
+        trackMCP(
+          "percy_discover_urls",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyDiscoverUrls(args, config);
+      } catch (error) {
+        return handleMCPError("percy_discover_urls", server, config, error);
+      }
     },
   );
 
@@ -337,8 +426,16 @@ export function registerPercyMcpToolsV2(
       build_id: z.string().optional().describe("Build ID for device details"),
     },
     async (args) => {
-      try { trackMCP("percy_get_devices", server.server.getClientVersion()!, config); return await percyGetDevices(args, config); }
-      catch (error) { return handleMCPError("percy_get_devices", server, config, error); }
+      try {
+        trackMCP(
+          "percy_get_devices",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetDevices(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_devices", server, config, error);
+      }
     },
   );
 
@@ -349,13 +446,30 @@ export function registerPercyMcpToolsV2(
     "Get or update allowed/error domain lists for a project.",
     {
       project_id: z.string().describe("Project ID"),
-      action: z.enum(["get", "update"]).optional().describe("Action (default: get)"),
-      allowed_domains: z.string().optional().describe("Comma-separated allowed domains"),
-      error_domains: z.string().optional().describe("Comma-separated error domains"),
+      action: z
+        .enum(["get", "update"])
+        .optional()
+        .describe("Action (default: get)"),
+      allowed_domains: z
+        .string()
+        .optional()
+        .describe("Comma-separated allowed domains"),
+      error_domains: z
+        .string()
+        .optional()
+        .describe("Comma-separated error domains"),
     },
     async (args) => {
-      try { trackMCP("percy_manage_domains", server.server.getClientVersion()!, config); return await percyManageDomains(args, config); }
-      catch (error) { return handleMCPError("percy_manage_domains", server, config, error); }
+      try {
+        trackMCP(
+          "percy_manage_domains",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageDomains(args, config);
+      } catch (error) {
+        return handleMCPError("percy_manage_domains", server, config, error);
+      }
     },
   );
 
@@ -364,15 +478,31 @@ export function registerPercyMcpToolsV2(
     "Configure usage alert thresholds for billing notifications.",
     {
       org_id: z.string().describe("Organization ID"),
-      action: z.enum(["get", "create", "update"]).optional().describe("Action (default: get)"),
+      action: z
+        .enum(["get", "create", "update"])
+        .optional()
+        .describe("Action (default: get)"),
       threshold: z.number().optional().describe("Screenshot count threshold"),
       emails: z.string().optional().describe("Comma-separated email addresses"),
       enabled: z.boolean().optional().describe("Enable/disable alerts"),
       product: z.enum(["web", "app"]).optional().describe("Product type"),
     },
     async (args) => {
-      try { trackMCP("percy_manage_usage_alerts", server.server.getClientVersion()!, config); return await percyManageUsageAlerts(args, config); }
-      catch (error) { return handleMCPError("percy_manage_usage_alerts", server, config, error); }
+      try {
+        trackMCP(
+          "percy_manage_usage_alerts",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyManageUsageAlerts(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_manage_usage_alerts",
+          server,
+          config,
+          error,
+        );
+      }
     },
   );
 
@@ -383,8 +513,21 @@ export function registerPercyMcpToolsV2(
       comparison_id: z.string().describe("Comparison ID to recompute"),
     },
     async (args) => {
-      try { trackMCP("percy_preview_comparison", server.server.getClientVersion()!, config); return await percyPreviewComparison(args, config); }
-      catch (error) { return handleMCPError("percy_preview_comparison", server, config, error); }
+      try {
+        trackMCP(
+          "percy_preview_comparison",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyPreviewComparison(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_preview_comparison",
+          server,
+          config,
+          error,
+        );
+      }
     },
   );
 
@@ -395,8 +538,14 @@ export function registerPercyMcpToolsV2(
     "Advanced build item search with filters: category, browser, width, OS, device, resolution, orientation.",
     {
       build_id: z.string().describe("Build ID to search within"),
-      category: z.string().optional().describe("Filter: changed, new, removed, unchanged, failed"),
-      browser_ids: z.string().optional().describe("Comma-separated browser IDs"),
+      category: z
+        .string()
+        .optional()
+        .describe("Filter: changed, new, removed, unchanged, failed"),
+      browser_ids: z
+        .string()
+        .optional()
+        .describe("Comma-separated browser IDs"),
       widths: z.string().optional().describe("Comma-separated widths"),
       os: z.string().optional().describe("Operating system filter"),
       device_name: z.string().optional().describe("Device name filter"),
@@ -404,8 +553,16 @@ export function registerPercyMcpToolsV2(
       limit: z.number().optional().describe("Max results"),
     },
     async (args) => {
-      try { trackMCP("percy_search_builds", server.server.getClientVersion()!, config); return await percySearchBuildItems(args, config); }
-      catch (error) { return handleMCPError("percy_search_builds", server, config, error); }
+      try {
+        trackMCP(
+          "percy_search_builds",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percySearchBuildItems(args, config);
+      } catch (error) {
+        return handleMCPError("percy_search_builds", server, config, error);
+      }
     },
   );
 
@@ -418,8 +575,16 @@ export function registerPercyMcpToolsV2(
       org_id: z.string().describe("Organization ID"),
     },
     async (args) => {
-      try { trackMCP("percy_list_integrations", server.server.getClientVersion()!, config); return await percyListIntegrations(args, config); }
-      catch (error) { return handleMCPError("percy_list_integrations", server, config, error); }
+      try {
+        trackMCP(
+          "percy_list_integrations",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyListIntegrations(args, config);
+      } catch (error) {
+        return handleMCPError("percy_list_integrations", server, config, error);
+      }
     },
   );
 
@@ -431,8 +596,21 @@ export function registerPercyMcpToolsV2(
       target_org_id: z.string().describe("Target organization ID"),
     },
     async (args) => {
-      try { trackMCP("percy_migrate_integrations", server.server.getClientVersion()!, config); return await percyMigrateIntegrations(args, config); }
-      catch (error) { return handleMCPError("percy_migrate_integrations", server, config, error); }
+      try {
+        trackMCP(
+          "percy_migrate_integrations",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyMigrateIntegrations(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_migrate_integrations",
+          server,
+          config,
+          error,
+        );
+      }
     },
   );
 

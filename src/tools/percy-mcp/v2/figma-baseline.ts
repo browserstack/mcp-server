@@ -6,14 +6,14 @@ export async function percyFigmaBaseline(
   args: { project_slug: string; branch: string; build_id: string },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const result = await percyPost("/design/figma/update-baseline", config, {
+  await percyPost("/design/figma/update-baseline", config, {
     data: {
       attributes: {
         "project-slug": args.project_slug,
         branch: args.branch,
         "build-id": args.build_id,
-      }
-    }
+      },
+    },
   });
 
   let output = `## Figma Baseline Updated\n\n`;

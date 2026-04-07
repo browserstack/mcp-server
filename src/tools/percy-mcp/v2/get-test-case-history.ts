@@ -6,11 +6,15 @@ export async function percyGetTestCaseHistory(
   args: { test_case_id: string },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const response = await percyGet("/test-case-histories", config, { test_case_id: args.test_case_id });
+  const response = await percyGet("/test-case-histories", config, {
+    test_case_id: args.test_case_id,
+  });
   const history = response?.data || [];
 
   if (!history.length) {
-    return { content: [{ type: "text", text: "No history found for this test case." }] };
+    return {
+      content: [{ type: "text", text: "No history found for this test case." }],
+    };
   }
 
   let output = `## Test Case History\n\n`;

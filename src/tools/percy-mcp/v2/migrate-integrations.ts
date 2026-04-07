@@ -12,9 +12,16 @@ export async function percyMigrateIntegrations(
       attributes: {
         "source-organization-id": args.source_org_id,
         "target-organization-id": args.target_org_id,
-      }
-    }
+      },
+    },
   });
 
-  return { content: [{ type: "text", text: `## Integration Migration\n\nIntegrations migrated from org ${args.source_org_id} to ${args.target_org_id}.` }] };
+  return {
+    content: [
+      {
+        type: "text",
+        text: `## Integration Migration\n\nIntegrations migrated from org ${args.source_org_id} to ${args.target_org_id}.`,
+      },
+    ],
+  };
 }

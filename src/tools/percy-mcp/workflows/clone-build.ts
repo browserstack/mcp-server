@@ -88,6 +88,7 @@ async function fetchSnapshotRaw(
     browserName: string;
     imageUrl: string | null;
   }>;
+  debugRelKeys?: string;
 } | null> {
   const headers = await getPercyHeaders(config);
   const baseUrl = getPercyApiBaseUrl();
@@ -122,9 +123,15 @@ async function fetchSnapshotRaw(
     imageUrl: string | null;
   }> = [];
 
+  // Debug: dump first comparison's relationships keys
+  let debugRelKeys = "";
   for (const compRef of compRefs) {
     const comp = byTypeId.get(`comparisons:${compRef.id}`);
     if (!comp) continue;
+
+    if (!debugRelKeys && comp.relationships) {
+      debugRelKeys = Object.keys(comp.relationships).join(", ");
+    }
 
     const width = comp.attributes?.width || 1280;
 
@@ -172,7 +179,7 @@ async function fetchSnapshotRaw(
     });
   }
 
-  return { name, comparisons };
+  return { name, comparisons, debugRelKeys };
 }
 
 // ── Main handler ────────────────────────────────────────────────────────────
@@ -393,6 +400,14 @@ export async function percyCloneBuild(
 
       let compCloned = 0;
 
+      // Debug: output comparison tags for first snapshot
+      if (clonedCount === 0) {
+        output += `  [DBG] relationship keys: ${snap.debugRelKeys || "NONE"}\n`;
+        for (const c of comparisonsWithImages) {
+          output += `  [DBG] tag="${c.tagName}" w=${c.width} h=${c.height} os="${c.osName}" browser="${c.browserName}"\n`;
+        }
+      }
+
       for (const comp of comparisonsWithImages) {
         // Download screenshot
         const base64 = await fetchImageAsBase64(comp.imageUrl!);
@@ -405,31 +420,32 @@ export async function percyCloneBuild(
         const sha = createHash("sha256").update(imageBuffer).digest("hex");
 
         try {
-          // Create comparison with tile
-          // NOTE: attributes must have content (not empty {}) or API returns 400
+          // Create comparison with tile — must match JSON:API format with type fields
+          const tagAttributes: Record<string, unknown> = {
+            name: comp.tagName,
+            width: comp.width,
+            height: comp.height,
+          };
+          if (comp.osName) tagAttributes["os-name"] = comp.osName;
+          if (comp.browserName)
+            tagAttributes["browser-name"] = comp.browserName;
+
           const compResult = await targetClient.post<any>(
             `/snapshots/${newSnapId}/comparisons`,
             {
               data: {
-                attributes: {
-                  "external-debug-url": null,
-                  "dom-info-sha": null,
-                },
+                type: "comparisons",
                 relationships: {
                   tag: {
                     data: {
-                      attributes: {
-                        name: comp.tagName,
-                        width: comp.width,
-                        height: comp.height,
-                        "os-name": comp.osName,
-                        "browser-name": comp.browserName,
-                      },
+                      type: "tag",
+                      attributes: tagAttributes,
                     },
                   },
                   tiles: {
                     data: [
                       {
+                        type: "tiles",
                         attributes: {
                           sha,
                           "status-bar-height": 0,

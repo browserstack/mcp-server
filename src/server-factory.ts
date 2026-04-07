@@ -21,6 +21,7 @@ import { setupOnInitialized } from "./oninitialized.js";
 import { BrowserStackConfig } from "./lib/types.js";
 import addRCATools from "./tools/rca-agent.js";
 import addPercyMcpTools from "./tools/percy-mcp/index.js";
+import addPercyMcpToolsV2 from "./tools/percy-mcp/v2/index.js";
 
 /**
  * Wrapper class for BrowserStack MCP Server
@@ -62,7 +63,8 @@ export class BrowserStackMcpServer {
       addSelfHealTools,
       addBuildInsightsTools,
       addRCATools,
-      addPercyMcpTools,
+      // addPercyMcpTools, // v1 — disabled, replaced by v2
+      addPercyMcpToolsV2,
     ];
 
     toolAdders.forEach((adder) => {

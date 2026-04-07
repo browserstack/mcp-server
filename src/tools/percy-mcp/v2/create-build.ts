@@ -168,21 +168,8 @@ async function handleUrlSnapshot(
     return { content: [{ type: "text", text: output }] };
   }
 
-  // If test cases provided, use percy exec + local API approach
-  // (Percy local server at :5338 supports testCase param)
-  if (testCases.length > 0) {
-    return handleUrlWithTestCases(
-      projectName,
-      token,
-      urlList,
-      widths,
-      branch,
-      customNames,
-      testCases,
-    );
-  }
-
-  // Standard approach: build snapshots.yml and run Percy CLI
+  // Build snapshots.yml with names, test cases, and widths
+  // Percy CLI YAML supports: name, url, testCase, widths, waitForTimeout
   let yamlContent = "";
   urlList.forEach((url, i) => {
     const name =
@@ -195,14 +182,18 @@ async function handleUrlSnapshot(
             .replace(/[/:?&=]/g, "-")
             .replace(/-+/g, "-")
             .replace(/^-|-$/g, "") || `Page ${i + 1}`);
+    const tc = testCases.length === 1 ? testCases[0] : testCases[i];
 
     yamlContent += `- name: "${name}"\n`;
     yamlContent += `  url: ${url}\n`;
     yamlContent += `  waitForTimeout: 3000\n`;
+    if (tc) {
+      yamlContent += `  testCase: "${tc}"\n`;
+    }
     if (widths.length > 0) {
-      yamlContent += `  additionalSnapshots:\n`;
+      yamlContent += `  widths:\n`;
       widths.forEach((w) => {
-        yamlContent += `    - width: ${w}\n`;
+        yamlContent += `    - ${w}\n`;
       });
     }
   });
@@ -268,16 +259,18 @@ async function handleUrlSnapshot(
   output += `**Widths:** ${widths.join(", ")}px\n`;
   if (testCases.length > 0) {
     output += `**Test cases:** ${testCases.join(", ")}\n`;
-    output += `> Note: test cases are set via Percy API (screenshot upload mode), not CLI snapshots.\n`;
   }
   output += "\n";
 
-  // Show snapshot names
+  // Show snapshot details
   output += `**Snapshots:**\n`;
   urlList.forEach((url, i) => {
     const name =
       customNames[i] || (urlList.length === 1 ? "Homepage" : `Page ${i + 1}`);
-    output += `- ${name} → ${url}\n`;
+    const tc = testCases.length === 1 ? testCases[0] : testCases[i];
+    output += `- **${name}**`;
+    if (tc) output += ` (test: ${tc})`;
+    output += ` → ${url}\n`;
   });
   output += "\n";
 
@@ -303,9 +296,10 @@ async function handleUrlSnapshot(
   return { content: [{ type: "text", text: output }] };
 }
 
-// ── URL Snapshot with Test Cases (via percy exec + local API) ───────────────
+// ── REMOVED: handleUrlWithTestCases — test cases now handled in YAML directly
 
-async function handleUrlWithTestCases(
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _handleUrlWithTestCases_UNUSED(
   projectName: string,
   token: string,
   urlList: string[],

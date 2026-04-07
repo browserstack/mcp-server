@@ -47,7 +47,11 @@ export function registerPercyMcpToolsV2(
     },
     async (args) => {
       try {
-        trackMCP("percy_create_project", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_create_project",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyCreateProjectV2(args, config);
       } catch (error) {
         return handleMCPError("percy_create_project", server, config, error);
@@ -66,7 +70,9 @@ export function registerPercyMcpToolsV2(
       urls: z
         .string()
         .optional()
-        .describe("Comma-separated URLs to snapshot (e.g., 'http://localhost:3000,http://localhost:3000/about')"),
+        .describe(
+          "Comma-separated URLs to snapshot (e.g., 'http://localhost:3000,http://localhost:3000/about')",
+        ),
       screenshots_dir: z
         .string()
         .optional()
@@ -87,7 +93,9 @@ export function registerPercyMcpToolsV2(
       snapshot_names: z
         .string()
         .optional()
-        .describe("Custom snapshot names, comma-separated (e.g., 'Homepage,Login Page,Dashboard'). Maps 1:1 with urls or screenshot files."),
+        .describe(
+          "Custom snapshot names, comma-separated (e.g., 'Homepage,Login Page,Dashboard'). Maps 1:1 with urls or screenshot files.",
+        ),
       test_case: z
         .string()
         .optional()
@@ -96,7 +104,11 @@ export function registerPercyMcpToolsV2(
     },
     async (args) => {
       try {
-        trackMCP("percy_create_build", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_create_build",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyCreateBuildV2(args, config);
       } catch (error) {
         return handleMCPError("percy_create_build", server, config, error);
@@ -114,7 +126,11 @@ export function registerPercyMcpToolsV2(
     },
     async (args) => {
       try {
-        trackMCP("percy_get_projects", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_get_projects",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyGetProjectsV2(args, config);
       } catch (error) {
         return handleMCPError("percy_get_projects", server, config, error);
@@ -130,7 +146,9 @@ export function registerPercyMcpToolsV2(
       project_slug: z
         .string()
         .optional()
-        .describe("Project slug from percy_get_projects (e.g., 'org-id/project-slug')"),
+        .describe(
+          "Project slug from percy_get_projects (e.g., 'org-id/project-slug')",
+        ),
       branch: z.string().optional().describe("Filter by branch"),
       state: z
         .string()
@@ -155,7 +173,11 @@ export function registerPercyMcpToolsV2(
     {},
     async () => {
       try {
-        trackMCP("percy_auth_status", server.server.getClientVersion()!, config);
+        trackMCP(
+          "percy_auth_status",
+          server.server.getClientVersion()!,
+          config,
+        );
         return await percyAuthStatusV2({}, config);
       } catch (error) {
         return handleMCPError("percy_auth_status", server, config, error);

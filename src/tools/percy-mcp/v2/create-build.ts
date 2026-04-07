@@ -23,8 +23,9 @@ const execFileAsync = promisify(execFile);
 async function getGitBranch(): Promise<string> {
   try {
     return (
-      (await execFileAsync("git", ["branch", "--show-current"])).stdout.trim() ||
-      "main"
+      (
+        await execFileAsync("git", ["branch", "--show-current"])
+      ).stdout.trim() || "main"
     );
   } catch {
     return "main";
@@ -80,11 +81,7 @@ export async function percyCreateBuildV2(
   // Get project token
   let token: string;
   try {
-    token = await getOrCreateProjectToken(
-      args.project_name,
-      config,
-      args.type,
-    );
+    token = await getOrCreateProjectToken(args.project_name, config, args.type);
   } catch (e: any) {
     return {
       content: [
@@ -229,9 +226,7 @@ async function handleUrlSnapshot(
   child.stdout?.on("data", (d: Buffer) => {
     const text = d.toString();
     stdoutData += text;
-    const match = text.match(
-      /https:\/\/percy\.io\/[^\s]+\/builds\/\d+/,
-    );
+    const match = text.match(/https:\/\/percy\.io\/[^\s]+\/builds\/\d+/);
     if (match) buildUrl = match[0];
   });
 
@@ -281,8 +276,7 @@ async function handleUrlSnapshot(
   output += `**Snapshots:**\n`;
   urlList.forEach((url, i) => {
     const name =
-      customNames[i] ||
-      (urlList.length === 1 ? "Homepage" : `Page ${i + 1}`);
+      customNames[i] || (urlList.length === 1 ? "Homepage" : `Page ${i + 1}`);
     output += `- ${name} → ${url}\n`;
   });
   output += "\n";
@@ -294,10 +288,7 @@ async function handleUrlSnapshot(
     output += `Results ready in 1-3 minutes.\n`;
   } else {
     const allOutput = (stdoutData + stderrData).trim();
-    if (
-      allOutput.includes("ECONNREFUSED") ||
-      allOutput.includes("not found")
-    ) {
+    if (allOutput.includes("ECONNREFUSED") || allOutput.includes("not found")) {
       output += `**Error:** URL not reachable. Make sure your app is running.\n\n`;
       urlList.forEach((u) => {
         output += `- ${u}\n`;
@@ -325,29 +316,21 @@ async function handleUrlWithTestCases(
 ): Promise<CallToolResult> {
   // Start percy exec with a dummy command (sleep) to get the local server running
   // Then POST to localhost:5338/percy/snapshot for each URL with testCase
-  const child = spawn(
-    "npx",
-    ["@percy/cli", "exec", "--", "sleep", "120"],
-    {
-      env: { ...process.env, PERCY_TOKEN: token },
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-    },
-  );
+  const child = spawn("npx", ["@percy/cli", "exec", "--", "sleep", "120"], {
+    env: { ...process.env, PERCY_TOKEN: token },
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
 
   let buildUrl = "";
-  let stdoutData = "";
 
   child.stdout?.on("data", (d: Buffer) => {
     const text = d.toString();
-    stdoutData += text;
-    const match = text.match(
-      /https:\/\/percy\.io\/[^\s]+\/builds\/\d+/,
-    );
+    const match = text.match(/https:\/\/percy\.io\/[^\s]+\/builds\/\d+/);
     if (match) buildUrl = match[0];
   });
-  child.stderr?.on("data", (d: Buffer) => {
-    stdoutData += d.toString();
+  child.stderr?.on("data", () => {
+    // capture stderr but don't store
   });
 
   // Wait for Percy server to start (looks for "Percy has started" or port 5338)
@@ -388,7 +371,8 @@ async function handleUrlWithTestCases(
         .replace(/^\//, "")
         .replace(/[/:?&=]/g, "-")
         .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "") || `Page ${i + 1}`;
+        .replace(/^-|-$/g, "") ||
+      `Page ${i + 1}`;
     const tc = testCases.length === 1 ? testCases[0] : testCases[i];
 
     try {
@@ -480,15 +464,11 @@ async function handleTestCommand(
   const cmdParts = testCommand.split(" ").filter(Boolean);
 
   // EXECUTE AUTOMATICALLY
-  const child = spawn(
-    "npx",
-    ["@percy/cli", "exec", "--", ...cmdParts],
-    {
-      env: { ...process.env, PERCY_TOKEN: token },
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-    },
-  );
+  const child = spawn("npx", ["@percy/cli", "exec", "--", ...cmdParts], {
+    env: { ...process.env, PERCY_TOKEN: token },
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
 
   let buildUrl = "";
   let stdoutData = "";
@@ -496,9 +476,7 @@ async function handleTestCommand(
   child.stdout?.on("data", (d: Buffer) => {
     const text = d.toString();
     stdoutData += text;
-    const match = text.match(
-      /https:\/\/percy\.io\/[^\s]+\/builds\/\d+/,
-    );
+    const match = text.match(/https:\/\/percy\.io\/[^\s]+\/builds\/\d+/);
     if (match) buildUrl = match[0];
   });
   child.stderr?.on("data", (d: Buffer) => {
@@ -694,11 +672,7 @@ async function handleScreenshotUpload(
       });
 
       // Finalize comparison
-      await percyTokenPost(
-        `/comparisons/${compId}/finalize`,
-        token,
-        {},
-      );
+      await percyTokenPost(`/comparisons/${compId}/finalize`, token, {});
 
       uploaded++;
       output += `- ✓ **${name}** (${width}×${height})\n`;

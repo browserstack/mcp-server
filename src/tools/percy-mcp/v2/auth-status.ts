@@ -1,4 +1,7 @@
-import { percyGet, getOrCreateProjectToken } from "../../../lib/percy-api/percy-auth.js";
+import {
+  percyGet,
+  getOrCreateProjectToken,
+} from "../../../lib/percy-api/percy-auth.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -8,7 +11,9 @@ export async function percyAuthStatusV2(
 ): Promise<CallToolResult> {
   let output = `## Percy Auth Status\n\n`;
 
-  const hasCreds = !!(config["browserstack-username"] && config["browserstack-access-key"]);
+  const hasCreds = !!(
+    config["browserstack-username"] && config["browserstack-access-key"]
+  );
   const percyToken = process.env.PERCY_TOKEN;
 
   output += `| Credential | Status |\n|---|---|\n`;
@@ -21,7 +26,9 @@ export async function percyAuthStatusV2(
   if (hasCreds) {
     output += `### Validation\n\n`;
     try {
-      const response = await percyGet("/projects", config, { "page[limit]": "1" });
+      const response = await percyGet("/projects", config, {
+        "page[limit]": "1",
+      });
       const projects = response?.data || [];
       if (projects.length > 0) {
         output += `**Percy API (Basic Auth):** Connected — ${projects[0].attributes?.name || "project found"}\n`;

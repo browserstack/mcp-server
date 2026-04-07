@@ -3,7 +3,12 @@ import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 export async function percyGetBuildsV2(
-  args: { project_slug?: string; branch?: string; state?: string; limit?: number },
+  args: {
+    project_slug?: string;
+    branch?: string;
+    state?: string;
+    limit?: number;
+  },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   // Need project_slug to list builds

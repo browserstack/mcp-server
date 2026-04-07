@@ -16,7 +16,9 @@ import { BrowserStackConfig } from "../types.js";
  * Get auth headers for Percy API calls.
  * Uses BrowserStack Basic Auth (username:accessKey).
  */
-export function getPercyAuthHeaders(config: BrowserStackConfig): Record<string, string> {
+export function getPercyAuthHeaders(
+  config: BrowserStackConfig,
+): Record<string, string> {
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -62,7 +64,9 @@ export async function percyGet(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`GET ${path}: ${response.status} ${response.statusText}. ${body}`);
+    throw new Error(
+      `GET ${path}: ${response.status} ${response.statusText}. ${body}`,
+    );
   }
 
   if (response.status === 204) return null;
@@ -88,7 +92,9 @@ export async function percyPost(
 
   if (!response.ok) {
     const responseBody = await response.text().catch(() => "");
-    throw new Error(`POST ${path}: ${response.status} ${response.statusText}. ${responseBody}`);
+    throw new Error(
+      `POST ${path}: ${response.status} ${response.statusText}. ${responseBody}`,
+    );
   }
 
   if (response.status === 204) return null;
@@ -114,7 +120,9 @@ export async function percyPatch(
 
   if (!response.ok) {
     const responseBody = await response.text().catch(() => "");
-    throw new Error(`PATCH ${path}: ${response.status} ${response.statusText}. ${responseBody}`);
+    throw new Error(
+      `PATCH ${path}: ${response.status} ${response.statusText}. ${responseBody}`,
+    );
   }
 
   if (response.status === 204) return null;
@@ -141,7 +149,9 @@ export async function percyTokenPost(
 
   if (!response.ok) {
     const responseBody = await response.text().catch(() => "");
-    throw new Error(`POST ${path}: ${response.status} ${response.statusText}. ${responseBody}`);
+    throw new Error(
+      `POST ${path}: ${response.status} ${response.statusText}. ${responseBody}`,
+    );
   }
 
   if (response.status === 204) return null;
@@ -169,12 +179,16 @@ export async function getOrCreateProjectToken(
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to get token for project "${projectName}": ${response.status}`);
+    throw new Error(
+      `Failed to get token for project "${projectName}": ${response.status}`,
+    );
   }
 
   const data = await response.json();
   if (!data?.token || !data?.success) {
-    throw new Error(`No token returned for project "${projectName}". Check the project name.`);
+    throw new Error(
+      `No token returned for project "${projectName}". Check the project name.`,
+    );
   }
 
   return data.token;

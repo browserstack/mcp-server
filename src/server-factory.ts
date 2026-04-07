@@ -20,7 +20,7 @@ import addBuildInsightsTools from "./tools/build-insights.js";
 import { setupOnInitialized } from "./oninitialized.js";
 import { BrowserStackConfig } from "./lib/types.js";
 import addRCATools from "./tools/rca-agent.js";
-import addPercyMcpTools from "./tools/percy-mcp/index.js";
+// import addPercyMcpTools from "./tools/percy-mcp/index.js"; // v1 disabled
 import addPercyMcpToolsV2 from "./tools/percy-mcp/v2/index.js";
 
 /**

@@ -1,6 +1,6 @@
 # Percy MCP Tools — Quick Reference
 
-> 20 tools | BrowserStack Basic Auth | All commands use natural language
+> 21 tools | BrowserStack Basic Auth | All commands use natural language
 
 ---
 
@@ -426,6 +426,22 @@ List all integrations for an organization.
 ```
 Use percy_list_integrations with org_id "12345"
 ```
+
+---
+
+### percy_get_ai_summary
+
+Get AI-generated build summary with potential bugs, visual diffs, and change descriptions.
+
+| Parameter | Required | Description | Example |
+|-----------|----------|-------------|---------|
+| `build_id` | Yes | Percy build ID | `"48436286"` |
+
+```
+Use percy_get_ai_summary with build_id "48436286"
+```
+
+Returns: potential bugs count, AI visual diffs count, change descriptions with occurrences, affected snapshots.
 
 ---
 

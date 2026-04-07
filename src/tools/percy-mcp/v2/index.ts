@@ -55,6 +55,7 @@ import { percyPreviewComparison } from "./preview-comparison.js";
 import { percySearchBuildItems } from "./search-build-items.js";
 import { percyListIntegrations } from "./list-integrations.js";
 import { percyMigrateIntegrations } from "./migrate-integrations.js";
+import { percyGetAiSummary } from "./get-ai-summary.js";
 
 export function registerPercyMcpToolsV2(
   server: McpServer,
@@ -606,6 +607,33 @@ export function registerPercyMcpToolsV2(
       } catch (error) {
         return handleMCPError(
           "percy_migrate_integrations",
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  // ── AI Summary ─────────────────────────────────────────────────────────
+
+  tools.percy_get_ai_summary = server.tool(
+    "percy_get_ai_summary",
+    "Get the AI-generated build summary: potential bugs, visual diffs, change descriptions with occurrence counts. Shows what changed and why.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_ai_summary",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetAiSummary(args, config);
+      } catch (error) {
+        return handleMCPError(
+          "percy_get_ai_summary",
           server,
           config,
           error,

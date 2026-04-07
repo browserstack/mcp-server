@@ -11,11 +11,7 @@ export async function percyGetInsights(
     product: args.product || "web",
   };
 
-  const response = await percyGet(
-    `/insights/metrics/${args.org_slug}`,
-    config,
-    params,
-  );
+  const response = await percyGet("/insights/metrics", config, params);
   const data = response?.data?.attributes || response?.data || {};
 
   let output = `## Percy Testing Insights — ${args.org_slug}\n\n`;

@@ -6,11 +6,24 @@
 
 ## Setup
 
-```bash
-cd mcp-server
-./percy-config/setup.sh    # enter BrowserStack username + access key
-# restart Claude Code
+Add to your `.mcp.json` (or Claude Code MCP settings):
+
+```json
+{
+  "mcpServers": {
+    "browserstack": {
+      "command": "node",
+      "args": ["path/to/mcp-server/dist/index.js"],
+      "env": {
+        "BROWSERSTACK_USERNAME": "your-username",
+        "BROWSERSTACK_ACCESS_KEY": "your-access-key"
+      }
+    }
+  }
+}
 ```
+
+That's it. No Percy token needed — BrowserStack credentials handle everything.
 
 ---
 
@@ -539,14 +552,10 @@ Use percy_get_builds with project_slug "org-id/project-slug"
 
 | Requirement | Needed For | How to Get |
 |---|---|---|
-| BrowserStack credentials | All tools | `./percy-config/setup.sh` |
+| BrowserStack credentials | All tools | Set `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` in `.mcp.json` env |
 | @percy/cli installed | URL snapshots, test commands | `npm install -g @percy/cli` |
 | Local dev server running | URL snapshots | Start your app first |
 
 ## Switching Orgs
 
-```bash
-./percy-config/switch-org.sh --save my-org    # save current
-./percy-config/switch-org.sh other-org        # switch
-# restart Claude Code
-```
+Update `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` in your `.mcp.json` and restart Claude Code.

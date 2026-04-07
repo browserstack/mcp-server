@@ -7,6 +7,7 @@ export async function percyGetInsights(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   const params: Record<string, string> = {
+    organization_id: args.org_slug,
     period: args.period || "last_30_days",
     product: args.product || "web",
   };

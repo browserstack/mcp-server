@@ -28,9 +28,7 @@ export async function percyGetAiSummary(
 
   // Get build summary from included data
   const included = response?.included || [];
-  const summaryObj = included.find(
-    (i: any) => i.type === "build-summaries",
-  );
+  const summaryObj = included.find((i: any) => i.type === "build-summaries");
   const summaryJson = summaryObj?.attributes?.summary;
 
   let output = `## Percy Build #${buildNum} — AI Build Summary\n\n`;
@@ -61,9 +59,7 @@ export async function percyGetAiSummary(
   if (summaryJson) {
     try {
       const summary =
-        typeof summaryJson === "string"
-          ? JSON.parse(summaryJson)
-          : summaryJson;
+        typeof summaryJson === "string" ? JSON.parse(summaryJson) : summaryJson;
 
       if (summary.title) {
         output += `### Summary\n\n`;
@@ -80,7 +76,8 @@ export async function percyGetAiSummary(
           const occurrences =
             item.occurrences || item.count || item.occurrence_count;
           output += `- **${title}**`;
-          if (occurrences) output += ` (${occurrences} occurrence${occurrences !== 1 ? "s" : ""})`;
+          if (occurrences)
+            output += ` (${occurrences} occurrence${occurrences !== 1 ? "s" : ""})`;
           output += "\n";
         });
         output += "\n";

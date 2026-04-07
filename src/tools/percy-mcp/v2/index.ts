@@ -40,6 +40,7 @@ import { percyGetProjectsV2 } from "./get-projects.js";
 import { percyGetBuildsV2 } from "./get-builds.js";
 import { percyCreateBuildV2 } from "./create-build.js";
 import { percyAuthStatusV2 } from "./auth-status.js";
+import { percyGetBuildDetail } from "./get-build-detail.js";
 import { percyFigmaBuild } from "./figma-build.js";
 import { percyFigmaBaseline } from "./figma-baseline.js";
 import { percyFigmaLink } from "./figma-link.js";
@@ -210,6 +211,50 @@ export function registerPercyMcpToolsV2(
         return await percyAuthStatusV2({}, config);
       } catch (error) {
         return handleMCPError("percy_auth_status", server, config, error);
+      }
+    },
+  );
+
+  // ── Unified Build Details ─────────────────────────────────────────────────
+
+  tools.percy_get_build = server.tool(
+    "percy_get_build",
+    "Get Percy build details. Supports multiple views: overview (default), ai_summary, changes, rca, logs, network, snapshots. One tool for all build data.",
+    {
+      build_id: z.string().describe("Percy build ID"),
+      detail: z
+        .enum([
+          "overview",
+          "ai_summary",
+          "changes",
+          "rca",
+          "logs",
+          "network",
+          "snapshots",
+        ])
+        .optional()
+        .describe(
+          "What to show: overview (default), ai_summary, changes, rca, logs, network, snapshots",
+        ),
+      comparison_id: z
+        .string()
+        .optional()
+        .describe("Comparison ID (required for rca and network details)"),
+      snapshot_id: z
+        .string()
+        .optional()
+        .describe("Snapshot ID (for snapshot-specific details)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_build",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetBuildDetail(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_build", server, config, error);
       }
     },
   );
@@ -632,12 +677,7 @@ export function registerPercyMcpToolsV2(
         );
         return await percyGetAiSummary(args, config);
       } catch (error) {
-        return handleMCPError(
-          "percy_get_ai_summary",
-          server,
-          config,
-          error,
-        );
+        return handleMCPError("percy_get_ai_summary", server, config, error);
       }
     },
   );

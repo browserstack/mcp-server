@@ -1,6 +1,6 @@
 # Percy MCP Tools — Quick Reference
 
-> 21 tools | BrowserStack Basic Auth | All commands use natural language
+> 22 tools | BrowserStack Basic Auth | All commands use natural language
 
 ---
 
@@ -159,6 +159,50 @@ Use percy_get_projects with limit 5
 ```
 
 Returns: table with project name, type, and slug. Use the slug in `percy_get_builds`.
+
+---
+
+### percy_get_build
+
+**THE unified build details tool.** One command for everything about a build.
+
+| Parameter | Required | Description | Example |
+|-----------|----------|-------------|---------|
+| `build_id` | Yes | Build ID | `"48436286"` |
+| `detail` | No | What to show (default: overview) | `"ai_summary"` |
+| `comparison_id` | No | Needed for rca and network | `"99999"` |
+
+**Detail options:** `overview`, `ai_summary`, `changes`, `rca`, `logs`, `network`, `snapshots`
+
+**Examples:**
+
+```
+Use percy_get_build with build_id "48436286"
+```
+
+```
+Use percy_get_build with build_id "48436286" and detail "ai_summary"
+```
+
+```
+Use percy_get_build with build_id "48436286" and detail "changes"
+```
+
+```
+Use percy_get_build with build_id "48436286" and detail "logs"
+```
+
+```
+Use percy_get_build with build_id "48436286" and detail "rca" and comparison_id "99999"
+```
+
+```
+Use percy_get_build with build_id "48436286" and detail "network" and comparison_id "99999"
+```
+
+```
+Use percy_get_build with build_id "48436286" and detail "snapshots"
+```
 
 ---
 

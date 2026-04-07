@@ -314,56 +314,9 @@ async function handleUrlWithTestCases(
   customNames: string[],
   testCases: string[],
 ): Promise<CallToolResult> {
-  // Start percy exec with a dummy command (sleep) to get the local server running
-  // Then POST to localhost:5338/percy/snapshot for each URL with testCase
-  const child = spawn("npx", ["@percy/cli", "exec", "--", "sleep", "120"], {
-    env: { ...process.env, PERCY_TOKEN: token },
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
-  });
-
-  let buildUrl = "";
-
-  child.stdout?.on("data", (d: Buffer) => {
-    const text = d.toString();
-    const match = text.match(/https:\/\/percy\.io\/[^\s]+\/builds\/\d+/);
-    if (match) buildUrl = match[0];
-  });
-  child.stderr?.on("data", () => {
-    // capture stderr but don't store
-  });
-
-  // Wait for Percy server to start (looks for "Percy has started" or port 5338)
-  await new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, 12000);
-    const check = setInterval(async () => {
-      try {
-        const res = await fetch("http://localhost:5338/percy/healthcheck");
-        if (res.ok) {
-          clearTimeout(timeout);
-          clearInterval(check);
-          resolve();
-        }
-      } catch {
-        // Not ready yet
-      }
-    }, 500);
-    child.on("close", () => {
-      clearTimeout(timeout);
-      clearInterval(check);
-      resolve();
-    });
-  });
-
-  let output = `## Percy Build — ${projectName}\n\n`;
-  output += `**Branch:** ${branch}\n`;
-  output += `**URLs:** ${urlList.length}\n`;
-  output += `**Widths:** ${widths.join(", ")}px\n\n`;
-
-  // Send snapshots to Percy local server
-  let snapshotCount = 0;
-  for (let i = 0; i < urlList.length; i++) {
-    const url = urlList[i];
+  // Use @percy/core directly via a generated Node.js script
+  // This is the only way to set testCase on URL-based snapshots
+  const snapshots = urlList.map((url, i) => {
     const name =
       customNames[i] ||
       url
@@ -374,71 +327,112 @@ async function handleUrlWithTestCases(
         .replace(/^-|-$/g, "") ||
       `Page ${i + 1}`;
     const tc = testCases.length === 1 ? testCases[0] : testCases[i];
+    return { url, name, testCase: tc || undefined };
+  });
 
-    try {
-      const snapshotBody: Record<string, unknown> = {
-        url,
-        name,
-        widths: widths.map(Number),
-        waitForTimeout: 3000,
-      };
-      if (tc) snapshotBody.testCase = tc;
+  const scriptContent = `
+import Percy from '@percy/core';
 
-      const res = await fetch("http://localhost:5338/percy/snapshot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(snapshotBody),
-      });
+const percy = new Percy({
+  token: process.env.PERCY_TOKEN,
+  snapshot: { widths: [${widths.join(",")}] }
+});
 
-      if (res.ok) {
-        snapshotCount++;
-        output += `- ✓ **${name}**`;
-        if (tc) output += ` (test: ${tc})`;
-        output += ` → ${url}\n`;
-      } else {
-        const errText = await res.text().catch(() => "");
-        output += `- ✗ **${name}** — ${res.status}: ${errText.slice(0, 100)}\n`;
-      }
-    } catch (e: any) {
-      output += `- ✗ **${name}** — ${e.message}\n`;
-    }
-  }
+await percy.start();
+console.log('[percy-mcp] Percy started');
 
-  output += "\n";
+const snapshots = ${JSON.stringify(snapshots)};
 
-  // Stop Percy (send stop signal)
+for (const snap of snapshots) {
   try {
-    await fetch("http://localhost:5338/percy/stop", { method: "POST" });
-  } catch {
-    // Percy may have already stopped
-  }
-
-  // Wait briefly for build URL
-  if (!buildUrl) {
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(resolve, 10000);
-      const check = setInterval(() => {
-        if (buildUrl) {
-          clearTimeout(timeout);
-          clearInterval(check);
-          resolve();
-        }
-      }, 500);
-      child.on("close", () => {
-        clearTimeout(timeout);
-        clearInterval(check);
-        resolve();
-      });
+    await percy.snapshot({
+      url: snap.url,
+      name: snap.name,
+      testCase: snap.testCase,
+      widths: [${widths.join(",")}],
+      waitForTimeout: 3000,
     });
+    console.log('[percy-mcp] ok ' + snap.name + (snap.testCase ? ' (test: ' + snap.testCase + ')' : ''));
+  } catch (e) {
+    console.error('[percy-mcp] fail ' + snap.name + ': ' + e.message);
   }
+}
+
+await percy.stop();
+console.log('[percy-mcp] Done');
+`;
+
+  const tmpDir = await mkdtemp(join(tmpdir(), "percy-mcp-"));
+  const scriptPath = join(tmpDir, "snapshot.mjs");
+  await writeFile(scriptPath, scriptContent);
+
+  // Run the script in background
+  const child = spawn("node", [scriptPath], {
+    env: { ...process.env, PERCY_TOKEN: token },
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
+
+  let buildUrl = "";
+  const stdoutLines: string[] = [];
+
+  child.stdout?.on("data", (d: Buffer) => {
+    const text = d.toString();
+    stdoutLines.push(text.trim());
+    const match = text.match(/https:\/\/percy\.io\/[^\s]+\/builds\/\d+/);
+    if (match) buildUrl = match[0];
+  });
+  child.stderr?.on("data", (d: Buffer) => {
+    stdoutLines.push(d.toString().trim());
+  });
+
+  // Wait for completion (up to 60s — Percy needs to start browser, render, upload)
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, 60000);
+    child.on("close", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
 
   child.unref();
 
+  setTimeout(async () => {
+    try {
+      await unlink(scriptPath);
+    } catch {
+      /* ignore */
+    }
+  }, 120000);
+
+  // Build output
+  let output = `## Percy Build — ${projectName}\n\n`;
+  output += `**Branch:** ${branch}\n`;
+  output += `**URLs:** ${urlList.length}\n`;
+  output += `**Widths:** ${widths.join(", ")}px\n\n`;
+
+  output += `**Snapshots:**\n`;
+  for (const snap of snapshots) {
+    const logLine = stdoutLines.find((l) => l.includes(snap.name));
+    const ok = logLine?.includes("[percy-mcp] ok");
+    output += `- ${ok ? "✓" : "?"} **${snap.name}**`;
+    if (snap.testCase) output += ` (test: ${snap.testCase})`;
+    output += ` → ${snap.url}\n`;
+  }
+  output += "\n";
+
   if (buildUrl) {
     output += `**Build URL:** ${buildUrl}\n\n`;
-    output += `${snapshotCount} snapshot(s) captured with test cases. Results ready in 1-3 minutes.\n`;
+    output += `${snapshots.length} snapshot(s) with test cases. Results ready in 1-3 minutes.\n`;
   } else {
-    output += `${snapshotCount} snapshot(s) sent to Percy. Check dashboard for results.\n`;
+    const percyOutput = stdoutLines
+      .filter((l) => l.includes("[percy"))
+      .join("\n");
+    if (percyOutput) {
+      output += `**Percy output:**\n\`\`\`\n${percyOutput.slice(0, 500)}\n\`\`\`\n`;
+    } else {
+      output += `Percy is processing. Check dashboard for results.\n`;
+    }
   }
 
   return { content: [{ type: "text", text: output }] };

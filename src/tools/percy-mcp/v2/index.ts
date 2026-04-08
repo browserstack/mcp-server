@@ -247,11 +247,7 @@ export function registerPercyMcpToolsV2(
     },
     async (args) => {
       try {
-        trackMCP(
-          "percy_get_build",
-          server.server.getClientVersion()!,
-          config,
-        );
+        trackMCP("percy_get_build", server.server.getClientVersion()!, config);
         return await percyGetBuildDetail(args, config);
       } catch (error) {
         return handleMCPError("percy_get_build", server, config, error);

@@ -6,24 +6,44 @@
 
 ## Setup
 
-Add to your `.mcp.json` (or Claude Code MCP settings):
-
+### Published package (recommended)
 ```json
 {
   "mcpServers": {
     "browserstack": {
-      "command": "node",
-      "args": ["path/to/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@browserstack/mcp-server@latest"],
       "env": {
-        "BROWSERSTACK_USERNAME": "your-username",
-        "BROWSERSTACK_ACCESS_KEY": "your-access-key"
+        "BROWSERSTACK_USERNAME": "<username>",
+        "BROWSERSTACK_ACCESS_KEY": "<access_key>"
       }
     }
   }
 }
 ```
 
-That's it. No Percy token needed — BrowserStack credentials handle everything.
+### Local development (testing your changes)
+```bash
+cd mcp-server
+npm run build
+```
+
+Then in Claude Code:
+```
+/mcp add-server
+```
+Select "command" transport, enter:
+- Command: `node`
+- Args: `/path/to/mcp-server/dist/index.js`
+- Env: `BROWSERSTACK_USERNAME=xxx`, `BROWSERSTACK_ACCESS_KEY=xxx`
+
+Or use MCP Inspector for testing:
+```bash
+npx @modelcontextprotocol/inspector node dist/index.js
+```
+Set env vars in the Inspector UI.
+
+No Percy token needed — BrowserStack credentials handle everything.
 
 ---
 
@@ -558,4 +578,4 @@ Use percy_get_builds with project_slug "org-id/project-slug"
 
 ## Switching Orgs
 
-Update `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` in your `.mcp.json` and restart Claude Code.
+Update `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` in your MCP config and restart the client.

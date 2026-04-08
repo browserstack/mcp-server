@@ -11,10 +11,7 @@
  * - snapshots: all snapshots with review states
  */
 
-import {
-  percyGet,
-  percyPost,
-} from "../../../lib/percy-api/percy-auth.js";
+import { percyGet, percyPost } from "../../../lib/percy-api/percy-auth.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -108,9 +105,7 @@ async function getOverview(
 
   // Quick summary
   const included = response?.included || [];
-  const summaryObj = included.find(
-    (i: any) => i.type === "build-summaries",
-  );
+  const summaryObj = included.find((i: any) => i.type === "build-summaries");
   if (summaryObj?.attributes?.summary) {
     try {
       const summary =
@@ -167,9 +162,7 @@ async function getAiSummary(
 
   // Parse build summary
   const included = response?.included || [];
-  const summaryObj = included.find(
-    (i: any) => i.type === "build-summaries",
-  );
+  const summaryObj = included.find((i: any) => i.type === "build-summaries");
 
   if (summaryObj?.attributes?.summary) {
     try {
@@ -184,10 +177,8 @@ async function getAiSummary(
       if (items.length > 0) {
         output += `### Changes\n\n`;
         items.forEach((item: any) => {
-          const title =
-            item.title || item.description || String(item);
-          const occ =
-            item.occurrences || item.count;
+          const title = item.title || item.description || String(item);
+          const occ = item.occurrences || item.count;
           output += `- **${title}**`;
           if (occ) output += ` (${occ} occurrences)`;
           output += "\n";
@@ -227,7 +218,10 @@ async function getChanges(
   if (!items.length) {
     return {
       content: [
-        { type: "text", text: `## Build #${buildId} — No Changes\n\nAll snapshots match the baseline.` },
+        {
+          type: "text",
+          text: `## Build #${buildId} — No Changes\n\nAll snapshots match the baseline.`,
+        },
       ],
     };
   }
@@ -237,22 +231,14 @@ async function getChanges(
 
   items.forEach((item: any, i: number) => {
     const name =
-      item.attributes?.["cover-snapshot-name"] ||
-      item.coverSnapshotName ||
-      "?";
-    const diff =
-      item.attributes?.["max-diff-ratio"] ??
-      item.maxDiffRatio;
-    const diffStr =
-      diff != null ? `${(diff * 100).toFixed(1)}%` : "—";
+      item.attributes?.["cover-snapshot-name"] || item.coverSnapshotName || "?";
+    const diff = item.attributes?.["max-diff-ratio"] ?? item.maxDiffRatio;
+    const diffStr = diff != null ? `${(diff * 100).toFixed(1)}%` : "—";
     const bugs =
       item.attributes?.["max-bug-total-potential-bugs"] ??
       item.maxBugTotalPotentialBugs ??
       0;
-    const review =
-      item.attributes?.["review-state"] ||
-      item.reviewState ||
-      "?";
+    const review = item.attributes?.["review-state"] || item.reviewState || "?";
     output += `| ${i + 1} | ${name} | ${diffStr} | ${bugs} | ${review} |\n`;
   });
 
@@ -339,8 +325,7 @@ async function getRca(
   // Parse diff nodes
   let output = `## Root Cause Analysis — Comparison ${args.comparison_id}\n\n`;
 
-  const diffNodes =
-    rcaData?.data?.attributes?.["diff-nodes"] || {};
+  const diffNodes = rcaData?.data?.attributes?.["diff-nodes"] || {};
   const common = diffNodes.common_diffs || [];
   const removed = diffNodes.extra_base || [];
   const added = diffNodes.extra_head || [];
@@ -361,21 +346,17 @@ async function getRca(
 
   if (removed.length > 0) {
     output += `### Removed (${removed.length})\n`;
-    removed
-      .slice(0, 10)
-      .forEach((n: any) => {
-        output += `- ${n.node_detail?.tagName || "element"}\n`;
-      });
+    removed.slice(0, 10).forEach((n: any) => {
+      output += `- ${n.node_detail?.tagName || "element"}\n`;
+    });
     output += "\n";
   }
 
   if (added.length > 0) {
     output += `### Added (${added.length})\n`;
-    added
-      .slice(0, 10)
-      .forEach((n: any) => {
-        output += `- ${n.node_detail?.tagName || "element"}\n`;
-      });
+    added.slice(0, 10).forEach((n: any) => {
+      output += `- ${n.node_detail?.tagName || "element"}\n`;
+    });
     output += "\n";
   }
 
@@ -487,12 +468,9 @@ async function getNetwork(
   output += `| URL | Base | Head | Type |\n|---|---|---|---|\n`;
 
   entries.slice(0, 30).forEach((entry: any) => {
-    const url =
-      entry.domain || entry.file || entry.url || "?";
-    const base =
-      entry["base-status"] || entry.baseStatus || "—";
-    const head =
-      entry["head-status"] || entry.headStatus || "—";
+    const url = entry.domain || entry.file || entry.url || "?";
+    const base = entry["base-status"] || entry.baseStatus || "—";
+    const head = entry["head-status"] || entry.headStatus || "—";
     const type = entry.mimetype || entry.type || "—";
     output += `| ${url} | ${base} | ${head} | ${type} |\n`;
   });
@@ -526,21 +504,11 @@ async function getSnapshots(
 
   items.forEach((item: any, i: number) => {
     const name =
-      item.attributes?.["cover-snapshot-name"] ||
-      item.coverSnapshotName ||
-      "?";
-    const diff =
-      item.attributes?.["max-diff-ratio"] ?? item.maxDiffRatio;
-    const diffStr =
-      diff != null ? `${(diff * 100).toFixed(1)}%` : "—";
-    const review =
-      item.attributes?.["review-state"] ||
-      item.reviewState ||
-      "?";
-    const count =
-      item.attributes?.["item-count"] ||
-      item.itemCount ||
-      1;
+      item.attributes?.["cover-snapshot-name"] || item.coverSnapshotName || "?";
+    const diff = item.attributes?.["max-diff-ratio"] ?? item.maxDiffRatio;
+    const diffStr = diff != null ? `${(diff * 100).toFixed(1)}%` : "—";
+    const review = item.attributes?.["review-state"] || item.reviewState || "?";
+    const count = item.attributes?.["item-count"] || item.itemCount || 1;
     output += `| ${i + 1} | ${name} | ${diffStr} | ${review} | ${count} |\n`;
   });
 

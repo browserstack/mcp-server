@@ -6,7 +6,3 @@ tests.md
 *.ipa
 .npmrc
 .vscode/
-
-# Percy credentials (never commit)
-percy-config/config
-percy-config/profiles/

@@ -28,8 +28,7 @@ export function handlePercyToolError(
   toolHelp: ToolHelp,
   args: Record<string, unknown>,
 ): CallToolResult {
-  const message =
-    error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
 
   let output = `## Error: ${toolHelp.name}\n\n`;
 
@@ -98,9 +97,24 @@ export const TOOL_HELP: Record<string, ToolHelp> = {
     name: "percy_get_build",
     description: "Get build details with different views",
     params: [
-      { name: "build_id", required: true, description: "Percy build ID (numeric)", example: "48436286" },
-      { name: "detail", required: false, description: "View type", example: "overview" },
-      { name: "comparison_id", required: false, description: "For rca/network detail", example: "4391856176" },
+      {
+        name: "build_id",
+        required: true,
+        description: "Percy build ID (numeric)",
+        example: "48436286",
+      },
+      {
+        name: "detail",
+        required: false,
+        description: "View type",
+        example: "overview",
+      },
+      {
+        name: "comparison_id",
+        required: false,
+        description: "For rca/network detail",
+        example: "4391856176",
+      },
     ],
     examples: [
       'Use percy_get_build with build_id "48436286"',
@@ -112,29 +126,50 @@ export const TOOL_HELP: Record<string, ToolHelp> = {
     name: "percy_get_snapshot",
     description: "Get snapshot with all comparisons and AI analysis",
     params: [
-      { name: "snapshot_id", required: true, description: "Percy snapshot ID (numeric)", example: "2576885624" },
+      {
+        name: "snapshot_id",
+        required: true,
+        description: "Percy snapshot ID (numeric)",
+        example: "2576885624",
+      },
     ],
-    examples: [
-      'Use percy_get_snapshot with snapshot_id "2576885624"',
-    ],
+    examples: ['Use percy_get_snapshot with snapshot_id "2576885624"'],
   },
   percy_get_comparison: {
     name: "percy_get_comparison",
     description: "Get comparison with AI change descriptions and image URLs",
     params: [
-      { name: "comparison_id", required: true, description: "Percy comparison ID (numeric)", example: "4391856176" },
+      {
+        name: "comparison_id",
+        required: true,
+        description: "Percy comparison ID (numeric)",
+        example: "4391856176",
+      },
     ],
-    examples: [
-      'Use percy_get_comparison with comparison_id "4391856176"',
-    ],
+    examples: ['Use percy_get_comparison with comparison_id "4391856176"'],
   },
   percy_get_builds: {
     name: "percy_get_builds",
     description: "List builds for a project",
     params: [
-      { name: "project_slug", required: false, description: "Project slug from percy_get_projects", example: "9560f98d/my-project-abc123" },
-      { name: "branch", required: false, description: "Filter by branch", example: "main" },
-      { name: "state", required: false, description: "Filter by state", example: "finished" },
+      {
+        name: "project_slug",
+        required: false,
+        description: "Project slug from percy_get_projects",
+        example: "9560f98d/my-project-abc123",
+      },
+      {
+        name: "branch",
+        required: false,
+        description: "Filter by branch",
+        example: "main",
+      },
+      {
+        name: "state",
+        required: false,
+        description: "Filter by state",
+        example: "finished",
+      },
     ],
     examples: [
       'Use percy_get_builds with project_slug "9560f98d/my-project-abc123"',
@@ -145,7 +180,12 @@ export const TOOL_HELP: Record<string, ToolHelp> = {
     name: "percy_get_projects",
     description: "List all Percy projects",
     params: [
-      { name: "search", required: false, description: "Search by name", example: "my-app" },
+      {
+        name: "search",
+        required: false,
+        description: "Search by name",
+        example: "my-app",
+      },
     ],
     examples: [
       "Use percy_get_projects",
@@ -156,10 +196,30 @@ export const TOOL_HELP: Record<string, ToolHelp> = {
     name: "percy_create_build",
     description: "Create a Percy build with snapshots",
     params: [
-      { name: "project_name", required: true, description: "Project name", example: "my-app" },
-      { name: "urls", required: false, description: "URLs to snapshot", example: "http://localhost:3000" },
-      { name: "screenshots_dir", required: false, description: "Screenshot directory", example: "./screenshots" },
-      { name: "test_command", required: false, description: "Test command", example: "npx cypress run" },
+      {
+        name: "project_name",
+        required: true,
+        description: "Project name",
+        example: "my-app",
+      },
+      {
+        name: "urls",
+        required: false,
+        description: "URLs to snapshot",
+        example: "http://localhost:3000",
+      },
+      {
+        name: "screenshots_dir",
+        required: false,
+        description: "Screenshot directory",
+        example: "./screenshots",
+      },
+      {
+        name: "test_command",
+        required: false,
+        description: "Test command",
+        example: "npx cypress run",
+      },
     ],
     examples: [
       'Use percy_create_build with project_name "my-app" and urls "http://localhost:3000"',
@@ -169,19 +229,37 @@ export const TOOL_HELP: Record<string, ToolHelp> = {
     name: "percy_create_project",
     description: "Create or get a Percy project",
     params: [
-      { name: "name", required: true, description: "Project name", example: "my-app" },
-      { name: "type", required: false, description: "web or automate", example: "web" },
+      {
+        name: "name",
+        required: true,
+        description: "Project name",
+        example: "my-app",
+      },
+      {
+        name: "type",
+        required: false,
+        description: "web or automate",
+        example: "web",
+      },
     ],
-    examples: [
-      'Use percy_create_project with name "my-app"',
-    ],
+    examples: ['Use percy_create_project with name "my-app"'],
   },
   percy_clone_build: {
     name: "percy_clone_build",
     description: "Clone snapshots from one build to another project",
     params: [
-      { name: "source_build_id", required: true, description: "Build ID to clone from", example: "48436286" },
-      { name: "target_project_name", required: true, description: "Target project name", example: "my-project" },
+      {
+        name: "source_build_id",
+        required: true,
+        description: "Build ID to clone from",
+        example: "48436286",
+      },
+      {
+        name: "target_project_name",
+        required: true,
+        description: "Target project name",
+        example: "my-project",
+      },
     ],
     examples: [
       'Use percy_clone_build with source_build_id "48436286" and target_project_name "my-project"',
@@ -191,12 +269,25 @@ export const TOOL_HELP: Record<string, ToolHelp> = {
     name: "percy_get_insights",
     description: "Get testing health metrics",
     params: [
-      { name: "org_slug", required: true, description: "Organization slug or ID", example: "9560f98d" },
-      { name: "period", required: false, description: "Time period", example: "last_30_days" },
-      { name: "product", required: false, description: "web or app", example: "web" },
+      {
+        name: "org_slug",
+        required: true,
+        description: "Organization slug or ID",
+        example: "9560f98d",
+      },
+      {
+        name: "period",
+        required: false,
+        description: "Time period",
+        example: "last_30_days",
+      },
+      {
+        name: "product",
+        required: false,
+        description: "web or app",
+        example: "web",
+      },
     ],
-    examples: [
-      'Use percy_get_insights with org_slug "9560f98d"',
-    ],
+    examples: ['Use percy_get_insights with org_slug "9560f98d"'],
   },
 };

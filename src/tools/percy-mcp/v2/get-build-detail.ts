@@ -90,10 +90,15 @@ async function getOverview(
   output += `| **Failed** | ${attrs["failed-snapshots-count"] ?? "—"} |\n`;
   output += `| **Unreviewed** | ${attrs["total-snapshots-unreviewed"] ?? "—"} |\n`;
 
-  if (ai["ai-enabled"]) {
+  // Show AI data if any exists (don't rely on ai-enabled flag)
+  if (
+    (ai["total-comparisons-with-ai"] ?? 0) > 0 ||
+    (ai["total-potential-bugs"] ?? 0) > 0
+  ) {
     output += `| **AI Bugs** | ${ai["total-potential-bugs"] ?? "—"} |\n`;
     output += `| **AI Diffs** | ${ai["total-ai-visual-diffs"] ?? "—"} |\n`;
     output += `| **AI Reduced** | ${ai["total-diffs-reduced-capped"] ?? "—"} diffs filtered |\n`;
+    output += `| **AI Analyzed** | ${ai["total-comparisons-with-ai"] ?? "—"} comparisons |\n`;
   }
 
   if (attrs["failure-reason"]) {
@@ -148,8 +153,17 @@ async function getAiSummary(
 
   let output = `## Build #${buildNum} — AI Summary\n\n`;
 
-  if (!ai["ai-enabled"]) {
-    output += `AI is not enabled for this project.\n`;
+  // Check if there's ANY AI data — don't rely on ai-enabled flag alone
+  // ai-enabled can be false even when AI data exists (processed before toggle off)
+  const hasAiData =
+    (ai["total-comparisons-with-ai"] ?? 0) > 0 ||
+    (ai["total-potential-bugs"] ?? 0) > 0 ||
+    (ai["total-ai-visual-diffs"] ?? 0) > 0 ||
+    ai["summary-status"] === "ok";
+
+  if (!hasAiData) {
+    output += `No AI analysis data found for this build.\n`;
+    output += `AI may not be enabled for this project, or the build has no visual diffs.\n`;
     return { content: [{ type: "text", text: output }] };
   }
 

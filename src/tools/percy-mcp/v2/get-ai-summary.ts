@@ -18,7 +18,6 @@ export async function percyGetAiSummary(
 
   // Get AI details from build attributes
   const ai = attrs["ai-details"] || {};
-  const aiEnabled = ai["ai-enabled"] ?? false;
   const potentialBugs = ai["total-potential-bugs"] ?? 0;
   const aiVisualDiffs = ai["total-ai-visual-diffs"] ?? 0;
   const diffsReduced = ai["total-diffs-reduced-capped"] ?? 0;
@@ -33,9 +32,16 @@ export async function percyGetAiSummary(
 
   let output = `## Percy Build #${buildNum} — AI Build Summary\n\n`;
 
-  if (!aiEnabled) {
-    output += `AI is not enabled for this project.\n`;
-    output += `Enable it in Percy project settings to get AI-powered visual analysis.\n`;
+  // Check for actual AI data, not just the toggle flag
+  const hasAiData =
+    (comparisonsWithAi ?? 0) > 0 ||
+    (potentialBugs ?? 0) > 0 ||
+    (aiVisualDiffs ?? 0) > 0 ||
+    summaryStatus === "ok";
+
+  if (!hasAiData) {
+    output += `No AI analysis data found for this build.\n`;
+    output += `AI may not be enabled, or the build has no visual diffs.\n`;
     return { content: [{ type: "text", text: output }] };
   }
 

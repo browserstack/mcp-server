@@ -467,35 +467,42 @@ async function uploadScreenshots(
   // Step 1: Create temp directory for screenshots
   const tmpDir = await mkdtemp(join(tmpdir(), "percy-clone-"));
   let downloaded = 0;
+  let totalComps = 0;
 
-  // Step 2: Download screenshots — use first comparison per snapshot (primary width)
+  // Step 2: Download ALL screenshots — every width/device/browser per snapshot
   for (const snap of snapshots) {
-    const comp = snap.comparisons.find((c) => c.imageUrl);
-    if (!comp?.imageUrl) continue;
+    const compsWithImages = snap.comparisons.filter((c) => c.imageUrl);
+    if (compsWithImages.length === 0) continue;
+    totalComps += compsWithImages.length;
 
-    try {
-      const imgResponse = await fetch(comp.imageUrl);
-      if (!imgResponse.ok) continue;
+    for (const comp of compsWithImages) {
+      try {
+        const imgResponse = await fetch(comp.imageUrl!);
+        if (!imgResponse.ok) continue;
 
-      const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+        const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
 
-      // Name file after snapshot — sanitize for filesystem
-      const safeName = snap.name
-        .replace(/[/\\?%*:|"<>]/g, "-")
-        .replace(/\s+/g, "_")
-        .slice(0, 200);
-      const ext =
-        comp.imageUrl.includes(".jpg") || comp.imageUrl.includes("jpeg")
-          ? ".jpg"
-          : ".png";
-      await writeFile(join(tmpDir, `${safeName}${ext}`), imgBuffer);
-      downloaded++;
-    } catch {
-      output += `- Failed to download: ${snap.name}\n`;
+        // Name: {snapshot}_{browser}_{width}px — preserves all width/device combos
+        const safeName = snap.name
+          .replace(/[/\\?%*:|"<>]/g, "-")
+          .replace(/\s+/g, "_")
+          .slice(0, 150);
+        const devicePart = comp.browserName || comp.tagName || "default";
+        const safeDevice = devicePart.replace(/[/\\?%*:|"<>]/g, "-");
+        const fileName = `${safeName}_${safeDevice}_${comp.width}px`;
+        const ext =
+          comp.imageUrl!.includes(".jpg") || comp.imageUrl!.includes("jpeg")
+            ? ".jpg"
+            : ".png";
+        await writeFile(join(tmpDir, `${fileName}${ext}`), imgBuffer);
+        downloaded++;
+      } catch {
+        output += `- Failed to download: ${snap.name} (${comp.browserName} ${comp.width}px)\n`;
+      }
     }
   }
 
-  output += `Downloaded **${downloaded}/${snapshots.length}** screenshots.\n\n`;
+  output += `Downloaded **${downloaded}/${totalComps}** screenshots across ${snapshots.length} snapshots.\n\n`;
 
   if (downloaded === 0) {
     output += `No screenshots to upload.\n`;
@@ -573,11 +580,18 @@ async function uploadScreenshots(
     output += `\n**Percy output:**\n\`\`\`\n${percyLines.join("\n")}\n\`\`\`\n`;
   }
 
-  // List cloned snapshots
-  output += `\n**Snapshots:**\n`;
+  // List cloned snapshots with all their width/device combos
+  output += `\n**Snapshots cloned:**\n`;
   for (const snap of snapshots) {
-    const hasImage = snap.comparisons.some((c) => c.imageUrl);
-    output += `- ${hasImage ? "+" : "-"} ${snap.name}\n`;
+    const comps = snap.comparisons.filter((c) => c.imageUrl);
+    if (comps.length === 0) {
+      output += `- ${snap.name} — no screenshots\n`;
+    } else {
+      const details = comps
+        .map((c) => `${c.browserName || c.tagName} ${c.width}px`)
+        .join(", ");
+      output += `- **${snap.name}** — ${comps.length} variant${comps.length !== 1 ? "s" : ""} (${details})\n`;
+    }
   }
 
   return { content: [{ type: "text", text: output }] };

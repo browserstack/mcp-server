@@ -34,6 +34,10 @@ import { BrowserStackConfig } from "../../../lib/types.js";
 import { handleMCPError } from "../../../lib/utils.js";
 import { trackMCP } from "../../../index.js";
 import { z } from "zod";
+import {
+  handlePercyToolError,
+  TOOL_HELP,
+} from "../../../lib/percy-api/percy-error-handler.js";
 
 import { percyCreateProjectV2 } from "./create-project.js";
 import { percyGetProjectsV2 } from "./get-projects.js";
@@ -86,7 +90,9 @@ export function registerPercyMcpToolsV2(
         );
         return await percyCreateProjectV2(args, config);
       } catch (error) {
-        return handleMCPError("percy_create_project", server, config, error);
+        return TOOL_HELP.percy_create_project
+          ? handlePercyToolError(error, TOOL_HELP.percy_create_project, args)
+          : handleMCPError("percy_create_project", server, config, error);
       }
     },
   );
@@ -143,7 +149,9 @@ export function registerPercyMcpToolsV2(
         );
         return await percyCreateBuildV2(args, config);
       } catch (error) {
-        return handleMCPError("percy_create_build", server, config, error);
+        return TOOL_HELP.percy_create_build
+          ? handlePercyToolError(error, TOOL_HELP.percy_create_build, args)
+          : handleMCPError("percy_create_build", server, config, error);
       }
     },
   );
@@ -165,7 +173,9 @@ export function registerPercyMcpToolsV2(
         );
         return await percyGetProjectsV2(args, config);
       } catch (error) {
-        return handleMCPError("percy_get_projects", server, config, error);
+        return TOOL_HELP.percy_get_projects
+          ? handlePercyToolError(error, TOOL_HELP.percy_get_projects, args)
+          : handleMCPError("percy_get_projects", server, config, error);
       }
     },
   );
@@ -193,7 +203,9 @@ export function registerPercyMcpToolsV2(
         trackMCP("percy_get_builds", server.server.getClientVersion()!, config);
         return await percyGetBuildsV2(args, config);
       } catch (error) {
-        return handleMCPError("percy_get_builds", server, config, error);
+        return TOOL_HELP.percy_get_builds
+          ? handlePercyToolError(error, TOOL_HELP.percy_get_builds, args)
+          : handleMCPError("percy_get_builds", server, config, error);
       }
     },
   );
@@ -252,7 +264,9 @@ export function registerPercyMcpToolsV2(
         trackMCP("percy_get_build", server.server.getClientVersion()!, config);
         return await percyGetBuildDetail(args, config);
       } catch (error) {
-        return handleMCPError("percy_get_build", server, config, error);
+        return TOOL_HELP.percy_get_build
+          ? handlePercyToolError(error, TOOL_HELP.percy_get_build, args)
+          : handleMCPError("percy_get_build", server, config, error);
       }
     },
   );
@@ -274,7 +288,9 @@ export function registerPercyMcpToolsV2(
         );
         return await percyGetSnapshot(args, config);
       } catch (error) {
-        return handleMCPError("percy_get_snapshot", server, config, error);
+        return TOOL_HELP.percy_get_snapshot
+          ? handlePercyToolError(error, TOOL_HELP.percy_get_snapshot, args)
+          : handleMCPError("percy_get_snapshot", server, config, error);
       }
     },
   );
@@ -296,7 +312,9 @@ export function registerPercyMcpToolsV2(
         );
         return await percyGetComparison(args, config);
       } catch (error) {
-        return handleMCPError("percy_get_comparison", server, config, error);
+        return TOOL_HELP.percy_get_comparison
+          ? handlePercyToolError(error, TOOL_HELP.percy_get_comparison, args)
+          : handleMCPError("percy_get_comparison", server, config, error);
       }
     },
   );

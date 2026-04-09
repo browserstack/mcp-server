@@ -466,7 +466,11 @@ async function copyScreenshots(
         `/builds/${buildId}/snapshots`,
         token,
         {
-          data: { type: "snapshots", attributes: { name: snap.name } },
+          data: {
+            type: "snapshots",
+            attributes: { name: snap.name },
+            relationships: { resources: { data: [] } },
+          },
         },
       );
       const newSnapId = snapResult?.data?.id;

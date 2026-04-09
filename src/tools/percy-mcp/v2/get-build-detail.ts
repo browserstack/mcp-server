@@ -1,32 +1,26 @@
 /**
  * percy_get_build — Unified build details tool.
  *
- * Returns different data based on the `detail` parameter:
- * - overview (default): build status, snapshots, AI metrics
- * - ai_summary: AI-generated change descriptions, bugs, diffs
- * - changes: list of changed snapshots with diff ratios
- * - rca: root cause analysis (DOM/CSS changes) for a comparison
- * - logs: build failure suggestions and diagnostics
+ * detail param routes to different views:
+ * - overview: status, stats, AI metrics, browsers, summary preview
+ * - ai_summary: full AI change descriptions with occurrences
+ * - changes: changed snapshots with diff ratios and bugs
+ * - rca: root cause analysis for a comparison
+ * - logs: failure diagnostics and suggestions
  * - network: network request logs for a comparison
  * - snapshots: all snapshots with review states
  */
 
-import { percyGet, percyPost } from "../../../lib/percy-api/percy-auth.js";
+import {
+  percyGet,
+  percyPost,
+} from "../../../lib/percy-api/percy-auth.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-type DetailType =
-  | "overview"
-  | "ai_summary"
-  | "changes"
-  | "rca"
-  | "logs"
-  | "network"
-  | "snapshots";
-
 interface GetBuildArgs {
   build_id: string;
-  detail?: DetailType;
+  detail?: string;
   comparison_id?: string;
   snapshot_id?: string;
 }
@@ -57,12 +51,73 @@ export async function percyGetBuildDetail(
         content: [
           {
             type: "text",
-            text: `Unknown detail type: ${detail}. Use: overview, ai_summary, changes, rca, logs, network, snapshots.`,
+            text: `Unknown detail: ${detail}. Use: overview, ai_summary, changes, rca, logs, network, snapshots.`,
           },
         ],
         isError: true,
       };
   }
+}
+
+// ── Helper: parse build response ────────────────────────────────────────────
+
+function parseBuild(response: any) {
+  const attrs = response?.data?.attributes || {};
+  const ai = attrs["ai-details"] || {};
+  const included = response?.included || [];
+  const rels = response?.data?.relationships || {};
+
+  // Parse browsers from unique-browsers-across-snapshots (more detailed)
+  const uniqueBrowsers = (
+    attrs["unique-browsers-across-snapshots"] || []
+  ).map((b: any) => {
+    const bf = b.browser_family || {};
+    const os = b.operating_system || {};
+    const dp = b.device_pool || {};
+    return `${bf.name || "?"} ${b.version || ""} on ${os.name || "?"} ${os.version || ""} ${dp.name || ""}`.trim();
+  });
+
+  // Parse build summary
+  let summaryItems: any[] = [];
+  const summaryObj = included.find(
+    (i: any) => i.type === "build-summaries",
+  );
+  if (summaryObj?.attributes?.summary) {
+    const raw = summaryObj.attributes.summary;
+    try {
+      summaryItems =
+        typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (!Array.isArray(summaryItems)) summaryItems = [];
+    } catch {
+      summaryItems = [];
+    }
+  }
+
+  // Parse commit
+  const commitObj = included.find(
+    (i: any) => i.type === "commits",
+  );
+  const commit = commitObj?.attributes || {};
+
+  // Base build
+  const baseBuildId = rels["base-build"]?.data?.id;
+
+  const hasAiData =
+    (ai["total-comparisons-with-ai"] ?? 0) > 0 ||
+    (ai["total-potential-bugs"] ?? 0) > 0 ||
+    (ai["total-ai-visual-diffs"] ?? 0) > 0 ||
+    ai["summary-status"] === "ok";
+
+  return {
+    attrs,
+    ai,
+    included,
+    uniqueBrowsers,
+    summaryItems,
+    commit,
+    baseBuildId,
+    hasAiData,
+  };
 }
 
 // ── Overview ────────────────────────────────────────────────────────────────
@@ -72,67 +127,119 @@ async function getOverview(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   const response = await percyGet(`/builds/${buildId}`, config, {
-    include: "build-summary",
+    include: "build-summary,browsers,commit",
   });
 
-  const build = response?.data || {};
-  const attrs = build.attributes || {};
-  const ai = attrs["ai-details"] || {};
+  const {
+    attrs,
+    ai,
+    uniqueBrowsers,
+    summaryItems,
+    commit,
+    baseBuildId,
+    hasAiData,
+  } = parseBuild(response);
 
-  let output = `## Percy Build #${attrs["build-number"] || buildId}\n\n`;
+  const buildNum = attrs["build-number"] || buildId;
+
+  let output = `## Percy Build #${buildNum}\n\n`;
+
+  // Status table
   output += `| Field | Value |\n|---|---|\n`;
   output += `| **State** | ${attrs.state || "?"} |\n`;
   output += `| **Branch** | ${attrs.branch || "?"} |\n`;
-  output += `| **Review** | ${attrs["review-state"] || "—"} |\n`;
-  output += `| **Snapshots** | ${attrs["total-snapshots"] ?? "?"} |\n`;
-  output += `| **Comparisons** | ${attrs["total-comparisons"] ?? "?"} |\n`;
-  output += `| **Diffs** | ${attrs["total-comparisons-diff"] ?? "—"} |\n`;
-  output += `| **Failed** | ${attrs["failed-snapshots-count"] ?? "—"} |\n`;
-  output += `| **Unreviewed** | ${attrs["total-snapshots-unreviewed"] ?? "—"} |\n`;
+  output += `| **Review** | ${attrs["review-state"] || "—"} (${attrs["review-state-reason"] || ""}) |\n`;
+  output += `| **Type** | ${attrs.type || "?"} |\n`;
+  if (commit.sha)
+    output += `| **Commit** | ${commit.sha?.slice(0, 8)} — ${commit.message || "no message"} |\n`;
+  if (commit["author-name"])
+    output += `| **Author** | ${commit["author-name"]} |\n`;
+  if (baseBuildId)
+    output += `| **Base build** | #${baseBuildId} |\n`;
 
-  // Show AI data if any exists (don't rely on ai-enabled flag)
-  if (
-    (ai["total-comparisons-with-ai"] ?? 0) > 0 ||
-    (ai["total-potential-bugs"] ?? 0) > 0
-  ) {
-    output += `| **AI Bugs** | ${ai["total-potential-bugs"] ?? "—"} |\n`;
-    output += `| **AI Diffs** | ${ai["total-ai-visual-diffs"] ?? "—"} |\n`;
-    output += `| **AI Reduced** | ${ai["total-diffs-reduced-capped"] ?? "—"} diffs filtered |\n`;
-    output += `| **AI Analyzed** | ${ai["total-comparisons-with-ai"] ?? "—"} comparisons |\n`;
+  // Stats
+  output += `\n### Stats\n\n`;
+  output += `| Metric | Value |\n|---|---|\n`;
+  output += `| Snapshots | ${attrs["total-snapshots"] ?? "?"} |\n`;
+  output += `| Comparisons | ${attrs["total-comparisons"] ?? "?"} |\n`;
+  output += `| With diffs | ${attrs["total-comparisons-diff"] ?? "—"} |\n`;
+  output += `| Unreviewed | ${attrs["total-snapshots-unreviewed"] ?? "—"} |\n`;
+  output += `| Failed | ${attrs["failed-snapshots-count"] ?? 0} |\n`;
+  output += `| Comments | ${attrs["total-open-comments"] ?? 0} |\n`;
+  output += `| Issues | ${attrs["total-open-issues"] ?? 0} |\n`;
+
+  // AI metrics
+  if (hasAiData) {
+    output += `\n### AI Analysis\n\n`;
+    output += `| Metric | Value |\n|---|---|\n`;
+    output += `| Potential bugs | **${ai["total-potential-bugs"] ?? 0}** |\n`;
+    output += `| AI visual diffs | ${ai["total-ai-visual-diffs"] ?? 0} |\n`;
+    output += `| Diffs reduced | ${ai["total-diffs-reduced-capped"] ?? 0} filtered |\n`;
+    output += `| Comparisons analyzed | ${ai["total-comparisons-with-ai"] ?? 0} |\n`;
+    output += `| Jobs | ${ai["all-ai-jobs-completed"] ? "completed" : "in progress"} |\n`;
   }
 
+  // Browsers
+  if (uniqueBrowsers.length > 0) {
+    output += `\n### Browsers (${uniqueBrowsers.length})\n\n`;
+    uniqueBrowsers.forEach((b: string) => {
+      output += `- ${b}\n`;
+    });
+  }
+
+  // AI Summary preview
+  if (summaryItems.length > 0) {
+    output += `\n### AI Summary (${summaryItems.length} changes)\n\n`;
+    summaryItems.slice(0, 3).forEach((item: any) => {
+      output += `- **${item.title}** (${item.occurrences} occurrences)\n`;
+    });
+    if (summaryItems.length > 3) {
+      output += `- ... and ${summaryItems.length - 3} more\n`;
+    }
+    output += `\nUse \`detail "ai_summary"\` for full details.\n`;
+  }
+
+  // Failure info
   if (attrs["failure-reason"]) {
-    output += `| **Failure** | ${attrs["failure-reason"]} |\n`;
-  }
-
-  const webUrl = attrs["web-url"];
-  if (webUrl) output += `\n**View:** ${webUrl}\n`;
-
-  // Quick summary
-  const included = response?.included || [];
-  const summaryObj = included.find((i: any) => i.type === "build-summaries");
-  if (summaryObj?.attributes?.summary) {
-    try {
-      const summary =
-        typeof summaryObj.attributes.summary === "string"
-          ? JSON.parse(summaryObj.attributes.summary)
-          : summaryObj.attributes.summary;
-      if (summary.title) {
-        output += `\n### AI Summary\n> ${summary.title}\n`;
-      }
-    } catch {
-      /* ignore parse errors */
+    output += `\n### Failure\n\n`;
+    output += `**Reason:** ${attrs["failure-reason"]}\n`;
+    if (attrs["failure-details"])
+      output += `**Details:** ${attrs["failure-details"]}\n`;
+    const buckets = attrs["error-buckets"];
+    if (Array.isArray(buckets) && buckets.length > 0) {
+      output += `\n**Error categories:**\n`;
+      buckets.forEach((b: any) => {
+        output += `- ${b.bucket || b.name || "?"}: ${b.count ?? "?"} snapshot(s)\n`;
+      });
     }
   }
 
-  output += `\n### Available Details\n`;
-  output += `Use \`detail\` parameter for more:\n`;
-  output += `- \`ai_summary\` — AI change descriptions and bugs\n`;
-  output += `- \`changes\` — changed snapshots with diffs\n`;
-  output += `- \`snapshots\` — all snapshots with review states\n`;
-  output += `- \`logs\` — failure diagnostics\n`;
-  output += `- \`rca\` — root cause analysis (needs comparison_id)\n`;
-  output += `- \`network\` — network logs (needs comparison_id)\n`;
+  // Timing
+  if (attrs["created-at"]) {
+    output += `\n### Timing\n\n`;
+    output += `| | |\n|---|---|\n`;
+    output += `| Created | ${attrs["created-at"]} |\n`;
+    if (attrs["finished-at"])
+      output += `| Finished | ${attrs["finished-at"]} |\n`;
+    if (attrs["percy-processing-duration"])
+      output += `| Processing | ${attrs["percy-processing-duration"]}s |\n`;
+    if (attrs["build-processing-duration"])
+      output += `| Total | ${attrs["build-processing-duration"]}s |\n`;
+  }
+
+  // URL
+  if (attrs["web-url"])
+    output += `\n**View:** ${attrs["web-url"]}\n`;
+
+  // Available details
+  output += `\n### More Details\n\n`;
+  output += `| Command | Shows |\n|---|---|\n`;
+  output += `| \`detail "ai_summary"\` | Full AI change descriptions with occurrences |\n`;
+  output += `| \`detail "changes"\` | Changed snapshots with diff ratios |\n`;
+  output += `| \`detail "snapshots"\` | All snapshots with review states |\n`;
+  output += `| \`detail "logs"\` | Failure diagnostics and suggestions |\n`;
+  output += `| \`detail "rca"\` | Root cause analysis (needs comparison_id) |\n`;
+  output += `| \`detail "network"\` | Network logs (needs comparison_id) |\n`;
 
   return { content: [{ type: "text", text: output }] };
 }
@@ -147,68 +254,63 @@ async function getAiSummary(
     include: "build-summary",
   });
 
-  const attrs = response?.data?.attributes || {};
-  const ai = attrs["ai-details"] || {};
+  const { attrs, ai, summaryItems, hasAiData } =
+    parseBuild(response);
   const buildNum = attrs["build-number"] || buildId;
 
   let output = `## Build #${buildNum} — AI Summary\n\n`;
 
-  // Check if there's ANY AI data — don't rely on ai-enabled flag alone
-  // ai-enabled can be false even when AI data exists (processed before toggle off)
-  const hasAiData =
-    (ai["total-comparisons-with-ai"] ?? 0) > 0 ||
-    (ai["total-potential-bugs"] ?? 0) > 0 ||
-    (ai["total-ai-visual-diffs"] ?? 0) > 0 ||
-    ai["summary-status"] === "ok";
-
   if (!hasAiData) {
     output += `No AI analysis data found for this build.\n`;
-    output += `AI may not be enabled for this project, or the build has no visual diffs.\n`;
     return { content: [{ type: "text", text: output }] };
   }
 
-  output += `**${ai["total-potential-bugs"] ?? 0} potential bugs** · **${ai["total-ai-visual-diffs"] ?? 0} AI visual diffs**\n\n`;
+  // AI stats
+  output += `**${ai["total-potential-bugs"] ?? 0} potential bugs** · **${ai["total-ai-visual-diffs"] ?? 0} AI visual diffs** · **${ai["total-diffs-reduced-capped"] ?? 0} diffs filtered**\n\n`;
+  output += `${ai["total-comparisons-with-ai"] ?? 0} of ${attrs["total-comparisons"] ?? "?"} comparisons analyzed by AI.\n\n`;
 
-  if (ai["total-diffs-reduced-capped"] > 0) {
-    output += `AI filtered **${ai["total-diffs-reduced-capped"]}** noisy diffs.\n`;
-  }
-  output += `${ai["total-comparisons-with-ai"] ?? 0} comparisons analyzed. Jobs: ${ai["all-ai-jobs-completed"] ? "done" : "in progress"}.\n\n`;
+  // Summary items with full detail
+  if (summaryItems.length > 0) {
+    output += `### Changes (${summaryItems.length})\n\n`;
+    summaryItems.forEach((item: any, i: number) => {
+      output += `#### ${i + 1}. ${item.title}\n\n`;
+      output += `**Occurrences:** ${item.occurrences}\n`;
 
-  // Parse build summary
-  const included = response?.included || [];
-  const summaryObj = included.find((i: any) => i.type === "build-summaries");
+      const snaps = item.snapshots || [];
+      if (snaps.length > 0) {
+        output += `**Affected snapshots:** ${snaps.length}\n`;
+        const totalComps = snaps.reduce(
+          (sum: number, s: any) =>
+            sum + (s.comparisons?.length || 0),
+          0,
+        );
+        output += `**Affected comparisons:** ${totalComps}\n`;
 
-  if (summaryObj?.attributes?.summary) {
-    try {
-      const summary =
-        typeof summaryObj.attributes.summary === "string"
-          ? JSON.parse(summaryObj.attributes.summary)
-          : summaryObj.attributes.summary;
-
-      if (summary.title) output += `> ${summary.title}\n\n`;
-
-      const items = summary.items || summary.changes || [];
-      if (items.length > 0) {
-        output += `### Changes\n\n`;
-        items.forEach((item: any) => {
-          const title = item.title || item.description || String(item);
-          const occ = item.occurrences || item.count;
-          output += `- **${title}**`;
-          if (occ) output += ` (${occ} occurrences)`;
-          output += "\n";
+        // Show snapshot IDs and comparison details
+        output += `\n| Snapshot | Comparisons | Dimensions |\n|---|---|---|\n`;
+        snaps.slice(0, 5).forEach((s: any) => {
+          const comps = s.comparisons || [];
+          const dims = comps
+            .map(
+              (c: any) =>
+                `${c.width || "?"}×${c.height || "?"}`,
+            )
+            .join(", ");
+          output += `| ${s.snapshot_id} | ${comps.length} | ${dims} |\n`;
         });
+        if (snaps.length > 5) {
+          output += `| ... | +${snaps.length - 5} more | |\n`;
+        }
       }
-    } catch {
-      /* ignore */
-    }
+      output += "\n";
+    });
   } else {
-    const status = ai["summary-status"];
-    if (status === "processing") {
-      output += `Summary is being generated. Try again shortly.\n`;
-    } else if (status === "skipped") {
-      output += `Summary skipped: ${ai["summary-reason"] || "unknown"}.\n`;
-    } else {
-      output += `No AI summary available.\n`;
+    output += `AI analysis complete but no summary items generated.\n`;
+    if (ai["summary-status"] && ai["summary-status"] !== "ok") {
+      output += `Summary status: ${ai["summary-status"]}`;
+      if (ai["summary-reason"])
+        output += ` — ${ai["summary-reason"]}`;
+      output += "\n";
     }
   }
 
@@ -241,20 +343,34 @@ async function getChanges(
   }
 
   let output = `## Build #${buildId} — Changed Snapshots (${items.length})\n\n`;
-  output += `| # | Snapshot | Diff | Bugs | Review |\n|---|---|---|---|---|\n`;
+  output += `| # | Snapshot | Display Name | Diff | Bugs | Review | Comparisons |\n|---|---|---|---|---|---|---|\n`;
 
   items.forEach((item: any, i: number) => {
+    const a = item.attributes || item;
     const name =
-      item.attributes?.["cover-snapshot-name"] || item.coverSnapshotName || "?";
-    const diff = item.attributes?.["max-diff-ratio"] ?? item.maxDiffRatio;
-    const diffStr = diff != null ? `${(diff * 100).toFixed(1)}%` : "—";
+      a["cover-snapshot-name"] || a.coverSnapshotName || "?";
+    const displayName =
+      a["cover-snapshot-display-name"] ||
+      a.coverSnapshotDisplayName ||
+      "";
+    const diff =
+      (a["max-diff-ratio"] ?? a.maxDiffRatio) != null
+        ? ((a["max-diff-ratio"] ?? a.maxDiffRatio) * 100).toFixed(
+            1,
+          ) + "%"
+        : "—";
     const bugs =
-      item.attributes?.["max-bug-total-potential-bugs"] ??
-      item.maxBugTotalPotentialBugs ??
+      a["max-bug-total-potential-bugs"] ??
+      a.maxBugTotalPotentialBugs ??
       0;
-    const review = item.attributes?.["review-state"] || item.reviewState || "?";
-    output += `| ${i + 1} | ${name} | ${diffStr} | ${bugs} | ${review} |\n`;
+    const review =
+      a["review-state"] || a.reviewState || "?";
+    const count =
+      a["item-count"] || a.itemCount || 1;
+    output += `| ${i + 1} | ${name} | ${displayName || "—"} | ${diff} | ${bugs} | ${review} | ${count} |\n`;
   });
+
+  output += `\nUse \`percy_get_snapshot\` with a snapshot ID from above for full details.\n`;
 
   return { content: [{ type: "text", text: output }] };
 }
@@ -270,32 +386,32 @@ async function getRca(
       content: [
         {
           type: "text",
-          text: `RCA requires a comparison_id. Get one from:\n\`percy_get_build with build_id "${args.build_id}" and detail "changes"\``,
+          text: `RCA requires a comparison_id.\n\nFind one with:\n\`Use percy_get_build with build_id "${args.build_id}" and detail "changes"\`\nThen: \`Use percy_get_snapshot with snapshot_id "..."\``,
         },
       ],
       isError: true,
     };
   }
 
-  // Check if RCA exists
   let rcaData: any;
   try {
     rcaData = await percyGet("/rca", config, {
       comparison_id: args.comparison_id,
     });
   } catch {
-    // Trigger RCA
     try {
       await percyPost("/rca", config, {
         data: {
-          attributes: { "comparison-id": args.comparison_id },
+          attributes: {
+            "comparison-id": args.comparison_id,
+          },
         },
       });
       return {
         content: [
           {
             type: "text",
-            text: `## RCA Triggered\n\nRoot Cause Analysis started for comparison ${args.comparison_id}.\nRe-run this command in 30-60 seconds to see results.`,
+            text: `## RCA Triggered\n\nStarted for comparison ${args.comparison_id}. Re-run in 30-60 seconds.`,
           },
         ],
       };
@@ -304,7 +420,7 @@ async function getRca(
         content: [
           {
             type: "text",
-            text: `RCA failed: ${e.message}. This comparison may not support RCA (requires DOM metadata).`,
+            text: `RCA not available: ${e.message}\nThis comparison may not have DOM metadata.`,
           },
         ],
         isError: true,
@@ -312,14 +428,15 @@ async function getRca(
     }
   }
 
-  const status = rcaData?.data?.attributes?.status || "unknown";
+  const status =
+    rcaData?.data?.attributes?.status || "unknown";
 
   if (status === "pending") {
     return {
       content: [
         {
           type: "text",
-          text: `## RCA — Processing\n\nAnalysis in progress for comparison ${args.comparison_id}. Try again in 30 seconds.`,
+          text: `## RCA — Processing\n\nStill analyzing. Try again in 30 seconds.`,
         },
       ],
     };
@@ -330,46 +447,56 @@ async function getRca(
       content: [
         {
           type: "text",
-          text: `## RCA — Failed\n\nRoot cause analysis failed. This comparison may not have DOM metadata.`,
+          text: `## RCA — Failed\n\nAnalysis failed. Missing DOM metadata.`,
         },
       ],
     };
   }
 
-  // Parse diff nodes
   let output = `## Root Cause Analysis — Comparison ${args.comparison_id}\n\n`;
 
-  const diffNodes = rcaData?.data?.attributes?.["diff-nodes"] || {};
+  const diffNodes =
+    rcaData?.data?.attributes?.["diff-nodes"] || {};
   const common = diffNodes.common_diffs || [];
   const removed = diffNodes.extra_base || [];
   const added = diffNodes.extra_head || [];
 
   if (common.length > 0) {
-    output += `### Changed Elements (${common.length})\n\n`;
-    common.slice(0, 15).forEach((diff: any, i: number) => {
-      const base = diff.base || {};
+    output += `### Changed (${common.length})\n\n`;
+    output += `| # | Element | XPath | Diff Type |\n|---|---|---|---|\n`;
+    common.slice(0, 20).forEach((diff: any, i: number) => {
       const head = diff.head || {};
-      const tag = head.tagName || base.tagName || "element";
-      const xpath = head.xpath || base.xpath || "";
-      output += `${i + 1}. **${tag}**`;
-      if (xpath) output += ` — \`${xpath}\``;
-      output += "\n";
+      const tag = head.tagName || "?";
+      const xpath = (head.xpath || "").slice(0, 60);
+      const dt =
+        head.diff_type === 1
+          ? "change"
+          : head.diff_type === 2
+            ? "ignored"
+            : "?";
+      output += `| ${i + 1} | ${tag} | \`${xpath}\` | ${dt} |\n`;
     });
     output += "\n";
   }
 
   if (removed.length > 0) {
-    output += `### Removed (${removed.length})\n`;
+    output += `### Removed (${removed.length})\n\n`;
     removed.slice(0, 10).forEach((n: any) => {
-      output += `- ${n.node_detail?.tagName || "element"}\n`;
+      const d = n.node_detail || n;
+      output += `- ${d.tagName || "element"}`;
+      if (d.xpath) output += ` — \`${d.xpath.slice(0, 60)}\``;
+      output += "\n";
     });
     output += "\n";
   }
 
   if (added.length > 0) {
-    output += `### Added (${added.length})\n`;
+    output += `### Added (${added.length})\n\n`;
     added.slice(0, 10).forEach((n: any) => {
-      output += `- ${n.node_detail?.tagName || "element"}\n`;
+      const d = n.node_detail || n;
+      output += `- ${d.tagName || "element"}`;
+      if (d.xpath) output += ` — \`${d.xpath.slice(0, 60)}\``;
+      output += "\n";
     });
     output += "\n";
   }
@@ -389,54 +516,83 @@ async function getLogs(
 ): Promise<CallToolResult> {
   let output = `## Build #${buildId} — Diagnostics\n\n`;
 
-  // Get suggestions
+  // Build info
   try {
-    const response = await percyGet("/suggestions", config, {
+    const buildResponse = await percyGet(
+      `/builds/${buildId}`,
+      config,
+    );
+    const attrs = buildResponse?.data?.attributes || {};
+
+    if (attrs["failure-reason"]) {
+      output += `### Failure\n\n`;
+      output += `**Reason:** ${attrs["failure-reason"]}\n`;
+      if (attrs["failure-details"])
+        output += `**Details:** ${attrs["failure-details"]}\n`;
+
+      const buckets = attrs["error-buckets"];
+      if (Array.isArray(buckets) && buckets.length > 0) {
+        output += `\n**Error categories:**\n`;
+        output += `| Category | Snapshots |\n|---|---|\n`;
+        buckets.forEach((b: any) => {
+          output += `| ${b.bucket || b.name || "?"} | ${b.count ?? "?"} |\n`;
+        });
+      }
+      output += "\n";
+    } else {
+      output += `Build state: **${attrs.state || "?"}** — no failure recorded.\n\n`;
+    }
+
+    // Failed snapshots
+    if ((attrs["failed-snapshots-count"] ?? 0) > 0) {
+      output += `### Failed Snapshots (${attrs["failed-snapshots-count"]})\n\n`;
+      try {
+        const failedResponse = await percyGet(
+          `/builds/${buildId}/failed-snapshots`,
+          config,
+        );
+        const failed = failedResponse?.data || [];
+        if (failed.length > 0) {
+          output += `| # | Name |\n|---|---|\n`;
+          failed.slice(0, 10).forEach((s: any, i: number) => {
+            output += `| ${i + 1} | ${s.attributes?.name || s.name || "?"} |\n`;
+          });
+          output += "\n";
+        }
+      } catch {
+        output += `Could not fetch failed snapshot details.\n\n`;
+      }
+    }
+  } catch {
+    output += `Could not fetch build info.\n\n`;
+  }
+
+  // Suggestions
+  try {
+    const sugResponse = await percyGet("/suggestions", config, {
       build_id: buildId,
     });
-
-    const suggestions = response?.data || [];
+    const suggestions = sugResponse?.data || [];
     if (Array.isArray(suggestions) && suggestions.length > 0) {
-      output += `### Suggestions\n\n`;
+      output += `### Suggestions (${suggestions.length})\n\n`;
       suggestions.forEach((s: any, i: number) => {
-        const attrs = s.attributes || s;
-        output += `${i + 1}. **${attrs["bucket-display-name"] || attrs.bucket || "Issue"}**\n`;
-        if (attrs["reason-message"])
-          output += `   Reason: ${attrs["reason-message"]}\n`;
-        const steps = attrs.suggestion || [];
+        const a = s.attributes || s;
+        output += `${i + 1}. **${a["bucket-display-name"] || a.bucket || "Issue"}**\n`;
+        if (a["reason-message"])
+          output += `   ${a["reason-message"]}\n`;
+        const steps = a.suggestion || [];
         if (Array.isArray(steps)) {
           steps.forEach((step: string) => {
             output += `   - ${step}\n`;
           });
         }
+        if (a["reference-doc-link"])
+          output += `   [Docs](${a["reference-doc-link"]})\n`;
         output += "\n";
       });
-    } else {
-      output += `No diagnostic suggestions found.\n\n`;
     }
   } catch {
-    output += `Could not fetch suggestions.\n\n`;
-  }
-
-  // Get build failure info
-  try {
-    const buildResponse = await percyGet(`/builds/${buildId}`, config);
-    const attrs = buildResponse?.data?.attributes || {};
-
-    if (attrs["failure-reason"]) {
-      output += `### Failure Info\n\n`;
-      output += `**Reason:** ${attrs["failure-reason"]}\n`;
-
-      const buckets = attrs["error-buckets"];
-      if (Array.isArray(buckets) && buckets.length > 0) {
-        output += `\n**Error Buckets:**\n`;
-        buckets.forEach((b: any) => {
-          output += `- ${b.bucket || b.name || "?"}: ${b.count || "?"} snapshot(s)\n`;
-        });
-      }
-    }
-  } catch {
-    /* ignore */
+    /* suggestions endpoint may not exist */
   }
 
   return { content: [{ type: "text", text: output }] };
@@ -453,7 +609,7 @@ async function getNetwork(
       content: [
         {
           type: "text",
-          text: `Network logs require a comparison_id. Get one from:\n\`percy_get_build with build_id "${args.build_id}" and detail "changes"\``,
+          text: `Network logs require comparison_id.\n\nFind one with:\n\`Use percy_get_snapshot with snapshot_id "..."\``,
         },
       ],
       isError: true,
@@ -465,7 +621,9 @@ async function getNetwork(
   });
 
   const logs = response?.data || response || {};
-  const entries = Array.isArray(logs) ? logs : Object.values(logs);
+  const entries = Array.isArray(logs)
+    ? logs
+    : Object.values(logs);
 
   if (!entries.length) {
     return {
@@ -479,14 +637,19 @@ async function getNetwork(
   }
 
   let output = `## Network Logs — Comparison ${args.comparison_id}\n\n`;
-  output += `| URL | Base | Head | Type |\n|---|---|---|---|\n`;
+  output += `| # | URL | Base | Head | Type | Issue |\n|---|---|---|---|---|---|\n`;
 
-  entries.slice(0, 30).forEach((entry: any) => {
-    const url = entry.domain || entry.file || entry.url || "?";
-    const base = entry["base-status"] || entry.baseStatus || "—";
-    const head = entry["head-status"] || entry.headStatus || "—";
+  entries.slice(0, 30).forEach((entry: any, i: number) => {
+    const url =
+      entry.file || entry.domain || entry.url || "?";
+    const base =
+      entry["base-status"] || entry.baseStatus || "—";
+    const head =
+      entry["head-status"] || entry.headStatus || "—";
     const type = entry.mimetype || entry.type || "—";
-    output += `| ${url} | ${base} | ${head} | ${type} |\n`;
+    const summary =
+      entry["status-summary"] || entry.statusSummary || "";
+    output += `| ${i + 1} | ${url} | ${base} | ${head} | ${type} | ${summary} |\n`;
   });
 
   return { content: [{ type: "text", text: output }] };
@@ -508,23 +671,61 @@ async function getSnapshots(
   if (!items.length) {
     return {
       content: [
-        { type: "text", text: `No snapshots found for build ${buildId}.` },
+        {
+          type: "text",
+          text: `No snapshots found for build ${buildId}.`,
+        },
       ],
     };
   }
 
-  let output = `## Build #${buildId} — Snapshots (${items.length})\n\n`;
-  output += `| # | Name | Diff | Review | Items |\n|---|---|---|---|---|\n`;
+  // Count totals
+  let totalItems = 0;
+  items.forEach((item: any) => {
+    totalItems += item.attributes?.["item-count"] || item.itemCount || 1;
+  });
+
+  let output = `## Build #${buildId} — Snapshots\n\n`;
+  output += `**Groups:** ${items.length} | **Total snapshots:** ${totalItems}\n\n`;
+  output += `| # | Name | Display | Diff | Bugs | Review | Items | Snapshot IDs |\n|---|---|---|---|---|---|---|---|\n`;
 
   items.forEach((item: any, i: number) => {
+    const a = item.attributes || item;
     const name =
-      item.attributes?.["cover-snapshot-name"] || item.coverSnapshotName || "?";
-    const diff = item.attributes?.["max-diff-ratio"] ?? item.maxDiffRatio;
-    const diffStr = diff != null ? `${(diff * 100).toFixed(1)}%` : "—";
-    const review = item.attributes?.["review-state"] || item.reviewState || "?";
-    const count = item.attributes?.["item-count"] || item.itemCount || 1;
-    output += `| ${i + 1} | ${name} | ${diffStr} | ${review} | ${count} |\n`;
+      a["cover-snapshot-name"] || a.coverSnapshotName || "?";
+    const display =
+      a["cover-snapshot-display-name"] ||
+      a.coverSnapshotDisplayName ||
+      "—";
+    const diff =
+      (a["max-diff-ratio"] ?? a.maxDiffRatio) != null
+        ? ((a["max-diff-ratio"] ?? a.maxDiffRatio) * 100).toFixed(
+            1,
+          ) + "%"
+        : "—";
+    const bugs =
+      a["max-bug-total-potential-bugs"] ??
+      a.maxBugTotalPotentialBugs ??
+      "—";
+    const review =
+      a["review-state"] || a.reviewState || "?";
+    const count =
+      a["item-count"] || a.itemCount || 1;
+    const snapIds = (
+      a["snapshot-ids"] ||
+      a.snapshotIds ||
+      []
+    )
+      .slice(0, 3)
+      .join(", ");
+    const more =
+      (a["snapshot-ids"] || a.snapshotIds || []).length > 3
+        ? "..."
+        : "";
+    output += `| ${i + 1} | ${name} | ${display} | ${diff} | ${bugs} | ${review} | ${count} | ${snapIds}${more} |\n`;
   });
+
+  output += `\nUse \`percy_get_snapshot\` with a snapshot ID for full comparison details.\n`;
 
   return { content: [{ type: "text", text: output }] };
 }

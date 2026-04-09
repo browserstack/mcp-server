@@ -44,8 +44,14 @@ async function main() {
     const httpServer = http.createServer(async (req, res) => {
       // CORS headers for browser clients
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, mcp-session-id");
+      res.setHeader(
+        "Access-Control-Allow-Methods",
+        "GET, POST, DELETE, OPTIONS",
+      );
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type, mcp-session-id",
+      );
       res.setHeader("Access-Control-Expose-Headers", "mcp-session-id");
 
       if (req.method === "OPTIONS") {
@@ -107,7 +113,11 @@ async function main() {
 
         // Invalid request
         res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Invalid request. POST to /mcp to start a session." }));
+        res.end(
+          JSON.stringify({
+            error: "Invalid request. POST to /mcp to start a session.",
+          }),
+        );
         return;
       }
 
@@ -136,8 +146,12 @@ async function main() {
       console.log(`   Version: ${packageJson.version}`);
       console.log(`   Endpoint: http://localhost:${port}/mcp`);
       console.log(`   Health: http://localhost:${port}/health`);
-      console.log(`\n   Connect from any MCP client using the endpoint URL above.`);
-      console.log(`   In VS Code: Add MCP Server → HTTP → http://localhost:${port}/mcp`);
+      console.log(
+        `\n   Connect from any MCP client using the endpoint URL above.`,
+      );
+      console.log(
+        `   In VS Code: Add MCP Server → HTTP → http://localhost:${port}/mcp`,
+      );
       console.log(`   In Claude Code: /mcp add http://localhost:${port}/mcp\n`);
     });
   } else {

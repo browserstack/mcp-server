@@ -41,6 +41,8 @@ import { percyGetBuildsV2 } from "./get-builds.js";
 import { percyCreateBuildV2 } from "./create-build.js";
 import { percyAuthStatusV2 } from "./auth-status.js";
 import { percyGetBuildDetail } from "./get-build-detail.js";
+import { percyGetSnapshot } from "./get-snapshot.js";
+import { percyGetComparison } from "./get-comparison.js";
 import { percyFigmaBuild } from "./figma-build.js";
 import { percyFigmaBaseline } from "./figma-baseline.js";
 import { percyFigmaLink } from "./figma-link.js";
@@ -251,6 +253,50 @@ export function registerPercyMcpToolsV2(
         return await percyGetBuildDetail(args, config);
       } catch (error) {
         return handleMCPError("percy_get_build", server, config, error);
+      }
+    },
+  );
+
+  // ── Snapshot Details ───────────────────────────────────────────────────────
+
+  tools.percy_get_snapshot = server.tool(
+    "percy_get_snapshot",
+    "Get Percy snapshot details: name, review state, all comparisons with diff ratios, AI analysis regions, and screenshot URLs.",
+    {
+      snapshot_id: z.string().describe("Percy snapshot ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_snapshot",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetSnapshot(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_snapshot", server, config, error);
+      }
+    },
+  );
+
+  // ── Comparison Details ────────────────────────────────────────────────────
+
+  tools.percy_get_comparison = server.tool(
+    "percy_get_comparison",
+    "Get Percy comparison details: diff ratios, AI change descriptions with coordinates, potential bugs, and head/base/diff image URLs.",
+    {
+      comparison_id: z.string().describe("Percy comparison ID"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_get_comparison",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyGetComparison(args, config);
+      } catch (error) {
+        return handleMCPError("percy_get_comparison", server, config, error);
       }
     },
   );

@@ -1,16 +1,16 @@
 /**
- * percy_clone_build — Deep clone: downloads DOM resources and re-creates
- * snapshots so Percy re-renders them against the target project's baseline.
+ * percy_clone_build — Replay a build by re-snapshotting the same URLs.
  *
- * Flow:
- * 1. Read source build → get snapshot IDs
- * 2. For each snapshot: download root HTML from /snapshots/{id}/assets/head.html
- * 3. Create target build with resources
- * 4. For each snapshot: create with resource SHA → upload missing → finalize
- * 5. Finalize build → Percy re-renders DOM and creates proper comparisons
+ * Two modes:
+ * 1. URL Replay (web builds): Extracts page URLs from source build,
+ *    re-snapshots them using Percy CLI → full DOM + CSS + JS + images
+ * 2. Screenshot Copy (app builds): Downloads screenshots and re-uploads
  *
- * Resources are GLOBAL by SHA — if the CSS/JS/images already exist from the
- * original build, they won't need re-uploading.
+ * URL Replay is the correct approach because:
+ * - Percy CLI handles full resource discovery (CSS, JS, images, fonts)
+ * - Resources are properly uploaded with correct SHAs
+ * - Percy re-renders with all dependencies
+ * - Creates proper comparisons against target baseline
  */
 
 import {
@@ -22,8 +22,11 @@ import {
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createHash } from "crypto";
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import { promisify } from "util";
+import { writeFile, unlink, mkdtemp } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
 
 const execFileAsync = promisify(execFile);
 
@@ -39,23 +42,10 @@ async function getGitBranch(): Promise<string> {
   }
 }
 
-async function getGitSha(): Promise<string> {
-  try {
-    return (
-      await execFileAsync("git", ["rev-parse", "HEAD"])
-    ).stdout.trim();
-  } catch {
-    return createHash("sha1")
-      .update(Date.now().toString())
-      .digest("hex");
-  }
-}
-
 interface CloneBuildArgs {
   source_build_id: string;
   target_project_name: string;
   target_token?: string;
-  source_token?: string;
   branch?: string;
 }
 
@@ -64,29 +54,23 @@ export async function percyCloneBuildV2(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   const branch = args.branch || (await getGitBranch());
-  const commitSha = await getGitSha();
 
-  let output = `## Percy Deep Clone\n\n`;
+  let output = `## Percy Build Clone\n\n`;
   output += `**Source:** Build #${args.source_build_id}\n`;
   output += `**Target:** ${args.target_project_name}\n`;
   output += `**Branch:** ${branch}\n\n`;
 
   // ── Step 1: Read source build ─────────────────────────────────────────
 
-  output += `### Step 1: Reading source build...\n\n`;
-
   let sourceBuild: any;
   try {
-    sourceBuild = await percyGet(
-      `/builds/${args.source_build_id}`,
-      config,
-    );
+    sourceBuild = await percyGet(`/builds/${args.source_build_id}`, config);
   } catch (e: any) {
     return {
       content: [
         {
           type: "text",
-          text: `Failed to read source build: ${e.message}\n\nUse BrowserStack credentials that have access to the source project.`,
+          text: `Failed to read source build: ${e.message}`,
         },
       ],
       isError: true,
@@ -94,11 +78,14 @@ export async function percyCloneBuildV2(
   }
 
   const sourceAttrs = sourceBuild?.data?.attributes || {};
-  output += `Source: **${sourceAttrs.state}** — ${sourceAttrs["total-snapshots"]} snapshots, ${sourceAttrs["total-comparisons"]} comparisons\n\n`;
+  const buildType = sourceAttrs.type || "web";
 
-  // ── Step 2: Get snapshot IDs ──────────────────────────────────────────
+  output += `Source: **${sourceAttrs.state}** — ${sourceAttrs["total-snapshots"]} snapshots, type: ${buildType}\n\n`;
 
-  output += `### Step 2: Getting snapshots...\n\n`;
+  // ── Step 2: Get snapshot details ──────────────────────────────────────
+
+  const headers = getPercyAuthHeaders(config);
+  const baseUrl = "https://percy.io/api/v1";
 
   let allSnapshotIds: string[] = [];
   try {
@@ -109,8 +96,7 @@ export async function percyCloneBuildV2(
     const itemList = items?.data || [];
     for (const item of itemList) {
       const a = item.attributes || item;
-      const ids =
-        a["snapshot-ids"] || a.snapshotIds || [];
+      const ids = a["snapshot-ids"] || a.snapshotIds || [];
       if (ids.length > 0) {
         allSnapshotIds.push(...ids.map(String));
       } else if (a["cover-snapshot-id"] || a.coverSnapshotId) {
@@ -123,10 +109,7 @@ export async function percyCloneBuildV2(
   } catch (e: any) {
     return {
       content: [
-        {
-          type: "text",
-          text: `Failed to read snapshots: ${e.message}`,
-        },
+        { type: "text", text: `Failed to read snapshots: ${e.message}` },
       ],
       isError: true,
     };
@@ -139,25 +122,17 @@ export async function percyCloneBuildV2(
     return { content: [{ type: "text", text: output }] };
   }
 
-  // Limit to 20 for sanity
+  // Read snapshot metadata
   const snapsToClone = allSnapshotIds.slice(0, 20);
 
-  // ── Step 3: Read each snapshot's metadata + download root HTML ────────
-
-  output += `### Step 3: Downloading snapshot resources...\n\n`;
-
-  const headers = getPercyAuthHeaders(config);
-  const baseUrl = "https://percy.io/api/v1";
-
-  interface SnapshotData {
+  interface SnapshotInfo {
     id: string;
     name: string;
+    displayName: string;
     widths: number[];
     enableJavascript: boolean;
-    enableLayout: boolean;
-    rootHtml: string | null;
-    rootSha: string | null;
-    hasScreenshots: boolean;
+    testCase: string | null;
+    // For screenshot fallback
     comparisons: Array<{
       width: number;
       height: number;
@@ -166,61 +141,41 @@ export async function percyCloneBuildV2(
     }>;
   }
 
-  const snapshotData: SnapshotData[] = [];
+  const snapshots: SnapshotInfo[] = [];
 
   for (const snapId of snapsToClone) {
     try {
-      // Get snapshot metadata
       const snapResponse = await fetch(
         `${baseUrl}/snapshots/${snapId}?include=comparisons.head-screenshot.image,comparisons.comparison-tag`,
         { headers },
       );
-      if (!snapResponse.ok) {
-        output += `- ⚠ Snapshot ${snapId}: ${snapResponse.status}\n`;
-        continue;
-      }
+      if (!snapResponse.ok) continue;
+
       const snapJson = await snapResponse.json();
-      const snapAttrs = snapJson.data?.attributes || {};
+      const sa = snapJson.data?.attributes || {};
       const included = snapJson.included || [];
 
-      // Try to download root HTML (DOM)
-      let rootHtml: string | null = null;
-      let rootSha: string | null = null;
-      try {
-        const htmlResponse = await fetch(
-          `${baseUrl}/snapshots/${snapId}/assets/head.html`,
-          { headers },
-        );
-        if (htmlResponse.ok) {
-          rootHtml = await htmlResponse.text();
-          rootSha = createHash("sha256")
-            .update(rootHtml)
-            .digest("hex");
-        }
-      } catch {
-        // HTML not available — will fall back to screenshot clone
-      }
-
-      // Get comparison data for screenshot fallback
-      const compRefs =
-        snapJson.data?.relationships?.comparisons?.data || [];
       const byTypeId = new Map<string, any>();
       for (const item of included) {
         byTypeId.set(`${item.type}:${item.id}`, item);
       }
 
-      const comparisons: SnapshotData["comparisons"] = [];
+      // Get comparison details
+      const compRefs = snapJson.data?.relationships?.comparisons?.data || [];
+      const comparisons: SnapshotInfo["comparisons"] = [];
+      const widthSet = new Set<number>();
+
       for (const ref of compRefs) {
         const comp = byTypeId.get(`comparisons:${ref.id}`);
         if (!comp) continue;
 
         const width = comp.attributes?.width || 1280;
+        widthSet.add(width);
+
         let imageUrl: string | null = null;
         let height = 800;
 
-        // Walk: comparison → head-screenshot → image
-        const hsRef =
-          comp.relationships?.["head-screenshot"]?.data;
+        const hsRef = comp.relationships?.["head-screenshot"]?.data;
         if (hsRef) {
           const ss = byTypeId.get(`screenshots:${hsRef.id}`);
           const imgRef = ss?.relationships?.image?.data;
@@ -233,52 +188,33 @@ export async function percyCloneBuildV2(
           }
         }
 
-        // Get tag
-        const tagRef =
-          comp.relationships?.["comparison-tag"]?.data;
+        const tagRef = comp.relationships?.["comparison-tag"]?.data;
         let tagName = "Screenshot";
         if (tagRef) {
-          const tag = byTypeId.get(
-            `comparison-tags:${tagRef.id}`,
-          );
+          const tag = byTypeId.get(`comparison-tags:${tagRef.id}`);
           tagName = tag?.attributes?.name || "Screenshot";
         }
 
         comparisons.push({ width, height, tagName, imageUrl });
       }
 
-      snapshotData.push({
+      snapshots.push({
         id: snapId,
-        name: snapAttrs.name || `Snapshot ${snapId}`,
-        widths: [1280], // default — will be derived from comparisons
-        enableJavascript: snapAttrs["enable-javascript"] || false,
-        enableLayout: snapAttrs["enable-layout"] || false,
-        rootHtml,
-        rootSha,
-        hasScreenshots: comparisons.some((c) => c.imageUrl),
+        name: sa.name || `Snapshot ${snapId}`,
+        displayName: sa["display-name"] || sa.name || "",
+        widths: [...widthSet].sort(),
+        enableJavascript: sa["enable-javascript"] || false,
+        testCase: sa["test-case-name"] || null,
         comparisons,
       });
-
-      const method = rootHtml ? "DOM (deep)" : "screenshot";
-      output += `- ✓ **${snapAttrs.name}** — ${method}, ${comparisons.length} comparisons\n`;
-    } catch (e: any) {
-      output += `- ✗ Snapshot ${snapId}: ${e.message}\n`;
+    } catch {
+      /* skip failed snapshots */
     }
   }
 
-  output += "\n";
+  output += `Read **${snapshots.length}** snapshot details.\n\n`;
 
-  const domSnapshots = snapshotData.filter((s) => s.rootHtml);
-  const screenshotSnapshots = snapshotData.filter(
-    (s) => !s.rootHtml && s.hasScreenshots,
-  );
-
-  output += `**DOM clones:** ${domSnapshots.length} (Percy will re-render)\n`;
-  output += `**Screenshot clones:** ${screenshotSnapshots.length} (image copy)\n\n`;
-
-  // ── Step 4: Create target build ───────────────────────────────────────
-
-  output += `### Step 4: Creating target build...\n\n`;
+  // ── Step 3: Get target project token ──────────────────────────────────
 
   let targetToken: string;
   if (args.target_token) {
@@ -292,231 +228,256 @@ export async function percyCloneBuildV2(
     } catch (e: any) {
       return {
         content: [
-          {
-            type: "text",
-            text: `Failed to get target project token: ${e.message}`,
-          },
+          { type: "text", text: `Failed to get target token: ${e.message}` },
         ],
         isError: true,
       };
     }
   }
 
-  // Create build with all root resource SHAs
-  const allResourceShas = domSnapshots
-    .filter((s) => s.rootSha)
-    .map((s) => ({
-      type: "resources",
-      id: s.rootSha!,
-      attributes: {
-        "resource-url": `/${s.name.replace(/\s+/g, "-").toLowerCase()}.html`,
-        "is-root": true,
-        mimetype: "text/html",
-      },
-    }));
+  // ── Step 4: Check if Percy CLI is available for URL replay ────────────
 
+  let hasCli = false;
+  try {
+    await execFileAsync("npx", ["@percy/cli", "--version"]);
+    hasCli = true;
+  } catch {
+    hasCli = false;
+  }
+
+  if (hasCli && buildType === "web") {
+    // ── URL Replay mode: use Percy CLI to re-snapshot ─────────────────
+    return await replayWithPercyCli(
+      output,
+      snapshots,
+      targetToken,
+      branch,
+      args.target_project_name,
+    );
+  } else {
+    // ── Screenshot copy mode: download and re-upload images ───────────
+    return await copyScreenshots(output, snapshots, targetToken, branch);
+  }
+}
+
+// ── URL Replay (Percy CLI) ──────────────────────────────────────────────────
+
+async function replayWithPercyCli(
+  output: string,
+  snapshots: Array<{
+    name: string;
+    displayName: string;
+    widths: number[];
+    testCase: string | null;
+    enableJavascript: boolean;
+  }>,
+  token: string,
+  branch: string,
+  projectName: string,
+): Promise<CallToolResult> {
+  output += `### Mode: URL Replay (Percy CLI)\n\n`;
+  output += `Percy CLI will re-snapshot each page with full resource discovery.\n\n`;
+
+  // Build snapshots.yml — use snapshot names as identifiers
+  // For web builds, snapshot names often contain the URL path
+  let yamlContent = "";
+  const uniqueNames = new Set<string>();
+
+  for (const snap of snapshots) {
+    // Skip duplicates
+    if (uniqueNames.has(snap.name)) continue;
+    uniqueNames.add(snap.name);
+
+    const name = snap.displayName || snap.name;
+    const widths = snap.widths.length > 0 ? snap.widths : [1280];
+
+    yamlContent += `- name: "${name}"\n`;
+    // If name looks like a URL or path, use it as the URL
+    if (snap.name.startsWith("http://") || snap.name.startsWith("https://")) {
+      yamlContent += `  url: ${snap.name}\n`;
+    } else {
+      // For non-URL names, we can't determine the URL
+      // Skip this snapshot — user needs to provide the base URL
+      yamlContent += `  # NOTE: Cannot determine URL from snapshot name "${snap.name}"\n`;
+      yamlContent += `  # Provide the URL manually or use percy_create_build with urls parameter\n`;
+      yamlContent += `  url: "UNKNOWN"\n`;
+    }
+    yamlContent += `  waitForTimeout: 3000\n`;
+    if (snap.enableJavascript) {
+      yamlContent += `  enableJavaScript: true\n`;
+    }
+    if (snap.testCase) {
+      yamlContent += `  testCase: "${snap.testCase}"\n`;
+    }
+    yamlContent += `  widths:\n`;
+    widths.forEach((w) => {
+      yamlContent += `    - ${w}\n`;
+    });
+  }
+
+  // Check if any snapshots have URLs
+  const hasUrls = snapshots.some(
+    (s) => s.name.startsWith("http://") || s.name.startsWith("https://"),
+  );
+
+  if (!hasUrls) {
+    // Snapshots don't have URL names — show the YAML for manual editing
+    output += `**Snapshots don't contain URL paths.** The snapshot names are:\n\n`;
+    for (const snap of snapshots.slice(0, 10)) {
+      output += `- ${snap.displayName || snap.name} (${snap.widths.join(", ")}px)\n`;
+    }
+    output += `\nTo replay, provide the base URL and use:\n`;
+    output += `\`\`\`\nUse percy_create_build with project_name "${projectName}" and urls "http://your-app.com/page1,http://your-app.com/page2"\n\`\`\`\n\n`;
+    output += `Or save this config as snapshots.yml and edit the URLs:\n`;
+    output += `\`\`\`yaml\n${yamlContent.slice(0, 1000)}\n\`\`\`\n`;
+    return { content: [{ type: "text", text: output }] };
+  }
+
+  // Write and run Percy CLI
+  const tmpDir = await mkdtemp(join(tmpdir(), "percy-clone-"));
+  const configPath = join(tmpDir, "snapshots.yml");
+  await writeFile(configPath, yamlContent);
+
+  const child = spawn("npx", ["@percy/cli", "snapshot", configPath], {
+    env: { ...process.env, PERCY_TOKEN: token },
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
+
+  let buildUrl = "";
+  let stdoutData = "";
+
+  child.stdout?.on("data", (d: Buffer) => {
+    const text = d.toString();
+    stdoutData += text;
+    const match = text.match(/https:\/\/percy\.io\/[^\s]+\/builds\/\d+/);
+    if (match) buildUrl = match[0];
+  });
+  child.stderr?.on("data", (d: Buffer) => {
+    stdoutData += d.toString();
+  });
+
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, 30000);
+    child.on("close", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    const check = setInterval(() => {
+      if (buildUrl) {
+        clearTimeout(timeout);
+        clearInterval(check);
+        resolve();
+      }
+    }, 500);
+  });
+
+  child.unref();
+
+  setTimeout(async () => {
+    try {
+      await unlink(configPath);
+    } catch {
+      /* ignore */
+    }
+  }, 120000);
+
+  output += `**Replaying ${uniqueNames.size} snapshots...**\n\n`;
+
+  if (buildUrl) {
+    output += `**Build URL:** ${buildUrl}\n\n`;
+    output += `Percy CLI is re-snapshotting with full resource discovery (CSS, JS, images, fonts).\n`;
+    output += `Results ready in 1-3 minutes.\n`;
+  } else {
+    const percyLines = stdoutData
+      .split("\n")
+      .filter((l) => l.includes("[percy"))
+      .slice(0, 10);
+    if (percyLines.length > 0) {
+      output += `**Percy output:**\n\`\`\`\n${percyLines.join("\n")}\n\`\`\`\n`;
+    } else {
+      output += `Percy is processing in background. Check dashboard.\n`;
+    }
+  }
+
+  return { content: [{ type: "text", text: output }] };
+}
+
+// ── Screenshot Copy (fallback) ──────────────────────────────────────────────
+
+async function copyScreenshots(
+  output: string,
+  snapshots: Array<{
+    name: string;
+    comparisons: Array<{
+      width: number;
+      height: number;
+      tagName: string;
+      imageUrl: string | null;
+    }>;
+  }>,
+  token: string,
+  branch: string,
+): Promise<CallToolResult> {
+  output += `### Mode: Screenshot Copy\n\n`;
+  output += `Downloading screenshots and re-uploading to target project.\n\n`;
+
+  const commitSha = createHash("sha1")
+    .update(Date.now().toString())
+    .digest("hex");
+
+  // Create build
   let buildResult: any;
   try {
-    buildResult = await percyTokenPost("/builds", targetToken, {
+    buildResult = await percyTokenPost("/builds", token, {
       data: {
         type: "builds",
-        attributes: {
-          branch,
-          "commit-sha": commitSha,
-        },
-        relationships: {
-          resources: { data: allResourceShas },
-        },
+        attributes: { branch, "commit-sha": commitSha },
+        relationships: { resources: { data: [] } },
       },
     });
   } catch (e: any) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Failed to create target build: ${e.message}`,
-        },
-      ],
-      isError: true,
-    };
+    output += `Failed to create build: ${e.message}\n`;
+    return { content: [{ type: "text", text: output }], isError: true };
   }
 
-  const targetBuildId = buildResult?.data?.id;
-  const targetBuildUrl =
-    buildResult?.data?.attributes?.["web-url"] || "";
-  const missingResources =
-    buildResult?.data?.relationships?.["missing-resources"]
-      ?.data || [];
+  const buildId = buildResult?.data?.id;
+  const buildUrl = buildResult?.data?.attributes?.["web-url"] || "";
 
-  output += `Target build: **#${targetBuildId}**\n`;
-  if (targetBuildUrl) output += `URL: ${targetBuildUrl}\n`;
-  output += `Missing resources to upload: ${missingResources.length}\n\n`;
+  output += `Target build: **#${buildId}**\n`;
+  if (buildUrl) output += `URL: ${buildUrl}\n`;
+  output += "\n";
 
-  // ── Step 5: Upload missing resources ──────────────────────────────────
+  let cloned = 0;
 
-  if (missingResources.length > 0) {
-    output += `### Step 5: Uploading resources...\n\n`;
+  for (const snap of snapshots) {
+    const compsWithImages = snap.comparisons.filter((c) => c.imageUrl);
+    if (compsWithImages.length === 0) continue;
 
-    for (const missing of missingResources) {
-      const missingSha = missing.id;
-      // Find the matching snapshot's root HTML
-      const snap = domSnapshots.find(
-        (s) => s.rootSha === missingSha,
-      );
-      if (snap?.rootHtml) {
-        try {
-          const base64 = Buffer.from(snap.rootHtml).toString(
-            "base64",
-          );
-          await percyTokenPost(
-            `/builds/${targetBuildId}/resources`,
-            targetToken,
-            {
-              data: {
-                type: "resources",
-                id: missingSha,
-                attributes: { "base64-content": base64 },
-              },
-            },
-          );
-          output += `- ✓ Uploaded ${missingSha.slice(0, 12)}... (${snap.name})\n`;
-        } catch (e: any) {
-          output += `- ✗ ${missingSha.slice(0, 12)}...: ${e.message}\n`;
-        }
-      }
-    }
-    output += "\n";
-  }
-
-  // ── Step 6: Create snapshots ──────────────────────────────────────────
-
-  output += `### Step 6: Creating snapshots...\n\n`;
-
-  let clonedDom = 0;
-  let clonedScreenshot = 0;
-
-  // DOM snapshots — create with resource reference (Percy re-renders)
-  for (const snap of domSnapshots) {
-    try {
-      const widths = [
-        ...new Set(snap.comparisons.map((c) => c.width)),
-      ].sort();
-
-      const snapResult = await percyTokenPost(
-        `/builds/${targetBuildId}/snapshots`,
-        targetToken,
-        {
-          data: {
-            type: "snapshots",
-            attributes: {
-              name: snap.name,
-              widths: widths.length > 0 ? widths : [1280],
-              "enable-javascript": snap.enableJavascript,
-              "enable-layout": snap.enableLayout,
-            },
-            relationships: {
-              resources: {
-                data: snap.rootSha
-                  ? [
-                      {
-                        type: "resources",
-                        id: snap.rootSha,
-                        attributes: {
-                          "resource-url": `/${snap.name.replace(/\s+/g, "-").toLowerCase()}.html`,
-                          "is-root": true,
-                          mimetype: "text/html",
-                        },
-                      },
-                    ]
-                  : [],
-              },
-            },
-          },
-        },
-      );
-
-      const newSnapId = snapResult?.data?.id;
-      if (newSnapId) {
-        // Upload any missing resources for this snapshot
-        const snapMissing =
-          snapResult?.data?.relationships?.[
-            "missing-resources"
-          ]?.data || [];
-        for (const m of snapMissing) {
-          if (m.id === snap.rootSha && snap.rootHtml) {
-            const base64 = Buffer.from(
-              snap.rootHtml,
-            ).toString("base64");
-            try {
-              await percyTokenPost(
-                `/builds/${targetBuildId}/resources`,
-                targetToken,
-                {
-                  data: {
-                    type: "resources",
-                    id: m.id,
-                    attributes: {
-                      "base64-content": base64,
-                    },
-                  },
-                },
-              );
-            } catch {
-              /* may already be uploaded */
-            }
-          }
-        }
-
-        // Finalize snapshot
-        await percyTokenPost(
-          `/snapshots/${newSnapId}/finalize`,
-          targetToken,
-          {},
-        );
-
-        clonedDom++;
-        output += `- ✓ **${snap.name}** (DOM, ${widths.length} widths) → Percy will re-render\n`;
-      }
-    } catch (e: any) {
-      output += `- ✗ ${snap.name}: ${e.message}\n`;
-    }
-  }
-
-  // Screenshot snapshots — fallback to tile upload
-  for (const snap of screenshotSnapshots) {
     try {
       const snapResult = await percyTokenPost(
-        `/builds/${targetBuildId}/snapshots`,
-        targetToken,
+        `/builds/${buildId}/snapshots`,
+        token,
         {
-          data: {
-            type: "snapshots",
-            attributes: { name: snap.name },
-          },
+          data: { type: "snapshots", attributes: { name: snap.name } },
         },
       );
       const newSnapId = snapResult?.data?.id;
       if (!newSnapId) continue;
 
       let compCount = 0;
-      for (const comp of snap.comparisons) {
-        if (!comp.imageUrl) continue;
-
-        // Download screenshot
-        const imgResponse = await fetch(comp.imageUrl);
+      for (const comp of compsWithImages) {
+        const imgResponse = await fetch(comp.imageUrl!);
         if (!imgResponse.ok) continue;
-        const imgBuffer = Buffer.from(
-          await imgResponse.arrayBuffer(),
-        );
-        const sha = createHash("sha256")
-          .update(imgBuffer)
-          .digest("hex");
+
+        const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+        const sha = createHash("sha256").update(imgBuffer).digest("hex");
         const base64 = imgBuffer.toString("base64");
 
         try {
           const compResult = await percyTokenPost(
             `/snapshots/${newSnapId}/comparisons`,
-            targetToken,
+            token,
             {
               data: {
                 attributes: {
@@ -553,20 +514,10 @@ export async function percyCloneBuildV2(
 
           const compId = compResult?.data?.id;
           if (compId) {
-            await percyTokenPost(
-              `/comparisons/${compId}/tiles`,
-              targetToken,
-              {
-                data: {
-                  attributes: { "base64-content": base64 },
-                },
-              },
-            );
-            await percyTokenPost(
-              `/comparisons/${compId}/finalize`,
-              targetToken,
-              {},
-            );
+            await percyTokenPost(`/comparisons/${compId}/tiles`, token, {
+              data: { attributes: { "base64-content": base64 } },
+            });
+            await percyTokenPost(`/comparisons/${compId}/finalize`, token, {});
             compCount++;
           }
         } catch {
@@ -574,40 +525,22 @@ export async function percyCloneBuildV2(
         }
       }
 
-      clonedScreenshot++;
-      output += `- ✓ **${snap.name}** (screenshot, ${compCount} comparisons)\n`;
+      cloned++;
+      output += `- ✓ **${snap.name}** (${compCount} comparisons)\n`;
     } catch (e: any) {
       output += `- ✗ ${snap.name}: ${e.message}\n`;
     }
   }
 
-  output += "\n";
-
-  // ── Step 7: Finalize ──────────────────────────────────────────────────
-
+  // Finalize
   try {
-    await percyTokenPost(
-      `/builds/${targetBuildId}/finalize`,
-      targetToken,
-      {},
-    );
-    output += `### Build Finalized ✓\n\n`;
+    await percyTokenPost(`/builds/${buildId}/finalize`, token, {});
+    output += `\n**Build finalized.** ${cloned} snapshots cloned.\n`;
   } catch (e: any) {
-    output += `### Finalize failed: ${e.message}\n\n`;
+    output += `\nFinalize failed: ${e.message}\n`;
   }
 
-  // Summary
-  output += `### Summary\n\n`;
-  output += `| | Count |\n|---|---|\n`;
-  output += `| DOM clones (re-rendered) | ${clonedDom} |\n`;
-  output += `| Screenshot clones (copied) | ${clonedScreenshot} |\n`;
-  output += `| Total | ${clonedDom + clonedScreenshot} |\n`;
-  output += `| Target build | #${targetBuildId} |\n`;
-  if (targetBuildUrl) output += `| View | ${targetBuildUrl} |\n`;
-
-  if (allSnapshotIds.length > 20) {
-    output += `\n> Cloned first 20 of ${allSnapshotIds.length} snapshots.\n`;
-  }
+  if (buildUrl) output += `**View:** ${buildUrl}\n`;
 
   return { content: [{ type: "text", text: output }] };
 }

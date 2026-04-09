@@ -278,14 +278,10 @@ export function registerPercyMcpToolsV2(
     "percy_clone_build",
     "Deep clone a Percy build to another project. Downloads DOM resources and re-creates snapshots so Percy re-renders them. Falls back to screenshot cloning when DOM is unavailable. Works across projects.",
     {
-      source_build_id: z
-        .string()
-        .describe("Build ID to clone FROM"),
+      source_build_id: z.string().describe("Build ID to clone FROM"),
       target_project_name: z
         .string()
-        .describe(
-          "Project name to clone INTO (auto-creates if new)",
-        ),
+        .describe("Project name to clone INTO (auto-creates if new)"),
       target_token: z
         .string()
         .optional()
@@ -307,17 +303,8 @@ export function registerPercyMcpToolsV2(
         return await percyCloneBuildV2(args, config);
       } catch (error) {
         return TOOL_HELP.percy_clone_build
-          ? handlePercyToolError(
-              error,
-              TOOL_HELP.percy_clone_build,
-              args,
-            )
-          : handleMCPError(
-              "percy_clone_build",
-              server,
-              config,
-              error,
-            );
+          ? handlePercyToolError(error, TOOL_HELP.percy_clone_build, args)
+          : handleMCPError("percy_clone_build", server, config, error);
       }
     },
   );

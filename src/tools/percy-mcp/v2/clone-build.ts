@@ -235,18 +235,25 @@ export async function percyCloneBuildV2(
     }
   }
 
-  // ── Step 4: Check if Percy CLI is available for URL replay ────────────
+  // ── Step 4: Determine clone mode ────────────────────────────────────────
+
+  // Check if snapshots have URL names (web builds where name IS the URL)
+  const hasUrlNames = snapshots.some(
+    (s) => s.name.startsWith("http://") || s.name.startsWith("https://"),
+  );
 
   let hasCli = false;
-  try {
-    await execFileAsync("npx", ["@percy/cli", "--version"]);
-    hasCli = true;
-  } catch {
-    hasCli = false;
+  if (hasUrlNames) {
+    try {
+      await execFileAsync("npx", ["@percy/cli", "--version"]);
+      hasCli = true;
+    } catch {
+      hasCli = false;
+    }
   }
 
-  if (hasCli && buildType === "web") {
-    // ── URL Replay mode: use Percy CLI to re-snapshot ─────────────────
+  if (hasCli && hasUrlNames && buildType === "web") {
+    // URL Replay: Percy CLI re-snapshots with full resources
     return await replayWithPercyCli(
       output,
       snapshots,
@@ -255,7 +262,7 @@ export async function percyCloneBuildV2(
       args.target_project_name,
     );
   } else {
-    // ── Screenshot copy mode: download and re-upload images ───────────
+    // Screenshot copy: always works — downloads and re-uploads images
     return await copyScreenshots(output, snapshots, targetToken, branch);
   }
 }

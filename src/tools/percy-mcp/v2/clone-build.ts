@@ -319,7 +319,8 @@ export async function percyCloneBuildV2(
 
   // ── Screenshot Clone via tile API ─────────────────────────────────────
   // Tile-based API preserves: exact snapshot names, all widths, all browsers.
-  // Requires app-type project (web projects use DOM rendering, not tiles).
+  // MUST be app-type project — web projects require DOM resources for snapshots
+  // and reject tile-based uploads. This is an immutable Percy API constraint.
 
   let targetToken: string;
   const actualProjectName = args.target_project_name;
@@ -327,24 +328,26 @@ export async function percyCloneBuildV2(
   if (args.target_token) {
     targetToken = args.target_token;
   } else {
-    // Try to get token for existing project first
+    // Always request app type — tiles only work on app/automate/generic projects.
+    // If project exists as web-type, this will fail and we retry with a suffix.
     try {
       targetToken = await getOrCreateProjectToken(
         args.target_project_name,
         config,
+        "app",
       );
     } catch {
-      // Project doesn't exist — create as app type for tile support
+      // Project exists as web-type — can't use tiles on it.
+      // Create companion project with same name + "-screenshots" as app type.
+      const altName = `${args.target_project_name}-screenshots`;
+      output += `"${args.target_project_name}" is web-type (needs DOM resources).\n`;
+      output += `Creating **${altName}** (app-type) for screenshot clone.\n\n`;
       try {
-        targetToken = await getOrCreateProjectToken(
-          args.target_project_name,
-          config,
-          "app",
-        );
+        targetToken = await getOrCreateProjectToken(altName, config, "app");
       } catch (e: any) {
         return {
           content: [
-            { type: "text", text: `Failed to get project token: ${e.message}` },
+            { type: "text", text: `Failed to create project: ${e.message}` },
           ],
           isError: true,
         };

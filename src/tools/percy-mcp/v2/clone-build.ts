@@ -1,16 +1,17 @@
 /**
- * percy_clone_build — Replay a build by re-snapshotting the same URLs.
+ * percy_clone_build — Clone a build into a different project. Fully automatic.
  *
- * Two modes:
- * 1. URL Replay (web builds): Extracts page URLs from source build,
- *    re-snapshots them using Percy CLI → full DOM + CSS + JS + images
- * 2. Screenshot Copy (app builds): Downloads screenshots and re-uploads
+ * Auto-selects the best strategy without user intervention:
  *
- * URL Replay is the correct approach because:
- * - Percy CLI handles full resource discovery (CSS, JS, images, fonts)
- * - Resources are properly uploaded with correct SHAs
- * - Percy re-renders with all dependencies
- * - Creates proper comparisons against target baseline
+ * 1. Percy CLI (preferred — auto-installs if missing):
+ *    - For URL-named snapshots: re-snapshots with full DOM/CSS/JS
+ *    - Always used for web projects when snapshots have URLs
+ *
+ * 2. Screenshot Copy (for app/automate/generic builds, or web without URLs):
+ *    - Downloads rendered screenshots from source build
+ *    - Re-uploads as tiles via API
+ *    - Copies real device/browser names from source
+ *    - For web projects without URLs: clones into same project as app-type
  */
 
 import {
@@ -42,6 +43,33 @@ async function getGitBranch(): Promise<string> {
   }
 }
 
+/** Strip base64 padding for Percy's strict base64 requirement */
+function toStrictBase64(buffer: Buffer): string {
+  return buffer.toString("base64").replace(/=+$/, "");
+}
+
+interface ComparisonInfo {
+  width: number;
+  height: number;
+  tagName: string;
+  osName: string;
+  osVersion: string;
+  browserName: string;
+  browserVersion: string;
+  orientation: string;
+  imageUrl: string | null;
+}
+
+interface SnapshotInfo {
+  id: string;
+  name: string;
+  displayName: string;
+  widths: number[];
+  enableJavascript: boolean;
+  testCase: string | null;
+  comparisons: ComparisonInfo[];
+}
+
 interface CloneBuildArgs {
   source_build_id: string;
   target_project_name: string;
@@ -68,10 +96,7 @@ export async function percyCloneBuildV2(
   } catch (e: any) {
     return {
       content: [
-        {
-          type: "text",
-          text: `Failed to read source build: ${e.message}`,
-        },
+        { type: "text", text: `Failed to read source build: ${e.message}` },
       ],
       isError: true,
     };
@@ -82,7 +107,7 @@ export async function percyCloneBuildV2(
 
   output += `Source: **${sourceAttrs.state}** — ${sourceAttrs["total-snapshots"]} snapshots, type: ${buildType}\n\n`;
 
-  // ── Step 2: Get snapshot details ──────────────────────────────────────
+  // ── Step 2: Get snapshot details with full comparison/device info ──────
 
   const headers = getPercyAuthHeaders(config);
   const baseUrl = "https://percy.io/api/v1";
@@ -122,25 +147,8 @@ export async function percyCloneBuildV2(
     return { content: [{ type: "text", text: output }] };
   }
 
-  // Read snapshot metadata
+  // Read snapshot metadata with full comparison-tag details
   const snapsToClone = allSnapshotIds.slice(0, 20);
-
-  interface SnapshotInfo {
-    id: string;
-    name: string;
-    displayName: string;
-    widths: number[];
-    enableJavascript: boolean;
-    testCase: string | null;
-    // For screenshot fallback
-    comparisons: Array<{
-      width: number;
-      height: number;
-      tagName: string;
-      imageUrl: string | null;
-    }>;
-  }
-
   const snapshots: SnapshotInfo[] = [];
 
   for (const snapId of snapsToClone) {
@@ -160,9 +168,8 @@ export async function percyCloneBuildV2(
         byTypeId.set(`${item.type}:${item.id}`, item);
       }
 
-      // Get comparison details
       const compRefs = snapJson.data?.relationships?.comparisons?.data || [];
-      const comparisons: SnapshotInfo["comparisons"] = [];
+      const comparisons: ComparisonInfo[] = [];
       const widthSet = new Set<number>();
 
       for (const ref of compRefs) {
@@ -188,14 +195,39 @@ export async function percyCloneBuildV2(
           }
         }
 
+        // Extract REAL device/browser info from comparison tag
         const tagRef = comp.relationships?.["comparison-tag"]?.data;
-        let tagName = "Screenshot";
+        let tagName = "Chrome";
+        let osName = "";
+        let osVersion = "";
+        let browserName = "Chrome";
+        let browserVersion = "";
+        let orientation = "portrait";
+
         if (tagRef) {
           const tag = byTypeId.get(`comparison-tags:${tagRef.id}`);
-          tagName = tag?.attributes?.name || "Screenshot";
+          if (tag?.attributes) {
+            const ta = tag.attributes;
+            tagName = ta.name || tagName;
+            osName = ta["os-name"] || osName;
+            osVersion = ta["os-version"] || osVersion;
+            browserName = ta["browser-name"] || browserName;
+            browserVersion = ta["browser-version"] || browserVersion;
+            orientation = ta.orientation || orientation;
+          }
         }
 
-        comparisons.push({ width, height, tagName, imageUrl });
+        comparisons.push({
+          width,
+          height,
+          tagName,
+          osName,
+          osVersion,
+          browserName,
+          browserVersion,
+          orientation,
+          imageUrl,
+        });
       }
 
       snapshots.push({
@@ -214,13 +246,34 @@ export async function percyCloneBuildV2(
 
   output += `Read **${snapshots.length}** snapshot details.\n\n`;
 
-  // ── Step 3: Get target project token ──────────────────────────────────
+  // ── Step 3: Ensure Percy CLI is available (auto-install if missing) ───
+
+  let hasCli = false;
+  try {
+    await execFileAsync("npx", ["@percy/cli", "--version"]);
+    hasCli = true;
+  } catch {
+    output += `Installing Percy CLI...\n`;
+    try {
+      await execFileAsync("npm", ["install", "-g", "@percy/cli"], {
+        timeout: 60000,
+      });
+      hasCli = true;
+      output += `Percy CLI installed.\n\n`;
+    } catch {
+      hasCli = false;
+      output += `Percy CLI install failed — using screenshot copy.\n\n`;
+    }
+  }
+
+  // ── Step 4: Get target project token ──────────────────────────────────
 
   let targetToken: string;
   if (args.target_token) {
     targetToken = args.target_token;
   } else {
     try {
+      // Don't force a type — use existing project as-is, or create with default type
       targetToken = await getOrCreateProjectToken(
         args.target_project_name,
         config,
@@ -235,25 +288,19 @@ export async function percyCloneBuildV2(
     }
   }
 
-  // ── Step 4: Determine clone mode ────────────────────────────────────────
+  // ── Step 5: Determine clone mode ──────────────────────────────────────
+  //
+  // Priority:
+  //   1. Percy CLI + URL-named snapshots → URL Replay (best for web builds)
+  //   2. Percy CLI + non-URL snapshots + web build → still screenshot copy
+  //   3. No CLI → screenshot copy (app/automate/generic only)
+  //
 
-  // Check if snapshots have URL names (web builds where name IS the URL)
   const hasUrlNames = snapshots.some(
     (s) => s.name.startsWith("http://") || s.name.startsWith("https://"),
   );
 
-  let hasCli = false;
-  if (hasUrlNames) {
-    try {
-      await execFileAsync("npx", ["@percy/cli", "--version"]);
-      hasCli = true;
-    } catch {
-      hasCli = false;
-    }
-  }
-
-  if (hasCli && hasUrlNames && buildType === "web") {
-    // URL Replay: Percy CLI re-snapshots with full resources
+  if (hasCli && hasUrlNames) {
     return await replayWithPercyCli(
       output,
       snapshots,
@@ -261,37 +308,82 @@ export async function percyCloneBuildV2(
       branch,
       args.target_project_name,
     );
-  } else {
-    // Screenshot copy: always works — downloads and re-uploads images
-    return await copyScreenshots(output, snapshots, targetToken, branch);
   }
+
+  // Screenshot copy — works for app/automate/generic projects.
+  // For web projects with non-URL snapshots, we need an app-type project.
+  // Look up target project type to decide.
+
+  const isRenderingBuild =
+    buildType === "web" ||
+    buildType === "visual_scanner" ||
+    buildType === "lca";
+
+  if (isRenderingBuild) {
+    // Source is web-type but snapshots don't have URLs (can't use CLI replay).
+    // Screenshot copy needs app-type project. Try to get/create one.
+    let appToken: string;
+    let appProjectName = args.target_project_name;
+    try {
+      appToken = await getOrCreateProjectToken(
+        args.target_project_name,
+        config,
+        "app",
+      );
+    } catch {
+      // Existing project is web-type — can't change it. Use companion project.
+      appProjectName = `${args.target_project_name}-clone`;
+      output += `"${args.target_project_name}" is web-type. Cloning screenshots into "${appProjectName}" (app-type).\n\n`;
+      try {
+        appToken = await getOrCreateProjectToken(appProjectName, config, "app");
+      } catch (e: any) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to create clone project: ${e.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+    return await copyScreenshots(
+      output,
+      snapshots,
+      appToken,
+      branch,
+      appProjectName,
+    );
+  }
+
+  // App/automate/generic — clone directly into same project
+  return await copyScreenshots(
+    output,
+    snapshots,
+    targetToken,
+    branch,
+    args.target_project_name,
+  );
 }
 
 // ── URL Replay (Percy CLI) ──────────────────────────────────────────────────
 
 async function replayWithPercyCli(
   output: string,
-  snapshots: Array<{
-    name: string;
-    displayName: string;
-    widths: number[];
-    testCase: string | null;
-    enableJavascript: boolean;
-  }>,
+  snapshots: SnapshotInfo[],
   token: string,
   branch: string,
   projectName: string,
 ): Promise<CallToolResult> {
   output += `### Mode: URL Replay (Percy CLI)\n\n`;
+  output += `**Project:** ${projectName}\n`;
   output += `Percy CLI will re-snapshot each page with full resource discovery.\n\n`;
 
-  // Build snapshots.yml — use snapshot names as identifiers
-  // For web builds, snapshot names often contain the URL path
   let yamlContent = "";
   const uniqueNames = new Set<string>();
 
   for (const snap of snapshots) {
-    // Skip duplicates
     if (uniqueNames.has(snap.name)) continue;
     uniqueNames.add(snap.name);
 
@@ -299,14 +391,9 @@ async function replayWithPercyCli(
     const widths = snap.widths.length > 0 ? snap.widths : [1280];
 
     yamlContent += `- name: "${name}"\n`;
-    // If name looks like a URL or path, use it as the URL
     if (snap.name.startsWith("http://") || snap.name.startsWith("https://")) {
       yamlContent += `  url: ${snap.name}\n`;
     } else {
-      // For non-URL names, we can't determine the URL
-      // Skip this snapshot — user needs to provide the base URL
-      yamlContent += `  # NOTE: Cannot determine URL from snapshot name "${snap.name}"\n`;
-      yamlContent += `  # Provide the URL manually or use percy_create_build with urls parameter\n`;
       yamlContent += `  url: "UNKNOWN"\n`;
     }
     yamlContent += `  waitForTimeout: 3000\n`;
@@ -322,31 +409,25 @@ async function replayWithPercyCli(
     });
   }
 
-  // Check if any snapshots have URLs
   const hasUrls = snapshots.some(
     (s) => s.name.startsWith("http://") || s.name.startsWith("https://"),
   );
 
   if (!hasUrls) {
-    // Snapshots don't have URL names — show the YAML for manual editing
-    output += `**Snapshots don't contain URL paths.** The snapshot names are:\n\n`;
+    output += `**Snapshots don't have URL names.** Use \`percy_create_build\` with URLs instead.\n`;
+    output += `\nSnapshot names:\n`;
     for (const snap of snapshots.slice(0, 10)) {
       output += `- ${snap.displayName || snap.name} (${snap.widths.join(", ")}px)\n`;
     }
-    output += `\nTo replay, provide the base URL and use:\n`;
-    output += `\`\`\`\nUse percy_create_build with project_name "${projectName}" and urls "http://your-app.com/page1,http://your-app.com/page2"\n\`\`\`\n\n`;
-    output += `Or save this config as snapshots.yml and edit the URLs:\n`;
-    output += `\`\`\`yaml\n${yamlContent.slice(0, 1000)}\n\`\`\`\n`;
     return { content: [{ type: "text", text: output }] };
   }
 
-  // Write and run Percy CLI
   const tmpDir = await mkdtemp(join(tmpdir(), "percy-clone-"));
   const configPath = join(tmpDir, "snapshots.yml");
   await writeFile(configPath, yamlContent);
 
   const child = spawn("npx", ["@percy/cli", "snapshot", configPath], {
-    env: { ...process.env, PERCY_TOKEN: token },
+    env: { ...process.env, PERCY_TOKEN: token, PERCY_BRANCH: branch },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
@@ -393,7 +474,7 @@ async function replayWithPercyCli(
 
   if (buildUrl) {
     output += `**Build URL:** ${buildUrl}\n\n`;
-    output += `Percy CLI is re-snapshotting with full resource discovery (CSS, JS, images, fonts).\n`;
+    output += `Percy CLI is re-snapshotting with full resource discovery.\n`;
     output += `Results ready in 1-3 minutes.\n`;
   } else {
     const percyLines = stdoutData
@@ -410,37 +491,42 @@ async function replayWithPercyCli(
   return { content: [{ type: "text", text: output }] };
 }
 
-// ── Screenshot Copy (fallback) ──────────────────────────────────────────────
+// ── Screenshot Copy (tile-based) ────────────────────────────────────────────
+//
+// Downloads rendered screenshots and re-uploads as tiles.
+// Works for app/automate/generic project types.
+//
+// API flow:
+//   POST /builds                            → create build
+//   POST /builds/:id/snapshots              → create snapshot (no resources)
+//   POST /snapshots/:id/comparisons         → create comparison with tag + tile SHAs
+//   POST /comparisons/:id/tiles             → upload tile image (strict base64)
+//   POST /comparisons/:id/finalize          → finalize comparison
+//   POST /builds/:id/finalize               → finalize build
+//
 
 async function copyScreenshots(
   output: string,
-  snapshots: Array<{
-    name: string;
-    comparisons: Array<{
-      width: number;
-      height: number;
-      tagName: string;
-      imageUrl: string | null;
-    }>;
-  }>,
+  snapshots: SnapshotInfo[],
   token: string,
   branch: string,
+  projectName: string,
 ): Promise<CallToolResult> {
-  output += `### Mode: Screenshot Copy\n\n`;
-  output += `Downloading screenshots and re-uploading to target project.\n\n`;
+  output += `### Mode: Screenshot Copy (tile-based)\n\n`;
+  output += `**Project:** ${projectName}\n`;
+  output += `Downloading screenshots and re-uploading as tiles.\n\n`;
 
   const commitSha = createHash("sha1")
     .update(Date.now().toString())
     .digest("hex");
 
-  // Create build
+  // Step 1: Create build
   let buildResult: any;
   try {
     buildResult = await percyTokenPost("/builds", token, {
       data: {
         type: "builds",
         attributes: { branch, "commit-sha": commitSha },
-        relationships: { resources: { data: [] } },
       },
     });
   } catch (e: any) {
@@ -456,12 +542,14 @@ async function copyScreenshots(
   output += "\n";
 
   let cloned = 0;
+  let compTotal = 0;
 
   for (const snap of snapshots) {
     const compsWithImages = snap.comparisons.filter((c) => c.imageUrl);
     if (compsWithImages.length === 0) continue;
 
     try {
+      // Step 2: Create snapshot (no resources needed for app builds)
       const snapResult = await percyTokenPost(
         `/builds/${buildId}/snapshots`,
         token,
@@ -469,7 +557,6 @@ async function copyScreenshots(
           data: {
             type: "snapshots",
             attributes: { name: snap.name },
-            relationships: { resources: { data: [] } },
           },
         },
       );
@@ -478,42 +565,49 @@ async function copyScreenshots(
 
       let compCount = 0;
       for (const comp of compsWithImages) {
-        const imgResponse = await fetch(comp.imageUrl!);
-        if (!imgResponse.ok) continue;
-
-        const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
-        const sha = createHash("sha256").update(imgBuffer).digest("hex");
-        const base64 = imgBuffer.toString("base64");
-
         try {
+          const imgResponse = await fetch(comp.imageUrl!);
+          if (!imgResponse.ok) continue;
+
+          const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+          const sha = createHash("sha256").update(imgBuffer).digest("hex");
+          const base64 = toStrictBase64(imgBuffer);
+
+          // Step 3: Create comparison with tag + tile SHAs
+          // Use real device/browser info from source comparison
           const compResult = await percyTokenPost(
             `/snapshots/${newSnapId}/comparisons`,
             token,
             {
               data: {
-                attributes: {
-                  "external-debug-url": null,
-                  "dom-info-sha": null,
-                },
+                type: "comparisons",
                 relationships: {
                   tag: {
                     data: {
+                      type: "tag",
                       attributes: {
                         name: comp.tagName,
                         width: comp.width,
                         height: comp.height,
-                        "os-name": "Clone",
-                        "browser-name": "Screenshot",
+                        "os-name": comp.osName,
+                        "os-version": comp.osVersion,
+                        "browser-name": comp.browserName,
+                        "browser-version": comp.browserVersion,
+                        orientation: comp.orientation,
                       },
                     },
                   },
                   tiles: {
                     data: [
                       {
+                        type: "tiles",
                         attributes: {
                           sha,
                           "status-bar-height": 0,
                           "nav-bar-height": 0,
+                          "header-height": 0,
+                          "footer-height": 0,
+                          fullscreen: false,
                         },
                       },
                     ],
@@ -525,28 +619,34 @@ async function copyScreenshots(
 
           const compId = compResult?.data?.id;
           if (compId) {
+            // Step 4: Upload tile image (strict base64, no padding)
             await percyTokenPost(`/comparisons/${compId}/tiles`, token, {
-              data: { attributes: { "base64-content": base64 } },
+              data: {
+                type: "tiles",
+                attributes: { "base64-content": base64 },
+              },
             });
+            // Step 5: Finalize comparison
             await percyTokenPost(`/comparisons/${compId}/finalize`, token, {});
             compCount++;
           }
-        } catch {
-          /* comparison failed */
+        } catch (compErr: any) {
+          output += `  - Comparison failed (${comp.tagName} ${comp.width}px): ${compErr.message?.slice(0, 120)}\n`;
         }
       }
 
+      compTotal += compCount;
       cloned++;
-      output += `- ✓ **${snap.name}** (${compCount} comparisons)\n`;
+      output += `- **${snap.name}** — ${compCount} comparison${compCount !== 1 ? "s" : ""} (${compsWithImages.map((c) => `${c.browserName || c.tagName} ${c.width}px`).join(", ")})\n`;
     } catch (e: any) {
-      output += `- ✗ ${snap.name}: ${e.message}\n`;
+      output += `- FAILED ${snap.name}: ${e.message}\n`;
     }
   }
 
-  // Finalize
+  // Step 6: Finalize build
   try {
     await percyTokenPost(`/builds/${buildId}/finalize`, token, {});
-    output += `\n**Build finalized.** ${cloned} snapshots cloned.\n`;
+    output += `\n**Build finalized.** ${cloned}/${snapshots.length} snapshots, ${compTotal} comparisons.\n`;
   } catch (e: any) {
     output += `\nFinalize failed: ${e.message}\n`;
   }

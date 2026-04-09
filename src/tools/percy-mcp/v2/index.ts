@@ -45,6 +45,7 @@ import { percyGetBuildsV2 } from "./get-builds.js";
 import { percyCreateBuildV2 } from "./create-build.js";
 import { percyAuthStatusV2 } from "./auth-status.js";
 import { percyGetBuildDetail } from "./get-build-detail.js";
+import { percyCloneBuildV2 } from "./clone-build.js";
 import { percyGetSnapshot } from "./get-snapshot.js";
 import { percyGetComparison } from "./get-comparison.js";
 import { percyFigmaBuild } from "./figma-build.js";
@@ -267,6 +268,56 @@ export function registerPercyMcpToolsV2(
         return TOOL_HELP.percy_get_build
           ? handlePercyToolError(error, TOOL_HELP.percy_get_build, args)
           : handleMCPError("percy_get_build", server, config, error);
+      }
+    },
+  );
+
+  // ── Clone Build (Deep) ─────────────────────────────────────────────────────
+
+  tools.percy_clone_build = server.tool(
+    "percy_clone_build",
+    "Deep clone a Percy build to another project. Downloads DOM resources and re-creates snapshots so Percy re-renders them. Falls back to screenshot cloning when DOM is unavailable. Works across projects.",
+    {
+      source_build_id: z
+        .string()
+        .describe("Build ID to clone FROM"),
+      target_project_name: z
+        .string()
+        .describe(
+          "Project name to clone INTO (auto-creates if new)",
+        ),
+      target_token: z
+        .string()
+        .optional()
+        .describe(
+          "Target project token (use for existing projects to avoid creating duplicates)",
+        ),
+      branch: z
+        .string()
+        .optional()
+        .describe("Branch for new build (auto-detected from git)"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_clone_build",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyCloneBuildV2(args, config);
+      } catch (error) {
+        return TOOL_HELP.percy_clone_build
+          ? handlePercyToolError(
+              error,
+              TOOL_HELP.percy_clone_build,
+              args,
+            )
+          : handleMCPError(
+              "percy_clone_build",
+              server,
+              config,
+              error,
+            );
       }
     },
   );

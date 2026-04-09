@@ -11,10 +11,7 @@
  * - snapshots: all snapshots with review states
  */
 
-import {
-  percyGet,
-  percyPost,
-} from "../../../lib/percy-api/percy-auth.js";
+import { percyGet, percyPost } from "../../../lib/percy-api/percy-auth.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -68,25 +65,22 @@ function parseBuild(response: any) {
   const rels = response?.data?.relationships || {};
 
   // Parse browsers from unique-browsers-across-snapshots (more detailed)
-  const uniqueBrowsers = (
-    attrs["unique-browsers-across-snapshots"] || []
-  ).map((b: any) => {
-    const bf = b.browser_family || {};
-    const os = b.operating_system || {};
-    const dp = b.device_pool || {};
-    return `${bf.name || "?"} ${b.version || ""} on ${os.name || "?"} ${os.version || ""} ${dp.name || ""}`.trim();
-  });
+  const uniqueBrowsers = (attrs["unique-browsers-across-snapshots"] || []).map(
+    (b: any) => {
+      const bf = b.browser_family || {};
+      const os = b.operating_system || {};
+      const dp = b.device_pool || {};
+      return `${bf.name || "?"} ${b.version || ""} on ${os.name || "?"} ${os.version || ""} ${dp.name || ""}`.trim();
+    },
+  );
 
   // Parse build summary
   let summaryItems: any[] = [];
-  const summaryObj = included.find(
-    (i: any) => i.type === "build-summaries",
-  );
+  const summaryObj = included.find((i: any) => i.type === "build-summaries");
   if (summaryObj?.attributes?.summary) {
     const raw = summaryObj.attributes.summary;
     try {
-      summaryItems =
-        typeof raw === "string" ? JSON.parse(raw) : raw;
+      summaryItems = typeof raw === "string" ? JSON.parse(raw) : raw;
       if (!Array.isArray(summaryItems)) summaryItems = [];
     } catch {
       summaryItems = [];
@@ -94,9 +88,7 @@ function parseBuild(response: any) {
   }
 
   // Parse commit
-  const commitObj = included.find(
-    (i: any) => i.type === "commits",
-  );
+  const commitObj = included.find((i: any) => i.type === "commits");
   const commit = commitObj?.attributes || {};
 
   // Base build
@@ -154,8 +146,7 @@ async function getOverview(
     output += `| **Commit** | ${commit.sha?.slice(0, 8)} — ${commit.message || "no message"} |\n`;
   if (commit["author-name"])
     output += `| **Author** | ${commit["author-name"]} |\n`;
-  if (baseBuildId)
-    output += `| **Base build** | #${baseBuildId} |\n`;
+  if (baseBuildId) output += `| **Base build** | #${baseBuildId} |\n`;
 
   // Stats
   output += `\n### Stats\n\n`;
@@ -228,8 +219,7 @@ async function getOverview(
   }
 
   // URL
-  if (attrs["web-url"])
-    output += `\n**View:** ${attrs["web-url"]}\n`;
+  if (attrs["web-url"]) output += `\n**View:** ${attrs["web-url"]}\n`;
 
   // Available details
   output += `\n### More Details\n\n`;
@@ -254,8 +244,7 @@ async function getAiSummary(
     include: "build-summary",
   });
 
-  const { attrs, ai, summaryItems, hasAiData } =
-    parseBuild(response);
+  const { attrs, ai, summaryItems, hasAiData } = parseBuild(response);
   const buildNum = attrs["build-number"] || buildId;
 
   let output = `## Build #${buildNum} — AI Summary\n\n`;
@@ -280,8 +269,7 @@ async function getAiSummary(
       if (snaps.length > 0) {
         output += `**Affected snapshots:** ${snaps.length}\n`;
         const totalComps = snaps.reduce(
-          (sum: number, s: any) =>
-            sum + (s.comparisons?.length || 0),
+          (sum: number, s: any) => sum + (s.comparisons?.length || 0),
           0,
         );
         output += `**Affected comparisons:** ${totalComps}\n`;
@@ -291,10 +279,7 @@ async function getAiSummary(
         snaps.slice(0, 5).forEach((s: any) => {
           const comps = s.comparisons || [];
           const dims = comps
-            .map(
-              (c: any) =>
-                `${c.width || "?"}×${c.height || "?"}`,
-            )
+            .map((c: any) => `${c.width || "?"}×${c.height || "?"}`)
             .join(", ");
           output += `| ${s.snapshot_id} | ${comps.length} | ${dims} |\n`;
         });
@@ -308,8 +293,7 @@ async function getAiSummary(
     output += `AI analysis complete but no summary items generated.\n`;
     if (ai["summary-status"] && ai["summary-status"] !== "ok") {
       output += `Summary status: ${ai["summary-status"]}`;
-      if (ai["summary-reason"])
-        output += ` — ${ai["summary-reason"]}`;
+      if (ai["summary-reason"]) output += ` — ${ai["summary-reason"]}`;
       output += "\n";
     }
   }
@@ -347,26 +331,17 @@ async function getChanges(
 
   items.forEach((item: any, i: number) => {
     const a = item.attributes || item;
-    const name =
-      a["cover-snapshot-name"] || a.coverSnapshotName || "?";
+    const name = a["cover-snapshot-name"] || a.coverSnapshotName || "?";
     const displayName =
-      a["cover-snapshot-display-name"] ||
-      a.coverSnapshotDisplayName ||
-      "";
+      a["cover-snapshot-display-name"] || a.coverSnapshotDisplayName || "";
     const diff =
       (a["max-diff-ratio"] ?? a.maxDiffRatio) != null
-        ? ((a["max-diff-ratio"] ?? a.maxDiffRatio) * 100).toFixed(
-            1,
-          ) + "%"
+        ? ((a["max-diff-ratio"] ?? a.maxDiffRatio) * 100).toFixed(1) + "%"
         : "—";
     const bugs =
-      a["max-bug-total-potential-bugs"] ??
-      a.maxBugTotalPotentialBugs ??
-      0;
-    const review =
-      a["review-state"] || a.reviewState || "?";
-    const count =
-      a["item-count"] || a.itemCount || 1;
+      a["max-bug-total-potential-bugs"] ?? a.maxBugTotalPotentialBugs ?? 0;
+    const review = a["review-state"] || a.reviewState || "?";
+    const count = a["item-count"] || a.itemCount || 1;
     output += `| ${i + 1} | ${name} | ${displayName || "—"} | ${diff} | ${bugs} | ${review} | ${count} |\n`;
   });
 
@@ -428,8 +403,7 @@ async function getRca(
     }
   }
 
-  const status =
-    rcaData?.data?.attributes?.status || "unknown";
+  const status = rcaData?.data?.attributes?.status || "unknown";
 
   if (status === "pending") {
     return {
@@ -455,8 +429,7 @@ async function getRca(
 
   let output = `## Root Cause Analysis — Comparison ${args.comparison_id}\n\n`;
 
-  const diffNodes =
-    rcaData?.data?.attributes?.["diff-nodes"] || {};
+  const diffNodes = rcaData?.data?.attributes?.["diff-nodes"] || {};
   const common = diffNodes.common_diffs || [];
   const removed = diffNodes.extra_base || [];
   const added = diffNodes.extra_head || [];
@@ -518,10 +491,7 @@ async function getLogs(
 
   // Build info
   try {
-    const buildResponse = await percyGet(
-      `/builds/${buildId}`,
-      config,
-    );
+    const buildResponse = await percyGet(`/builds/${buildId}`, config);
     const attrs = buildResponse?.data?.attributes || {};
 
     if (attrs["failure-reason"]) {
@@ -578,8 +548,7 @@ async function getLogs(
       suggestions.forEach((s: any, i: number) => {
         const a = s.attributes || s;
         output += `${i + 1}. **${a["bucket-display-name"] || a.bucket || "Issue"}**\n`;
-        if (a["reason-message"])
-          output += `   ${a["reason-message"]}\n`;
+        if (a["reason-message"]) output += `   ${a["reason-message"]}\n`;
         const steps = a.suggestion || [];
         if (Array.isArray(steps)) {
           steps.forEach((step: string) => {
@@ -621,9 +590,7 @@ async function getNetwork(
   });
 
   const logs = response?.data || response || {};
-  const entries = Array.isArray(logs)
-    ? logs
-    : Object.values(logs);
+  const entries = Array.isArray(logs) ? logs : Object.values(logs);
 
   if (!entries.length) {
     return {
@@ -640,15 +607,11 @@ async function getNetwork(
   output += `| # | URL | Base | Head | Type | Issue |\n|---|---|---|---|---|---|\n`;
 
   entries.slice(0, 30).forEach((entry: any, i: number) => {
-    const url =
-      entry.file || entry.domain || entry.url || "?";
-    const base =
-      entry["base-status"] || entry.baseStatus || "—";
-    const head =
-      entry["head-status"] || entry.headStatus || "—";
+    const url = entry.file || entry.domain || entry.url || "?";
+    const base = entry["base-status"] || entry.baseStatus || "—";
+    const head = entry["head-status"] || entry.headStatus || "—";
     const type = entry.mimetype || entry.type || "—";
-    const summary =
-      entry["status-summary"] || entry.statusSummary || "";
+    const summary = entry["status-summary"] || entry.statusSummary || "";
     output += `| ${i + 1} | ${url} | ${base} | ${head} | ${type} | ${summary} |\n`;
   });
 
@@ -691,37 +654,22 @@ async function getSnapshots(
 
   items.forEach((item: any, i: number) => {
     const a = item.attributes || item;
-    const name =
-      a["cover-snapshot-name"] || a.coverSnapshotName || "?";
+    const name = a["cover-snapshot-name"] || a.coverSnapshotName || "?";
     const display =
-      a["cover-snapshot-display-name"] ||
-      a.coverSnapshotDisplayName ||
-      "—";
+      a["cover-snapshot-display-name"] || a.coverSnapshotDisplayName || "—";
     const diff =
       (a["max-diff-ratio"] ?? a.maxDiffRatio) != null
-        ? ((a["max-diff-ratio"] ?? a.maxDiffRatio) * 100).toFixed(
-            1,
-          ) + "%"
+        ? ((a["max-diff-ratio"] ?? a.maxDiffRatio) * 100).toFixed(1) + "%"
         : "—";
     const bugs =
-      a["max-bug-total-potential-bugs"] ??
-      a.maxBugTotalPotentialBugs ??
-      "—";
-    const review =
-      a["review-state"] || a.reviewState || "?";
-    const count =
-      a["item-count"] || a.itemCount || 1;
-    const snapIds = (
-      a["snapshot-ids"] ||
-      a.snapshotIds ||
-      []
-    )
+      a["max-bug-total-potential-bugs"] ?? a.maxBugTotalPotentialBugs ?? "—";
+    const review = a["review-state"] || a.reviewState || "?";
+    const count = a["item-count"] || a.itemCount || 1;
+    const snapIds = (a["snapshot-ids"] || a.snapshotIds || [])
       .slice(0, 3)
       .join(", ");
     const more =
-      (a["snapshot-ids"] || a.snapshotIds || []).length > 3
-        ? "..."
-        : "";
+      (a["snapshot-ids"] || a.snapshotIds || []).length > 3 ? "..." : "";
     output += `| ${i + 1} | ${name} | ${display} | ${diff} | ${bugs} | ${review} | ${count} | ${snapIds}${more} |\n`;
   });
 

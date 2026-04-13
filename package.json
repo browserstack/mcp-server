@@ -1,6 +1,6 @@
 {
   "name": "@browserstack/mcp-server",
-  "version": "1.2.14",
+  "version": "1.2.15",
   "description": "BrowserStack's Official MCP Server",
   "mcpName": "io.github.browserstack/mcp-server",
   "main": "dist/index.js",
@@ -37,7 +37,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/form-data": "^2.5.2",
-    "axios": "^1.14.0",
+    "axios": "^1.15.0",
     "browserstack-local": "^1.5.12",
     "csv-parse": "^6.2.1",
     "dotenv": "^17.4.0",

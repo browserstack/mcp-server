@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "browserstack-mcp-server": {
+      "command": "npx",
+      "args": ["-y", "@browserstack/mcp-server"]
+    }
+  }
+}

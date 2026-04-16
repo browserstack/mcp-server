@@ -581,13 +581,17 @@ async function cloneViaApi(
           const sha = createHash("sha256").update(imgBuffer).digest("hex");
           const base64 = toStrictBase64(imgBuffer);
 
-          // Create comparison with real tag info + tile SHA
+          // Create comparison: attributes (required) + relationships (tag + tiles)
           const compResult = await percyTokenPost(
             `/snapshots/${newSnapId}/comparisons`,
             token,
             {
               data: {
                 type: "comparisons",
+                attributes: {
+                  "external-debug-url": null,
+                  "dom-info-sha": null,
+                },
                 relationships: {
                   tag: {
                     data: {
@@ -596,11 +600,11 @@ async function cloneViaApi(
                         name: comp.tagName,
                         width: comp.width,
                         height: comp.height,
-                        "os-name": comp.osName || undefined,
-                        "os-version": comp.osVersion || undefined,
-                        "browser-name": comp.browserName || undefined,
-                        "browser-version": comp.browserVersion || undefined,
-                        orientation: comp.orientation || undefined,
+                        "os-name": comp.osName || "",
+                        "os-version": comp.osVersion || "",
+                        "browser-name": comp.browserName || "",
+                        "browser-version": comp.browserVersion || "",
+                        orientation: comp.orientation || "portrait",
                       },
                     },
                   },
@@ -646,8 +650,8 @@ async function cloneViaApi(
           output += `  ! ${comp.browserName} ${comp.width}px: ${msg}\n`;
         }
 
-        // Rate limit protection — 200ms between API calls
-        await delay(200);
+        // Rate limit protection — 500ms between comparisons (3 API calls each)
+        await delay(500);
       }
 
       clonedSnaps++;
@@ -655,6 +659,9 @@ async function cloneViaApi(
     } catch (e: any) {
       output += `- FAILED ${snap.name}: ${e.message}\n`;
     }
+
+    // Delay between snapshots to avoid Cloudflare rate limits
+    await delay(1000);
   }
 
   // Finalize build

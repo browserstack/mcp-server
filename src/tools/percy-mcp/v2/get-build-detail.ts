@@ -14,6 +14,7 @@
 import { percyGet, percyPost } from "../../../lib/percy-api/percy-auth.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { setActiveBuild } from "../../../lib/percy-api/percy-session.js";
 
 interface GetBuildArgs {
   build_id: string;
@@ -133,15 +134,27 @@ async function getOverview(
   } = parseBuild(response);
 
   const buildNum = attrs["build-number"] || buildId;
+  const webUrl = attrs["web-url"] || "";
 
-  let output = `## Percy Build #${buildNum}\n\n`;
+  // Store in session
+  setActiveBuild({
+    id: buildId,
+    number: buildNum?.toString(),
+    url: webUrl,
+    branch: attrs.branch,
+  });
+
+  let output = `## Percy Build #${buildNum} (ID: ${buildId})\n\n`;
 
   // Status table
   output += `| Field | Value |\n|---|---|\n`;
+  output += `| **Build ID** | ${buildId} |\n`;
+  output += `| **Build #** | ${buildNum} |\n`;
   output += `| **State** | ${attrs.state || "?"} |\n`;
   output += `| **Branch** | ${attrs.branch || "?"} |\n`;
   output += `| **Review** | ${attrs["review-state"] || "—"} (${attrs["review-state-reason"] || ""}) |\n`;
   output += `| **Type** | ${attrs.type || "?"} |\n`;
+  if (webUrl) output += `| **Build URL** | ${webUrl} |\n`;
   if (commit.sha)
     output += `| **Commit** | ${commit.sha?.slice(0, 8)} — ${commit.message || "no message"} |\n`;
   if (commit["author-name"])

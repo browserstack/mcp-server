@@ -6,7 +6,7 @@
  * - Fewer, more powerful tools (quality > quantity)
  * - Every tool tested against real Percy API
  *
- * Tools (20 total):
+ * Tools (21 total):
  *   percy_create_project       — Create/get a Percy project
  *   percy_create_build         — Create build (URL snapshot / screenshot upload / test wrap)
  *   percy_get_projects         — List projects
@@ -27,6 +27,7 @@
  *   percy_search_builds        — Advanced build item search
  *   percy_list_integrations    — List org integrations
  *   percy_migrate_integrations — Migrate integrations between orgs
+ *   percy_create_app_build     — Create App Percy BYOS build from device screenshots
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -64,6 +65,7 @@ import { percySearchBuildItems } from "./search-build-items.js";
 import { percyListIntegrations } from "./list-integrations.js";
 import { percyMigrateIntegrations } from "./migrate-integrations.js";
 import { percyGetAiSummary } from "./get-ai-summary.js";
+import { percyCreateAppBuildV2 } from "./create-app-build.js";
 
 export function registerPercyMcpToolsV2(
   server: McpServer,
@@ -776,6 +778,49 @@ export function registerPercyMcpToolsV2(
         return await percyGetAiSummary(args, config);
       } catch (error) {
         return handleMCPError("percy_get_ai_summary", server, config, error);
+      }
+    },
+  );
+
+  // ── App Percy Build (BYOS) ──────────────────────────────────────────────
+
+  tools.percy_create_app_build = server.tool(
+    "percy_create_app_build",
+    "Create an App Percy BYOS (Bring Your Own Screenshots) build. Works in two modes: (1) Sample mode (default) — auto-generates 3 devices × 2 screenshots for instant testing, no setup needed. (2) Custom mode — provide resources_dir with your own device folders (each with device.json + .png files). Validates dimensions, uploads with device tags, and finalizes the build.",
+    {
+      project_name: z
+        .string()
+        .describe("App Percy project name (auto-creates if doesn't exist)"),
+      resources_dir: z
+        .string()
+        .optional()
+        .describe(
+          "Path to resources directory with device folders (each with device.json + .png files). Omit to use built-in sample data.",
+        ),
+      use_sample_data: z
+        .boolean()
+        .optional()
+        .describe(
+          "Use built-in sample data (3 devices × 2 screenshots). Default: true when resources_dir is omitted.",
+        ),
+      branch: z.string().optional().describe("Git branch (auto-detected)"),
+      test_case: z
+        .string()
+        .optional()
+        .describe("Test case name to attach to all snapshots"),
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "percy_create_app_build",
+          server.server.getClientVersion()!,
+          config,
+        );
+        return await percyCreateAppBuildV2(args, config);
+      } catch (error) {
+        return TOOL_HELP.percy_create_app_build
+          ? handlePercyToolError(error, TOOL_HELP.percy_create_app_build, args)
+          : handleMCPError("percy_create_app_build", server, config, error);
       }
     },
   );

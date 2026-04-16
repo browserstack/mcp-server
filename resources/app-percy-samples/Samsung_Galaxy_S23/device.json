@@ -1,0 +1,9 @@
+{
+  "deviceName": "Samsung Galaxy S23",
+  "osName": "Android",
+  "osVersion": "13",
+  "orientation": "portrait",
+  "deviceScreenSize": "1080x2340",
+  "statusBarHeight": 110,
+  "navBarHeight": 63
+}

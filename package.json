@@ -15,7 +15,8 @@
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "generate-app-samples": "node scripts/generate-app-samples.mjs"
   },
   "bin": {
     "browserstack-mcp-server": "dist/index.js"

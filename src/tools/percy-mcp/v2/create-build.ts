@@ -4,6 +4,10 @@ import {
 } from "../../../lib/percy-api/percy-auth.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  setActiveProject,
+  setActiveBuild,
+} from "../../../lib/percy-api/percy-session.js";
 import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import {
@@ -78,10 +82,11 @@ export async function percyCreateBuildV2(
     ? args.widths.split(",").map((w) => w.trim())
     : ["375", "1280"];
 
-  // Get project token
+  // Get project token and activate in session
   let token: string;
   try {
     token = await getOrCreateProjectToken(args.project_name, config, args.type);
+    setActiveProject({ name: args.project_name, token, type: args.type });
   } catch (e: any) {
     return {
       content: [
@@ -252,15 +257,33 @@ async function handleUrlSnapshot(
     }
   }, 120000);
 
+  // Extract build ID from URL (format: .../builds/12345)
+  const buildIdMatch = buildUrl.match(/\/builds\/(\d+)/);
+  const buildId = buildIdMatch ? buildIdMatch[1] : "";
+
+  // Store in session
+  if (buildId || buildUrl) {
+    setActiveBuild({ id: buildId, url: buildUrl, branch });
+  }
+
   // Build response
   let output = `## Percy Build — ${projectName}\n\n`;
-  output += `**Branch:** ${branch}\n`;
-  output += `**URLs:** ${urlList.length}\n`;
-  output += `**Widths:** ${widths.join(", ")}px\n`;
-  if (testCases.length > 0) {
-    output += `**Test cases:** ${testCases.join(", ")}\n`;
-  }
+
+  // Always show build info table
+  output += `| Field | Value |\n|---|---|\n`;
+  output += `| **Project** | ${projectName} |\n`;
+  if (buildId) output += `| **Build ID** | ${buildId} |\n`;
+  output += `| **Branch** | ${branch} |\n`;
+  output += `| **URLs** | ${urlList.length} |\n`;
+  output += `| **Widths** | ${widths.join(", ")}px |\n`;
+  output += `| **Expected Snapshots** | ${urlList.length * widths.length} |\n`;
+  if (buildUrl) output += `| **Build URL** | ${buildUrl} |\n`;
+  output += `| **Token** | \`${token.slice(0, 8)}...${token.slice(-4)}\` |\n`;
   output += "\n";
+
+  if (testCases.length > 0) {
+    output += `**Test cases:** ${testCases.join(", ")}\n\n`;
+  }
 
   // Show snapshot details
   output += `**Snapshots:**\n`;
@@ -275,9 +298,7 @@ async function handleUrlSnapshot(
   output += "\n";
 
   if (buildUrl) {
-    output += `**Build started!** Percy is rendering in the background.\n\n`;
-    output += `**Build URL:** ${buildUrl}\n\n`;
-    output += `${urlList.length} URL(s) × ${widths.length} width(s) = ${urlList.length * widths.length} snapshot(s)\n`;
+    output += `**Build started!** Percy is rendering in the background.\n`;
     output += `Results ready in 1-3 minutes.\n`;
   } else {
     const allOutput = (stdoutData + stderrData).trim();
@@ -291,6 +312,16 @@ async function handleUrlSnapshot(
     } else {
       output += `Percy launched in background. Check your Percy dashboard for results.\n`;
     }
+  }
+
+  // Next steps
+  output += `\n### Next Steps\n\n`;
+  if (buildId) {
+    output += `- \`percy_get_build\` with build_id "${buildId}" — View build details\n`;
+    output += `- \`percy_get_build\` with build_id "${buildId}" and detail "snapshots" — List snapshots\n`;
+    output += `- \`percy_get_build\` with build_id "${buildId}" and detail "ai_summary" — AI analysis\n`;
+  } else {
+    output += `- \`percy_get_builds\` — Find the build ID once processing completes\n`;
   }
 
   return { content: [{ type: "text", text: output }] };
@@ -487,17 +518,38 @@ async function handleTestCommand(
   });
   child.unref();
 
+  // Extract build ID from URL
+  const buildIdMatch = buildUrl.match(/\/builds\/(\d+)/);
+  const buildId = buildIdMatch ? buildIdMatch[1] : "";
+
+  if (buildId || buildUrl) {
+    setActiveBuild({ id: buildId, url: buildUrl, branch });
+  }
+
   let output = `## Percy Build — Tests\n\n`;
-  output += `**Project:** ${projectName}\n`;
-  output += `**Command:** \`${testCommand}\`\n`;
-  output += `**Branch:** ${branch}\n\n`;
+  output += `| Field | Value |\n|---|---|\n`;
+  output += `| **Project** | ${projectName} |\n`;
+  if (buildId) output += `| **Build ID** | ${buildId} |\n`;
+  output += `| **Command** | \`${testCommand}\` |\n`;
+  output += `| **Branch** | ${branch} |\n`;
+  output += `| **Token** | \`${token.slice(0, 8)}...${token.slice(-4)}\` |\n`;
+  if (buildUrl) output += `| **Build URL** | ${buildUrl} |\n`;
+  output += "\n";
 
   if (buildUrl) {
-    output += `**Build URL:** ${buildUrl}\n\nTests running in background.\n`;
+    output += `Tests running in background.\n`;
   } else if (stdoutData.trim()) {
     output += `**Output:**\n\`\`\`\n${stdoutData.trim().slice(0, 500)}\n\`\`\`\n`;
   } else {
     output += `Tests launched in background. Check Percy dashboard.\n`;
+  }
+
+  // Next steps
+  output += `\n### Next Steps\n\n`;
+  if (buildId) {
+    output += `- \`percy_get_build\` with build_id "${buildId}" — View build details\n`;
+  } else {
+    output += `- \`percy_get_builds\` — Find build once processing completes\n`;
   }
 
   return { content: [{ type: "text", text: output }] };
@@ -570,8 +622,18 @@ async function handleScreenshotUpload(
     };
   }
 
+  // Store in session
+  setActiveBuild({ id: buildId, url: buildUrl, branch });
+
   let output = `## Percy Build — Screenshot Upload\n\n`;
-  output += `**Build:** #${buildId}\n**Files:** ${files.length}\n\n`;
+  output += `| Field | Value |\n|---|---|\n`;
+  output += `| **Build ID** | ${buildId} |\n`;
+  output += `| **Project** | ${args.project_name} |\n`;
+  output += `| **Branch** | ${branch} |\n`;
+  output += `| **Files** | ${files.length} |\n`;
+  output += `| **Token** | \`${token.slice(0, 8)}...${token.slice(-4)}\` |\n`;
+  if (buildUrl) output += `| **Build URL** | ${buildUrl} |\n`;
+  output += "\n";
 
   let uploaded = 0;
   for (let i = 0; i < files.length; i++) {
@@ -676,7 +738,12 @@ async function handleScreenshotUpload(
   } catch (e: any) {
     output += `\n**Finalize failed:** ${e.message}\n`;
   }
-  if (buildUrl) output += `**View:** ${buildUrl}\n`;
+  if (buildUrl) output += `\n**View:** ${buildUrl}\n`;
+
+  output += `\n### Next Steps\n\n`;
+  output += `- \`percy_get_build\` with build_id "${buildId}" — View build details\n`;
+  output += `- \`percy_get_build\` with build_id "${buildId}" and detail "snapshots" — List snapshots\n`;
+  output += `- \`percy_get_build\` with build_id "${buildId}" and detail "ai_summary" — AI analysis\n`;
 
   return { content: [{ type: "text", text: output }] };
 }

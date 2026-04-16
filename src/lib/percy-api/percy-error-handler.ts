@@ -265,6 +265,39 @@ export const TOOL_HELP: Record<string, ToolHelp> = {
       'Use percy_clone_build with source_build_id "48436286" and target_project_name "my-project"',
     ],
   },
+  percy_create_app_build: {
+    name: "percy_create_app_build",
+    description: "Create an App Percy BYOS build from device screenshots",
+    params: [
+      {
+        name: "project_name",
+        required: true,
+        description: "App Percy project name",
+        example: "my-mobile-app",
+      },
+      {
+        name: "resources_dir",
+        required: true,
+        description: "Path to resources directory with device folders",
+        example: "./resources",
+      },
+      {
+        name: "branch",
+        required: false,
+        description: "Git branch (auto-detected)",
+        example: "main",
+      },
+      {
+        name: "test_case",
+        required: false,
+        description: "Test case name for all snapshots",
+        example: "Login Flow",
+      },
+    ],
+    examples: [
+      'Use percy_create_app_build with project_name "my-mobile-app" and resources_dir "./resources"',
+    ],
+  },
   percy_get_insights: {
     name: "percy_get_insights",
     description: "Get testing health metrics",

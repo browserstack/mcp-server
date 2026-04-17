@@ -24,7 +24,7 @@ export interface PercySessionState {
   orgId?: string;
 }
 
-let session: PercySessionState = {};
+const session: PercySessionState = {};
 
 // ── Setters ─────────────────────────────────────────────────────────────────
 
@@ -94,11 +94,9 @@ export function formatActiveBuild(): string {
   let out = `\n### Active Build\n\n`;
   out += `| | |\n|---|---|\n`;
   out += `| **Build ID** | ${session.buildId} |\n`;
-  if (session.buildNumber)
-    out += `| **Build #** | ${session.buildNumber} |\n`;
+  if (session.buildNumber) out += `| **Build #** | ${session.buildNumber} |\n`;
   if (session.buildUrl) out += `| **URL** | ${session.buildUrl} |\n`;
-  if (session.buildBranch)
-    out += `| **Branch** | ${session.buildBranch} |\n`;
+  if (session.buildBranch) out += `| **Branch** | ${session.buildBranch} |\n`;
   return out;
 }
 
@@ -108,9 +106,7 @@ export function formatSessionSummary(): string {
     const masked = session.projectToken
       ? `****${session.projectToken.slice(-4)}`
       : "";
-    parts.push(
-      `**Project:** ${session.projectName} (${masked})`,
-    );
+    parts.push(`**Project:** ${session.projectName} (${masked})`);
   }
   if (session.buildId) {
     parts.push(

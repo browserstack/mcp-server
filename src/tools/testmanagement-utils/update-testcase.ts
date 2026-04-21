@@ -77,7 +77,7 @@ export async function updateTestCase(
   }
 
   if (params.test_case_steps !== undefined) {
-    testCaseBody.steps = params.test_case_steps;
+    testCaseBody.test_case_steps = params.test_case_steps;
   }
 
   const body = { test_case: testCaseBody };

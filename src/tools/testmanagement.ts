@@ -26,6 +26,11 @@ import {
 } from "./testmanagement-utils/list-testcases.js";
 
 import {
+  listFolders,
+  ListFoldersSchema,
+} from "./testmanagement-utils/list-folders.js";
+
+import {
   CreateTestRunSchema,
   createTestRun,
 } from "./testmanagement-utils/create-testrun.js";
@@ -191,6 +196,38 @@ export async function listTestCasesTool(
         {
           type: "text",
           text: `Failed to list test cases: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Lists folders in a project (or sub-folders under a parent folder).
+ */
+export async function listFoldersTool(
+  args: z.infer<typeof ListFoldersSchema>,
+  config: BrowserStackConfig,
+  server: McpServer,
+): Promise<CallToolResult> {
+  try {
+    trackMCP(
+      "listFolders",
+      server.server.getClientVersion()!,
+      undefined,
+      config,
+    );
+    return await listFolders(args, config);
+  } catch (err) {
+    trackMCP("listFolders", server.server.getClientVersion()!, err, config);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to list folders: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
         },
@@ -457,16 +494,23 @@ export default function addTestManagementTools(
 
   tools.updateTestCase = server.tool(
     "updateTestCase",
-    "Use this tool to update an existing test case in BrowserStack Test Management. Allows editing test case details like name, description, steps, owner, priority, and more.",
+    "Update an existing test case in BrowserStack Test Management. Any subset of the following fields may be changed: name, description, preconditions, test_case_steps, owner, priority, case_type, automation_status, status, tags, issues, custom_fields. Only the supplied fields are modified.",
     UpdateTestCaseSchema.shape,
     (args) => updateTestCaseTool(args, config, server),
   );
 
   tools.listTestCases = server.tool(
     "listTestCases",
-    "List test cases in a project with optional filters (status, priority, custom fields, etc.)",
+    "List test cases in a project, optionally scoped to a specific folder. Omit folder_id to list all test cases in the project; provide folder_id (discoverable via listFolders) to list only that folder's cases. Supports filters: case_type, priority, pagination.",
     ListTestCasesSchema.shape,
     (args) => listTestCasesTool(args, config, server),
+  );
+
+  tools.listFolders = server.tool(
+    "listFolders",
+    "List folders in a BrowserStack Test Management project, returning each folder's id and name (plus case counts and sub-folder counts). Pass parent_id to list sub-folders under a specific folder instead of top-level folders.",
+    ListFoldersSchema.shape,
+    (args) => listFoldersTool(args, config, server),
   );
 
   tools.createTestRun = server.tool(

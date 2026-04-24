@@ -54,6 +54,7 @@ export async function getBuildIdTool(
           text: `Error fetching build ID: ${errorMessage}`,
         },
       ],
+      isError: true,
     };
   }
 }
@@ -83,7 +84,17 @@ export async function fetchRCADataTool(
     };
   } catch (error) {
     logger.error("Error fetching RCA data", error);
-    throw error;
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error fetching RCA data: ${errorMessage}`,
+        },
+      ],
+      isError: true,
+    };
   }
 }
 
@@ -120,6 +131,7 @@ export async function listTestIdsTool(
           text: `Error listing test IDs: ${errorMessage}`,
         },
       ],
+      isError: true,
     };
   }
 }

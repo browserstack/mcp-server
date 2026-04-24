@@ -150,7 +150,6 @@ export default function addBrowserLiveTools(
             {
               type: "text" as const,
               text: `Failed to start a browser live session. Error: ${error}`,
-              isError: true,
             },
           ],
           isError: true,

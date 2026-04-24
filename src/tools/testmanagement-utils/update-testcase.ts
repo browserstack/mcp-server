@@ -105,7 +105,6 @@ export async function updateTestCase(
             text: `Failed to update test case: ${JSON.stringify(
               response.data,
             )}`,
-            isError: true,
           },
         ],
         isError: true,
@@ -154,9 +153,8 @@ The test case has been updated successfully and is now available in your Browser
           {
             type: "text",
             text: `Test case not found. Please verify the project_identifier ("${params.project_identifier}") and test_case_identifier ("${params.test_case_identifier}") are correct. Make sure to use actual values, not placeholders like "your_project_id".
-            
+
 Error details: ${JSON.stringify(err.response?.data || err.message)}`,
-            isError: true,
           },
         ],
         isError: true,
@@ -169,7 +167,6 @@ Error details: ${JSON.stringify(err.response?.data || err.message)}`,
           {
             type: "text",
             text: "Access denied. You don't have permission to update this test case.",
-            isError: true,
           },
         ],
         isError: true,
@@ -182,7 +179,6 @@ Error details: ${JSON.stringify(err.response?.data || err.message)}`,
         {
           type: "text",
           text: `Failed to update test case: ${errorMessage}. Please verify your credentials and try again.`,
-          isError: true,
         },
       ],
       isError: true,

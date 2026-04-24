@@ -89,9 +89,9 @@ export async function getFailureLogs(
         {
           type: "text",
           text: `No valid log types found for ${args.sessionType} session.\nErrors encountered:\n${errors.join("\n")}`,
-          isError: true,
         },
       ],
+      isError: true,
     };
   }
   let response;
@@ -156,7 +156,6 @@ export async function getFailureLogs(
     results.push({
       type: "text",
       text: `Errors encountered:\n${errors.join("\n")}`,
-      isError: true,
     });
   }
 
@@ -226,7 +225,6 @@ export default function registerGetFailureLogs(
               text: `Failed to fetch failure logs: ${
                 error instanceof Error ? error.message : "Unknown error"
               }`,
-              isError: true,
             },
           ],
           isError: true,

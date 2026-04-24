@@ -327,12 +327,7 @@ export async function fetchSelfHealSelectorTool(
     };
   } catch (error) {
     logger.error("Error fetching self-heal selector suggestions", error);
-    const context = sessionId
-      ? `fetching self-heal data for session ${sessionId}`
-      : `fetching self-healing report for build ${buildUuid}`;
-    return {
-      content: [{ type: "text", text: friendlyApiError(error, context) }],
-    };
+    throw error;
   }
 }
 
@@ -560,7 +555,7 @@ export async function prepareSelfHealingPlanTool(
   };
 }
 
-// Registers self-heal tools with the MCP server.
+// Registers the fetchSelfHealSelector tool with the MCP server
 export default function addSelfHealTools(
   server: McpServer,
   config: BrowserStackConfig,
@@ -641,6 +636,7 @@ export default function addSelfHealTools(
               text: `Error during fetching self-heal suggestions: ${errorMessage}`,
             },
           ],
+          isError: true,
         };
       }
     },

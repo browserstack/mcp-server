@@ -36,10 +36,9 @@ export async function fetchAutomationScreenshotsTool(
 
     const results = screenshots.map((screenshot, index) => ({
       type: "image" as const,
-      text: `Screenshot ${index + 1}`,
       data: screenshot.base64,
       mimeType: "image/png",
-      metadata: { url: screenshot.url },
+      _meta: { url: screenshot.url, index: index + 1 },
     }));
 
     return {
@@ -53,7 +52,17 @@ export async function fetchAutomationScreenshotsTool(
     };
   } catch (error) {
     logger.error("Error during fetching screenshots", error);
-    throw error;
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error during fetching screenshots: ${errorMessage}`,
+        },
+      ],
+      isError: true,
+    };
   }
 }
 
@@ -100,6 +109,7 @@ export default function addAutomationTools(
               text: `Error during fetching automate screenshots: ${errorMessage}`,
             },
           ],
+          isError: true,
         };
       }
     },

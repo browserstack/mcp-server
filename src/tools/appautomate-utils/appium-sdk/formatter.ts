@@ -17,7 +17,6 @@ ${formattedInstructions}`;
       {
         type: "text",
         text: fullInstructions,
-        isError: false,
       },
     ],
   };

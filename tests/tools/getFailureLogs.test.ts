@@ -90,8 +90,11 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'automate'
       }, mockServer);
 
-      expect(result.content?.[0]?.isError).toBe(true);
-      expect(result.content?.[0]?.text).toContain('Invalid log type');
+      expect(result.isError).toBe(true);
+      expect(result.content?.[0]?.type).toBe('text');
+      if (result.content?.[0]?.type === 'text') {
+        expect(result.content[0].text).toContain('Invalid log type');
+      }
     });
 
     it('should return error when mixing session types', async () => {
@@ -109,8 +112,8 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(automateResult.content?.[0]?.isError).toBe(true);
-      expect(appAutomateResult.content?.[0]?.isError).toBe(true);
+      expect(automateResult.isError).toBe(true);
+      expect(appAutomateResult.isError).toBe(true);
     });
   });
 
@@ -150,7 +153,9 @@ describe('BrowserStack Failure Logs', () => {
 
       expect(automate.retrieveNetworkFailures).toHaveBeenCalledWith(mockSessionId, expect.anything());
       expect(result.content?.[0]?.type).toBe('text');
-      expect(result.content?.[0]?.text).toContain('Network Failures (1 found)');
+      if (result.content?.[0]?.type === 'text') {
+        expect(result.content[0].text).toContain('Network Failures (1 found)');
+      }
     });
 
     it('should fetch session logs successfully', async () => {
@@ -162,8 +167,10 @@ describe('BrowserStack Failure Logs', () => {
       }, mockServer);
 
       expect(automate.retrieveSessionFailures).toHaveBeenCalledWith(mockSessionId, expect.anything());
-      expect(result.content?.[0]?.text).toContain('Session Failures (1 found)');
-      expect(result.content?.[0]?.text).toContain('[ERROR] Test failed');
+      if (result.content?.[0]?.type === 'text') {
+        expect(result.content[0].text).toContain('Session Failures (1 found)');
+        expect(result.content[0].text).toContain('[ERROR] Test failed');
+      }
     });
 
     it('should fetch console logs successfully', async () => {
@@ -175,8 +182,10 @@ describe('BrowserStack Failure Logs', () => {
       }, mockServer);
 
       expect(automate.retrieveConsoleFailures).toHaveBeenCalledWith(mockSessionId, expect.anything());
-      expect(result.content?.[0]?.text).toContain('Console Failures (1 found)');
-      expect(result.content?.[0]?.text).toContain('Uncaught TypeError');
+      if (result.content?.[0]?.type === 'text') {
+        expect(result.content[0].text).toContain('Console Failures (1 found)');
+        expect(result.content[0].text).toContain('Uncaught TypeError');
+      }
     });
   });
 
@@ -203,8 +212,10 @@ describe('BrowserStack Failure Logs', () => {
       }, mockServer);
 
       expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything());
-      expect(result.content?.[0]?.text).toContain('Device Failures (1 found)');
-      expect(result.content?.[0]?.text).toContain('Fatal Exception');
+      if (result.content?.[0]?.type === 'text') {
+        expect(result.content[0].text).toContain('Device Failures (1 found)');
+        expect(result.content[0].text).toContain('Fatal Exception');
+      }
     });
 
     it('should fetch appium logs successfully', async () => {
@@ -217,8 +228,10 @@ describe('BrowserStack Failure Logs', () => {
       }, mockServer);
 
       expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything());
-      expect(result.content?.[0]?.text).toContain('Appium Failures (1 found)');
-      expect(result.content?.[0]?.text).toContain('Element not found');
+      if (result.content?.[0]?.type === 'text') {
+        expect(result.content[0].text).toContain('Appium Failures (1 found)');
+        expect(result.content[0].text).toContain('Element not found');
+      }
     });
 
     it('should fetch crash logs successfully', async () => {
@@ -231,8 +244,10 @@ describe('BrowserStack Failure Logs', () => {
       }, mockServer);
 
       expect(appAutomate.retrieveCrashLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything());
-      expect(result.content?.[0]?.text).toContain('Crash Failures (1 found)');
-      expect(result.content?.[0]?.text).toContain('signal 11');
+      if (result.content?.[0]?.type === 'text') {
+        expect(result.content[0].text).toContain('Crash Failures (1 found)');
+        expect(result.content[0].text).toContain('signal 11');
+      }
     });
   });
 
@@ -247,7 +262,9 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'automate'
       }, mockServer);
 
-      expect(result.content?.[0]?.text).toBe('No network failures found');
+      if (result.content?.[0]?.type === 'text') {
+        expect(result.content[0].text).toBe('No network failures found');
+      }
     });
   });
 

@@ -72,7 +72,6 @@ export async function listTestCases(
           {
             type: "text",
             text: `Failed to list test cases: ${JSON.stringify(resp_data)}`,
-            isError: true,
           },
         ],
         isError: true,

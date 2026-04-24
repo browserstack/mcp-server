@@ -59,7 +59,6 @@ export async function listTestRuns(
           {
             type: "text",
             text: `Failed to list test runs: ${JSON.stringify(data)}`,
-            isError: true,
           },
         ],
         isError: true,

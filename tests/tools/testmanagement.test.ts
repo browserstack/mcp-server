@@ -47,6 +47,13 @@ vi.mock('../../src/tools/testmanagement-utils/testcase-from-file', () => ({
   createTestCasesFromFile: vi.fn(),
 }));
 
+vi.mock('../../src/tools/testmanagement-utils/TCG-utils/types', () => ({
+  CreateTestCasesFromFileSchema: {
+    parse: (args: any) => args,
+    shape: {},
+  },
+}));
+
 vi.mock('../../src/tools/testmanagement-utils/create-lca-steps', () => ({
   createLCASteps: vi.fn(),
   CreateLCAStepsSchema: {

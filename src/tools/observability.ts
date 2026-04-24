@@ -97,7 +97,6 @@ export default function addObservabilityTools(
             {
               type: "text",
               text: `Failed to get failures in the last run. Error: ${error}. Please open an issue on GitHub if this is an issue with BrowserStack`,
-              isError: true,
             },
           ],
           isError: true,

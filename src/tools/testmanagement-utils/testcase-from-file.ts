@@ -45,7 +45,6 @@ export async function createTestCasesFromFile(
         {
           type: "text",
           text: `Document with ID ${args.documentId} not found.`,
-          isError: true,
         },
       ],
       isError: true,

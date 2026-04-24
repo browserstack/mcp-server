@@ -206,7 +206,7 @@ export async function simulatePercyChangeHandler(
 
     if (Array.isArray(percyInstruction.content)) {
       percyInstruction.content = percyInstruction.content.map((item) => {
-        if (typeof item.text === "string") {
+        if (item.type === "text" && typeof item.text === "string") {
           const updatedText = item.text
             .replace(PERCY_REPLACE_REGEX, PERCY_SIMULATE_INSTRUCTION)
             .replace(PERCY_VERIFICATION_REGEX, "");

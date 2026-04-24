@@ -124,7 +124,6 @@ export async function setupAppAutomateHandler(
       {
         type: "text",
         text: formatAppInstructionsWithNumbers(combinedInstructions),
-        isError: false,
       },
     ],
     isError: false,

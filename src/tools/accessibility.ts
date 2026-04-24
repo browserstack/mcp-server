@@ -50,16 +50,15 @@ function setupAuth(config: BrowserStackConfig): AuthCredentials {
   return { username, password };
 }
 
-function createErrorResponse(message: string, isError = true): CallToolResult {
+function createErrorResponse(message: string): CallToolResult {
   return {
     content: [
       {
         type: "text",
         text: message,
-        isError,
       },
     ],
-    isError,
+    isError: true,
   };
 }
 
@@ -196,7 +195,12 @@ async function fetchAccessibilityIssues(
 }
 
 async function executeAccessibilityScan(
-  args: { name: string; pageURL: string; authConfigId?: number },
+  args: {
+    name: string;
+    pageURL: string;
+    authConfigId?: number;
+    advancedRules?: boolean;
+  },
   context: ScanProgressContext,
   server: McpServer,
   config: BrowserStackConfig,
@@ -214,6 +218,7 @@ async function executeAccessibilityScan(
       context,
       config,
       args.authConfigId,
+      args.advancedRules,
     );
   } catch (error) {
     return handleMCPError("startAccessibilityScan", server, config, error);
@@ -369,10 +374,16 @@ async function runAccessibilityScan(
   context: ScanProgressContext,
   config: BrowserStackConfig,
   authConfigId?: number,
+  advancedRules?: boolean,
 ): Promise<CallToolResult> {
   const scanner = await initializeScanner(config);
 
-  const startResp = await scanner.startScan(name, [pageURL], authConfigId);
+  const startResp = await scanner.startScan(
+    name,
+    [pageURL],
+    authConfigId,
+    advancedRules,
+  );
   const scanId = startResp.data!.id;
   const scanRunId = startResp.data!.scanRunId;
 
@@ -432,6 +443,10 @@ export default function addAccessibilityTools(
         .number()
         .optional()
         .describe("Optional auth config ID for authenticated scans"),
+      advancedRules: z
+        .boolean()
+        .optional()
+        .describe("Enable advanced accessibility rules in the scan settings"),
     },
     async (args, context) => {
       return await executeAccessibilityScan(args, context, server, config);

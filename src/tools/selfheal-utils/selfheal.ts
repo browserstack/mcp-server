@@ -11,11 +11,120 @@ interface SelectorMapping {
   };
 }
 
+export interface LocatorRef {
+  type: string;
+  value: string;
+}
+
+export interface HealedSelectorEntry {
+  original_locator: LocatorRef;
+  healed_locator: LocatorRef;
+  timestamp?: string;
+  healing_thought?: string;
+  healed_element_screenshot_url?: string;
+}
+
+export interface HealingLog {
+  session_id: string;
+  session_name?: string;
+  product?: string;
+  os?: string;
+  browser?: string;
+  browser_version?: string;
+  healed_selectors: HealedSelectorEntry[];
+  healing_attempted_logs?: unknown[];
+  session_url?: string;
+}
+
+export interface SelfHealingReport {
+  report_meta: Record<string, unknown>;
+  healing_logs: HealingLog[];
+}
+
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 
 type SessionType = "automate" | "app-automate";
+
+const SELF_HEAL_REPORT_BASE =
+  "https://api-automation.browserstack.com/ext/v1/builds";
+
+/**
+ * Fetches the self-healing report for a build via the build-scoped API.
+ *
+ * Two-step flow:
+ *   1. GET /ext/v1/builds/{buildUuid}/selfHealingReport -> { url, expiry }
+ *   2. GET <presigned S3 url> -> full report JSON
+ *
+ * Returns the full report so the caller (LLM) has rich context (metrics,
+ * screenshots, healing thoughts) when deciding which selectors to apply.
+ */
+export async function fetchSelfHealingReportByBuild(
+  buildUuid: string,
+  config: BrowserStackConfig,
+): Promise<SelfHealingReport> {
+  if (!buildUuid) {
+    throw new Error("buildUuid is required");
+  }
+
+  const authString = getBrowserStackAuth(config);
+  const auth = Buffer.from(authString).toString("base64");
+
+  const presignedResp = await apiClient.get<Record<string, unknown>>({
+    url: `${SELF_HEAL_REPORT_BASE}/${encodeURIComponent(buildUuid)}/selfHealingReport`,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Basic ${auth}`,
+    },
+  });
+  await assertOkResponse(presignedResp, "self-healing report");
+
+  const presignedUrl = extractPresignedUrl(presignedResp.data);
+  if (!presignedUrl) {
+    throw new Error(
+      "Self-healing report response did not contain a presigned URL",
+    );
+  }
+
+  const reportResp = await apiClient.get<SelfHealingReport>({
+    url: presignedUrl,
+  });
+  await assertOkResponse(reportResp, "self-healing report payload");
+
+  return reportResp.data;
+}
+
+function extractPresignedUrl(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const candidates = ["url", "presigned_url", "signed_url", "s3_url"];
+  const obj = payload as Record<string, unknown>;
+  for (const key of candidates) {
+    const value = obj[key];
+    if (typeof value === "string" && /^https?:\/\//.test(value)) {
+      return value;
+    }
+  }
+  // Some APIs nest the URL one level deeper (e.g. { data: { url } }).
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === "object") {
+      const nested = extractPresignedUrl(value);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Convenience: flatten all healed_selectors across sessions in a report.
+ */
+export function flattenHealedSelectors(
+  report: SelfHealingReport,
+): HealedSelectorEntry[] {
+  return (report.healing_logs ?? []).flatMap(
+    (log) => log.healed_selectors ?? [],
+  );
+}
 
 export async function getSelfHealSelectors(
   sessionId: string,

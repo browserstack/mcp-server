@@ -57,6 +57,17 @@ import {
   createLCASteps,
   CreateLCAStepsSchema,
 } from "./testmanagement-utils/create-lca-steps.js";
+
+import {
+  listTestPlans,
+  ListTestPlansSchema,
+} from "./testmanagement-utils/list-testplans.js";
+
+import {
+  getTestPlan,
+  GetTestPlanSchema,
+} from "./testmanagement-utils/get-testplan.js";
+
 import { BrowserStackConfig } from "../lib/types.js";
 
 //TODO: Moving the traceMCP and catch block to the parent(server) function
@@ -433,6 +444,72 @@ export async function createLCAStepsTool(
 }
 
 /**
+ * Lists test plans in a project.
+ */
+export async function listTestPlansTool(
+  args: z.infer<typeof ListTestPlansSchema>,
+  config: BrowserStackConfig,
+  server: McpServer,
+): Promise<CallToolResult> {
+  try {
+    trackMCP(
+      "listTestPlans",
+      server.server.getClientVersion()!,
+      undefined,
+      config,
+    );
+    return await listTestPlans(args, config);
+  } catch (err) {
+    logger.error("Failed to list test plans: %s", err);
+    trackMCP("listTestPlans", server.server.getClientVersion()!, err, config);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to list test plans: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Fetches a test plan by identifier, with its linked runs and a derived status summary.
+ */
+export async function getTestPlanTool(
+  args: z.infer<typeof GetTestPlanSchema>,
+  config: BrowserStackConfig,
+  server: McpServer,
+): Promise<CallToolResult> {
+  try {
+    trackMCP(
+      "getTestPlan",
+      server.server.getClientVersion()!,
+      undefined,
+      config,
+    );
+    return await getTestPlan(args, config);
+  } catch (err) {
+    logger.error("Failed to fetch test plan: %s", err);
+    trackMCP("getTestPlan", server.server.getClientVersion()!, err, config);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to fetch test plan: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
  * Registers both project/folder and test-case tools.
  */
 export default function addTestManagementTools(
@@ -517,6 +594,20 @@ export default function addTestManagementTools(
     "Generate Low Code Automation (LCA) steps for a test case in BrowserStack Test Management using the Low Code Automation Agent.",
     CreateLCAStepsSchema.shape,
     (args, context) => createLCAStepsTool(args, context, config, server),
+  );
+
+  tools.listTestPlans = server.tool(
+    "listTestPlans",
+    "List test plans in a BrowserStack Test Management project. Returns each plan's identifier (TP-*), name, status, description, dates, and active/closed test-run counts. Supports pagination.",
+    ListTestPlansSchema.shape,
+    (args) => listTestPlansTool(args, config, server),
+  );
+
+  tools.getTestPlan = server.tool(
+    "getTestPlan",
+    "Fetch a test plan by identifier (TP-*) from BrowserStack Test Management. Returns plan metadata, the full list of linked test runs, total test-case count across runs, and a status summary — suitable for generating test documentation or QA status reports.",
+    GetTestPlanSchema.shape,
+    (args) => getTestPlanTool(args, config, server),
   );
 
   return tools;

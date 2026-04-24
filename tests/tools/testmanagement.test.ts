@@ -8,7 +8,9 @@ import {
   uploadProductRequirementFileTool,
   createTestCasesFromFileTool,
   createLCAStepsTool,
-  listTestCasesTool
+  listTestCasesTool,
+  listTestPlansTool,
+  getTestPlanTool,
 } from '../../src/tools/testmanagement';
 import addTestManagementTools from '../../src/tools/testmanagement';
 import { createProjectOrFolder } from '../../src/tools/testmanagement-utils/create-project-folder';
@@ -18,6 +20,8 @@ import { createTestRun } from '../../src/tools/testmanagement-utils/create-testr
 import { addTestResult } from '../../src/tools/testmanagement-utils/add-test-result';
 import { listTestRuns } from '../../src/tools/testmanagement-utils/list-testruns';
 import { updateTestRun } from '../../src/tools/testmanagement-utils/update-testrun';
+import { listTestPlans } from '../../src/tools/testmanagement-utils/list-testplans';
+import { getTestPlan } from '../../src/tools/testmanagement-utils/get-testplan';
 import { createTestCasesFromFile } from '../../src/tools/testmanagement-utils/testcase-from-file';
 import { createLCASteps } from '../../src/tools/testmanagement-utils/create-lca-steps';
 import axios from 'axios';
@@ -143,6 +147,20 @@ vi.mock('../../src/tools/testmanagement-utils/update-testrun', () => ({
 vi.mock('../../src/tools/testmanagement-utils/list-testcases', () => ({
   listTestCases: vi.fn(),
   ListTestCasesSchema: {
+    parse: (args: any) => args,
+    shape: {},
+  },
+}));
+vi.mock('../../src/tools/testmanagement-utils/list-testplans', () => ({
+  listTestPlans: vi.fn(),
+  ListTestPlansSchema: {
+    parse: (args: any) => args,
+    shape: {},
+  },
+}));
+vi.mock('../../src/tools/testmanagement-utils/get-testplan', () => ({
+  getTestPlan: vi.fn(),
+  GetTestPlanSchema: {
     parse: (args: any) => args,
     shape: {},
   },
@@ -692,3 +710,83 @@ vi.mock('../../src/tools/testmanagement-utils/upload-file', () => {
 });
 
 // Get the mocked uploadFile
+
+describe('listTestPlansTool', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const projectId = 'PR-127';
+  const mockPlans = [
+    { identifier: 'TP-25', name: 'Release 1.0', active_state: 'active' },
+    { identifier: 'TP-26', name: 'Release 2.0', active_state: 'active' },
+  ];
+
+  it('should return summary and raw JSON on success', async () => {
+    (listTestPlans as Mock).mockResolvedValue({
+      content: [
+        { type: 'text', text: 'Found 2 test plan(s) in project PR-127:\n\n• TP-25: Release 1.0 [active]' },
+        { type: 'text', text: JSON.stringify(mockPlans, null, 2) },
+      ],
+      isError: false,
+    });
+    const result = await listTestPlansTool({ project_identifier: projectId }, mockConfig, mockServer);
+    expect(result.isError).toBe(false);
+    expect(result.content?.[0]?.text).toContain('Found 2 test plan(s)');
+    expect(result.content?.[1]?.text).toBe(JSON.stringify(mockPlans, null, 2));
+  });
+
+  it('should handle errors', async () => {
+    (listTestPlans as Mock).mockRejectedValue(new Error('Network Error'));
+    const result = await listTestPlansTool({ project_identifier: projectId }, mockConfig, mockServer);
+    expect(result.isError).toBe(true);
+    expect(result.content?.[0]?.text).toContain('Failed to list test plans: Network Error');
+  });
+});
+
+describe('getTestPlanTool', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const args = {
+    project_identifier: 'PR-127',
+    test_plan_identifier: 'TP-25',
+  };
+
+  it('should return plan details, linked runs and status summary on success', async () => {
+    const payload = {
+      test_plan: {
+        identifier: 'TP-25',
+        name: 'Release 1.0',
+        active_state: 'active',
+        description: 'Plan for Release 1.0',
+      },
+      linked_test_runs: [
+        { identifier: 'TR-1', name: 'Run One', run_state: 'new_run', test_cases_count: 10 },
+        { identifier: 'TR-2', name: 'Run Two', run_state: 'done', test_cases_count: 5 },
+      ],
+      status_summary: { new_run: 1, done: 1 },
+      total_test_cases: 15,
+    };
+    (getTestPlan as Mock).mockResolvedValue({
+      content: [
+        { type: 'text', text: 'Test Plan TP-25: Release 1.0\nStatus: active\nTotal test cases across runs: 15' },
+        { type: 'text', text: JSON.stringify(payload, null, 2) },
+      ],
+      isError: false,
+    });
+    const result = await getTestPlanTool(args, mockConfig, mockServer);
+    expect(result.isError).toBe(false);
+    expect(result.content?.[0]?.text).toContain('TP-25');
+    expect(result.content?.[0]?.text).toContain('Total test cases across runs: 15');
+    expect(result.content?.[1]?.text).toBe(JSON.stringify(payload, null, 2));
+  });
+
+  it('should handle errors', async () => {
+    (getTestPlan as Mock).mockRejectedValue(new Error('Not Found'));
+    const result = await getTestPlanTool(args, mockConfig, mockServer);
+    expect(result.isError).toBe(true);
+    expect(result.content?.[0]?.text).toContain('Failed to fetch test plan: Not Found');
+  });
+});

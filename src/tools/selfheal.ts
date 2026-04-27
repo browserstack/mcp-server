@@ -15,7 +15,31 @@ import {
 import logger from "../logger.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
-import { resolveBrowserStackAuth } from "../lib/get-auth.js";
+
+// Local helper: merges per-call credential overrides (when the user pastes
+// credentials in chat) with the server-configured pair, returning null when
+// neither source has a usable username/accessKey. Lives here because the
+// self-heal tools are the only callers that need to degrade gracefully —
+// `getBrowserStackAuth` throws, which is wrong for these flows.
+function resolveBrowserStackAuth(
+  config: BrowserStackConfig,
+  overrides: { username?: string; accessKey?: string } = {},
+): { config: BrowserStackConfig } | null {
+  const username = (
+    overrides.username?.trim() || config["browserstack-username"] || ""
+  ).trim();
+  const accessKey = (
+    overrides.accessKey?.trim() || config["browserstack-access-key"] || ""
+  ).trim();
+  if (!username || !accessKey) return null;
+  return {
+    config: {
+      ...config,
+      "browserstack-username": username,
+      "browserstack-access-key": accessKey,
+    },
+  };
+}
 
 type SessionType = "automate" | "app-automate";
 
@@ -564,51 +588,33 @@ export default function addSelfHealTools(
 
   tools.fetchSelfHealedSelectors = server.tool(
     "fetchSelfHealedSelectors",
-    "Retrieves self-healed selectors for a BrowserStack run along with the " +
-      "test source code for each session. Provide EITHER sessionId (legacy " +
-      "log-parse path for a single Automate/App-Automate session) OR buildUuid " +
-      "(calls the build-scoped self-healing report API and returns the full " +
-      "report so the caller can review the healed selectors and pass the " +
-      "relevant subset to `prepareSelfHealingPlan`, which bundles the " +
-      "locator pairs with test code as context for the calling LLM to edit " +
-      "files directly). `username` and `accessKey` are optional — when the " +
-      "user shares their BrowserStack credentials in chat, forward them " +
-      "here; otherwise the server-configured credentials are used. If " +
-      "neither is available, the tool will tell you to ask the user for " +
-      "credentials. The response includes test code context (filename, " +
-      "source code, VCS URL) to help locate and fix selectors accurately.",
+    "Fetch BrowserStack self-healed selectors plus the test source code for " +
+      "the run. Provide exactly one of `sessionId` (single Automate / " +
+      "App-Automate session) or `buildUuid` (full self-healing report for a " +
+      "build). Pass the returned locator pairs to `prepareSelfHealingPlan` " +
+      "to plan edits. `username`/`accessKey` are optional — forward them " +
+      "when the user shares credentials in chat; otherwise the server " +
+      "config is used.",
     {
       sessionId: z
         .string()
-        .describe(
-          "Session ID (legacy mode). Mutually exclusive with buildUuid.",
-        )
+        .describe("Session ID. Mutually exclusive with buildUuid.")
         .optional(),
       sessionType: z
         .enum(["automate", "app-automate"])
-        .describe(
-          "Only meaningful with sessionId; defaults to automate when omitted.",
-        )
+        .describe("Used with sessionId. Defaults to automate.")
         .optional(),
       buildUuid: z
         .string()
-        .describe(
-          "Build UUID (new mode). Fetches the self-healing report for the build.",
-        )
+        .describe("Build UUID. Fetches the build's self-healing report.")
         .optional(),
       username: z
         .string()
-        .describe(
-          "Optional BrowserStack username. Supply this when the user provides " +
-            "their credentials in chat; otherwise the server config is used.",
-        )
+        .describe("Optional BrowserStack username override.")
         .optional(),
       accessKey: z
         .string()
-        .describe(
-          "Optional BrowserStack access key (password). Supply alongside " +
-            "`username` when the user provides credentials in chat.",
-        )
+        .describe("Optional BrowserStack access key override.")
         .optional(),
     },
     async (args) => {
@@ -627,14 +633,14 @@ export default function addSelfHealTools(
           error,
           config,
         );
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
+        const context = args.sessionId
+          ? `fetching self-heal selectors for sessionId=${args.sessionId}`
+          : args.buildUuid
+            ? `fetching self-healing report for buildUuid=${args.buildUuid}`
+            : "fetching self-heal suggestions";
         return {
           content: [
-            {
-              type: "text",
-              text: `Error during fetching self-heal suggestions: ${errorMessage}`,
-            },
+            { type: "text", text: friendlyApiError(error, context) },
           ],
           isError: true,
         };
@@ -671,43 +677,30 @@ export default function addSelfHealTools(
 
   tools.prepareSelfHealingPlan = server.tool(
     "prepareSelfHealingPlan",
-    "Builds a self-healing edit plan and returns it to the calling LLM as " +
-      "structured context. This tool DOES NOT modify any files — the calling " +
-      "LLM is expected to apply the edits itself using its file-editing " +
-      "tools. This avoids blind find/replace that would touch every call " +
-      "site sharing an id or class, even ones unrelated to the failing test. " +
-      "`sessions` is lenient and accepts any of these shapes: (a) an array " +
-      "of `{ sessionId, locators: [{ original, healed, thought? }] }`; (b) " +
-      "a single such session object; (c) an envelope like `{ action, " +
-      "sessions: [...] }`; (d) the raw self-healing report `{ healing_logs: " +
-      "[...] }` (with `healed_selectors` in place of `locators`); (e) " +
-      "snake_case variants (`session_id`, `original_locator`, " +
-      "`healed_locator`, `healing_thought`). For each session, the tool " +
-      "fetches the test source code (filename + code + VCS URL) and returns " +
-      "it bundled with the locator pairs. `username` and `accessKey` are " +
-      "optional — forward them when the user supplied BrowserStack " +
-      "credentials in chat; otherwise the server config is used. Missing " +
-      "credentials do NOT block plan generation — they only skip the test " +
-      "code enrichment.",
+    "Build a self-healing edit plan that bundles locator pairs with test " +
+      "source code for the calling LLM to apply with its own editing tools. " +
+      "This tool does NOT modify files — it returns structured context so " +
+      "the LLM can edit only the relevant call sites (avoids blind " +
+      "find/replace across shared ids/classes). `sessions` accepts the " +
+      "canonical shape `[{sessionId, locators: [{original, healed, " +
+      "thought?}]}]`, a single session object, an envelope `{sessions: " +
+      "[...]}`, the raw report `{healing_logs: [...]}` (with " +
+      "`healed_selectors` aliasing `locators`), and snake_case keys " +
+      "(`session_id`, `original_locator`, `healed_locator`, " +
+      "`healing_thought`). `username`/`accessKey` are optional and only " +
+      "used to enrich the plan with test code; missing credentials do not " +
+      "block plan generation.",
     {
       sessions: sessionsFieldSchema.describe(
-        "Sessions to plan edits for. Accepts the canonical shape, envelope " +
-          "wrappers, a single session object, or the raw healing report " +
-          "(see tool description).",
+        "Sessions to plan edits for. See tool description for accepted shapes.",
       ),
       username: z
         .string()
-        .describe(
-          "Optional BrowserStack username. Needed only to fetch test code " +
-            "context for each session.",
-        )
+        .describe("Optional BrowserStack username override.")
         .optional(),
       accessKey: z
         .string()
-        .describe(
-          "Optional BrowserStack access key. Needed only to fetch test code " +
-            "context for each session.",
-        )
+        .describe("Optional BrowserStack access key override.")
         .optional(),
     },
     async (args) => {
@@ -726,15 +719,14 @@ export default function addSelfHealTools(
           error,
           config,
         );
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
         return {
           content: [
             {
               type: "text",
-              text: `Error preparing self-healing plan: ${errorMessage}`,
+              text: friendlyApiError(error, "preparing self-healing plan"),
             },
           ],
+          isError: true,
         };
       }
     },

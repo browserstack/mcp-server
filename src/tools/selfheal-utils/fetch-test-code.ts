@@ -10,6 +10,14 @@ export interface TestCodeEntry {
   code: string | null;
   filename: string | null;
   url: string | null;
+  language?: string | null;
+  type?: string | null;
+}
+
+interface TestCodeApiResponse {
+  sessionId?: string;
+  buildUuid?: string;
+  tests?: TestCodeEntry[];
 }
 
 /**
@@ -42,6 +50,20 @@ export interface SessionTestCode {
   status: TestCodeFetchStatus;
   httpStatus?: number;
   errorMessage?: string;
+}
+
+/**
+ * Normalizes the testCode response. The Observability API used to return a
+ * bare array of TestCodeEntry, but now wraps it as
+ * `{ sessionId, buildUuid, tests: TestCodeEntry[] }`. Accept both shapes so
+ * the integration is resilient to either deployment.
+ */
+function extractTests(
+  data: TestCodeApiResponse | TestCodeEntry[] | null | undefined,
+): TestCodeEntry[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  return Array.isArray(data.tests) ? data.tests : [];
 }
 
 function classifyByHttpStatus(status: number): TestCodeFetchStatus {
@@ -85,7 +107,7 @@ export async function fetchTestCodeBySession(
   const url = `${OBSERVABILITY_API_BASE}/sessions/${encodeURIComponent(sessionId)}/testCode`;
 
   try {
-    const response = await apiClient.get<TestCodeEntry[]>({
+    const response = await apiClient.get<TestCodeApiResponse | TestCodeEntry[]>({
       url,
       headers: {
         "Content-Type": "application/json",
@@ -106,7 +128,7 @@ export async function fetchTestCodeBySession(
       };
     }
 
-    const tests = Array.isArray(response.data) ? response.data : [];
+    const tests = extractTests(response.data);
     return {
       sessionId,
       tests,

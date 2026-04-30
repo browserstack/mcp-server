@@ -31,9 +31,13 @@ export async function runPercyScan(
   const hasUpdatedFiles = checkForUpdatedFiles(stored, projectName);
   const updatedFiles = hasUpdatedFiles ? getUpdatedFiles(stored) : [];
 
+  // Token is fetched to validate the project but is intentionally NOT echoed
+  // back in tool output — see generatePercyTokenInstructions() for why.
+  void percyToken;
+
   // Build steps array with conditional spread
   const steps = [
-    generatePercyTokenInstructions(percyToken),
+    generatePercyTokenInstructions(),
     ...(hasUpdatedFiles ? generateUpdatedFilesSteps(stored, updatedFiles) : []),
     ...(instruction && !hasUpdatedFiles
       ? generateInstructionSteps(instruction)
@@ -55,12 +59,17 @@ export async function runPercyScan(
   };
 }
 
-function generatePercyTokenInstructions(percyToken: string): string {
-  return `Set the environment variable for your project:
+// SECURITY: Never interpolate the actual Percy token into this output.
+// The token is fetched from a privileged BrowserStack backend and emitting it
+// in tool output exposes it across a trust boundary (HackerOne #3576387).
+// Always return placeholder-only instructions and direct the user to the
+// Percy dashboard to retrieve their own token.
+function generatePercyTokenInstructions(): string {
+  return `Set the PERCY_TOKEN environment variable for your project. Retrieve your project's token from the Percy dashboard (https://percy.io → Project Settings → Project Token), then export it locally — do not paste it into chat or commit it:
 
-export PERCY_TOKEN="${percyToken}"
-
-(For Windows: use 'setx PERCY_TOKEN "${percyToken}"' or 'set PERCY_TOKEN=${percyToken}' as appropriate.)`;
+  - macOS/Linux:    export PERCY_TOKEN="<your Percy project token>"
+  - Windows (PS):   $env:PERCY_TOKEN="<your Percy project token>"
+  - Windows (CMD):  set PERCY_TOKEN=<your Percy project token>`;
 }
 
 const toAbs = (p: string): string | undefined =>

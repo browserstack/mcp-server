@@ -29,8 +29,11 @@ const mockConfig = {
 describe("runPercyScan", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("SUCCESS: returns Percy token and run instructions", async () => {
-    (fetchPercyToken as Mock).mockResolvedValue("percy-token-abc");
+  // SECURITY (HackerOne #3576387): the Percy token is fetched from a privileged
+  // BrowserStack backend and must never appear in tool output text.
+  it("SECURITY: never echoes the fetched Percy token in output", async () => {
+    const SECRET = "percy-secret-token-DO-NOT-LEAK";
+    (fetchPercyToken as Mock).mockResolvedValue(SECRET);
     (storedPercyResults.get as Mock).mockReturnValue(null);
 
     const result = await runPercyScan(
@@ -41,12 +44,17 @@ describe("runPercyScan", () => {
       mockConfig,
     );
 
-    expect(result.content[0].text).toContain("percy-token-abc");
-    expect(result.content[0].text).toContain("PERCY_TOKEN");
+    const text = result.content[0].text as string;
+    expect(text).not.toContain(SECRET);
+    // Output should still mention PERCY_TOKEN as the env var name and use a
+    // placeholder so users know what to set.
+    expect(text).toContain("PERCY_TOKEN");
+    expect(text).toContain("<your Percy project token>");
   });
 
   it("SUCCESS: includes updated file instructions when available", async () => {
-    (fetchPercyToken as Mock).mockResolvedValue("percy-token-abc");
+    const SECRET = "percy-secret-token-DO-NOT-LEAK";
+    (fetchPercyToken as Mock).mockResolvedValue(SECRET);
     (storedPercyResults.get as Mock).mockReturnValue({
       projectName: "my-project",
       testFiles: { "/tests/login.test.js": true },
@@ -62,11 +70,14 @@ describe("runPercyScan", () => {
       mockConfig,
     );
 
-    expect(result.content[0].text).toContain("percy-token-abc");
+    const text = result.content[0].text as string;
+    expect(text).not.toContain(SECRET);
+    expect(text).toContain("Updated files to run");
   });
 
   it("SUCCESS: includes custom instruction steps", async () => {
-    (fetchPercyToken as Mock).mockResolvedValue("percy-token-abc");
+    const SECRET = "percy-secret-token-DO-NOT-LEAK";
+    (fetchPercyToken as Mock).mockResolvedValue(SECRET);
     (storedPercyResults.get as Mock).mockReturnValue(null);
 
     const result = await runPercyScan(
@@ -78,8 +89,9 @@ describe("runPercyScan", () => {
       mockConfig,
     );
 
-    expect(result.content[0].text).toContain("percy-token-abc");
-    expect(result.content[0].text).toContain("npx percy exec");
+    const text = result.content[0].text as string;
+    expect(text).not.toContain(SECRET);
+    expect(text).toContain("npx percy exec");
   });
 
   it("FAIL: throws when Percy token fetch fails", async () => {

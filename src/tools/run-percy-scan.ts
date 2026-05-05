@@ -1,8 +1,5 @@
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { PercyIntegrationTypeEnum } from "./sdk-utils/common/types.js";
-import { BrowserStackConfig } from "../lib/types.js";
-import { getBrowserStackAuth } from "../lib/get-auth.js";
-import { fetchPercyToken } from "./sdk-utils/percy-web/fetchPercyToken.js";
 import { storedPercyResults } from "../lib/inmemory-store.js";
 import {
   getFrameworkTestCommand,
@@ -10,19 +7,12 @@ import {
 } from "./sdk-utils/percy-web/constants.js";
 import path from "path";
 
-export async function runPercyScan(
-  args: {
-    projectName: string;
-    integrationType: PercyIntegrationTypeEnum;
-    instruction?: string;
-  },
-  config: BrowserStackConfig,
-): Promise<CallToolResult> {
-  const { projectName, integrationType, instruction } = args;
-  const authorization = getBrowserStackAuth(config);
-  const percyToken = await fetchPercyToken(projectName, authorization, {
-    type: integrationType,
-  });
+export async function runPercyScan(args: {
+  projectName: string;
+  integrationType: PercyIntegrationTypeEnum;
+  instruction?: string;
+}): Promise<CallToolResult> {
+  const { projectName, instruction } = args;
 
   // Check if we have stored data and project matches
   const stored = storedPercyResults.get();
@@ -33,7 +23,7 @@ export async function runPercyScan(
 
   // Build steps array with conditional spread
   const steps = [
-    generatePercyTokenInstructions(percyToken),
+    generatePercyTokenInstructions(),
     ...(hasUpdatedFiles ? generateUpdatedFilesSteps(stored, updatedFiles) : []),
     ...(instruction && !hasUpdatedFiles
       ? generateInstructionSteps(instruction)
@@ -55,12 +45,14 @@ export async function runPercyScan(
   };
 }
 
-function generatePercyTokenInstructions(percyToken: string): string {
-  return `Set the environment variable for your project:
+function generatePercyTokenInstructions(): string {
+  return `Set the PERCY_TOKEN environment variable for your project. Retrieve your project's token from the Percy dashboard (https://percy.io → Project Settings → Project Token) and add it to your project's .env file (PERCY_TOKEN=<your Percy project token>) or export it in your shell:
 
-export PERCY_TOKEN="${percyToken}"
+  - macOS/Linux:    export PERCY_TOKEN="<your Percy project token>"
+  - Windows (PS):   $env:PERCY_TOKEN="<your Percy project token>"
+  - Windows (CMD):  set PERCY_TOKEN=<your Percy project token>
 
-(For Windows: use 'setx PERCY_TOKEN "${percyToken}"' or 'set PERCY_TOKEN=${percyToken}' as appropriate.)`;
+Do not paste the token into chat or commit it.`;
 }
 
 const toAbs = (p: string): string | undefined =>

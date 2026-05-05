@@ -10,10 +10,7 @@ import {
 
 export let percyWebSetupInstructions = "";
 
-export function runPercyWeb(
-  input: SetUpPercyInput,
-  percyToken: string,
-): RunTestsInstructionResult {
+export function runPercyWeb(input: SetUpPercyInput): RunTestsInstructionResult {
   const steps: RunTestsStep[] = [];
 
   // Assume configuration is supported due to guardrails at orchestration layer
@@ -32,9 +29,12 @@ export function runPercyWeb(
   steps.push({
     type: "instruction",
     title: "Set Percy Token in Environment",
-    content: `Set the environment variable for your project:
-        export PERCY_TOKEN="${percyToken}"
-        (For Windows: use 'setx PERCY_TOKEN "${percyToken}"' or 'set PERCY_TOKEN=${percyToken}' as appropriate.)`,
+    content: `Retrieve your project's token from the Percy dashboard (https://percy.io → Project Settings → Project Token) and add it to your project's .env file (PERCY_TOKEN=<your Percy project token>) or export it in your shell:
+        macOS/Linux:    export PERCY_TOKEN="<your Percy project token>"
+        Windows (PS):   $env:PERCY_TOKEN="<your Percy project token>"
+        Windows (CMD):  set PERCY_TOKEN=<your Percy project token>
+
+Do not paste the token into chat or commit it.`,
   });
 
   steps.push({

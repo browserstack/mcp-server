@@ -2,8 +2,6 @@ import { formatToolResult } from "./common/utils.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { PercyIntegrationTypeEnum } from "./common/types.js";
-import { getBrowserStackAuth } from "../../lib/get-auth.js";
-import { fetchPercyToken } from "./percy-web/fetchPercyToken.js";
 import { runPercyWeb } from "./percy-web/handler.js";
 import { runPercyAutomateOnly } from "./percy-automate/handler.js";
 import { runBstackSDKOnly } from "./bstack/sdkHandler.js";
@@ -60,8 +58,6 @@ export async function setUpPercyHandler(
       testFiles: {},
     });
 
-    const authorization = getBrowserStackAuth(config);
-
     const folderPaths = input.folderPaths || [];
     const filePaths = input.filePaths || [];
 
@@ -86,14 +82,7 @@ export async function setUpPercyHandler(
         );
       }
 
-      // Fetch the Percy token
-      const percyToken = await fetchPercyToken(
-        input.projectName,
-        authorization,
-        { type: PercyIntegrationTypeEnum.WEB },
-      );
-
-      const result = runPercyWeb(percyInput, percyToken);
+      const result = runPercyWeb(percyInput);
       return await formatToolResult(result, "percy-web");
     } else if (input.integrationType === PercyIntegrationTypeEnum.AUTOMATE) {
       // First try Percy with BrowserStack SDK
@@ -142,15 +131,7 @@ export async function setUpPercyHandler(
         };
         const sdkResult = await runBstackSDKOnly(sdkInput, config, true);
         // Percy Automate instructions
-        const percyToken = await fetchPercyToken(
-          input.projectName,
-          authorization,
-          { type: PercyIntegrationTypeEnum.AUTOMATE },
-        );
-        const percyAutomateResult = runPercyAutomateOnly(
-          percyInput,
-          percyToken,
-        );
+        const percyAutomateResult = runPercyAutomateOnly(percyInput);
 
         // Combine steps: warning, SDK steps, Percy Automate steps
         const steps = [

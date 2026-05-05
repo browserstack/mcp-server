@@ -1,15 +1,8 @@
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import { runPercyScan } from "../../src/tools/run-percy-scan";
-import { fetchPercyToken } from "../../src/tools/sdk-utils/percy-web/fetchPercyToken";
 import { storedPercyResults } from "../../src/lib/inmemory-store";
 import { PercyIntegrationTypeEnum } from "../../src/tools/sdk-utils/common/types";
 
-vi.mock("../../src/lib/get-auth", () => ({
-  getBrowserStackAuth: vi.fn().mockReturnValue("fake-user:fake-key"),
-}));
-vi.mock("../../src/tools/sdk-utils/percy-web/fetchPercyToken", () => ({
-  fetchPercyToken: vi.fn(),
-}));
 vi.mock("../../src/lib/inmemory-store", () => ({
   storedPercyResults: { get: vi.fn(), set: vi.fn() },
 }));
@@ -21,32 +14,24 @@ vi.mock("../../src/logger", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
-const mockConfig = {
-  "browserstack-username": "fake-user",
-  "browserstack-access-key": "fake-key",
-};
-
 describe("runPercyScan", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("SUCCESS: returns Percy token and run instructions", async () => {
-    (fetchPercyToken as Mock).mockResolvedValue("percy-token-abc");
+  it("renders PERCY_TOKEN setup instructions with placeholder", async () => {
     (storedPercyResults.get as Mock).mockReturnValue(null);
 
-    const result = await runPercyScan(
-      {
-        projectName: "my-project",
-        integrationType: PercyIntegrationTypeEnum.WEB,
-      },
-      mockConfig,
-    );
+    const result = await runPercyScan({
+      projectName: "my-project",
+      integrationType: PercyIntegrationTypeEnum.WEB,
+    });
 
-    expect(result.content[0].text).toContain("percy-token-abc");
-    expect(result.content[0].text).toContain("PERCY_TOKEN");
+    const text = result.content[0].text as string;
+    expect(text).toContain("PERCY_TOKEN");
+    expect(text).toContain("<your Percy project token>");
+    expect(text).toContain(".env");
   });
 
-  it("SUCCESS: includes updated file instructions when available", async () => {
-    (fetchPercyToken as Mock).mockResolvedValue("percy-token-abc");
+  it("includes updated file instructions when available", async () => {
     (storedPercyResults.get as Mock).mockReturnValue({
       projectName: "my-project",
       testFiles: { "/tests/login.test.js": true },
@@ -54,48 +39,25 @@ describe("runPercyScan", () => {
       detectedTestingFramework: "jest",
     });
 
-    const result = await runPercyScan(
-      {
-        projectName: "my-project",
-        integrationType: PercyIntegrationTypeEnum.WEB,
-      },
-      mockConfig,
-    );
+    const result = await runPercyScan({
+      projectName: "my-project",
+      integrationType: PercyIntegrationTypeEnum.WEB,
+    });
 
-    expect(result.content[0].text).toContain("percy-token-abc");
+    const text = result.content[0].text as string;
+    expect(text).toContain("Updated files to run");
   });
 
-  it("SUCCESS: includes custom instruction steps", async () => {
-    (fetchPercyToken as Mock).mockResolvedValue("percy-token-abc");
+  it("includes custom instruction steps", async () => {
     (storedPercyResults.get as Mock).mockReturnValue(null);
 
-    const result = await runPercyScan(
-      {
-        projectName: "my-project",
-        integrationType: PercyIntegrationTypeEnum.WEB,
-        instruction: "npx percy exec -- npx playwright test",
-      },
-      mockConfig,
-    );
+    const result = await runPercyScan({
+      projectName: "my-project",
+      integrationType: PercyIntegrationTypeEnum.WEB,
+      instruction: "npx percy exec -- npx playwright test",
+    });
 
-    expect(result.content[0].text).toContain("percy-token-abc");
-    expect(result.content[0].text).toContain("npx percy exec");
-  });
-
-  it("FAIL: throws when Percy token fetch fails", async () => {
-    (fetchPercyToken as Mock).mockRejectedValue(
-      new Error("Percy token not found"),
-    );
-    (storedPercyResults.get as Mock).mockReturnValue(null);
-
-    await expect(
-      runPercyScan(
-        {
-          projectName: "bad-project",
-          integrationType: PercyIntegrationTypeEnum.WEB,
-        },
-        mockConfig,
-      ),
-    ).rejects.toThrow("Percy token not found");
+    const text = result.content[0].text as string;
+    expect(text).toContain("npx percy exec");
   });
 });

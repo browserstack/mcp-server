@@ -2,8 +2,7 @@ import { trackMCP } from "../index.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { fetchPercyChanges } from "./review-agent.js";
 import { addListTestFiles } from "./list-test-files.js";
-// PMAA-100: runPercyScan tool temporarily disabled due to plaintext token leak in tool output.
-// import { runPercyScan } from "./run-percy-scan.js";
+import { runPercyScan } from "./run-percy-scan.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SetUpPercyParamsShape } from "./sdk-utils/common/schema.js";
 import { updateTestsWithPercyCommands } from "./add-percy-snapshots.js";
@@ -22,8 +21,7 @@ import {
 import { UpdateTestFileWithInstructionsParams } from "./percy-snapshot-utils/constants.js";
 
 import {
-  // PMAA-100: kept commented so the registration block below is easy to restore once the proper fix lands.
-  // RunPercyScanParamsShape,
+  RunPercyScanParamsShape,
   FetchPercyChangesParamsShape,
   ManagePercyBuildApprovalParamsShape,
 } from "./sdk-utils/common/schema.js";
@@ -135,22 +133,19 @@ export function registerPercyTools(
     },
   );
 
-  // PMAA-100: runPercyScan temporarily disabled — fetched Percy token was being
-  // returned in plaintext within tool output (see HackerOne #3576387). Re-enable
-  // once the token is replaced with a placeholder in run-percy-scan.ts.
-  // tools.runPercyScan = server.tool(
-  //   "runPercyScan",
-  //   "Run a Percy visual test scan. Example prompts : Run this Percy build/scan. Never run percy scan/build without this tool",
-  //   RunPercyScanParamsShape,
-  //   async (args) => {
-  //     try {
-  //       trackMCP("runPercyScan", server.server.getClientVersion()!, config);
-  //       return runPercyScan(args, config);
-  //     } catch (error) {
-  //       return handleMCPError("runPercyScan", server, config, error);
-  //     }
-  //   },
-  // );
+  tools.runPercyScan = server.tool(
+    "runPercyScan",
+    "Run a Percy visual test scan. Example prompts : Run this Percy build/scan. Never run percy scan/build without this tool",
+    RunPercyScanParamsShape,
+    async (args) => {
+      try {
+        trackMCP("runPercyScan", server.server.getClientVersion()!, config);
+        return runPercyScan(args);
+      } catch (error) {
+        return handleMCPError("runPercyScan", server, config, error);
+      }
+    },
+  );
 
   tools.fetchPercyChanges = server.tool(
     "fetchPercyChanges",

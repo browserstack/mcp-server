@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { registerPercyTools } from "../../src/tools/percy-sdk";
 import { setUpPercyHandler, simulatePercyChangeHandler } from "../../src/tools/sdk-utils/handler";
 import { updateTestsWithPercyCommands } from "../../src/tools/add-percy-snapshots";
-// PMAA-100: runPercyScan registration disabled — restore import alongside the test.
-// import { runPercyScan } from "../../src/tools/run-percy-scan";
+import { runPercyScan } from "../../src/tools/run-percy-scan";
 import { fetchPercyChanges } from "../../src/tools/review-agent";
 import { approveOrDeclinePercyBuild } from "../../src/tools/review-agent-utils/percy-approve-reject";
 
@@ -14,10 +13,9 @@ vi.mock("../../src/tools/sdk-utils/handler", () => ({
 vi.mock("../../src/tools/add-percy-snapshots", () => ({
   updateTestsWithPercyCommands: vi.fn(),
 }));
-// PMAA-100: runPercyScan registration disabled — restore mock alongside the test.
-// vi.mock("../../src/tools/run-percy-scan", () => ({
-//   runPercyScan: vi.fn(),
-// }));
+vi.mock("../../src/tools/run-percy-scan", () => ({
+  runPercyScan: vi.fn(),
+}));
 vi.mock("../../src/tools/review-agent", () => ({
   fetchPercyChanges: vi.fn(),
 }));
@@ -66,8 +64,7 @@ describe("Percy SDK Tools", () => {
     expect(toolNames).toContain("expandPercyVisualTesting");
     expect(toolNames).toContain("addPercySnapshotCommands");
     expect(toolNames).toContain("listTestFiles");
-    // PMAA-100: runPercyScan registration disabled — restore once the token leak is fixed.
-    // expect(toolNames).toContain("runPercyScan");
+    expect(toolNames).toContain("runPercyScan");
     expect(toolNames).toContain("fetchPercyChanges");
     expect(toolNames).toContain("managePercyBuildApproval");
   });
@@ -121,15 +118,14 @@ describe("Percy SDK Tools", () => {
     expect(result.content[0].text).toContain("Commands added");
   });
 
-  // PMAA-100: runPercyScan registration disabled — restore once the token leak is fixed.
-  // it("runPercyScan - SUCCESS", async () => {
-  //   (runPercyScan as any).mockResolvedValue({
-  //     content: [{ type: "text", text: "Percy scan started" }],
-  //   });
-  //
-  //   const result = await handlers["runPercyScan"]({ projectName: "test" });
-  //   expect(result.content[0].text).toContain("Percy scan");
-  // });
+  it("runPercyScan - SUCCESS", async () => {
+    (runPercyScan as any).mockResolvedValue({
+      content: [{ type: "text", text: "Percy scan started" }],
+    });
+
+    const result = await handlers["runPercyScan"]({ projectName: "test" });
+    expect(result.content[0].text).toContain("Percy scan");
+  });
 
   it("fetchPercyChanges - SUCCESS", async () => {
     (fetchPercyChanges as any).mockResolvedValue({

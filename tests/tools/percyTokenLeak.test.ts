@@ -1,7 +1,3 @@
-// Regression tests for HackerOne #3576387: the Percy token is fetched from a
-// privileged BrowserStack backend and must never appear in any tool output.
-// These tests pin the contract for the two SDK handlers so the leak cannot
-// silently return.
 import { describe, it, expect } from "vitest";
 import { runPercyWeb } from "../../src/tools/sdk-utils/percy-web/handler";
 import { runPercyAutomateOnly } from "../../src/tools/sdk-utils/percy-automate/handler";

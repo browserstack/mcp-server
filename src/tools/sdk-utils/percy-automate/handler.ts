@@ -9,10 +9,6 @@ export function runPercyAutomateOnly(
 ): RunTestsInstructionResult {
   const steps: RunTestsStep[] = [];
 
-  // SECURITY: percyToken is intentionally NOT interpolated into any returned
-  // step content. The token is fetched from a privileged BrowserStack backend
-  // and echoing it in tool output would expose it across a trust boundary
-  // (HackerOne #3576387). The parameter is retained for upstream compatibility.
   void percyToken;
 
   // Assume configuration is supported due to guardrails at orchestration layer
@@ -28,8 +24,7 @@ export function runPercyAutomateOnly(
     ? testingFrameworkConfig.instructions
     : "";
 
-  // Prepend a step to set the Percy token in the environment.
-  // Placeholder-only — never emit the real token here.
+  // Prepend a step to set the Percy token in the environment
   steps.push({
     type: "instruction",
     title: "Set Percy Token in Environment",

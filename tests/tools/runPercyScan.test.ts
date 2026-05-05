@@ -29,8 +29,6 @@ const mockConfig = {
 describe("runPercyScan", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  // SECURITY (HackerOne #3576387): the Percy token is fetched from a privileged
-  // BrowserStack backend and must never appear in tool output text.
   it("SECURITY: never echoes the fetched Percy token in output", async () => {
     const SECRET = "percy-secret-token-DO-NOT-LEAK";
     (fetchPercyToken as Mock).mockResolvedValue(SECRET);
@@ -46,8 +44,6 @@ describe("runPercyScan", () => {
 
     const text = result.content[0].text as string;
     expect(text).not.toContain(SECRET);
-    // Output should still mention PERCY_TOKEN as the env var name and use a
-    // placeholder so users know what to set.
     expect(text).toContain("PERCY_TOKEN");
     expect(text).toContain("<your Percy project token>");
   });

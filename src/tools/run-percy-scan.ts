@@ -1,6 +1,5 @@
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { PercyIntegrationTypeEnum } from "./sdk-utils/common/types.js";
-import { BrowserStackConfig } from "../lib/types.js";
 import { storedPercyResults } from "../lib/inmemory-store.js";
 import {
   getFrameworkTestCommand,
@@ -8,14 +7,11 @@ import {
 } from "./sdk-utils/percy-web/constants.js";
 import path from "path";
 
-export async function runPercyScan(
-  args: {
-    projectName: string;
-    integrationType: PercyIntegrationTypeEnum;
-    instruction?: string;
-  },
-  _config: BrowserStackConfig,
-): Promise<CallToolResult> {
+export async function runPercyScan(args: {
+  projectName: string;
+  integrationType: PercyIntegrationTypeEnum;
+  instruction?: string;
+}): Promise<CallToolResult> {
   const { projectName, instruction } = args;
 
   // Check if we have stored data and project matches

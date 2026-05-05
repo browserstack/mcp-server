@@ -140,7 +140,7 @@ export function registerPercyTools(
     async (args) => {
       try {
         trackMCP("runPercyScan", server.server.getClientVersion()!, config);
-        return runPercyScan(args, config);
+        return runPercyScan(args);
       } catch (error) {
         return handleMCPError("runPercyScan", server, config, error);
       }

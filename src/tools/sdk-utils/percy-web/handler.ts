@@ -10,9 +10,7 @@ import {
 
 export let percyWebSetupInstructions = "";
 
-export function runPercyWeb(
-  input: SetUpPercyInput,
-): RunTestsInstructionResult {
+export function runPercyWeb(input: SetUpPercyInput): RunTestsInstructionResult {
   const steps: RunTestsStep[] = [];
 
   // Assume configuration is supported due to guardrails at orchestration layer

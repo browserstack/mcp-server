@@ -14,24 +14,16 @@ vi.mock("../../src/logger", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
-const mockConfig = {
-  "browserstack-username": "fake-user",
-  "browserstack-access-key": "fake-key",
-};
-
 describe("runPercyScan", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("renders PERCY_TOKEN setup instructions with placeholder", async () => {
     (storedPercyResults.get as Mock).mockReturnValue(null);
 
-    const result = await runPercyScan(
-      {
-        projectName: "my-project",
-        integrationType: PercyIntegrationTypeEnum.WEB,
-      },
-      mockConfig,
-    );
+    const result = await runPercyScan({
+      projectName: "my-project",
+      integrationType: PercyIntegrationTypeEnum.WEB,
+    });
 
     const text = result.content[0].text as string;
     expect(text).toContain("PERCY_TOKEN");
@@ -47,13 +39,10 @@ describe("runPercyScan", () => {
       detectedTestingFramework: "jest",
     });
 
-    const result = await runPercyScan(
-      {
-        projectName: "my-project",
-        integrationType: PercyIntegrationTypeEnum.WEB,
-      },
-      mockConfig,
-    );
+    const result = await runPercyScan({
+      projectName: "my-project",
+      integrationType: PercyIntegrationTypeEnum.WEB,
+    });
 
     const text = result.content[0].text as string;
     expect(text).toContain("Updated files to run");
@@ -62,14 +51,11 @@ describe("runPercyScan", () => {
   it("includes custom instruction steps", async () => {
     (storedPercyResults.get as Mock).mockReturnValue(null);
 
-    const result = await runPercyScan(
-      {
-        projectName: "my-project",
-        integrationType: PercyIntegrationTypeEnum.WEB,
-        instruction: "npx percy exec -- npx playwright test",
-      },
-      mockConfig,
-    );
+    const result = await runPercyScan({
+      projectName: "my-project",
+      integrationType: PercyIntegrationTypeEnum.WEB,
+      instruction: "npx percy exec -- npx playwright test",
+    });
 
     const text = result.content[0].text as string;
     expect(text).toContain("npx percy exec");

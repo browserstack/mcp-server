@@ -13,19 +13,20 @@ const JAVA_FRAMEWORK_MAP: Record<string, string> = {
   cucumber: "cucumber-testng",
 } as const;
 
+// The literal access key is never echoed into tool output; users substitute
+// this placeholder locally. See PMAA-100 security review.
+const ACCESS_KEY_PLACEHOLDER = "<your BrowserStack access key>";
+
 // Template for Node.js SDK setup instructions
-const NODEJS_SDK_INSTRUCTIONS = (
-  username: string,
-  accessKey: string,
-): string => `---STEP---
+const NODEJS_SDK_INSTRUCTIONS = (username: string): string => `---STEP---
 Install BrowserStack Node SDK using command:
 \`\`\`bash
 npm i -D browserstack-node-sdk@latest
 \`\`\`
 ---STEP---
-Run the following command to setup browserstack sdk:
+Run the following command to setup browserstack sdk (replace the placeholder with your BrowserStack access key):
 \`\`\`bash
-npx setup --username ${username} --key ${accessKey}
+npx setup --username ${username} --key "${ACCESS_KEY_PLACEHOLDER}"
 \`\`\``;
 
 // Template for Gradle setup instructions (platform-independent)
@@ -44,7 +45,6 @@ const GRADLE_SETUP_INSTRUCTIONS = `
 // Generates Maven archetype command for Windows platform
 function getMavenCommandForWindows(
   username: string,
-  accessKey: string,
   mavenFramework: string,
 ): string {
   return (
@@ -56,7 +56,7 @@ function getMavenCommandForWindows(
     `-DartifactId="${MAVEN_ARCHETYPE_ARTIFACT_ID}" ` +
     `-Dversion="${MAVEN_ARCHETYPE_VERSION}" ` +
     `-DBROWSERSTACK_USERNAME="${username}" ` +
-    `-DBROWSERSTACK_ACCESS_KEY="${accessKey}" ` +
+    `-DBROWSERSTACK_ACCESS_KEY="${ACCESS_KEY_PLACEHOLDER}" ` +
     `-DBROWSERSTACK_FRAMEWORK="${mavenFramework}"`
   );
 }
@@ -64,30 +64,25 @@ function getMavenCommandForWindows(
 // Generates Maven archetype command for Unix-like platforms (macOS/Linux)
 function getMavenCommandForUnix(
   username: string,
-  accessKey: string,
   mavenFramework: string,
 ): string {
   return `mvn archetype:generate -B -DarchetypeGroupId=${MAVEN_ARCHETYPE_GROUP_ID} \\
 -DarchetypeArtifactId=${MAVEN_ARCHETYPE_ARTIFACT_ID} -DarchetypeVersion=${MAVEN_ARCHETYPE_VERSION} \\
 -DgroupId=${MAVEN_ARCHETYPE_GROUP_ID} -DartifactId=${MAVEN_ARCHETYPE_ARTIFACT_ID} -Dversion=${MAVEN_ARCHETYPE_VERSION} \\
 -DBROWSERSTACK_USERNAME="${username}" \\
--DBROWSERSTACK_ACCESS_KEY="${accessKey}" \\
+-DBROWSERSTACK_ACCESS_KEY="${ACCESS_KEY_PLACEHOLDER}" \\
 -DBROWSERSTACK_FRAMEWORK="${mavenFramework}"`;
 }
 
 // Generates Java SDK setup instructions with Maven/Gradle options
-function getJavaSDKInstructions(
-  framework: string,
-  username: string,
-  accessKey: string,
-): string {
+function getJavaSDKInstructions(framework: string, username: string): string {
   const mavenFramework = getJavaFrameworkForMaven(framework);
   const isWindows = process.platform === "win32";
   const platformLabel = isWindows ? "Windows" : "macOS/Linux";
 
   const mavenCommand = isWindows
-    ? getMavenCommandForWindows(username, accessKey, mavenFramework)
-    : getMavenCommandForUnix(username, accessKey, mavenFramework);
+    ? getMavenCommandForWindows(username, mavenFramework)
+    : getMavenCommandForUnix(username, mavenFramework);
 
   return `---STEP---
 Install BrowserStack Java SDK
@@ -105,14 +100,13 @@ export function getSDKPrefixCommand(
   language: SDKSupportedLanguage,
   framework: string,
   username: string,
-  accessKey: string,
 ): string {
   switch (language) {
     case "nodejs":
-      return NODEJS_SDK_INSTRUCTIONS(username, accessKey);
+      return NODEJS_SDK_INSTRUCTIONS(username);
 
     case "java":
-      return getJavaSDKInstructions(framework, username, accessKey);
+      return getJavaSDKInstructions(framework, username);
 
     default:
       return "";

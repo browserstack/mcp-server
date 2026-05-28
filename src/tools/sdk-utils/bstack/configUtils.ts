@@ -16,7 +16,7 @@ export function generateBrowserStackYMLInstructions(
 
   // Get credentials from config
   const authString = getBrowserStackAuth(browserStackConfig);
-  const [username, accessKey] = authString.split(":");
+  const [username] = authString.split(":");
 
   // Generate platform configurations using the utility function
   const platformConfigs = generatePlatformConfigs(config);
@@ -32,7 +32,7 @@ export function generateBrowserStackYMLInstructions(
 # ======================
 
 userName: ${username}
-accessKey: ${accessKey}
+accessKey: "<your BrowserStack access key>"
 
 # TODO: Replace these sample values with your actual project details
 projectName: ${projectName}

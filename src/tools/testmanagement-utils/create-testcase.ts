@@ -21,6 +21,14 @@ interface IssueTracker {
   host: string;
 }
 
+// A custom field value may be a scalar or, for multi-select fields, an array
+// of option values. The TM API accepts arrays only when keyed by field NAME.
+export type CustomFieldValue =
+  | string
+  | number
+  | boolean
+  | Array<string | number>;
+
 export interface TestCaseCreateRequest {
   project_identifier: string;
   folder_id: string;
@@ -32,9 +40,10 @@ export interface TestCaseCreateRequest {
   issues?: string[];
   issue_tracker?: IssueTracker;
   tags?: string[];
-  custom_fields?: Record<string, string>;
+  custom_fields?: Record<string, CustomFieldValue>;
   automation_status?: string;
   priority?: string;
+  template?: string;
 }
 
 export interface TestCaseResponse {
@@ -65,6 +74,14 @@ export interface TestCaseResponse {
     };
   };
 }
+
+// Scalar value, or an array of values for multi-select custom fields.
+export const customFieldValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.union([z.string(), z.number()])),
+]);
 
 export const CreateTestCaseSchema = z.object({
   project_identifier: z
@@ -122,9 +139,11 @@ export const CreateTestCaseSchema = z.object({
       "Tags to attach to the test case. This should be strictly in array format not the string of json",
     ),
   custom_fields: z
-    .record(z.string(), z.string())
+    .record(z.string(), customFieldValueSchema)
     .optional()
-    .describe("Map of custom field names to values."),
+    .describe(
+      "Map of custom field NAME to value; use an array for multi-select fields.",
+    ),
   automation_status: z
     .string()
     .optional()
@@ -137,6 +156,12 @@ export const CreateTestCaseSchema = z.object({
     .describe(
       "Priority of the test case. Accepts either display name (e.g. 'Critical', 'High', 'Medium', 'Low') or internal name (e.g. 'medium'). If omitted, the project default (usually 'Medium') is applied. Valid values are per-project and discoverable via the form-fields endpoint.",
     ),
+  template: z
+    .string()
+    .optional()
+    .describe(
+      "Template internal slug, e.g. 'test_case_steps' or 'test_case_bdd'. Use the slug, not the display name.",
+    ),
 });
 
 export function sanitizeArgs(args: any) {
@@ -146,6 +171,7 @@ export function sanitizeArgs(args: any) {
   if (cleaned.owner === null) delete cleaned.owner;
   if (cleaned.preconditions === null) delete cleaned.preconditions;
   if (cleaned.automation_status === null) delete cleaned.automation_status;
+  if (cleaned.template === null) delete cleaned.template;
 
   if (cleaned.issue_tracker) {
     if (
@@ -245,22 +271,33 @@ export async function createTestCase(
       config,
     );
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Test case successfully created:
+    const content: Array<{ type: "text"; text: string }> = [];
+
+    // The TM API silently ignores an unrecognized template slug and falls back
+    // to the default. Surface that instead of letting it pass as success.
+    if (
+      params.template &&
+      tc.template &&
+      String(tc.template).toLowerCase() !==
+        String(params.template).toLowerCase()
+    ) {
+      content.push({
+        type: "text",
+        text: `Warning: requested template "${params.template}" was not applied — the test case was created with "${tc.template}". BrowserStack expects the template's internal slug (e.g. "test_case_steps", "test_case_bdd") and silently uses the default for unrecognized values.`,
+      });
+    }
+
+    content.push({
+      type: "text",
+      text: `Test case successfully created:
             - Identifier: ${tc.identifier}
             - Title: ${tc.title}
 
           You can view it here: ${tmBaseUrl}/projects/${projectId}/folder/search?q=${tc.identifier}`,
-        },
-        {
-          type: "text",
-          text: JSON.stringify(tc, null, 2),
-        },
-      ],
-    };
+    });
+    content.push({ type: "text", text: JSON.stringify(tc, null, 2) });
+
+    return { content };
   } catch (err) {
     // Delegate to our centralized Axios error formatter
     return formatAxiosError(err, "Failed to create test case");

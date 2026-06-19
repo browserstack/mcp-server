@@ -384,7 +384,6 @@ export async function bulkCreateTestCases(
   documentId: number,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const results: Record<string, any> = {};
   const total = Object.keys(scenariosMap).length;
   let doneCount = 0;
   let testCaseCount = 0;
@@ -415,7 +414,7 @@ export async function bulkCreateTestCases(
       };
 
       try {
-        const resp = await apiClient.post({
+        await apiClient.post({
           url: BULK_CREATE_URL_VALUE,
           headers: {
             "API-TOKEN": getBrowserStackAuth(config),
@@ -423,7 +422,6 @@ export async function bulkCreateTestCases(
           },
           body: payload,
         });
-        results[id] = resp.data;
         createdInScenario += batch.length;
       } catch (error) {
         scenarioFailed = true;

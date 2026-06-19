@@ -73,7 +73,7 @@ function extractFailedTestIds(
   let failedTests: FailedTestInfo[] = [];
 
   for (const node of hierarchy) {
-    if (node.details?.status === status && node.details?.run_count) {
+    if (node.details?.status === status) {
       if (node.details?.observability_url) {
         const idMatch = node.details.observability_url.match(/details=(\d+)/);
         if (idMatch) {

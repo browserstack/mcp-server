@@ -78,7 +78,6 @@ function getAxiosAgent(): AxiosRequestConfig["httpsAgent"] | undefined {
         host: proxyHost,
         port: Number(proxyPort),
         ca,
-        rejectUnauthorized: false, // Set to true if you want strict SSL
       });
     } else {
       // Proxy only
@@ -88,7 +87,6 @@ function getAxiosAgent(): AxiosRequestConfig["httpsAgent"] | undefined {
     // CA only
     return new https.Agent({
       ca: fs.readFileSync(caCertPath),
-      rejectUnauthorized: false, // Set to true for strict SSL
     });
   }
   // Default agent (no proxy, no CA)

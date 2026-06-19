@@ -4,6 +4,9 @@ on:
   pull_request_review:
     types: [submitted]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     if: github.event.pull_request.base.ref == 'main' && github.event.review.state == 'approved'

@@ -190,7 +190,7 @@ vi.mock('../../src/tools/testmanagement-utils/get-sub-testplan', () => ({
 // utils at the module level, so apiClient and tm-base-url never get reached
 // through real code paths today — adding these mocks is safe.
 vi.mock('../../src/lib/apiClient', () => ({
-  apiClient: { get: vi.fn(), post: vi.fn() },
+  apiClient: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
 }));
 vi.mock('../../src/lib/tm-base-url', () => ({
   getTMBaseURL: vi.fn(async () => 'https://test-management.browserstack.com'),
@@ -1161,5 +1161,130 @@ describe('createTestCase — priority normalization', () => {
 
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
     expect(body.test_case.priority).toBe('critical');
+  });
+});
+
+// PMAA-131: template slug pass-through + multi-select custom fields.
+// Behaviour verified against the live TM v2 API: the create endpoint keys on
+// the template's internal slug and silently falls back to the default for
+// unrecognized values; multi-select custom fields accept arrays keyed by name.
+describe('createTestCase — template & multi-select custom_fields', () => {
+  let createTestCaseReal: typeof import('../../src/tools/testmanagement-utils/create-testcase').createTestCase;
+  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
+
+  beforeAll(async () => {
+    const actual = await vi.importActual<
+      typeof import('../../src/tools/testmanagement-utils/create-testcase')
+    >('../../src/tools/testmanagement-utils/create-testcase');
+    createTestCaseReal = actual.createTestCase;
+    apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const baseArgs = {
+    project_identifier: 'PR-1',
+    folder_id: 'F-1',
+    name: 'Sample',
+    test_case_steps: [{ step: 'a', result: 'b' }],
+  };
+
+  const resp = (template: string) => ({
+    data: {
+      data: {
+        success: true,
+        test_case: { identifier: 'TC-1', title: 'Sample', folder_id: 1, template },
+      },
+    },
+  });
+
+  it('passes the template slug through to the request body and does not warn when applied', async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(resp('test_case_bdd'));
+
+    const result = await createTestCaseReal(
+      { ...baseArgs, template: 'test_case_bdd' },
+      mockConfig as any,
+    );
+
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case.template).toBe('test_case_bdd');
+    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
+    expect(text).not.toContain('was not applied');
+  });
+
+  it('warns when the API silently falls back to a different template', async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(resp('test_case_steps'));
+
+    const result = await createTestCaseReal(
+      { ...baseArgs, template: 'test_case_sec' },
+      mockConfig as any,
+    );
+
+    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
+    expect(text).toContain('was not applied');
+    expect(text).toContain('test_case_sec');
+  });
+
+  it('passes array (multi-select) custom_fields through to the request body', async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(resp('test_case_steps'));
+
+    await createTestCaseReal(
+      { ...baseArgs, custom_fields: { aaas: ['m40', 'm48'] } },
+      mockConfig as any,
+    );
+
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case.custom_fields).toEqual({ aaas: ['m40', 'm48'] });
+  });
+});
+
+// PMAA-131: multi-select custom fields on the update (PATCH) path.
+describe('updateTestCase — multi-select custom_fields', () => {
+  let updateTestCaseReal: typeof import('../../src/tools/testmanagement-utils/update-testcase').updateTestCase;
+  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
+
+  beforeAll(async () => {
+    const actual = await vi.importActual<
+      typeof import('../../src/tools/testmanagement-utils/update-testcase')
+    >('../../src/tools/testmanagement-utils/update-testcase');
+    updateTestCaseReal = actual.updateTestCase;
+    apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('passes array (multi-select) custom_fields through to the PATCH body', async () => {
+    (apiClientMock.patch as Mock).mockResolvedValueOnce({
+      data: {
+        data: {
+          success: true,
+          test_case: {
+            identifier: 'TC-1',
+            title: 'Sample',
+            case_type: 'functional',
+            priority: 'Medium',
+            status: 'active',
+            folder_id: 1,
+          },
+        },
+      },
+    });
+
+    const result = await updateTestCaseReal(
+      {
+        project_identifier: 'PR-1',
+        test_case_identifier: 'TC-1',
+        custom_fields: { aaas: ['m40', 'm48'] },
+      },
+      mockConfig as any,
+    );
+
+    expect(result.isError).toBeFalsy();
+    const body = (apiClientMock.patch as Mock).mock.calls[0][0].body;
+    expect(body.test_case.custom_fields).toEqual({ aaas: ['m40', 'm48'] });
   });
 });

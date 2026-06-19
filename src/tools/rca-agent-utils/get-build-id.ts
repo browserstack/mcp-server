@@ -9,7 +9,6 @@ export async function getBuildId(
   );
   url.searchParams.append("project_name", projectName);
   url.searchParams.append("build_name", buildName);
-  url.searchParams.append("user_name", username);
 
   const authHeader =
     "Basic " + Buffer.from(`${username}:${accessKey}`).toString("base64");

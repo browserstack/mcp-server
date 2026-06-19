@@ -29,7 +29,10 @@ export interface TestCaseUpdateRequest {
   status?: string;
   tags?: string[];
   issues?: string[];
-  custom_fields?: Record<string, string | number | boolean>;
+  custom_fields?: Record<
+    string,
+    string | number | boolean | Array<string | number>
+  >;
 }
 
 export const UpdateTestCaseSchema = z.object({
@@ -101,10 +104,18 @@ export const UpdateTestCaseSchema = z.object({
       "Replacement list of linked Jira/Asana/Azure issue IDs for the test case.",
     ),
   custom_fields: z
-    .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+    .record(
+      z.string(),
+      z.union([
+        z.string(),
+        z.number(),
+        z.boolean(),
+        z.array(z.union([z.string(), z.number()])),
+      ]),
+    )
     .optional()
     .describe(
-      "Map of custom field name/id to value. Valid field names and value types are per-project; discover them via the project's form fields.",
+      "Map of custom field NAME to value; use an array for multi-select fields.",
     ),
 });
 

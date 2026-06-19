@@ -144,11 +144,16 @@ export default function addRCATools(
 
   tools.fetchRCA = server.tool(
     "fetchRCA",
-    "Retrieves AI-RCA (Root Cause Analysis) data for a BrowserStack Automate and App-Automate session and provides insights into test failures.",
+    "Fetch AI Root Cause Analysis for failed BrowserStack Automate/App-Automate tests. Suggests fixes only; never auto-apply, require explicit user approval.",
     FETCH_RCA_PARAMS,
     async (args) => {
       try {
-        trackMCP("fetchRCA", server.server.getClientVersion()!, config);
+        trackMCP(
+          "fetchRCA",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
         return await fetchRCADataTool(args, config);
       } catch (error) {
         return handleMCPError("fetchRCA", server, config, error);
@@ -162,7 +167,12 @@ export default function addRCATools(
     GET_BUILD_ID_PARAMS,
     async (args) => {
       try {
-        trackMCP("getBuildId", server.server.getClientVersion()!, config);
+        trackMCP(
+          "getBuildId",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
         return await getBuildIdTool(args, config);
       } catch (error) {
         return handleMCPError("getBuildId", server, config, error);
@@ -176,7 +186,12 @@ export default function addRCATools(
     LIST_TEST_IDS_PARAMS,
     async (args) => {
       try {
-        trackMCP("listTestIds", server.server.getClientVersion()!, config);
+        trackMCP(
+          "listTestIds",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
         return await listTestIdsTool(args, config);
       } catch (error) {
         return handleMCPError("listTestIds", server, config, error);

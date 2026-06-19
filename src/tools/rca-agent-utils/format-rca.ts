@@ -6,6 +6,10 @@ export function formatRCAData(rcaData: any): string {
 
   let output = "## Root Cause Analysis Report\n\n";
 
+  // Track whether any test case carries a fix suggestion so we can append the
+  // approval-gate directive only when it is relevant.
+  let hasFixSuggestion = false;
+
   rcaData.testCases.forEach((testCase: any, index: number) => {
     // Show test case ID with smaller heading
     output += `### Test Case ${index + 1}\n`;
@@ -29,7 +33,8 @@ export function formatRCAData(rcaData: any): string {
       }
 
       if (rca.possible_fix) {
-        output += `**Recommended Fix:**\n${rca.possible_fix}\n\n`;
+        hasFixSuggestion = true;
+        output += `**Suggested Fix (proposal only — do not apply without explicit user approval):**\n${rca.possible_fix}\n\n`;
       }
     } else if (testCase.rcaData?.error) {
       output += `**Error:** ${testCase.rcaData.error}\n\n`;
@@ -39,6 +44,13 @@ export function formatRCAData(rcaData: any): string {
 
     output += "---\n\n";
   });
+
+  if (hasFixSuggestion) {
+    output +=
+      "> **Action required:** The fixes above are suggestions only. " +
+      "Present them to the user and apply code changes ONLY after the user " +
+      "explicitly approves. Do not modify any files automatically.\n";
+  }
 
   return output;
 }

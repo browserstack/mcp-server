@@ -5,16 +5,27 @@ import {
   FETCH_DETAILS_URL,
   FORM_FIELDS_URL,
   BULK_CREATE_URL,
+  TC_DETAILS_MAX_BATCH,
+  BULK_CREATE_MAX_BATCH,
+  MAX_SCENARIOS_PER_DOCUMENT,
 } from "./config.js";
 import {
   DefaultFieldMaps,
   Scenario,
   CreateTestCasesFromFileArgs,
 } from "./types.js";
-import { createTestCasePayload } from "./helpers.js";
+import {
+  createTestCasePayload,
+  chunkArray,
+  canAcceptScenario,
+} from "./helpers.js";
 import { getBrowserStackAuth } from "../../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { getTMBaseURL } from "../../../lib/tm-base-url.js";
+import logger from "../../../logger.js";
+
+const POLL_INTERVAL_MS = 10000;
+const MAX_POLL_DURATION_MS = 8 * 60 * 1000;
 
 /**
  * Fetch default and custom form fields for a project.
@@ -132,6 +143,7 @@ export async function fetchTestCaseDetails(
 export async function pollTestCaseDetails(
   traceRequestId: string,
   config: BrowserStackConfig,
+  deadline: number = Date.now() + MAX_POLL_DURATION_MS,
 ): Promise<Record<string, any>> {
   const detailMap: Record<string, any> = {};
   let done = false;
@@ -140,7 +152,12 @@ export async function pollTestCaseDetails(
 
   while (!done) {
     // add a bit of jitter to avoid synchronized polling storms
-    await new Promise((r) => setTimeout(r, 10000 + Math.random() * 5000));
+    await new Promise((r) =>
+      setTimeout(r, POLL_INTERVAL_MS + Math.random() * 5000),
+    );
+
+    // Give up before the backend key TTL expires; return whatever we collected.
+    if (Date.now() > deadline) break;
 
     const poll = await apiClient.post({
       url: `${TCG_POLL_URL_VALUE}?x-bstack-traceRequestId=${encodeURIComponent(traceRequestId)}`,
@@ -148,10 +165,14 @@ export async function pollTestCaseDetails(
         "API-TOKEN": getBrowserStackAuth(config),
       },
       body: {},
+      // Don't throw on a non-2xx: an expired request key returns 400
+      // ("Request ids does not exists") and simply means there is nothing more
+      // to fetch — stop gracefully instead of failing the whole run.
+      raise_error: false,
     });
 
-    if (!poll.data.data.success) {
-      throw new Error(`Polling failed: ${poll.data.data.message}`);
+    if (poll.status !== 200 || !poll.data?.data?.success) {
+      break;
     }
 
     for (const msg of poll.data.data.message) {
@@ -189,10 +210,14 @@ export async function pollScenariosTestDetails(
   let iteratorCount = 0;
   const tmBaseUrl = await getTMBaseURL(config);
   const TCG_POLL_URL_VALUE = TCG_POLL_URL(tmBaseUrl);
+  const deadline = Date.now() + MAX_POLL_DURATION_MS;
 
   // Promisify interval-style polling using a wrapper
   await new Promise<void>((resolve, reject) => {
-    const intervalId = setInterval(async () => {
+    let stopped = false;
+
+    const pollOnce = async () => {
+      if (stopped) return;
       try {
         const poll = await apiClient.post({
           url: `${TCG_POLL_URL_VALUE}?x-bstack-traceRequestId=${encodeURIComponent(traceId)}`,
@@ -200,18 +225,40 @@ export async function pollScenariosTestDetails(
             "API-TOKEN": getBrowserStackAuth(config),
           },
           body: {},
+          raise_error: false,
         });
 
         if (poll.status !== 200) {
-          clearInterval(intervalId);
-          reject(new Error(`Polling error: ${poll.statusText || poll.status}`));
+          stopped = true;
+          if (Object.keys(scenariosMap).length > 0) {
+            resolve();
+          } else {
+            reject(
+              new Error(
+                `Polling error: ${poll.status} ${typeof poll.data === "string" ? poll.data : JSON.stringify(poll.data)}`,
+              ),
+            );
+          }
           return;
         }
 
+        let terminated = false;
         for (const msg of poll.data.data.message) {
           if (msg.type === "scenario") {
             msg.data.scenarios.forEach((sc: any) => {
-              scenariosMap[sc.id] = { id: sc.id, name: sc.name, testcases: [] };
+              if (
+                canAcceptScenario(
+                  scenariosMap,
+                  sc.id,
+                  MAX_SCENARIOS_PER_DOCUMENT,
+                )
+              ) {
+                scenariosMap[sc.id] ||= {
+                  id: sc.id,
+                  name: sc.name,
+                  testcases: [],
+                };
+              }
             });
             const count = Object.keys(scenariosMap).length;
             await context.sendNotification({
@@ -227,23 +274,32 @@ export async function pollScenariosTestDetails(
 
           if (msg.type === "testcase") {
             const sc = msg.data.scenario;
-            if (sc) {
+            if (
+              sc &&
+              canAcceptScenario(scenariosMap, sc.id, MAX_SCENARIOS_PER_DOCUMENT)
+            ) {
               const array = Array.isArray(msg.data.testcases)
                 ? msg.data.testcases
                 : msg.data.testcases
                   ? [msg.data.testcases]
                   : [];
-              const ids = array.map((tc: any) => tc.id || tc.test_case_id);
-
-              const reqId = await fetchTestCaseDetails(
-                documentId,
-                folderId,
-                projectReferenceId,
-                ids,
-                source,
-                config,
+              const ids: string[] = array.map(
+                (tc: any) => tc.id || tc.test_case_id,
               );
-              detailPromises.push(pollTestCaseDetails(reqId, config));
+
+              for (const idChunk of chunkArray(ids, TC_DETAILS_MAX_BATCH)) {
+                const reqId = await fetchTestCaseDetails(
+                  documentId,
+                  folderId,
+                  projectReferenceId,
+                  idChunk,
+                  source,
+                  config,
+                );
+                detailPromises.push(
+                  pollTestCaseDetails(reqId, config, deadline),
+                );
+              }
 
               scenariosMap[sc.id] ||= {
                 id: sc.id,
@@ -267,20 +323,41 @@ export async function pollScenariosTestDetails(
           }
 
           if (msg.type === "termination") {
-            clearInterval(intervalId);
-            resolve();
+            terminated = true;
           }
         }
+
+        if (terminated || Date.now() > deadline) {
+          stopped = true;
+          logger.info(
+            `TCG scenario poll stopped (${terminated ? "termination received" : "max duration reached"}); ${Object.keys(scenariosMap).length} scenarios, ${detailPromises.length} detail fetches`,
+          );
+          resolve();
+          return;
+        }
+        setTimeout(pollOnce, POLL_INTERVAL_MS);
       } catch (err) {
-        clearInterval(intervalId);
+        stopped = true;
         reject(err);
       }
-    }, 10000); // 10 second interval
+    };
+    setTimeout(pollOnce, POLL_INTERVAL_MS);
   });
 
-  // once all detail fetches are triggered, wait for them to complete
-  const detailsList = await Promise.all(detailPromises);
-  const allDetails = detailsList.reduce((acc, cur) => ({ ...acc, ...cur }), {});
+  const detailsList = await Promise.allSettled(detailPromises);
+  const rejectedDetails = detailsList.filter(
+    (r) => r.status === "rejected",
+  ).length;
+  if (rejectedDetails > 0) {
+    logger.info(
+      `TCG detail fetches: ${detailsList.length - rejectedDetails}/${detailsList.length} succeeded, ${rejectedDetails} failed (degrading gracefully)`,
+    );
+  }
+  const allDetails = detailsList.reduce<Record<string, any>>(
+    (acc, result) =>
+      result.status === "fulfilled" ? { ...acc, ...result.value } : acc,
+    {},
+  );
 
   // attach the fetched detail objects back to each testcase
   for (const scenario of Object.values(scenariosMap)) {
@@ -311,37 +388,63 @@ export async function bulkCreateTestCases(
   const total = Object.keys(scenariosMap).length;
   let doneCount = 0;
   let testCaseCount = 0;
+  const failedScenarios: string[] = [];
   const tmBaseUrl = await getTMBaseURL(config);
   const BULK_CREATE_URL_VALUE = BULK_CREATE_URL(tmBaseUrl, projectId, folderId);
 
   for (const { id, testcases } of Object.values(scenariosMap)) {
-    const testCaseLength = testcases.length;
-    testCaseCount += testCaseLength;
-    if (testCaseLength === 0) continue;
-    const payload = {
-      test_cases: testcases.map((tc) =>
-        createTestCasePayload(
-          tc,
-          id,
-          folderId,
-          fieldMaps,
-          documentId,
-          booleanFieldId,
-          traceId,
-        ),
-      ),
-    };
+    if (testcases.length === 0) continue;
 
-    try {
-      const resp = await apiClient.post({
-        url: BULK_CREATE_URL_VALUE,
-        headers: {
-          "API-TOKEN": getBrowserStackAuth(config),
-          "Content-Type": "application/json",
-        },
-        body: payload,
-      });
-      results[id] = resp.data;
+    const batches = chunkArray(testcases, BULK_CREATE_MAX_BATCH);
+    let createdInScenario = 0;
+    let scenarioFailed = false;
+
+    for (const batch of batches) {
+      const payload = {
+        test_cases: batch.map((tc) =>
+          createTestCasePayload(
+            tc,
+            id,
+            folderId,
+            fieldMaps,
+            documentId,
+            booleanFieldId,
+            traceId,
+          ),
+        ),
+      };
+
+      try {
+        const resp = await apiClient.post({
+          url: BULK_CREATE_URL_VALUE,
+          headers: {
+            "API-TOKEN": getBrowserStackAuth(config),
+            "Content-Type": "application/json",
+          },
+          body: payload,
+        });
+        results[id] = resp.data;
+        createdInScenario += batch.length;
+      } catch (error) {
+        scenarioFailed = true;
+        await context.sendNotification({
+          method: "notifications/progress",
+          params: {
+            progressToken: context._meta?.progressToken ?? traceId,
+            message: `Creation failed for scenario ${id}: ${error instanceof Error ? error.message : "Unknown error"}`,
+            total,
+            progress: doneCount,
+          },
+        });
+      }
+    }
+
+    testCaseCount += createdInScenario;
+    if (scenarioFailed) {
+      failedScenarios.push(id);
+    }
+    if (createdInScenario > 0) {
+      doneCount++;
       await context.sendNotification({
         method: "notifications/progress",
         params: {
@@ -351,23 +454,12 @@ export async function bulkCreateTestCases(
           progress: doneCount,
         },
       });
-    } catch (error) {
-      //send notification
-      await context.sendNotification({
-        method: "notifications/progress",
-        params: {
-          progressToken: context._meta?.progressToken ?? traceId,
-          message: `Creation failed for scenario ${id}: ${error instanceof Error ? error.message : "Unknown error"}`,
-          total,
-          progress: doneCount,
-        },
-      });
-      //continue to next scenario
-      continue;
     }
-    doneCount++;
   }
-  const resultString = `Total of ${testCaseCount} test cases created in ${total} scenarios.`;
+  let resultString = `Total of ${testCaseCount} test cases created in ${doneCount} of ${total} scenarios.`;
+  if (failedScenarios.length > 0) {
+    resultString += ` Failed to create test cases for ${failedScenarios.length} scenario(s): ${failedScenarios.join(", ")}.`;
+  }
   return resultString;
 }
 

@@ -28,6 +28,32 @@ export function findBooleanFieldId(customFields: any[]): number | undefined {
   return boolField?.id;
 }
 
+// True if the scenario is already tracked or we're still under `max`.
+export function canAcceptScenario(
+  scenariosMap: Record<string, unknown>,
+  id: string,
+  max: number,
+): boolean {
+  return (
+    scenariosMap[id] !== undefined || Object.keys(scenariosMap).length < max
+  );
+}
+
+/**
+ * Split an array into consecutive chunks of at most `size` items.
+ * Used to keep test-case-detail fetches within the backend's per-request limit.
+ */
+export function chunkArray<T>(items: T[], size: number): T[][] {
+  if (size < 1) {
+    throw new Error("chunk size must be at least 1");
+  }
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 /**
  * Construct payload for creating a single test case in bulk.
  */

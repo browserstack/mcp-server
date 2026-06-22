@@ -8,15 +8,10 @@ export interface BuildSummary {
 const BUILDS_API_BASE = "https://api-automation.browserstack.com/ext/v1";
 const DEFAULT_LIMIT = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
-// The project-builds endpoint returns oldest-first within a date_range window
-// (the backend hard-codes ascending sort), so the most recent runs sit at the
-// end of the window. We anchor the window at the latest build and try
-// progressively wider spans, stopping as soon as we have enough runs. Narrow
-// windows keep the common (active build) case to a handful of requests; wider
-// ones cover infrequently-run builds.
+// The project-builds endpoint sorts ascending within a date_range, so the
+// newest runs sit at the end of the window. We anchor at the latest build and
+// widen the span until we have enough runs.
 const WINDOW_DAYS = [2, 7, 30, 180, 730];
-// Safety cap on pages walked per window (10 builds/page) to bound pathological
-// high-volume windows.
 const MAX_PAGES_PER_WINDOW = 60;
 
 function authHeaders(username: string, accessKey: string) {
@@ -29,11 +24,6 @@ function authHeaders(username: string, accessKey: string) {
 
 /**
  * List the most recent build IDs for a given project + build name, newest first.
- *
- * Unlike getBuildId (which returns only the single latest build and used to
- * over-filter by user_name), this lists up to `limit` recent runs of the build
- * name with no user restriction, using the project-builds endpoint's
- * `unique_build_names` + `date_range` filters.
  */
 export async function listBuildIds(
   projectName: string,
@@ -44,8 +34,7 @@ export async function listBuildIds(
 ): Promise<BuildSummary[]> {
   const headers = authHeaders(username, accessKey);
 
-  // 1. Resolve the project id (and the latest build's timestamp) via the same
-  //    latest-build endpoint used by getBuildId, with no user_name filter.
+  // Resolve the project id from the latest build (no user_name filter).
   const latestUrl = new URL(`${BUILDS_API_BASE}/builds/latest`);
   latestUrl.searchParams.append("project_name", projectName);
   latestUrl.searchParams.append("build_name", buildName);
@@ -64,12 +53,11 @@ export async function listBuildIds(
     );
   }
 
-  // Anchor the window just after the latest run so it is always included.
+  // Anchor just after the latest run so it always falls inside the window.
   const anchorMs = latest.started_at
     ? Date.parse(latest.started_at) + DAY_MS
     : Date.now() + DAY_MS;
 
-  // 2. Try progressively wider windows; stop once we have `limit` runs.
   let collected: BuildSummary[] = [];
   for (const windowDays of WINDOW_DAYS) {
     collected = await collectBuildsInWindow(
@@ -85,13 +73,12 @@ export async function listBuildIds(
     }
   }
 
-  // Walk yields oldest-first; present newest-first.
   return collected.reverse();
 }
 
 /**
- * Walk the project-builds pages for a single build name within [startMs, endMs],
- * returning the last `limit` runs (oldest-first) found in that window.
+ * Walk the project-builds pages within [startMs, endMs], returning the last
+ * `limit` runs (oldest-first) found in that window.
  */
 async function collectBuildsInWindow(
   projectId: number,
@@ -129,7 +116,6 @@ async function collectBuildsInWindow(
           status: build.status,
           started_at: build.started_at,
         });
-        // Keep only the most recent `limit` runs (window is oldest-first).
         if (tail.length > limit) {
           tail.shift();
         }

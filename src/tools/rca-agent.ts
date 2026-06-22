@@ -198,7 +198,7 @@ export default function addRCATools(
 
   tools.fetchRCA = server.tool(
     "fetchRCA",
-    "Fetch AI Root Cause Analysis for failed BrowserStack Automate/App-Automate tests. Suggests fixes only; never auto-apply, require explicit user approval.",
+    "Fetch AI Root Cause Analysis for the current user's failed BrowserStack Automate/App-Automate tests. Suggests fixes only; never auto-apply, require explicit user approval.",
     FETCH_RCA_PARAMS,
     async (args) => {
       try {
@@ -217,7 +217,7 @@ export default function addRCATools(
 
   tools.getBuildId = server.tool(
     "getBuildId",
-    "Get the BrowserStack build ID for a given project and build name.",
+    "Get the BrowserStack build ID for a given project and build name, scoped to the current user's builds.",
     GET_BUILD_ID_PARAMS,
     async (args) => {
       try {
@@ -236,7 +236,7 @@ export default function addRCATools(
 
   tools.listBuildId = server.tool(
     "listBuildId",
-    "List up to 5 recent BrowserStack build IDs for a project and build name.",
+    "List up to 5 recent build IDs for a project and build name, across all users.",
     GET_BUILD_ID_PARAMS,
     async (args) => {
       try {

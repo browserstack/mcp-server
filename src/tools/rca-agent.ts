@@ -234,21 +234,21 @@ export default function addRCATools(
     },
   );
 
-  tools.listBuildId = server.tool(
-    "listBuildId",
+  tools.listBuildIds = server.tool(
+    "listBuildIds",
     "List up to 5 recent build IDs for a project and build name, across all users.",
     GET_BUILD_ID_PARAMS,
     async (args) => {
       try {
         trackMCP(
-          "listBuildId",
+          "listBuildIds",
           server.server.getClientVersion()!,
           undefined,
           config,
         );
         return await listBuildIdsTool(args, config);
       } catch (error) {
-        return handleMCPError("listBuildId", server, config, error);
+        return handleMCPError("listBuildIds", server, config, error);
       }
     },
   );

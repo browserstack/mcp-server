@@ -4,6 +4,7 @@ import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { getBuildId } from "./rca-agent-utils/get-build-id.js";
+import { listBuildIds } from "./rca-agent-utils/list-build-ids.js";
 import { getTestIds } from "./rca-agent-utils/get-failed-test-id.js";
 import { getRCAData } from "./rca-agent-utils/rca-data.js";
 import { formatRCAData } from "./rca-agent-utils/format-rca.js";
@@ -52,6 +53,59 @@ export async function getBuildIdTool(
         {
           type: "text",
           text: `Error fetching build ID: ${errorMessage}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+// Tool function to list recent build IDs for a project + build name
+export async function listBuildIdsTool(
+  args: BuildIdArgs,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  try {
+    const { browserStackProjectName, browserStackBuildName } = args;
+
+    const authString = getBrowserStackAuth(config);
+    const [username, accessKey] = authString.split(":");
+
+    const builds = await listBuildIds(
+      browserStackProjectName,
+      browserStackBuildName,
+      username,
+      accessKey,
+    );
+
+    if (builds.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `No builds found for project "${browserStackProjectName}" and build "${browserStackBuildName}".`,
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(builds, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    logger.error("Error listing build IDs", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error listing build IDs: ${errorMessage}`,
         },
       ],
       isError: true,
@@ -176,6 +230,25 @@ export default function addRCATools(
         return await getBuildIdTool(args, config);
       } catch (error) {
         return handleMCPError("getBuildId", server, config, error);
+      }
+    },
+  );
+
+  tools.listBuildId = server.tool(
+    "listBuildId",
+    "List up to 5 recent BrowserStack build IDs for a project and build name.",
+    GET_BUILD_ID_PARAMS,
+    async (args) => {
+      try {
+        trackMCP(
+          "listBuildId",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
+        return await listBuildIdsTool(args, config);
+      } catch (error) {
+        return handleMCPError("listBuildId", server, config, error);
       }
     },
   );

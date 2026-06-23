@@ -318,8 +318,6 @@ export async function bulkCreateTestCases(
   const BULK_CREATE_URL_VALUE = BULK_CREATE_URL(tmBaseUrl, projectId, folderId);
 
   for (const { id, testcases } of Object.values(scenariosMap)) {
-    // Cap per-scenario test cases to the backend's per-request limit so the
-    // bulk-create call never exceeds it ("More than permitted test cases sent").
     const cappedTestcases = testcases.slice(0, TC_DETAILS_MAX_BATCH);
     const testCaseLength = cappedTestcases.length;
     testCaseCount += testCaseLength;

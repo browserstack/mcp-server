@@ -150,18 +150,8 @@ class ApiClient {
       const res = await fn(this.axiosAgent);
       return new ApiResponse<T>(res);
     } catch (error: any) {
-      if (error.response) {
-        if (!raise_error) {
-          return new ApiResponse<T>(error.response);
-        }
-        const body = error.response.data;
-        const serverMessage =
-          typeof body === "string"
-            ? body
-            : (body?.message ?? body?.error ?? JSON.stringify(body));
-        if (serverMessage) {
-          error.message = `Request failed with status code ${error.response.status}: ${serverMessage}`;
-        }
+      if (error.response && !raise_error) {
+        return new ApiResponse<T>(error.response);
       }
       throw error;
     }

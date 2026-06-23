@@ -1,10 +1,5 @@
 export const TC_DETAILS_MAX_BATCH = 10;
 
-export const BULK_CREATE_MAX_BATCH = 10;
-
-// Cap scenarios per document (mirrors TCG's former maxScenariosPerDocument=10).
-export const MAX_SCENARIOS_PER_DOCUMENT = 10;
-
 export const TCG_TRIGGER_URL = (baseUrl: string) =>
   `${baseUrl}/api/v1/integration/tcg/test-generation/suggest-test-cases`;
 

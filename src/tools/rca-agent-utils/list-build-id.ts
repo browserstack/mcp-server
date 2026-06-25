@@ -1,3 +1,5 @@
+import { apiClient } from "../../lib/apiClient.js";
+
 /**
  * Returns the latest build for a project + build name across all users (not just the caller's).
  */
@@ -7,28 +9,26 @@ export async function listBuildId(
   username: string,
   accessKey: string,
 ): Promise<string> {
-  const url = new URL(
-    "https://api-automation.browserstack.com/ext/v1/builds/latest",
-  );
-  url.searchParams.append("project_name", projectName);
-  url.searchParams.append("build_name", buildName);
-
   const authHeader =
     "Basic " + Buffer.from(`${username}:${accessKey}`).toString("base64");
 
-  const response = await fetch(url.toString(), {
+  const response = await apiClient.get({
+    url: "https://api-automation.browserstack.com/ext/v1/builds/latest",
     headers: {
       Authorization: authHeader,
       "Content-Type": "application/json",
     },
+    params: {
+      project_name: projectName,
+      build_name: buildName,
+    },
   });
 
-  if (!response.ok) {
+  const buildId = response.data?.build_id;
+  if (!buildId) {
     throw new Error(
-      `Failed to fetch build ID: ${response.status} ${response.statusText}`,
+      `No build found for project "${projectName}" and build "${buildName}"`,
     );
   }
-
-  const data = await response.json();
-  return data.build_id;
+  return buildId;
 }

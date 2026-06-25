@@ -65,15 +65,14 @@ export async function getTestIds(
   }
 }
 
-// Recursive function to extract failed test IDs from hierarchy
-function extractFailedTestIds(
+export function extractFailedTestIds(
   hierarchy: TestDetails[],
   status?: TestStatus,
 ): FailedTestInfo[] {
   let failedTests: FailedTestInfo[] = [];
 
   for (const node of hierarchy) {
-    if (node.details?.status === status && node.details?.run_count) {
+    if (node.details?.status === status) {
       if (node.details?.observability_url) {
         const idMatch = node.details.observability_url.match(/details=(\d+)/);
         if (idMatch) {

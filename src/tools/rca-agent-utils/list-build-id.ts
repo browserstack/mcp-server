@@ -1,6 +1,5 @@
 /**
- * Same as getBuildId, but without the user_name filter — returns the latest
- * build for a project + build name across all users (not just the caller's).
+ * Returns the latest build for a project + build name across all users (not just the caller's).
  */
 export async function listBuildId(
   projectName: string,

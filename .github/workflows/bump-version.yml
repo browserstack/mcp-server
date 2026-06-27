@@ -1,0 +1,134 @@
+name: "Bump Version"
+
+# For: mcp-server (this repo).
+# Bumps the package's OWN version across package.json, package-lock.json, and
+# server.json, then opens a PR titled `chore: bump version to <X.Y.Z>`.
+# Merge the PR, then trigger "Release New Version" to tag + publish.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Explicit target version (e.g. 1.2.23). Leave blank to use 'bump'."
+        required: false
+        type: string
+      bump:
+        description: "Semver increment when 'version' is blank."
+        required: false
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout source code"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Set up Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: "Compute and apply version bump"
+        id: bump
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BUMP: ${{ inputs.bump }}
+        run: |
+          set -e
+          OLD_VERSION=$(node -p 'require("./package.json").version')
+
+          if [ -n "$INPUT_VERSION" ]; then
+            TARGET="$INPUT_VERSION"
+          else
+            TARGET="$INPUT_BUMP"
+          fi
+
+          # Validate: explicit version must be semver; bump must be patch/minor/major.
+          case "$TARGET" in
+            patch|minor|major) ;;
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "Invalid target version/bump: $TARGET"; exit 1 ;;
+          esac
+
+          # npm version accepts an explicit version OR major|minor|patch.
+          # --no-git-tag-version: update package.json + package-lock.json only.
+          NEW_VERSION=$(npm version "$TARGET" --no-git-tag-version | tail -n1)
+          NEW_VERSION=${NEW_VERSION#v}
+
+          echo "Bumping $OLD_VERSION -> $NEW_VERSION"
+          echo "old_version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: "Update server.json package version"
+        env:
+          OLD_VERSION: ${{ steps.bump.outputs.old_version }}
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+        run: |
+          set -e
+          node -e '
+            const fs = require("fs");
+            const oldV = process.env.OLD_VERSION;
+            const newV = process.env.NEW_VERSION;
+            let s = fs.readFileSync("server.json", "utf8");
+            // Only the nested packages[].version matches "<oldV>";
+            // the top-level "version" is the schema version (1.0.0) and is left alone.
+            const needle = `"version": "${oldV}"`;
+            if (!s.includes(needle)) {
+              console.error(`Could not find ${needle} in server.json`);
+              process.exit(1);
+            }
+            s = s.replace(needle, `"version": "${newV}"`);
+            fs.writeFileSync("server.json", s);
+          '
+
+      - name: "Verify all three files are in sync"
+        env:
+          NEW: ${{ steps.bump.outputs.new_version }}
+        run: |
+          set -e
+          PKG=$(node -p 'require("./package.json").version')
+          LOCK_TOP=$(node -p 'require("./package-lock.json").version')
+          LOCK_ROOT=$(node -p 'require("./package-lock.json").packages[""].version')
+          SRV=$(node -p 'require("./server.json").packages[0].version')
+          echo "package.json=$PKG lock=$LOCK_TOP lock.root=$LOCK_ROOT server.json=$SRV"
+          for v in "$PKG" "$LOCK_TOP" "$LOCK_ROOT" "$SRV"; do
+            if [ "$v" != "$NEW" ]; then
+              echo "Version mismatch: expected $NEW, got $v"
+              exit 1
+            fi
+          done
+
+      - name: "Create branch, commit, and open PR"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW: ${{ steps.bump.outputs.new_version }}
+          BASE_REF: ${{ github.ref_name }}
+        run: |
+          set -e
+          BRANCH="chore/bump-version-$NEW"
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git checkout -b "$BRANCH"
+          git add package.json package-lock.json server.json
+          git commit -m "chore: bump version to $NEW"
+          git push --force-with-lease origin "$BRANCH"
+
+          gh pr create \
+            --base "$BASE_REF" \
+            --head "$BRANCH" \
+            --title "chore: bump version to $NEW" \
+            --body "Automated version bump to \`$NEW\` (package.json, package-lock.json, server.json). Merge, then trigger **Release New Version** to tag and publish."

@@ -95,7 +95,6 @@ export function runPercyWithBrowserstackSDK(
     input.detectedLanguage as SDKSupportedLanguage,
     input.detectedTestingFramework as SDKSupportedTestingFramework,
     username,
-    accessKey,
   );
 
   if (sdkSetupCommand) {

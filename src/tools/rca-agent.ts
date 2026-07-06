@@ -4,6 +4,7 @@ import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { getBuildId } from "./rca-agent-utils/get-build-id.js";
+import { listBuildId } from "./rca-agent-utils/list-build-id.js";
 import { getTestIds } from "./rca-agent-utils/get-failed-test-id.js";
 import { getRCAData } from "./rca-agent-utils/rca-data.js";
 import { formatRCAData } from "./rca-agent-utils/format-rca.js";
@@ -29,6 +30,48 @@ export async function getBuildIdTool(
     const [username, accessKey] = authString.split(":");
 
     const buildId = await getBuildId(
+      browserStackProjectName,
+      browserStackBuildName,
+      username,
+      accessKey,
+    );
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: buildId,
+        },
+      ],
+    };
+  } catch (error) {
+    logger.error("Error fetching build ID", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error fetching build ID: ${errorMessage}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+// Tool function to fetch the build ID across all users (no user scoping)
+export async function listBuildIdTool(
+  args: BuildIdArgs,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  try {
+    const { browserStackProjectName, browserStackBuildName } = args;
+
+    const authString = getBrowserStackAuth(config);
+    const [username, accessKey] = authString.split(":");
+
+    const buildId = await listBuildId(
       browserStackProjectName,
       browserStackBuildName,
       username,
@@ -144,7 +187,7 @@ export default function addRCATools(
 
   tools.fetchRCA = server.tool(
     "fetchRCA",
-    "Fetch AI Root Cause Analysis for failed BrowserStack Automate/App-Automate tests. Suggests fixes only; never auto-apply, require explicit user approval.",
+    "Fetch AI Root Cause Analysis for the current user's failed BrowserStack Automate/App-Automate tests. Suggests fixes only; never auto-apply, require explicit user approval.",
     FETCH_RCA_PARAMS,
     async (args) => {
       try {
@@ -163,7 +206,7 @@ export default function addRCATools(
 
   tools.getBuildId = server.tool(
     "getBuildId",
-    "Get the BrowserStack build ID for a given project and build name.",
+    "Get the BrowserStack build ID for a given project and build name, scoped to the current user's builds.",
     GET_BUILD_ID_PARAMS,
     async (args) => {
       try {
@@ -176,6 +219,25 @@ export default function addRCATools(
         return await getBuildIdTool(args, config);
       } catch (error) {
         return handleMCPError("getBuildId", server, config, error);
+      }
+    },
+  );
+
+  tools.listBuildId = server.tool(
+    "listBuildId",
+    "Get the latest build ID for a project and build name, across all users (no user filter).",
+    GET_BUILD_ID_PARAMS,
+    async (args) => {
+      try {
+        trackMCP(
+          "listBuildId",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
+        return await listBuildIdTool(args, config);
+      } catch (error) {
+        return handleMCPError("listBuildId", server, config, error);
       }
     },
   );

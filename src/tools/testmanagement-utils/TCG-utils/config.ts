@@ -1,3 +1,5 @@
+export const TC_DETAILS_MAX_BATCH = 10;
+
 export const TCG_TRIGGER_URL = (baseUrl: string) =>
   `${baseUrl}/api/v1/integration/tcg/test-generation/suggest-test-cases`;
 

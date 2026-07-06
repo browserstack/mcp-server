@@ -1164,7 +1164,7 @@ describe('createTestCase — priority normalization', () => {
   });
 });
 
-// PMAA-131: template slug pass-through + multi-select custom fields.
+// Template slug pass-through + multi-select custom fields.
 // Behaviour verified against the live TM v2 API: the create endpoint keys on
 // the template's internal slug and silently falls back to the default for
 // unrecognized values; multi-select custom fields accept arrays keyed by name.
@@ -1238,9 +1238,142 @@ describe('createTestCase — template & multi-select custom_fields', () => {
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
     expect(body.test_case.custom_fields).toEqual({ aaas: ['m40', 'm48'] });
   });
+
+  // A custom template can only be selected by its numeric template_id; the
+  // slug always resolves to a system template (two templates share a step_type).
+  const respWithId = (template_id: number) => ({
+    data: {
+      data: {
+        success: true,
+        test_case: {
+          identifier: 'TC-1',
+          title: 'Sample',
+          folder_id: 1,
+          template: 'test_case_steps',
+          template_id,
+        },
+      },
+    },
+  });
+
+  it('passes template_id through to the request body and does not warn when applied', async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(4321));
+
+    const result = await createTestCaseReal(
+      { ...baseArgs, template_id: 4321 },
+      mockConfig as any,
+    );
+
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case.template_id).toBe(4321);
+    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
+    expect(text).not.toContain('was not applied');
+  });
+
+  it('warns when the API applies a different template_id than requested', async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(1));
+
+    const result = await createTestCaseReal(
+      { ...baseArgs, template_id: 4321 },
+      mockConfig as any,
+    );
+
+    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
+    expect(text).toContain('template_id 4321 was not applied');
+    expect(text).toContain('template_id 1');
+  });
+
+  it('does not emit the slug warning when template_id is supplied (id takes precedence)', async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(4321));
+
+    const result = await createTestCaseReal(
+      { ...baseArgs, template: 'test_case_sec', template_id: 4321 },
+      mockConfig as any,
+    );
+
+    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
+    expect(text).not.toContain('The \'template\' field accepts only');
+  });
+
+  it('reads the case back and warns when template_id is omitted from the create response but not applied', async () => {
+    // Real API: create response carries `template` (step_type) but no template_id.
+    (apiClientMock.post as Mock).mockResolvedValueOnce(resp('test_case_steps'));
+    // Read-back via v1 search shows the default (2) was applied, not 656127.
+    (apiClientMock.get as Mock).mockResolvedValueOnce({
+      data: { test_cases: [{ identifier: 'TC-1', template_id: 2 }] },
+    });
+
+    const result = await createTestCaseReal(
+      { ...baseArgs, template_id: 656127 },
+      mockConfig as any,
+    );
+
+    const getUrl = (apiClientMock.get as Mock).mock.calls[0][0].url;
+    expect(getUrl).toContain('/test-cases/search');
+    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
+    expect(text).toContain('template_id 656127 was not applied');
+    expect(text).toContain('template_id 2');
+  });
+
+  // template_id is honoured only by the v1 create endpoint (v2 strips it), so a
+  // template_id request must route to /api/v1/.../test-cases with API-TOKEN auth
+  // and the folder carried in the body.
+  it('routes to the v1 create endpoint with API-TOKEN auth when template_id is set', async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(656127));
+
+    await createTestCaseReal(
+      { ...baseArgs, folder_id: '50', template_id: 656127 },
+      mockConfig as any,
+    );
+
+    const call = (apiClientMock.post as Mock).mock.calls[0][0];
+    expect(call.url).toContain('/api/v1/projects/');
+    expect(call.url).toContain('/test-cases');
+    expect(call.url).not.toContain('/folders/'); // folder goes in the body for v1
+    expect(call.headers['API-TOKEN']).toBe('fake-user:fake-key');
+    expect(call.headers.Authorization).toBeUndefined();
+    expect(call.body.folder_id).toBe(50);
+    expect(call.body.test_case.test_case_folder_id).toBe(50);
+    expect(call.body.test_case.template_id).toBe(656127);
+    // MCP-only params must not leak into the v1 test_case payload.
+    expect(call.body.test_case.project_identifier).toBeUndefined();
+    expect(call.body.test_case.folder_id).toBeUndefined();
+  });
+
+  it('translates custom_fields name→id and option value→id on the v1 path', async () => {
+    const api = await import('../../src/tools/testmanagement-utils/TCG-utils/api');
+    (api.fetchFormFields as Mock).mockResolvedValueOnce({
+      default_fields: {},
+      custom_fields: [
+        {
+          field_name: 'aaas',
+          id: 194184,
+          field_type: 'field_multi_dropdown',
+          option_values: [
+            { option_value: 'm40', id: 111 },
+            { option_value: 'm48', id: 222 },
+          ],
+        },
+      ],
+    });
+    (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(656127));
+
+    await createTestCaseReal(
+      {
+        ...baseArgs,
+        folder_id: '50',
+        template_id: 656127,
+        custom_fields: { aaas: ['m40', 'm48'] },
+      },
+      mockConfig as any,
+    );
+
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case.custom_fields).toEqual({ 194184: [111, 222] });
+  });
 });
 
-// PMAA-131: multi-select custom fields on the update (PATCH) path.
+// Multi-select custom fields on the update (PATCH) path.
 describe('updateTestCase — multi-select custom_fields', () => {
   let updateTestCaseReal: typeof import('../../src/tools/testmanagement-utils/update-testcase').updateTestCase;
   let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
@@ -1286,5 +1419,67 @@ describe('updateTestCase — multi-select custom_fields', () => {
     expect(result.isError).toBeFalsy();
     const body = (apiClientMock.patch as Mock).mock.calls[0][0].body;
     expect(body.test_case.custom_fields).toEqual({ aaas: ['m40', 'm48'] });
+  });
+});
+
+// listTestCaseTemplates resolves a template name to a template_id.
+describe('listTemplates', () => {
+  let listTemplatesReal: typeof import('../../src/tools/testmanagement-utils/list-templates').listTemplates;
+  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
+
+  beforeAll(async () => {
+    const actual = await vi.importActual<
+      typeof import('../../src/tools/testmanagement-utils/list-templates')
+    >('../../src/tools/testmanagement-utils/list-templates');
+    listTemplatesReal = actual.listTemplates;
+    apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const templatesResp = {
+    data: {
+      success: true,
+      templates: [
+        { id: 2, name: 'Test Case Steps', step_type: 'test_case_steps', is_system: true, is_default: true, enabled: true },
+        { id: 42, name: 'Test Case - SEC', step_type: 'test_case_steps', is_system: false, is_default: false, enabled: true },
+      ],
+    },
+  };
+
+  it('queries the admin-v2 templates endpoint with API-TOKEN auth and surfaces ids', async () => {
+    (apiClientMock.get as Mock).mockResolvedValueOnce(templatesResp);
+
+    const result = await listTemplatesReal({}, mockConfig as any);
+
+    const call = (apiClientMock.get as Mock).mock.calls[0][0];
+    expect(call.url).toContain('/api/v1/admin-v2/settings/templates');
+    expect(call.url).toContain('entity_type=TestCase');
+    expect(call.headers['API-TOKEN']).toBe('fake-user:fake-key');
+
+    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
+    expect(text).toContain('template_id=42');
+    expect(text).toContain('Test Case - SEC');
+  });
+
+  it('filters by name client-side', async () => {
+    (apiClientMock.get as Mock).mockResolvedValueOnce(templatesResp);
+
+    const result = await listTemplatesReal({ name: 'SEC' }, mockConfig as any);
+
+    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
+    expect(text).toContain('Test Case - SEC');
+    expect(text).not.toContain('[template_id=2]');
+    expect(text).toContain('Found 1 template');
+  });
+
+  it('reports when no templates match the name filter', async () => {
+    (apiClientMock.get as Mock).mockResolvedValueOnce(templatesResp);
+
+    const result = await listTemplatesReal({ name: 'nope' }, mockConfig as any);
+    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
+    expect(text).toContain('No templates matching "nope"');
   });
 });

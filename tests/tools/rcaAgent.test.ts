@@ -3,8 +3,10 @@ import {
   getBuildIdTool,
   fetchRCADataTool,
   listTestIdsTool,
+  listBuildIdTool,
 } from "../../src/tools/rca-agent";
 import { getBuildId } from "../../src/tools/rca-agent-utils/get-build-id";
+import { listBuildId } from "../../src/tools/rca-agent-utils/list-build-id";
 import { getTestIds } from "../../src/tools/rca-agent-utils/get-failed-test-id";
 import { getRCAData } from "../../src/tools/rca-agent-utils/rca-data";
 import { formatRCAData } from "../../src/tools/rca-agent-utils/format-rca";
@@ -12,6 +14,9 @@ import { getBrowserStackAuth } from "../../src/lib/get-auth";
 
 vi.mock("../../src/tools/rca-agent-utils/get-build-id", () => ({
   getBuildId: vi.fn(),
+}));
+vi.mock("../../src/tools/rca-agent-utils/list-build-id", () => ({
+  listBuildId: vi.fn(),
 }));
 vi.mock("../../src/tools/rca-agent-utils/get-failed-test-id", () => ({
   getTestIds: vi.fn(),
@@ -95,6 +100,39 @@ describe("RCA Agent Tools", () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error listing test IDs");
+    });
+  });
+
+  describe("listBuildIdTool", () => {
+    it("SUCCESS: returns build ID string (all users, no user filter)", async () => {
+      (listBuildId as Mock).mockResolvedValue("build-xyz-789");
+
+      const result = await listBuildIdTool(
+        {
+          browserStackProjectName: "MyProject",
+          browserStackBuildName: "MyBuild",
+        },
+        mockConfig,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toBe("build-xyz-789");
+      expect(getBrowserStackAuth).toHaveBeenCalledWith(mockConfig);
+    });
+
+    it("FAIL: returns isError on API failure", async () => {
+      (listBuildId as Mock).mockRejectedValue(new Error("Not found"));
+
+      const result = await listBuildIdTool(
+        {
+          browserStackProjectName: "Bad",
+          browserStackBuildName: "Bad",
+        },
+        mockConfig,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Error fetching build ID");
     });
   });
 

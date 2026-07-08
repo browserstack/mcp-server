@@ -85,10 +85,14 @@ export async function listTestCases(
 
     // Summary for more focused output
     const summary = test_cases
-      .map(
-        (tc: any) =>
-          `• ${tc.identifier}: ${tc.title} [${tc.case_type} | ${tc.priority}]`,
-      )
+      .map((tc: any) => {
+        const links = (tc.issues ?? [])
+          .map((i: any) => `${i.issue_type}:${i.jira_id}`)
+          .join(", ");
+        return `• ${tc.identifier}: ${tc.title} [${tc.case_type} | ${tc.priority}]${
+          links ? ` {linked: ${links}}` : ""
+        }`;
+      })
       .join("\n");
 
     return {

@@ -10,7 +10,10 @@ import { getTMBaseURL } from "../../lib/tm-base-url.js";
  * Selection of test cases (with optional configurations) to add.
  */
 const TestCaseSelectionSchema = z.object({
-  test_case_ids: z.array(z.string()).describe("Test case IDs, e.g. TC-123"),
+  test_case_ids: z
+    .array(z.string())
+    .min(1)
+    .describe("Test case IDs, e.g. TC-123"),
   configuration_ids: z
     .array(z.number())
     .optional()
@@ -52,6 +55,14 @@ export const UpdateTestRunSchema = z.object({
 type UpdateTestRunArgs = z.infer<typeof UpdateTestRunSchema>;
 
 /**
+ * Builds the HTTP Basic auth header from per-request config credentials.
+ */
+function buildAuthHeader(config: BrowserStackConfig): string {
+  const [username, password] = getBrowserStackAuth(config).split(":");
+  return "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
+}
+
+/**
  * Partially updates an existing test run.
  *
  * Dispatches to one of two BrowserStack endpoints based on the fields provided,
@@ -70,7 +81,8 @@ export async function updateTestRun(
 ): Promise<CallToolResult> {
   const { name, run_state, add_test_cases } = args.test_run;
 
-  const hasTestCases = (add_test_cases?.length ?? 0) > 0;
+  const addIds = add_test_cases?.flatMap((s) => s.test_case_ids) ?? [];
+  const hasTestCases = addIds.length > 0;
   const hasMetadata = name !== undefined || run_state !== undefined;
 
   if (!hasTestCases && !hasMetadata) {
@@ -85,14 +97,18 @@ export async function updateTestRun(
     };
   }
 
-  const results: CallToolResult[] = [];
+  const tmBaseUrl = await getTMBaseURL(config);
+  const authHeader = buildAuthHeader(config);
+
+  const tasks: Promise<CallToolResult>[] = [];
   if (hasMetadata) {
-    results.push(await updateTestRunMetadata(args, config));
+    tasks.push(updateTestRunMetadata(args, tmBaseUrl, authHeader));
   }
   if (hasTestCases) {
-    results.push(await updateTestRunTestCases(args, config));
+    tasks.push(updateTestRunTestCases(args, tmBaseUrl, authHeader));
   }
 
+  const results = await Promise.all(tasks);
   if (results.length === 1) {
     return results[0];
   }
@@ -109,24 +125,20 @@ export async function updateTestRun(
  */
 async function updateTestRunMetadata(
   args: UpdateTestRunArgs,
-  config: BrowserStackConfig,
+  baseUrl: string,
+  authHeader: string,
 ): Promise<CallToolResult> {
   try {
     const { name, run_state } = args.test_run;
     const body = { test_run: { name, run_state } };
-    const tmBaseUrl = await getTMBaseURL(config);
-    const url = `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
+    const url = `${baseUrl}/api/v2/projects/${encodeURIComponent(
       args.project_identifier,
     )}/test-runs/${encodeURIComponent(args.test_run_id)}/update`;
-
-    const authString = getBrowserStackAuth(config);
-    const [username, password] = authString.split(":");
 
     const resp = await apiClient.patch({
       url,
       headers: {
-        Authorization:
-          "Basic " + Buffer.from(`${username}:${password}`).toString("base64"),
+        Authorization: authHeader,
         "Content-Type": "application/json",
       },
       body,
@@ -165,7 +177,8 @@ async function updateTestRunMetadata(
  */
 async function updateTestRunTestCases(
   args: UpdateTestRunArgs,
-  config: BrowserStackConfig,
+  baseUrl: string,
+  authHeader: string,
 ): Promise<CallToolResult> {
   try {
     const { add_test_cases, preserve_existing_results } = args.test_run;
@@ -177,19 +190,14 @@ async function updateTestRunTestCases(
       },
     };
 
-    const tmBaseUrl = await getTMBaseURL(config);
-    const url = `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
+    const url = `${baseUrl}/api/v2/projects/${encodeURIComponent(
       args.project_identifier,
     )}/test-runs/${encodeURIComponent(args.test_run_id)}/test-cases`;
-
-    const authString = getBrowserStackAuth(config);
-    const [username, password] = authString.split(":");
 
     const resp = await apiClient.patch({
       url,
       headers: {
-        Authorization:
-          "Basic " + Buffer.from(`${username}:${password}`).toString("base64"),
+        Authorization: authHeader,
         "Content-Type": "application/json",
       },
       body,

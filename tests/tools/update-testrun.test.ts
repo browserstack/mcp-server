@@ -184,4 +184,79 @@ describe("updateTestRun — endpoint dispatch", () => {
       "Failed to update test run test cases",
     );
   });
+
+  it("forwards configuration_ids in the test-cases body", async () => {
+    (apiClient.patch as any).mockResolvedValue({
+      data: { success: true, async: true, unique_id: "cfg" },
+    });
+
+    await updateTestRun(
+      {
+        project_identifier: "PR-1",
+        test_run_id: "TR-9",
+        test_run: {
+          add_test_cases: [
+            { test_case_ids: ["TC-1"], configuration_ids: [3, 4] },
+          ],
+        },
+      },
+      mockConfig,
+    );
+
+    const call = (apiClient.patch as any).mock.calls[0][0];
+    expect(call.body.test_run.add_test_cases[0].configuration_ids).toEqual([
+      3, 4,
+    ]);
+  });
+
+  it("returns an error when the PATCH rejects (catch path)", async () => {
+    (apiClient.patch as any).mockRejectedValue(new Error("network down"));
+
+    const result = await updateTestRun(
+      {
+        project_identifier: "PR-1",
+        test_run_id: "TR-9",
+        test_run: { add_test_cases: [{ test_case_ids: ["TC-1"] }] },
+      },
+      mockConfig,
+    );
+
+    expect(result.isError).toBe(true);
+  });
+
+  it("rejects an empty test_case_ids selection without any API call", async () => {
+    const result = await updateTestRun(
+      {
+        project_identifier: "PR-1",
+        test_run_id: "TR-9",
+        test_run: { add_test_cases: [{ test_case_ids: [] }] },
+      },
+      mockConfig,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(apiClient.patch).not.toHaveBeenCalled();
+    expect(result.content?.[0]?.text).toContain("Nothing to update");
+  });
+
+  it("flags an error when both concerns fail", async () => {
+    (apiClient.patch as any)
+      .mockResolvedValueOnce({ data: { success: false } })
+      .mockResolvedValueOnce({ data: { success: false } });
+
+    const result = await updateTestRun(
+      {
+        project_identifier: "PR-1",
+        test_run_id: "TR-1",
+        test_run: {
+          run_state: "in_progress",
+          add_test_cases: [{ test_case_ids: ["TC-1"] }],
+        },
+      },
+      mockConfig,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(apiClient.patch).toHaveBeenCalledTimes(2);
+  });
 });

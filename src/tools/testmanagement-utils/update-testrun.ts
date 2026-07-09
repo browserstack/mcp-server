@@ -58,8 +58,7 @@ type UpdateTestRunArgs = z.infer<typeof UpdateTestRunSchema>;
  * Builds the HTTP Basic auth header from per-request config credentials.
  */
 function buildAuthHeader(config: BrowserStackConfig): string {
-  const [username, password] = getBrowserStackAuth(config).split(":");
-  return "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
+  return "Basic " + Buffer.from(getBrowserStackAuth(config)).toString("base64");
 }
 
 /**

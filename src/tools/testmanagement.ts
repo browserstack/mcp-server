@@ -736,7 +736,7 @@ export default function addTestManagementTools(
 
   tools.updateTestRun = server.tool(
     "updateTestRun",
-    "Update a test run in BrowserStack Test Management.",
+    "Update a test run's metadata and/or add test cases to it.",
     UpdateTestRunSchema.shape,
     (args) => updateTestRunTool(args, config, server),
   );

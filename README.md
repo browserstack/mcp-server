@@ -334,7 +334,7 @@ As of now we support 20 tools.
   List all test runs from the 'Shopping App' project that were executed last week and are currently marked in-progress
   ```
 
- 6. `updateTestRun` — Partially update a test run (status, tags, notes, associated test cases).
+ 6. `updateTestRun` — Update a test run's name/state and/or add test cases to it.
   **Prompt example**
 
   ```text

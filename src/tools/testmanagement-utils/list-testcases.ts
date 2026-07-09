@@ -87,6 +87,7 @@ export async function listTestCases(
     const summary = test_cases
       .map((tc: any) => {
         const links = (tc.issues ?? [])
+          .filter((i: any) => i?.issue_type && i?.jira_id)
           .map((i: any) => `${i.issue_type}:${i.jira_id}`)
           .join(", ");
         return `• ${tc.identifier}: ${tc.title} [${tc.case_type} | ${tc.priority}]${

@@ -84,4 +84,30 @@ describe("listTestCases — linked issues in summary", () => {
     );
     expect(result.content?.[0]?.text).not.toContain("{linked:");
   });
+
+  it("skips malformed issue entries instead of rendering undefined", async () => {
+    (apiClient.get as any).mockResolvedValue({
+      data: {
+        success: true,
+        info: { count: 1 },
+        test_cases: [
+          {
+            identifier: "TC-3",
+            title: "Malformed link",
+            case_type: "Functional",
+            priority: "Medium",
+            issues: [{}, { jira_id: "TES-9", issue_type: "linear" }],
+          },
+        ],
+      },
+    });
+
+    const result = await listTestCases(
+      { project_identifier: "PR-1" },
+      mockConfig,
+    );
+
+    expect(result.content?.[0]?.text).toContain("{linked: linear:TES-9}");
+    expect(result.content?.[0]?.text).not.toContain("undefined");
+  });
 });

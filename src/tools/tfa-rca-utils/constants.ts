@@ -13,6 +13,42 @@ export function getO11yBaseUrl(): string {
   return appConfig.O11Y_TFA_RCA_BASE_URL;
 }
 
+/**
+ * Test Observability (TRA) web UI base for human-facing "view report" links.
+ * Startup config (`BROWSERSTACK_O11Y_UI_BASE_URL` in `src/config.ts`, default
+ * observability.browserstack.com) — never read `process.env` here.
+ */
+export function getO11yUiBaseUrl(): string {
+  return appConfig.BROWSERSTACK_O11Y_UI_BASE_URL;
+}
+
+/**
+ * ASSUMPTION: the TRA UI deep-link for a build's report is
+ * `<UI_BASE>/builds/<buildUuid>`. This path shape is unverified against the UI
+ * router — kept as a single constant so it is trivial to correct.
+ */
+export const O11Y_UI_BUILD_PATH = "/builds/{buildUuid}";
+
+/** Human-facing TRA UI link for one build's full report. */
+export function getO11yUiBuildUrl(buildUuid: string): string {
+  return (
+    getO11yUiBaseUrl() +
+    O11Y_UI_BUILD_PATH.replace("{buildUuid}", encodeURIComponent(buildUuid))
+  );
+}
+
+/**
+ * Generic TRA UI pointer used on RESOLVED turns where only a testRunId is
+ * known (no buildUuid to deep-link). The full RCA lives on the dashboard.
+ */
+export function getRcaViewGuidance(): string {
+  return `${getO11yUiBaseUrl()} — open the build in Test Observability to view the full RCA`;
+}
+
+/** Trigger (or read, when already complete) a build's Release Readiness report. */
+export const RELEASE_READINESS_TRIGGER_PATH =
+  "/ext/v1/ai/builds/{buildUuid}/releaseReadiness/trigger";
+
 /** Submit one collaborative turn for a test run. */
 export const RCA_CHAT_SUBMIT_PATH = "/ext/v1/testRuns/{testRunId}/rcaChat";
 
@@ -31,6 +67,9 @@ export const POLL_MAX_WAIT_MS = 90 * 1000;
 
 /** Max length of the digest message, matching o11y's request `@Size`. */
 export const MESSAGE_MAX_LENGTH = 5000;
+
+/** Max chars of `root_cause` surfaced in the RESOLVED glimpse. */
+export const RCA_GLIMPSE_ROOT_CAUSE_MAX = 220;
 
 /**
  * Zod param shapes for the `tfaRcaTurn` tool, exported as a
@@ -51,4 +90,16 @@ export const TFA_RCA_TURN_PARAMS = {
     .string()
     .optional()
     .describe("Turn id to resume a pending poll; usually omit."),
+};
+
+/**
+ * Zod param shapes for the `triggerRcaReport` tool. No credential fields
+ * (security rule). Each `.describe()` ≤ 60 chars.
+ */
+export const TRIGGER_RCA_REPORT_PARAMS = {
+  buildUuid: z.string().describe("Automate build UUID to analyze."),
+  force: z
+    .boolean()
+    .optional()
+    .describe("Re-run even if a completed report exists."),
 };

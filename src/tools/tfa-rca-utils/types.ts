@@ -81,19 +81,40 @@ export interface TurnResponse {
 }
 
 /**
- * Structured result returned by the turn util / tool. The raw o11y envelope and
- * `meta` blob are never echoed — only these fields cross the boundary.
+ * Trimmed glimpse of a RESOLVED turn's RCA. The full `TfaRca` payload
+ * (analysis, log_evidence, alternatives, ...) is intentionally dropped — the
+ * complete report lives on the Test Observability dashboard (`viewRca`).
+ */
+export interface TfaRcaGlimpse {
+  /** Truncated to `RCA_GLIMPSE_ROOT_CAUSE_MAX` chars. */
+  root_cause?: string;
+  failure_type?: string;
+  related_prs?: unknown[];
+}
+
+/**
+ * Trimmed, status-discriminated result returned by the turn util / tool. The
+ * raw o11y envelope, `meta` blob, and full RCA payload are never echoed:
+ * - NEEDS_INFO carries questions/asks/suggestions/hypotheses VERBATIM (the
+ *   client loop executes them).
+ * - RESOLVED carries only a `glimpse` + a `viewRca` UI pointer.
+ * - BLOCKED carries reason/unmetAsks.
+ * - PENDING carries only turnId/threadId to resume polling.
  */
 export interface TfaRcaTurnResult {
   status: TfaStatus | typeof PENDING_STATUS;
-  confidence: Confidence;
+  confidence?: Confidence;
   threadId?: string;
+  /** Present on PENDING turns: resume via the tool's `turnId` arg. */
   turnId?: string;
-  questions: string[];
-  asks: TfaAsk[];
-  suggestions: string[];
-  hypotheses: string[];
-  rca?: TfaRca;
+  questions?: string[];
+  asks?: TfaAsk[];
+  suggestions?: string[];
+  hypotheses?: string[];
+  /** Present on RESOLVED turns: trimmed root-cause glimpse. */
+  glimpse?: TfaRcaGlimpse;
+  /** Present on RESOLVED turns: where the full RCA report lives. */
+  viewRca?: string;
   reason?: string;
   unmetAsks?: string[];
 }

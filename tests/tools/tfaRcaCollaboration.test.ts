@@ -19,6 +19,7 @@ vi.mock("../../src/config", () => ({
   default: {
     REMOTE_MCP: false,
     O11Y_TFA_RCA_BASE_URL: "https://api-observability-rengg-tfa.bsstag.com",
+    BROWSERSTACK_O11Y_UI_BASE_URL: "https://observability.browserstack.com",
   },
 }));
 
@@ -76,7 +77,7 @@ describe("tfaRcaTurnTool", () => {
     (appConfig as any).O11Y_TFA_RCA_BASE_URL = DEFAULT_O11Y_BASE_URL;
   });
 
-  it("RESOLVED turn → tool returns structured rca, isError falsy", async () => {
+  it("RESOLVED turn → trimmed glimpse + viewRca; full rca dropped", async () => {
     post.mockResolvedValue(
       ok({ turnId: "u-1", threadId: "t-1", status: "working" }),
     );
@@ -89,6 +90,9 @@ describe("tfaRcaTurnTool", () => {
             root_cause: "Config map deleted on deploy.",
             possible_fix: "Re-add the key.",
             failure_type: "infra",
+            related_prs: [42, 43],
+            analysis: "very long chain of reasoning",
+            log_evidence: ["stack trace line 1", "stack trace line 2"],
           },
         },
         { meta: { huge: "blob".repeat(1000) } },
@@ -107,11 +111,43 @@ describe("tfaRcaTurnTool", () => {
     expect(payload.status).toBe("RESOLVED");
     expect(payload.confidence).toBe("high");
     expect(payload.threadId).toBe("t-1");
-    expect(payload.rca.root_cause).toBe("Config map deleted on deploy.");
-    expect(payload.rca.possible_fix).toBe("Re-add the key.");
-    expect(payload.rca.failure_type).toBe("infra");
+    // Glimpse only — root_cause, failure_type, related_prs.
+    expect(payload.glimpse.root_cause).toBe("Config map deleted on deploy.");
+    expect(payload.glimpse.failure_type).toBe("infra");
+    expect(payload.glimpse.related_prs).toEqual([42, 43]);
+    // Full RCA payload dropped; humans go to the TRA UI for the report.
+    expect(payload.rca).toBeUndefined();
+    expect(result.content[0].text).not.toContain("very long chain");
+    expect(result.content[0].text).not.toContain("stack trace line");
+    expect(result.content[0].text).not.toContain("Re-add the key.");
+    expect(payload.viewRca).toContain("https://observability.browserstack.com");
     // Response trimmed: no raw meta blob echoed.
     expect(result.content[0].text).not.toContain("blob");
+  });
+
+  it("RESOLVED glimpse truncates root_cause to 220 chars", async () => {
+    const longCause = "x".repeat(500);
+    post.mockResolvedValue(
+      ok({ turnId: "u-tr", threadId: "t-tr", status: "working" }),
+    );
+    get.mockResolvedValue(
+      completed({
+        status: "RESOLVED",
+        confidence: "high",
+        rca: { root_cause: longCause, failure_type: "product" },
+      }),
+    );
+
+    const result = await runWithTimers(
+      tfaRcaTurnTool(
+        { testRunId: "tr-tr", message: "digest" },
+        mockConfig as any,
+      ),
+    );
+    const payload = JSON.parse(result.content[0].text as string);
+    expect(payload.glimpse.root_cause.length).toBeLessThanOrEqual(220);
+    expect(payload.glimpse.root_cause.endsWith("…")).toBe(true);
+    expect(payload.glimpse.root_cause.startsWith("xxx")).toBe(true);
   });
 
   it("NEEDS_INFO turn → typed asks + questions read directly from structure", async () => {
@@ -402,10 +438,10 @@ describe("tfaRcaTurnTool", () => {
   });
 
   it("o11y base is not exposed as a Zod tool-input field", () => {
-    const { server, captured } = buildFakeServer();
+    const { server, tools } = buildFakeServer();
     addTfaRcaCollaborationTools(server as any, mockConfig as any);
     // The schema captured at registration must carry no endpoint/base-url field.
-    const fieldNames = Object.keys(captured.schema ?? {});
+    const fieldNames = Object.keys(tools.tfaRcaTurn.schema ?? {});
     expect(fieldNames).toEqual(["testRunId", "message", "threadId", "turnId"]);
     expect(fieldNames).not.toContain("baseUrl");
     expect(fieldNames).not.toContain("o11yBaseUrl");
@@ -435,22 +471,25 @@ interface CapturedHandler {
   schema: Record<string, any>;
 }
 
-function buildFakeServer(): { server: any; captured: CapturedHandler } {
-  const captured: CapturedHandler = { handler: async () => ({}), schema: {} };
+/** Captures every registered tool by name (the adder registers several). */
+function buildFakeServer(): {
+  server: any;
+  tools: Record<string, CapturedHandler>;
+} {
+  const tools: Record<string, CapturedHandler> = {};
   const server = {
     server: { getClientVersion: () => ({ name: "test", version: "1.0" }) },
     tool: (
-      _name: string,
+      name: string,
       _desc: string,
       schema: any,
       handler: (args: any, context: any) => Promise<any>,
     ) => {
-      captured.schema = schema;
-      captured.handler = handler;
+      tools[name] = { schema, handler };
       return {};
     },
   };
-  return { server, captured };
+  return { server, tools };
 }
 
 describe("tfaRcaTurn handler instrumentation", () => {
@@ -464,11 +503,11 @@ describe("tfaRcaTurn handler instrumentation", () => {
       completed({ status: "RESOLVED", confidence: "high" }),
     );
 
-    const { server, captured } = buildFakeServer();
+    const { server, tools } = buildFakeServer();
     addTfaRcaCollaborationTools(server as any, mockConfig as any);
 
     const result = await runWithTimers(
-      captured.handler({ testRunId: "tr-1", message: "d" }, undefined),
+      tools.tfaRcaTurn.handler({ testRunId: "tr-1", message: "d" }, undefined),
     );
 
     expect(result.isError).toBeFalsy();
@@ -479,11 +518,11 @@ describe("tfaRcaTurn handler instrumentation", () => {
   it("domain failure → isError envelope + trackMCP with error", async () => {
     post.mockResolvedValue(nonOk(403));
 
-    const { server, captured } = buildFakeServer();
+    const { server, tools } = buildFakeServer();
     addTfaRcaCollaborationTools(server as any, mockConfig as any);
 
     const result = await runWithTimers(
-      captured.handler({ testRunId: "tr-1", message: "d" }, undefined),
+      tools.tfaRcaTurn.handler({ testRunId: "tr-1", message: "d" }, undefined),
     );
 
     expect(result.isError).toBe(true);
@@ -500,11 +539,11 @@ describe("tfaRcaTurn handler instrumentation", () => {
       throw new Error("Missing BrowserStack credentials");
     });
 
-    const { server, captured } = buildFakeServer();
+    const { server, tools } = buildFakeServer();
     addTfaRcaCollaborationTools(server as any, mockConfig as any);
 
     const result = await runWithTimers(
-      captured.handler({ testRunId: "tr-1", message: "d" }, undefined),
+      tools.tfaRcaTurn.handler({ testRunId: "tr-1", message: "d" }, undefined),
     );
 
     expect(result.isError).toBe(true);

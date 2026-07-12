@@ -3,11 +3,13 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import {
   getO11yBaseUrl,
+  getRcaViewGuidance,
   POLL_INITIAL_DELAY_MS,
   POLL_INTERVAL_MS,
   POLL_MAX_WAIT_MS,
   RCA_CHAT_POLL_PATH,
   RCA_CHAT_SUBMIT_PATH,
+  RCA_GLIMPSE_ROOT_CAUSE_MAX,
 } from "./constants.js";
 import {
   PENDING_STATUS,
@@ -116,6 +118,60 @@ function readStructuredTurn(data: any): TurnResponse {
   };
 }
 
+/** Truncate to `max` chars total (ellipsis included when cut). */
+function truncate(text: string | undefined, max: number): string | undefined {
+  if (text === undefined) return undefined;
+  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+}
+
+/**
+ * Trim a completed turn to the status-discriminated contract:
+ * - NEEDS_INFO: questions/asks/suggestions/hypotheses VERBATIM (the client
+ *   loop consumes them).
+ * - RESOLVED: glimpse only (root_cause truncated, failure_type, related_prs)
+ *   + a `viewRca` pointer — the full RCA lives on the TRA dashboard.
+ * - BLOCKED: reason + unmetAsks.
+ */
+function toTrimmedResult(
+  turn: TurnResponse,
+  threadId: string | undefined,
+): TfaRcaTurnResult {
+  switch (turn.status) {
+    case TfaStatus.RESOLVED: {
+      const rca = turn.rca ?? {};
+      return {
+        status: turn.status,
+        confidence: turn.confidence,
+        threadId,
+        glimpse: {
+          root_cause: truncate(rca.root_cause, RCA_GLIMPSE_ROOT_CAUSE_MAX),
+          failure_type: rca.failure_type,
+          related_prs: rca.related_prs,
+        },
+        viewRca: getRcaViewGuidance(),
+      };
+    }
+    case TfaStatus.BLOCKED:
+      return {
+        status: turn.status,
+        confidence: turn.confidence,
+        threadId,
+        reason: turn.reason,
+        unmetAsks: turn.unmetAsks,
+      };
+    default:
+      return {
+        status: turn.status,
+        confidence: turn.confidence,
+        threadId,
+        questions: turn.questions,
+        asks: turn.asks,
+        suggestions: turn.suggestions,
+        hypotheses: turn.hypotheses,
+      };
+  }
+}
+
 /** Map a submit (POST) non-2xx into a clean, group-scope-safe domain error. */
 function mapSubmitError(status: number): TfaRcaTurnError {
   if (status === 403) {
@@ -217,19 +273,7 @@ export async function submitTfaRcaTurn(
       if (status === "completed") {
         const turn = readStructuredTurn(data);
         await notify(context, "TFA agent turn complete.", 100);
-        return {
-          status: turn.status,
-          confidence: turn.confidence,
-          threadId,
-          turnId,
-          questions: turn.questions,
-          asks: turn.asks,
-          suggestions: turn.suggestions,
-          hypotheses: turn.hypotheses,
-          rca: turn.rca,
-          reason: turn.reason,
-          unmetAsks: turn.unmetAsks,
-        };
+        return toTrimmedResult(turn, threadId);
       }
       // status === "working" (or any other in-progress value) → keep polling.
     }
@@ -237,15 +281,11 @@ export async function submitTfaRcaTurn(
 
     if (Date.now() - startTime >= POLL_MAX_WAIT_MS) {
       await notify(context, "TFA agent still working; will resume later.", 90);
+      // PENDING keeps only what the skill needs to resume polling.
       return {
         status: PENDING_STATUS,
-        confidence: "unknown",
         threadId,
         turnId,
-        questions: [],
-        asks: [],
-        suggestions: [],
-        hypotheses: [],
       };
     }
 

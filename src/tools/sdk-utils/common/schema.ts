@@ -133,4 +133,8 @@ export const ManagePercyBuildApprovalParamsShape = {
   action: z
     .enum(["approve", "unapprove", "reject"])
     .describe("The action to perform on the Percy build."),
+  confirmToken: z
+    .string()
+    .optional()
+    .describe("Token from the prior call; required to perform the action."),
 };

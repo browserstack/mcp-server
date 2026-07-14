@@ -31,13 +31,14 @@ for (const key of BROWSERSTACK_LOCAL_OPTION_KEYS) {
 }
 
 /**
- * Default o11y base URL for the `tfaRcaTurn` collaborative-RCA tool. Same value
- * for every user served by the process; overridable at startup via
- * `O11Y_TFA_RCA_BASE_URL` so the tool can target the o11y env where a build's
+ * Default o11y base URL for the `tfaRcaTurn` collaborative-RCA tool —
+ * PRODUCTION (verified: api-automation.browserstack.com routes the
+ * /ext/v1 testRca + rcaChat endpoints). Same value for every user served by
+ * the process; overridable at startup via `O11Y_TFA_RCA_BASE_URL` to target a
+ * staging tenant (e.g. api-observability-<tenant>.bsstag.com) where a build's
  * representatives actually live. Per-process config, never a per-call arg.
  */
-const DEFAULT_O11Y_TFA_RCA_BASE_URL =
-  "https://api-observability-rengg-tfa.bsstag.com";
+const DEFAULT_O11Y_TFA_RCA_BASE_URL = "https://api-automation.browserstack.com";
 
 /**
  * Base URL for the Automate test-runs API (`/ext/v1/builds/{id}/testRuns`) that

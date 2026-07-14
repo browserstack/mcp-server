@@ -5,7 +5,7 @@ import appConfig from "../../config.js";
 /**
  * O11y base for the `rcaChat` proxy. The MCP server talks ONLY to o11y-api
  * (boundary discipline, R9). The value is process-startup config resolved in
- * `src/config.ts` from `O11Y_TFA_RCA_BASE_URL` (default rengg-tfa) — never read
+ * `src/config.ts` from `O11Y_TFA_RCA_BASE_URL` (default: production) — never read
  * `process.env` here. Resolved per call so a config built per server instance
  * (multi-tenant) is honored.
  */

@@ -21,6 +21,14 @@ interface IssueTracker {
   host: string;
 }
 
+// A custom field value may be a scalar or, for multi-select fields, an array
+// of option values. The TM API accepts arrays only when keyed by field NAME.
+export type CustomFieldValue =
+  | string
+  | number
+  | boolean
+  | Array<string | number>;
+
 export interface TestCaseCreateRequest {
   project_identifier: string;
   folder_id: string;
@@ -32,9 +40,11 @@ export interface TestCaseCreateRequest {
   issues?: string[];
   issue_tracker?: IssueTracker;
   tags?: string[];
-  custom_fields?: Record<string, string>;
+  custom_fields?: Record<string, CustomFieldValue>;
   automation_status?: string;
   priority?: string;
+  template?: string;
+  template_id?: number;
 }
 
 export interface TestCaseResponse {
@@ -51,6 +61,7 @@ export interface TestCaseResponse {
       }>;
       tags: string[];
       template: string;
+      template_id?: number;
       description: string;
       preconditions: string;
       title: string;
@@ -65,6 +76,14 @@ export interface TestCaseResponse {
     };
   };
 }
+
+// Scalar value, or an array of values for multi-select custom fields.
+export const customFieldValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.union([z.string(), z.number()])),
+]);
 
 export const CreateTestCaseSchema = z.object({
   project_identifier: z
@@ -122,9 +141,11 @@ export const CreateTestCaseSchema = z.object({
       "Tags to attach to the test case. This should be strictly in array format not the string of json",
     ),
   custom_fields: z
-    .record(z.string(), z.string())
+    .record(z.string(), customFieldValueSchema)
     .optional()
-    .describe("Map of custom field names to values."),
+    .describe(
+      "Map of custom field NAME to value; use an array for multi-select fields.",
+    ),
   automation_status: z
     .string()
     .optional()
@@ -137,6 +158,18 @@ export const CreateTestCaseSchema = z.object({
     .describe(
       "Priority of the test case. Accepts either display name (e.g. 'Critical', 'High', 'Medium', 'Low') or internal name (e.g. 'medium'). If omitted, the project default (usually 'Medium') is applied. Valid values are per-project and discoverable via the form-fields endpoint.",
     ),
+  template: z
+    .string()
+    .optional()
+    .describe(
+      "System template slug only: 'test_case_steps' or 'test_case_bdd'. For a custom template, use template_id instead.",
+    ),
+  template_id: z
+    .number()
+    .optional()
+    .describe(
+      "Numeric ID of a custom template (from listTestCaseTemplates); applies that template. Overrides 'template'.",
+    ),
 });
 
 export function sanitizeArgs(args: any) {
@@ -146,6 +179,8 @@ export function sanitizeArgs(args: any) {
   if (cleaned.owner === null) delete cleaned.owner;
   if (cleaned.preconditions === null) delete cleaned.preconditions;
   if (cleaned.automation_status === null) delete cleaned.automation_status;
+  if (cleaned.template === null) delete cleaned.template;
+  if (cleaned.template_id === null) delete cleaned.template_id;
 
   if (cleaned.issue_tracker) {
     if (
@@ -192,6 +227,91 @@ async function normalizePriority(
   }
 }
 
+/**
+ * Read a freshly-created test case back to learn which template was actually
+ * applied. The create response does not echo template_id, but the v1 search
+ * endpoint does. Returns undefined on any failure (caller then skips the
+ * verification warning rather than blocking the success path).
+ */
+async function fetchAppliedTemplateId(
+  numericProjectId: string,
+  identifier: string,
+  config: BrowserStackConfig,
+): Promise<number | undefined> {
+  try {
+    const tmBaseUrl = await getTMBaseURL(config);
+    const resp = await apiClient.get({
+      url: `${tmBaseUrl}/api/v1/projects/${encodeURIComponent(
+        numericProjectId,
+      )}/test-cases/search?q%5Bquery%5D=${encodeURIComponent(identifier)}`,
+      headers: {
+        "API-TOKEN": getBrowserStackAuth(config),
+        accept: "application/json, text/plain, */*",
+      },
+    });
+    const cases: Array<{ identifier?: string; template_id?: number }> =
+      resp.data?.test_cases ?? [];
+    const match = cases.find((c) => c.identifier === identifier);
+    return match?.template_id;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The v1 create endpoint (used when a template_id is requested) keys
+ * custom_fields by numeric field id with option *ids* — unlike the v2 endpoint,
+ * which keys by field name with option *values*. Translate the MCP's by-name
+ * shape into v1's by-id shape using the project's form fields. Best-effort:
+ * unknown fields/options pass through unchanged.
+ */
+async function toV1CustomFields(
+  customFields: Record<string, CustomFieldValue>,
+  numericProjectId: string,
+  config: BrowserStackConfig,
+): Promise<Record<string, CustomFieldValue>> {
+  let defs: any[] = [];
+  try {
+    const formFields = await fetchFormFields(numericProjectId, config);
+    defs = Array.isArray(formFields?.custom_fields)
+      ? formFields.custom_fields
+      : [];
+  } catch {
+    return customFields;
+  }
+
+  const byName = new Map<string, any>(defs.map((f) => [f.field_name, f]));
+  const out: Record<string, CustomFieldValue> = {};
+
+  for (const [name, value] of Object.entries(customFields)) {
+    const def = byName.get(name);
+    if (!def) {
+      out[name] = value; // unknown field name — leave as-is
+      continue;
+    }
+    const isOptionField =
+      def.field_type === "field_dropdown" ||
+      def.field_type === "field_multi_dropdown";
+    if (isOptionField) {
+      const optionIdByValue = new Map<string, string | number>();
+      for (const o of (def.option_values ?? []) as Array<{
+        option_value: string | number;
+        id: string | number;
+      }>) {
+        optionIdByValue.set(String(o.option_value), o.id);
+      }
+      const toOptionId = (v: string | number): string | number =>
+        optionIdByValue.get(String(v)) ?? v;
+      out[String(def.id)] = Array.isArray(value)
+        ? value.map(toOptionId)
+        : toOptionId(value as string | number);
+    } else {
+      out[String(def.id)] = value;
+    }
+  }
+  return out;
+}
+
 export async function createTestCase(
   params: TestCaseCreateRequest,
   config: BrowserStackConfig,
@@ -206,23 +326,62 @@ export async function createTestCase(
     );
   }
 
-  const body = { test_case: testCaseParams };
   const authString = getBrowserStackAuth(config);
   const [username, password] = authString.split(":");
 
   try {
     const tmBaseUrl = await getTMBaseURL(config);
-    const response = await apiClient.post({
-      url: `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
+
+    // The public v2 create endpoint silently drops template_id, so a specific
+    // (custom) template cannot be applied through it. The v1 create endpoint
+    // DOES honour template_id — but it needs the numeric project id, the folder
+    // in the body, API-TOKEN auth, and custom_fields keyed by id. Use v1 only
+    // when a template_id is requested; otherwise keep the proven v2 path so
+    // existing behaviour (incl. custom_fields by name) is unchanged.
+    let request: { url: string; headers: Record<string, string>; body: any };
+    if (testCaseParams.template_id !== undefined) {
+      const numericProjectId = await projectIdentifierToId(
         params.project_identifier,
-      )}/folders/${encodeURIComponent(params.folder_id)}/test-cases`,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization:
-          "Basic " + Buffer.from(`${username}:${password}`).toString("base64"),
-      },
-      body,
-    });
+        config,
+      );
+      const v1TestCase: Record<string, any> = { ...testCaseParams };
+      delete v1TestCase.project_identifier;
+      delete v1TestCase.folder_id;
+      delete v1TestCase.custom_fields;
+      v1TestCase.test_case_folder_id = Number(params.folder_id);
+      if (testCaseParams.custom_fields) {
+        v1TestCase.custom_fields = await toV1CustomFields(
+          testCaseParams.custom_fields,
+          numericProjectId,
+          config,
+        );
+      }
+      request = {
+        url: `${tmBaseUrl}/api/v1/projects/${encodeURIComponent(
+          numericProjectId,
+        )}/test-cases`,
+        headers: {
+          "Content-Type": "application/json",
+          "API-TOKEN": authString,
+        },
+        body: { folder_id: Number(params.folder_id), test_case: v1TestCase },
+      };
+    } else {
+      request = {
+        url: `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
+          params.project_identifier,
+        )}/folders/${encodeURIComponent(params.folder_id)}/test-cases`,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization:
+            "Basic " +
+            Buffer.from(`${username}:${password}`).toString("base64"),
+        },
+        body: { test_case: testCaseParams },
+      };
+    }
+
+    const response = await apiClient.post(request);
 
     const { data } = response.data;
     if (!data.success) {
@@ -245,22 +404,53 @@ export async function createTestCase(
       config,
     );
 
-    return {
-      content: [
-        {
+    const content: Array<{ type: "text"; text: string }> = [];
+
+    // A specific custom template is selected by numeric template_id. The create
+    // response does not echo template_id, so read the case back to learn which
+    // template was actually applied and warn on mismatch — the public create
+    // endpoint may silently ignore the requested template.
+    if (params.template_id !== undefined) {
+      const appliedId =
+        tc.template_id !== undefined
+          ? Number(tc.template_id)
+          : await fetchAppliedTemplateId(projectId, tc.identifier, config);
+      if (appliedId !== undefined && appliedId !== Number(params.template_id)) {
+        content.push({
           type: "text",
-          text: `Test case successfully created:
+          text: `Warning: requested template_id ${params.template_id} was not applied — the test case uses template_id ${appliedId}. Confirm the id via listTestCaseTemplates and that the template is linked to this project.`,
+        });
+      }
+    }
+
+    // The TM API silently ignores an unrecognized template slug and falls back
+    // to the default. Surface that instead of letting it pass as success.
+    // Note: the `template` slug only ever selects a SYSTEM template; a custom
+    // template must be selected with template_id.
+    if (
+      params.template_id === undefined &&
+      params.template &&
+      tc.template &&
+      String(tc.template).toLowerCase() !==
+        String(params.template).toLowerCase()
+    ) {
+      content.push({
+        type: "text",
+        text: `Warning: requested template "${params.template}" was not applied — the test case was created with "${tc.template}". The 'template' field accepts only the system slugs "test_case_steps" or "test_case_bdd"; for a custom template pass template_id (see listTestCaseTemplates).`,
+      });
+    }
+
+    content.push({
+      type: "text",
+      text: `Test case successfully created:
             - Identifier: ${tc.identifier}
             - Title: ${tc.title}
 
           You can view it here: ${tmBaseUrl}/projects/${projectId}/folder/search?q=${tc.identifier}`,
-        },
-        {
-          type: "text",
-          text: JSON.stringify(tc, null, 2),
-        },
-      ],
-    };
+    });
+    content.push({ type: "text", text: JSON.stringify(tc, null, 2) });
+
+    return { content };
   } catch (err) {
     // Delegate to our centralized Axios error formatter
     return formatAxiosError(err, "Failed to create test case");

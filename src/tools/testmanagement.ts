@@ -31,6 +31,11 @@ import {
 } from "./testmanagement-utils/list-folders.js";
 
 import {
+  listTemplates,
+  ListTemplatesSchema,
+} from "./testmanagement-utils/list-templates.js";
+
+import {
   CreateTestRunSchema,
   createTestRun,
 } from "./testmanagement-utils/create-testrun.js";
@@ -249,6 +254,43 @@ export async function listFoldersTool(
         {
           type: "text",
           text: `Failed to list folders: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }. Please open an issue on GitHub if the problem persists`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Lists test-case templates so callers can resolve a name to a template_id.
+ */
+export async function listTemplatesTool(
+  args: z.infer<typeof ListTemplatesSchema>,
+  config: BrowserStackConfig,
+  server: McpServer,
+): Promise<CallToolResult> {
+  try {
+    trackMCP(
+      "listTestCaseTemplates",
+      server.server.getClientVersion()!,
+      undefined,
+      config,
+    );
+    return await listTemplates(args, config);
+  } catch (err) {
+    trackMCP(
+      "listTestCaseTemplates",
+      server.server.getClientVersion()!,
+      err,
+      config,
+    );
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Failed to list templates: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
         },
@@ -671,6 +713,13 @@ export default function addTestManagementTools(
     (args) => listFoldersTool(args, config, server),
   );
 
+  tools.listTestCaseTemplates = server.tool(
+    "listTestCaseTemplates",
+    "List test-case templates with their numeric template_id. Use the id with createTestCase to apply a custom template (the 'template' slug only selects system templates).",
+    ListTemplatesSchema.shape,
+    (args) => listTemplatesTool(args, config, server),
+  );
+
   tools.createTestRun = server.tool(
     "createTestRun",
     "Create a test run in BrowserStack Test Management.",
@@ -687,7 +736,7 @@ export default function addTestManagementTools(
 
   tools.updateTestRun = server.tool(
     "updateTestRun",
-    "Update a test run in BrowserStack Test Management.",
+    "Update a test run's metadata and/or add test cases to it.",
     UpdateTestRunSchema.shape,
     (args) => updateTestRunTool(args, config, server),
   );

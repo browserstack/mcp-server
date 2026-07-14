@@ -81,8 +81,7 @@ export async function getTestIds(
   }
 }
 
-// Recursive function to extract failed test IDs from hierarchy
-function extractFailedTestIds(
+export function extractFailedTestIds(
   hierarchy: TestDetails[],
   status?: TestStatus,
   includeFailureDetail = false,

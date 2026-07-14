@@ -85,6 +85,8 @@ Similar to the app testing, you can use the following prompts to test your **web
 Auto-analyze, diagnose, and even fix broken test scripts right in your IDE or LLM. Instantly fetch logs, identify root causes, and apply context-aware fixes. No more debugging loops.
 Below are few example prompts to run/debug/fix your automated tests on BrowserStack's [Test Platform](https://www.browserstack.com/test-platform).
 
+> **Note:** When fetching Root Cause Analysis (RCA) for a test, the server returns the suggested fix as a proposal only. It never applies code changes automatically — your assistant must present the suggestion and wait for your explicit approval before editing any files.
+
 ```bash
 #Port test suite to BrowserStack
 "Setup test suite to run on BrowserStack infra"
@@ -332,7 +334,7 @@ As of now we support 20 tools.
   List all test runs from the 'Shopping App' project that were executed last week and are currently marked in-progress
   ```
 
- 6. `updateTestRun` — Partially update a test run (status, tags, notes, associated test cases).
+ 6. `updateTestRun` — Update a test run's name/state and/or add test cases to it.
   **Prompt example**
 
   ```text

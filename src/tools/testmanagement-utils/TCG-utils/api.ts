@@ -5,6 +5,7 @@ import {
   FETCH_DETAILS_URL,
   FORM_FIELDS_URL,
   BULK_CREATE_URL,
+  TC_DETAILS_MAX_BATCH,
 } from "./config.js";
 import {
   DefaultFieldMaps,
@@ -228,11 +229,13 @@ export async function pollScenariosTestDetails(
           if (msg.type === "testcase") {
             const sc = msg.data.scenario;
             if (sc) {
-              const array = Array.isArray(msg.data.testcases)
-                ? msg.data.testcases
-                : msg.data.testcases
-                  ? [msg.data.testcases]
-                  : [];
+              const array = (
+                Array.isArray(msg.data.testcases)
+                  ? msg.data.testcases
+                  : msg.data.testcases
+                    ? [msg.data.testcases]
+                    : []
+              ).slice(0, TC_DETAILS_MAX_BATCH);
               const ids = array.map((tc: any) => tc.id || tc.test_case_id);
 
               const reqId = await fetchTestCaseDetails(
@@ -315,11 +318,12 @@ export async function bulkCreateTestCases(
   const BULK_CREATE_URL_VALUE = BULK_CREATE_URL(tmBaseUrl, projectId, folderId);
 
   for (const { id, testcases } of Object.values(scenariosMap)) {
-    const testCaseLength = testcases.length;
+    const cappedTestcases = testcases.slice(0, TC_DETAILS_MAX_BATCH);
+    const testCaseLength = cappedTestcases.length;
     testCaseCount += testCaseLength;
     if (testCaseLength === 0) continue;
     const payload = {
-      test_cases: testcases.map((tc) =>
+      test_cases: cappedTestcases.map((tc) =>
         createTestCasePayload(
           tc,
           id,

@@ -51,18 +51,18 @@ export function getNodejsAppInstructions(
     case AppSDKSupportedTestingFrameworkEnum.jest:
       return createStep(
         "Run your Jest test suite with BrowserStack SDK:",
-        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx run browserstack-node-sdk jest specs/single_test.js\n\`\`\``,
+        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx browserstack-node-sdk jest specs/single_test.js\n\`\`\``,
       );
     case AppSDKSupportedTestingFrameworkEnum.mocha:
       return createStep(
         "Run your Mocha test suite with BrowserStack SDK:",
-        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx run browserstack-node-sdk mocha specs/single_test.js\n\`\`\``,
+        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx browserstack-node-sdk mocha specs/single_test.js\n\`\`\``,
       );
 
     case AppSDKSupportedTestingFrameworkEnum.cucumberJs:
       return createStep(
         "Run your Cucumber JS test suite with BrowserStack SDK:",
-        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx run browserstack-node-sdk cucumber-js specs/single_test.js\n\`\`\``,
+        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx browserstack-node-sdk cucumber-js specs/single_test.js\n\`\`\``,
       );
     default:
       return "";

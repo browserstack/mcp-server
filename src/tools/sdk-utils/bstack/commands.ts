@@ -25,7 +25,7 @@ npm i -D browserstack-node-sdk@latest
 ---STEP---
 Run the following command to setup browserstack sdk:
 \`\`\`bash
-npx setup --username ${username} --key ${accessKey}
+npx browserstack-node-sdk setup --username ${username} --key ${accessKey}
 \`\`\``;
 
 // Template for Gradle setup instructions (platform-independent)

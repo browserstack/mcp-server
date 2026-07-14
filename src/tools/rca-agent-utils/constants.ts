@@ -1,5 +1,17 @@
 import { z } from "zod";
+import appConfig from "../../config.js";
 import { TestStatus } from "./types.js";
+
+/**
+ * Base URL for the Automate test-runs API used by `listTestIds`. Process-startup
+ * config resolved in `src/config.ts` from `BROWSERSTACK_AUTOMATION_BASE_URL`
+ * (default prod). Set it to a rengg/staging host to list a build that lives
+ * there. Read per call so a per-server-instance config is honored; never read
+ * `process.env` here.
+ */
+export function getAutomationBaseUrl(): string {
+  return appConfig.BROWSERSTACK_AUTOMATION_BASE_URL;
+}
 
 export const FETCH_RCA_PARAMS = {
   testId: z
@@ -34,4 +46,8 @@ export const LIST_TEST_IDS_PARAMS = {
     .describe(
       "Filter tests by status. If not provided, all tests are returned. Example for RCA usecase always use failed status",
     ),
+  includeFailureDetail: z
+    .boolean()
+    .optional()
+    .describe("Add per-test failure signature for clustering. Default false."),
 };

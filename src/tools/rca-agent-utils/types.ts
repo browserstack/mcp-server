@@ -20,9 +20,22 @@ export interface TestRun {
   };
 }
 
+// Trimmed per-test failure signature for downstream clustering.
+// Never carries full stack traces — error_summary is a single capped line.
+export interface TestFailureSignature {
+  category?: string;
+  error_summary?: string;
+  file_path?: string;
+  is_flaky?: boolean;
+  is_always_failing?: boolean;
+  is_new_failure?: boolean;
+}
+
 export interface FailedTestInfo {
   test_id: number;
   test_name: string;
+  // Present only when listTestIds is called with includeFailureDetail=true.
+  failure?: TestFailureSignature;
 }
 
 export enum RCAState {

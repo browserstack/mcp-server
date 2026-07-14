@@ -145,15 +145,21 @@ export async function listTestIdsTool(
   args: {
     buildId: string;
     status?: TestStatus;
+    includeFailureDetail?: boolean;
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const { buildId, status } = args;
+    const { buildId, status, includeFailureDetail } = args;
     const authString = getBrowserStackAuth(config);
 
     // Get test IDs
-    const testIds = await getTestIds(buildId, authString, status);
+    const testIds = await getTestIds(
+      buildId,
+      authString,
+      status,
+      includeFailureDetail,
+    );
 
     return {
       content: [

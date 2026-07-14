@@ -57,7 +57,7 @@ const DEFAULT_BROWSERSTACK_AUTOMATION_BASE_URL =
  * config, never a per-call arg.
  */
 const DEFAULT_BROWSERSTACK_O11Y_UI_BASE_URL =
-  "https://observability.browserstack.com";
+  "https://automation.browserstack.com";
 
 /**
  * USE_OWN_LOCAL_BINARY_PROCESS:

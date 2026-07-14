@@ -23,11 +23,13 @@ export function getO11yUiBaseUrl(): string {
 }
 
 /**
- * ASSUMPTION: the TRA UI deep-link for a build's report is
- * `<UI_BASE>/builds/<buildUuid>`. This path shape is unverified against the UI
- * router — kept as a single constant so it is trivial to correct.
+ * TRA UI deep-link for a build's AI report (confirmed shape, 2026-07-13):
+ * `<UI_BASE>/builds/<buildUuid>?tab=ai_report&subTab=aitfa` — the AI-TFA
+ * sub-tab of the build's AI report. `{buildUuid}` is replaced with the
+ * caller-supplied build id.
  */
-export const O11Y_UI_BUILD_PATH = "/builds/{buildUuid}";
+export const O11Y_UI_BUILD_PATH =
+  "/builds/{buildUuid}?tab=ai_report&subTab=aitfa";
 
 /** Human-facing TRA UI link for one build's full report. */
 export function getO11yUiBuildUrl(buildUuid: string): string {
@@ -39,10 +41,11 @@ export function getO11yUiBuildUrl(buildUuid: string): string {
 
 /**
  * Generic TRA UI pointer used on RESOLVED turns where only a testRunId is
- * known (no buildUuid to deep-link). The full RCA lives on the dashboard.
+ * known (no buildUuid to deep-link). The full RCA lives on the dashboard
+ * (build page → AI report → AI TFA sub-tab).
  */
 export function getRcaViewGuidance(): string {
-  return `${getO11yUiBaseUrl()} — open the build in Test Observability to view the full RCA`;
+  return `${getO11yUiBaseUrl()} — open the build's AI report (tab=ai_report, subTab=aitfa) to view the full RCA`;
 }
 
 /** Trigger (or read, when already complete) a build's Release Readiness report. */

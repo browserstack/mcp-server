@@ -91,7 +91,7 @@ describe("triggerRcaReportTool", () => {
     expect(payload.failureReason).toBe(
       "2 product regressions traced to PR #412",
     );
-    expect(payload.viewReport).toBe(`${UI_BASE}/builds/b-1`);
+    expect(payload.viewReport).toBe(`${UI_BASE}/builds/b-1?tab=ai_report&subTab=aitfa`);
     // Raw response is never echoed: no prs[]/workflows[] entries, no envelope.
     expect(payload.prs).toBeUndefined();
     expect(payload.workflows).toBeUndefined();
@@ -140,7 +140,7 @@ describe("triggerRcaReportTool", () => {
     const payload = JSON.parse(result.content[0].text as string);
     expect(payload.state).toBe("running");
     expect(payload.verdict).toBeUndefined();
-    expect(payload.viewReport).toBe(`${UI_BASE}/builds/b-2`);
+    expect(payload.viewReport).toBe(`${UI_BASE}/builds/b-2?tab=ai_report&subTab=aitfa`);
   });
 
   it("403 plan/flag fence → clear domain error", async () => {

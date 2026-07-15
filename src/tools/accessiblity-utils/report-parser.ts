@@ -1,5 +1,6 @@
 import { apiClient } from "../../lib/apiClient.js";
 import { parse } from "csv-parse/sync";
+import logger from "../../logger.js";
 
 type SimplifiedAccessibilityIssue = {
   issue_type: string;
@@ -34,10 +35,23 @@ export async function parseAccessibilityReportFromCSV(
   if (!res.ok) throw new Error(`Failed to download report: ${res.statusText}`);
   const text =
     typeof res.data === "string" ? res.data : JSON.stringify(res.data);
-  const all: SimplifiedAccessibilityIssue[] = parse(text, {
-    columns: true,
-    skip_empty_lines: true,
-  }).map((row: any) => ({
+
+  let parsed: any[];
+  try {
+    parsed = parse(text, {
+      columns: true,
+      skip_empty_lines: true,
+      relax_column_count_less: true,
+    });
+  } catch (err) {
+    logger.error(
+      `[AccessibilityReport] CSV parse failed (${text.length} chars): ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    throw err;
+  }
+  const all: SimplifiedAccessibilityIssue[] = parsed.map((row: any) => ({
     issue_type: row["Issue type"],
     component: row["Component"],
     issue_description: row["Issue description"],

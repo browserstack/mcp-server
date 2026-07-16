@@ -1162,6 +1162,76 @@ describe('createTestCase — priority normalization', () => {
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
     expect(body.test_case.priority).toBe('critical');
   });
+
+  const caseTypeValues = [
+    { name: 'Functional', internal_name: 'functional', value: 1 },
+    { name: 'Regression', internal_name: 'regression', value: 2 },
+  ];
+
+  it('looks up the project form fields and sends the normalized case_type in the request body', async () => {
+    fetchFormFieldsMock.mockResolvedValue({
+      default_fields: { case_type: { values: caseTypeValues } },
+      custom_fields: {},
+    });
+    normalizeMock.mockReturnValue('Functional');
+    (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
+
+    const result = await createTestCaseReal(
+      { ...baseArgs, case_type: 'functional' },
+      mockConfig as any,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(normalizeMock).toHaveBeenCalledWith(caseTypeValues, 'functional', 'name');
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case.case_type).toBe('Functional');
+  });
+
+  it('omits case_type from the request body when not provided (preserves project default)', async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
+
+    await createTestCaseReal({ ...baseArgs }, mockConfig as any);
+
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case).not.toHaveProperty('case_type');
+  });
+
+  it('passes the raw case_type through when the form-fields lookup fails (graceful fallback)', async () => {
+    fetchFormFieldsMock.mockRejectedValue(new Error('Network Error'));
+    (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
+
+    await createTestCaseReal(
+      { ...baseArgs, case_type: 'functional' },
+      mockConfig as any,
+    );
+
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case.case_type).toBe('functional');
+  });
+
+  it('normalizes both priority and case_type in a single form-fields lookup', async () => {
+    fetchFormFieldsMock.mockResolvedValue({
+      default_fields: {
+        priority: { values: priorityValues },
+        case_type: { values: caseTypeValues },
+      },
+      custom_fields: {},
+    });
+    normalizeMock.mockImplementation((_values, input) =>
+      input === 'critical' ? 'Critical' : 'Functional',
+    );
+    (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
+
+    await createTestCaseReal(
+      { ...baseArgs, priority: 'critical', case_type: 'functional' },
+      mockConfig as any,
+    );
+
+    expect(fetchFormFieldsMock).toHaveBeenCalledTimes(1);
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case.priority).toBe('Critical');
+    expect(body.test_case.case_type).toBe('Functional');
+  });
 });
 
 // Template slug pass-through + multi-select custom fields.

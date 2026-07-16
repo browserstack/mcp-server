@@ -34,7 +34,11 @@ export interface TestFailureSignature {
 export interface FailedTestInfo {
   test_id: number;
   test_name: string;
-  // Present only when listTestIds is called with includeFailureDetail=true.
+  // The test's own status (passed/failed/pending/skipped). listTestIds returns
+  // ALL tests by default, so consumers rely on this to filter/group.
+  status?: TestStatus;
+  // Present only when listTestIds is called with includeFailureDetail=true
+  // (only failed tests carry a signature).
   failure?: TestFailureSignature;
 }
 

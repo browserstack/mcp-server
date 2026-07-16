@@ -250,7 +250,7 @@ export default function addRCATools(
 
   tools.listTestIds = server.tool(
     "listTestIds",
-    "List test IDs from a BrowserStack Automate build, optionally filtered by status",
+    "List all tests of a BrowserStack build (each with its status); optional status filter.",
     LIST_TEST_IDS_PARAMS,
     async (args) => {
       try {

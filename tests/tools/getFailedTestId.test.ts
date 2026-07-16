@@ -51,7 +51,7 @@ describe("getTestIds — failure signature extraction", () => {
 
     const result = await getTestIds("build-1", AUTH, TestStatus.FAILED);
 
-    expect(result).toEqual([{ test_id: "101", test_name: "login test" }]);
+    expect(result).toEqual([{ test_id: "101", test_name: "login test", status: TestStatus.FAILED }]);
     expect(result[0]).not.toHaveProperty("failure");
   });
 
@@ -176,7 +176,7 @@ describe("getTestIds — failure signature extraction", () => {
 
     const result = await getTestIds("build-1", AUTH, TestStatus.FAILED);
 
-    expect(result).toEqual([{ test_id: "142", test_name: "uploaded test" }]);
+    expect(result).toEqual([{ test_id: "142", test_name: "uploaded test", status: TestStatus.FAILED }]);
   });
 
   it("extracts signatures from nested children", async () => {

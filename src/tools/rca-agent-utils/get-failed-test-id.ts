@@ -18,9 +18,11 @@ export async function getTestIds(
   status?: TestStatus,
   includeFailureDetail = false,
 ): Promise<FailedTestInfo[]> {
+  // No `status` → no `test_statuses` filter → the endpoint returns ALL tests
+  // (the default). A `status` narrows both the query and the extraction.
   const baseUrl = `${getAutomationBaseUrl()}/ext/v1/builds/${buildId}/testRuns`;
   let url = status ? `${baseUrl}?test_statuses=${status}` : baseUrl;
-  let allFailedTests: FailedTestInfo[] = [];
+  let allTests: FailedTestInfo[] = [];
   let requestNumber = 0;
 
   // Construct Basic auth header
@@ -46,14 +48,14 @@ export async function getTestIds(
 
       const data = (await response.json()) as TestRun;
 
-      // Extract failed IDs from current page
+      // Extract test IDs from the current page (all tests unless narrowed).
       if (data.hierarchy && data.hierarchy.length > 0) {
-        const currentFailedTests = extractFailedTestIds(
+        const currentTests = extractTestIds(
           data.hierarchy,
           status,
           includeFailureDetail,
         );
-        allFailedTests = allFailedTests.concat(currentFailedTests);
+        allTests = allTests.concat(currentTests);
       }
 
       // Check for pagination termination conditions
@@ -73,52 +75,59 @@ export async function getTestIds(
       url = `${baseUrl}?${new URLSearchParams(params).toString()}`;
     }
 
-    // Return unique failed test IDs
-    return allFailedTests;
+    return allTests;
   } catch (error) {
-    logger.error("Error fetching failed tests:", error);
+    logger.error("Error fetching test runs:", error);
     throw error;
   }
 }
 
-export function extractFailedTestIds(
+export function extractTestIds(
   hierarchy: TestDetails[],
   status?: TestStatus,
   includeFailureDetail = false,
 ): FailedTestInfo[] {
-  let failedTests: FailedTestInfo[] = [];
+  let tests: FailedTestInfo[] = [];
 
   for (const node of hierarchy) {
-    // Match on status alone — the observability_url `details=<id>` check below
-    // already filters to real test nodes (suite/hook nodes carry no status and
-    // no such URL). Do NOT also require run_count: JUnit-uploaded builds report
-    // run_count=0 even for genuinely failed tests, which would drop them all.
-    if (node.details?.status === status) {
-      if (node.details?.observability_url) {
-        const idMatch = node.details.observability_url.match(/details=(\d+)/);
-        if (idMatch) {
-          const entry: FailedTestInfo = {
-            test_id: idMatch[1],
-            test_name: node.display_name || `Test ${idMatch[1]}`,
-          };
-          if (includeFailureDetail) {
-            const signature = buildFailureSignature(node.details);
-            if (signature) entry.failure = signature;
-          }
-          failedTests.push(entry);
+    // Include every REAL test node. The observability_url `details=<id>` check
+    // already filters out suite/hook nodes (they carry no such URL). We do NOT
+    // require run_count: JUnit-uploaded builds report run_count=0 even for
+    // genuine tests, which would drop them all.
+    // Status filtering is optional: when `status` is omitted we return ALL
+    // tests (the default); when provided we narrow to that status.
+    const nodeStatus = node.details?.status;
+    const statusMatches = status === undefined || nodeStatus === status;
+    if (statusMatches && node.details?.observability_url) {
+      const idMatch = node.details.observability_url.match(/details=(\d+)/);
+      if (idMatch) {
+        const entry: FailedTestInfo = {
+          test_id: idMatch[1],
+          test_name: node.display_name || `Test ${idMatch[1]}`,
+          status: nodeStatus,
+        };
+        // Failure signatures only exist for failed tests; include when asked.
+        if (includeFailureDetail && nodeStatus === TestStatus.FAILED) {
+          const signature = buildFailureSignature(node.details);
+          if (signature) entry.failure = signature;
         }
+        tests.push(entry);
       }
     }
 
     if (node.children && node.children.length > 0) {
-      failedTests = failedTests.concat(
-        extractFailedTestIds(node.children, status, includeFailureDetail),
+      tests = tests.concat(
+        extractTestIds(node.children, status, includeFailureDetail),
       );
     }
   }
 
-  return failedTests;
+  return tests;
 }
+
+// Back-compat alias — prefer extractTestIds. Kept so existing imports/tests
+// referencing the old name continue to resolve.
+export const extractFailedTestIds = extractTestIds;
 
 // Build a trimmed failure signature from a test node's `details`. Returns
 // undefined when no signal is available so the field is simply omitted.

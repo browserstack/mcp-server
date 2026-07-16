@@ -193,16 +193,17 @@ export async function createLCASteps(
         };
       }
     }
-    const msg =
+    const detail =
       error?.response?.data?.message ||
       error?.response?.data?.error ||
       error?.message ||
       String(error);
+    console.error("Error creating LCA steps:", detail);
     return {
       content: [
         {
           type: "text",
-          text: `Failed to create LCA steps: ${msg}`,
+          text: "Failed to create LCA steps. Please verify the inputs and try again.",
         },
       ],
       isError: true,

@@ -9,6 +9,7 @@ import { pollLCAStatus } from "./poll-lca-status.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import logger from "../../logger.js";
 
 /**
  * Schema for creating LCA steps for a test case
@@ -198,12 +199,12 @@ export async function createLCASteps(
       error?.response?.data?.error ||
       error?.message ||
       String(error);
-    console.error("Error creating LCA steps:", detail);
+    logger.error("Error creating LCA steps: %s", detail);
     return {
       content: [
         {
           type: "text",
-          text: "Failed to create LCA steps. Please verify the inputs and try again.",
+          text: "Failed to create LCA steps. Please verify the inputs and try again",
         },
       ],
       isError: true,

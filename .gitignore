@@ -7,3 +7,12 @@ tests.md
 .npmrc
 .vscode/
 .env
+
+# bstack-ai-harness:begin (managed — do not edit between markers)
+bstack-ai-harness.yml
+.harness-docs.json
+.harness-manifest.json
+.plumb/
+CLAUDE.md
+.claude/
+# bstack-ai-harness:end

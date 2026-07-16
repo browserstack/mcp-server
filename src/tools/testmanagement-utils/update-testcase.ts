@@ -4,7 +4,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { formatAxiosError } from "../../lib/error.js";
 import {
   fetchFormFields,
-  normalizeDefaultFieldValue,
+  normalizeDefaultFields as normalizeDefaultFieldsFromForm,
   projectIdentifierToId,
 } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
@@ -146,47 +146,11 @@ async function normalizeDefaultFields(
     );
     const { default_fields } = await fetchFormFields(numericProjectId, config);
 
-    const out: {
-      priority?: string;
-      case_type?: string;
-      automation_status?: string;
-    } = {};
-
-    if (params.priority !== undefined) {
-      out.priority =
-        normalizeDefaultFieldValue(
-          default_fields?.priority?.values ?? [],
-          params.priority,
-          "name",
-        ) ?? params.priority;
-    }
-    if (params.case_type !== undefined) {
-      out.case_type =
-        normalizeDefaultFieldValue(
-          default_fields?.case_type?.values ?? [],
-          params.case_type,
-          "name",
-        ) ?? params.case_type;
-    }
-    if (params.automation_status !== undefined) {
-      // automation_status.values have null internal_name and the internal
-      // name is actually held in `value` (see API inspection). Accept
-      // either the display name or the internal snake_case form.
-      const values =
-        (default_fields?.automation_status?.values as Array<{
-          name?: string;
-          value?: string;
-        }>) ?? [];
-      const input = params.automation_status.toLowerCase().trim();
-      const match = values.find(
-        (v) =>
-          (v.value ?? "").toLowerCase() === input ||
-          (v.name ?? "").toLowerCase() === input,
-      );
-      out.automation_status = match?.value ?? params.automation_status;
-    }
-
-    return out;
+    return normalizeDefaultFieldsFromForm(default_fields, {
+      priority: params.priority,
+      case_type: params.case_type,
+      automation_status: params.automation_status,
+    });
   } catch (err) {
     logger.warn(
       "Failed to normalize default field values; passing through as given: %s",

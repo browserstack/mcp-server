@@ -4,7 +4,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { formatAxiosError } from "../../lib/error.js";
 import {
   fetchFormFields,
-  normalizeDefaultFieldValue,
+  normalizeDefaultFields as normalizeDefaultFieldsFromForm,
   projectIdentifierToId,
 } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
@@ -163,7 +163,7 @@ export const CreateTestCaseSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Test case type. Accepts either display name (e.g. 'Functional', 'Regression', 'Smoke & Sanity') or internal name (e.g. 'functional', 'smoke_sanity'). If omitted, the project default (usually 'Other') is applied. Valid values are per-project.",
+      "Test case type display or internal name (per-project). Omit for project default.",
     ),
   template: z
     .string()
@@ -204,9 +204,9 @@ export function sanitizeArgs(args: any) {
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 
 /**
- * Normalize priority and case_type to the display names the create endpoint
- * accepts (it rejects lowercase internal names). Fetches the project's
- * form-fields once; on lookup failure, passes raw values through.
+ * Fetch the project's form-fields and normalize priority/case_type to the
+ * display names the create endpoint accepts (it rejects lowercase internal
+ * names). On lookup failure, passes raw values through.
  */
 async function normalizeDefaultFields(
   projectIdentifier: string,
@@ -219,24 +219,7 @@ async function normalizeDefaultFields(
       config,
     );
     const { default_fields } = await fetchFormFields(numericProjectId, config);
-    const out: { priority?: string; case_type?: string } = {};
-    if (fields.priority !== undefined) {
-      out.priority =
-        normalizeDefaultFieldValue(
-          default_fields?.priority?.values ?? [],
-          fields.priority,
-          "name",
-        ) ?? fields.priority;
-    }
-    if (fields.case_type !== undefined) {
-      out.case_type =
-        normalizeDefaultFieldValue(
-          default_fields?.case_type?.values ?? [],
-          fields.case_type,
-          "name",
-        ) ?? fields.case_type;
-    }
-    return out;
+    return normalizeDefaultFieldsFromForm(default_fields, fields);
   } catch (err) {
     logger.warn(
       "Failed to normalize default fields; passing through as given: %s",

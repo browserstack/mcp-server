@@ -97,11 +97,17 @@ vi.mock('../../src/lib/inmemory-store', () => ({ signedUrlMap: new Map() }));
 vi.mock('../../src/lib/get-auth', () => ({
   getBrowserStackAuth: vi.fn(() => 'fake-user:fake-key')
 }));
-vi.mock('../../src/tools/testmanagement-utils/TCG-utils/api', () => ({
-  projectIdentifierToId: vi.fn(() => Promise.resolve('999')),
-  fetchFormFields: vi.fn(),
-  normalizeDefaultFieldValue: vi.fn(),
-}));
+vi.mock('../../src/tools/testmanagement-utils/TCG-utils/api', async (importActual) => {
+  const actual = await importActual<
+    typeof import('../../src/tools/testmanagement-utils/TCG-utils/api')
+  >();
+  return {
+    ...actual,
+    projectIdentifierToId: vi.fn(() => Promise.resolve('999')),
+    fetchFormFields: vi.fn(),
+    normalizeDefaultFieldValue: vi.fn(),
+  };
+});
 vi.mock('form-data', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
@@ -1077,7 +1083,6 @@ describe('createTestCase — priority normalization', () => {
   let createTestCaseReal: typeof import('../../src/tools/testmanagement-utils/create-testcase').createTestCase;
   let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
   let fetchFormFieldsMock: Mock;
-  let normalizeMock: Mock;
 
   beforeAll(async () => {
     const actual = await vi.importActual<
@@ -1087,7 +1092,6 @@ describe('createTestCase — priority normalization', () => {
     apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
     const api = await import('../../src/tools/testmanagement-utils/TCG-utils/api');
     fetchFormFieldsMock = api.fetchFormFields as unknown as Mock;
-    normalizeMock = api.normalizeDefaultFieldValue as unknown as Mock;
   });
 
   beforeEach(() => {
@@ -1126,7 +1130,6 @@ describe('createTestCase — priority normalization', () => {
 
   it('looks up the project form fields and sends the normalized priority in the request body', async () => {
     fetchFormFieldsMock.mockResolvedValue(formFields);
-    normalizeMock.mockReturnValue('Critical');
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     const result = await createTestCaseReal(
@@ -1135,7 +1138,8 @@ describe('createTestCase — priority normalization', () => {
     );
 
     expect(result.isError).toBeFalsy();
-    expect(normalizeMock).toHaveBeenCalledWith(priorityValues, 'critical', 'name');
+    // Real normalizeDefaultFields maps the internal name 'critical' to the
+    // display name 'Critical' the create endpoint requires.
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
     expect(body.test_case.priority).toBe('Critical');
   });
@@ -1173,7 +1177,6 @@ describe('createTestCase — priority normalization', () => {
       default_fields: { case_type: { values: caseTypeValues } },
       custom_fields: {},
     });
-    normalizeMock.mockReturnValue('Functional');
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     const result = await createTestCaseReal(
@@ -1182,7 +1185,7 @@ describe('createTestCase — priority normalization', () => {
     );
 
     expect(result.isError).toBeFalsy();
-    expect(normalizeMock).toHaveBeenCalledWith(caseTypeValues, 'functional', 'name');
+    // Real normalizeDefaultFields maps 'functional' to the display name 'Functional'.
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
     expect(body.test_case.case_type).toBe('Functional');
   });
@@ -1217,9 +1220,6 @@ describe('createTestCase — priority normalization', () => {
       },
       custom_fields: {},
     });
-    normalizeMock.mockImplementation((_values, input) =>
-      input === 'critical' ? 'Critical' : 'Functional',
-    );
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     await createTestCaseReal(
@@ -1408,6 +1408,30 @@ describe('createTestCase — template & multi-select custom_fields', () => {
     // MCP-only params must not leak into the v1 test_case payload.
     expect(call.body.test_case.project_identifier).toBeUndefined();
     expect(call.body.test_case.folder_id).toBeUndefined();
+  });
+
+  // case_type must survive into the v1 test_case body (spread from
+  // testCaseParams), normalized to the display name the endpoint accepts.
+  it('carries the normalized case_type into the v1 body when template_id is set', async () => {
+    const api = await import('../../src/tools/testmanagement-utils/TCG-utils/api');
+    (api.fetchFormFields as Mock).mockResolvedValue({
+      default_fields: {
+        case_type: {
+          values: [{ name: 'Functional', internal_name: 'functional', value: 1 }],
+        },
+      },
+      custom_fields: [],
+    });
+    (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(656127));
+
+    await createTestCaseReal(
+      { ...baseArgs, template_id: 656127, case_type: 'functional' },
+      mockConfig as any,
+    );
+
+    const call = (apiClientMock.post as Mock).mock.calls[0][0];
+    expect(call.url).toContain('/api/v1/projects/');
+    expect(call.body.test_case.case_type).toBe('Functional');
   });
 
   it('translates custom_fields name→id and option value→id on the v1 path', async () => {

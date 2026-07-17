@@ -321,7 +321,7 @@ export async function createTestCase(
   const testCaseParams: TestCaseCreateRequest = { ...params };
 
   testCaseParams.tags = Array.from(
-    new Set([...(testCaseParams.tags ?? []), "MCP generated"]),
+    new Set([...(testCaseParams.tags ?? []), "MCP Generated"]),
   );
 
   if (

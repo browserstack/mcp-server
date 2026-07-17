@@ -63,18 +63,18 @@ describe('createTestCase MCP-origin tag (PMAA-166)', () => {
     mockCreateSuccess();
   });
 
-  it('stamps "MCP generated" when the caller passes no tags', async () => {
+  it('stamps "MCP Generated" when the caller passes no tags', async () => {
     await createTestCase({ ...baseArgs }, mockConfig);
-    expect(sentTags()).toEqual(['MCP generated']);
+    expect(sentTags()).toEqual(['MCP Generated']);
   });
 
-  it('preserves user tags and appends "MCP generated"', async () => {
+  it('preserves user tags and appends "MCP Generated"', async () => {
     await createTestCase({ ...baseArgs, tags: ['smoke', 'regression'] }, mockConfig);
-    expect(sentTags()).toEqual(['smoke', 'regression', 'MCP generated']);
+    expect(sentTags()).toEqual(['smoke', 'regression', 'MCP Generated']);
   });
 
-  it('does not duplicate "MCP generated" if already present', async () => {
-    await createTestCase({ ...baseArgs, tags: ['MCP generated'] }, mockConfig);
-    expect(sentTags()).toEqual(['MCP generated']);
+  it('does not duplicate "MCP Generated" if already present', async () => {
+    await createTestCase({ ...baseArgs, tags: ['MCP Generated'] }, mockConfig);
+    expect(sentTags()).toEqual(['MCP Generated']);
   });
 });

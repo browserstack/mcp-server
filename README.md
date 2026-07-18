@@ -1,3 +1,4 @@
+1.2.29
 # BrowserStack MCP Server
 
 <div align="center">

@@ -58,6 +58,60 @@ export function normalizeDefaultFieldValue(
   return match.internal_name ?? match.name;
 }
 
+export interface DefaultFieldInputs {
+  priority?: string;
+  case_type?: string;
+  automation_status?: string;
+}
+
+/**
+ * Normalize priority/case_type/automation_status against a project's already
+ * fetched `default_fields`. priority and case_type resolve to the display name
+ * (the create/update endpoints reject lowercase internal names); on no match
+ * the raw value passes through. automation_status is special: its values carry
+ * a null internal_name and hold the internal name in `value`, so it matches on
+ * name-or-value and emits `value`. Callers own the fetch and its error path.
+ */
+export function normalizeDefaultFields(
+  defaultFields: any,
+  inputs: DefaultFieldInputs,
+): DefaultFieldInputs {
+  const out: DefaultFieldInputs = {};
+
+  if (inputs.priority !== undefined) {
+    out.priority =
+      normalizeDefaultFieldValue(
+        defaultFields?.priority?.values ?? [],
+        inputs.priority,
+        "name",
+      ) ?? inputs.priority;
+  }
+  if (inputs.case_type !== undefined) {
+    out.case_type =
+      normalizeDefaultFieldValue(
+        defaultFields?.case_type?.values ?? [],
+        inputs.case_type,
+        "name",
+      ) ?? inputs.case_type;
+  }
+  if (inputs.automation_status !== undefined) {
+    const values =
+      (defaultFields?.automation_status?.values as Array<{
+        name?: string;
+        value?: string;
+      }>) ?? [];
+    const input = inputs.automation_status.toLowerCase().trim();
+    const match = values.find(
+      (v) =>
+        (v.value ?? "").toLowerCase() === input ||
+        (v.name ?? "").toLowerCase() === input,
+    );
+    out.automation_status = match?.value ?? inputs.automation_status;
+  }
+
+  return out;
+}
+
 /**
  * Trigger AI-based test case generation for a document.
  */

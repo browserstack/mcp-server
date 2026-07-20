@@ -320,6 +320,10 @@ export async function createTestCase(
 ): Promise<CallToolResult> {
   const testCaseParams: TestCaseCreateRequest = { ...params };
 
+  testCaseParams.tags = Array.from(
+    new Set([...(testCaseParams.tags ?? []), "MCP Generated"]),
+  );
+
   if (
     testCaseParams.priority !== undefined ||
     testCaseParams.case_type !== undefined

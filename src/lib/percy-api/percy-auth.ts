@@ -49,14 +49,18 @@ const PERCY_API_BASE = "https://percy.io/api/v1";
 export async function percyGet(
   path: string,
   config: BrowserStackConfig,
-  params?: Record<string, string>,
+  params?: Record<string, string | string[]>,
 ): Promise<any> {
   const headers = getPercyAuthHeaders(config);
   const url = new URL(`${PERCY_API_BASE}${path}`);
 
   if (params) {
     for (const [key, value] of Object.entries(params)) {
-      url.searchParams.set(key, value);
+      if (Array.isArray(value)) {
+        value.forEach((v) => url.searchParams.append(key, v));
+      } else {
+        url.searchParams.set(key, value);
+      }
     }
   }
 

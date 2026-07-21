@@ -12,6 +12,11 @@
  */
 
 import { percyGet, percyPost } from "../../../lib/percy-api/percy-auth.js";
+import {
+  fetchAllBuildItems,
+  formatDiffPercent,
+  CHANGED_CATEGORY_PARAMS,
+} from "../../../lib/percy-api/build-items.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { setActiveBuild } from "../../../lib/percy-api/percy-session.js";
@@ -320,13 +325,10 @@ async function getChanges(
   buildId: string,
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const response = await percyGet("/build-items", config, {
+  const { items, truncated } = await fetchAllBuildItems(config, {
     "filter[build-id]": buildId,
-    "filter[category]": "changed",
-    "page[limit]": "30",
+    ...CHANGED_CATEGORY_PARAMS,
   });
-
-  const items = response?.data || [];
 
   if (!items.length) {
     return {
@@ -347,10 +349,7 @@ async function getChanges(
     const name = a["cover-snapshot-name"] || a.coverSnapshotName || "?";
     const displayName =
       a["cover-snapshot-display-name"] || a.coverSnapshotDisplayName || "";
-    const diff =
-      (a["max-diff-ratio"] ?? a.maxDiffRatio) != null
-        ? ((a["max-diff-ratio"] ?? a.maxDiffRatio) * 100).toFixed(1) + "%"
-        : "—";
+    const diff = formatDiffPercent(a["max-diff-ratio"] ?? a.maxDiffRatio);
     const bugs =
       a["max-bug-total-potential-bugs"] ?? a.maxBugTotalPotentialBugs ?? 0;
     const review = a["review-state"] || a.reviewState || "?";
@@ -358,6 +357,9 @@ async function getChanges(
     output += `| ${i + 1} | ${name} | ${displayName || "—"} | ${diff} | ${bugs} | ${review} | ${count} |\n`;
   });
 
+  if (truncated) {
+    output += `\n⚠️ Result may be incomplete — pagination could not be fully exhausted.\n`;
+  }
   output += `\nUse \`percy_get_snapshot\` with a snapshot ID from above for full details.\n`;
 
   return { content: [{ type: "text", text: output }] };
@@ -637,12 +639,9 @@ async function getSnapshots(
   buildId: string,
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const response = await percyGet("/build-items", config, {
+  const { items, truncated } = await fetchAllBuildItems(config, {
     "filter[build-id]": buildId,
-    "page[limit]": "30",
   });
-
-  const items = response?.data || [];
 
   if (!items.length) {
     return {
@@ -670,10 +669,7 @@ async function getSnapshots(
     const name = a["cover-snapshot-name"] || a.coverSnapshotName || "?";
     const display =
       a["cover-snapshot-display-name"] || a.coverSnapshotDisplayName || "—";
-    const diff =
-      (a["max-diff-ratio"] ?? a.maxDiffRatio) != null
-        ? ((a["max-diff-ratio"] ?? a.maxDiffRatio) * 100).toFixed(1) + "%"
-        : "—";
+    const diff = formatDiffPercent(a["max-diff-ratio"] ?? a.maxDiffRatio);
     const bugs =
       a["max-bug-total-potential-bugs"] ?? a.maxBugTotalPotentialBugs ?? "—";
     const review = a["review-state"] || a.reviewState || "?";
@@ -686,6 +682,9 @@ async function getSnapshots(
     output += `| ${i + 1} | ${name} | ${display} | ${diff} | ${bugs} | ${review} | ${count} | ${snapIds}${more} |\n`;
   });
 
+  if (truncated) {
+    output += `\n⚠️ Result may be incomplete — pagination could not be fully exhausted.\n`;
+  }
   output += `\nUse \`percy_get_snapshot\` with a snapshot ID for full comparison details.\n`;
 
   return { content: [{ type: "text", text: output }] };

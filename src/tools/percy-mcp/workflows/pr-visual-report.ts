@@ -1,4 +1,5 @@
 import { PercyClient } from "../../../lib/percy-api/client.js";
+import { formatDiffPercent } from "../../../lib/percy-api/build-items.js";
 import { percyCache } from "../../../lib/percy-api/cache.js";
 import { formatBuild } from "../../../lib/percy-api/formatter.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
@@ -162,7 +163,7 @@ export async function percyPrVisualReport(
       if (critical.length > 0) {
         output += `**CRITICAL — Potential Bugs (${critical.length}):**\n`;
         critical.forEach((e, i) => {
-          output += `${i + 1}. **${e.name}** — ${(e.diffRatio * 100).toFixed(1)}% diff, ${e.potentialBugs} bug(s) flagged\n`;
+          output += `${i + 1}. **${e.name}** — ${formatDiffPercent(e.diffRatio)} diff, ${e.potentialBugs} bug(s) flagged\n`;
         });
         output += "\n";
       }
@@ -170,7 +171,7 @@ export async function percyPrVisualReport(
       if (review.length > 0) {
         output += `**REVIEW REQUIRED (${review.length}):**\n`;
         review.forEach((e, i) => {
-          output += `${i + 1}. **${e.name}** — ${(e.diffRatio * 100).toFixed(1)}% diff\n`;
+          output += `${i + 1}. **${e.name}** — ${formatDiffPercent(e.diffRatio)} diff\n`;
         });
         output += "\n";
       }
@@ -178,7 +179,7 @@ export async function percyPrVisualReport(
       if (expected.length > 0) {
         output += `**EXPECTED CHANGES (${expected.length}):**\n`;
         expected.forEach((e, i) => {
-          output += `${i + 1}. ${e.name} — ${(e.diffRatio * 100).toFixed(1)}% diff\n`;
+          output += `${i + 1}. ${e.name} — ${formatDiffPercent(e.diffRatio)} diff\n`;
         });
         output += "\n";
       }

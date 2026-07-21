@@ -1,4 +1,5 @@
 import { PercyClient } from "../../../lib/percy-api/client.js";
+import { formatDiffPercent } from "../../../lib/percy-api/build-items.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -56,14 +57,14 @@ export async function percyAutoTriage(
   if (critical.length > 0) {
     output += `### CRITICAL — Potential Bugs (${critical.length})\n`;
     critical.forEach((e, i) => {
-      output += `${i + 1}. **${e.name}** — ${(e.diffRatio * 100).toFixed(1)}% diff, ${e.potentialBugs} bug(s)\n`;
+      output += `${i + 1}. **${e.name}** — ${formatDiffPercent(e.diffRatio)} diff, ${e.potentialBugs} bug(s)\n`;
     });
     output += "\n";
   }
   if (reviewRequired.length > 0) {
     output += `### REVIEW REQUIRED (${reviewRequired.length})\n`;
     reviewRequired.forEach((e, i) => {
-      output += `${i + 1}. **${e.name}** — ${(e.diffRatio * 100).toFixed(1)}% diff\n`;
+      output += `${i + 1}. **${e.name}** — ${formatDiffPercent(e.diffRatio)} diff\n`;
     });
     output += "\n";
   }

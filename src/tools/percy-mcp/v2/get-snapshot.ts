@@ -1,4 +1,5 @@
 import { percyGet } from "../../../lib/percy-api/percy-auth.js";
+import { formatDiffPercent } from "../../../lib/percy-api/build-items.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -29,7 +30,7 @@ export async function percyGetSnapshot(
 
   output += `| Field | Value |\n|---|---|\n`;
   output += `| **Review** | ${attrs["review-state"] || "—"} (${attrs["review-state-reason"] || "—"}) |\n`;
-  output += `| **Diff ratio** | ${attrs["diff-ratio"] != null ? (attrs["diff-ratio"] * 100).toFixed(2) + "%" : "—"} |\n`;
+  output += `| **Diff ratio** | ${formatDiffPercent(attrs["diff-ratio"])} |\n`;
   output += `| **Test case** | ${attrs["test-case-name"] || "none"} |\n`;
   output += `| **Comments** | ${attrs["total-open-comments"] ?? 0} |\n`;
   output += `| **Layout** | ${attrs["enable-layout"] ? "enabled" : "disabled"} |\n`;
@@ -65,14 +66,8 @@ export async function percyGetSnapshot(
       const ca = c.attributes || {};
       const browserId = c.relationships?.browser?.data?.id;
       const browserName = browsers.get(browserId) || "?";
-      const diff =
-        ca["diff-ratio"] != null
-          ? (ca["diff-ratio"] * 100).toFixed(1) + "%"
-          : "—";
-      const aiDiff =
-        ca["ai-diff-ratio"] != null
-          ? (ca["ai-diff-ratio"] * 100).toFixed(1) + "%"
-          : "—";
+      const diff = formatDiffPercent(ca["diff-ratio"]);
+      const aiDiff = formatDiffPercent(ca["ai-diff-ratio"]);
       const aiState = ca["ai-processing-state"] || "—";
       const bugs = ca["ai-details"]?.["total-potential-bugs"] ?? "—";
       output += `| ${browserName} | ${ca.width || "?"}px | ${diff} | ${aiDiff} | ${aiState} | ${bugs} |\n`;

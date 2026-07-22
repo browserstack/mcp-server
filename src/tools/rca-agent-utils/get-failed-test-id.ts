@@ -12,6 +12,10 @@ import {
 // return full stack traces into the MCP client's context window).
 const ERROR_SUMMARY_MAX = 200;
 
+// Safety bound on pagination — high enough to cover large builds, low enough to
+// prevent a runaway loop. Truncation (if ever hit) is logged, never silent.
+const MAX_PAGES = 100;
+
 export async function getTestIds(
   buildId: string,
   authString: string,
@@ -58,12 +62,17 @@ export async function getTestIds(
         allTests = allTests.concat(currentTests);
       }
 
-      // Check for pagination termination conditions
-      if (
-        !data.pagination?.has_next ||
-        !data.pagination.next_page ||
-        requestNumber >= 5
-      ) {
+      // Paginate to the end. A safety bound prevents a runaway loop, but it is
+      // high enough to cover large builds (the old cap of 5 pages silently
+      // truncated builds with more than ~5 pages of tests). If we ever hit the
+      // bound we log it rather than returning a silently-partial list.
+      if (!data.pagination?.has_next || !data.pagination.next_page) {
+        break;
+      }
+      if (requestNumber >= MAX_PAGES) {
+        logger.warn(
+          `listTestIds: hit MAX_PAGES (${MAX_PAGES}) for build ${buildId}; result may be partial`,
+        );
         break;
       }
 

@@ -9,6 +9,7 @@ import { pollLCAStatus } from "./poll-lca-status.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import logger from "../../logger.js";
 
 /**
  * Schema for creating LCA steps for a test case
@@ -193,16 +194,17 @@ export async function createLCASteps(
         };
       }
     }
-    const msg =
+    const detail =
       error?.response?.data?.message ||
       error?.response?.data?.error ||
       error?.message ||
       String(error);
+    logger.error("Error creating LCA steps: %s", detail);
     return {
       content: [
         {
           type: "text",
-          text: `Failed to create LCA steps: ${msg}`,
+          text: "Failed to create LCA steps. Please verify the inputs and try again",
         },
       ],
       isError: true,

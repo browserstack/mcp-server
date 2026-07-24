@@ -1,4 +1,5 @@
 import { PercyClient } from "../../../lib/percy-api/client.js";
+import { formatDiffPercent } from "../../../lib/percy-api/build-items.js";
 import { pollUntil } from "../../../lib/percy-api/polling.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -36,9 +37,9 @@ export async function percyDiffExplain(
   // Basic diff info
   const diffRatio = comparison.diffRatio ?? 0;
   const aiDiffRatio = comparison.aiDiffRatio;
-  output += `**Diff:** ${(diffRatio * 100).toFixed(1)}%`;
+  output += `**Diff:** ${formatDiffPercent(diffRatio)}`;
   if (aiDiffRatio !== null && aiDiffRatio !== undefined) {
-    output += ` | **AI Diff:** ${(aiDiffRatio * 100).toFixed(1)}%`;
+    output += ` | **AI Diff:** ${formatDiffPercent(aiDiffRatio)}`;
     const reduction =
       diffRatio > 0 ? ((1 - aiDiffRatio / diffRatio) * 100).toFixed(0) : "0";
     output += ` (${reduction}% noise filtered)`;

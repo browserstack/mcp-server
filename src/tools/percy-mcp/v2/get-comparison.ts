@@ -1,4 +1,5 @@
 import { percyGet } from "../../../lib/percy-api/percy-auth.js";
+import { formatDiffPercent } from "../../../lib/percy-api/build-items.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -43,8 +44,8 @@ export async function percyGetComparison(
   output += `| **Browser** | ${browserName} |\n`;
   output += `| **Width** | ${attrs.width || "?"}px |\n`;
   output += `| **State** | ${attrs.state || "?"} |\n`;
-  output += `| **Diff ratio** | ${attrs["diff-ratio"] != null ? (attrs["diff-ratio"] * 100).toFixed(2) + "%" : "—"} |\n`;
-  output += `| **AI diff ratio** | ${attrs["ai-diff-ratio"] != null ? (attrs["ai-diff-ratio"] * 100).toFixed(2) + "%" : "—"} |\n`;
+  output += `| **Diff ratio** | ${formatDiffPercent(attrs["diff-ratio"])} |\n`;
+  output += `| **AI diff ratio** | ${formatDiffPercent(attrs["ai-diff-ratio"])} |\n`;
   output += `| **AI state** | ${attrs["ai-processing-state"] || "—"} |\n`;
   output += `| **Potential bugs** | ${ai["total-potential-bugs"] ?? "—"} |\n`;
   output += `| **AI visual diffs** | ${ai["total-ai-visual-diffs"] ?? "—"} |\n`;

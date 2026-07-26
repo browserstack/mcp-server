@@ -1,23 +1,23 @@
 import { apiClient } from "../../lib/apiClient.js";
-import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import {
   getO11yBaseUrl,
-  getRcaViewGuidance,
   POLL_INITIAL_DELAY_MS,
   POLL_INTERVAL_MS,
   POLL_MAX_WAIT_MS,
-  RCA_CHAT_POLL_PATH,
   RCA_CHAT_SUBMIT_PATH,
-  RCA_GLIMPSE_ROOT_CAUSE_MAX,
 } from "./constants.js";
+import { PENDING_STATUS, TfaRcaTurnResult } from "./types.js";
 import {
-  PENDING_STATUS,
-  TfaAsk,
-  TfaRcaTurnResult,
-  TfaStatus,
-  TurnResponse,
-} from "./types.js";
+  buildAuthHeader,
+  buildPollUrl,
+  readStructuredTurn,
+  TfaRcaTurnError,
+  toTrimmedResult,
+} from "./turn-result.js";
+
+// Re-exported so existing importers keep a single entry point for the error type.
+export { TfaRcaTurnError };
 
 interface TurnContext {
   sendNotification?: (notification: any) => Promise<void>;
@@ -32,18 +32,7 @@ export interface TfaRcaTurnArgs {
   turnId?: string;
 }
 
-/**
- * Domain error carrying a client-safe message. The tool maps these to a
- * `{ isError: true }` envelope; the message never contains credentials.
- */
-export class TfaRcaTurnError extends Error {}
-
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function buildAuthHeader(config: BrowserStackConfig): string {
-  const authString = getBrowserStackAuth(config);
-  return `Basic ${Buffer.from(authString).toString("base64")}`;
-}
 
 async function notify(
   context: TurnContext | undefined,
@@ -60,116 +49,6 @@ async function notify(
       total: 100,
     },
   });
-}
-
-/** Map a raw status string from the wire onto the `TfaStatus` enum. */
-function toTfaStatus(raw: unknown): TfaStatus {
-  switch (raw) {
-    case "RESOLVED":
-      return TfaStatus.RESOLVED;
-    case "BLOCKED":
-      return TfaStatus.BLOCKED;
-    default:
-      return TfaStatus.NEEDS_INFO;
-  }
-}
-
-/** Map one wire ask (snake_case) to the client `TfaAsk` (camelCase). */
-function toAsk(raw: any): TfaAsk {
-  return {
-    what: raw?.what ?? "",
-    why: raw?.why ?? "",
-    evidenceType: raw?.evidence_type ?? "other",
-    priority: raw?.priority ?? "medium",
-  };
-}
-
-/**
- * Read the LLM-enforced structured turn from the completed `rcaChat` poll body.
- *
- * The poll envelope's own `status` field is the lifecycle state
- * (`working`/`completed`/`failed`); the agent's `TurnResponse` is passed
- * through under `turn` so its `status` (NEEDS_INFO/RESOLVED/BLOCKED) never
- * collides with the lifecycle one. The agent's model validator guarantees the
- * sub-object matching the turn status is present; we still default-fill the
- * lists so the skill never sees `undefined`.
- */
-function readStructuredTurn(data: any): TurnResponse {
-  const turn = data.turn ?? {};
-  const status = toTfaStatus(turn.status);
-  const needsInfo = turn.needs_info ?? {};
-  const blocked = turn.blocked ?? {};
-
-  return {
-    status,
-    confidence: turn.confidence ?? "unknown",
-    questions: Array.isArray(needsInfo.questions) ? needsInfo.questions : [],
-    asks: Array.isArray(needsInfo.asks) ? needsInfo.asks.map(toAsk) : [],
-    suggestions: Array.isArray(needsInfo.suggestions)
-      ? needsInfo.suggestions
-      : [],
-    hypotheses: Array.isArray(needsInfo.hypotheses) ? needsInfo.hypotheses : [],
-    rca: status === TfaStatus.RESOLVED ? (turn.rca ?? undefined) : undefined,
-    reason: status === TfaStatus.BLOCKED ? blocked.reason : undefined,
-    unmetAsks:
-      status === TfaStatus.BLOCKED && Array.isArray(blocked.unmet_asks)
-        ? blocked.unmet_asks
-        : undefined,
-  };
-}
-
-/** Truncate to `max` chars total (ellipsis included when cut). */
-function truncate(text: string | undefined, max: number): string | undefined {
-  if (text === undefined) return undefined;
-  return text.length > max ? text.slice(0, max - 1) + "…" : text;
-}
-
-/**
- * Trim a completed turn to the status-discriminated contract:
- * - NEEDS_INFO: questions/asks/suggestions/hypotheses VERBATIM (the client
- *   loop consumes them).
- * - RESOLVED: glimpse only (root_cause truncated, failure_type, related_prs)
- *   + a `viewRca` pointer — the full RCA lives on the TRA dashboard.
- * - BLOCKED: reason + unmetAsks.
- */
-function toTrimmedResult(
-  turn: TurnResponse,
-  threadId: string | undefined,
-): TfaRcaTurnResult {
-  switch (turn.status) {
-    case TfaStatus.RESOLVED: {
-      const rca = turn.rca ?? {};
-      return {
-        status: turn.status,
-        confidence: turn.confidence,
-        threadId,
-        glimpse: {
-          root_cause: truncate(rca.root_cause, RCA_GLIMPSE_ROOT_CAUSE_MAX),
-          failure_type: rca.failure_type,
-          related_prs: rca.related_prs,
-        },
-        viewRca: getRcaViewGuidance(),
-      };
-    }
-    case TfaStatus.BLOCKED:
-      return {
-        status: turn.status,
-        confidence: turn.confidence,
-        threadId,
-        reason: turn.reason,
-        unmetAsks: turn.unmetAsks,
-      };
-    default:
-      return {
-        status: turn.status,
-        confidence: turn.confidence,
-        threadId,
-        questions: turn.questions,
-        asks: turn.asks,
-        suggestions: turn.suggestions,
-        hypotheses: turn.hypotheses,
-      };
-  }
 }
 
 /** Map a submit (POST) non-2xx into a clean, group-scope-safe domain error. */
@@ -240,12 +119,7 @@ export async function submitTfaRcaTurn(
   }
 
   // Poll to completion, soft-PENDING on wall-clock cap.
-  const pollUrl =
-    baseUrl +
-    RCA_CHAT_POLL_PATH.replace("{testRunId}", args.testRunId).replace(
-      "{turnId}",
-      turnId,
-    );
+  const pollUrl = buildPollUrl(args.testRunId, turnId);
 
   await delay(POLL_INITIAL_DELAY_MS);
   const startTime = Date.now();

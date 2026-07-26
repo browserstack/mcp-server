@@ -96,6 +96,15 @@ export const TFA_RCA_TURN_PARAMS = {
 };
 
 /**
+ * Zod param shapes for the `getTfaTurnResult` tool — a one-shot read of an
+ * already-submitted turn. No credential fields (security rule).
+ */
+export const GET_TFA_TURN_RESULT_PARAMS = {
+  testRunId: z.string().describe("Test run id the turn was submitted on."),
+  turnId: z.string().describe("Turn id returned by tfaRcaTurn."),
+};
+
+/**
  * Zod param shapes for the `triggerRcaReport` tool. No credential fields
  * (security rule). Each `.describe()` ≤ 60 chars.
  */

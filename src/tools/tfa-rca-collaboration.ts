@@ -4,14 +4,19 @@ import { trackMCP } from "../lib/instrumentation.js";
 import { handleMCPError } from "../lib/utils.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import {
+  GET_TFA_TURN_RESULT_PARAMS,
   TFA_RCA_TURN_PARAMS,
   TRIGGER_RCA_REPORT_PARAMS,
 } from "./tfa-rca-utils/constants.js";
 import {
   submitTfaRcaTurn,
   TfaRcaTurnArgs,
-  TfaRcaTurnError,
 } from "./tfa-rca-utils/submit-turn.js";
+import {
+  getTfaTurnResult,
+  GetTfaTurnResultArgs,
+  TfaRcaTurnError,
+} from "./tfa-rca-utils/turn-result.js";
 import {
   triggerRcaReport,
   TriggerRcaReportArgs,
@@ -19,6 +24,7 @@ import {
 } from "./tfa-rca-utils/trigger-report.js";
 
 const TOOL_NAME = "tfaRcaTurn";
+const GET_RESULT_TOOL_NAME = "getTfaTurnResult";
 const TRIGGER_TOOL_NAME = "triggerRcaReport";
 
 /** Wrap a domain error into the standard `{ isError: true }` envelope. */
@@ -43,6 +49,22 @@ export async function tfaRcaTurnTool(
   // The util returns the trimmed, status-discriminated contract; JSON.stringify
   // drops the undefined slots, so the wrapper stays a plain serializer.
   const result = await submitTfaRcaTurn(args, config, context);
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+export async function getTfaTurnResultTool(
+  args: GetTfaTurnResultArgs,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  // Same trimmed contract as `tfaRcaTurn`, read once without submitting.
+  const result = await getTfaTurnResult(args, config);
   return {
     content: [
       {
@@ -95,6 +117,36 @@ export default function addTfaRcaCollaborationTools(
           return domainErrorResult(TOOL_NAME, error);
         }
         return handleMCPError(TOOL_NAME, server, config, error);
+      }
+    },
+  );
+
+  tools.getTfaTurnResult = server.tool(
+    GET_RESULT_TOOL_NAME,
+    "Read a submitted RCA turn's result once by turnId; PENDING if the agent is still working.",
+    GET_TFA_TURN_RESULT_PARAMS,
+    async (args) => {
+      try {
+        const result = await getTfaTurnResultTool(args, config);
+        trackMCP(
+          GET_RESULT_TOOL_NAME,
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
+        return result;
+      } catch (error) {
+        // Domain failures carry a client-safe, group-scope-safe message.
+        if (error instanceof TfaRcaTurnError) {
+          trackMCP(
+            GET_RESULT_TOOL_NAME,
+            server.server.getClientVersion()!,
+            error,
+            config,
+          );
+          return domainErrorResult(GET_RESULT_TOOL_NAME, error);
+        }
+        return handleMCPError(GET_RESULT_TOOL_NAME, server, config, error);
       }
     },
   );

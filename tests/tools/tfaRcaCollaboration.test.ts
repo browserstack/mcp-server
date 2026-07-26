@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import addTfaRcaCollaborationTools, {
+  getTfaTurnResultTool,
   tfaRcaTurnTool,
 } from "../../src/tools/tfa-rca-collaboration";
 import { apiClient } from "../../src/lib/apiClient";
@@ -445,6 +446,245 @@ describe("tfaRcaTurnTool", () => {
     expect(fieldNames).toEqual(["testRunId", "message", "threadId", "turnId"]);
     expect(fieldNames).not.toContain("baseUrl");
     expect(fieldNames).not.toContain("o11yBaseUrl");
+  });
+});
+
+describe("getTfaTurnResultTool", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (appConfig as any).O11Y_TFA_RCA_BASE_URL = DEFAULT_O11Y_BASE_URL;
+  });
+
+  it("reads once — no submit POST, no poll loop, GET targets the turn", async () => {
+    get.mockResolvedValue(
+      completed({ status: "RESOLVED", confidence: "high", rca: {} }),
+    );
+
+    const result = await getTfaTurnResultTool(
+      { testRunId: "tr-1", turnId: "u-1" },
+      mockConfig as any,
+    );
+
+    expect(post).not.toHaveBeenCalled();
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get.mock.calls[0][0].url).toBe(
+      `${DEFAULT_O11Y_BASE_URL}/ext/v1/testRuns/tr-1/rcaChat/u-1`,
+    );
+    expect(JSON.parse(result.content[0].text as string).status).toBe("RESOLVED");
+  });
+
+  it("RESOLVED → same trimmed glimpse contract as tfaRcaTurn", async () => {
+    get.mockResolvedValue(
+      completed(
+        {
+          status: "RESOLVED",
+          confidence: "high",
+          rca: {
+            root_cause: "Config map deleted on deploy.",
+            possible_fix: "Re-add the key.",
+            failure_type: "infra",
+            related_prs: [42],
+            analysis: "very long chain of reasoning",
+          },
+        },
+        { meta: { huge: "blob".repeat(1000) } },
+      ),
+    );
+
+    const result = await getTfaTurnResultTool(
+      { testRunId: "tr-2", turnId: "u-2" },
+      mockConfig as any,
+    );
+
+    const payload = JSON.parse(result.content[0].text as string);
+    expect(payload.glimpse.root_cause).toBe("Config map deleted on deploy.");
+    expect(payload.glimpse.failure_type).toBe("infra");
+    expect(payload.glimpse.related_prs).toEqual([42]);
+    expect(payload.threadId).toBe("t-1");
+    expect(payload.viewRca).toContain("https://observability.browserstack.com");
+    // Full RCA + envelope noise dropped, exactly like the polling tool.
+    expect(payload.rca).toBeUndefined();
+    expect(result.content[0].text).not.toContain("very long chain");
+    expect(result.content[0].text).not.toContain("Re-add the key.");
+    expect(result.content[0].text).not.toContain("blob");
+  });
+
+  it("NEEDS_INFO → typed asks/questions passed through verbatim", async () => {
+    get.mockResolvedValue(
+      completed(
+        {
+          status: "NEEDS_INFO",
+          confidence: "medium",
+          needs_info: {
+            questions: ["Which service owns this endpoint?"],
+            asks: [
+              {
+                what: "deploy log for service X",
+                why: "confirm the rollout time",
+                evidence_type: "deploy",
+                priority: "high",
+              },
+            ],
+            suggestions: ["Compare against the last green build."],
+            hypotheses: ["A bad deploy dropped the config map."],
+          },
+        },
+        { threadId: "t-ni" },
+      ),
+    );
+
+    const payload = JSON.parse(
+      (
+        await getTfaTurnResultTool(
+          { testRunId: "tr-3", turnId: "u-3" },
+          mockConfig as any,
+        )
+      ).content[0].text as string,
+    );
+    expect(payload.status).toBe("NEEDS_INFO");
+    expect(payload.threadId).toBe("t-ni");
+    expect(payload.questions).toEqual(["Which service owns this endpoint?"]);
+    expect(payload.asks[0].evidenceType).toBe("deploy");
+    expect(payload.suggestions).toEqual([
+      "Compare against the last green build.",
+    ]);
+    expect(payload.hypotheses).toEqual([
+      "A bad deploy dropped the config map.",
+    ]);
+  });
+
+  it("BLOCKED → reason + unmetAsks", async () => {
+    get.mockResolvedValue(
+      completed({
+        status: "BLOCKED",
+        confidence: "low",
+        blocked: {
+          reason: "No access to the k8s cluster.",
+          unmet_asks: ["pod restart count"],
+        },
+      }),
+    );
+
+    const payload = JSON.parse(
+      (
+        await getTfaTurnResultTool(
+          { testRunId: "tr-4", turnId: "u-4" },
+          mockConfig as any,
+        )
+      ).content[0].text as string,
+    );
+    expect(payload.status).toBe("BLOCKED");
+    expect(payload.reason).toBe("No access to the k8s cluster.");
+    expect(payload.unmetAsks).toEqual(["pod restart count"]);
+  });
+
+  it("still working → soft PENDING with turnId/threadId, returns immediately", async () => {
+    get.mockResolvedValue(ok({ status: "working", threadId: "t-w" }));
+
+    const payload = JSON.parse(
+      (
+        await getTfaTurnResultTool(
+          { testRunId: "tr-5", turnId: "u-5" },
+          mockConfig as any,
+        )
+      ).content[0].text as string,
+    );
+    expect(payload.status).toBe("PENDING");
+    expect(payload.turnId).toBe("u-5");
+    expect(payload.threadId).toBe("t-w");
+    // One read only — the caller decides when to look again.
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("failed run → clean domain error carrying upstream text", async () => {
+    get.mockResolvedValue(ok({ status: "failed", error: "agent crashed" }));
+
+    await expect(
+      getTfaTurnResultTool(
+        { testRunId: "tr-6", turnId: "u-6" },
+        mockConfig as any,
+      ),
+    ).rejects.toThrow("agent crashed");
+  });
+
+  it("404 → 'turn expired or not found', no existence leak", async () => {
+    get.mockResolvedValue(nonOk(404));
+
+    await expect(
+      getTfaTurnResultTool(
+        { testRunId: "tr-7", turnId: "u-7" },
+        mockConfig as any,
+      ),
+    ).rejects.toThrow("turn expired or not found");
+  });
+
+  it("other non-2xx → clean status-only error", async () => {
+    get.mockResolvedValue(nonOk(500));
+
+    await expect(
+      getTfaTurnResultTool(
+        { testRunId: "tr-8", turnId: "u-8" },
+        mockConfig as any,
+      ),
+    ).rejects.toThrow("failed to read RCA turn (status 500)");
+  });
+
+  it("config override → GET honors the overridden o11y host", async () => {
+    (appConfig as any).O11Y_TFA_RCA_BASE_URL =
+      "https://api-observability.bsstag.com";
+    get.mockResolvedValue(
+      completed({ status: "RESOLVED", confidence: "high" }),
+    );
+
+    await getTfaTurnResultTool(
+      { testRunId: "tr-ov", turnId: "u-ov" },
+      mockConfig as any,
+    );
+
+    expect(get.mock.calls[0][0].url).toBe(
+      "https://api-observability.bsstag.com/ext/v1/testRuns/tr-ov/rcaChat/u-ov",
+    );
+    expect(get.mock.calls[0][0].headers.Authorization).toBe(
+      `Basic ${Buffer.from("fake-user:fake-key").toString("base64")}`,
+    );
+  });
+
+  it("registers with a credential-free schema of exactly testRunId + turnId", () => {
+    const { server, tools } = buildFakeServer();
+    addTfaRcaCollaborationTools(server as any, mockConfig as any);
+    expect(Object.keys(tools.getTfaTurnResult.schema ?? {})).toEqual([
+      "testRunId",
+      "turnId",
+    ]);
+  });
+
+  it("handler success → one trackMCP; domain failure → isError envelope", async () => {
+    const { server, tools } = buildFakeServer();
+    addTfaRcaCollaborationTools(server as any, mockConfig as any);
+
+    get.mockResolvedValue(
+      completed({ status: "RESOLVED", confidence: "high" }),
+    );
+    const okResult = await tools.getTfaTurnResult.handler(
+      { testRunId: "tr-1", turnId: "u-1" },
+      undefined,
+    );
+    expect(okResult.isError).toBeFalsy();
+    expect(trackMCP).toHaveBeenCalledTimes(1);
+    expect((trackMCP as Mock).mock.calls[0][0]).toBe("getTfaTurnResult");
+    expect((trackMCP as Mock).mock.calls[0][2]).toBeUndefined();
+
+    vi.clearAllMocks();
+    get.mockResolvedValue(nonOk(404));
+    const errResult = await tools.getTfaTurnResult.handler(
+      { testRunId: "tr-1", turnId: "u-1" },
+      undefined,
+    );
+    expect(errResult.isError).toBe(true);
+    expect(errResult.content[0].text).toContain("turn expired or not found");
+    expect(errResult.content[0].text).not.toContain("fake-key");
+    expect(trackMCP).toHaveBeenCalledTimes(1);
+    expect((trackMCP as Mock).mock.calls[0][2]).toBeInstanceOf(Error);
   });
 });
 

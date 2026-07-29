@@ -36,6 +36,24 @@ describe("fetchAutomationScreenshotsTool", () => {
     expect(result.content[1].type).toBe("image");
   });
 
+  it("SUCCESS: omits URL metadata for inline screenshots", async () => {
+    (fetchAutomationScreenshots as Mock).mockResolvedValue([
+      { base64: "inline-png" },
+    ]);
+
+    const result = await fetchAutomationScreenshotsTool(
+      { sessionId: "sess-123", sessionType: SessionType.Automate },
+      mockConfig,
+    );
+
+    expect(result.content[1]).toEqual({
+      type: "image",
+      data: "inline-png",
+      mimeType: "image/png",
+      _meta: { index: 1 },
+    });
+  });
+
   it("SUCCESS: returns isError when no screenshots found", async () => {
     (fetchAutomationScreenshots as Mock).mockResolvedValue([]);
 

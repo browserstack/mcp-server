@@ -38,7 +38,10 @@ export async function fetchAutomationScreenshotsTool(
       type: "image" as const,
       data: screenshot.base64,
       mimeType: "image/png",
-      _meta: { url: screenshot.url, index: index + 1 },
+      _meta: {
+        ...(screenshot.url ? { url: screenshot.url } : {}),
+        index: index + 1,
+      },
     }));
 
     return {

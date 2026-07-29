@@ -4,7 +4,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 
-async function extractScreenshotUrls(
+async function extractScreenshotValues(
   sessionId: string,
   sessionType: SessionType,
   config: BrowserStackConfig,
@@ -31,7 +31,7 @@ async function extractScreenshotUrls(
       ? response.data
       : JSON.stringify(response.data);
 
-  const urls: string[] = [];
+  const values: string[] = [];
   const SCREENSHOT_PATTERN = /REQUEST.*GET.*\/screenshot/;
   const RESPONSE_VALUE_PATTERN = /"value"\s*:\s*"([^"]+)"/;
 
@@ -45,22 +45,40 @@ async function extractScreenshotUrls(
     if (SCREENSHOT_PATTERN.test(currentLine)) {
       const match = nextLine.match(RESPONSE_VALUE_PATTERN);
       if (match && match[1]) {
-        urls.push(match[1]);
+        values.push(match[1]);
       }
     }
   }
 
-  return urls;
+  return values;
 }
 
-//Converts screenshot URLs to base64 encoded images
-async function convertUrlsToBase64(
-  urls: string[],
-): Promise<Array<{ url: string; base64: string }>> {
+const PNG_BASE64_PREFIX = "iVBORw0KGgo";
+const PNG_DATA_URL_PREFIX = "data:image/png;base64,";
+
+function extractInlinePngBase64(value: string): string | undefined {
+  const base64 = value.startsWith(PNG_DATA_URL_PREFIX)
+    ? value.slice(PNG_DATA_URL_PREFIX.length)
+    : value;
+
+  return base64.startsWith(PNG_BASE64_PREFIX) ? base64 : undefined;
+}
+
+// Converts screenshot URLs or inline Playwright PNG values to base64 images.
+async function convertScreenshotValuesToBase64(
+  values: string[],
+): Promise<Array<{ url?: string; base64: string }>> {
   const screenshots = await Promise.all(
-    urls.map(async (url) => {
+    values.map(async (value) => {
+      const inlineBase64 = extractInlinePngBase64(value);
+      if (inlineBase64) {
+        return {
+          base64: await maybeCompressBase64(inlineBase64),
+        };
+      }
+
       const response = await apiClient.get({
-        url,
+        url: value,
         responseType: "arraybuffer",
       });
       // Axios returns response.data as a Buffer for binary data
@@ -70,7 +88,7 @@ async function convertUrlsToBase64(
       const compressedBase64 = await maybeCompressBase64(base64);
 
       return {
-        url,
+        url: value,
         base64: compressedBase64,
       };
     }),
@@ -79,18 +97,18 @@ async function convertUrlsToBase64(
   return screenshots;
 }
 
-//Fetches and converts screenshot URLs to base64 encoded images
+// Fetches and converts screenshot URLs or inline PNG values to base64 images.
 export async function fetchAutomationScreenshots(
   sessionId: string,
   sessionType: SessionType = SessionType.Automate,
   config: BrowserStackConfig,
 ) {
-  const urls = await extractScreenshotUrls(sessionId, sessionType, config);
-  if (urls.length === 0) {
+  const values = await extractScreenshotValues(sessionId, sessionType, config);
+  if (values.length === 0) {
     return [];
   }
 
-  // Take only the last 5 URLs
-  const lastFiveUrls = urls.slice(-5);
-  return await convertUrlsToBase64(lastFiveUrls);
+  // Take only the last 5 screenshots
+  const lastFiveValues = values.slice(-5);
+  return await convertScreenshotValuesToBase64(lastFiveValues);
 }

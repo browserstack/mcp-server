@@ -9,6 +9,7 @@ import {
 } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapRichText, wrapTestCaseSteps } from "./rich-text.js";
 import logger from "../../logger.js";
 
 interface TestCaseStep {
@@ -323,6 +324,18 @@ export async function createTestCase(
   testCaseParams.tags = Array.from(
     new Set([...(testCaseParams.tags ?? []), "MCP Generated"]),
   );
+
+  // Rich-text fields must be HTML-wrapped or the TM UI shows entity-encoded
+  // text literally (PMAA-185); see rich-text.ts.
+  testCaseParams.test_case_steps = wrapTestCaseSteps(
+    testCaseParams.test_case_steps,
+  );
+  if (testCaseParams.preconditions !== undefined) {
+    testCaseParams.preconditions = wrapRichText(testCaseParams.preconditions);
+  }
+  if (testCaseParams.description !== undefined) {
+    testCaseParams.description = wrapRichText(testCaseParams.description);
+  }
 
   if (
     testCaseParams.priority !== undefined ||

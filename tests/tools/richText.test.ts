@@ -41,6 +41,21 @@ describe('wrapRichText', () => {
       '<p>< 5 items are shown</p>',
     );
   });
+
+  it('handles any characters, not just fixed strings', () => {
+    expect(wrapRichText('émojis 🎉 and ünïcode ≥ 5 stay bare')).toBe(
+      'émojis 🎉 and ünïcode ≥ 5 stay bare',
+    );
+    expect(wrapRichText('unicode plus html char: 温度 > 30°C')).toBe(
+      '<p>unicode plus html char: 温度 > 30°C</p>',
+    );
+    expect(wrapRichText('line1 a > b\nline2 c < d')).toBe(
+      '<p>line1 a > b\nline2 c < d</p>',
+    );
+    expect(wrapRichText('a>=b && c<=d & "e"')).toBe(
+      '<p>a>=b && c<=d & "e"</p>',
+    );
+  });
 });
 
 describe('wrapTestCaseSteps', () => {

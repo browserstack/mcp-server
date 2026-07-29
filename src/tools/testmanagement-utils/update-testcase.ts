@@ -178,8 +178,6 @@ export async function updateTestCase(
   const testCaseBody: Record<string, any> = {};
 
   if (params.name !== undefined) testCaseBody.name = params.name;
-  // Rich-text fields must be HTML-wrapped or the TM UI shows entity-encoded
-  // text literally (PMAA-185); see rich-text.ts.
   if (params.description !== undefined)
     testCaseBody.description = wrapRichText(params.description);
   if (params.preconditions !== undefined)

@@ -325,8 +325,6 @@ export async function createTestCase(
     new Set([...(testCaseParams.tags ?? []), "MCP Generated"]),
   );
 
-  // Rich-text fields must be HTML-wrapped or the TM UI shows entity-encoded
-  // text literally (PMAA-185); see rich-text.ts.
   testCaseParams.test_case_steps = wrapTestCaseSteps(
     testCaseParams.test_case_steps,
   );

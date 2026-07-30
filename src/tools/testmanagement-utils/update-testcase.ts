@@ -10,6 +10,7 @@ import {
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
+import { wrapRichText, wrapTestCaseSteps } from "./rich-text.js";
 import logger from "../../logger.js";
 
 export interface TestCaseUpdateRequest {
@@ -178,11 +179,11 @@ export async function updateTestCase(
 
   if (params.name !== undefined) testCaseBody.name = params.name;
   if (params.description !== undefined)
-    testCaseBody.description = params.description;
+    testCaseBody.description = wrapRichText(params.description);
   if (params.preconditions !== undefined)
-    testCaseBody.preconditions = params.preconditions;
+    testCaseBody.preconditions = wrapRichText(params.preconditions);
   if (params.test_case_steps !== undefined)
-    testCaseBody.test_case_steps = params.test_case_steps;
+    testCaseBody.test_case_steps = wrapTestCaseSteps(params.test_case_steps);
   if (params.owner !== undefined) testCaseBody.owner = params.owner;
   if (params.status !== undefined) testCaseBody.status = params.status;
   if (params.tags !== undefined) testCaseBody.tags = params.tags;

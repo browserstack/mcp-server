@@ -4,12 +4,16 @@ import {
   combineInstructions,
   createEnvStep,
   PLATFORM_UTILS,
+  USERNAME_PLACEHOLDER,
+  ACCESS_KEY_PLACEHOLDER,
 } from "../index.js";
 
-const username = "${process.env.BROWSERSTACK_USERNAME}";
-const accessKey = "${process.env.BROWSERSTACK_ACCESS_KEY}";
-
 export function getRubyAppInstructions(): string {
+  // Read lazily (inside the function) rather than at module top-level to avoid
+  // a circular-import TDZ error through the index barrel.
+  const username = USERNAME_PLACEHOLDER;
+  const accessKey = ACCESS_KEY_PLACEHOLDER;
+
   const configStep = createStep(
     "Create/Update the config file (config.yml) as follows:",
     `\`\`\`yaml
@@ -76,16 +80,10 @@ bundle exec cucumber
   return combineInstructions(configStep, envStep, runStep);
 }
 
-export function getRubySDKCommand(
-  framework: string,
-  username: string,
-  accessKey: string,
-): string {
+export function getRubySDKCommand(): string {
   const { isWindows, getPlatformLabel } = PLATFORM_UTILS;
 
   const envStep = createEnvStep(
-    username,
-    accessKey,
     isWindows,
     getPlatformLabel(),
     "Set your BrowserStack credentials as environment variables:",

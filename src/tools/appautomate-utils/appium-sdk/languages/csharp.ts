@@ -4,6 +4,8 @@ import {
   createStep,
   createEnvStep,
   combineInstructions,
+  USERNAME_PLACEHOLDER,
+  ACCESS_KEY_PLACEHOLDER,
 } from "../index.js";
 
 export function getCSharpAppInstructions(): string {
@@ -48,10 +50,7 @@ __Resolution:__
   return runStep;
 }
 
-export function getCSharpSDKCommand(
-  username: string,
-  accessKey: string,
-): string {
+export function getCSharpSDKCommand(): string {
   const {
     isWindows = false,
     isAppleSilicon = false,
@@ -61,23 +60,18 @@ export function getCSharpSDKCommand(
     console.warn("PLATFORM_UTILS is undefined. Defaulting platform values.");
   }
 
-  const envStep = createEnvStep(
-    username,
-    accessKey,
-    isWindows,
-    getPlatformLabel(),
-  );
+  const envStep = createEnvStep(isWindows, getPlatformLabel());
 
   const installCommands = isWindows
     ? `\`\`\`cmd
 dotnet add package BrowserStack.TestAdapter
 dotnet build
-dotnet browserstack-sdk setup --userName "${username}" --accessKey "${accessKey}"
+dotnet browserstack-sdk setup --userName "${USERNAME_PLACEHOLDER}" --accessKey "${ACCESS_KEY_PLACEHOLDER}"
 \`\`\``
     : `\`\`\`bash
 dotnet add package BrowserStack.TestAdapter
 dotnet build
-dotnet browserstack-sdk setup --userName "${username}" --accessKey "${accessKey}"
+dotnet browserstack-sdk setup --userName "${USERNAME_PLACEHOLDER}" --accessKey "${ACCESS_KEY_PLACEHOLDER}"
 \`\`\``;
 
   const installStep = createStep(

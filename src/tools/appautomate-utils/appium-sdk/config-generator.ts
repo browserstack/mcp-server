@@ -2,6 +2,8 @@ import {
   APP_DEVICE_CONFIGS,
   AppSDKSupportedTestingFrameworkEnum,
   DEFAULT_APP_PATH,
+  USERNAME_PLACEHOLDER,
+  ACCESS_KEY_PLACEHOLDER,
   createStep,
 } from "./index.js";
 import { ValidatedEnvironment } from "../../sdk-utils/common/device-validator.js";
@@ -13,8 +15,6 @@ export function generateAppBrowserStackYMLInstructions(
     testingFramework?: string;
     projectName?: string;
   },
-  username: string,
-  accessKey: string,
   appPath: string = DEFAULT_APP_PATH,
 ): string {
   if (
@@ -35,8 +35,8 @@ export function generateAppBrowserStackYMLInstructions(
     : "bstack-demo";
 
   const configContent = `\`\`\`yaml
-userName: ${username}
-accessKey: ${accessKey}
+userName: ${USERNAME_PLACEHOLDER}
+accessKey: ${ACCESS_KEY_PLACEHOLDER}
 app: ${appPath}
 platforms:
 ${platformConfigs}

@@ -66,8 +66,6 @@ export async function setupAppAutomateHandler(
   const sdkCommand = getAppSDKPrefixCommand(
     language,
     testingFramework,
-    username,
-    accessKey,
     appPath,
   );
 
@@ -83,8 +81,6 @@ export async function setupAppAutomateHandler(
       testingFramework,
       projectName: input.project as string,
     },
-    username,
-    accessKey,
     appPath,
   );
 

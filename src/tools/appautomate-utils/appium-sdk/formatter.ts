@@ -1,5 +1,9 @@
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { STEP_DELIMITER } from "./constants.js";
+import {
+  STEP_DELIMITER,
+  USERNAME_PLACEHOLDER,
+  ACCESS_KEY_PLACEHOLDER,
+} from "./constants.js";
 
 export function formatFinalAppInstructions(
   formattedInstructions: string,
@@ -33,26 +37,20 @@ export function combineInstructions(...instructionParts: string[]): string {
   return instructionParts.filter(Boolean).join("\n\n");
 }
 
-export function formatEnvCommands(
-  username: string,
-  accessKey: string,
-  isWindows: boolean,
-): string {
+export function formatEnvCommands(isWindows: boolean): string {
   if (isWindows) {
     return `\`\`\`cmd
-setx BROWSERSTACK_USERNAME "${username}"
-setx BROWSERSTACK_ACCESS_KEY "${accessKey}"
+setx BROWSERSTACK_USERNAME "${USERNAME_PLACEHOLDER}"
+setx BROWSERSTACK_ACCESS_KEY "${ACCESS_KEY_PLACEHOLDER}"
 \`\`\``;
   }
   return `\`\`\`bash
-export BROWSERSTACK_USERNAME=${username}
-export BROWSERSTACK_ACCESS_KEY=${accessKey}
+export BROWSERSTACK_USERNAME=${USERNAME_PLACEHOLDER}
+export BROWSERSTACK_ACCESS_KEY=${ACCESS_KEY_PLACEHOLDER}
 \`\`\``;
 }
 
 export function createEnvStep(
-  username: string,
-  accessKey: string,
   isWindows: boolean,
   platformLabel: string,
   title: string = "Set BrowserStack credentials as environment variables:",
@@ -60,7 +58,7 @@ export function createEnvStep(
   return createStep(
     title,
     `**${platformLabel}:**
-${formatEnvCommands(username, accessKey, isWindows)}`,
+${formatEnvCommands(isWindows)}`,
   );
 }
 

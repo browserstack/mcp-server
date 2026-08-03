@@ -11,39 +11,43 @@ describe("getSDKPrefixCommand", () => {
   });
 
   beforeEach(() => {
-    // Guard: ensure these env vars never leak into the rendered command.
-    // The fix forwards `username` / `accessKey` parameters; reading process.env
-    // would silently return undefined or a stale value in remote (multi-tenant) mode.
-    delete process.env.BROWSERSTACK_USERNAME;
-    delete process.env.BROWSERSTACK_ACCESS_KEY;
+    // If a real credential ever leaks into a rendered command, these env vars
+    // are where it would come from. Set decoy values so any accidental
+    // interpolation would be caught by the assertions below.
+    process.env.BROWSERSTACK_USERNAME = "real-user-should-not-appear";
+    process.env.BROWSERSTACK_ACCESS_KEY = "real-key-should-not-appear";
   });
 
-  it("nodejs: embeds passed username/accessKey, never reads process.env", () => {
-    const out = getSDKPrefixCommand("nodejs", "testng", "u-from-config", "k-from-config");
-    expect(out).toContain("--username u-from-config");
-    expect(out).toContain("--key k-from-config");
+  it("nodejs: emits env-var references, never literal credentials", () => {
+    const out = getSDKPrefixCommand("nodejs", "testng");
+    expect(out).toContain("--username ${BROWSERSTACK_USERNAME}");
+    expect(out).toContain("--key ${BROWSERSTACK_ACCESS_KEY}");
+    expect(out).not.toContain("real-user-should-not-appear");
+    expect(out).not.toContain("real-key-should-not-appear");
     expect(out).not.toContain("undefined");
-    expect(out).not.toContain("process.env");
   });
 
-  it("java/unix: Maven command uses passed username/accessKey", () => {
+  it("java/unix: Maven command uses env-var references", () => {
     Object.defineProperty(process, "platform", { value: "darwin" });
-    const out = getSDKPrefixCommand("java", "testng", "u-from-config", "k-from-config");
-    expect(out).toContain('-DBROWSERSTACK_USERNAME="u-from-config"');
-    expect(out).toContain('-DBROWSERSTACK_ACCESS_KEY="k-from-config"');
+    const out = getSDKPrefixCommand("java", "testng");
+    expect(out).toContain('-DBROWSERSTACK_USERNAME="${BROWSERSTACK_USERNAME}"');
+    expect(out).toContain(
+      '-DBROWSERSTACK_ACCESS_KEY="${BROWSERSTACK_ACCESS_KEY}"',
+    );
+    expect(out).not.toContain("real-user-should-not-appear");
+    expect(out).not.toContain("real-key-should-not-appear");
     expect(out).not.toContain("undefined");
-    expect(out).not.toContain("process.env");
   });
 
-  it("java/windows: Maven command uses passed username/accessKey (regression)", () => {
-    // Regression for a bug where the Windows branch read process.env.BROWSERSTACK_*
-    // while the Unix branch correctly took params. In remote mode this leaked the
-    // string "undefined" into the Maven command shown to the user.
+  it("java/windows: Maven command uses env-var references", () => {
     Object.defineProperty(process, "platform", { value: "win32" });
-    const out = getSDKPrefixCommand("java", "testng", "u-from-config", "k-from-config");
-    expect(out).toContain('-DBROWSERSTACK_USERNAME="u-from-config"');
-    expect(out).toContain('-DBROWSERSTACK_ACCESS_KEY="k-from-config"');
+    const out = getSDKPrefixCommand("java", "testng");
+    expect(out).toContain('-DBROWSERSTACK_USERNAME="${BROWSERSTACK_USERNAME}"');
+    expect(out).toContain(
+      '-DBROWSERSTACK_ACCESS_KEY="${BROWSERSTACK_ACCESS_KEY}"',
+    );
+    expect(out).not.toContain("real-user-should-not-appear");
+    expect(out).not.toContain("real-key-should-not-appear");
     expect(out).not.toContain("undefined");
-    expect(out).not.toContain("process.env");
   });
 });

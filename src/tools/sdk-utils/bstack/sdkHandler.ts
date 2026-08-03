@@ -1,7 +1,6 @@
 // Handler for BrowserStack SDK only (no Percy) - Sets up BrowserStack SDK with YML configuration
 import { RunTestsInstructionResult, RunTestsStep } from "../common/types.js";
 import { RunTestsOnBrowserStackInput } from "../common/schema.js";
-import { getBrowserStackAuth } from "../../../lib/get-auth.js";
 import { getSDKPrefixCommand } from "./commands.js";
 import { generateBrowserStackYMLInstructions } from "./configUtils.js";
 import { getInstructionsForProjectConfiguration } from "../common/instructionUtils.js";
@@ -19,8 +18,6 @@ export async function runBstackSDKOnly(
   isPercyAutomate = false,
 ): Promise<RunTestsInstructionResult> {
   const steps: RunTestsStep[] = [];
-  const authString = getBrowserStackAuth(config);
-  const [username, accessKey] = authString.split(":");
 
   const tupleTargets: Array<Array<string>> =
     input.devices?.map((device) => {
@@ -58,8 +55,6 @@ export async function runBstackSDKOnly(
       input.detectedBrowserAutomationFramework as SDKSupportedBrowserAutomationFramework,
       input.detectedTestingFramework as SDKSupportedTestingFramework,
       input.detectedLanguage as SDKSupportedLanguage,
-      username,
-      accessKey,
     );
 
     if (frameworkInstructions) {
@@ -91,8 +86,6 @@ export async function runBstackSDKOnly(
   const sdkSetupCommand = getSDKPrefixCommand(
     input.detectedLanguage as SDKSupportedLanguage,
     input.detectedTestingFramework as SDKSupportedTestingFramework,
-    username,
-    accessKey,
   );
 
   if (sdkSetupCommand) {
@@ -107,8 +100,6 @@ export async function runBstackSDKOnly(
     input.detectedBrowserAutomationFramework as SDKSupportedBrowserAutomationFramework,
     input.detectedTestingFramework as SDKSupportedTestingFramework,
     input.detectedLanguage as SDKSupportedLanguage,
-    username,
-    accessKey,
   );
 
   if (frameworkInstructions) {
@@ -121,14 +112,11 @@ export async function runBstackSDKOnly(
     }
   }
 
-  const ymlInstructions = generateBrowserStackYMLInstructions(
-    {
-      validatedEnvironments,
-      enablePercy: false,
-      projectName: input.projectName,
-    },
-    config,
-  );
+  const ymlInstructions = generateBrowserStackYMLInstructions({
+    validatedEnvironments,
+    enablePercy: false,
+    projectName: input.projectName,
+  });
 
   if (ymlInstructions) {
     steps.push({

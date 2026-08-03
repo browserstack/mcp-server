@@ -1,7 +1,6 @@
 // Percy + BrowserStack SDK combined handler
 import { RunTestsInstructionResult, RunTestsStep } from "../common/types.js";
 import { RunTestsOnBrowserStackInput } from "../common/schema.js";
-import { getBrowserStackAuth } from "../../../lib/get-auth.js";
 import { getSDKPrefixCommand } from "../bstack/commands.js";
 import { generateBrowserStackYMLInstructions } from "../bstack/configUtils.js";
 import { getInstructionsForProjectConfiguration } from "../common/instructionUtils.js";
@@ -9,7 +8,6 @@ import {
   formatPercyInstructions,
   getPercyInstructions,
 } from "./instructions.js";
-import { BrowserStackConfig } from "../../../lib/types.js";
 import {
   SDKSupportedBrowserAutomationFramework,
   SDKSupportedTestingFramework,
@@ -18,11 +16,8 @@ import {
 
 export function runPercyWithBrowserstackSDK(
   input: RunTestsOnBrowserStackInput,
-  config: BrowserStackConfig,
 ): RunTestsInstructionResult {
   const steps: RunTestsStep[] = [];
-  const authString = getBrowserStackAuth(config);
-  const [username, accessKey] = authString.split(":");
 
   // Check if Percy is supported for this configuration
   const percyResult = getPercyInstructions(
@@ -57,8 +52,6 @@ export function runPercyWithBrowserstackSDK(
       input.detectedBrowserAutomationFramework as SDKSupportedBrowserAutomationFramework,
       input.detectedTestingFramework as SDKSupportedTestingFramework,
       input.detectedLanguage as SDKSupportedLanguage,
-      username,
-      accessKey,
     );
 
     if (frameworkInstructions && frameworkInstructions.setup) {
@@ -94,8 +87,6 @@ export function runPercyWithBrowserstackSDK(
   const sdkSetupCommand = getSDKPrefixCommand(
     input.detectedLanguage as SDKSupportedLanguage,
     input.detectedTestingFramework as SDKSupportedTestingFramework,
-    username,
-    accessKey,
   );
 
   if (sdkSetupCommand) {
@@ -106,17 +97,14 @@ export function runPercyWithBrowserstackSDK(
     });
   }
 
-  const ymlInstructions = generateBrowserStackYMLInstructions(
-    {
-      platforms:
-        ((input as any).devices as string[][] | undefined)?.map((t) =>
-          t.join(" "),
-        ) || [],
-      enablePercy: true,
-      projectName: input.projectName,
-    },
-    config,
-  );
+  const ymlInstructions = generateBrowserStackYMLInstructions({
+    platforms:
+      ((input as any).devices as string[][] | undefined)?.map((t) =>
+        t.join(" "),
+      ) || [],
+    enablePercy: true,
+    projectName: input.projectName,
+  });
 
   if (ymlInstructions) {
     steps.push({
@@ -130,8 +118,6 @@ export function runPercyWithBrowserstackSDK(
     input.detectedBrowserAutomationFramework as SDKSupportedBrowserAutomationFramework,
     input.detectedTestingFramework as SDKSupportedTestingFramework,
     input.detectedLanguage as SDKSupportedLanguage,
-    username,
-    accessKey,
   );
 
   if (frameworkInstructions && frameworkInstructions.setup) {

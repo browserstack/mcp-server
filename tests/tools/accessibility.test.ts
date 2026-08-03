@@ -39,7 +39,12 @@ vi.mock("../../src/tools/accessiblity-utils/auth-config", () => {
         data: { id: "auth-2", name: "test-form" },
       });
       getAuthConfig = vi.fn().mockResolvedValue({
-        data: [{ id: "auth-1", name: "test" }],
+        data: {
+          id: "auth-1",
+          name: "test",
+          username: "site-user",
+          password: "super-secret-site-password",
+        },
       });
     },
   };
@@ -110,13 +115,17 @@ describe("Accessibility Tools", () => {
     expect(result.isError).toBe(true);
   });
 
-  it("getAccessibilityAuthConfig — returns a response", async () => {
+  it("getAccessibilityAuthConfig — returns a response with the password redacted", async () => {
     const result = await handlers["getAccessibilityAuthConfig"](
       { configId: 1 },
       { sendNotification: vi.fn(), _meta: {} },
     );
     expect(result).toBeDefined();
     expect(result.content).toBeDefined();
+
+    const serialized = JSON.stringify(result.content);
+    expect(serialized).not.toContain("super-secret-site-password");
+    expect(serialized).toContain("***");
   });
 
   it("startAccessibilityScan — returns a response", async () => {

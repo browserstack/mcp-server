@@ -325,9 +325,16 @@ async function executeGetAuthConfig(
 
     const result = await authConfig.getAuthConfig(args.configId);
 
+    const redactedData = result.data
+      ? {
+          ...result.data,
+          ...(result.data.password ? { password: "***" } : {}),
+        }
+      : result.data;
+
     return createSuccessResponse([
       `✅ Auth config retrieved successfully`,
-      `Auth config details: ${JSON.stringify(result.data, null, 2)}`,
+      `Auth config details: ${JSON.stringify(redactedData, null, 2)}`,
     ]);
   } catch (error) {
     return handleMCPError("getAccessibilityAuthConfig", server, config, error);

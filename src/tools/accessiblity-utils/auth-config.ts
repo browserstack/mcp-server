@@ -18,22 +18,6 @@ export interface AuthConfigResponse {
 }
 
 /**
- * Masks stored site secrets (password + username) before an auth-config
- * response is written to logs. Never log the raw credential values.
- */
-export function redactAuthConfigResponse(
-  response?: AuthConfigResponse,
-): AuthConfigResponse | undefined {
-  if (!response?.data) {
-    return response;
-  }
-  const data = { ...response.data };
-  if (data.password) data.password = "***";
-  if (data.username) data.username = "***";
-  return { ...response, data };
-}
-
-/**
  * Allowlist of non-sensitive fields safe to return to the LLM/tool caller.
  * Everything else (site username/password, selectors, undeclared keys) is
  * dropped rather than echoed — see rules/tool-design.md "never echo".
@@ -126,9 +110,7 @@ export class AccessibilityAuthConfig {
 
       const data = response.data;
       logger.info(
-        `The data returned from the API is: ${JSON.stringify(
-          redactAuthConfigResponse(data),
-        )}`,
+        `Auth config API returned: ${JSON.stringify(safeAuthConfigData(data))}`,
       );
       if (!data.success) {
         throw new Error(

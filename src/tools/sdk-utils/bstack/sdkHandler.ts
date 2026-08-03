@@ -14,9 +14,12 @@ import {
 
 export async function runBstackSDKOnly(
   input: RunTestsOnBrowserStackInput,
+  // Retained for tool-handler signature stability (callers pass the per-request
+  // config); setup instructions no longer embed credentials, so it is unused here.
   config: BrowserStackConfig,
   isPercyAutomate = false,
 ): Promise<RunTestsInstructionResult> {
+  void config;
   const steps: RunTestsStep[] = [];
 
   const tupleTargets: Array<Array<string>> =

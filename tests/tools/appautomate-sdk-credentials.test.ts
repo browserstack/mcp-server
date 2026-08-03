@@ -60,6 +60,12 @@ describe("App Automate SDK setup — no credential leakage", () => {
           ),
         ].join("\n\n");
 
+        // Positive assertion: the generators must actually produce setup text
+        // (guards against the whole suite passing green on empty output) and
+        // that text must carry the credential placeholder.
+        expect(rendered.length).toBeGreaterThan(0);
+        expect(rendered).toContain("<your_browserstack_username>");
+
         expect(rendered).not.toContain(DECOY_USER);
         expect(rendered).not.toContain(DECOY_KEY);
       });

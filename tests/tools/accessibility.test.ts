@@ -28,12 +28,22 @@ vi.mock("../../src/tools/accessiblity-utils/report-parser", () => ({
     pageLength: 1,
   }),
 }));
-vi.mock("../../src/tools/accessiblity-utils/auth-config", () => {
+vi.mock("../../src/tools/accessiblity-utils/auth-config", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../src/tools/accessiblity-utils/auth-config")
+    >();
   return {
+    ...actual,
     AccessibilityAuthConfig: class {
       setAuth = vi.fn();
       createBasicAuthConfig = vi.fn().mockResolvedValue({
-        data: { id: "auth-1", name: "test" },
+        data: {
+          id: "auth-1",
+          name: "test",
+          username: "site-user",
+          password: "super-secret-site-password",
+        },
       });
       createFormAuthConfig = vi.fn().mockResolvedValue({
         data: { id: "auth-2", name: "test-form" },
@@ -97,13 +107,17 @@ describe("Accessibility Tools", () => {
     expect(result.content.length).toBeGreaterThan(0);
   });
 
-  it("createAccessibilityAuthConfig — returns a response for basic auth", async () => {
+  it("createAccessibilityAuthConfig — returns a response for basic auth with the password redacted", async () => {
     const result = await handlers["createAccessibilityAuthConfig"](
       { type: "basic", name: "test-auth", username: "user", password: "pass", url: "https://example.com/login" },
       { sendNotification: vi.fn(), _meta: {} },
     );
     expect(result).toBeDefined();
     expect(result.content).toBeDefined();
+
+    const serialized = JSON.stringify(result.content);
+    expect(serialized).not.toContain("super-secret-site-password");
+    expect(serialized).toContain("***");
   });
 
   it("createAccessibilityAuthConfig — FAIL: form auth without required selectors returns error", async () => {

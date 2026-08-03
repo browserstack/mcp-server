@@ -46,7 +46,7 @@ python3 -m pip install browserstack-sdk
 
 Setup the BrowserStack SDK with framework-specific configuration:
 \`\`\`bash
-browserstack-sdk setup --framework "${framework}" --username "\${BROWSERSTACK_USERNAME}" --key "\${BROWSERSTACK_ACCESS_KEY}"
+browserstack-sdk setup --framework "${framework}" --username "<your_browserstack_username>" --key "<your_browserstack_access_key>"
 \`\`\`
 `;
 
@@ -100,8 +100,8 @@ dependencies {
 
 Export your BrowserStack credentials as environment variables:
 \`\`\`bash
-export BROWSERSTACK_USERNAME=<your_browserstack_username>
-export BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\`
 `;
 
@@ -146,7 +146,7 @@ dotnet build
 
 Set up BrowserStack SDK with your credentials:
 \`\`\`bash
-dotnet browserstack-sdk setup --userName \${BROWSERSTACK_USERNAME} --accessKey \${BROWSERSTACK_ACCESS_KEY}
+dotnet browserstack-sdk setup --userName "<your_browserstack_username>" --accessKey "<your_browserstack_access_key>"
 \`\`\`
 
 ---STEP---
@@ -215,7 +215,7 @@ dotnet build
 
 Set up BrowserStack SDK with your credentials:
 \`\`\`bash
-dotnet browserstack-sdk setup --userName \${BROWSERSTACK_USERNAME} --accessKey \${BROWSERSTACK_ACCESS_KEY}
+dotnet browserstack-sdk setup --userName "<your_browserstack_username>" --accessKey "<your_browserstack_access_key>"
 \`\`\`
 
 ---STEP---
@@ -310,8 +310,8 @@ Example :
 Export BrowserStack credentials as environment variables:
 Set the following environment variables before running tests.
 \`\`\`bash
-export BROWSERSTACK_USERNAME=<your_browserstack_username>
-export BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\`
 
 ---STEP---
@@ -344,14 +344,14 @@ Export your BrowserStack username and access key as environment variables.
 
 For macOS/Linux:
 \`\`\`bash
-export BROWSERSTACK_USERNAME=<your_browserstack_username>
-export BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\`
 
 For Windows PowerShell:
 \`\`\`powershell
-$env:BROWSERSTACK_USERNAME=<your_browserstack_username>
-$env:BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+$env:BROWSERSTACK_USERNAME="<your_browserstack_username>"
+$env:BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\`
 
 ---STEP---
@@ -532,14 +532,14 @@ const serenityInstructions = () => {
 Set BrowserStack credentials as environment variables:
 For macOS/Linux:
 \`\`\`bash
-export BROWSERSTACK_USERNAME=<your_browserstack_username>
-export BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\`
 
 For Windows Command Prompt:
 \`\`\`cmd
-set BROWSERSTACK_USERNAME=<your_browserstack_username>
-set BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+set "BROWSERSTACK_USERNAME=<your_browserstack_username>"
+set "BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>"
 \`\`\`
 
 ---STEP---

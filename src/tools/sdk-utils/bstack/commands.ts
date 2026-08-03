@@ -22,7 +22,7 @@ npm i -D browserstack-node-sdk@latest
 ---STEP---
 Run the following command to setup browserstack sdk:
 \`\`\`bash
-npx browserstack-node-sdk setup --username \${BROWSERSTACK_USERNAME} --key \${BROWSERSTACK_ACCESS_KEY}
+npx browserstack-node-sdk setup --username "<your_browserstack_username>" --key "<your_browserstack_access_key>"
 \`\`\``;
 
 // Template for Gradle setup instructions (platform-independent)
@@ -48,8 +48,8 @@ function getMavenCommandForWindows(mavenFramework: string): string {
     `-DgroupId="${MAVEN_ARCHETYPE_GROUP_ID}" ` +
     `-DartifactId="${MAVEN_ARCHETYPE_ARTIFACT_ID}" ` +
     `-Dversion="${MAVEN_ARCHETYPE_VERSION}" ` +
-    `-DBROWSERSTACK_USERNAME="\${BROWSERSTACK_USERNAME}" ` +
-    `-DBROWSERSTACK_ACCESS_KEY="\${BROWSERSTACK_ACCESS_KEY}" ` +
+    `-DBROWSERSTACK_USERNAME="<your_browserstack_username>" ` +
+    `-DBROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>" ` +
     `-DBROWSERSTACK_FRAMEWORK="${mavenFramework}"`
   );
 }
@@ -59,8 +59,8 @@ function getMavenCommandForUnix(mavenFramework: string): string {
   return `mvn archetype:generate -B -DarchetypeGroupId=${MAVEN_ARCHETYPE_GROUP_ID} \\
 -DarchetypeArtifactId=${MAVEN_ARCHETYPE_ARTIFACT_ID} -DarchetypeVersion=${MAVEN_ARCHETYPE_VERSION} \\
 -DgroupId=${MAVEN_ARCHETYPE_GROUP_ID} -DartifactId=${MAVEN_ARCHETYPE_ARTIFACT_ID} -Dversion=${MAVEN_ARCHETYPE_VERSION} \\
--DBROWSERSTACK_USERNAME="\${BROWSERSTACK_USERNAME}" \\
--DBROWSERSTACK_ACCESS_KEY="\${BROWSERSTACK_ACCESS_KEY}" \\
+-DBROWSERSTACK_USERNAME="<your_browserstack_username>" \\
+-DBROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>" \\
 -DBROWSERSTACK_FRAMEWORK="${mavenFramework}"`;
 }
 

@@ -17,6 +17,22 @@ export interface AuthConfigResponse {
   errors?: string[];
 }
 
+/**
+ * Redacts the stored site password before an auth-config response is returned
+ * to the LLM/tool caller or written to logs. Never expose the raw password.
+ */
+export function redactAuthConfigResponse(
+  response?: AuthConfigResponse,
+): AuthConfigResponse | undefined {
+  if (!response?.data?.password) {
+    return response;
+  }
+  return {
+    ...response,
+    data: { ...response.data, password: "***" },
+  };
+}
+
 export interface FormAuthData {
   username: string;
   usernameSelector: string;
@@ -91,7 +107,11 @@ export class AccessibilityAuthConfig {
       });
 
       const data = response.data;
-      logger.info(`The data returned from the API is: ${JSON.stringify(data)}`);
+      logger.info(
+        `The data returned from the API is: ${JSON.stringify(
+          redactAuthConfigResponse(data),
+        )}`,
+      );
       if (!data.success) {
         throw new Error(
           `Unable to create auth config: ${data.errors?.join(", ")}`,

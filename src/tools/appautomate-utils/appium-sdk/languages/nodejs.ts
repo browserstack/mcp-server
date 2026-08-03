@@ -77,8 +77,8 @@ function getWebDriverIOCommand(): string {
   const envStep = createStep(
     "Set your BrowserStack credentials as environment variables:",
     `\`\`\`bash
-export BROWSERSTACK_USERNAME=<your_browserstack_username>
-export BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 
@@ -152,8 +152,8 @@ function getNightwatchCommand(): string {
   const envStep = createStep(
     "Set your BrowserStack credentials as environment variables:",
     `\`\`\`bash 
-export BROWSERSTACK_USERNAME=<your_browserstack_username>
-export BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 
@@ -240,8 +240,8 @@ function getJestCommand(): string {
   const envStep = createStep(
     "Set your BrowserStack credentials as environment variables:",
     `\`\`\`bash
-export BROWSERSTACK_USERNAME=<your_browserstack_username>
-export BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 
@@ -259,8 +259,8 @@ function getMochaCommand(): string {
   const envStep = createStep(
     "Set your BrowserStack credentials as environment variables:",
     `\`\`\`bash
-export BROWSERSTACK_USERNAME=<your_browserstack_username>
-export BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 
@@ -278,8 +278,8 @@ function getCucumberJSCommand(): string {
   return createStep(
     "Set your BrowserStack credentials as environment variables:",
     `\`\`\`bash
-export BROWSERSTACK_USERNAME=<your_browserstack_username>
-export BROWSERSTACK_ACCESS_KEY=<your_browserstack_access_key>
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 }

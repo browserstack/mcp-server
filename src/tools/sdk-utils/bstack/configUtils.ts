@@ -22,8 +22,8 @@ export function generateBrowserStackYMLInstructions(config: {
 # BrowserStack Reporting
 # ======================
 
-userName: \${BROWSERSTACK_USERNAME}
-accessKey: \${BROWSERSTACK_ACCESS_KEY}
+userName: <your_browserstack_username>
+accessKey: <your_browserstack_access_key>
 
 # TODO: Replace these sample values with your actual project details
 projectName: ${projectName}

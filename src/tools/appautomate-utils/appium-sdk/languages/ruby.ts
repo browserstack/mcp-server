@@ -4,16 +4,15 @@ import {
   combineInstructions,
   createEnvStep,
   PLATFORM_UTILS,
-  USERNAME_PLACEHOLDER,
-  ACCESS_KEY_PLACEHOLDER,
 } from "../index.js";
+// Import placeholders straight from constants.js (not the index barrel) so these
+// module-scope constants have no circular dependency on the barrel.
+import { USERNAME_PLACEHOLDER, ACCESS_KEY_PLACEHOLDER } from "../constants.js";
+
+const username = USERNAME_PLACEHOLDER;
+const accessKey = ACCESS_KEY_PLACEHOLDER;
 
 export function getRubyAppInstructions(): string {
-  // Read lazily (inside the function) rather than at module top-level to avoid
-  // a circular-import TDZ error through the index barrel.
-  const username = USERNAME_PLACEHOLDER;
-  const accessKey = ACCESS_KEY_PLACEHOLDER;
-
   const configStep = createStep(
     "Create/Update the config file (config.yml) as follows:",
     `\`\`\`yaml

@@ -3,7 +3,10 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { AccessibilityScanner } from "./accessiblity-utils/scanner.js";
 import { AccessibilityReportFetcher } from "./accessiblity-utils/report-fetcher.js";
-import { AccessibilityAuthConfig } from "./accessiblity-utils/auth-config.js";
+import {
+  AccessibilityAuthConfig,
+  safeAuthConfigData,
+} from "./accessiblity-utils/auth-config.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { parseAccessibilityReportFromCSV } from "./accessiblity-utils/report-parser.js";
 import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
@@ -288,7 +291,11 @@ async function executeCreateAuthConfig(
 
     return createSuccessResponse([
       `✅ Auth config "${args.name}" created successfully with ID: ${result.data?.id}`,
-      `Auth config details: ${JSON.stringify(result.data, null, 2)}`,
+      `Auth config details: ${JSON.stringify(
+        safeAuthConfigData(result),
+        null,
+        2,
+      )}`,
     ]);
   } catch (error) {
     if (
@@ -327,7 +334,11 @@ async function executeGetAuthConfig(
 
     return createSuccessResponse([
       `✅ Auth config retrieved successfully`,
-      `Auth config details: ${JSON.stringify(result.data, null, 2)}`,
+      `Auth config details: ${JSON.stringify(
+        safeAuthConfigData(result),
+        null,
+        2,
+      )}`,
     ]);
   } catch (error) {
     return handleMCPError("getAccessibilityAuthConfig", server, config, error);

@@ -28,18 +28,33 @@ vi.mock("../../src/tools/accessiblity-utils/report-parser", () => ({
     pageLength: 1,
   }),
 }));
-vi.mock("../../src/tools/accessiblity-utils/auth-config", () => {
+vi.mock("../../src/tools/accessiblity-utils/auth-config", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../src/tools/accessiblity-utils/auth-config")
+    >();
   return {
+    ...actual,
     AccessibilityAuthConfig: class {
       setAuth = vi.fn();
       createBasicAuthConfig = vi.fn().mockResolvedValue({
-        data: { id: "auth-1", name: "test" },
+        data: {
+          id: "auth-1",
+          name: "test",
+          username: "site-user",
+          password: "super-secret-site-password",
+        },
       });
       createFormAuthConfig = vi.fn().mockResolvedValue({
         data: { id: "auth-2", name: "test-form" },
       });
       getAuthConfig = vi.fn().mockResolvedValue({
-        data: [{ id: "auth-1", name: "test" }],
+        data: {
+          id: "auth-1",
+          name: "test",
+          username: "site-user",
+          password: "super-secret-site-password",
+        },
       });
     },
   };
@@ -92,13 +107,20 @@ describe("Accessibility Tools", () => {
     expect(result.content.length).toBeGreaterThan(0);
   });
 
-  it("createAccessibilityAuthConfig — returns a response for basic auth", async () => {
+  it("createAccessibilityAuthConfig — response omits the stored site credentials", async () => {
     const result = await handlers["createAccessibilityAuthConfig"](
       { type: "basic", name: "test-auth", username: "user", password: "pass", url: "https://example.com/login" },
       { sendNotification: vi.fn(), _meta: {} },
     );
     expect(result).toBeDefined();
     expect(result.content).toBeDefined();
+
+    const serialized = JSON.stringify(result.content);
+    // Allowlist: neither the site password nor the site username is echoed.
+    expect(serialized).not.toContain("super-secret-site-password");
+    expect(serialized).not.toContain("site-user");
+    // Safe identifying fields are still returned.
+    expect(serialized).toContain("auth-1");
   });
 
   it("createAccessibilityAuthConfig — FAIL: form auth without required selectors returns error", async () => {
@@ -110,13 +132,20 @@ describe("Accessibility Tools", () => {
     expect(result.isError).toBe(true);
   });
 
-  it("getAccessibilityAuthConfig — returns a response", async () => {
+  it("getAccessibilityAuthConfig — response omits the stored site credentials", async () => {
     const result = await handlers["getAccessibilityAuthConfig"](
       { configId: 1 },
       { sendNotification: vi.fn(), _meta: {} },
     );
     expect(result).toBeDefined();
     expect(result.content).toBeDefined();
+
+    const serialized = JSON.stringify(result.content);
+    // Allowlist: neither the site password nor the site username is echoed.
+    expect(serialized).not.toContain("super-secret-site-password");
+    expect(serialized).not.toContain("site-user");
+    // Safe identifying fields are still returned.
+    expect(serialized).toContain("auth-1");
   });
 
   it("startAccessibilityScan — returns a response", async () => {

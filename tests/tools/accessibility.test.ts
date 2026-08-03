@@ -107,7 +107,7 @@ describe("Accessibility Tools", () => {
     expect(result.content.length).toBeGreaterThan(0);
   });
 
-  it("createAccessibilityAuthConfig — returns a response for basic auth with the password redacted", async () => {
+  it("createAccessibilityAuthConfig — response omits the stored site credentials", async () => {
     const result = await handlers["createAccessibilityAuthConfig"](
       { type: "basic", name: "test-auth", username: "user", password: "pass", url: "https://example.com/login" },
       { sendNotification: vi.fn(), _meta: {} },
@@ -116,8 +116,11 @@ describe("Accessibility Tools", () => {
     expect(result.content).toBeDefined();
 
     const serialized = JSON.stringify(result.content);
+    // Allowlist: neither the site password nor the site username is echoed.
     expect(serialized).not.toContain("super-secret-site-password");
-    expect(serialized).toContain("***");
+    expect(serialized).not.toContain("site-user");
+    // Safe identifying fields are still returned.
+    expect(serialized).toContain("auth-1");
   });
 
   it("createAccessibilityAuthConfig — FAIL: form auth without required selectors returns error", async () => {
@@ -129,7 +132,7 @@ describe("Accessibility Tools", () => {
     expect(result.isError).toBe(true);
   });
 
-  it("getAccessibilityAuthConfig — returns a response with the password redacted", async () => {
+  it("getAccessibilityAuthConfig — response omits the stored site credentials", async () => {
     const result = await handlers["getAccessibilityAuthConfig"](
       { configId: 1 },
       { sendNotification: vi.fn(), _meta: {} },
@@ -138,8 +141,11 @@ describe("Accessibility Tools", () => {
     expect(result.content).toBeDefined();
 
     const serialized = JSON.stringify(result.content);
+    // Allowlist: neither the site password nor the site username is echoed.
     expect(serialized).not.toContain("super-secret-site-password");
-    expect(serialized).toContain("***");
+    expect(serialized).not.toContain("site-user");
+    // Safe identifying fields are still returned.
+    expect(serialized).toContain("auth-1");
   });
 
   it("startAccessibilityScan — returns a response", async () => {

@@ -25,8 +25,10 @@ export const APP_DEVICE_CONFIGS = {
 // Step delimiter for parsing instructions
 export const STEP_DELIMITER = "---STEP---";
 
-export const USERNAME_PLACEHOLDER = "<your_browserstack_username>";
-export const ACCESS_KEY_PLACEHOLDER = "<your_browserstack_access_key>";
+export {
+  USERNAME_PLACEHOLDER,
+  ACCESS_KEY_PLACEHOLDER,
+} from "../../sdk-utils/common/credentials.js";
 
 // Default app path for examples
 export const DEFAULT_APP_PATH = "bs://sample.app";

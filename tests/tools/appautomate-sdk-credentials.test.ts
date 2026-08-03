@@ -14,6 +14,7 @@ const COMBOS: Array<[string, string[]]> = [
   ["python", ["pytest", "robot", "behave", "lettuce"]],
   ["nodejs", ["jest", "mocha", "cucumberJs", "webdriverio", "nightwatch"]],
   ["ruby", ["cucumberRuby"]],
+  ["csharp", ["nunit", "mstest", "xunit", "specflow", "reqnroll"]],
 ];
 
 const DECOY_USER = "decoy-username-must-not-leak";
@@ -30,8 +31,11 @@ describe("App Automate SDK setup — no credential leakage", () => {
   });
 
   afterEach(() => {
-    process.env.BROWSERSTACK_USERNAME = originalUser;
-    process.env.BROWSERSTACK_ACCESS_KEY = originalKey;
+    // Restore exactly — assigning `undefined` would store the string "undefined".
+    if (originalUser === undefined) delete process.env.BROWSERSTACK_USERNAME;
+    else process.env.BROWSERSTACK_USERNAME = originalUser;
+    if (originalKey === undefined) delete process.env.BROWSERSTACK_ACCESS_KEY;
+    else process.env.BROWSERSTACK_ACCESS_KEY = originalKey;
   });
 
   for (const [language, frameworks] of COMBOS) {
@@ -65,6 +69,7 @@ describe("App Automate SDK setup — no credential leakage", () => {
         // that text must carry the credential placeholder.
         expect(rendered.length).toBeGreaterThan(0);
         expect(rendered).toContain("<your_browserstack_username>");
+        expect(rendered).toContain("<your_browserstack_access_key>");
 
         expect(rendered).not.toContain(DECOY_USER);
         expect(rendered).not.toContain(DECOY_KEY);

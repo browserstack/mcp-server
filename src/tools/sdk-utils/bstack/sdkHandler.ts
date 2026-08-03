@@ -4,6 +4,7 @@ import { RunTestsOnBrowserStackInput } from "../common/schema.js";
 import { getSDKPrefixCommand } from "./commands.js";
 import { generateBrowserStackYMLInstructions } from "./configUtils.js";
 import { getInstructionsForProjectConfiguration } from "../common/instructionUtils.js";
+import { CREDENTIALS_SUBSTITUTION_NOTE } from "../common/credentials.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { validateDevices } from "../common/device-validator.js";
 import {
@@ -20,7 +21,13 @@ export async function runBstackSDKOnly(
   isPercyAutomate = false,
 ): Promise<RunTestsInstructionResult> {
   void config;
-  const steps: RunTestsStep[] = [];
+  const steps: RunTestsStep[] = [
+    {
+      type: "instruction",
+      title: "Set your BrowserStack credentials",
+      content: CREDENTIALS_SUBSTITUTION_NOTE,
+    },
+  ];
 
   const tupleTargets: Array<Array<string>> =
     input.devices?.map((device) => {

@@ -5,7 +5,7 @@ import { AccessibilityScanner } from "./accessiblity-utils/scanner.js";
 import { AccessibilityReportFetcher } from "./accessiblity-utils/report-fetcher.js";
 import {
   AccessibilityAuthConfig,
-  redactAuthConfigResponse,
+  safeAuthConfigData,
 } from "./accessiblity-utils/auth-config.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { parseAccessibilityReportFromCSV } from "./accessiblity-utils/report-parser.js";
@@ -292,7 +292,7 @@ async function executeCreateAuthConfig(
     return createSuccessResponse([
       `✅ Auth config "${args.name}" created successfully with ID: ${result.data?.id}`,
       `Auth config details: ${JSON.stringify(
-        redactAuthConfigResponse(result)?.data,
+        safeAuthConfigData(result),
         null,
         2,
       )}`,
@@ -335,7 +335,7 @@ async function executeGetAuthConfig(
     return createSuccessResponse([
       `✅ Auth config retrieved successfully`,
       `Auth config details: ${JSON.stringify(
-        redactAuthConfigResponse(result)?.data,
+        safeAuthConfigData(result),
         null,
         2,
       )}`,

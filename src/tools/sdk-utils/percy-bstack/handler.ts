@@ -4,6 +4,7 @@ import { RunTestsOnBrowserStackInput } from "../common/schema.js";
 import { getSDKPrefixCommand } from "../bstack/commands.js";
 import { generateBrowserStackYMLInstructions } from "../bstack/configUtils.js";
 import { getInstructionsForProjectConfiguration } from "../common/instructionUtils.js";
+import { CREDENTIALS_SUBSTITUTION_NOTE } from "../common/credentials.js";
 import {
   formatPercyInstructions,
   getPercyInstructions,
@@ -17,7 +18,13 @@ import {
 export function runPercyWithBrowserstackSDK(
   input: RunTestsOnBrowserStackInput,
 ): RunTestsInstructionResult {
-  const steps: RunTestsStep[] = [];
+  const steps: RunTestsStep[] = [
+    {
+      type: "instruction",
+      title: "Set your BrowserStack credentials",
+      content: CREDENTIALS_SUBSTITUTION_NOTE,
+    },
+  ];
 
   // Check if Percy is supported for this configuration
   const percyResult = getPercyInstructions(

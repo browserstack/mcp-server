@@ -3,6 +3,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { getBrowserStackAuth } from "../../../lib/get-auth.js";
 import { validateAppAutomateDevices } from "../../sdk-utils/common/device-validator.js";
+import { CREDENTIALS_SUBSTITUTION_NOTE } from "../../sdk-utils/common/credentials.js";
 
 import {
   getAppUploadInstruction,
@@ -19,6 +20,7 @@ import {
   AppSDKSupportedLanguage,
   AppSDKSupportedTestingFramework,
   AppSDKInstruction,
+  createStep,
   formatAppInstructionsWithNumbers,
   getAppInstructionsForProjectConfiguration,
   SETUP_APP_AUTOMATE_SCHEMA,
@@ -32,7 +34,15 @@ export async function setupAppAutomateHandler(
   const auth = getBrowserStackAuth(config);
   const [username, accessKey] = auth.split(":");
 
-  const instructions: AppSDKInstruction[] = [];
+  const instructions: AppSDKInstruction[] = [
+    {
+      content: createStep(
+        "BrowserStack credentials",
+        CREDENTIALS_SUBSTITUTION_NOTE,
+      ),
+      type: "setup",
+    },
+  ];
 
   // Use variables for all major input properties
   const testingFramework =

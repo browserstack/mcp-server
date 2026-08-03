@@ -18,18 +18,36 @@ export interface AuthConfigResponse {
 }
 
 /**
- * Redacts the stored site password before an auth-config response is returned
- * to the LLM/tool caller or written to logs. Never expose the raw password.
+ * Masks stored site secrets (password + username) before an auth-config
+ * response is written to logs. Never log the raw credential values.
  */
 export function redactAuthConfigResponse(
   response?: AuthConfigResponse,
 ): AuthConfigResponse | undefined {
-  if (!response?.data?.password) {
+  if (!response?.data) {
     return response;
   }
+  const data = { ...response.data };
+  if (data.password) data.password = "***";
+  if (data.username) data.username = "***";
+  return { ...response, data };
+}
+
+/**
+ * Allowlist of non-sensitive fields safe to return to the LLM/tool caller.
+ * Everything else (site username/password, selectors, undeclared keys) is
+ * dropped rather than echoed — see rules/tool-design.md "never echo".
+ */
+export function safeAuthConfigData(response?: AuthConfigResponse) {
+  const data = response?.data;
+  if (!data) {
+    return undefined;
+  }
   return {
-    ...response,
-    data: { ...response.data, password: "***" },
+    id: data.id,
+    name: data.name,
+    type: data.type,
+    ...(data.url ? { url: data.url } : {}),
   };
 }
 
@@ -120,7 +138,7 @@ export class AccessibilityAuthConfig {
       return data;
     } catch (err: any) {
       logger.error(
-        `Error creating form auth config: ${JSON.stringify(err?.response?.data)}`,
+        `Error creating form auth config (status ${err?.response?.status ?? "unknown"})`,
       );
       const msg =
         err?.response?.data?.error ||

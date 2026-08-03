@@ -22,8 +22,11 @@ describe("getSDKPrefixCommand", () => {
     if (originalPlatform) {
       Object.defineProperty(process, "platform", originalPlatform);
     }
-    process.env.BROWSERSTACK_USERNAME = originalUser;
-    process.env.BROWSERSTACK_ACCESS_KEY = originalKey;
+    // Restore exactly — assigning `undefined` would store the string "undefined".
+    if (originalUser === undefined) delete process.env.BROWSERSTACK_USERNAME;
+    else process.env.BROWSERSTACK_USERNAME = originalUser;
+    if (originalKey === undefined) delete process.env.BROWSERSTACK_ACCESS_KEY;
+    else process.env.BROWSERSTACK_ACCESS_KEY = originalKey;
   });
 
   it("nodejs: emits quoted placeholders, never literal credentials", () => {

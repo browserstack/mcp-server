@@ -52,6 +52,61 @@ export function getRcaViewGuidance(): string {
 export const RELEASE_READINESS_TRIGGER_PATH =
   "/ext/v1/ai/builds/{buildUuid}/releaseReadiness/trigger";
 
+/** Read a build's server-computed failure-theme clusters. */
+export const AI_FAILURES_PATH = "/ext/v1/ai/failures/{buildUuid}";
+
+/** Paginated test-run membership for one failure theme / workflow. */
+export const AI_FAILURES_FLAT_PATH = "/ext/v1/ai/failures/{buildUuid}/flat";
+
+/** Terminal-success value of `buildThemeWorkflow.status` (confirmed: obs-api aiRca.test.js). */
+export const BUILD_THEMES_SUCCESS_STATUS = "SUCCESS";
+
+/** Terminal-failure values of `buildThemeWorkflow.status` — nothing to wait for; read-only, no retrigger. */
+export const BUILD_THEMES_FAILURE_STATUSES = ["FAILED", "ERROR"];
+
+/** Interval between in-call polls of the build-failure-themes readiness. */
+export const BUILD_THEMES_POLL_INTERVAL_MS = 3000;
+
+/**
+ * Wall-clock cap for the in-call poll — same soft-PENDING budget shape as
+ * `tfaRcaTurn` (`POLL_MAX_WAIT_MS`). The gate's own clustering step has been
+ * measured at 8-12 minutes for large builds, far past what's reasonable to
+ * hold an MCP call open for — `getBuildFailureThemes` returns `ready: false`
+ * once this budget is spent so the caller can fall back or retry later
+ * instead of blocking the run.
+ */
+export const BUILD_THEMES_POLL_MAX_WAIT_MS = 90 * 1000;
+
+/**
+ * Zod param shapes for the `getBuildFailureThemes` tool. Read-only — no
+ * trigger/retrigger param. No credential fields (security rule).
+ */
+export const GET_BUILD_FAILURE_THEMES_PARAMS = {
+  buildUuid: z
+    .string()
+    .describe("Automate build UUID to fetch failure themes for."),
+};
+
+/**
+ * Zod param shapes for the `listTestsInFailureTheme` tool. No credential
+ * fields (security rule).
+ */
+export const LIST_TESTS_IN_FAILURE_THEME_PARAMS = {
+  buildUuid: z
+    .string()
+    .describe("Automate build UUID the theme/workflow belongs to."),
+  themeId: z.number().optional().describe("buildFailureThemeId to filter by."),
+  workflowId: z
+    .number()
+    .optional()
+    .describe("buildFailureWorkflowId to filter by."),
+  limit: z.number().optional().describe("Max tests to return, default 50."),
+  cursor: z
+    .string()
+    .optional()
+    .describe("searchAfter cursor from a prior call."),
+};
+
 /** Submit one collaborative turn for a test run. */
 export const RCA_CHAT_SUBMIT_PATH = "/ext/v1/testRuns/{testRunId}/rcaChat";
 

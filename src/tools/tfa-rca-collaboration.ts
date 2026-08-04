@@ -4,7 +4,9 @@ import { trackMCP } from "../lib/instrumentation.js";
 import { handleMCPError } from "../lib/utils.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import {
+  GET_BUILD_FAILURE_THEMES_PARAMS,
   GET_TFA_TURN_RESULT_PARAMS,
+  LIST_TESTS_IN_FAILURE_THEME_PARAMS,
   TFA_RCA_TURN_PARAMS,
   TRIGGER_RCA_REPORT_PARAMS,
 } from "./tfa-rca-utils/constants.js";
@@ -22,10 +24,18 @@ import {
   TriggerRcaReportArgs,
   TriggerRcaReportError,
 } from "./tfa-rca-utils/trigger-report.js";
+import {
+  BuildFailureThemesError,
+  fetchBuildFailureThemes,
+  fetchTestsInFailureTheme,
+  ListTestsInFailureThemeArgs,
+} from "./tfa-rca-utils/build-failure-themes.js";
 
 const TOOL_NAME = "tfaRcaTurn";
 const GET_RESULT_TOOL_NAME = "getTfaTurnResult";
 const TRIGGER_TOOL_NAME = "triggerRcaReport";
+const GET_BUILD_FAILURE_THEMES_TOOL_NAME = "getBuildFailureThemes";
+const LIST_TESTS_IN_FAILURE_THEME_TOOL_NAME = "listTestsInFailureTheme";
 
 /** Wrap a domain error into the standard `{ isError: true }` envelope. */
 function domainErrorResult(toolName: string, error: Error): CallToolResult {
@@ -85,6 +95,36 @@ export async function triggerRcaReportTool(
       {
         type: "text",
         text: JSON.stringify(glimpse, null, 2),
+      },
+    ],
+  };
+}
+
+export async function getBuildFailureThemesTool(
+  args: { buildUuid: string },
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  const result = await fetchBuildFailureThemes(args.buildUuid, config);
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+export async function listTestsInFailureThemeTool(
+  args: ListTestsInFailureThemeArgs,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  const result = await fetchTestsInFailureTheme(args, config);
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(result, null, 2),
       },
     ],
   };
@@ -177,6 +217,79 @@ export default function addTfaRcaCollaborationTools(
           return domainErrorResult(TRIGGER_TOOL_NAME, error);
         }
         return handleMCPError(TRIGGER_TOOL_NAME, server, config, error);
+      }
+    },
+  );
+
+  tools.getBuildFailureThemes = server.tool(
+    GET_BUILD_FAILURE_THEMES_TOOL_NAME,
+    "Get a build's server-computed failure-theme clusters; triggers computation if never run, polls to done; ready:false if still not done or trigger unavailable — caller falls back to client-side clustering.",
+    GET_BUILD_FAILURE_THEMES_PARAMS,
+    async (args) => {
+      try {
+        const result = await getBuildFailureThemesTool(args, config);
+        trackMCP(
+          GET_BUILD_FAILURE_THEMES_TOOL_NAME,
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
+        return result;
+      } catch (error) {
+        // Domain failures carry a client-safe, group-scope-safe message.
+        if (error instanceof BuildFailureThemesError) {
+          trackMCP(
+            GET_BUILD_FAILURE_THEMES_TOOL_NAME,
+            server.server.getClientVersion()!,
+            error,
+            config,
+          );
+          return domainErrorResult(GET_BUILD_FAILURE_THEMES_TOOL_NAME, error);
+        }
+        return handleMCPError(
+          GET_BUILD_FAILURE_THEMES_TOOL_NAME,
+          server,
+          config,
+          error,
+        );
+      }
+    },
+  );
+
+  tools.listTestsInFailureTheme = server.tool(
+    LIST_TESTS_IN_FAILURE_THEME_TOOL_NAME,
+    "List test runs belonging to a build failure theme/workflow (paginated via cursor); the representative/sibling grouping source.",
+    LIST_TESTS_IN_FAILURE_THEME_PARAMS,
+    async (args) => {
+      try {
+        const result = await listTestsInFailureThemeTool(args, config);
+        trackMCP(
+          LIST_TESTS_IN_FAILURE_THEME_TOOL_NAME,
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
+        return result;
+      } catch (error) {
+        // Domain failures carry a client-safe, group-scope-safe message.
+        if (error instanceof BuildFailureThemesError) {
+          trackMCP(
+            LIST_TESTS_IN_FAILURE_THEME_TOOL_NAME,
+            server.server.getClientVersion()!,
+            error,
+            config,
+          );
+          return domainErrorResult(
+            LIST_TESTS_IN_FAILURE_THEME_TOOL_NAME,
+            error,
+          );
+        }
+        return handleMCPError(
+          LIST_TESTS_IN_FAILURE_THEME_TOOL_NAME,
+          server,
+          config,
+          error,
+        );
       }
     },
   );

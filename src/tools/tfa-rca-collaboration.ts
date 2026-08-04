@@ -138,7 +138,7 @@ export default function addTfaRcaCollaborationTools(
 
   tools.tfaRcaTurn = server.tool(
     TOOL_NAME,
-    "Submit one collaborative RCA turn for a test run to the TFA agent; returns status, asks, and RCA.",
+    "Submit one collaborative RCA turn for a test run to the TFA agent, then poll in-call for a result. Omit threadId on the first turn for a test run — this starts a new investigation thread; every following turn on that same test MUST pass back the threadId from the previous response, since a test run should have only one active thread at a time. Returns status RESOLVED (terminal, includes root_cause/related_prs), NEEDS_INFO (fulfill the asks and submit the next turn with the same threadId), or PENDING (still working — poll it with getTfaTurnResult using the returned turnId; do NOT call tfaRcaTurn again for the same turn, that submits a duplicate).",
     TFA_RCA_TURN_PARAMS,
     async (args, context) => {
       try {
@@ -163,7 +163,7 @@ export default function addTfaRcaCollaborationTools(
 
   tools.getTfaTurnResult = server.tool(
     GET_RESULT_TOOL_NAME,
-    "Read a submitted RCA turn's result once by turnId; PENDING if the agent is still working.",
+    "Read a previously submitted RCA turn's status once, given the testRunId and the turnId a PENDING tfaRcaTurn response returned — this never resubmits or duplicates the turn. Returns PENDING again if the TFA agent is still working, or the same RESOLVED/NEEDS_INFO contract as tfaRcaTurn once it finishes. On NEEDS_INFO, gather the requested evidence and continue via tfaRcaTurn with the same threadId; RESOLVED is terminal for this test — do not call this tool or tfaRcaTurn again for it.",
     GET_TFA_TURN_RESULT_PARAMS,
     async (args) => {
       try {
@@ -193,7 +193,7 @@ export default function addTfaRcaCollaborationTools(
 
   tools.triggerRcaReport = server.tool(
     TRIGGER_TOOL_NAME,
-    "Trigger or read a build's Release Readiness report; returns a verdict glimpse and a UI link.",
+    "Trigger (or read, if one already exists) a build's Release Readiness report, returning a trimmed verdict glimpse and a Test Observability UI link — never the raw report body. Without force, a completed report is read as-is at no extra analysis cost, so it's safe to call this repeatedly just to check status. Pass force:true only to force a fresh re-analysis of an already-completed report (e.g. after new evidence changed the picture) — do NOT set force on every call, since that discards the cached report and always pays the full re-analysis cost.",
     TRIGGER_RCA_REPORT_PARAMS,
     async (args) => {
       try {
@@ -223,7 +223,7 @@ export default function addTfaRcaCollaborationTools(
 
   tools.getBuildFailureThemes = server.tool(
     GET_BUILD_FAILURE_THEMES_TOOL_NAME,
-    "Get a build's server-computed failure-theme clusters; triggers computation if never run, polls to done; ready:false if still not done or trigger unavailable — caller falls back to client-side clustering.",
+    "Get a build's server-computed failure-theme clusters (buildThemes + buildWorkflows), the preferred grouping source for representative/sibling fan-out — call this once per build, not per test. Triggers server-side computation if nothing has ever run for this build, and polls in-call up to its own budget for the result to finish; never blocks indefinitely. ready:false means either the computation is still running past the poll budget or the trigger itself failed (status:'trigger-unavailable') — either way, fall back to client-side clustering rather than waiting longer or retrying this call.",
     GET_BUILD_FAILURE_THEMES_PARAMS,
     async (args) => {
       try {
@@ -258,7 +258,7 @@ export default function addTfaRcaCollaborationTools(
 
   tools.listTestsInFailureTheme = server.tool(
     LIST_TESTS_IN_FAILURE_THEME_TOOL_NAME,
-    "List test runs belonging to a build failure theme/workflow (paginated via cursor); the representative/sibling grouping source.",
+    "List the test runs belonging to one failure theme or workflow from a prior getBuildFailureThemes call, filtered by themeId or workflowId. Results are paginated — pass the previous response's nextCursor back as cursor and keep calling until no nextCursor is returned; do not assume a single page covers all members. This is the representative/sibling grouping source: every test in a theme's list becomes either the cluster's representative or a pre-seeded sibling confirm.",
     LIST_TESTS_IN_FAILURE_THEME_PARAMS,
     async (args) => {
       try {

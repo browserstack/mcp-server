@@ -112,11 +112,7 @@ export function toTrimmedResult(
         status: turn.status,
         confidence: turn.confidence,
         threadId,
-        glimpse: {
-          root_cause: truncate(rca.root_cause, RCA_GLIMPSE_ROOT_CAUSE_MAX),
-          failure_type: rca.failure_type,
-          related_prs: rca.related_prs,
-        },
+        rca: rca, // TODO: To remove later, adding for testing by passing additional context
         viewRca: getRcaViewGuidance(),
       };
     }

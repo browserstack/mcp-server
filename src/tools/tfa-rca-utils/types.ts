@@ -113,6 +113,7 @@ export interface TfaRcaTurnResult {
   hypotheses?: string[];
   /** Present on RESOLVED turns: trimmed root-cause glimpse. */
   glimpse?: TfaRcaGlimpse;
+  rca?: unknown;
   /** Present on RESOLVED turns: where the full RCA report lives. */
   viewRca?: string;
   reason?: string;

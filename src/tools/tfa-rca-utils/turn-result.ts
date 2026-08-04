@@ -5,7 +5,6 @@ import {
   getO11yBaseUrl,
   getRcaViewGuidance,
   RCA_CHAT_POLL_PATH,
-  RCA_GLIMPSE_ROOT_CAUSE_MAX,
 } from "./constants.js";
 import {
   PENDING_STATUS,
@@ -85,12 +84,6 @@ export function readStructuredTurn(data: any): TurnResponse {
         ? blocked.unmet_asks
         : undefined,
   };
-}
-
-/** Truncate to `max` chars total (ellipsis included when cut). */
-function truncate(text: string | undefined, max: number): string | undefined {
-  if (text === undefined) return undefined;
-  return text.length > max ? text.slice(0, max - 1) + "…" : text;
 }
 
 /**

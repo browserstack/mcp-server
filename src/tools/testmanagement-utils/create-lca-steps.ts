@@ -25,18 +25,14 @@ export const CreateLCAStepsSchema = z.object({
     .boolean()
     .optional()
     .default(false)
-    .describe(
-      "Set true if the test case requires login. When true, credentials are requested securely from the user — prefer this over passing them.",
-    ),
+    .describe("Set true if the test case requires login."),
   credentials: z
     .object({
       username: z.string().describe("Username for authentication"),
       password: z.string().describe("Password for authentication"),
     })
     .optional()
-    .describe(
-      "Login credentials. Omit and set requires_authentication instead to have them requested securely from the user; passed here only as a fallback.",
-    ),
+    .describe("Login credentials; omit to have them requested from the user."),
   local_enabled: z
     .boolean()
     .optional()

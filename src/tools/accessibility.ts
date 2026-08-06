@@ -481,15 +481,11 @@ export default function addAccessibilityTools(
       username: z
         .string()
         .optional()
-        .describe(
-          "Site username. Omit to have it requested securely from the user.",
-        ),
+        .describe("Site username; omit to have it requested from the user."),
       password: z
         .string()
         .optional()
-        .describe(
-          "Site password. Omit to have it requested securely from the user; do not pass real passwords here.",
-        ),
+        .describe("Site password; omit to have it requested from the user."),
       usernameSelector: z
         .string()
         .optional()
@@ -504,39 +500,55 @@ export default function addAccessibilityTools(
         .describe("CSS selector for submit button (required for form auth)"),
     },
     async (args) => {
-      const creds = await elicitCredentialsIfSupported(
-        server,
-        { username: args.username, password: args.password },
-        [
-          {
-            key: "username",
-            title: "Site username",
-            description: `Username for the login being configured ("${args.name}")`,
-          },
-          {
-            key: "password",
-            title: "Site password",
-            description: `Password for the login being configured ("${args.name}")`,
-          },
-        ],
-        `Enter the login credentials for accessibility auth config "${args.name}".`,
-      );
+      try {
+        const creds = await elicitCredentialsIfSupported(
+          server,
+          { username: args.username, password: args.password },
+          [
+            {
+              key: "username",
+              title: "Site username",
+              description: `Username for the login being configured ("${args.name}")`,
+            },
+            {
+              key: "password",
+              title: "Site password",
+              description: `Password for the login being configured ("${args.name}")`,
+            },
+          ],
+          `Enter the login credentials for accessibility auth config "${args.name}".`,
+        );
 
-      if (!creds.username || !creds.password) {
-        return createErrorResponse(
-          "Username and password are required to create an auth config. Provide them when prompted, or pass them as arguments.",
+        if (!creds.username || !creds.password) {
+          const error = new Error(
+            "Username and password are required to create an auth config. Provide them when prompted, or pass them as arguments.",
+          );
+          trackMCP(
+            "createAccessibilityAuthConfig",
+            server.server.getClientVersion()!,
+            error,
+            config,
+          );
+          return createErrorResponse(error.message);
+        }
+
+        return await executeCreateAuthConfig(
+          {
+            ...args,
+            username: creds.username,
+            password: creds.password,
+          } as AuthConfigArgs,
+          server,
+          config,
+        );
+      } catch (error) {
+        return handleMCPError(
+          "createAccessibilityAuthConfig",
+          server,
+          config,
+          error,
         );
       }
-
-      return await executeCreateAuthConfig(
-        {
-          ...args,
-          username: creds.username,
-          password: creds.password,
-        } as AuthConfigArgs,
-        server,
-        config,
-      );
     },
   );
 

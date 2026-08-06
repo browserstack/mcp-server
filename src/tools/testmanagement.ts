@@ -547,6 +547,19 @@ export async function createLCAStepsTool(
           ...args,
           credentials: { username: creds.username, password: creds.password },
         };
+      } else {
+        // requires_authentication was requested but no credentials could be
+        // obtained (client can't elicit, or the user declined). Fail clearly
+        // rather than creating a login test case with no credentials.
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Authentication is required for test case ${args.test_case_identifier}, but no credentials were provided. Provide them when prompted, or pass them as arguments.`,
+            },
+          ],
+          isError: true,
+        };
       }
     }
 

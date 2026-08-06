@@ -83,7 +83,12 @@ describe("Accessibility Tools", () => {
       tool: vi.fn((name: string, _desc: string, _schema: any, handler: (...args: any[]) => any) => {
         handlers[name] = handler;
       }),
-      server: { getClientVersion: vi.fn().mockReturnValue({ version: "1.0" }) },
+      server: {
+        getClientVersion: vi.fn().mockReturnValue({ version: "1.0" }),
+        // Default: client does NOT support elicitation (arg-based flow).
+        getClientCapabilities: vi.fn().mockReturnValue({}),
+        elicitInput: vi.fn(),
+      },
     };
     addAccessibilityTools(serverMock, mockConfig);
   });
@@ -121,6 +126,35 @@ describe("Accessibility Tools", () => {
     expect(serialized).not.toContain("site-user");
     // Safe identifying fields are still returned.
     expect(serialized).toContain("auth-1");
+  });
+
+  it("createAccessibilityAuthConfig — elicits credentials from the user when the client supports it and they are not passed as args", async () => {
+    serverMock.server.getClientCapabilities.mockReturnValue({ elicitation: {} });
+    serverMock.server.elicitInput.mockResolvedValue({
+      action: "accept",
+      content: { username: "elicited-user", password: "elicited-pass" },
+    });
+
+    const result = await handlers["createAccessibilityAuthConfig"](
+      { type: "basic", name: "no-args-auth", url: "https://example.com/login" },
+      { sendNotification: vi.fn(), _meta: {} },
+    );
+
+    // Elicitation was used, and the config was created without creds in args.
+    expect(serverMock.server.elicitInput).toHaveBeenCalledTimes(1);
+    expect(result.isError).toBeFalsy();
+    // The elicited secret is never echoed back (allowlisted response).
+    expect(JSON.stringify(result.content)).not.toContain("elicited-pass");
+  });
+
+  it("createAccessibilityAuthConfig — errors when creds are missing and the client cannot elicit", async () => {
+    // Default mock: getClientCapabilities returns {} (no elicitation support).
+    const result = await handlers["createAccessibilityAuthConfig"](
+      { type: "basic", name: "no-args-auth", url: "https://example.com/login" },
+      { sendNotification: vi.fn(), _meta: {} },
+    );
+    expect(result.isError).toBe(true);
+    expect(serverMock.server.elicitInput).not.toHaveBeenCalled();
   });
 
   it("createAccessibilityAuthConfig — FAIL: form auth without required selectors returns error", async () => {

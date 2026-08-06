@@ -89,6 +89,7 @@ import {
 } from "./testmanagement-utils/get-sub-testplan.js";
 
 import { BrowserStackConfig } from "../lib/types.js";
+import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 
 //TODO: Moving the traceMCP and catch block to the parent(server) function
 
@@ -515,7 +516,41 @@ export async function createLCAStepsTool(
       undefined,
       config,
     );
-    return await createLCASteps(args, context, config);
+
+    let effectiveArgs = args;
+    if (
+      args.requires_authentication &&
+      (!args.credentials?.username || !args.credentials?.password)
+    ) {
+      const creds = await elicitCredentialsIfSupported(
+        server,
+        {
+          username: args.credentials?.username,
+          password: args.credentials?.password,
+        },
+        [
+          {
+            key: "username",
+            title: "Login username",
+            description: `Username for test case ${args.test_case_identifier}`,
+          },
+          {
+            key: "password",
+            title: "Login password",
+            description: `Password for test case ${args.test_case_identifier}`,
+          },
+        ],
+        `Enter the login credentials for test case ${args.test_case_identifier}.`,
+      );
+      if (creds.username && creds.password) {
+        effectiveArgs = {
+          ...args,
+          credentials: { username: creds.username, password: creds.password },
+        };
+      }
+    }
+
+    return await createLCASteps(effectiveArgs, context, config);
   } catch (err) {
     trackMCP("createLCASteps", server.server.getClientVersion()!, err, config);
     return {

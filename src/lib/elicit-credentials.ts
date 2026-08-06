@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ElicitResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "../logger.js";
 
 export interface CredentialField {
@@ -51,7 +52,7 @@ export async function elicitCredentialsIfSupported(
     };
   }
 
-  let result;
+  let result: ElicitResult;
   try {
     result = await server.server.elicitInput({
       mode: "form",
@@ -62,10 +63,12 @@ export async function elicitCredentialsIfSupported(
         required: missing.map((field) => field.key),
       },
     });
-  } catch (error) {
+  } catch {
     // A client that advertised elicitation but failed to handle it must not
-    // break the tool — fall back to whatever was provided.
-    logger.info(`Elicitation request failed; using provided values: ${error}`);
+    // break the tool — fall back to whatever was provided. The error is not
+    // logged: a client validation error can echo the submitted form values
+    // (including the password), which must never reach the logs.
+    logger.warn("Elicitation request failed; falling back to provided values.");
     return provided;
   }
 

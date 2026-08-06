@@ -725,7 +725,7 @@ describe("createLCAStepsTool", () => {
     expect(elicitInput).not.toHaveBeenCalled();
   });
 
-  it("falls back to the arg path (no elicit) when requires_authentication but the client cannot elicit", async () => {
+  it("errors (does not proceed) when requires_authentication but the client cannot elicit and no creds are passed", async () => {
     (createLCASteps as Mock).mockResolvedValue({ content: [], isError: false });
     const elicitInput = vi.fn();
     const localServer = {
@@ -737,10 +737,30 @@ describe("createLCAStepsTool", () => {
     } as any;
     const args = { ...validArgs, credentials: undefined, requires_authentication: true };
 
+    const result = await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
+
+    expect(elicitInput).not.toHaveBeenCalled();
+    // No login test case is created without credentials — it fails clearly.
+    expect(createLCASteps).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
+  it("uses the credentials passed as args when requires_authentication is set (backward-compat)", async () => {
+    (createLCASteps as Mock).mockResolvedValue({ content: [], isError: false });
+    const elicitInput = vi.fn();
+    const localServer = {
+      server: {
+        getClientVersion: () => "test",
+        getClientCapabilities: () => ({}),
+        elicitInput,
+      },
+    } as any;
+    const args = { ...validArgs, requires_authentication: true }; // validArgs has credentials
+
     await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
 
     expect(elicitInput).not.toHaveBeenCalled();
-    expect(createLCASteps).toHaveBeenCalled();
+    expect(createLCASteps).toHaveBeenCalledWith(args, mockContext, mockConfig);
   });
 
   it("handles errors when creating LCA steps", async () => {

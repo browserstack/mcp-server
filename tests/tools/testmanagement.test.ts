@@ -682,6 +682,67 @@ describe("createLCAStepsTool", () => {
     expect(result.isError).toBe(false);
   });
 
+  it("elicits credentials when requires_authentication is set and the client supports elicitation", async () => {
+    (createLCASteps as Mock).mockResolvedValue({ content: [], isError: false });
+    const localServer = {
+      server: {
+        getClientVersion: () => "test",
+        getClientCapabilities: () => ({ elicitation: {} }),
+        elicitInput: vi.fn().mockResolvedValue({
+          action: "accept",
+          content: { username: "elicited-user", password: "elicited-pass" },
+        }),
+      },
+    } as any;
+    const args = { ...validArgs, credentials: undefined, requires_authentication: true };
+
+    await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
+
+    expect(localServer.server.elicitInput).toHaveBeenCalledTimes(1);
+    expect(createLCASteps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentials: { username: "elicited-user", password: "elicited-pass" },
+      }),
+      mockContext,
+      mockConfig,
+    );
+  });
+
+  it("does not elicit when requires_authentication is false", async () => {
+    (createLCASteps as Mock).mockResolvedValue({ content: [], isError: false });
+    const elicitInput = vi.fn();
+    const localServer = {
+      server: {
+        getClientVersion: () => "test",
+        getClientCapabilities: () => ({ elicitation: {} }),
+        elicitInput,
+      },
+    } as any;
+    const args = { ...validArgs, credentials: undefined, requires_authentication: false };
+
+    await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
+
+    expect(elicitInput).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the arg path (no elicit) when requires_authentication but the client cannot elicit", async () => {
+    (createLCASteps as Mock).mockResolvedValue({ content: [], isError: false });
+    const elicitInput = vi.fn();
+    const localServer = {
+      server: {
+        getClientVersion: () => "test",
+        getClientCapabilities: () => ({}),
+        elicitInput,
+      },
+    } as any;
+    const args = { ...validArgs, credentials: undefined, requires_authentication: true };
+
+    await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
+
+    expect(elicitInput).not.toHaveBeenCalled();
+    expect(createLCASteps).toHaveBeenCalled();
+  });
+
   it("handles errors when creating LCA steps", async () => {
     (createLCASteps as Mock).mockRejectedValue(new Error("API Error"));
 

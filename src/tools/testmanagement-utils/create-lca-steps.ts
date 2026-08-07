@@ -22,15 +22,18 @@ export const CreateLCAStepsSchema = z.object({
     .string()
     .describe("Identifier of the test case (e.g., 'TC-12345')"),
   base_url: z.string().describe("Base URL for the test (e.g., 'google.com')"),
+  requires_authentication: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Set true if the test case requires login."),
   credentials: z
     .object({
       username: z.string().describe("Username for authentication"),
       password: z.string().describe("Password for authentication"),
     })
     .optional()
-    .describe(
-      "Optional credentials for authentication. Extract from the test case details if provided in it. This is required for the test cases which require authentication.",
-    ),
+    .describe("Login credentials; omit to have them requested from the user."),
   local_enabled: z
     .boolean()
     .optional()

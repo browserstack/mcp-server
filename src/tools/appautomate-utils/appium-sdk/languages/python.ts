@@ -6,6 +6,8 @@ import {
   createEnvStep,
   combineInstructions,
   PLATFORM_UTILS,
+  USERNAME_PLACEHOLDER,
+  ACCESS_KEY_PLACEHOLDER,
 } from "../index.js";
 
 export function getPythonAppInstructions(
@@ -46,44 +48,26 @@ paver run first_test
   }
 }
 
-export function getPythonSDKCommand(
-  framework: string,
-  username: string,
-  accessKey: string,
-): string {
+export function getPythonSDKCommand(framework: string): string {
   const { isWindows, getPlatformLabel } = PLATFORM_UTILS;
 
   switch (framework) {
     case "robot":
     case "pytest":
     case "behave":
-      return getPythonCommonSDKCommand(
-        username,
-        accessKey,
-        isWindows,
-        getPlatformLabel(),
-      );
+      return getPythonCommonSDKCommand(isWindows, getPlatformLabel());
     case "lettuce":
-      return getLettuceCommand(
-        username,
-        accessKey,
-        isWindows,
-        getPlatformLabel(),
-      );
+      return getLettuceCommand(isWindows, getPlatformLabel());
     default:
       return "";
   }
 }
 
 function getPythonCommonSDKCommand(
-  username: string,
-  accessKey: string,
   isWindows: boolean,
   platformLabel: string,
 ): string {
   const envStep = createEnvStep(
-    username,
-    accessKey,
     isWindows,
     platformLabel,
     "Set your BrowserStack credentials as environment variables:",
@@ -99,22 +83,15 @@ python3 -m pip install browserstack-sdk
   const setupStep = createStep(
     "Set up BrowserStack SDK:",
     `\`\`\`bash
-browserstack-sdk setup --username "${username}" --key "${accessKey}"
+browserstack-sdk setup --username "${USERNAME_PLACEHOLDER}" --key "${ACCESS_KEY_PLACEHOLDER}"
 \`\`\``,
   );
 
   return combineInstructions(envStep, installStep, setupStep);
 }
 
-function getLettuceCommand(
-  username: string,
-  accessKey: string,
-  isWindows: boolean,
-  platformLabel: string,
-): string {
+function getLettuceCommand(isWindows: boolean, platformLabel: string): string {
   const envStep = createEnvStep(
-    username,
-    accessKey,
     isWindows,
     platformLabel,
     "Set your BrowserStack credentials as environment variables:",
@@ -126,8 +103,8 @@ function getLettuceCommand(
 \`\`\`json
 {
     "capabilities": {
-      "browserstack.user" : "${username}",
-      "browserstack.key" : "${accessKey}",
+      "browserstack.user" : "${USERNAME_PLACEHOLDER}",
+      "browserstack.key" : "${ACCESS_KEY_PLACEHOLDER}",
       "project": "First Lettuce Android Project",
       "build": "Lettuce Android",
       "name": "first_test",

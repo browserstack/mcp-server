@@ -45,21 +45,19 @@ export function getAppInstructionsForProjectConfiguration(
 export function getAppSDKPrefixCommand(
   language: AppSDKSupportedLanguage,
   testingFramework: string,
-  username: string,
-  accessKey: string,
   appPath?: string,
 ): string {
   switch (language) {
     case "csharp":
-      return getCSharpSDKCommand(username, accessKey);
+      return getCSharpSDKCommand();
     case "java":
-      return getJavaSDKCommand(testingFramework, username, accessKey, appPath);
+      return getJavaSDKCommand(testingFramework, appPath);
     case "nodejs":
-      return getNodejsSDKCommand(testingFramework, username, accessKey);
+      return getNodejsSDKCommand(testingFramework);
     case "python":
-      return getPythonSDKCommand(testingFramework, username, accessKey);
+      return getPythonSDKCommand(testingFramework);
     case "ruby":
-      return getRubySDKCommand(testingFramework, username, accessKey);
+      return getRubySDKCommand();
     default:
       return "";
   }

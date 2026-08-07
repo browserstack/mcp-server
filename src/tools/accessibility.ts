@@ -3,12 +3,16 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { AccessibilityScanner } from "./accessiblity-utils/scanner.js";
 import { AccessibilityReportFetcher } from "./accessiblity-utils/report-fetcher.js";
-import { AccessibilityAuthConfig } from "./accessiblity-utils/auth-config.js";
+import {
+  AccessibilityAuthConfig,
+  safeAuthConfigData,
+} from "./accessiblity-utils/auth-config.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { parseAccessibilityReportFromCSV } from "./accessiblity-utils/report-parser.js";
 import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
 import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { BrowserStackConfig } from "../lib/types.js";
+import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 
 interface AuthCredentials {
@@ -288,7 +292,11 @@ async function executeCreateAuthConfig(
 
     return createSuccessResponse([
       `✅ Auth config "${args.name}" created successfully with ID: ${result.data?.id}`,
-      `Auth config details: ${JSON.stringify(result.data, null, 2)}`,
+      `Auth config details: ${JSON.stringify(
+        safeAuthConfigData(result),
+        null,
+        2,
+      )}`,
     ]);
   } catch (error) {
     if (
@@ -327,7 +335,11 @@ async function executeGetAuthConfig(
 
     return createSuccessResponse([
       `✅ Auth config retrieved successfully`,
-      `Auth config details: ${JSON.stringify(result.data, null, 2)}`,
+      `Auth config details: ${JSON.stringify(
+        safeAuthConfigData(result),
+        null,
+        2,
+      )}`,
     ]);
   } catch (error) {
     return handleMCPError("getAccessibilityAuthConfig", server, config, error);
@@ -466,8 +478,14 @@ export default function addAccessibilityTools(
           "Authentication type: 'form' for form-based auth, 'basic' for HTTP basic auth",
         ),
       url: z.string().describe("URL of the authentication page"),
-      username: z.string().describe("Username for authentication"),
-      password: z.string().describe("Password for authentication"),
+      username: z
+        .string()
+        .optional()
+        .describe("Site username; omit to have it requested from the user."),
+      password: z
+        .string()
+        .optional()
+        .describe("Site password; omit to have it requested from the user."),
       usernameSelector: z
         .string()
         .optional()
@@ -482,11 +500,55 @@ export default function addAccessibilityTools(
         .describe("CSS selector for submit button (required for form auth)"),
     },
     async (args) => {
-      return await executeCreateAuthConfig(
-        args as AuthConfigArgs,
-        server,
-        config,
-      );
+      try {
+        const creds = await elicitCredentialsIfSupported(
+          server,
+          { username: args.username, password: args.password },
+          [
+            {
+              key: "username",
+              title: "Site username",
+              description: `Username for the login being configured ("${args.name}")`,
+            },
+            {
+              key: "password",
+              title: "Site password",
+              description: `Password for the login being configured ("${args.name}")`,
+            },
+          ],
+          `Enter the login credentials for accessibility auth config "${args.name}".`,
+        );
+
+        if (!creds.username || !creds.password) {
+          const error = new Error(
+            "Username and password are required to create an auth config. Provide them when prompted, or pass them as arguments.",
+          );
+          trackMCP(
+            "createAccessibilityAuthConfig",
+            server.server.getClientVersion()!,
+            error,
+            config,
+          );
+          return createErrorResponse(error.message);
+        }
+
+        return await executeCreateAuthConfig(
+          {
+            ...args,
+            username: creds.username,
+            password: creds.password,
+          } as AuthConfigArgs,
+          server,
+          config,
+        );
+      } catch (error) {
+        return handleMCPError(
+          "createAccessibilityAuthConfig",
+          server,
+          config,
+          error,
+        );
+      }
     },
   );
 

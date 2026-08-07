@@ -1,49 +1,60 @@
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { getSDKPrefixCommand } from "../../src/tools/sdk-utils/bstack/commands";
 
+const USERNAME_PLACEHOLDER = "<your_browserstack_username>";
+const ACCESS_KEY_PLACEHOLDER = "<your_browserstack_access_key>";
+const DECOY_USER = "real-user-should-not-appear";
+const DECOY_KEY = "real-key-should-not-appear";
+
 describe("getSDKPrefixCommand", () => {
   const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+  const originalUser = process.env.BROWSERSTACK_USERNAME;
+  const originalKey = process.env.BROWSERSTACK_ACCESS_KEY;
+
+  beforeEach(() => {
+    // If a real credential ever leaked into a rendered command, these env vars
+    // are where it would come from. Plant decoys so any accidental read surfaces.
+    process.env.BROWSERSTACK_USERNAME = DECOY_USER;
+    process.env.BROWSERSTACK_ACCESS_KEY = DECOY_KEY;
+  });
 
   afterEach(() => {
     if (originalPlatform) {
       Object.defineProperty(process, "platform", originalPlatform);
     }
+    // Restore exactly — assigning `undefined` would store the string "undefined".
+    if (originalUser === undefined) delete process.env.BROWSERSTACK_USERNAME;
+    else process.env.BROWSERSTACK_USERNAME = originalUser;
+    if (originalKey === undefined) delete process.env.BROWSERSTACK_ACCESS_KEY;
+    else process.env.BROWSERSTACK_ACCESS_KEY = originalKey;
   });
 
-  beforeEach(() => {
-    // Guard: ensure these env vars never leak into the rendered command.
-    // The fix forwards `username` / `accessKey` parameters; reading process.env
-    // would silently return undefined or a stale value in remote (multi-tenant) mode.
-    delete process.env.BROWSERSTACK_USERNAME;
-    delete process.env.BROWSERSTACK_ACCESS_KEY;
-  });
-
-  it("nodejs: embeds passed username/accessKey, never reads process.env", () => {
-    const out = getSDKPrefixCommand("nodejs", "testng", "u-from-config", "k-from-config");
-    expect(out).toContain("--username u-from-config");
-    expect(out).toContain("--key k-from-config");
+  it("nodejs: emits quoted placeholders, never literal credentials", () => {
+    const out = getSDKPrefixCommand("nodejs", "testng");
+    expect(out).toContain(`--username "${USERNAME_PLACEHOLDER}"`);
+    expect(out).toContain(`--key "${ACCESS_KEY_PLACEHOLDER}"`);
+    expect(out).not.toContain(DECOY_USER);
+    expect(out).not.toContain(DECOY_KEY);
     expect(out).not.toContain("undefined");
-    expect(out).not.toContain("process.env");
   });
 
-  it("java/unix: Maven command uses passed username/accessKey", () => {
+  it("java/unix: Maven command uses quoted placeholders", () => {
     Object.defineProperty(process, "platform", { value: "darwin" });
-    const out = getSDKPrefixCommand("java", "testng", "u-from-config", "k-from-config");
-    expect(out).toContain('-DBROWSERSTACK_USERNAME="u-from-config"');
-    expect(out).toContain('-DBROWSERSTACK_ACCESS_KEY="k-from-config"');
+    const out = getSDKPrefixCommand("java", "testng");
+    expect(out).toContain(`-DBROWSERSTACK_USERNAME="${USERNAME_PLACEHOLDER}"`);
+    expect(out).toContain(`-DBROWSERSTACK_ACCESS_KEY="${ACCESS_KEY_PLACEHOLDER}"`);
+    expect(out).not.toContain(DECOY_USER);
+    expect(out).not.toContain(DECOY_KEY);
     expect(out).not.toContain("undefined");
-    expect(out).not.toContain("process.env");
   });
 
-  it("java/windows: Maven command uses passed username/accessKey (regression)", () => {
-    // Regression for a bug where the Windows branch read process.env.BROWSERSTACK_*
-    // while the Unix branch correctly took params. In remote mode this leaked the
-    // string "undefined" into the Maven command shown to the user.
+  it("java/windows: Maven command uses quoted placeholders", () => {
     Object.defineProperty(process, "platform", { value: "win32" });
-    const out = getSDKPrefixCommand("java", "testng", "u-from-config", "k-from-config");
-    expect(out).toContain('-DBROWSERSTACK_USERNAME="u-from-config"');
-    expect(out).toContain('-DBROWSERSTACK_ACCESS_KEY="k-from-config"');
+    const out = getSDKPrefixCommand("java", "testng");
+    expect(out).toContain(`-DBROWSERSTACK_USERNAME="${USERNAME_PLACEHOLDER}"`);
+    expect(out).toContain(`-DBROWSERSTACK_ACCESS_KEY="${ACCESS_KEY_PLACEHOLDER}"`);
+    expect(out).not.toContain(DECOY_USER);
+    expect(out).not.toContain(DECOY_KEY);
     expect(out).not.toContain("undefined");
-    expect(out).not.toContain("process.env");
   });
 });

@@ -5,9 +5,12 @@ import {
   createEnvStep,
   PLATFORM_UTILS,
 } from "../index.js";
+// Import placeholders straight from constants.js (not the index barrel) so these
+// module-scope constants have no circular dependency on the barrel.
+import { USERNAME_PLACEHOLDER, ACCESS_KEY_PLACEHOLDER } from "../constants.js";
 
-const username = "${process.env.BROWSERSTACK_USERNAME}";
-const accessKey = "${process.env.BROWSERSTACK_ACCESS_KEY}";
+const username = USERNAME_PLACEHOLDER;
+const accessKey = ACCESS_KEY_PLACEHOLDER;
 
 export function getRubyAppInstructions(): string {
   const configStep = createStep(
@@ -76,16 +79,10 @@ bundle exec cucumber
   return combineInstructions(configStep, envStep, runStep);
 }
 
-export function getRubySDKCommand(
-  framework: string,
-  username: string,
-  accessKey: string,
-): string {
+export function getRubySDKCommand(): string {
   const { isWindows, getPlatformLabel } = PLATFORM_UTILS;
 
   const envStep = createEnvStep(
-    username,
-    accessKey,
     isWindows,
     getPlatformLabel(),
     "Set your BrowserStack credentials as environment variables:",

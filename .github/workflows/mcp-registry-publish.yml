@@ -14,10 +14,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "lts/*"
 
@@ -31,8 +31,14 @@ jobs:
         run: npm run build --if-present
 
       - name: Install MCP Publisher
+        env:
+          MCP_PUBLISHER_VERSION: v1.3.3
+          # sha256 of mcp-publisher_linux_amd64.tar.gz from registry_1.3.3_checksums.txt
+          MCP_PUBLISHER_SHA256: 1113b9d6bf59b000966c4f17752cf87b51db03dcc5482721421fd843ce3bf048
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/download/v1.3.3/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher    
+          curl -fsSL -o mcp-publisher.tar.gz "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum --check
+          tar xzf mcp-publisher.tar.gz mcp-publisher
       - name: Login to MCP Registry
         run: ./mcp-publisher login github-oidc
 

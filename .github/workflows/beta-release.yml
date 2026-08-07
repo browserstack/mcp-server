@@ -5,18 +5,19 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   publish-beta:
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout source code"
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       - name: "Set up Node.js"
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22.x
           registry-url: "https://registry.npmjs.org/"
@@ -67,7 +68,7 @@ jobs:
           npm version ${{ steps.get_version.outputs.version }} --no-git-tag-version
 
       - name: "Publish beta to NPM"
-        run: npm publish --tag beta --access public
+        run: npm publish --tag beta --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           

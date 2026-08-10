@@ -55,7 +55,9 @@ describe("validateUploadPath", () => {
   });
 
   it("rejects a defaulted base dir that is the filesystem root", () => {
-    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(path.parse(workDir).root);
+    const cwdSpy = vi
+      .spyOn(process, "cwd")
+      .mockReturnValue(path.parse(workDir).root);
     try {
       const file = write("app.apk");
       expect(() =>

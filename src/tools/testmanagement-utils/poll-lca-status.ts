@@ -75,6 +75,9 @@ export async function pollLCAStatus(
   await new Promise((resolve) => setTimeout(resolve, initialWaitMs));
   clearInterval(notificationIntervalId);
 
+  const maxConsecutiveErrors = 3;
+  let consecutiveErrors = 0;
+
   return new Promise((resolve) => {
     // Set up timeout to handle max wait time
     const timeoutId = setTimeout(() => {
@@ -105,6 +108,8 @@ export async function pollLCAStatus(
         });
 
         const responseData: TestCaseResponse = response.data;
+
+        consecutiveErrors = 0;
 
         if (responseData.data.success && responseData.data.test_case) {
           const testCase = responseData.data.test_case;
@@ -164,8 +169,27 @@ export async function pollLCAStatus(
         }
       } catch (error) {
         console.error("Error polling LCA status:", error);
+        consecutiveErrors++;
 
-        // Send error notification but continue polling
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          clearInterval(intervalId);
+          clearTimeout(timeoutId);
+
+          await context.sendNotification({
+            method: "notifications/progress",
+            params: {
+              progressToken:
+                context._meta?.progressToken ?? `lca-${testCaseId}`,
+              message: `LCA build polling stopped after ${maxConsecutiveErrors} consecutive errors`,
+              progress: 100,
+              total: 100,
+            },
+          });
+
+          resolve(null);
+          return;
+        }
+
         await context.sendNotification({
           method: "notifications/progress",
           params: {

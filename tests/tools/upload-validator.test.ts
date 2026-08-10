@@ -1,7 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   validateUploadPath,
   APP_BINARY_EXTENSIONS,
@@ -32,8 +32,33 @@ describe("validateUploadPath", () => {
     const resolved = validateUploadPath(file, {
       allowedExtensions: APP_BINARY_EXTENSIONS,
       maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+      allowedBaseDir: workDir,
     });
     expect(resolved).toBe(fs.realpathSync(file));
+  });
+
+  it("defaults containment to the process working directory (fail-closed)", () => {
+    const outside = write("app.apk");
+    expect(() =>
+      validateUploadPath(outside, {
+        allowedExtensions: APP_BINARY_EXTENSIONS,
+        maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+      }),
+    ).toThrow(/must be located inside/);
+  });
+
+  it("allows files inside the working directory when no base dir is set", () => {
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(workDir);
+    try {
+      const file = write("app.apk");
+      const resolved = validateUploadPath(file, {
+        allowedExtensions: APP_BINARY_EXTENSIONS,
+        maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+      });
+      expect(resolved).toBe(fs.realpathSync(file));
+    } finally {
+      cwdSpy.mockRestore();
+    }
   });
 
   it("rejects an empty path", () => {
@@ -185,6 +210,7 @@ describe("validateUploadPath", () => {
     const resolved = validateUploadPath(file, {
       allowedExtensions: APP_BINARY_EXTENSIONS,
       maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+      allowedBaseDir: workDir,
     });
     expect(resolved).toBe(fs.realpathSync(file));
   });

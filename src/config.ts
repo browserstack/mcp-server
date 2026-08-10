@@ -49,11 +49,13 @@ const config = new Config(
   browserstackLocalOptions,
   process.env.USE_OWN_LOCAL_BINARY_PROCESS === "true",
   process.env.REMOTE_MCP === "true",
-  // Fail-closed: uploads are contained to the working directory unless the
-  // user explicitly widens the boundary via MCP_UPLOAD_BASE_DIR.
+  // Undefined when MCP_UPLOAD_BASE_DIR is unset; validateUploadPath() then
+  // falls back to the process working directory (fail-closed containment).
+  // The default lives in the validator — the enforcement point — so it can
+  // distinguish a defaulted base dir from a configured one.
   process.env.MCP_UPLOAD_BASE_DIR && process.env.MCP_UPLOAD_BASE_DIR.length > 0
     ? process.env.MCP_UPLOAD_BASE_DIR
-    : process.cwd(),
+    : undefined,
 );
 
 export default config;

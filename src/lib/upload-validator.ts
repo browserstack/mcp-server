@@ -18,7 +18,8 @@ export interface UploadValidationOptions {
  *  - No path segment is a hidden dir/file (starts with `.`); blocks ~/.ssh,
  *    ~/.aws, .env, etc. even after symlink resolution
  *  - The canonical path must live inside `allowedBaseDir` (defaults to the
- *    process working directory when not provided — containment is fail-closed)
+ *    process working directory when not provided — containment is fail-closed;
+ *    a defaulted base dir that is the filesystem root is rejected outright)
  */
 export function validateUploadPath(
   filePath: string,
@@ -72,13 +73,21 @@ export function validateUploadPath(
     );
   }
 
+  const usingDefaultBaseDir = options.allowedBaseDir === undefined;
   const allowedBaseDir = options.allowedBaseDir ?? process.cwd();
   let baseCanonical: string;
   try {
     baseCanonical = fs.realpathSync(path.resolve(allowedBaseDir));
   } catch {
     throw new Error(
-      `Upload rejected: configured MCP_UPLOAD_BASE_DIR does not exist (${allowedBaseDir}).`,
+      usingDefaultBaseDir
+        ? `Upload rejected: the process working directory could not be resolved (${allowedBaseDir}). Set MCP_UPLOAD_BASE_DIR to a valid directory.`
+        : `Upload rejected: configured MCP_UPLOAD_BASE_DIR does not exist (${allowedBaseDir}).`,
+    );
+  }
+  if (usingDefaultBaseDir && path.parse(baseCanonical).root === baseCanonical) {
+    throw new Error(
+      "Upload rejected: the process working directory is the filesystem root, so upload containment cannot be enforced. Set MCP_UPLOAD_BASE_DIR to the directory uploads may come from.",
     );
   }
   const baseWithSep = baseCanonical.endsWith(path.sep)

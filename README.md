@@ -290,6 +290,22 @@ Select the “Installed” tab. Click the “Configure MCP Servers” button at 
    }
    ```
 
+### 📂 Upload directory containment
+
+File-upload tools (app uploads, Test Management attachments) only read files inside the directory the MCP server was launched from (usually your project root). This is a security default: it stops a misbehaving agent from uploading arbitrary files on your machine.
+
+To upload files from elsewhere (e.g. `~/Downloads`), set `MCP_UPLOAD_BASE_DIR` to the directory your files live in:
+
+   ```json
+   "env": {
+     "BROWSERSTACK_USERNAME": "<username>",
+     "BROWSERSTACK_ACCESS_KEY": "<access_key>",
+     "MCP_UPLOAD_BASE_DIR": "/Users/you/Downloads"
+   }
+   ```
+
+If the server is launched with the filesystem root as its working directory (some MCP clients do this), uploads are rejected until `MCP_UPLOAD_BASE_DIR` is set.
+
 ### 💡 List of BrowserStack MCP Tools
 
 As of now we support 44 tools.

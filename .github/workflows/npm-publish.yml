@@ -12,12 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout source code"
-        uses: actions/checkout@v2
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       - name: "Set up Node.js"
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22.x
           registry-url: "https://registry.npmjs.org/"
@@ -105,13 +105,14 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: "Create GitHub Release"
-        uses: actions/create-release@v1
-        with:
-          tag_name: ${{ steps.get_version.outputs.version }}
-          release_name: ${{ steps.get_version.outputs.version }}
-          body: |
-            ${{ steps.fetch_prs.outputs.pr_list }}
-
-            Published by ${{ github.actor }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+          PR_LIST: ${{ steps.fetch_prs.outputs.pr_list }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --notes "$PR_LIST
+
+          Published by $ACTOR"

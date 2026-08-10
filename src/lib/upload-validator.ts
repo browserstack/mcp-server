@@ -17,7 +17,8 @@ export interface UploadValidationOptions {
  *  - File extension is in `allowedExtensions` (case-insensitive)
  *  - No path segment is a hidden dir/file (starts with `.`); blocks ~/.ssh,
  *    ~/.aws, .env, etc. even after symlink resolution
- *  - If `allowedBaseDir` is set, the canonical path must live inside it
+ *  - The canonical path must live inside `allowedBaseDir` (defaults to the
+ *    process working directory when not provided — containment is fail-closed)
  */
 export function validateUploadPath(
   filePath: string,
@@ -71,23 +72,22 @@ export function validateUploadPath(
     );
   }
 
-  if (options.allowedBaseDir) {
-    let baseCanonical: string;
-    try {
-      baseCanonical = fs.realpathSync(path.resolve(options.allowedBaseDir));
-    } catch {
-      throw new Error(
-        `Upload rejected: configured MCP_UPLOAD_BASE_DIR does not exist (${options.allowedBaseDir}).`,
-      );
-    }
-    const baseWithSep = baseCanonical.endsWith(path.sep)
-      ? baseCanonical
-      : baseCanonical + path.sep;
-    if (canonical !== baseCanonical && !canonical.startsWith(baseWithSep)) {
-      throw new Error(
-        `Upload rejected: file must be located inside ${baseCanonical}.`,
-      );
-    }
+  const allowedBaseDir = options.allowedBaseDir ?? process.cwd();
+  let baseCanonical: string;
+  try {
+    baseCanonical = fs.realpathSync(path.resolve(allowedBaseDir));
+  } catch {
+    throw new Error(
+      `Upload rejected: configured MCP_UPLOAD_BASE_DIR does not exist (${allowedBaseDir}).`,
+    );
+  }
+  const baseWithSep = baseCanonical.endsWith(path.sep)
+    ? baseCanonical
+    : baseCanonical + path.sep;
+  if (canonical !== baseCanonical && !canonical.startsWith(baseWithSep)) {
+    throw new Error(
+      `Upload rejected: file must be located inside ${baseCanonical}. Set MCP_UPLOAD_BASE_DIR to allow uploads from a different directory.`,
+    );
   }
 
   return canonical;

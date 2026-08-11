@@ -1,5 +1,7 @@
 # BrowserStack MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.browserstack%2Fmcp-server.svg)](https://mcptoplist.com/server/io.github.browserstack%2Fmcp-server)
+
 <div align="center">
 <img src="assets/browserstack-logo.png" alt="BrowserStack Logo" height="100"> <img src="assets/mcp-logo.png" alt="MCP Server Logo" width="100">
 </div>

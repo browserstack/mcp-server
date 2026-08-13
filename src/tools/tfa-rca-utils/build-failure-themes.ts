@@ -40,11 +40,16 @@ export interface BuildFailureWorkflow {
 /**
  * Result of `fetchBuildFailureThemes`. `ready: false` is NOT an error — it
  * means the server-side clustering (triggered by this call if needed) hasn't
- * reached `SUCCESS` within the poll budget, OR the trigger endpoint itself
- * isn't available yet (`status: "trigger-unavailable"` — see
- * `fetchBuildFailureThemes`'s doc comment). Either way this util never blocks
- * past its budget and never throws for "not ready yet"; the caller
- * (`rca-build`) falls back to client-side clustering.
+ * reached `SUCCESS` within the poll budget, OR the trigger itself failed
+ * (`status: "trigger-unavailable"` — see `fetchBuildFailureThemes`'s doc
+ * comment). The trigger endpoint (`POST /ext/v1/ai/failures/{buildUuid}`) is
+ * deployed, so for a healthy server a never-computed build now reaches
+ * `ready: true` on its own; `ready: false` signals a genuine server outage
+ * (endpoint erroring, computation failed, or a real backlog outrunning the
+ * poll budget), not the routine path for a fresh build. Either way this
+ * util never blocks past its budget and never throws for "not ready yet"; the
+ * caller (`rca-build`) keeps a client-side clustering net for exactly this
+ * outage case.
  */
 export interface BuildFailureThemesResult {
   ready: boolean;
@@ -150,11 +155,11 @@ async function triggerFailuresOnce(
  * still-not-ready result is treated as "waiting on the async computation to
  * start," not a reason to give up — it keeps polling within budget same as
  * any other in-progress state. A trigger that FAILS (for any reason — a
- * missing route, a permission error, a server error) returns immediately with
- * `ready: false, status: "trigger-unavailable"` rather than throwing or
- * entering the poll loop at all: the caller (`rca-build`) has a client-side
- * clustering fallback for exactly this case, so failing fast beats failing
- * slow.
+ * permission error or a server error; the route itself now exists) returns
+ * immediately with `ready: false, status: "trigger-unavailable"` rather than
+ * throwing or entering the poll loop at all: the caller (`rca-build`) keeps a
+ * client-side clustering net for exactly this server-outage case, so failing
+ * fast beats failing slow.
  */
 export async function fetchBuildFailureThemes(
   buildUuid: string,

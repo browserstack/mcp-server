@@ -145,8 +145,10 @@ async function triggerFailuresOnce(
 /**
  * Fetch a build's server-computed failure-theme clusters (`buildThemes` +
  * `buildWorkflows`), triggering computation if nothing has ever run for this
- * build. Polls until `buildThemeWorkflow.status` reaches `SUCCESS` or the
- * wall-clock budget is spent (`BUILD_THEMES_POLL_MAX_WAIT_MS`).
+ * build. Cadence: GET first; a single POST trigger (at most once — see below);
+ * then GET every `BUILD_THEMES_POLL_INTERVAL_MS` (3s) until
+ * `buildThemeWorkflow.status` reaches `SUCCESS` or the wall-clock budget
+ * `BUILD_THEMES_POLL_MAX_WAIT_MS` (90s) is spent. Never blocks past ~90s.
  *
  * Triggers (POST, same URL as the GET) at most ONCE per call — on a 404, a
  * missing `buildThemeWorkflow`, or a terminal failure status — never on an

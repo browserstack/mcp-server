@@ -34,6 +34,9 @@ export async function fetchBuildInsightsTool(
       unique_errors: buildData.unique_errors?.overview,
       observability_url: buildData?.observability_url,
       ci_build_url: buildData.ci_info?.build_url,
+      branch: buildData.vcs_info?.branch,
+      commit_sha: buildData.vcs_info?.sha,
+      vcs_name: buildData.vcs_info?.name,
       quality_gate_result: qualityData.quality_gate_result,
     };
 

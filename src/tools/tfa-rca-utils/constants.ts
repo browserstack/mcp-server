@@ -162,7 +162,9 @@ export const TFA_RCA_TURN_PARAMS = {
       }),
     )
     .optional()
-    .describe("Suspect PRs; identity is repo+number. Each needs repo, number, title, author, link, tag."),
+    .describe(
+      "Suspect PRs; identity is repo+number. Each needs repo, number, title, author, link, tag.",
+    ),
 };
 
 /**

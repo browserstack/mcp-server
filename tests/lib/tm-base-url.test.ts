@@ -67,3 +67,43 @@ describe("getTMBaseURL — multi-tenant cache discipline", () => {
     expect(apiClient.get).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("getTMBaseURL — failure details", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reports the HTTP status when requests complete (auth/permission failure)", async () => {
+    const { apiClient, getTMBaseURL } = await loadModule(false);
+    (apiClient.get as any).mockResolvedValue({ ok: false, status: 401 });
+
+    const err = (await getTMBaseURL(mockConfig).catch(
+      (e) => e as Error,
+    )) as unknown as Error;
+    expect(err.message).toMatch(/HTTP 401/);
+  });
+
+  it("reports the Node error code when requests never complete (network failure)", async () => {
+    const { apiClient, getTMBaseURL } = await loadModule(false);
+    (apiClient.get as any).mockRejectedValue(
+      Object.assign(new Error("self signed cert"), {
+        code: "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+      }),
+    );
+
+    const err = (await getTMBaseURL(mockConfig).catch(
+      (e) => e as Error,
+    )) as unknown as Error;
+    expect(err.message).toMatch(/UNABLE_TO_VERIFY_LEAF_SIGNATURE/);
+  });
+
+  it("passes through any other status verbatim (not just auth codes)", async () => {
+    const { apiClient, getTMBaseURL } = await loadModule(false);
+    (apiClient.get as any).mockResolvedValue({ ok: false, status: 503 });
+
+    const err = (await getTMBaseURL(mockConfig).catch(
+      (e) => e as Error,
+    )) as unknown as Error;
+    expect(err.message).toMatch(/HTTP 503/);
+  });
+});

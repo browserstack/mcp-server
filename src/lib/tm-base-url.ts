@@ -32,6 +32,8 @@ export async function getTMBaseURL(
   const authHeader =
     "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
 
+  const failures: string[] = [];
+
   for (const baseUrl of TM_BASE_URLS) {
     try {
       const res = await apiClient.get({
@@ -39,6 +41,10 @@ export async function getTMBaseURL(
         headers: { Authorization: authHeader },
         raise_error: false,
       });
+
+      if (!res.ok) {
+        failures.push(`${baseUrl}: HTTP ${res.status}`);
+      }
 
       if (res.ok) {
         // Only populate the cache in single-tenant (stdio) mode; in remote mode
@@ -50,11 +56,13 @@ export async function getTMBaseURL(
         return baseUrl;
       }
     } catch (err) {
+      const code = (err as { code?: string })?.code ?? (err as Error)?.message;
+      failures.push(`${baseUrl}: ${code}`);
       logger.debug(`Failed TM base URL: ${baseUrl} (${err})`);
     }
   }
 
   throw new Error(
-    "Unable to connect to BrowserStack Test Management. Please check your credentials and network connection.Please open an issue on GitHub if the problem persists",
+    `Unable to connect to BrowserStack Test Management. Please check your credentials and network connection.Please open an issue on GitHub if the problem persists. Details: ${failures.join("; ")}`,
   );
 }

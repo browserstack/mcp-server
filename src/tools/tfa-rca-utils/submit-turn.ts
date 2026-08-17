@@ -24,12 +24,77 @@ interface TurnContext {
   _meta?: { progressToken?: string | number };
 }
 
+/** PR-context tag: a fresh regression PR vs. a pre-existing (latent) one. */
+export type PrTag = "latent" | "regression";
+
+/**
+ * One suspect PR passed as investigation context to the TFA agent. Every field
+ * is required by contract — a partial PR object is rejected rather than sent,
+ * since incomplete/missing PR context is exactly what previously misled the agent.
+ */
+export interface PrDetail {
+  title: string;
+  author: string;
+  link: string;
+  number: number;
+  tag: PrTag;
+}
+
 export interface TfaRcaTurnArgs {
   testRunId: string;
   message: string;
+  /** Suspect PRs as context. Optional, but each entry must satisfy PrDetail. */
+  prDetails?: PrDetail[];
   threadId?: string;
   /** Resume polling an already-submitted turn without re-submitting. */
   turnId?: string;
+}
+
+const PR_TAGS: readonly PrTag[] = ["latent", "regression"];
+
+/**
+ * Enforce the PR-details contract. The list is optional, but any entry present
+ * MUST carry every field (title, author, link, number, tag with a valid value);
+ * a partial PR object is rejected rather than silently forwarded.
+ */
+function validatePrDetails(prDetails: readonly PrDetail[]): void {
+  prDetails.forEach((pr, i) => {
+    if (!pr || typeof pr !== "object") {
+      throw new TfaRcaTurnError(`prDetails[${i}] is not an object`);
+    }
+    const missing: string[] = [];
+    if (!pr.title) missing.push("title");
+    if (!pr.author) missing.push("author");
+    if (!pr.link) missing.push("link");
+    if (pr.number === undefined || pr.number === null) missing.push("number");
+    if (!pr.tag) missing.push("tag");
+    if (missing.length > 0) {
+      throw new TfaRcaTurnError(
+        `prDetails[${i}] missing required field(s): ${missing.join(", ")}`,
+      );
+    }
+    if (!PR_TAGS.includes(pr.tag)) {
+      throw new TfaRcaTurnError(
+        `prDetails[${i}].tag must be one of: ${PR_TAGS.join(", ")}`,
+      );
+    }
+  });
+}
+
+/**
+ * Compose the message body sent to the TFA agent. PR context is ALWAYS passed
+ * (the mandate): a validated PR list is appended as a stringified PR_DETAILS
+ * block, or an explicit "none provided" marker when absent — so the agent never
+ * silently loses the PR context the way it did before.
+ */
+function composeMessageWithPrDetails(
+  message: string,
+  prDetails?: readonly PrDetail[],
+): string {
+  if (!prDetails || prDetails.length === 0) {
+    return `${message}\n\nPR_DETAILS: none provided`;
+  }
+  return `${message}\n\nPR_DETAILS: ${JSON.stringify(prDetails)}`;
 }
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -90,9 +155,21 @@ export async function submitTfaRcaTurn(
 
     await notify(context, "Submitting RCA turn to TFA agent...", 5);
 
+    // Validate the PR contract before sending; a partial PR object is rejected
+    // rather than forwarded as misleading context.
+    if (args.prDetails) {
+      validatePrDetails(args.prDetails);
+    }
+
+    // PR context is always concatenated onto the message payload sent to TFA.
+    const composedMessage = composeMessageWithPrDetails(
+      args.message,
+      args.prDetails,
+    );
+
     const body: Record<string, unknown> = {
-      message: args.message,
-      client_context: args.message,
+      message: composedMessage,
+      client_context: composedMessage,
     };
     if (args.threadId) {
       body.thread_id = args.threadId;

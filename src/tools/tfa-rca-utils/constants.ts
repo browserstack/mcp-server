@@ -148,6 +148,18 @@ export const TFA_RCA_TURN_PARAMS = {
     .string()
     .optional()
     .describe("Turn id to resume a pending poll; usually omit."),
+  prDetails: z
+    .array(
+      z.object({
+        title: z.string().describe("PR title."),
+        author: z.string().describe("PR author."),
+        link: z.string().describe("PR URL."),
+        number: z.number().describe("PR number."),
+        tag: z.enum(["latent", "regression"]).describe("latent | regression."),
+      }),
+    )
+    .optional()
+    .describe("Suspect PRs as context; each needs title, author, link, number, tag."),
 };
 
 /**

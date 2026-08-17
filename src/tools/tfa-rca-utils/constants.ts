@@ -151,15 +151,18 @@ export const TFA_RCA_TURN_PARAMS = {
   prDetails: z
     .array(
       z.object({
+        repo: z.string().describe("owner/name, e.g. browserstack/ai-sdk."),
+        number: z.number().describe("PR number (unique only within repo)."),
         title: z.string().describe("PR title."),
         author: z.string().describe("PR author."),
-        link: z.string().describe("PR URL."),
-        number: z.number().describe("PR number."),
+        link: z
+          .string()
+          .describe("Canonical URL: https://github.com/<repo>/pull/<number>."),
         tag: z.enum(["latent", "regression"]).describe("latent | regression."),
       }),
     )
     .optional()
-    .describe("Suspect PRs as context; each needs title, author, link, number, tag."),
+    .describe("Suspect PRs; identity is repo+number. Each needs repo, number, title, author, link, tag."),
 };
 
 /**

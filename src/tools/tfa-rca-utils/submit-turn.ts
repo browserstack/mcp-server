@@ -31,12 +31,18 @@ export type PrTag = "latent" | "regression";
  * One suspect PR passed as investigation context to the TFA agent. Every field
  * is required by contract — a partial PR object is rejected rather than sent,
  * since incomplete/missing PR context is exactly what previously misled the agent.
+ *
+ * Identity is `repo` + `number`, never the bare number: a PR number is unique
+ * only within its repo, so two repos can share a number and collapse into one
+ * card if keyed on number alone. `link` must be the canonical
+ * `https://github.com/<repo>/pull/<number>` so it cannot cross-join or 404.
  */
 export interface PrDetail {
+  repo: string;
+  number: number;
   title: string;
   author: string;
   link: string;
-  number: number;
   tag: PrTag;
 }
 
@@ -63,10 +69,11 @@ function validatePrDetails(prDetails: readonly PrDetail[]): void {
       throw new TfaRcaTurnError(`prDetails[${i}] is not an object`);
     }
     const missing: string[] = [];
+    if (!pr.repo) missing.push("repo");
+    if (pr.number === undefined || pr.number === null) missing.push("number");
     if (!pr.title) missing.push("title");
     if (!pr.author) missing.push("author");
     if (!pr.link) missing.push("link");
-    if (pr.number === undefined || pr.number === null) missing.push("number");
     if (!pr.tag) missing.push("tag");
     if (missing.length > 0) {
       throw new TfaRcaTurnError(
@@ -76,6 +83,14 @@ function validatePrDetails(prDetails: readonly PrDetail[]): void {
     if (!PR_TAGS.includes(pr.tag)) {
       throw new TfaRcaTurnError(
         `prDetails[${i}].tag must be one of: ${PR_TAGS.join(", ")}`,
+      );
+    }
+    // Identity is repo+number; the link must be the canonical PR URL for that
+    // repo+number so cards can't cross-join across repos or 404 on a bad join.
+    if (!pr.link.includes(`/${pr.repo}/pull/${pr.number}`)) {
+      throw new TfaRcaTurnError(
+        `prDetails[${i}].link must be the canonical URL for ${pr.repo}#${pr.number} ` +
+          `(https://github.com/${pr.repo}/pull/${pr.number})`,
       );
     }
   });

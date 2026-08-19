@@ -238,7 +238,10 @@ describe("invoke", () => {
     };
     const result = await invoke(
       LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://tm.example", credentials, transport,
+      "https://tm.example", credentials, transport, {},
+      // The ceiling is NOT on the capability: it is a resolver control, so it travels in the
+      // artifact's sibling `paging` map and is passed in here.
+      { page: "p", size: "count", max: 300 },
     );
     expect(result.ok).toBe(true);
     expect(result.count).toBe(880);
@@ -252,7 +255,7 @@ describe("invoke", () => {
     const transport = async () => ({ status: 200, body: { rows: [{ unrelated: 1 }] } });
     const result = await invoke(
       LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://tm.example", credentials, transport,
+      "https://tm.example", credentials, transport, {}, { page: "p", size: "count", max: 300 },
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/capability_returns_drift/);
@@ -266,5 +269,26 @@ describe("invoke", () => {
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/401/);
+  });
+});
+
+
+describe("paging controls stay out of the published surface", () => {
+  it("is read from the artifact's sibling map, not from the capability", () => {
+    const registry = new CapabilityRegistry({
+      ...INDEX,
+      products: {
+        tm: {
+          ...INDEX.products.tm,
+          paging: { [`GET ${LIST_CASES.path}`]: { page: "p", size: "count", max: 300 } },
+        },
+      },
+    });
+    expect(registry.pagingFor("tm", LIST_CASES)).toEqual({ page: "p", size: "count", max: 300 });
+    // an endpoint that does not page gets an empty rule rather than a guess
+    expect(registry.pagingFor("tm", CREATE_FOLDER)).toEqual({});
+    // and none of it is visible to a caller searching
+    const hit = searchCapabilities(registry.index.products, "test cases").capabilities[0];
+    expect(JSON.stringify(hit)).not.toContain('"page"');
   });
 });

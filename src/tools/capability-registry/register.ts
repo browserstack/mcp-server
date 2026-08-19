@@ -8,11 +8,15 @@
  * read/write tool pair was buying.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
+import logger from "../../logger.js";
+import { trackMCP } from "../../lib/instrumentation.js";
+import { BrowserStackConfig } from "../../lib/types.js";
 import { GroupedArguments } from "./bind.js";
+import { baseUrlFor, indexPath, isEnabled } from "./config.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
 import { CapabilityRegistry, InvocationError } from "./index-loader.js";
 import { invoke } from "./resolve.js";
@@ -29,6 +33,55 @@ export interface RegistryDeps {
   transport?: Transport;
 }
 
+/**
+ * The tool-adder the server factory calls.
+ *
+ * Registers NOTHING when the artifact is absent or unreadable, rather than throwing: a
+ * missing index is a packaging problem, and taking the whole MCP server down with it would
+ * remove every other product's tools too. The reason is logged so it is not silent.
+ */
+export function addCapabilityRegistryToolsFromConfig(
+  server: McpServer,
+  config: BrowserStackConfig,
+): Record<string, RegisteredTool> {
+  if (!isEnabled()) {
+    logger.info("capability registry disabled by CAPABILITY_REGISTRY_DISABLED");
+    return {};
+  }
+  const file = indexPath();
+  if (!file) {
+    logger.warn(
+      "capability registry index not found; its tools are not registered. Set " +
+        "CAPABILITY_REGISTRY_INDEX or ship capability-index.json at the package root.",
+    );
+    return {};
+  }
+  let registry: CapabilityRegistry;
+  try {
+    registry = CapabilityRegistry.fromFile(file);
+  } catch (error) {
+    logger.error(
+      "capability registry index at %s is unusable: %s",
+      file, error instanceof Error ? error.message : String(error),
+    );
+    return {};
+  }
+  logger.info(
+    "capability registry loaded: build %s, %d product(s)",
+    registry.buildId, registry.productNames().length,
+  );
+  return addCapabilityRegistryTools(server, {
+    registry,
+    baseUrlFor,
+    // Read per call, not captured: the remote server rebuilds config per session, so a
+    // captured credential would outlive the session it belongs to.
+    credentialsFor: () => ({
+      username: config["browserstack-username"],
+      accessKey: config["browserstack-access-key"],
+    }),
+  }, config);
+}
+
 function ok(payload: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(payload) }] };
 }
@@ -37,36 +90,54 @@ function failed(message: string): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: message }) }], isError: true };
 }
 
-export function addCapabilityRegistryTools(server: McpServer, deps: RegistryDeps): void {
+export function addCapabilityRegistryTools(
+  server: McpServer,
+  deps: RegistryDeps,
+  config?: BrowserStackConfig,
+): Record<string, RegisteredTool> {
   const { registry } = deps;
   const transport = deps.transport || fetchTransport();
+  const tools: Record<string, RegisteredTool> = {};
 
-  server.tool(
+  /** Instrumentation in the house style, and never fatal to the call it wraps. */
+  const track = (name: string) => {
+    try {
+      trackMCP(name, server.server.getClientVersion()!, undefined, config);
+    } catch {
+      // Telemetry must not decide whether a tool call succeeds.
+    }
+  };
+
+  tools.listProducts = server.tool(
     "listProducts",
     "List the BrowserStack products this surface can reach, with a one-line summary each. " +
       "Start here when you do not know which product a task belongs to.",
     {},
-    async () => ok({
+    async () => {
+      track("listProducts");
+      return ok({
       build_id: registry.buildId,
       products: registry.productNames().map((name) => ({
         name, summary: registry.index.products[name].summary,
       })),
-    }),
+      });
+    },
   );
 
-  server.tool(
+  tools.listEntities = server.tool(
     "listEntities",
     "List the entities a product models (test case, folder, test plan, …). Use it to scope " +
       "searchCapability, or to find the entity name describeEntity wants.",
     { product: z.string().describe("Product name from listProducts.") },
     async ({ product }) => {
+      track("listEntities");
       const bundle = registry.index.products[product];
       if (!bundle) return failed(`unknown product '${product}'`);
       return ok({ product, entities: Object.keys(bundle.entities).sort() });
     },
   );
 
-  server.tool(
+  tools.describeEntity = server.tool(
     "describeEntity",
     "Describe one entity: what it is, what identifies it, what it relates to, and the " +
       "vocabulary the product uses for it. Read this before filtering or writing, because " +
@@ -76,6 +147,7 @@ export function addCapabilityRegistryTools(server: McpServer, deps: RegistryDeps
       entity: z.string().describe("Entity name from listEntities."),
     },
     async ({ product, entity }) => {
+      track("describeEntity");
       const bundle = registry.index.products[product];
       if (!bundle) return failed(`unknown product '${product}'`);
       const doc = bundle.entities[entity];
@@ -88,7 +160,7 @@ export function addCapabilityRegistryTools(server: McpServer, deps: RegistryDeps
     },
   );
 
-  server.tool(
+  tools.searchCapability = server.tool(
     "searchCapability",
     "Find endpoints this surface can call, by plain language, optionally narrowed to one " +
       "entity, product or mode. Each result carries the endpoint's `method` and `path` plus " +
@@ -104,15 +176,18 @@ export function addCapabilityRegistryTools(server: McpServer, deps: RegistryDeps
         .describe("Restrict to reads or writes. Omit to let the query decide."),
       limit: z.number().optional().describe("Max results (default 8)."),
     },
-    async ({ query, entity, product, mode, limit }) => ok({
+    async ({ query, entity, product, mode, limit }) => {
+      track("searchCapability");
+      return ok({
       build_id: registry.buildId,
       ...searchCapabilities(registry.index.products, query, {
         entity, product, mode: mode as Mode | undefined, limit,
       }),
-    }),
+      });
+    },
   );
 
-  server.tool(
+  tools.invokeEndpoint = server.tool(
     "invokeEndpoint",
     "Call an endpoint returned by searchCapability. Pass `method` and `path` exactly as " +
       "given, with arguments grouped into path_params / query / body under the spec's own " +
@@ -137,6 +212,7 @@ export function addCapabilityRegistryTools(server: McpServer, deps: RegistryDeps
       top_n: z.number().optional().describe("Keep only the first N rows after ordering."),
     },
     async (input): Promise<CallToolResult> => {
+      track("invokeEndpoint");
       try {
         const { product, capability } = registry.byEndpointLookup(
           input.method, input.path, input.product,
@@ -177,14 +253,18 @@ export function addCapabilityRegistryTools(server: McpServer, deps: RegistryDeps
         const result = await invoke(
           capability, args, deps.baseUrlFor(product), deps.credentialsFor(), transport,
           { orderBy: input.order_by, topN: input.top_n },
+          registry.pagingFor(product, capability),
         );
         return ok(result);
       } catch (error) {
         if (error instanceof InvocationError) return failed(error.message);
-        throw error;
+        logger.error("invokeEndpoint failed: %s", error instanceof Error ? error.message : String(error));
+        return failed("that endpoint could not be invoked");
       }
     },
   );
+
+  return tools;
 }
 
-export default addCapabilityRegistryTools;
+export default addCapabilityRegistryToolsFromConfig;

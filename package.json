@@ -21,7 +21,8 @@
     "browserstack-mcp-server": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "capability-index.json"
   ],
   "keywords": [
     "mcp",

@@ -62,10 +62,27 @@ export interface EntityDoc {
   [key: string]: unknown;
 }
 
+/**
+ * Paging controls, keyed "METHOD /path".
+ *
+ * These live BESIDE the capabilities rather than on them, and deliberately. The page and
+ * size parameter names are the resolver's, not the caller's — publishing them invites a
+ * caller to drive paging itself, which is what burned the call budget on 17 Aug. Whoever
+ * RUNS the request still needs them, so they travel here: `resolve` reads this map and the
+ * search tool never echoes it, leaving the published surface unchanged.
+ */
+export interface PagingRule {
+  page?: string;
+  size?: string;
+  /** The largest page the operation declares. Absent when the spec states no maximum. */
+  max?: number;
+}
+
 export interface ProductIndex {
   summary: string;
   capabilities: Capability[];
   entities: Record<string, EntityDoc>;
+  paging?: Record<string, PagingRule>;
 }
 
 export interface RegistryIndex {

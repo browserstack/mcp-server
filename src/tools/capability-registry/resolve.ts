@@ -6,7 +6,7 @@ import { bind, GroupedArguments } from "./bind.js";
 import { itemsOf, projectRow, rowFields, totalOf } from "./envelope.js";
 import { authHeaders, Credentials, Transport } from "./egress.js";
 import { InvocationError } from "./index-loader.js";
-import { Capability } from "./types.js";
+import { Capability, PagingRule } from "./types.js";
 
 /** A backstop, not a budget: a runaway pager is a bug, and 60 pages is past any real read. */
 export const MAX_PAGES = 60;
@@ -28,16 +28,6 @@ export interface InvokeOptions {
   pageSize?: number;
 }
 
-function pagingParams(capability: Capability): { page?: string; size?: string; max: number } {
-  // The artifact hides the page/count parameter NAMES (they are the resolver's, not the
-  // caller's) but publishes `paginated` and `max_items`. tm's own convention is `p` for the
-  // page and `count`/`per_page` for the size, and the declared ceiling travels as max_items.
-  if (!capability.paginated) return { max: 0 };
-  const query = new Set((capability.query || []).map((param) => param.name));
-  const size = ["count", "per_page", "page_size"].find((name) => query.has(name));
-  return { page: query.has("p") ? "p" : query.has("page") ? "page" : undefined, size, max: capability.max_items || 0 };
-}
-
 export async function invoke(
   capability: Capability,
   args: GroupedArguments,
@@ -45,11 +35,11 @@ export async function invoke(
   credentials: Credentials,
   transport: Transport,
   options: InvokeOptions = {},
+  paging: PagingRule = {},
 ): Promise<InvokeResult> {
   if (!baseUrl) throw new InvocationError("no base URL is configured for that product");
   const bound = bind(capability, args);
   const headers = authHeaders(credentials);
-  const paging = pagingParams(capability);
 
   const items: Record<string, unknown>[] = [];
   const declared = rowFields(capability.returns);
@@ -65,10 +55,8 @@ export async function invoke(
     if (paging.page) query[paging.page] = page;
     // Ask for the largest page the operation declares. Paging at the product's default was
     // the 17 Aug failure: 880 projects walked 30 at a time.
-    if (paging.size && !(paging.size in query)) {
-      query[paging.size] = options.pageSize || paging.max || undefined;
-      if (query[paging.size] === undefined) delete query[paging.size];
-    }
+    const size = options.pageSize || paging.max;
+    if (paging.size && size && !(paging.size in query)) query[paging.size] = size;
 
     const response = await transport(
       capability.method, `${baseUrl.replace(/\/$/, "")}${bound.path}`,

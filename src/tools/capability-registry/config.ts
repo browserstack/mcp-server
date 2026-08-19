@@ -28,31 +28,90 @@ import { InvocationError } from "./index-loader.js";
  * like the caller's problem; refusing names the real cause. Add one here only once its host
  * is known rather than inferred from a naming pattern.
  */
+/**
+ * The environment this DEPLOYMENT points at, e.g. "preprod".
+ *
+ * Process-level on purpose, and the distinction from region matters: an environment is a
+ * property of the deployment (this instance talks to preprod), whereas a REGION is a
+ * property of the account (this user's data lives in EU). That is why region discovery is
+ * per request and never cached under REMOTE_MCP, while the environment is read once here.
+ */
+export function selectedEnvironment(): string {
+  return (process.env.CAPABILITY_REGISTRY_ENV || "").trim();
+}
+
+/** product -> env -> host, the analogue of Atlas's `harness.extra_environments`. */
+function environmentMap(): Record<string, Record<string, string>> {
+  const raw = process.env.CAPABILITY_REGISTRY_BASE_URLS;
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    // A malformed map must not silently mean "no override" — that would send a preprod
+    // deployment at production.
+    throw new InvocationError(
+      "CAPABILITY_REGISTRY_BASE_URLS is not valid JSON; expected {product: {env: url}}",
+    );
+  }
+}
+
+/**
+ * Resolve a product's host, mirroring Atlas's precedence.
+ *
+ * Atlas resolves: an explicit per-session override, then the host for the session's
+ * environment (`harness.extra_environments[env][product]`), then the profile's own
+ * `base_url`. The same rungs, in the same order:
+ *
+ *   1. CAPABILITY_REGISTRY_BASE_URL_<PRODUCT>            explicit, environment-agnostic
+ *   2. CAPABILITY_REGISTRY_BASE_URL_<PRODUCT>_<ENV>      this environment's host
+ *   3. CAPABILITY_REGISTRY_BASE_URLS {product:{env:url}} the same, as one map
+ *   4. the harness-declared host, carried in the artifact
+ *   5. product-specific discovery (tm is region-sharded)
+ *   6. refuse, by name
+ *
+ * Refusing rather than guessing is deliberate: a guessed host fails as a DNS error or a 404
+ * that reads like the caller's problem, when it is our missing configuration.
+ */
 export async function resolveBaseUrl(
   product: string,
   config: BrowserStackConfig,
   harnessBaseUrl?: string,
 ): Promise<string> {
-  // 1. CONFIG WINS, the same precedence Atlas uses. This is how a non-production
-  //    environment is reached; no preprod host is or should be compiled in.
-  const override = process.env[`CAPABILITY_REGISTRY_BASE_URL_${product.toUpperCase()}`];
-  if (override) return override.replace(/\/$/, "");
+  const key = product.toUpperCase();
+  const environment = selectedEnvironment();
 
-  // 2. Then whatever the HARNESS declared, carried through in the artifact.
-  //    NOTE the sharp edge: a harness-declared host is one fixed origin, so declaring one
-  //    for a region-sharded product would send EU and IN accounts to the wrong region.
-  //    tm therefore declares none on purpose and falls through to discovery below.
+  const explicit = process.env[`CAPABILITY_REGISTRY_BASE_URL_${key}`];
+  if (explicit) return explicit.replace(/\/$/, "");
+
+  if (environment) {
+    const suffixed = process.env[
+      `CAPABILITY_REGISTRY_BASE_URL_${key}_${environment.toUpperCase()}`
+    ];
+    if (suffixed) return suffixed.replace(/\/$/, "");
+    const mapped = environmentMap()[product]?.[environment];
+    if (mapped) return String(mapped).replace(/\/$/, "");
+    // An environment was named and nothing defines its host. Falling back to the harness
+    // default here would send a preprod deployment at production, silently.
+    if (harnessBaseUrl || product === "tm") {
+      throw new InvocationError(
+        `environment '${environment}' has no host for product '${product}'. Set ` +
+          `CAPABILITY_REGISTRY_BASE_URL_${key}_${environment.toUpperCase()} or add it to ` +
+          `CAPABILITY_REGISTRY_BASE_URLS.`,
+      );
+    }
+  }
+
+  // NOTE the sharp edge: a harness-declared host is one fixed origin, so declaring one for a
+  // region-sharded product would send EU and IN accounts to the wrong region. tm declares
+  // none for exactly that reason and falls through to discovery.
   if (harnessBaseUrl) return harnessBaseUrl.replace(/\/$/, "");
 
-  // 3. Product-specific discovery. tm is region-sharded and the package already probes
-  //    test-management{,-eu,-in} with the caller's credentials to find their account's.
   if (product === "tm") return (await getTMBaseURL(config)).replace(/\/$/, "");
 
-  // 4. Refuse rather than guess. A guessed host fails as a DNS error or a 404 that reads
-  //    like the caller's problem, when it is our missing configuration.
   throw new InvocationError(
     `no host is configured for product '${product}': the harness declares none and there ` +
-      `is no override. Set CAPABILITY_REGISTRY_BASE_URL_${product.toUpperCase()}.`,
+      `is no override. Set CAPABILITY_REGISTRY_BASE_URL_${key}.`,
   );
 }
 

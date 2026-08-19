@@ -99,3 +99,63 @@ describe("harness declares, config overrides — the same precedence Atlas uses"
       .toBe("https://test-management-eu.browserstack.com");
   });
 });
+
+describe("multiple environments, the way Atlas defines them", () => {
+  const HARNESS_HOST = "https://tm.harness-declared.example";
+
+  async function resolver() {
+    return (await import("../../src/tools/capability-registry/config.js")).resolveBaseUrl;
+  }
+
+  afterEach(() => {
+    delete process.env.CAPABILITY_REGISTRY_ENV;
+    delete process.env.CAPABILITY_REGISTRY_BASE_URLS;
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_TM_PREPROD;
+  });
+
+  it("picks this environment's host from a per-env variable", async () => {
+    process.env.CAPABILITY_REGISTRY_ENV = "preprod";
+    process.env.CAPABILITY_REGISTRY_BASE_URL_TM_PREPROD = "https://tm-preprod.example/";
+    expect(await (await resolver())("tm", CONFIG, HARNESS_HOST))
+      .toBe("https://tm-preprod.example");
+  });
+
+  it("picks it from one map, the analogue of harness.extra_environments", async () => {
+    process.env.CAPABILITY_REGISTRY_ENV = "preprod";
+    process.env.CAPABILITY_REGISTRY_BASE_URLS = JSON.stringify({
+      tm: { preprod: "https://tm-preprod.example", prod: "https://tm.example" },
+    });
+    expect(await (await resolver())("tm", CONFIG, HARNESS_HOST))
+      .toBe("https://tm-preprod.example");
+  });
+
+  it("lets the environment-agnostic override win, as Atlas's session seam does", async () => {
+    process.env.CAPABILITY_REGISTRY_ENV = "preprod";
+    process.env.CAPABILITY_REGISTRY_BASE_URL_TM = "https://seam.example";
+    process.env.CAPABILITY_REGISTRY_BASE_URL_TM_PREPROD = "https://tm-preprod.example";
+    expect(await (await resolver())("tm", CONFIG, HARNESS_HOST)).toBe("https://seam.example");
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_TM;
+  });
+
+  it("refuses when an environment is named but has no host, rather than falling back", async () => {
+    // Falling through to the harness default here would point a preprod deployment at
+    // production, silently — the worst available outcome.
+    process.env.CAPABILITY_REGISTRY_ENV = "preprod";
+    await expect((await resolver())("tm", CONFIG, HARNESS_HOST))
+      .rejects.toThrow(/environment 'preprod' has no host/);
+  });
+
+  it("refuses a malformed map instead of reading it as 'no override'", async () => {
+    process.env.CAPABILITY_REGISTRY_ENV = "preprod";
+    process.env.CAPABILITY_REGISTRY_BASE_URLS = "{not json";
+    await expect((await resolver())("tm", CONFIG, HARNESS_HOST))
+      .rejects.toThrow(/not valid JSON/);
+  });
+
+  it("ignores the environment entirely when none is selected", async () => {
+    process.env.CAPABILITY_REGISTRY_BASE_URLS = JSON.stringify({
+      tm: { preprod: "https://tm-preprod.example" },
+    });
+    expect(await (await resolver())("tm", CONFIG, HARNESS_HOST)).toBe(HARNESS_HOST);
+  });
+});

@@ -65,11 +65,10 @@ export interface EntityDoc {
 /**
  * Paging controls, keyed "METHOD /path".
  *
- * These live BESIDE the capabilities rather than on them, and deliberately. The page and
- * size parameter names are the resolver's, not the caller's — publishing them invites a
- * caller to drive paging itself, which is what burned the call budget on 17 Aug. Whoever
- * RUNS the request still needs them, so they travel here: `resolve` reads this map and the
- * search tool never echoes it, leaving the published surface unchanged.
+ * NOT USED BY THIS SERVER any more: it performs one request and returns the response, so
+ * paging belongs to the caller and the page parameters are published with the endpoint's
+ * other query parameters. The field is still emitted by the build, so it stays described
+ * here rather than silently ignored — a consumer that DOES page can use it.
  */
 export interface PagingRule {
   page?: string;

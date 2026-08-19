@@ -63,7 +63,7 @@ describe("capability registry, end to end through the server factory", () => {
     expect(payload.capabilities[0].path.startsWith("/api/")).toBe(true);
   });
 
-  it("invokes a real endpoint: forwards Api-Token, pages, and projects the rows", async () => {
+  it("invokes a real endpoint: forwards Api-Token and returns the response untouched", async () => {
     process.env.CAPABILITY_REGISTRY_BASE_URL_TM = "https://tm.example";
     const calls: { url: string; headers: Record<string, string> }[] = [];
     vi.stubGlobal("fetch", async (url: string, init: any) => {
@@ -88,11 +88,11 @@ describe("capability registry, end to end through the server factory", () => {
     expect(calls[0].headers["Api-Token"]).toBe("ing_Xx:SECRET");
     expect(calls[0].headers["request-source"]).toBe("ai-chatbot");
     expect(calls[0].url.startsWith("https://tm.example/api/v1/projects/basic")).toBe(true);
-    // the page-size ceiling the operation declares, not the product's default
-    expect(calls[0].url).toContain("count=300");
-    // projected to the declared returns: the extra field never reaches the caller
-    expect(payload.items[0].leaked).toBeUndefined();
-    expect(payload.items[0].id).toBe(1);
+    // ONE request, and the body exactly as the product sent it
+    expect(calls).toHaveLength(1);
+    expect(payload.http_response.status).toBe(200);
+    expect(payload.http_response.body.projects[0])
+      .toEqual({ id: 1, name: "P", description: "d", leaked: "no" });
   });
 
   it("refuses a destructive endpoint without calling the product", async () => {

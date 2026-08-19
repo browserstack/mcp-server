@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { bind, coerce } from "../../src/tools/capability-registry/bind.js";
-import {
-  discoveredFields, isEnvelopeField, itemsOf, projectRow, totalOf,
-} from "../../src/tools/capability-registry/envelope.js";
 import { authHeaders } from "../../src/tools/capability-registry/egress.js";
 import {
   CapabilityRegistry, InvocationError, IndexError,
@@ -132,53 +129,6 @@ describe("binding", () => {
   });
 });
 
-describe("finding rows in a response", () => {
-  it("finds rows by shape, whatever the envelope calls them", () => {
-    // tm uses 30 distinct row-key names; a hardcoded list missed 24 of them.
-    expect(itemsOf({ success: true, path_folders: [{ id: 1 }] })).toEqual([{ id: 1 }]);
-  });
-
-  it("treats a single wrapped record as one row", () => {
-    // Without this every stats/summary/detail read came back ok:true, count:0, items:[].
-    expect(itemsOf({ success: true, project: { id: 4 } })).toEqual([{ id: 4 }]);
-    expect(itemsOf({ id: 9, name: "flat" })).toEqual([{ id: 9, name: "flat" }]);
-  });
-
-  it("keeps an empty array distinguishable from a shape with no rows", () => {
-    expect(itemsOf({ success: true, test_cases: [] })).toEqual([]);
-  });
-
-  it("reads the total out of the envelope", () => {
-    expect(totalOf({ info: { count: 880 } })).toBe(880);
-  });
-
-  it("knows an envelope field from a row field", () => {
-    for (const name of ["total_pages", "has_more", "is_empty", "count", "success"]) {
-      expect(isEnvelopeField(name)).toBe(true);
-    }
-    expect(isEnvelopeField("identifier")).toBe(false);
-  });
-});
-
-describe("projection", () => {
-  it("keeps only declared fields", () => {
-    expect(projectRow({ id: 1, secret_note: "x" }, ["id"], false)).toEqual({ id: 1 });
-  });
-
-  it("emits nothing when nothing is declared and discovery is off", () => {
-    expect(projectRow({ id: 1 }, [], false)).toEqual({});
-  });
-
-  it("discovers scalars but never expands an object or a sensitive name", () => {
-    // `assignee` expands to email/full_name/browserstack_user_id; field_values carry
-    // signed URLs. Both are objects, so neither can travel this path.
-    expect(discoveredFields({
-      id: 7, identifier: "TP-3", assignee: { email: "a@b.c" }, tags: ["x"],
-      api_token: "t", user_email: "a@b.c", user_id: 4,
-    })).toEqual({ id: 7, identifier: "TP-3" });
-  });
-});
-
 describe("search", () => {
   it("does not treat verbs as stopwords", () => {
     expect(terms("list the test cases")).toEqual(["list", "test", "cases"]);
@@ -220,75 +170,71 @@ describe("auth", () => {
   });
 });
 
-describe("invoke", () => {
+describe("invoke — one request, response returned untouched", () => {
   const credentials = { username: "u", accessKey: "k" };
 
-  it("pages to completion at the declared ceiling and projects the rows", async () => {
-    const seen: { query: Record<string, unknown>; headers: Record<string, string> }[] = [];
-    const transport = async (
-      _m: string, _u: string, headers: Record<string, string>, query: Record<string, unknown>,
-    ) => {
-      seen.push({ query, headers });
-      const page = Number(query.p || 1);
-      const start = (page - 1) * 300;
-      const rows = Array.from({ length: Math.max(0, Math.min(300, 880 - start)) }, (_v, i) => ({
-        id: start + i, identifier: `TC-${start + i}`, title: "t", leaked: "no",
-      }));
-      return { status: 200, body: { test_cases: rows, info: { count: 880 } } };
+  it("makes exactly ONE request and hands back status and body", async () => {
+    let calls = 0;
+    const transport = async () => {
+      calls += 1;
+      return {
+        status: 200,
+        body: { test_cases: [{ id: 1, leaked: "kept" }], info: { count: 880, next: null } },
+      };
     };
     const result = await invoke(
       LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://tm.example", credentials, transport, {},
-      // The ceiling is NOT on the capability: it is a resolver control, so it travels in the
-      // artifact's sibling `paging` map and is passed in here.
-      { page: "p", size: "count", max: 300 },
+      "https://tm.example", credentials, transport,
     );
+    expect(calls).toBe(1);                       // paging is the caller's now
     expect(result.ok).toBe(true);
-    expect(result.count).toBe(880);
-    expect(result.requests_made).toBe(3);            // not 30 at the product's default
-    expect(seen[0].query.count).toBe(300);
-    expect(seen[0].headers["Api-Token"]).toBe("u:k");
-    expect(Object.keys(result.items[0])).toEqual(["id", "identifier", "title"]);
+    expect(result.completed).toBe(true);         // the envelope says next: null
+    // No extraction, no counting, no projection — the body as sent, `leaked` included.
+    expect(result.http_response).toEqual({
+      status: 200,
+      body: { test_cases: [{ id: 1, leaked: "kept" }], info: { count: 880, next: null } },
+    });
   });
 
-  it("reports drift rather than an empty answer", async () => {
-    const transport = async () => ({ status: 200, body: { rows: [{ unrelated: 1 }] } });
+  it("says the answer is incomplete when the envelope declares another page", async () => {
+    const transport = async () => ({
+      status: 200, body: { test_cases: [{ id: 1 }], info: { count: 880, next: 2 } },
+    });
     const result = await invoke(
       LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://tm.example", credentials, transport, {}, { page: "p", size: "count", max: 300 },
+      "https://tm.example", credentials, transport,
     );
-    expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/capability_returns_drift/);
+    expect(result.ok).toBe(true);
+    expect(result.completed).toBe(false);
   });
 
-  it("surfaces a non-2xx as a failed call, not as empty rows", async () => {
-    const transport = async () => ({ status: 401, body: { error: "Unauthorized" } });
+  it("mirrors a non-2xx and lets the product's own body explain it", async () => {
+    const transport = async () => ({
+      status: 422,
+      body: { success: false, error: "Drill-down is only available for User Workload Reports" },
+    });
     const result = await invoke(
       LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
       "https://tm.example", credentials, transport,
     );
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/401/);
+    expect(result.completed).toBe(false);
+    expect(result.http_response.status).toBe(422);
+    expect((result.http_response.body as Record<string, unknown>).error)
+      .toMatch(/User Workload Reports/);
   });
-});
 
-
-describe("paging controls stay out of the published surface", () => {
-  it("is read from the artifact's sibling map, not from the capability", () => {
-    const registry = new CapabilityRegistry({
-      ...INDEX,
-      products: {
-        tm: {
-          ...INDEX.products.tm,
-          paging: { [`GET ${LIST_CASES.path}`]: { page: "p", size: "count", max: 300 } },
-        },
-      },
+  it("reports an unreachable product as status 0", async () => {
+    const transport = async () => ({
+      status: 0, body: null, error: "the product could not be reached",
     });
-    expect(registry.pagingFor("tm", LIST_CASES)).toEqual({ page: "p", size: "count", max: 300 });
-    // an endpoint that does not page gets an empty rule rather than a guess
-    expect(registry.pagingFor("tm", CREATE_FOLDER)).toEqual({});
-    // and none of it is visible to a caller searching
-    const hit = searchCapabilities(registry.index.products, "test cases").capabilities[0];
-    expect(JSON.stringify(hit)).not.toContain('"page"');
+    const result = await invoke(
+      LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
+      "https://tm.example", credentials, transport,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.http_response.status).toBe(0);
+    expect(result.http_response.error).toMatch(/could not be reached/);
   });
 });
+

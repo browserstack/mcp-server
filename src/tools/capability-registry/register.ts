@@ -212,8 +212,6 @@ export function addCapabilityRegistryTools(
       user_permission: z.enum(PERMISSION_VALUES).optional()
         .describe("Set to 'granted' only after the user has confirmed a write."),
       change_summary: z.string().optional().describe("What will change. Required for writes."),
-      order_by: z.string().optional().describe("A returns field; prefix '-' to reverse."),
-      top_n: z.number().optional().describe("Keep only the first N rows after ordering."),
     },
     async (input): Promise<CallToolResult> => {
       track("invokeEndpoint");
@@ -256,8 +254,7 @@ export function addCapabilityRegistryTools(
 
         const result = await invoke(
           capability, args, await deps.baseUrlFor(product), deps.credentialsFor(), transport,
-          { orderBy: input.order_by, topN: input.top_n },
-          registry.pagingFor(product, capability),
+
         );
         return ok(result);
       } catch (error) {

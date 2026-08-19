@@ -3,12 +3,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import {
-  Capability,
-  PagingRule,
-  RegistryIndex,
-  SUPPORTED_SCHEMA_VERSION,
-} from "./types.js";
+import { Capability, RegistryIndex, SUPPORTED_SCHEMA_VERSION } from "./types.js";
 
 export class IndexError extends Error {}
 
@@ -52,12 +47,6 @@ export class CapabilityRegistry {
 
   get buildId(): string {
     return this.index.build_id;
-  }
-
-  /** Paging controls for one endpoint, or an empty rule when it does not page. */
-  pagingFor(product: string, capability: Capability): PagingRule {
-    const rules = this.index.products[product]?.paging || {};
-    return rules[endpointKey(capability.method, capability.path)] || {};
   }
 
   productNames(): string[] {

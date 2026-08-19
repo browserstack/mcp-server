@@ -23,7 +23,12 @@ describe("the real artifact", () => {
     }
   });
 
-  it("bakes in no hostname, so one artifact ships to every environment", () => {
+  it("carries only a harness-declared host, and tm declares none", () => {
+    // Harness declares the default, config overrides it — the same precedence Atlas uses.
+    // What must never appear is a host that came from CONFIG, since one artifact ships to
+    // every environment. tm's product.yaml leaves the host to config on purpose, so that
+    // per-account region sharding is honoured.
+    expect(registry.index.products.tm.base_url).toBeUndefined();
     const blob = JSON.stringify(registry.index);
     for (const host of ["bsstag.com", "browserstack.com", "https://"]) {
       expect(blob).not.toContain(host);

@@ -80,6 +80,12 @@ export interface PagingRule {
 
 export interface ProductIndex {
   summary: string;
+  /**
+   * The host the HARNESS declares for this product, if any. Config overrides it — the same
+   * precedence Atlas uses. Absent for tm, whose product.yaml deliberately leaves the host
+   * to config so that per-account region sharding can be honoured.
+   */
+  base_url?: string;
   capabilities: Capability[];
   entities: Record<string, EntityDoc>;
   paging?: Record<string, PagingRule>;

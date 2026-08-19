@@ -16,7 +16,7 @@ import logger from "../../logger.js";
 import { trackMCP } from "../../lib/instrumentation.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { GroupedArguments } from "./bind.js";
-import { baseUrlFor, indexPath, isEnabled } from "./config.js";
+import { indexPath, isEnabled, resolveBaseUrl } from "./config.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
 import { CapabilityRegistry, InvocationError } from "./index-loader.js";
 import { invoke } from "./resolve.js";
@@ -27,8 +27,11 @@ export const PERMISSION_VALUES = ["not_asked", "granted", "denied"] as const;
 
 export interface RegistryDeps {
   registry: CapabilityRegistry;
-  /** Per-product base URL. Never baked into the artifact — it is environment-specific. */
-  baseUrlFor: (product: string) => string;
+  /**
+   * Per-product base URL. Never baked into the artifact — it is environment AND account
+   * specific: tm is region-sharded, so this is resolved per call, not once at startup.
+   */
+  baseUrlFor: (product: string) => Promise<string>;
   credentialsFor: () => Credentials;
   transport?: Transport;
 }
@@ -72,7 +75,8 @@ export function addCapabilityRegistryToolsFromConfig(
   );
   return addCapabilityRegistryTools(server, {
     registry,
-    baseUrlFor,
+    baseUrlFor: (product) =>
+      resolveBaseUrl(product, config, registry.index.products[product]?.base_url),
     // Read per call, not captured: the remote server rebuilds config per session, so a
     // captured credential would outlive the session it belongs to.
     credentialsFor: () => ({
@@ -251,7 +255,7 @@ export function addCapabilityRegistryTools(
         }
 
         const result = await invoke(
-          capability, args, deps.baseUrlFor(product), deps.credentialsFor(), transport,
+          capability, args, await deps.baseUrlFor(product), deps.credentialsFor(), transport,
           { orderBy: input.order_by, topN: input.top_n },
           registry.pagingFor(product, capability),
         );

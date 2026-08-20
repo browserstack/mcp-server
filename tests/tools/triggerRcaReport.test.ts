@@ -36,6 +36,7 @@ const mockConfig = {
 };
 
 const post = apiClient.post as Mock;
+const get = apiClient.get as Mock;
 
 function ok(data: any, status = 200) {
   return { ok: true, status, data };
@@ -72,6 +73,10 @@ describe("triggerRcaReportTool", () => {
 
   it("success → trimmed glimpse with UI link; prs/workflows never echoed", async () => {
     post.mockResolvedValue(fullReport());
+    // Canonical dashboard URL comes from the build's observability_url.
+    get.mockResolvedValue(
+      ok({ observability_url: `${UI_BASE}/projects/P+Name/builds/bname/1` }),
+    );
 
     const result = await triggerRcaReportTool(
       { buildUuid: "b-1" },
@@ -91,7 +96,9 @@ describe("triggerRcaReportTool", () => {
     expect(payload.failureReason).toBe(
       "2 product regressions traced to PR #412",
     );
-    expect(payload.viewReport).toBe(`${UI_BASE}/builds/b-1?tab=ai_report&subTab=aitfa`);
+    expect(payload.viewReport).toBe(
+      `${UI_BASE}/projects/P+Name/builds/bname/1?tab=ai_report&subTab=tfa`,
+    );
     // Raw response is never echoed: no prs[]/workflows[] entries, no envelope.
     expect(payload.prs).toBeUndefined();
     expect(payload.workflows).toBeUndefined();
@@ -132,6 +139,8 @@ describe("triggerRcaReportTool", () => {
     post.mockResolvedValue(
       ok({ state: "running", buildUuid: "b-2", triggeredAt: "now" }),
     );
+    // Build metadata unavailable → fall back to the UUID deep-link (still subTab=tfa).
+    get.mockResolvedValue(nonOk(404));
 
     const result = await triggerRcaReportTool(
       { buildUuid: "b-2" },
@@ -140,7 +149,9 @@ describe("triggerRcaReportTool", () => {
     const payload = JSON.parse(result.content[0].text as string);
     expect(payload.state).toBe("running");
     expect(payload.verdict).toBeUndefined();
-    expect(payload.viewReport).toBe(`${UI_BASE}/builds/b-2?tab=ai_report&subTab=aitfa`);
+    expect(payload.viewReport).toBe(
+      `${UI_BASE}/builds/b-2?tab=ai_report&subTab=tfa`,
+    );
   });
 
   it("403 plan/flag fence → clear domain error", async () => {

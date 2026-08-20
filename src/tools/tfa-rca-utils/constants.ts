@@ -23,15 +23,25 @@ export function getO11yUiBaseUrl(): string {
 }
 
 /**
- * TRA UI deep-link for a build's AI report (confirmed shape, 2026-07-13):
- * `<UI_BASE>/builds/<buildUuid>?tab=ai_report&subTab=aitfa` — the AI-TFA
- * sub-tab of the build's AI report. `{buildUuid}` is replaced with the
- * caller-supplied build id.
+ * Query that deep-links a dashboard build URL to the AI-report TFA sub-tab.
+ * Appended to the build's canonical `observability_url` (preferred) or the
+ * UUID fallback below.
  */
-export const O11Y_UI_BUILD_PATH =
-  "/builds/{buildUuid}?tab=ai_report&subTab=aitfa";
+export const AI_REPORT_TFA_QUERY = "tab=ai_report&subTab=tfa";
 
-/** Human-facing TRA UI link for one build's full report. */
+/** Read a build's metadata — carries the canonical `observability_url`. */
+export const BUILD_DETAILS_PATH = "/ext/v1/builds/{buildUuid}";
+
+/**
+ * UUID-form deep-link — `<UI_BASE>/builds/<buildUuid>?tab=ai_report&subTab=tfa`.
+ * Fallback only, used when the build's canonical `observability_url` can't be
+ * read. Preferred is the canonical `observability_url` + `AI_REPORT_TFA_QUERY`
+ * (see `trigger-report.ts`): the UUID URL 302-redirects to the canonical path
+ * and the redirect drops the query string, landing on the wrong sub-tab.
+ */
+export const O11Y_UI_BUILD_PATH = `/builds/{buildUuid}?${AI_REPORT_TFA_QUERY}`;
+
+/** Human-facing TRA UI link for one build's full report (UUID fallback form). */
 export function getO11yUiBuildUrl(buildUuid: string): string {
   return (
     getO11yUiBaseUrl() +
@@ -45,7 +55,7 @@ export function getO11yUiBuildUrl(buildUuid: string): string {
  * (build page → AI report → AI TFA sub-tab).
  */
 export function getRcaViewGuidance(): string {
-  return `${getO11yUiBaseUrl()} — open the build's AI report (tab=ai_report, subTab=aitfa) to view the full RCA`;
+  return `${getO11yUiBaseUrl()} — open the build's AI report (tab=ai_report, subTab=tfa) to view the full RCA`;
 }
 
 /** Trigger (or read, when already complete) a build's Release Readiness report. */

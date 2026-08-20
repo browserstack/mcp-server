@@ -443,7 +443,13 @@ describe("tfaRcaTurnTool", () => {
     addTfaRcaCollaborationTools(server as any, mockConfig as any);
     // The schema captured at registration must carry no endpoint/base-url field.
     const fieldNames = Object.keys(tools.tfaRcaTurn.schema ?? {});
-    expect(fieldNames).toEqual(["testRunId", "message", "threadId", "turnId"]);
+    expect(fieldNames).toEqual([
+      "testRunId",
+      "message",
+      "threadId",
+      "turnId",
+      "prDetails",
+    ]);
     expect(fieldNames).not.toContain("baseUrl");
     expect(fieldNames).not.toContain("o11yBaseUrl");
   });

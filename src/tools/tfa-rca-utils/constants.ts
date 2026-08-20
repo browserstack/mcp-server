@@ -148,6 +148,23 @@ export const TFA_RCA_TURN_PARAMS = {
     .string()
     .optional()
     .describe("Turn id to resume a pending poll; usually omit."),
+  prDetails: z
+    .array(
+      z.object({
+        repo: z.string().describe("owner/name, e.g. browserstack/ai-sdk."),
+        number: z.number().describe("PR number (unique only within repo)."),
+        title: z.string().describe("PR title."),
+        author: z.string().describe("PR author."),
+        link: z
+          .string()
+          .describe("Canonical URL: https://github.com/<repo>/pull/<number>."),
+        tag: z.enum(["latent", "regression"]).describe("latent | regression."),
+      }),
+    )
+    .optional()
+    .describe(
+      "Suspect PRs; identity is repo+number. Each needs repo, number, title, author, link, tag.",
+    ),
 };
 
 /**

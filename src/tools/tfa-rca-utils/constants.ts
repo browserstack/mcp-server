@@ -22,22 +22,16 @@ export function getO11yUiBaseUrl(): string {
   return appConfig.BROWSERSTACK_O11Y_UI_BASE_URL;
 }
 
-/**
- * Query that deep-links a dashboard build URL to the AI-report TFA sub-tab.
- * Appended to the build's canonical `observability_url` (preferred) or the
- * UUID fallback below.
- */
+/** Query that deep-links a dashboard build URL to the AI-report TFA sub-tab. */
 export const AI_REPORT_TFA_QUERY = "tab=ai_report&subTab=tfa";
 
 /** Read a build's metadata — carries the canonical `observability_url`. */
 export const BUILD_DETAILS_PATH = "/ext/v1/builds/{buildUuid}";
 
 /**
- * UUID-form deep-link — `<UI_BASE>/builds/<buildUuid>?tab=ai_report&subTab=tfa`.
- * Fallback only, used when the build's canonical `observability_url` can't be
- * read. Preferred is the canonical `observability_url` + `AI_REPORT_TFA_QUERY`
- * (see `trigger-report.ts`): the UUID URL 302-redirects to the canonical path
- * and the redirect drops the query string, landing on the wrong sub-tab.
+ * UUID-form deep-link — fallback when the canonical `observability_url` can't
+ * be read. The UUID URL 302-redirects and the redirect drops the query string,
+ * so prefer the canonical URL (see `trigger-report.ts`).
  */
 export const O11Y_UI_BUILD_PATH = `/builds/{buildUuid}?${AI_REPORT_TFA_QUERY}`;
 

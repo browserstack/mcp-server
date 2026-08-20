@@ -79,12 +79,10 @@ function mapTriggerError(status: number, data: unknown): TriggerRcaReportError {
  * nothing persists between calls.
  */
 /**
- * Resolve the human-facing "view report" link to the build's canonical
- * `observability_url` (`.../projects/<name>/builds/<name>/<n>`) + the AI-report
- * TFA sub-tab. The UUID form 302-redirects and the redirect drops the query
- * string, so the dashboard lands on the wrong sub-tab (QA-reported). The
- * trigger response is a lean ack with no `observability_url`, so read it from
- * build metadata; fall back to the UUID deep-link only if that read fails.
+ * "View report" link = the build's canonical `observability_url` + the TFA
+ * sub-tab. The UUID form 302-redirects and drops the query, loading the wrong
+ * sub-tab; the trigger response carries no URL, so read it from build metadata
+ * and fall back to the UUID deep-link only if that read fails.
  */
 async function resolveViewReport(
   buildUuid: string,

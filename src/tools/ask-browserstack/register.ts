@@ -39,9 +39,10 @@ import {
   AskError,
   ELICITATION_TIMEOUT_MS,
   agentUrl,
-  atlasToken,
+  authTokenUrl,
   isEnabled,
 } from "./config.js";
+import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
 import {
   AgentTransport,
   Credentials,
@@ -65,15 +66,20 @@ import {
 export interface AskDeps {
   /** Resolved per call: a deployment's host is configuration, not a constructor argument. */
   agentUrl: () => string;
-  /** The shared delegation token, resolved per call and for the same reason. A secret. */
-  atlasToken: () => string;
+  /**
+   * Sign in and return a bearer for `POST /agent`. Cached behind this, not minted per call.
+   *
+   * A function rather than a value because it is resolved per call for the same reason the
+   * host is, and because it can fail in ways a caller needs told apart.
+   */
+  mintToken: () => Promise<string>;
   /**
    * Read per call, not captured: the remote server rebuilds config per session, so a
    * captured credential would outlive the session it belongs to.
    *
-   * ONLY `username` is used, and only to attribute the run (`user_id`). The access key does
-   * NOT leave this process on this route: `/agent` has no use for it, so sending it would be
-   * exposure for nothing. Product calls are the place for `authHeaders`.
+   * These are now THE AUTH CREDENTIAL, not merely attribution: the access key is exchanged
+   * for a user-attested central JWT, which is what lets Atlas run the approved product call
+   * as the human rather than as a shared service account.
    */
   credentialsFor: () => Credentials;
   transport?: AgentTransport;
@@ -232,13 +238,18 @@ export function addAskBrowserstackAITool(
 
       try {
         const url = deps.agentUrl();
-        const headers = agentHeaders(deps.atlasToken());
+        // Signed in BEFORE the listener is opened and before the run starts. Minting
+        // lazily mid-call would put a token round-trip inside the window where a human is
+        // being prompted, and a mint that failed there would strand an open port.
+        const headers = agentHeaders(await deps.mintToken());
         const body: AgentRequest = { task: query, product };
 
-        // Attribution. The shared token authenticates the CALLER only, leaving
-        // `principal_verified=false`, so Atlas takes the acting user from the body — without
-        // it the run is unattributed, per-user limits cannot apply and the audit row cannot
-        // name who asked. Omitted ENTIRELY when unset, never sent as "".
+        // Attribution, and now belt-and-braces rather than the source of truth: the minted
+        // JWT is user-attested, so Atlas sets `principal_verified=True` and takes the acting
+        // user from signed claims instead of this field. It is still sent because it is part
+        // of the frozen wire format (CONTRACT v1.2 §3) and dropping it would be a one-sided
+        // change — but nothing should trust it, and Atlas no longer does.
+        // Omitted ENTIRELY when unset, never sent as "".
         const username = (deps.credentialsFor().username || "").trim();
         if (username) body.user_id = username;
 
@@ -296,17 +307,20 @@ export function addAskBrowserstackAIToolFromConfig(
     logger.info("askBrowserstackAI disabled by ASK_BROWSERSTACK_DISABLED");
     return {};
   }
+  const credentials = () => ({
+    username: config["browserstack-username"],
+    accessKey: config["browserstack-access-key"],
+  });
+  const tokenTransport = fetchTokenTransport();
   return addAskBrowserstackAITool(
     server,
     {
       // Both resolved per call. An unconfigured host surfaces as a named error from the
       // tool rather than as a missing tool, so the cause is visible to whoever hits it.
       agentUrl,
-      atlasToken,
-      credentialsFor: () => ({
-        username: config["browserstack-username"],
-        accessKey: config["browserstack-access-key"],
-      }),
+      mintToken: () =>
+        mintCentralToken(authTokenUrl(), credentials(), tokenTransport),
+      credentialsFor: credentials,
     },
     config,
   );

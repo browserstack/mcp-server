@@ -412,10 +412,11 @@ export function buildResult(
  * The token itself is NOT named here, only the variable that should hold it.
  */
 export const UNAUTHENTICATED_DETAIL =
-  "BrowserStack AI rejected this server's credentials (HTTP 401). NOBODY DECLINED " +
-  "ANYTHING — the request never reached the agent, so no permission was sought and nothing " +
-  "was refused. The shared delegation token in ASK_BROWSERSTACK_ATLAS_TOKEN is missing, " +
-  "wrong, or not the one this environment expects.";
+  "Signing in with your BrowserStack credentials SUCCEEDED, but BrowserStack AI refused " +
+  "the resulting token (HTTP 401). YOUR CREDENTIALS ARE NOT THE PROBLEM — this is a " +
+  "server-side configuration one, most likely `delegation.required_scope` not matching the " +
+  "scope the token was minted with. NOBODY DECLINED ANYTHING: the request never reached " +
+  "the agent, so no permission was sought and nothing was refused.";
 
 /**
  * The `error` field, from whichever side has one.

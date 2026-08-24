@@ -3,6 +3,7 @@ import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AskError } from "../../src/tools/ask-browserstack/config.js";
+import { resetTokenCache } from "../../src/tools/ask-browserstack/central-oauth.js";
 import { addAskBrowserstackAITool } from "../../src/tools/ask-browserstack/register.js";
 
 /** Captured before anything stubs the global, so the loopback hop stays real. */
@@ -14,6 +15,8 @@ const CONFIG = {
 } as any;
 
 const PERM_A = "perm-" + "a".repeat(32);
+const AUTH_URL = "https://auth.example/oauth2/v2/token";
+const MINTED = "minted.central.jwt";
 const PERM_B = "perm-" + "b".repeat(32);
 
 interface AtlasCall {
@@ -31,11 +34,23 @@ function atlas(options: {
   token?: (real: string) => string;
   payload?: (decisions: any[]) => unknown;
   throws?: boolean;
+  authStatus?: number;
 }) {
   const calls: AtlasCall[] = [];
   const decisions: any[] = [];
+  const mints: Record<string, string>[] = [];
 
   const stub = async (url: string, init: any) => {
+    if (String(url) === AUTH_URL) {
+      mints.push(Object.fromEntries(new URLSearchParams(init.body)));
+      return {
+        status: options.authStatus ?? 200,
+        headers: { get: () => "application/json" },
+        json: async () => (options.authStatus && options.authStatus !== 200
+          ? { error: "invalid_client", error_description: "access_key SECRET is invalid" }
+          : { access_token: MINTED, expires_in: 3600, token_type: "Bearer" }),
+      };
+    }
     const body = JSON.parse(init.body);
     calls.push({ url: String(url), headers: init.headers, body });
     if (options.throws) throw new Error("connection reset");
@@ -64,7 +79,24 @@ function atlas(options: {
   };
 
   vi.stubGlobal("fetch", stub);
-  return { calls, decisions };
+  return { calls, decisions, mints };
+}
+
+/**
+ * A bare fetch stub that still signs in. Every path to `/agent` now mints first, so a stub
+ * that only knows about `/agent` would have the mint land on it instead.
+ */
+function withAuth(agent: (url: string, init: any) => Promise<any>) {
+  return async (url: string, init: any) => {
+    if (String(url) === AUTH_URL) {
+      return {
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: async () => ({ access_token: MINTED, expires_in: 3600 }),
+      };
+    }
+    return agent(url, init);
+  };
 }
 
 async function buildServer() {
@@ -95,7 +127,8 @@ async function call(tools: Record<string, any>, args = { product: "tm", query: "
 describe("askBrowserstackAI, end to end through the server factory", () => {
   beforeEach(() => {
     process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
-    process.env.ASK_BROWSERSTACK_ATLAS_TOKEN = "shared-delegation-token";
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = AUTH_URL;
+    resetTokenCache();
     delete process.env.ASK_BROWSERSTACK_DISABLED;
     delete process.env.ASK_BROWSERSTACK_ENV;
     vi.resetModules();
@@ -103,7 +136,8 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
   afterEach(() => {
     delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
-    delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
+    delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
+    resetTokenCache();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -142,7 +176,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       // 1. the request: authenticated with the SHARED DELEGATION TOKEN, attributed, relay
       //    offered on loopback with a per-run token
       expect(stub.calls[0].url).toBe("https://atlas.example/agent");
-      expect(stub.calls[0].headers.Authorization).toBe("Bearer shared-delegation-token");
+      expect(stub.calls[0].headers.Authorization).toBe(`Bearer ${MINTED}`);
       // The EXACT key set. /agent has no Api-Token path, and that header carries the user's
       // access key — this assertion is what stops it creeping back in.
       expect(Object.keys(stub.calls[0].headers).sort())
@@ -449,7 +483,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       // Atlas answers 502 when a delegation RAN and a step then failed. One prompt was
       // shown and approved; the write did not land.
       const realFetchLocal = realFetch;
-      vi.stubGlobal("fetch", async (url: string, init: any) => {
+      vi.stubGlobal("fetch", withAuth(async (_url: string, init: any) => {
         const body = JSON.parse(init.body);
         await realFetchLocal(body.permission_relay.callback_url, {
           method: "POST",
@@ -475,7 +509,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
             permission_relay: { used: true, reason: "" },
           }),
         };
-      });
+      }));
 
       const { payload } = await call(server.getTools());
 
@@ -568,22 +602,27 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
   });
 
   describe("POST /agent authentication — CONTRACT v1.2", () => {
-    it("omits user_id entirely, never as \"\", when no username is configured", async () => {
-      const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
-      const server = new BrowserStackMcpServer({
-        "browserstack-username": "",
-        "browserstack-access-key": "",
-      } as any);
-      fakeClient(server.getInstance(), { roots: {} }, []);
-      const stub = atlas({});
+    it("omits user_id entirely, never as \"\", when no username is available", async () => {
+      // Driven through the seam: with central auth a blank username cannot sign in at all,
+      // so this branch is no longer reachable from the factory — but the wire rule still
+      // holds and must stay covered.
+      const mcp = new McpServer({ name: "t", version: "0" });
+      const transport = vi.fn(async () => ({ status: 200, body: { status: "ok", answer: "" } }));
+      const tools = addAskBrowserstackAITool(mcp, {
+        agentUrl: () => "https://atlas.example/agent",
+        mintToken: async () => MINTED,
+        credentialsFor: () => ({ username: "", accessKey: "" }),
+        transport: transport as never,
+      });
 
-      await call(server.getTools());
-      expect("user_id" in stub.calls[0].body).toBe(false);
-      expect(Object.keys(stub.calls[0].body).sort()).toEqual(["product", "task"]);
+      await call(tools);
+      const body = (transport.mock.calls[0] as any)[2];
+      expect("user_id" in body).toBe(false);
+      expect(Object.keys(body).sort()).toEqual(["product", "task"]);
     });
 
-    it("refuses by name when the token is unset, and never leaks it", async () => {
-      delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
+    it("refuses by name when there is nowhere to sign in", async () => {
+      delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
       const fetchSpy = vi.fn();
       vi.stubGlobal("fetch", fetchSpy);
       const server = await buildServer();
@@ -591,11 +630,41 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
       const { result, payload } = await call(server.getTools());
       expect(result.isError).toBe(true);
-      expect(payload.error).toMatch(/ASK_BROWSERSTACK_ATLAS_TOKEN/);
+      expect(payload.error).toMatch(/ASK_BROWSERSTACK_AUTH_TOKEN_URL/);
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it("never puts the token in the result, on success or on failure", async () => {
+    it("mints the token with the exact client_credentials grant", async () => {
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, []);
+      const stub = atlas({});
+
+      await call(server.getTools());
+      expect(stub.mints).toHaveLength(1);
+      expect(stub.mints[0]).toEqual({
+        grant_type: "client_credentials",
+        username: "ing_Xx",
+        access_key: "SECRET",
+        // BOTH parts. `central_ai_s2s` alone is refused by the endpoint; without it Atlas
+        // refuses the token.
+        scope: "oauth_user_profile central_ai_s2s",
+        expires_in: "3600",
+      });
+    });
+
+    it("does not re-mint on a second call inside the cache window", async () => {
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, []);
+      const stub = atlas({});
+
+      await call(server.getTools());
+      await call(server.getTools());
+      await call(server.getTools());
+      expect(stub.calls).toHaveLength(3);   // three runs...
+      expect(stub.mints).toHaveLength(1);   // ...one sign-in
+    });
+
+    it("never puts the access key or the minted token in the result", async () => {
       const server = await buildServer();
       fakeClient(server.getInstance(), { elicitation: {} }, [
         { action: "accept", content: { confirm: true } },
@@ -604,26 +673,81 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
       const { result } = await call(server.getTools());
       // The whole serialised result, not just the fields we happen to check.
-      expect(result.content[0].text).not.toContain("shared-delegation-token");
+      expect(result.content[0].text).not.toContain("SECRET");
+      expect(result.content[0].text).not.toContain(MINTED);
+    });
+
+    it("says the credentials were rejected, and NEVER echoes the auth body back", async () => {
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
+      // The endpoint's own error body echoes the access key straight back.
+      const stub = atlas({ authStatus: 401 });
+
+      const { result, payload } = await call(server.getTools());
+
+      expect(payload.error).toMatch(/credentials were rejected by BrowserStack auth \(HTTP 401\)/);
+      expect(payload.error).toMatch(/BROWSERSTACK_ACCESS_KEY/);
+      // Only the status crosses. Not the body, not the key it contained.
+      expect(result.content[0].text).not.toContain("SECRET");
+      expect(result.content[0].text).not.toContain("invalid_client");
+      // Never got as far as Atlas, let alone a prompt.
+      expect(stub.calls).toHaveLength(0);
+      expect(elicit).not.toHaveBeenCalled();
+      expect(payload.permission_relay.reason).toBe("not_reached");
+      expect(payload.applied_before_stop).toBeNull();
+    });
+
+    it("says auth was unreachable, distinctly from a rejected credential", async () => {
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
+      vi.stubGlobal("fetch", async () => {
+        throw new Error("ECONNREFUSED");
+      });
+
+      const { payload } = await call(server.getTools());
+      expect(payload.error).toMatch(/Could not reach BrowserStack auth/);
+      expect(payload.error).not.toMatch(/credentials were rejected/);
+      expect(elicit).not.toHaveBeenCalled();
+      expect(payload.permission_relay.reason).toBe("not_reached");
+    });
+
+    it("refuses before any network call when a credential is missing", async () => {
+      const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
+      const server = new BrowserStackMcpServer({
+        "browserstack-username": "ing_Xx",
+        "browserstack-access-key": "",
+      } as any);
+      fakeClient(server.getInstance(), { elicitation: {} }, []);
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const { payload } = await call(server.getTools());
+      expect(payload.error).toMatch(/BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);
+      // Our missing configuration, not the user's password being wrong.
+      expect(payload.error).not.toMatch(/rejected/);
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it("reads a 401 as rejected credentials, not as anyone declining", async () => {
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
-      vi.stubGlobal("fetch", async () => ({
+      vi.stubGlobal("fetch", withAuth(async () => ({
         status: 401,
         headers: { get: () => "application/json" },
         // Exactly what Atlas answers a bad bearer with: no `error` string of its own.
         json: async () => ({ detail: "unauthorized" }),
-      }));
+      })));
 
       const { result, payload } = await call(server.getTools());
 
       expect(payload.status).toBe("error");
       expect(result.isError).toBe(true);
-      expect(payload.error).toMatch(/rejected this server's credentials/);
+      // The THIRD failure mode: we signed in fine, Atlas refused the token. It must not
+      // read as "your password is wrong" — it is a server misconfiguration.
+      expect(payload.error).toMatch(/Signing in with your BrowserStack credentials SUCCEEDED/);
+      expect(payload.error).toMatch(/YOUR CREDENTIALS ARE NOT THE PROBLEM/);
+      expect(payload.error).toMatch(/delegation\.required_scope/);
       expect(payload.error).toMatch(/NOBODY DECLINED ANYTHING/);
-      expect(payload.error).toMatch(/ASK_BROWSERSTACK_ATLAS_TOKEN/);
       // Nothing was ever asked, so nothing can look like a refusal.
       expect(elicit).not.toHaveBeenCalled();
       expect(payload.approvals).toEqual([]);
@@ -660,11 +784,11 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
       // Exactly what Atlas answers with before the delegation layer: a bare detail.
-      vi.stubGlobal("fetch", async () => ({
+      vi.stubGlobal("fetch", withAuth(async () => ({
         status,
         headers: { get: () => "application/json" },
         json: async () => ({ detail }),
-      }));
+      })));
 
       const { result, payload } = await call(server.getTools());
 
@@ -697,12 +821,12 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.approvals[0]).toMatchObject({ decision: "deny", reason: "declined" });
     });
 
-    it("lets the named environment pick the token, so preprod cannot borrow prod's", async () => {
-      delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
+    it("signs in against the named environment, so preprod cannot use prod's auth", async () => {
       process.env.ASK_BROWSERSTACK_ENV = "preprod";
       process.env.ASK_BROWSERSTACK_ATLAS_URL_PREPROD = "https://atlas-preprod.example";
-      process.env.ASK_BROWSERSTACK_ATLAS_TOKEN_PREPROD = "preprod-token";
+      process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL_PREPROD = AUTH_URL;
       delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
+      delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
       try {
         const server = await buildServer();
         fakeClient(server.getInstance(), { roots: {} }, []);
@@ -710,11 +834,12 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
         await call(server.getTools());
         expect(stub.calls[0].url).toBe("https://atlas-preprod.example/agent");
-        expect(stub.calls[0].headers.Authorization).toBe("Bearer preprod-token");
+        expect(stub.calls[0].headers.Authorization).toBe(`Bearer ${MINTED}`);
+        expect(stub.mints).toHaveLength(1);
       } finally {
         delete process.env.ASK_BROWSERSTACK_ENV;
         delete process.env.ASK_BROWSERSTACK_ATLAS_URL_PREPROD;
-        delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN_PREPROD;
+        delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL_PREPROD;
       }
     });
   });
@@ -741,10 +866,10 @@ describe("askBrowserstackAI, against the injected seam", () => {
     const transport = vi.fn();
     const tools = addAskBrowserstackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
-      atlasToken: () => {
+      mintToken: async () => {
         throw new AskError(
-          "BrowserStack AI is not authenticated: set ASK_BROWSERSTACK_ATLAS_TOKEN to the " +
-            "shared delegation token",
+          "BrowserStack AI is not authenticated: BROWSERSTACK_USERNAME and " +
+            "BROWSERSTACK_ACCESS_KEY are required to sign in",
         );
       },
       credentialsFor: () => ({ username: "u", accessKey: "k" }),
@@ -754,7 +879,7 @@ describe("askBrowserstackAI, against the injected seam", () => {
 
     const { payload } = await call(tools);
     expect(payload.ok).toBe(false);
-    expect(payload.error).toMatch(/ASK_BROWSERSTACK_ATLAS_TOKEN/);
+    expect(payload.error).toMatch(/BROWSERSTACK_ACCESS_KEY/);
     expect(transport).not.toHaveBeenCalled();
   });
 
@@ -765,7 +890,7 @@ describe("askBrowserstackAI, against the injected seam", () => {
     const transport = vi.fn(async () => ({ status: 200, body: { status: "ok", answer: "" } }));
     const tools = addAskBrowserstackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
-      atlasToken: () => "shared-delegation-token",
+      mintToken: async () => MINTED,
       credentialsFor: () => ({ username: "ing_Xx", accessKey: "" }),
       transport: transport as never,
       startListener: (async () => ({ url: "x", token: "y", close: async () => {} })) as never,
@@ -783,7 +908,7 @@ describe("askBrowserstackAI, against the injected seam", () => {
     const close = vi.fn(async () => {});
     const tools = addAskBrowserstackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
-      atlasToken: () => "shared-delegation-token",
+      mintToken: async () => MINTED,
       credentialsFor: () => ({ username: "u", accessKey: "k" }),
       transport: (async () => {
         throw new Error("boom");

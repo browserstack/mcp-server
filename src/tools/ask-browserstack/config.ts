@@ -78,36 +78,30 @@ export function agentUrl(): string {
 }
 
 /**
- * The shared delegation token `POST /agent` authenticates with (CONTRACT v1.2 §I).
+ * Where a central-OAuth JWT is minted (CONTRACT v1.2 §I, as amended by task 7).
  *
- * `/agent` accepts exactly two credentials, both in `Authorization`: this shared token, which
- * authenticates the CALLER only, or a BrowserStack central JWT, which also attests the acting
- * user. There is no `Api-Token` path on this route. The shared token is what
- * `authenticate()`'s own docstring describes for a backend caller like an MCP server, and the
- * JWT path would mean minting a credential, which this work does not do.
+ * The shared `delegation.token` path is gone from Atlas, so a user-attested central JWT is
+ * now the only way in. This is the endpoint that issues one from a username and access key.
  *
- * Same precedence rungs as the host, for the same reason: a deployment pointing at preprod
- * must not be able to fall back to a token meant for somewhere else.
- *
- * THIS VALUE IS A SECRET. It is never logged, never returned in a result, and never named in
- * an error message — only the env var that should hold it is.
+ * Same precedence rungs as the host, and refusing rather than guessing for the same reason:
+ * a deployment pointing at preprod must not sign in against production's auth server.
  */
-export function atlasToken(): string {
-  const explicit = process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
+export function authTokenUrl(): string {
+  const explicit = process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
   if (explicit && explicit.trim()) return explicit.trim();
 
   const environment = selectedEnvironment();
   if (environment) {
     const suffixed =
-      process.env[`ASK_BROWSERSTACK_ATLAS_TOKEN_${environment.toUpperCase()}`];
+      process.env[`ASK_BROWSERSTACK_AUTH_TOKEN_URL_${environment.toUpperCase()}`];
     if (suffixed && suffixed.trim()) return suffixed.trim();
   }
 
   throw new AskError(
-    "BrowserStack AI is not authenticated: set ASK_BROWSERSTACK_ATLAS_TOKEN" +
+    "BrowserStack AI has nowhere to sign in: set ASK_BROWSERSTACK_AUTH_TOKEN_URL" +
       (environment
-        ? ` or ASK_BROWSERSTACK_ATLAS_TOKEN_${environment.toUpperCase()}`
+        ? ` or ASK_BROWSERSTACK_AUTH_TOKEN_URL_${environment.toUpperCase()}`
         : "") +
-      " to the shared delegation token",
+      " to the BrowserStack OAuth token endpoint",
   );
 }

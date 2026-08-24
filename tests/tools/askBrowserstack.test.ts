@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   CALLBACK_PATH,
@@ -7,8 +7,17 @@ import {
   startCallbackListener,
 } from "../../src/tools/ask-browserstack/callback.js";
 import {
-  AskError, atlasBaseUrl, atlasToken,
+  AskError, atlasBaseUrl, authTokenUrl,
 } from "../../src/tools/ask-browserstack/config.js";
+import {
+  AUTH_REJECTED_DETAIL,
+  AUTH_UNREACHABLE_DETAIL,
+  CENTRAL_SCOPE,
+  REFRESH_SKEW_MS,
+  mintCentralToken,
+  mintForm,
+  resetTokenCache,
+} from "../../src/tools/ask-browserstack/central-oauth.js";
 import { agentHeaders } from "../../src/tools/ask-browserstack/egress.js";
 import {
   approvalOutcome,
@@ -19,6 +28,7 @@ import {
   elicitationMessage,
   looksLikeDelegationResult,
   neverReachedAgent,
+  UNAUTHENTICATED_DETAIL,
 } from "../../src/tools/ask-browserstack/relay.js";
 import { ApprovalRecord } from "../../src/tools/ask-browserstack/types.js";
 
@@ -598,50 +608,197 @@ describe("POST /agent headers — CONTRACT v1.2 §4", () => {
   it("is exactly three headers, and Api-Token is not one of them", () => {
     // /agent has no Api-Token path, and that header carries the user's access key. Asserting
     // the exact key set is what stops it being reintroduced by a helpful future edit.
-    expect(agentHeaders("shared-delegation-token")).toEqual({
-      Authorization: "Bearer shared-delegation-token",
+    expect(agentHeaders("minted.central.jwt")).toEqual({
+      Authorization: "Bearer minted.central.jwt",
       "Content-Type": "application/json",
       "request-source": "ai-chatbot",
     });
   });
 });
 
-describe("the delegation token", () => {
+describe("where we sign in", () => {
   const saved = { ...process.env };
 
   afterEach(() => {
     process.env = { ...saved };
   });
 
-  it("refuses by name, naming the variable and never a value", () => {
-    delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
+  it("refuses by name rather than guessing an auth host", () => {
+    delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
     delete process.env.ASK_BROWSERSTACK_ENV;
     delete process.env.CAPABILITY_REGISTRY_ENV;
-    expect(() => atlasToken()).toThrow(AskError);
-    expect(() => atlasToken()).toThrow(/ASK_BROWSERSTACK_ATLAS_TOKEN/);
+    expect(() => authTokenUrl()).toThrow(AskError);
+    expect(() => authTokenUrl()).toThrow(/ASK_BROWSERSTACK_AUTH_TOKEN_URL/);
   });
 
-  it("treats a blank token as unset rather than sending `Bearer `", () => {
-    process.env.ASK_BROWSERSTACK_ATLAS_TOKEN = "   ";
-    delete process.env.ASK_BROWSERSTACK_ENV;
-    delete process.env.CAPABILITY_REGISTRY_ENV;
-    expect(() => atlasToken()).toThrow(AskError);
-  });
-
-  it("takes the environment's token when one is named, and trims it", () => {
-    delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
+  it("lets the environment pick it, so preprod cannot sign in against production", () => {
+    delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
     process.env.ASK_BROWSERSTACK_ENV = "preprod";
-    process.env.ASK_BROWSERSTACK_ATLAS_TOKEN_PREPROD = "  preprod-token  ";
-    expect(atlasToken()).toBe("preprod-token");
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL_PREPROD = "  https://auth-pp.example/t  ";
+    expect(authTokenUrl()).toBe("https://auth-pp.example/t");
   });
 
-  it("lets an explicit token win", () => {
+  it("lets an explicit endpoint win", () => {
     process.env.ASK_BROWSERSTACK_ENV = "preprod";
-    process.env.ASK_BROWSERSTACK_ATLAS_TOKEN_PREPROD = "preprod-token";
-    process.env.ASK_BROWSERSTACK_ATLAS_TOKEN = "explicit-token";
-    expect(atlasToken()).toBe("explicit-token");
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL_PREPROD = "https://auth-pp.example/t";
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = "https://auth.example/t";
+    expect(authTokenUrl()).toBe("https://auth.example/t");
   });
 });
+
+describe("minting a central JWT", () => {
+  const URL_ = "https://auth.example/oauth2/v2/token";
+  const CREDS = { username: "ing_Xx", accessKey: "SECRET" };
+  const OK = { status: 200, body: { access_token: "jwt.aaa", expires_in: 3600 } };
+
+  beforeEach(() => resetTokenCache());
+  afterEach(() => resetTokenCache());
+
+  function recording(response: any = OK) {
+    const seen: { url: string; form: Record<string, string> }[] = [];
+    const transport = async (url: string, form: Record<string, string>) => {
+      seen.push({ url, form });
+      return typeof response === "function" ? response() : response;
+    };
+    return { seen, transport };
+  }
+
+  it("sends the client_credentials grant verbatim, with BOTH scope parts", () => {
+    expect(mintForm(CREDS)).toEqual({
+      grant_type: "client_credentials",
+      username: "ing_Xx",
+      access_key: "SECRET",
+      scope: "oauth_user_profile central_ai_s2s",
+      expires_in: "3600",
+    });
+    // Load-bearing in both directions: `central_ai_s2s` is what Atlas matches on, and the
+    // endpoint will not issue it to a username+access_key unless `oauth_user_profile` is
+    // paired with it.
+    expect(CENTRAL_SCOPE.split(" ")).toEqual(["oauth_user_profile", "central_ai_s2s"]);
+  });
+
+  it("returns the token the endpoint issued", async () => {
+    const { seen, transport } = recording();
+    expect(await mintCentralToken(URL_, CREDS, transport, 0)).toBe("jwt.aaa");
+    expect(seen).toHaveLength(1);
+    expect(seen[0].url).toBe(URL_);
+  });
+
+  it("does not re-mint inside the cache window", async () => {
+    const { seen, transport } = recording();
+    await mintCentralToken(URL_, CREDS, transport, 0);
+    await mintCentralToken(URL_, CREDS, transport, 60_000);
+    await mintCentralToken(URL_, CREDS, transport, 1_000_000);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("refreshes once the token is inside the skew", async () => {
+    const { seen, transport } = recording();
+    await mintCentralToken(URL_, CREDS, transport, 0);
+    // Expires at 3_600_000; the skew is the whole /agent budget plus a minute, because
+    // Atlas holds this token for the life of the run and re-uses it for product egress.
+    expect(REFRESH_SKEW_MS).toBe(390_000);
+    await mintCentralToken(URL_, CREDS, transport, 3_600_000 - REFRESH_SKEW_MS + 1);
+    expect(seen).toHaveLength(2);
+  });
+
+  it("mints ONCE for concurrent callers rather than once each", async () => {
+    const { seen, transport } = recording();
+    const answers = await Promise.all([
+      mintCentralToken(URL_, CREDS, transport, 0),
+      mintCentralToken(URL_, CREDS, transport, 0),
+      mintCentralToken(URL_, CREDS, transport, 0),
+    ]);
+    expect(seen).toHaveLength(1);
+    expect(answers).toEqual(["jwt.aaa", "jwt.aaa", "jwt.aaa"]);
+  });
+
+  it("mints again when the access key rotates, rather than serving a revoked one", async () => {
+    const { seen, transport } = recording();
+    await mintCentralToken(URL_, CREDS, transport, 0);
+    await mintCentralToken(URL_, { ...CREDS, accessKey: "ROTATED" }, transport, 0);
+    expect(seen).toHaveLength(2);
+  });
+
+  it("trusts the lifetime the SERVER granted, not the one we asked for", async () => {
+    const { seen, transport } = recording({
+      status: 200, body: { access_token: "jwt.aaa", expires_in: 600 },
+    });
+    await mintCentralToken(URL_, CREDS, transport, 0);
+    // Granted 600s, so it is already inside the 390s skew at t=300s.
+    await mintCentralToken(URL_, CREDS, transport, 300_000);
+    expect(seen).toHaveLength(2);
+  });
+
+  it("surfaces ONLY the status when the endpoint refuses, never the body", async () => {
+    // The real endpoint's error body echoes the credential straight back.
+    const transport = async () => ({
+      status: 401,
+      body: { error: "invalid_client", error_description: "access_key SECRET is invalid" },
+    });
+    await expect(mintCentralToken(URL_, CREDS, transport, 0)).rejects.toThrow(AskError);
+    const message = await mintCentralToken(URL_, CREDS, transport, 0).catch((e) => e.message);
+    expect(message).toMatch(/rejected by BrowserStack auth \(HTTP 401\)/);
+    expect(message).not.toContain("SECRET");
+    expect(message).not.toContain("invalid_client");
+    expect(message).not.toContain("access_key");
+  });
+
+  it("says unreachable, distinctly from refused", async () => {
+    const transport = async () => ({ status: 0, body: null, error: "auth could not be reached" });
+    const message = await mintCentralToken(URL_, CREDS, transport, 0).catch((e) => e.message);
+    expect(message).toBe(AUTH_UNREACHABLE_DETAIL);
+    expect(message).not.toMatch(/rejected/);
+  });
+
+  it("says so when a 200 carries no access_token", async () => {
+    const transport = async () => ({ status: 200, body: { token_type: "Bearer" } });
+    const message = await mintCentralToken(URL_, CREDS, transport, 0).catch((e) => e.message);
+    expect(message).toMatch(/without issuing a token/);
+  });
+
+  it("does not cache a failure", async () => {
+    let calls = 0;
+    const transport = async () => {
+      calls += 1;
+      return calls === 1 ? { status: 500, body: null } : OK;
+    };
+    await mintCentralToken(URL_, CREDS, transport, 0).catch(() => undefined);
+    expect(await mintCentralToken(URL_, CREDS, transport, 0)).toBe("jwt.aaa");
+    expect(calls).toBe(2);
+  });
+
+  it("refuses before any network call when a credential is missing", async () => {
+    const { seen, transport } = recording();
+    for (const creds of [
+      { username: "", accessKey: "SECRET" },
+      { username: "ing_Xx", accessKey: "" },
+    ]) {
+      const message = await mintCentralToken(URL_, creds, transport, 0).catch((e) => e.message);
+      expect(message).toMatch(/BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);
+      // Our missing configuration, not the user's password being wrong.
+      expect(message).not.toMatch(/rejected/);
+    }
+    expect(seen).toHaveLength(0);
+  });
+
+  it("keeps the three auth failures readable as three different problems", () => {
+    const rejected = AUTH_REJECTED_DETAIL(401);
+    const unreachable = AUTH_UNREACHABLE_DETAIL;
+    const refusedByAtlas = UNAUTHENTICATED_DETAIL;
+    expect(new Set([rejected, unreachable, refusedByAtlas]).size).toBe(3);
+    // "your credentials are wrong" vs "auth is down" vs "the server is misconfigured"
+    expect(rejected).toMatch(/credentials were rejected/);
+    expect(unreachable).toMatch(/Could not reach BrowserStack auth/);
+    expect(refusedByAtlas).toMatch(/SUCCEEDED/);
+    expect(refusedByAtlas).toMatch(/YOUR CREDENTIALS ARE NOT THE PROBLEM/);
+    // None of them is a permission denial.
+    for (const message of [rejected, unreachable, refusedByAtlas]) {
+      expect(message).toMatch(/NOTHING REACHED THE AGENT|never reached the agent/);
+    }
+  });
+});
+
 
 describe("pre-run refusals — the request never reached the agent (D3)", () => {
   // Atlas omits its permission_relay verdict on every refusal that dies before the

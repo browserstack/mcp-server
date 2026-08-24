@@ -11,8 +11,10 @@ import {
 } from "../../src/tools/ask-browserstack/config.js";
 import {
   AUTH_REJECTED_DETAIL,
+  AUTH_SCOPE_REFUSED_DETAIL,
   AUTH_UNREACHABLE_DETAIL,
   CENTRAL_SCOPE,
+  refusalIsAboutScope,
   REFRESH_SKEW_MS,
   mintCentralToken,
   mintForm,
@@ -668,13 +670,33 @@ describe("minting a central JWT", () => {
       grant_type: "client_credentials",
       username: "ing_Xx",
       access_key: "SECRET",
-      scope: "oauth_user_profile central_ai_s2s",
+      scope: "oauth_user_profile ai_agent_notify",
       expires_in: "3600",
     });
-    // Load-bearing in both directions: `central_ai_s2s` is what Atlas matches on, and the
-    // endpoint will not issue it to a username+access_key unless `oauth_user_profile` is
-    // paired with it.
-    expect(CENTRAL_SCOPE.split(" ")).toEqual(["oauth_user_profile", "central_ai_s2s"]);
+    // Exact string, both members, in order: `ai_agent_notify` is what Atlas matches on, and
+    // `oauth_user_profile` is what makes the pair obtainable through this flow at all.
+    expect(CENTRAL_SCOPE).toBe("oauth_user_profile ai_agent_notify");
+    expect(CENTRAL_SCOPE.split(" ")).toEqual(["oauth_user_profile", "ai_agent_notify"]);
+  });
+
+  it("never falls back to another scope, on any path", async () => {
+    // A silent downgrade to a different authorization is the kind of thing nobody notices
+    // until it matters. Every refusal shape must fail, once, with the scope we chose.
+    for (const response of [
+      { status: 400, body: { error: "invalid_scope" } },
+      { status: 401, body: { error: "invalid_client" } },
+      { status: 403, body: { error: "unauthorized_client" } },
+      { status: 500, body: null },
+    ]) {
+      resetTokenCache();
+      const { seen, transport } = recording(response);
+      await mintCentralToken(URL_, CREDS, transport, 0).catch(() => undefined);
+      expect(seen).toHaveLength(1);
+      expect(seen[0].form.scope).toBe("oauth_user_profile ai_agent_notify");
+    }
+    // and nothing anywhere in the module names the scope it replaced
+    expect(JSON.stringify([AUTH_SCOPE_REFUSED_DETAIL(400), AUTH_REJECTED_DETAIL(401)]))
+      .not.toContain("central_ai_s2s");
   });
 
   it("returns the token the endpoint issued", async () => {
@@ -730,7 +752,60 @@ describe("minting a central JWT", () => {
     expect(seen).toHaveLength(2);
   });
 
-  it("surfaces ONLY the status when the endpoint refuses, never the body", async () => {
+  it("reports a refused SCOPE as a provisioning problem, naming the scope", async () => {
+    // The likely outcome: `ai_agent_notify` is documented as client_id/secret auth and is
+    // not in USERNAME_ACCESS_KEY_ONLY_SCOPES. Sending someone to check their password would
+    // be sending them to the wrong place entirely.
+    const transport = async () => ({
+      status: 400,
+      body: {
+        error: "invalid_scope",
+        error_description: "scope ai_agent_notify only valid for: user_management, access_key SECRET",
+      },
+    });
+    const message = await mintCentralToken(URL_, CREDS, transport, 0).catch((e) => e.message);
+    expect(message).toContain("oauth_user_profile ai_agent_notify");
+    expect(message).toMatch(/provisioning problem/);
+    expect(message).toMatch(/YOUR CREDENTIALS ARE NOT THE PROBLEM/);
+    expect(message).toMatch(/NOT quietly retry with a weaker scope/);
+    expect(message).not.toMatch(/Check BROWSERSTACK_USERNAME/);
+    // The body still never crosses, even while being read to classify.
+    expect(message).not.toContain("SECRET");
+    expect(message).not.toContain("error_description");
+    expect(message).not.toContain("only valid for");
+  });
+
+  it("classifies a refusal by the OAuth2 code, falling back to the status", () => {
+    // The `error` code is a fixed spec token and cannot carry a credential;
+    // `error_description` is free text and can, so only the code is ever consulted.
+    expect(refusalIsAboutScope(400, { error: "invalid_scope" })).toBe(true);
+    expect(refusalIsAboutScope(403, { error: "unauthorized_client" })).toBe(true);
+    expect(refusalIsAboutScope(400, { error: "invalid_request" })).toBe(true);
+    expect(refusalIsAboutScope(401, { error: "invalid_client" })).toBe(false);
+    expect(refusalIsAboutScope(400, { error: "invalid_grant" })).toBe(false);
+    // No usable code: 400 is a bad request (for us, the scope), 401/403 a bad caller.
+    expect(refusalIsAboutScope(400, null)).toBe(true);
+    expect(refusalIsAboutScope(400, { error: 42 })).toBe(true);
+    expect(refusalIsAboutScope(400, { error: "something_new" })).toBe(true);
+    expect(refusalIsAboutScope(401, {})).toBe(false);
+    expect(refusalIsAboutScope(500, { error: "server_error" })).toBe(false);
+  });
+
+  it("keeps a scope refusal and a credential refusal as two different problems", async () => {
+    const scope = await mintCentralToken(
+      URL_, CREDS, async () => ({ status: 400, body: { error: "invalid_scope" } }), 0,
+    ).catch((e) => e.message);
+    resetTokenCache();
+    const credential = await mintCentralToken(
+      URL_, CREDS, async () => ({ status: 401, body: { error: "invalid_client" } }), 0,
+    ).catch((e) => e.message);
+    expect(scope).not.toBe(credential);
+    expect(scope).toMatch(/provisioning/);
+    expect(credential).toMatch(/credentials were rejected/);
+    expect(credential).not.toMatch(/provisioning/);
+  });
+
+  it("surfaces ONLY the status when the CREDENTIAL is refused, never the body", async () => {
     // The real endpoint's error body echoes the credential straight back.
     const transport = async () => ({
       status: 401,
@@ -782,18 +857,24 @@ describe("minting a central JWT", () => {
     expect(seen).toHaveLength(0);
   });
 
-  it("keeps the three auth failures readable as three different problems", () => {
+  it("keeps the four auth failures readable as four different problems", () => {
+    const scopeRefused = AUTH_SCOPE_REFUSED_DETAIL(400);
     const rejected = AUTH_REJECTED_DETAIL(401);
     const unreachable = AUTH_UNREACHABLE_DETAIL;
     const refusedByAtlas = UNAUTHENTICATED_DETAIL;
-    expect(new Set([rejected, unreachable, refusedByAtlas]).size).toBe(3);
-    // "your credentials are wrong" vs "auth is down" vs "the server is misconfigured"
+    const all = [scopeRefused, rejected, unreachable, refusedByAtlas];
+    expect(new Set(all).size).toBe(4);
+    // provisioning vs "your credentials are wrong" vs "auth is down" vs "server misconfigured"
+    expect(scopeRefused).toMatch(/provisioning problem/);
     expect(rejected).toMatch(/credentials were rejected/);
     expect(unreachable).toMatch(/Could not reach BrowserStack auth/);
     expect(refusedByAtlas).toMatch(/SUCCEEDED/);
-    expect(refusedByAtlas).toMatch(/YOUR CREDENTIALS ARE NOT THE PROBLEM/);
+    // The two that are NOT the user's credentials say so in as many words.
+    for (const message of [scopeRefused, refusedByAtlas]) {
+      expect(message).toMatch(/YOUR CREDENTIALS ARE NOT THE PROBLEM/);
+    }
     // None of them is a permission denial.
-    for (const message of [rejected, unreachable, refusedByAtlas]) {
+    for (const message of all) {
       expect(message).toMatch(/NOTHING REACHED THE AGENT|never reached the agent/);
     }
   });

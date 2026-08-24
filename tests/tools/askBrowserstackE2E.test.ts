@@ -35,6 +35,7 @@ function atlas(options: {
   payload?: (decisions: any[]) => unknown;
   throws?: boolean;
   authStatus?: number;
+  authError?: string;
 }) {
   const calls: AtlasCall[] = [];
   const decisions: any[] = [];
@@ -47,7 +48,11 @@ function atlas(options: {
         status: options.authStatus ?? 200,
         headers: { get: () => "application/json" },
         json: async () => (options.authStatus && options.authStatus !== 200
-          ? { error: "invalid_client", error_description: "access_key SECRET is invalid" }
+          ? {
+              error: options.authError ?? "invalid_client",
+              error_description:
+                "scope ai_agent_notify only valid for: user_management, access_key SECRET",
+            }
           : { access_token: MINTED, expires_in: 3600, token_type: "Bearer" }),
       };
     }
@@ -645,9 +650,9 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         grant_type: "client_credentials",
         username: "ing_Xx",
         access_key: "SECRET",
-        // BOTH parts. `central_ai_s2s` alone is refused by the endpoint; without it Atlas
-        // refuses the token.
-        scope: "oauth_user_profile central_ai_s2s",
+        // BOTH parts, exact string. `ai_agent_notify` is what Atlas matches on;
+        // `oauth_user_profile` is what makes the pair obtainable through this flow.
+        scope: "oauth_user_profile ai_agent_notify",
         expires_in: "3600",
       });
     });
@@ -675,6 +680,28 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       // The whole serialised result, not just the fields we happen to check.
       expect(result.content[0].text).not.toContain("SECRET");
       expect(result.content[0].text).not.toContain(MINTED);
+    });
+
+    it("reports a refused scope as provisioning, not as a bad password", async () => {
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
+      const stub = atlas({ authStatus: 400, authError: "invalid_scope" });
+
+      const { result, payload } = await call(server.getTools());
+
+      expect(payload.error).toContain("oauth_user_profile ai_agent_notify");
+      expect(payload.error).toMatch(/provisioning problem/);
+      expect(payload.error).not.toMatch(/Check BROWSERSTACK_USERNAME/);
+      // Only one sign-in attempt, and no retry with a different scope.
+      expect(stub.mints).toHaveLength(1);
+      expect(stub.mints[0].scope).toBe("oauth_user_profile ai_agent_notify");
+      // The body is read to classify but never surfaced.
+      expect(result.content[0].text).not.toContain("SECRET");
+      expect(result.content[0].text).not.toContain("only valid for");
+      expect(stub.calls).toHaveLength(0);
+      expect(elicit).not.toHaveBeenCalled();
+      expect(payload.permission_relay.reason).toBe("not_reached");
+      expect(payload.applied_before_stop).toBeNull();
     });
 
     it("says the credentials were rejected, and NEVER echoes the auth body back", async () => {

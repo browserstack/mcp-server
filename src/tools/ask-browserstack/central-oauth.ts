@@ -21,19 +21,35 @@ import { AGENT_TIMEOUT_MS, AskError } from "./config.js";
 import { Credentials } from "./egress.js";
 
 /**
- * BOTH PARTS ARE REQUIRED — do not "tidy" this into one scope.
+ * BOTH PARTS ARE REQUIRED, AND THERE IS NO FALLBACK TO ANOTHER SCOPE.
  *
- * `central_ai_s2s` is what Atlas matches on (`delegation.required_scope`, checked as exact
- * membership of the token's `scopes` claim in `web/oauth.py`). But it is a client_id+secret
- * scope, and asking for it ALONE with a username+access_key is rejected outright. It becomes
- * obtainable only when paired with `oauth_user_profile` — see the note at `web/oauth.py:449`:
- * "today any user can obtain `central_ai_s2s` by pairing it with `oauth_user_profile`,
- * because the railsApp guard uses `none?` where it means `all?`".
+ * `oauth_user_profile` stays because it is what makes the pair obtainable through the
+ * username+access_key flow at all. `ai_agent_notify` is what Atlas matches on
+ * (`delegation.required_scope`, checked as exact membership of the token's `scopes` claim in
+ * `web/oauth.py`); both halves move together with Atlas.
  *
- * So the pair is load-bearing in both directions: drop `central_ai_s2s` and Atlas refuses the
- * token; drop `oauth_user_profile` and the endpoint refuses to issue it.
+ * THIS SCOPE MAY SIMPLY NOT BE ISSUABLE TO US, and the reasons are worth stating rather than
+ * discovering. From the merged `browserstack/railsApp#175367` (2026-08-24):
+ *
+ *   - `ai_agent_notify` is documented there as CLIENT_ID/SECRET auth, and
+ *     `USERNAME_ACCESS_KEY_ONLY_SCOPES` remains only `user_management, oauth_user_profile`.
+ *     We are on the username+access_key flow, which those restrictions are not written for.
+ *   - It is additionally covered by a new
+ *     `APP_REGISTERED_SCOPE_REQUIRED = %w[ai_agent ai_agent_notify]` gate, requiring the
+ *     calling APPLICATION to be registered for it — though that gate sits in the
+ *     `client_id + client_secret` path, not ours.
+ *   - railsApp defines it as the PRODUCT -> AGENT direction: "a product reporting progress
+ *     back to an AI agent for work the agent dispatched." We use it in the opposite
+ *     direction, as an agent -> Atlas inbound credential.
+ *   - `central_ai_s2s`, which this replaces, was deliberately EXCLUDED from that new gate.
+ *
+ * So this is strictly more restricted than what it replaces. If the endpoint refuses it, that
+ * is a PROVISIONING problem — the scope is not available to this credential type or this
+ * application — and it is reported as one, naming the scope. It is never retried with a
+ * different scope: a silent downgrade to a different authorization is exactly the kind of
+ * thing nobody notices until it matters.
  */
-export const CENTRAL_SCOPE = "oauth_user_profile central_ai_s2s";
+export const CENTRAL_SCOPE = "oauth_user_profile ai_agent_notify";
 
 /** What we ask for. The endpoint clamps to its own maximum, so the response wins. */
 export const REQUESTED_EXPIRES_IN = 3600;
@@ -65,11 +81,54 @@ export type TokenTransport = (
 ) => Promise<TokenResponse>;
 
 /**
- * Two of the three ways authentication can fail, kept apart because a user cannot act on
- * them otherwise. `rejected` is "your credentials are wrong"; `unreachable` is "auth is
- * down". The third — Atlas refusing a token we successfully minted — is a server
- * misconfiguration and lives in `relay.ts`, because it is discovered from `/agent`.
+ * The OAuth2 error codes we are willing to read out of a failure body.
+ *
+ * `error` is a fixed enum token in the spec, so it cannot carry a credential; `error_description`
+ * is free text and demonstrably CAN ("access_key <key> is invalid"), which is why only the
+ * code is ever looked at and only when it is one of these. Anything else is ignored entirely
+ * and the classification falls back to the status.
  */
+const SCOPE_ERROR_CODES = ["invalid_scope", "unauthorized_client", "invalid_request"];
+const CREDENTIAL_ERROR_CODES = ["invalid_client", "invalid_grant", "access_denied"];
+
+/**
+ * Was this refusal about the SCOPE or about the CREDENTIAL?
+ *
+ * The two need completely different fixes — provisioning versus a password — so collapsing
+ * them into one message sends someone to the wrong place entirely. Our form has five fields
+ * and four of them are constants, so a refusal of the REQUEST (as opposed to the caller) can
+ * only really be about the scope.
+ *
+ * Nothing from the body is ever surfaced; the code is used to classify and then discarded.
+ */
+export function refusalIsAboutScope(status: number, body: unknown): boolean {
+  const payload =
+    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  const code = typeof payload.error === "string" ? payload.error : "";
+  if (SCOPE_ERROR_CODES.includes(code)) return true;
+  if (CREDENTIAL_ERROR_CODES.includes(code)) return false;
+  // No usable code. OAuth2 answers a bad REQUEST with 400 and a bad CLIENT with 401/403, so
+  // the status is the next best evidence.
+  return status === 400;
+}
+
+/**
+ * The ways authentication can fail, kept apart because a user cannot act on them otherwise.
+ *
+ * `scope refused` is a provisioning problem; `rejected` is "your credentials are wrong";
+ * `unreachable` is "auth is down". A fourth — Atlas refusing a token we minted successfully —
+ * is a server misconfiguration and lives in `relay.ts`, because it is discovered from
+ * `/agent`. Four different fixes, so four different sentences.
+ */
+export const AUTH_SCOPE_REFUSED_DETAIL = (status: number): string =>
+  `BrowserStack auth would not issue a token for the scope "${CENTRAL_SCOPE}" (HTTP ${status}). ` +
+  `YOUR CREDENTIALS ARE NOT THE PROBLEM — this is a provisioning problem: \`ai_agent_notify\` ` +
+  `is documented as a client_id/secret scope, it is not in the username+access_key allow ` +
+  `list, and it carries an application-registration requirement. It has to be enabled for ` +
+  `this account or application; a different password will not help, and this server will ` +
+  `NOT quietly retry with a weaker scope. NOTHING REACHED THE AGENT — no request was made, ` +
+  `no prompt appeared and nothing was changed.`;
+
 export const AUTH_REJECTED_DETAIL = (status: number): string =>
   `Your BrowserStack credentials were rejected by BrowserStack auth (HTTP ${status}). ` +
   `NOTHING REACHED THE AGENT — no request was made, no prompt appeared and nothing was ` +
@@ -165,8 +224,16 @@ async function mintOnce(
   const response = await transport(url, mintForm(credentials));
 
   if (response.status === 0) throw new AskError(AUTH_UNREACHABLE_DETAIL);
-  // ONLY THE STATUS. The body of a non-200 can echo the credential straight back.
-  if (response.status !== 200) throw new AskError(AUTH_REJECTED_DETAIL(response.status));
+  if (response.status !== 200) {
+    // ONLY THE STATUS CROSSES. The body is read solely to tell a provisioning problem from a
+    // credential one, and nothing out of it is ever put in the message — a non-200 body can
+    // echo the access key straight back.
+    throw new AskError(
+      refusalIsAboutScope(response.status, response.body)
+        ? AUTH_SCOPE_REFUSED_DETAIL(response.status)
+        : AUTH_REJECTED_DETAIL(response.status),
+    );
+  }
 
   const body =
     typeof response.body === "object" && response.body !== null

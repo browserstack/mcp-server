@@ -14,8 +14,10 @@ import {
   appliedBeforeStop,
   buildResult,
   decide,
+  errorResult,
   deriveStatus,
   elicitationMessage,
+  neverReachedAgent,
 } from "../../src/tools/ask-browserstack/relay.js";
 import { ApprovalRecord } from "../../src/tools/ask-browserstack/types.js";
 
@@ -436,7 +438,12 @@ describe("the elicitation message — CONTRACT v1.1 §G", () => {
   it("still reads as a prompt when Atlas withheld a route-shaped description", () => {
     // v1.1 §A: a description that trips Atlas's route guard is replaced, not dropped, so
     // what arrives is a sentence — and must not look like a bug once framed.
-    const withheld = "[withheld: this description referenced an internal route]";
+    //
+    // THE REAL BYTES, from `collector.py:172-176` — `f"({kind} withheld: it referenced
+    // internal API detail)"` with kind="approval request" — and observed on the wire in the
+    // integration run. An invented placeholder is the one string in this feature a test can
+    // assert on and be confidently wrong about.
+    const withheld = "(approval request withheld: it referenced internal API detail)";
     expect(elicitationMessage("tm", withheld)).toBe(
       "BrowserStack AI (Test Management) needs your approval to continue:\n\n" + withheld,
     );
@@ -489,5 +496,112 @@ describe("the delegation token", () => {
     process.env.ASK_BROWSERSTACK_ATLAS_TOKEN_PREPROD = "preprod-token";
     process.env.ASK_BROWSERSTACK_ATLAS_TOKEN = "explicit-token";
     expect(atlasToken()).toBe("explicit-token");
+  });
+});
+
+describe("pre-run refusals — the request never reached the agent (D3)", () => {
+  // Atlas omits its permission_relay verdict on every refusal that dies before the
+  // delegation layer, so "no verdict" alone cannot be read as "an old Atlas".
+  const REFUSALS: [string, { status: number; body: unknown; error?: string }][] = [
+    ["401 unauthorized", { status: 401, body: { detail: "unauthorized" } }],
+    ["400 bad body", { status: 400, body: { detail: "task is required" } }],
+    ["503 delegation not enabled", { status: 503, body: { detail: "delegation is not enabled" } }],
+    ["unreachable", { status: 0, body: null, error: "BrowserStack AI could not be reached" }],
+  ];
+
+  it.each(REFUSALS)("detects %s", (_name, response) => {
+    expect(neverReachedAgent(response)).toBe(true);
+  });
+
+  it.each(REFUSALS)("never claims the channel was used on %s", (_name, response) => {
+    // The bug: `used: true` with an empty `approvals` and an `error` saying nothing was
+    // asked — three fields in one payload contradicting each other.
+    const relay = buildResult(response, [], true).permission_relay;
+    expect(relay.used).toBe(false);
+    expect(relay.reason).toBe("not_reached");
+    expect(relay.detail).toMatch(/NOTHING WAS ASKED AND NOTHING WAS REFUSED/);
+    expect(relay.detail).not.toMatch(/asked before each change/);
+  });
+
+  it.each(REFUSALS)("always says why, on %s", (_name, response) => {
+    // A pre-run refusal with `status: "error"` and no `error` string leaves a caller with
+    // nothing to act on. 400 and 503 carry `detail`, never `error`.
+    const result = buildResult(response, [], true);
+    expect(result.status).toBe("error");
+    expect(result.ok).toBe(false);
+    expect(typeof result.error).toBe("string");
+    expect(result.error!.length).toBeGreaterThan(0);
+    expect(result.approvals).toEqual([]);
+    expect(result.applied_before_stop).toBe(false);
+  });
+
+  it("names the HTTP status and quotes Atlas's detail on a 400 and a 503", () => {
+    expect(buildResult({ status: 400, body: { detail: "task is required" } }, [], true).error)
+      .toBe('BrowserStack AI refused this request before the agent started (HTTP 400): "task is required".');
+    expect(buildResult(
+      { status: 503, body: { detail: "delegation is not enabled" } }, [], true,
+    ).error).toMatch(/HTTP 503.*delegation is not enabled/);
+  });
+
+  it("bounds a detail string before putting it in front of a person", () => {
+    const result = buildResult({ status: 400, body: { detail: "x".repeat(5000) } }, [], true);
+    expect(result.error!.length).toBeLessThan(400);
+  });
+
+  it("still says something when a non-2xx has nothing to say for itself", () => {
+    expect(buildResult({ status: 502, body: null }, [], true).error)
+      .toBe("BrowserStack AI refused this request before the agent started (HTTP 502).");
+  });
+
+  it("outranks no_human: a client that cannot elicit did not 'run read-only' either", () => {
+    // Saying the run went read-only would be as wrong as saying the channel was used —
+    // nothing ran at all. The elicitation gap resurfaces on the next run.
+    const relay = buildResult(
+      { status: 401, body: { detail: "unauthorized" } }, [], false,
+    ).permission_relay;
+    expect(relay.reason).toBe("not_reached");
+    expect(relay.detail).not.toMatch(/does not support MCP elicitation/);
+  });
+
+  it("treats a 200 carrying a bare detail as not a delegation result", () => {
+    expect(neverReachedAgent({ status: 200, body: { detail: "nope" } })).toBe(true);
+    // ...but a real result that happens to carry a detail field is still a result.
+    expect(neverReachedAgent({
+      status: 200, body: { ok: true, status: "ok", answer: "", detail: "fyi" },
+    })).toBe(false);
+  });
+
+  it("leaves a genuine agent run alone", () => {
+    const response = { status: 200, body: { ok: true, status: "ok", answer: "done" } };
+    expect(neverReachedAgent(response)).toBe(false);
+    expect(buildResult(response, [], true).permission_relay).toEqual({
+      used: true, reason: "", detail: expect.stringContaining("asked before each change"),
+    });
+  });
+
+  it("says the same thing when the call never left this process", () => {
+    // No token, no host, a transport that threw: nothing was sent, so nothing was asked.
+    const relay = errorResult("BrowserStack AI is not authenticated: set …", []).permission_relay;
+    expect(relay).toEqual({
+      used: false,
+      reason: "not_reached",
+      detail: expect.stringContaining("NOTHING WAS ASKED AND NOTHING WAS REFUSED"),
+    });
+  });
+
+  it("keeps a pre-run refusal from reading like a relay that was switched off", () => {
+    // `disabled` means the agent RAN with the relay off — retry after an admin acts.
+    // `not_reached` means it never ran at all — fix what `error` names and retry now.
+    const notReached = buildResult(
+      { status: 401, body: { detail: "unauthorized" } }, [], true,
+    ).permission_relay;
+    const disabled = buildResult(
+      { status: 200, body: { status: "blocked", permission_relay: { used: false, reason: "disabled" } } },
+      [], true,
+    ).permission_relay;
+    expect(notReached.reason).not.toBe(disabled.reason);
+    expect(notReached.detail).not.toBe(disabled.detail);
+    expect(disabled.detail).toMatch(/administrator turns the relay on/);
+    expect(notReached.detail).toMatch(/run it again/);
   });
 });

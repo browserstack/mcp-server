@@ -480,6 +480,53 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(elicit).not.toHaveBeenCalled();
       expect(payload.approvals).toEqual([]);
       expect(payload.applied_before_stop).toBe(false);
+      // ...and the relay verdict must agree with `error` rather than contradict it.
+      expect(payload.permission_relay).toEqual({
+        used: false,
+        reason: "not_reached",
+        detail: expect.stringContaining("NOTHING WAS ASKED AND NOTHING WAS REFUSED"),
+      });
+    });
+
+    it("does not claim the channel was used when Atlas is unreachable", async () => {
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
+      const stub = atlas({ throws: true });
+
+      const { payload } = await call(server.getTools());
+
+      // We offered the channel and it was never exercised — zero prompts appeared.
+      expect(stub.calls[0].body.permission_relay).toBeDefined();
+      expect(elicit).not.toHaveBeenCalled();
+      expect(payload.status).toBe("error");
+      expect(payload.error).toMatch(/could not be reached/);
+      expect(payload.permission_relay.used).toBe(false);
+      expect(payload.permission_relay.reason).toBe("not_reached");
+      expect(payload.approvals).toEqual([]);
+    });
+
+    it.each([
+      [400, "task is required"],
+      [503, "delegation is not enabled"],
+    ])("reads a %i pre-run refusal as nothing-asked, and says why", async (status, detail) => {
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
+      // Exactly what Atlas answers with before the delegation layer: a bare detail.
+      vi.stubGlobal("fetch", async () => ({
+        status,
+        headers: { get: () => "application/json" },
+        json: async () => ({ detail }),
+      }));
+
+      const { result, payload } = await call(server.getTools());
+
+      expect(payload.status).toBe("error");
+      expect(result.isError).toBe(true);
+      expect(payload.error).toContain(`HTTP ${status}`);
+      expect(payload.error).toContain(detail);
+      expect(payload.permission_relay.reason).toBe("not_reached");
+      expect(elicit).not.toHaveBeenCalled();
+      expect(payload.approvals).toEqual([]);
     });
 
     it("keeps a 401 and a permission denial from reading alike", async () => {

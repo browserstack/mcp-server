@@ -51,6 +51,15 @@ export const RELAY_OFF_DETAILS: Record<string, string> = {
     "BrowserStack could not use the approval channel this client offered and ran read-only. " +
     "That is a bug on this side, not something you did; everything in `needs_approval` was " +
     "refused because of it.",
+
+  // The request never got as far as the agent. Distinct from `disabled` (the agent ran, with
+  // the relay switched off) and from a decline (someone was asked and said no), because the
+  // three call for completely different things from whoever reads them.
+  not_reached:
+    "NOTHING WAS ASKED AND NOTHING WAS REFUSED. BrowserStack rejected this request before " +
+    "the agent started, so no step ran, no prompt appeared, and nothing was changed. " +
+    "`error` says why. This is not a decision anyone made about your request — fix what " +
+    "`error` names and run it again.",
 };
 
 /** Kept for anything still importing the old single constant. */
@@ -72,6 +81,29 @@ function unknownRelayDetail(used: boolean, reason: string): string {
 export function relayDetail(used: boolean, reason: string): string {
   if (used) return reason ? unknownRelayDetail(true, reason) : RELAY_ON_DETAIL;
   return RELAY_OFF_DETAILS[reason] ?? unknownRelayDetail(false, reason);
+}
+
+/**
+ * Did this request die before the agent ever started?
+ *
+ * Atlas omits its `permission_relay` verdict on refusals that never reach the delegation
+ * layer — 401 unauthorized, 400 bad body, 503 delegation-not-enabled all answer with a bare
+ * `{"detail": …}` — and a transport failure has no body at all. Read naively, "no verdict"
+ * looks identical to "an Atlas older than v1.1", and the optimistic fallback for THAT case
+ * then claims the channel was used and answers were collected when zero prompts appeared.
+ *
+ * Which is the same confusion the `disabled` sentence exists to prevent, one layer earlier:
+ * a caller who cannot tell "nobody was asked" from "somebody said no" retries forever.
+ */
+export function neverReachedAgent(response: AgentResponse): boolean {
+  // No response at all, or one that is not a success.
+  if (response.status === 0) return true;
+  if (response.status < 200 || response.status >= 300) return true;
+  // A success carrying a bare `detail` is not a delegation result either.
+  const payload = asRecord(response.body);
+  const looksLikeAResult =
+    "ok" in payload || "status" in payload || "answer" in payload;
+  return "detail" in payload && !looksLikeAResult;
 }
 
 /**
@@ -211,7 +243,20 @@ export function deriveStatus(
 function relayVerdict(
   payload: Record<string, unknown>,
   relayUsed: boolean,
+  reachedAgent: boolean,
 ): AskResult["permission_relay"] {
+  // FIRST, because it outranks both of the cases below. If the request never reached the
+  // agent then no channel was exercised whether or not one was offered, and saying the run
+  // went read-only (`no_human`) would be just as wrong as saying it was used: nothing ran at
+  // all. The client's inability to be prompted is not the actionable fact here and will
+  // surface on the next run, once whatever `error` names is fixed.
+  if (!reachedAgent) {
+    return {
+      used: false,
+      reason: "not_reached",
+      detail: RELAY_OFF_DETAILS.not_reached,
+    };
+  }
   if (!relayUsed) {
     // CONTRACT §7's last row: no elicitation capability means the field was never sent.
     return { used: false, reason: "no_human", detail: RELAY_OFF_DETAILS.no_human };
@@ -240,6 +285,7 @@ export function buildResult(
     ? (payload.needs_approval as unknown[])
     : [];
   const status = deriveStatus(response, approvals, needsApproval);
+  const reachedAgent = !neverReachedAgent(response);
 
   return {
     ok: status === "ok",
@@ -249,7 +295,7 @@ export function buildResult(
     approvals,
     needs_approval: needsApproval,
     applied_before_stop: appliedBeforeStop(approvals),
-    permission_relay: relayVerdict(payload, relayUsed),
+    permission_relay: relayVerdict(payload, relayUsed, reachedAgent),
     atlas_response: response.body ?? null,
     ...atlasError(response, payload),
   };
@@ -275,8 +321,13 @@ export const UNAUTHENTICATED_DETAIL =
 /**
  * The `error` field, from whichever side has one.
  *
- * Ours when there was no response to speak for itself, or when the response was a 401;
- * otherwise Atlas's own string, which `public()` includes ONLY when non-empty (v1.1 §B).
+ * Ours when there was no response to speak for itself or the credentials were rejected;
+ * otherwise Atlas's own `error` string, which `public()` includes ONLY when non-empty
+ * (v1.1 §B) — and failing that, its bare `detail`.
+ *
+ * That last rung matters: Atlas's pre-run refusals (400 bad body, 503 delegation not
+ * enabled) carry `detail` and no `error`, so without it a caller got `status: "error"` and
+ * nothing whatsoever to act on.
  */
 function atlasError(
   response: AgentResponse,
@@ -284,8 +335,28 @@ function atlasError(
 ): { error?: string } {
   if (response.status === 0 && response.error) return { error: response.error };
   if (response.status === 401) return { error: UNAUTHENTICATED_DETAIL };
+
   const reported = payload.error;
-  return typeof reported === "string" && reported ? { error: reported } : {};
+  if (typeof reported === "string" && reported) return { error: reported };
+
+  const detail = payload.detail;
+  if (typeof detail === "string" && detail) {
+    // Bounded: this came off the wire and ends up in front of a person.
+    return {
+      error:
+        `BrowserStack AI refused this request before the agent started ` +
+        `(HTTP ${response.status}): ${JSON.stringify(detail.slice(0, 200))}.`,
+    };
+  }
+  // A non-2xx with nothing to say for itself still beats a silent one.
+  if (response.status < 200 || response.status >= 300) {
+    return {
+      error:
+        `BrowserStack AI refused this request before the agent started ` +
+        `(HTTP ${response.status}).`,
+    };
+  }
+  return {};
 }
 
 /**
@@ -295,11 +366,7 @@ function atlasError(
  * was granted is exactly the case where a caller most needs to know something may already
  * have been applied.
  */
-export function errorResult(
-  message: string,
-  approvals: ApprovalRecord[],
-  relayUsed: boolean,
-): AskResult {
+export function errorResult(message: string, approvals: ApprovalRecord[]): AskResult {
   return {
     ok: false,
     status: "error",
@@ -307,9 +374,12 @@ export function errorResult(
     approvals,
     needs_approval: [],
     applied_before_stop: appliedBeforeStop(approvals),
-    permission_relay: relayUsed
-      ? { used: true, reason: "", detail: RELAY_ON_DETAIL }
-      : { used: false, reason: "no_human", detail: RELAY_OFF_DETAILS.no_human },
+    // The request never left this process, so it certainly never reached the agent.
+    permission_relay: {
+      used: false,
+      reason: "not_reached",
+      detail: RELAY_OFF_DETAILS.not_reached,
+    },
     atlas_response: null,
     error: message,
   };

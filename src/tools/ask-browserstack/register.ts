@@ -266,7 +266,9 @@ export function addAskBrowserstackAITool(
             ? error.message
             : String(error);
         logger.error("askBrowserstackAI failed: %s", message);
-        return toResult(errorResult(message, approvals, canElicit));
+        // No `canElicit` argument: the request never left this process, so whether the
+        // client could have been prompted is not what the reader needs to know.
+        return toResult(errorResult(message, approvals));
       } finally {
         // Torn down here so it cannot leak across calls or survive an error, and awaited
         // so the port is released before the tool result is handed back.

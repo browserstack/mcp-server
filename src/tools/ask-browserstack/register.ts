@@ -51,7 +51,7 @@ import {
   CallbackListener,
   startCallbackListener,
 } from "./callback.js";
-import { buildResult, decide, errorResult } from "./relay.js";
+import { buildResult, decide, elicitationMessage, errorResult } from "./relay.js";
 import {
   AgentRequest,
   ApprovalRecord,
@@ -86,10 +86,19 @@ const CONFIRM_TITLE = "Approve this change";
 const CONFIRM_DESCRIPTION =
   "Yes, make this change. Anything else — including dismissing this prompt — refuses it.";
 
+/**
+ * `isError` marks a call that FAILED, not one that was refused.
+ *
+ * A `blocked` run is the feature working: the agent asked, a human said no, and the trail
+ * says so. Flagging that as a tool error makes a client render a correct refusal in red and
+ * — worse — invites it to retry, which is exactly the "retry forever" loop the distinct
+ * `permission_relay` reasons exist to prevent. `ok` still means `status === "ok"`.
+ */
 function toResult(payload: AskResult): CallToolResult {
+  const failed = payload.status === "error" || payload.status === "rate_limited";
   return {
     content: [{ type: "text", text: JSON.stringify(payload) }],
-    ...(payload.ok ? {} : { isError: true }),
+    ...(failed ? { isError: true } : {}),
   };
 }
 
@@ -113,9 +122,14 @@ async function relayOneAsk(
     answer = await server.server.elicitInput(
       {
         mode: "form",
-        // Atlas's `thought`, verbatim: product language, already free of the route,
-        // op_key and host that stay on its side of the boundary.
-        message: ask.description,
+        // Framed with the PRODUCT and nothing else (v1.1 §G): a bare sentence with no
+        // attribution is a worse prompt than a framed one, and `product` is all the
+        // callback carries — the route, method, path and op_key never reach this side by
+        // design. The description itself goes through VERBATIM: paraphrasing it would mean
+        // the human approves something other than what the model actually said. Atlas
+        // route-checks it first (v1.1 §A), so one that quoted an internal path arrives as a
+        // withheld-placeholder sentence, which reads correctly after the prefix.
+        message: elicitationMessage(ask.product, ask.description),
         requestedSchema: {
           type: "object",
           properties: {

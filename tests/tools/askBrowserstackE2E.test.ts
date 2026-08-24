@@ -137,10 +137,13 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         .toMatch(/^http:\/\/127\.0\.0\.1:\d+\/atlas-permission$/);
       expect(stub.calls[0].body.permission_relay.token).toHaveLength(64);
 
-      // 2. the prompt: Atlas's description verbatim, and a boolean confirm
+      // 2. the prompt: framed with the product, Atlas's description verbatim, boolean confirm
       expect(elicit).toHaveBeenCalledTimes(1);
       const request = elicit.mock.calls[0][0] as any;
-      expect(request.message).toBe("Create folder \"Regression\".");
+      expect(request.message).toBe(
+        "BrowserStack AI (Test Management) needs your approval to continue:\n\n" +
+          "Create folder \"Regression\".",
+      );
       expect(request.requestedSchema.properties.confirm.type).toBe("boolean");
       expect(request.requestedSchema.required).toEqual(["confirm"]);
       // The inner rung of the timeout ladder, shorter than Atlas's 300s gate.
@@ -268,6 +271,74 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.applied_before_stop).toBe(true);
       expect(payload.approvals.map((a: any) => a.decision)).toEqual(["allow", "deny"]);
       expect(payload.needs_approval).toEqual(["Move 40 test cases into it."]);
+    });
+
+    it("reports a server-side disabled relay as a configuration fact, not a refusal", async () => {
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
+      // v1.1 §D: the block was supplied, `delegation.permission_relay` is "off", so Atlas
+      // ignored it and ran read-only. Nobody was ever asked.
+      const stub = atlas({
+        payload: () => ({
+          ok: true, status: "blocked", answer: "I could not create the folder.", steps: [],
+          needs_approval: ["Create folder \"Regression\"."],
+          permission_relay: { used: false, reason: "disabled" },
+        }),
+      });
+
+      const { result, payload } = await call(server.getTools());
+
+      expect(stub.calls[0].body.permission_relay).toBeDefined();   // we DID offer it
+      expect(elicit).not.toHaveBeenCalled();                        // Atlas never called back
+      expect(payload.permission_relay).toEqual({
+        used: false,
+        reason: "disabled",
+        detail: expect.stringContaining("NOBODY DECLINED THIS"),
+      });
+      expect(payload.approvals).toEqual([]);
+      expect(payload.applied_before_stop).toBe(false);
+      // A refusal is not a tool failure, and rendering it as one invites the retry loop
+      // these distinct reasons exist to prevent.
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("treats an absent needs_approval as empty, end to end", async () => {
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "accept", content: { confirm: true } },
+      ]);
+      atlas({
+        asks: [{ perm_id: PERM_A, description: "Create folder." }],
+        // Exactly what public() emits when nothing needed approval: the key is absent.
+        payload: () => ({
+          ok: true, status: "ok", answer: "Created folder 12.", steps: [],
+          permission_relay: { used: true, reason: "" },
+        }),
+      });
+
+      const { result, payload } = await call(server.getTools());
+      expect(payload.needs_approval).toEqual([]);
+      expect(payload.status).toBe("ok");
+      expect(payload.permission_relay).toEqual({
+        used: true, reason: "", detail: expect.stringContaining("asked before each change"),
+      });
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("marks a genuine failure as an error but a refusal as a result", async () => {
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, [{ action: "decline" }]);
+      atlas({
+        asks: [{ perm_id: PERM_A, description: "Delete the sprint." }],
+        payload: () => ({
+          ok: true, status: "rate_limited", answer: "", error: "too many runs", steps: [],
+        }),
+      });
+
+      const { result, payload } = await call(server.getTools());
+      expect(payload.status).toBe("rate_limited");
+      expect(payload.error).toBe("too many runs");
+      expect(result.isError).toBe(true);
     });
 
     it("tears the listener down once the call ends, even when the call failed", async () => {

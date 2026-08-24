@@ -38,7 +38,17 @@ export type Decision = "allow" | "deny";
  * CONTRACT §2/§7. Advisory ONLY — `decision` alone decides whether the action proceeds.
  * It exists so a result can distinguish "a human said no" from "no human was there".
  */
-export type DecisionReason = "" | "declined" | "cancelled" | "no_human" | "timeout";
+export type DecisionReason =
+  | ""
+  | "declined"
+  | "cancelled"
+  | "no_human"
+  | "timeout"
+  // v1.1 §C enumerated "error" — the relay broke before or during the ask, so no human ever
+  // answered. This side never puts it ON THE WIRE: an unexpected relay failure answers HTTP
+  // 500, which Atlas's fail-closed rule already reads as a deny and records as `error_relay`.
+  // It appears only in `ApprovalRecord.reason`, where the caller can see what happened.
+  | "error";
 
 /** CONTRACT §2 — what we answer the still-open callback request with. */
 export interface PermissionDecision {
@@ -88,10 +98,19 @@ export interface AskResult {
   approvals: ApprovalRecord[];
   needs_approval: unknown[];
   applied_before_stop: boolean;
-  /** Why a write may have been refused, in the reason vocabulary of CONTRACT §7. */
+  /**
+   * Why a write may have been refused.
+   *
+   * `reason` is ATLAS'S OWN when it reported one (CONTRACT v1.1 §D: `"" | disabled |
+   * host_not_allowed | malformed`), and ours — `no_human` (§7's last row) — when the client
+   * could not be prompted at all, which Atlas never learns about because we omit the block.
+   * Typed as a plain string rather than a union because an Atlas newer than this build may
+   * name a reason this one has never heard of, and an unrecognised reason must degrade to a
+   * sentence, not throw.
+   */
   permission_relay: {
     used: boolean;
-    reason: DecisionReason;
+    reason: string;
     detail: string;
   };
   /**
@@ -102,6 +121,12 @@ export interface AskResult {
    * side would otherwise silently become `null` here rather than reaching the caller.
    */
   atlas_response: unknown;
-  /** Only set when the call itself failed before or during egress. */
+  /**
+   * Why the call failed, when it did.
+   *
+   * Ours when egress never completed; otherwise Atlas's own `error` string, which its
+   * `public()` includes ONLY when non-empty (v1.1 §B). Lifted out of `atlas_response` so a
+   * caller reading the top level is told why rather than having to go looking.
+   */
   error?: string;
 }

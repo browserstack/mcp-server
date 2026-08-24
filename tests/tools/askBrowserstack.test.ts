@@ -12,6 +12,7 @@ import {
   buildResult,
   decide,
   deriveStatus,
+  elicitationMessage,
 } from "../../src/tools/ask-browserstack/relay.js";
 import { ApprovalRecord } from "../../src/tools/ask-browserstack/types.js";
 
@@ -287,5 +288,154 @@ describe("host resolution", () => {
     process.env.ASK_BROWSERSTACK_ENV = "preprod";
     process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example/";
     expect(atlasBaseUrl()).toBe("https://atlas.example");
+  });
+});
+
+describe("the verified /agent response shape — CONTRACT v1.1 §B", () => {
+  it("reads an ABSENT needs_approval as empty, because public() omits it when empty", () => {
+    // The trap: Atlas never sends `[]`, it sends nothing at all. Same for narration,
+    // artifacts, error, cost_breach and usage.
+    const result = buildResult(
+      { status: 200, body: { ok: true, status: "ok", answer: "done", steps: [] } },
+      [], true,
+    );
+    expect(result.needs_approval).toEqual([]);
+    expect(result.status).toBe("ok");
+    expect(result.ok).toBe(true);
+  });
+
+  it("passes through every status in the verified vocabulary", () => {
+    for (const status of ["ok", "error", "blocked", "rate_limited"]) {
+      expect(deriveStatus({ status: 200, body: { status } }, [], [])).toBe(status);
+    }
+  });
+
+  it("ignores a status outside the vocabulary and derives one instead", () => {
+    // `interrupted` is in the dataclass comment but is not emitted on this path.
+    expect(deriveStatus({ status: 200, body: { status: "interrupted" } }, [], [])).toBe("ok");
+    expect(deriveStatus(
+      { status: 200, body: { status: "interrupted", needs_approval: ["x"] } }, [], ["x"],
+    )).toBe("blocked");
+  });
+
+  it("lifts Atlas's own error string to the top level rather than burying it", () => {
+    const result = buildResult(
+      { status: 200, body: { ok: true, status: "error", answer: "", error: "the run died" } },
+      [], true,
+    );
+    expect(result.status).toBe("error");
+    expect(result.error).toBe("the run died");
+  });
+
+  it("has no error key when Atlas reported none", () => {
+    const result = buildResult({ status: 200, body: { status: "ok", answer: "" } }, [], true);
+    expect("error" in result).toBe(false);
+  });
+});
+
+describe("Atlas's permission_relay verdict — CONTRACT v1.1 §D", () => {
+  function relayOf(permission_relay: unknown, relayUsed = true) {
+    return buildResult(
+      { status: 200, body: { status: "blocked", answer: "", permission_relay } },
+      [], relayUsed,
+    ).permission_relay;
+  }
+
+  it("prefers Atlas's used/reason over anything this side inferred", () => {
+    // We offered the channel and would have inferred used: true. Atlas knows better.
+    expect(relayOf({ used: false, reason: "disabled" })).toMatchObject({
+      used: false, reason: "disabled",
+    });
+    expect(relayOf({ used: true, reason: "" })).toMatchObject({ used: true, reason: "" });
+  });
+
+  it("says plainly that a disabled relay is NOT anyone declining", () => {
+    // The distinction a user cannot make for themselves, and will retry forever without.
+    const relay = relayOf({ used: false, reason: "disabled" });
+    expect(relay.detail).toMatch(/NOBODY DECLINED THIS/);
+    expect(relay.detail).toMatch(/administrator turns the relay on/);
+    expect(relay.detail).not.toMatch(/does not support MCP elicitation/);
+  });
+
+  it("gives host_not_allowed and malformed their own distinct sentences", () => {
+    const host = relayOf({ used: false, reason: "host_not_allowed" }).detail;
+    const malformed = relayOf({ used: false, reason: "malformed" }).detail;
+    expect(host).toMatch(/allowed-callback list/);
+    expect(host).toMatch(/same host/);
+    expect(malformed).toMatch(/bug on this side/);
+    expect(host).not.toBe(malformed);
+  });
+
+  it("degrades an unrecognised reason to a sentence instead of crashing", () => {
+    // Forward compatibility: an Atlas newer than this build may name a reason we have
+    // never heard of, and a result is not the place to throw.
+    const relay = relayOf({ used: false, reason: "quota_exhausted" });
+    expect(relay.used).toBe(false);
+    expect(relay.reason).toBe("quota_exhausted");
+    expect(relay.detail).toMatch(/does not recognise/);
+    expect(relay.detail).toMatch(/quota_exhausted/);
+  });
+
+  it("bounds an absurd reason before putting it in a sentence a human reads", () => {
+    const relay = relayOf({ used: false, reason: "x".repeat(5000) });
+    expect(relay.detail.length).toBeLessThan(500);
+  });
+
+  it("falls back to the inferred verdict when Atlas sends none (an Atlas older than v1.1)", () => {
+    expect(relayOf(undefined)).toEqual({
+      used: true, reason: "", detail: expect.stringContaining("asked before each change"),
+    });
+  });
+
+  it("treats an unreadable verdict as no verdict rather than half-trusting it", () => {
+    expect(relayOf({ reason: "disabled" }).used).toBe(true);      // no `used` boolean
+    expect(relayOf("disabled").used).toBe(true);
+    expect(relayOf([{ used: false }]).used).toBe(true);
+  });
+
+  it("keeps no_human ours: Atlas is never told the client cannot be prompted", () => {
+    // We omitted the block, so anything Atlas says about a relay cannot be about this run.
+    const relay = relayOf({ used: true, reason: "" }, false);
+    expect(relay).toEqual({
+      used: false,
+      reason: "no_human",
+      detail: expect.stringContaining("does not support MCP elicitation"),
+    });
+  });
+});
+
+describe("the elicitation message — CONTRACT v1.1 §G", () => {
+  it("names the product and leaves the description untouched", () => {
+    const message = elicitationMessage("tm", "Create folder \"Regression\".");
+    expect(message).toBe(
+      "BrowserStack AI (Test Management) needs your approval to continue:\n\n" +
+        "Create folder \"Regression\".",
+    );
+    // Verbatim: the human must approve what the model actually said.
+    expect(message.endsWith("Create folder \"Regression\".")).toBe(true);
+  });
+
+  it("labels every product the tool accepts", () => {
+    expect(elicitationMessage("a11y", "x")).toMatch(/\(Accessibility\)/);
+    expect(elicitationMessage("tra", "x")).toMatch(/\(Test Reporting & Analytics\)/);
+  });
+
+  it("carries a product it has no label for rather than dropping it", () => {
+    expect(elicitationMessage("newproduct", "x")).toMatch(/\(newproduct\)/);
+  });
+
+  it("omits the brackets entirely rather than showing an empty pair", () => {
+    expect(elicitationMessage("", "x")).toBe(
+      "BrowserStack AI needs your approval to continue:\n\nx",
+    );
+  });
+
+  it("still reads as a prompt when Atlas withheld a route-shaped description", () => {
+    // v1.1 §A: a description that trips Atlas's route guard is replaced, not dropped, so
+    // what arrives is a sentence — and must not look like a bug once framed.
+    const withheld = "[withheld: this description referenced an internal route]";
+    expect(elicitationMessage("tm", withheld)).toBe(
+      "BrowserStack AI (Test Management) needs your approval to continue:\n\n" + withheld,
+    );
   });
 });

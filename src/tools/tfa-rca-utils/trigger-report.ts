@@ -2,6 +2,8 @@ import { apiClient } from "../../lib/apiClient.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import {
+  AI_REPORT_TFA_QUERY,
+  BUILD_DETAILS_PATH,
   getO11yBaseUrl,
   getO11yUiBuildUrl,
   RELEASE_READINESS_TRIGGER_PATH,
@@ -76,6 +78,32 @@ function mapTriggerError(status: number, data: unknown): TriggerRcaReportError {
  * a build via the o11y external API, returning a trimmed glimpse. Stateless:
  * nothing persists between calls.
  */
+/**
+ * "View report" link = the build's canonical `observability_url` + the TFA
+ * sub-tab. The UUID form 302-redirects and drops the query, loading the wrong
+ * sub-tab; the trigger response carries no URL, so read it from build metadata
+ * and fall back to the UUID deep-link only if that read fails.
+ */
+async function resolveViewReport(
+  buildUuid: string,
+  headers: Record<string, string>,
+): Promise<string> {
+  try {
+    const url =
+      getO11yBaseUrl() +
+      BUILD_DETAILS_PATH.replace("{buildUuid}", encodeURIComponent(buildUuid));
+    const resp = await apiClient.get({ url, headers, raise_error: false });
+    const observabilityUrl =
+      resp.ok && typeof resp.data?.observability_url === "string"
+        ? resp.data.observability_url
+        : undefined;
+    if (observabilityUrl) return `${observabilityUrl}?${AI_REPORT_TFA_QUERY}`;
+  } catch {
+    // fall through to the UUID deep-link
+  }
+  return getO11yUiBuildUrl(buildUuid);
+}
+
 export async function triggerRcaReport(
   args: TriggerRcaReportArgs,
   config: BrowserStackConfig,
@@ -119,6 +147,6 @@ export async function triggerRcaReport(
     totalPrs: summary.totalPrs,
     faultyPrNumbers: summary.faultyPrNumbers,
     failureReason: summary.failureReason,
-    viewReport: getO11yUiBuildUrl(args.buildUuid),
+    viewReport: await resolveViewReport(args.buildUuid, headers),
   };
 }

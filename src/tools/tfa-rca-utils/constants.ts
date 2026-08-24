@@ -22,16 +22,20 @@ export function getO11yUiBaseUrl(): string {
   return appConfig.BROWSERSTACK_O11Y_UI_BASE_URL;
 }
 
-/**
- * TRA UI deep-link for a build's AI report (confirmed shape, 2026-07-13):
- * `<UI_BASE>/builds/<buildUuid>?tab=ai_report&subTab=aitfa` — the AI-TFA
- * sub-tab of the build's AI report. `{buildUuid}` is replaced with the
- * caller-supplied build id.
- */
-export const O11Y_UI_BUILD_PATH =
-  "/builds/{buildUuid}?tab=ai_report&subTab=aitfa";
+/** Query that deep-links a dashboard build URL to the AI-report TFA sub-tab. */
+export const AI_REPORT_TFA_QUERY = "tab=ai_report&subTab=tfa";
 
-/** Human-facing TRA UI link for one build's full report. */
+/** Read a build's metadata — carries the canonical `observability_url`. */
+export const BUILD_DETAILS_PATH = "/ext/v1/builds/{buildUuid}";
+
+/**
+ * UUID-form deep-link — fallback when the canonical `observability_url` can't
+ * be read. The UUID URL 302-redirects and the redirect drops the query string,
+ * so prefer the canonical URL (see `trigger-report.ts`).
+ */
+export const O11Y_UI_BUILD_PATH = `/builds/{buildUuid}?${AI_REPORT_TFA_QUERY}`;
+
+/** Human-facing TRA UI link for one build's full report (UUID fallback form). */
 export function getO11yUiBuildUrl(buildUuid: string): string {
   return (
     getO11yUiBaseUrl() +
@@ -45,7 +49,7 @@ export function getO11yUiBuildUrl(buildUuid: string): string {
  * (build page → AI report → AI TFA sub-tab).
  */
 export function getRcaViewGuidance(): string {
-  return `${getO11yUiBaseUrl()} — open the build's AI report (tab=ai_report, subTab=aitfa) to view the full RCA`;
+  return `${getO11yUiBaseUrl()} — open the build's AI report (tab=ai_report, subTab=tfa) to view the full RCA`;
 }
 
 /** Trigger (or read, when already complete) a build's Release Readiness report. */

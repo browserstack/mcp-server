@@ -24,7 +24,10 @@ interface IssueTracker {
 // A custom field value may be a scalar or, for multi-select fields, an array
 // of option values. The TM API accepts arrays only when keyed by field NAME.
 export type CustomFieldValue =
-  string | number | boolean | Array<string | number>;
+  | string
+  | number
+  | boolean
+  | Array<string | number>;
 
 export interface TestCaseCreateRequest {
   project_identifier: string;

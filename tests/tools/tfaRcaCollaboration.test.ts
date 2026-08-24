@@ -285,6 +285,101 @@ describe("tfaRcaTurnTool", () => {
     expect(body.thread_id).toBe("t-1");
   });
 
+  it("prDetails → structured clientContext, NOT appended into message", async () => {
+    post.mockResolvedValue(
+      ok({ turnId: "u-pr", threadId: "t-pr", status: "working" }),
+    );
+    get.mockResolvedValue(
+      completed({ status: "RESOLVED", confidence: "high", rca: {} }),
+    );
+
+    const prDetails = [
+      {
+        repo: "browserstack/misc-services",
+        number: 6044,
+        title: "Tcma poc",
+        author: "someone",
+        link: "https://github.com/browserstack/misc-services/pull/6044",
+        tag: "latent" as const,
+      },
+    ];
+
+    await runWithTimers(
+      tfaRcaTurnTool(
+        { testRunId: "tr-pr", message: "digest", prDetails },
+        mockConfig as any,
+      ),
+    );
+
+    const body = post.mock.calls[0][0].body;
+    // camelCase key — o11y's RcaChatTurnRequest.clientContext. A snake_case
+    // `client_context` never binds (@JsonIgnoreProperties ignoreUnknown) and is
+    // silently dropped.
+    expect(body.clientContext).toEqual({ pr_details: prDetails });
+    expect(body.client_context).toBeUndefined();
+    // The full PR objects must NOT be serialized into `message`: that field is
+    // @Size(max = 5000) server-side and is validated before any append, so
+    // inlining them is what produced opaque 400s.
+    expect(body.message).not.toContain("\"link\"");
+    expect(body.message).not.toContain("Tcma poc");
+    // A bounded marker still names the PRs in the trusted message body.
+    expect(body.message).toContain("browserstack/misc-services#6044");
+  });
+
+  it("no prDetails → clientContext omitted, message marks none provided", async () => {
+    post.mockResolvedValue(
+      ok({ turnId: "u-np", threadId: "t-np", status: "working" }),
+    );
+    get.mockResolvedValue(
+      completed({ status: "RESOLVED", confidence: "high", rca: {} }),
+    );
+
+    await runWithTimers(
+      tfaRcaTurnTool(
+        { testRunId: "tr-np", message: "digest" },
+        mockConfig as any,
+      ),
+    );
+
+    const body = post.mock.calls[0][0].body;
+    expect(body.clientContext).toBeUndefined();
+    expect(body.message).toContain("PR_DETAILS: none provided");
+  });
+
+  it("message at the cap → PR marker downgraded, never overflows", async () => {
+    post.mockResolvedValue(
+      ok({ turnId: "u-cap", threadId: "t-cap", status: "working" }),
+    );
+    get.mockResolvedValue(
+      completed({ status: "RESOLVED", confidence: "high", rca: {} }),
+    );
+
+    const atCap = "x".repeat(5000);
+    const prDetails = [
+      {
+        repo: "browserstack/misc-services",
+        number: 8015,
+        title: "AITCM-1374",
+        author: "someone",
+        link: "https://github.com/browserstack/misc-services/pull/8015",
+        tag: "regression" as const,
+      },
+    ];
+
+    await runWithTimers(
+      tfaRcaTurnTool(
+        { testRunId: "tr-cap", message: atCap, prDetails },
+        mockConfig as any,
+      ),
+    );
+
+    const body = post.mock.calls[0][0].body;
+    // The marker is dropped rather than pushing `message` past the server cap;
+    // nothing is lost because the PRs ride in clientContext.
+    expect(body.message.length).toBeLessThanOrEqual(5000);
+    expect(body.clientContext).toEqual({ pr_details: prDetails });
+  });
+
   it("resume soft-PENDING → polls turnId without re-submitting", async () => {
     get.mockResolvedValue(
       completed(

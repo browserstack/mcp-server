@@ -2,6 +2,7 @@ import { apiClient } from "../../lib/apiClient.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import {
   getO11yBaseUrl,
+  MESSAGE_MAX_LENGTH,
   POLL_INITIAL_DELAY_MS,
   POLL_INTERVAL_MS,
   POLL_MAX_WAIT_MS,
@@ -97,19 +98,55 @@ function validatePrDetails(prDetails: readonly PrDetail[]): void {
 }
 
 /**
- * Compose the message body sent to the TFA agent. PR context is ALWAYS passed
- * (the mandate): a validated PR list is appended as a stringified PR_DETAILS
- * block, or an explicit "none provided" marker when absent — so the agent never
- * silently loses the PR context the way it did before.
+ * Build the structured PR payload for the request's `clientContext` channel.
+ *
+ * `clientContext` is o11y's free-form digest lane: size-capped at 100_000 bytes
+ * in `RcaChatService`, forwarded to misc-services unchanged, and folded by the
+ * Python `tfa_chat` worker into the turn as a labelled `<untrusted_user_input>`
+ * block. It is the correct home for structured evidence.
+ *
+ * PR objects deliberately no longer go into `message`. Server-side `message` is
+ * `@Size(max = 5000)` and the tool validates the CALLER's string against that
+ * same 5000 before anything is appended — so appending a stringified PR list
+ * (~285 bytes for one PR, ~1095 for four) pushed real turns past the limit and
+ * came back as an opaque `failed to submit RCA turn (status 400)`.
  */
-function composeMessageWithPrDetails(
+function buildPrClientContext(
+  prDetails?: readonly PrDetail[],
+): Record<string, unknown> | undefined {
+  if (!prDetails || prDetails.length === 0) return undefined;
+  return { pr_details: prDetails };
+}
+
+/**
+ * Append a COMPACT PR marker to the message. The full objects travel in
+ * `clientContext`; the message keeps only `repo#number` refs so the agent still
+ * sees, in the trusted message body, that PR context exists and which PRs it
+ * covers — the mandate is preserved without paying the full serialization.
+ *
+ * Guarded against the very cap this fix exists to respect: the marker is
+ * downgraded (refs dropped, then omitted entirely) rather than allowed to push
+ * the composed message past MESSAGE_MAX_LENGTH. Dropping the marker loses
+ * nothing, because the PRs are in `clientContext` either way.
+ */
+function composeMessageWithPrMarker(
   message: string,
   prDetails?: readonly PrDetail[],
 ): string {
+  const fits = (suffix: string) =>
+    message.length + suffix.length <= MESSAGE_MAX_LENGTH;
+
   if (!prDetails || prDetails.length === 0) {
-    return `${message}\n\nPR_DETAILS: none provided`;
+    const none = "\n\nPR_DETAILS: none provided";
+    return fits(none) ? `${message}${none}` : message;
   }
-  return `${message}\n\nPR_DETAILS: ${JSON.stringify(prDetails)}`;
+
+  const refs = prDetails.map((pr) => `${pr.repo}#${pr.number}`).join(", ");
+  const full = `\n\nPR_DETAILS: ${prDetails.length} in clientContext (${refs})`;
+  if (fits(full)) return `${message}${full}`;
+
+  const terse = `\n\nPR_DETAILS: ${prDetails.length} in clientContext`;
+  return fits(terse) ? `${message}${terse}` : message;
 }
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -176,16 +213,26 @@ export async function submitTfaRcaTurn(
       validatePrDetails(args.prDetails);
     }
 
-    // PR context is always concatenated onto the message payload sent to TFA.
-    const composedMessage = composeMessageWithPrDetails(
+    // PR context travels as structured data in the `clientContext` digest lane;
+    // the message carries only a bounded marker naming the PRs.
+    const composedMessage = composeMessageWithPrMarker(
       args.message,
       args.prDetails,
     );
+    const prClientContext = buildPrClientContext(args.prDetails);
 
     const body: Record<string, unknown> = {
       message: composedMessage,
-      client_context: composedMessage,
     };
+    // `clientContext`, camelCase: o11y's RcaChatTurnRequest field is
+    // `clientContext` and the class is @JsonIgnoreProperties(ignoreUnknown =
+    // true), so the previous snake_case `client_context` key never bound and was
+    // silently discarded. It also carried a duplicate of `message`, which is why
+    // dropping it lost nothing — but it meant the 100_000-byte digest lane went
+    // unused while everything was squeezed through the 5000-char `message`.
+    if (prClientContext) {
+      body.clientContext = prClientContext;
+    }
     if (args.threadId) {
       body.thread_id = args.threadId;
     }

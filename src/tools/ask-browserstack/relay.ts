@@ -95,15 +95,31 @@ export function relayDetail(used: boolean, reason: string): string {
  * Which is the same confusion the `disabled` sentence exists to prevent, one layer earlier:
  * a caller who cannot tell "nobody was asked" from "somebody said no" retries forever.
  */
+export function looksLikeDelegationResult(body: unknown): boolean {
+  const payload = asRecord(body);
+  return (
+    "ok" in payload ||
+    "status" in payload ||
+    "answer" in payload ||
+    "approvals" in payload
+  );
+}
+
 export function neverReachedAgent(response: AgentResponse): boolean {
-  // No response at all, or one that is not a success.
+  // No response at all: nothing could have run.
   if (response.status === 0) return true;
-  if (response.status < 200 || response.status >= 300) return true;
-  // A success carrying a bare `detail` is not a delegation result either.
-  const payload = asRecord(response.body);
-  const looksLikeAResult =
-    "ok" in payload || "status" in payload || "answer" in payload;
-  return "detail" in payload && !looksLikeAResult;
+  // THE BODY DECIDES, NOT THE STATUS.
+  //
+  // This rung first read "any non-2xx", and that was wrong in the one direction that
+  // matters. Atlas answers HTTP 502 with a COMPLETE result body when a delegation ran and a
+  // step then failed (`delegation/http.py:317-320`), and 429 carries a full body too. So an
+  // approved write whose egress failed came back saying nobody had been asked, while
+  // `approvals` in the same payload showed the prompt shown and approved — the exact lie
+  // this predicate was added to prevent, now told on the one run where it costs the most.
+  //
+  // The HTTP code describes the OUTCOME; the body describes whether there was a RUN. Only
+  // the second question is being asked here.
+  return !looksLikeDelegationResult(response.body);
 }
 
 /**
@@ -283,20 +299,26 @@ export function deriveStatus(
   approvals: ApprovalRecord[],
   needsApproval: unknown[],
 ): AskStatus {
-  if (response.status === 429) return "rate_limited";
-  // Status 0 (unreachable) lands here too, which is what it is: a failed call.
-  if (response.status < 200 || response.status >= 300) return "error";
-
-  const declared = asRecord(response.body).status;
-  if (
-    typeof declared === "string" &&
-    (ASK_STATUSES as readonly string[]).includes(declared)
-  ) {
-    return declared as AskStatus;
+  if (looksLikeDelegationResult(response.body)) {
+    // A run happened, so its own status is the answer — on a 502 and a 429 as much as on a
+    // 200. Reading the HTTP code first would overwrite what the run said about itself.
+    const declared = asRecord(response.body).status;
+    if (
+      typeof declared === "string" &&
+      (ASK_STATUSES as readonly string[]).includes(declared)
+    ) {
+      return declared as AskStatus;
+    }
+    if (response.status === 429) return "rate_limited";
+    if (response.status < 200 || response.status >= 300) return "error";
+    const denied = approvals.some((entry) => entry.decision === "deny");
+    return denied || needsApproval.length > 0 ? "blocked" : "ok";
   }
 
-  const denied = approvals.some((entry) => entry.decision === "deny");
-  return denied || needsApproval.length > 0 ? "blocked" : "ok";
+  // No run to speak of. A 2xx lands here too when the body is not a result — which is what
+  // made that case report `ok: true` alongside an `error` (N4).
+  if (response.status === 429) return "rate_limited";
+  return "error";
 }
 
 /**
@@ -411,29 +433,41 @@ function atlasError(
   payload: Record<string, unknown>,
 ): { error?: string } {
   if (response.status === 0 && response.error) return { error: response.error };
-  if (response.status === 401) return { error: UNAUTHENTICATED_DETAIL };
 
+  // Atlas's own error string wherever it sent one — on a 502 that carries a full result,
+  // this is the run explaining its own failure, and nothing here should talk over it.
   const reported = payload.error;
   if (typeof reported === "string" && reported) return { error: reported };
 
-  const detail = payload.detail;
-  if (typeof detail === "string" && detail) {
-    // Bounded: this came off the wire and ends up in front of a person.
-    return {
-      error:
-        `BrowserStack AI refused this request before the agent started ` +
-        `(HTTP ${response.status}): ${JSON.stringify(detail.slice(0, 200))}.`,
-    };
+  if (response.status === 401) return { error: UNAUTHENTICATED_DETAIL };
+
+  if (!neverReachedAgent(response)) {
+    // The delegation ran. `status`, `approvals` and `needs_approval` already say what
+    // happened; "refused before the agent started" would simply be false.
+    return {};
   }
-  // A non-2xx with nothing to say for itself still beats a silent one.
+
+  // Bounded: this came off the wire and ends up in front of a person.
+  const detail = payload.detail;
+  const quoted =
+    typeof detail === "string" && detail
+      ? `: ${JSON.stringify(detail.slice(0, 200))}`
+      : "";
+
   if (response.status < 200 || response.status >= 300) {
     return {
       error:
         `BrowserStack AI refused this request before the agent started ` +
-        `(HTTP ${response.status}).`,
+        `(HTTP ${response.status})${quoted}.`,
     };
   }
-  return {};
+  // A 2xx carrying something that is not a delegation result at all. Real Atlas does not
+  // emit this; saying so plainly beats reporting a success with an error attached (N4).
+  return {
+    error:
+      `BrowserStack AI answered HTTP ${response.status} with no delegation ` +
+      `result${quoted}.`,
+  };
 }
 
 /**

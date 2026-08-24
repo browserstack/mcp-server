@@ -17,6 +17,7 @@ import {
   errorResult,
   deriveStatus,
   elicitationMessage,
+  looksLikeDelegationResult,
   neverReachedAgent,
 } from "../../src/tools/ask-browserstack/relay.js";
 import { ApprovalRecord } from "../../src/tools/ask-browserstack/types.js";
@@ -256,10 +257,13 @@ describe("result assembly", () => {
   });
 
   it("calls a run blocked when something was denied or left needing approval", () => {
+    // A real result that simply declared no usable status — `ok` and `answer` are what mark
+    // it as a delegation result at all.
+    const ran = { ok: true, answer: "" };
     const denied: ApprovalRecord[] = [{ description: "d", decision: "deny", reason: "cancelled" }];
-    expect(deriveStatus({ status: 200, body: {} }, denied, [])).toBe("blocked");
-    expect(deriveStatus({ status: 200, body: {} }, [], ["a write"])).toBe("blocked");
-    expect(deriveStatus({ status: 200, body: {} }, [], [])).toBe("ok");
+    expect(deriveStatus({ status: 200, body: ran }, denied, [])).toBe("blocked");
+    expect(deriveStatus({ status: 200, body: ran }, [], ["a write"])).toBe("blocked");
+    expect(deriveStatus({ status: 200, body: ran }, [], [])).toBe("ok");
   });
 
   it("maps 429 to rate_limited and every other non-2xx, including 0, to error", () => {
@@ -744,5 +748,152 @@ describe("pre-run refusals — the request never reached the agent (D3)", () => 
     expect(notReached.detail).not.toBe(disabled.detail);
     expect(disabled.detail).toMatch(/administrator turns the relay on/);
     expect(notReached.detail).toMatch(/run it again/);
+  });
+});
+
+describe("a result body outranks the HTTP status (N1)", () => {
+  // Atlas answers 502 with a COMPLETE result when a delegation ran and a step failed, and
+  // 429 carries a full body too. The status describes the OUTCOME; the body describes
+  // whether there was a RUN, and only the second question decides `not_reached`.
+  const RAN = {
+    ok: false,
+    status: "error",
+    answer: "The folder was not created.",
+    approvals: [
+      {
+        description: 'Creating the "Regression" folder.',
+        decision: "allow",
+        reason: "",
+        applied: false,
+      },
+    ],
+    applied_before_stop: false,
+    permission_relay: { used: true, reason: "" },
+  };
+
+  it.each([[502], [429], [500], [503]])(
+    "treats HTTP %i carrying a real result as a run that happened",
+    (status) => {
+      expect(neverReachedAgent({ status, body: RAN })).toBe(false);
+    },
+  );
+
+  it("reports the approval that WAS shown, on the 502 that regressed", () => {
+    const result = buildResult({ status: 502, body: RAN }, [], true);
+
+    // The whole object, so `permission_relay` and `approvals` can never disagree again
+    // without this failing.
+    expect(result.permission_relay).toEqual({
+      used: true,
+      reason: "",
+      detail: expect.stringContaining("asked before each change"),
+    });
+    expect(result.permission_relay.detail).not.toMatch(/NOTHING WAS ASKED/);
+    expect(result.approvals).toEqual([
+      {
+        description: 'Creating the "Regression" folder.',
+        decision: "allow",
+        reason: "",
+        applied: false,
+        outcome: expect.stringContaining("APPROVED, BUT THE CHANGE DID NOT GO THROUGH"),
+      },
+    ]);
+    expect(result.approvals_source).toBe("atlas");
+    // Atlas's status and its own verdict, not one derived from the 502.
+    expect(result.status).toBe("error");
+    expect(result.applied_before_stop).toBe(false);
+    // "refused before the agent started" would be false — the agent ran.
+    expect(result.error).toBeUndefined();
+  });
+
+  it("keeps Atlas's own status on a 429 with a full body", () => {
+    const result = buildResult(
+      {
+        status: 429,
+        body: { ok: false, status: "rate_limited", answer: "", approvals: [], applied_before_stop: false },
+      },
+      [], true,
+    );
+    expect(result.status).toBe("rate_limited");
+    expect(result.permission_relay.used).toBe(true);
+    expect(result.permission_relay.reason).toBe("");
+    expect(result.applied_before_stop).toBe(false);
+  });
+
+  it("still honours Atlas's `disabled` verdict on a result-carrying non-2xx", () => {
+    const result = buildResult(
+      {
+        status: 502,
+        body: { ok: false, status: "error", answer: "",
+                permission_relay: { used: false, reason: "disabled" } },
+      },
+      [], true,
+    );
+    expect(result.permission_relay.reason).toBe("disabled");
+    expect(result.permission_relay.detail).toMatch(/NOBODY DECLINED THIS/);
+  });
+
+  it("lets Atlas's own error string speak on a 502 rather than talking over it", () => {
+    const result = buildResult(
+      { status: 502, body: { ok: false, status: "error", answer: "", error: "the folder API returned 500" } },
+      [], true,
+    );
+    expect(result.error).toBe("the folder API returned 500");
+  });
+
+  it("still calls a bare {detail} refusal not_reached, whatever else changed", () => {
+    for (const status of [400, 401, 403, 503]) {
+      const result = buildResult({ status, body: { detail: "nope" } }, [], true);
+      expect(neverReachedAgent({ status, body: { detail: "nope" } })).toBe(true);
+      expect(result.permission_relay.used).toBe(false);
+      expect(result.permission_relay.reason).toBe("not_reached");
+      expect(result.applied_before_stop).toBeNull();
+      expect(result.approvals).toEqual([]);
+    }
+  });
+
+  it("still calls a transport failure not_reached", () => {
+    const result = buildResult(
+      { status: 0, body: null, error: "BrowserStack AI could not be reached" }, [], true,
+    );
+    expect(result.permission_relay.reason).toBe("not_reached");
+    expect(result.applied_before_stop).toBeNull();
+    expect(result.error).toBe("BrowserStack AI could not be reached");
+  });
+
+  it("recognises a result by any of the four keys, and nothing by none of them", () => {
+    for (const key of ["ok", "status", "answer", "approvals"]) {
+      expect(looksLikeDelegationResult({ [key]: null })).toBe(true);
+    }
+    expect(looksLikeDelegationResult({ detail: "x" })).toBe(false);
+    expect(looksLikeDelegationResult({})).toBe(false);
+    expect(looksLikeDelegationResult(null)).toBe(false);
+    expect(looksLikeDelegationResult("a string")).toBe(false);
+    // A result that also carries a detail field is still a result.
+    expect(looksLikeDelegationResult({ ok: true, detail: "fyi" })).toBe(true);
+  });
+});
+
+describe("a 2xx carrying no delegation result is internally consistent (N4)", () => {
+  it("does not report success alongside an error", () => {
+    const result = buildResult({ status: 200, body: { detail: "nope" } }, [], true);
+    // It used to say ok: true AND carry an error — a shape real Atlas never emits, but one
+    // that contradicted itself.
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("error");
+    expect(result.error).toBe(
+      'BrowserStack AI answered HTTP 200 with no delegation result: "nope".',
+    );
+    expect(result.permission_relay.reason).toBe("not_reached");
+    expect(result.applied_before_stop).toBeNull();
+  });
+
+  it("says the same about a 2xx with an empty or unparseable body", () => {
+    for (const body of [{}, null, "not json"]) {
+      const result = buildResult({ status: 200, body }, [], true);
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe("error");
+      expect(result.error).toBe("BrowserStack AI answered HTTP 200 with no delegation result.");
+    }
   });
 });

@@ -441,6 +441,62 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.applied_before_stop).toBeNull();
     });
 
+    it("does not claim nobody was asked when a 502 carries a real result (N1)", async () => {
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "accept", content: { confirm: true } },
+      ]);
+      // Atlas answers 502 when a delegation RAN and a step then failed. One prompt was
+      // shown and approved; the write did not land.
+      const realFetchLocal = realFetch;
+      vi.stubGlobal("fetch", async (url: string, init: any) => {
+        const body = JSON.parse(init.body);
+        await realFetchLocal(body.permission_relay.callback_url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${body.permission_relay.token}`,
+          },
+          body: JSON.stringify({
+            perm_id: PERM_A, product: "tm", mode: "ask-always",
+            description: 'Creating the "Regression" folder.',
+          }),
+        });
+        return {
+          status: 502,
+          headers: { get: () => "application/json" },
+          json: async () => ({
+            ok: false, status: "error", answer: "The folder was not created.", steps: [],
+            approvals: [{
+              description: 'Creating the "Regression" folder.',
+              decision: "allow", reason: "", applied: false,
+            }],
+            applied_before_stop: false,
+            permission_relay: { used: true, reason: "" },
+          }),
+        };
+      });
+
+      const { payload } = await call(server.getTools());
+
+      // A prompt WAS shown and approved — the client recorded it.
+      expect(elicit).toHaveBeenCalledTimes(1);
+      expect(payload.elicitations[0].decision).toBe("allow");
+      // ...so nothing in the payload may say otherwise.
+      expect(payload.permission_relay).toEqual({
+        used: true, reason: "",
+        detail: expect.stringContaining("asked before each change"),
+      });
+      expect(payload.permission_relay.detail).not.toMatch(/NOTHING WAS ASKED/);
+      expect(payload.approvals[0]).toMatchObject({
+        decision: "allow", applied: false,
+        outcome: expect.stringContaining("APPROVED, BUT THE CHANGE DID NOT GO THROUGH"),
+      });
+      expect(payload.approvals_source).toBe("atlas");
+      expect(payload.status).toBe("error");
+      expect(payload.applied_before_stop).toBe(false);
+    });
+
     it("tears the listener down once the call ends, even when the call failed", async () => {
       const server = await buildServer();
       fakeClient(server.getInstance(), { elicitation: {} }, []);

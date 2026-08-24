@@ -184,19 +184,88 @@ export function decide(result: ElicitResult): {
 }
 
 /**
- * CONTRACT §5 — "true if ANY allow preceded a deny".
+ * Read Atlas's `applied_before_stop`. NEVER DERIVE IT.
  *
- * This is the field that separates "nothing happened" from "some steps applied, then
- * stopped". A caller that cannot tell those apart will retry a half-applied task, so the
- * literal rule is implemented literally: a run where everything was allowed did not stop,
- * and is therefore false.
+ * This side used to compute it as CONTRACT §5's literal "any allow preceded a deny", which
+ * could only ever be a guess: an approval whose request then failed counted as applied, so
+ * the field lied in the exact direction it exists to prevent (D2). Atlas now computes it
+ * from `applied`, which only Atlas can know, and sends it whenever a gate ran — including
+ * `false`, including with an empty trail.
+ *
+ * So a MISSING field is never "false". It is "nobody measured this": either no gate ran, or
+ * this Atlas predates the field. `null` says that out loud instead of asserting a fact.
  */
-export function appliedBeforeStop(approvals: ApprovalRecord[]): boolean {
-  const firstDeny = approvals.findIndex((entry) => entry.decision === "deny");
-  if (firstDeny === -1) return false;
-  return approvals
-    .slice(0, firstDeny)
-    .some((entry) => entry.decision === "allow");
+export function readAppliedBeforeStop(
+  payload: Record<string, unknown>,
+): boolean | null {
+  const reported = payload.applied_before_stop;
+  return typeof reported === "boolean" ? reported : null;
+}
+
+/**
+ * Atlas's approval trail, when it sent one.
+ *
+ * Returns `null` — not `[]` — when the key is absent, because an empty trail Atlas DID send
+ * ("the relay ran and nothing was asked") is a different fact from no trail at all, and only
+ * the second is a reason to fall back to ours.
+ *
+ * Every entry is rebuilt rather than trusted: a `decision` that is not exactly `"allow"`
+ * becomes `"deny"`, so a garbled trail fails closed in the reporting the same way the wire
+ * does, and `applied` is carried only when it is genuinely a boolean.
+ */
+export function parseAtlasApprovals(
+  payload: Record<string, unknown>,
+): ApprovalRecord[] | null {
+  const raw = payload.approvals;
+  if (!Array.isArray(raw)) return null;
+  const trail: ApprovalRecord[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
+    const entry = item as Record<string, unknown>;
+    trail.push({
+      description: typeof entry.description === "string" ? entry.description : "",
+      decision: entry.decision === "allow" ? "allow" : "deny",
+      reason: typeof entry.reason === "string" ? entry.reason : "",
+      ...(typeof entry.applied === "boolean" ? { applied: entry.applied } : {}),
+    });
+  }
+  return trail;
+}
+
+/**
+ * One phrase per entry, because "approved, then it failed" and "refused" must not read
+ * alike — conflating them is the whole reason D2 mattered.
+ *
+ * An `allow` with no `applied` key is NOT rendered as a failure: nobody measured it, and
+ * saying otherwise would invent the very fact this is meant to report.
+ */
+export function approvalOutcome(entry: ApprovalRecord): string {
+  if (entry.decision === "allow") {
+    if (entry.applied === true) return "approved, and the change went through";
+    if (entry.applied === false) {
+      return (
+        "APPROVED, BUT THE CHANGE DID NOT GO THROUGH — nobody refused it; the request " +
+        "failed after it was approved"
+      );
+    }
+    return "approved; whether the change went through was not reported";
+  }
+  switch (entry.reason) {
+    case "declined":
+      return "refused: a human said no";
+    case "cancelled":
+      return "refused: nobody was there to be asked";
+    case "timeout":
+      return "refused: nobody answered in time";
+    case "error":
+      return "refused: the approval channel broke before any answer arrived";
+    default:
+      return "refused";
+  }
+}
+
+function withOutcomes(trail: ApprovalRecord[]): ApprovalRecord[] {
+  return trail.map((entry) => ({ ...entry, outcome: approvalOutcome(entry) }));
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -284,7 +353,13 @@ export function buildResult(
   const needsApproval = Array.isArray(payload.needs_approval)
     ? (payload.needs_approval as unknown[])
     : [];
-  const status = deriveStatus(response, approvals, needsApproval);
+  // ATLAS'S TRAIL WINS WHEN IT SENT ONE. It is the only side that can fill in `applied`, and
+  // it records what happened to the STEP: a callback answered without a prompt appearing is
+  // a denial there and nothing at all here. Ours is kept separately rather than discarded,
+  // because that difference is exactly how a probe of the loopback port shows up.
+  const atlasTrail = parseAtlasApprovals(payload);
+  const trail = atlasTrail ?? approvals;
+  const status = deriveStatus(response, trail, needsApproval);
   const reachedAgent = !neverReachedAgent(response);
 
   return {
@@ -292,9 +367,11 @@ export function buildResult(
     status,
     // The product's answer, as the product wrote it. Nothing here summarises or re-reads it.
     answer: payload.answer ?? null,
-    approvals,
+    approvals: withOutcomes(trail),
+    approvals_source: atlasTrail ? "atlas" : "mcp",
+    elicitations: withOutcomes(approvals),
     needs_approval: needsApproval,
-    applied_before_stop: appliedBeforeStop(approvals),
+    applied_before_stop: readAppliedBeforeStop(payload),
     permission_relay: relayVerdict(payload, relayUsed, reachedAgent),
     atlas_response: response.body ?? null,
     ...atlasError(response, payload),
@@ -371,9 +448,13 @@ export function errorResult(message: string, approvals: ApprovalRecord[]): AskRe
     ok: false,
     status: "error",
     answer: null,
-    approvals,
+    // Atlas never answered, so there is no authoritative trail to prefer. Ours is all there
+    // is, and `applied_before_stop` is null because nobody measured anything.
+    approvals: withOutcomes(approvals),
+    approvals_source: "mcp",
+    elicitations: withOutcomes(approvals),
     needs_approval: [],
-    applied_before_stop: appliedBeforeStop(approvals),
+    applied_before_stop: null,
     // The request never left this process, so it certainly never reached the agent.
     permission_relay: {
       used: false,

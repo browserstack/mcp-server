@@ -88,11 +88,34 @@ export interface AgentRequest {
   permission_relay?: PermissionRelay;
 }
 
-/** CONTRACT §5 — one entry per ask we relayed, in the order they arrived. */
+/** CONTRACT §5 — one entry in an approval trail, in the order the asks arrived. */
 export interface ApprovalRecord {
   description: string;
   decision: Decision;
   reason: string;
+  /**
+   * Did this approved step's request actually land? (Atlas task 3 §1.)
+   *
+   * `true` only when the entry was `allow` AND its request then returned 2xx. Everything
+   * else — a dead port, a 4xx, a 5xx, an async-dispatch refusal — resolves to `false`:
+   * unknown fails toward not-applied, never the other way.
+   *
+   * ONLY ATLAS CAN KNOW THIS. The gate returns before any request is sent, which was the
+   * whole of D2; the fact is written by the tool layer into the same record object the gate
+   * keeps by reference, so it correlates by object identity rather than by position.
+   *
+   * ABSENT means not reported (an Atlas that predates this, or our own elicitation trail,
+   * which has no way to know). Never render an absent value as a measured `false`.
+   */
+  applied?: boolean;
+  /**
+   * A human-readable phrase for this entry.
+   *
+   * Exists because `allow` + `applied: false` — approved, then the request failed — is a
+   * genuinely different thing to tell a person than a refusal, and the two must not read
+   * alike. Derived, never sent by anyone.
+   */
+  outcome?: string;
 }
 
 export const ASK_STATUSES = ["ok", "blocked", "error", "rate_limited"] as const;
@@ -104,12 +127,36 @@ export interface AskResult {
   status: AskStatus;
   answer: unknown;
   /**
-   * The approval trail. Without it a caller cannot tell "nothing happened" from "some
-   * steps applied, then stopped", and will retry a half-applied task.
+   * THE AUTHORITATIVE approval trail: Atlas's whenever it supplied one, ours otherwise.
+   *
+   * Atlas's wins because it is the only side that can populate `applied`, and because it
+   * records what happened to the STEP — a callback answered without a prompt appearing (a
+   * 401'd probe, a shape rejection) is a denial there and nothing at all here.
    */
   approvals: ApprovalRecord[];
+  /** Which side produced `approvals`, so a reader never has to infer it. */
+  approvals_source: "atlas" | "mcp";
+  /**
+   * OUR trail: one entry per prompt this server actually put in front of a human.
+   *
+   * Kept beside `approvals` rather than folded into it, because where the two disagree the
+   * disagreement is the signal. An entry Atlas records as a denial with nothing here means a
+   * callback was answered without any prompt appearing — which is what an attacker probing
+   * the loopback port looks like.
+   */
+  elicitations: ApprovalRecord[];
   needs_approval: unknown[];
-  applied_before_stop: boolean;
+  /**
+   * Atlas's own verdict: this run stopped on a refusal AND something had already changed.
+   *
+   * READ, NEVER DERIVED. Atlas computes it because only Atlas knows `applied`, and it sends
+   * the field whenever a relay gate ran — including `false`, including with an empty trail.
+   *
+   * `null` means NOT REPORTED, which is not the same as `false`: either no gate ran (so
+   * Atlas has nothing to say about applications) or this Atlas predates the field. Treating
+   * it as `false` would assert something nobody measured.
+   */
+  applied_before_stop: boolean | null;
   /**
    * Why a write may have been refused.
    *

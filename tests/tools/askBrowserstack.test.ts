@@ -11,7 +11,7 @@ import {
 } from "../../src/tools/ask-browserstack/config.js";
 import { agentHeaders } from "../../src/tools/ask-browserstack/egress.js";
 import {
-  appliedBeforeStop,
+  approvalOutcome,
   buildResult,
   decide,
   errorResult,
@@ -89,24 +89,164 @@ describe("decide — CONTRACT §7, and nothing but", () => {
   });
 });
 
-describe("applied_before_stop — the field that stops a half-applied retry", () => {
-  const allow: ApprovalRecord = { description: "a", decision: "allow", reason: "" };
-  const deny: ApprovalRecord = { description: "b", decision: "deny", reason: "declined" };
+describe("applied_before_stop — read from Atlas, never derived (D2/D4)", () => {
+  function build(body: Record<string, unknown>) {
+    return buildResult({ status: 200, body: { status: "ok", answer: "", ...body } }, [], true);
+  }
 
-  it("is false when nothing was asked", () => {
-    expect(appliedBeforeStop([])).toBe(false);
+  it("reports exactly what Atlas said, both ways", () => {
+    expect(build({ applied_before_stop: true }).applied_before_stop).toBe(true);
+    expect(build({ applied_before_stop: false }).applied_before_stop).toBe(false);
   });
 
-  it("is false when the FIRST thing asked was refused: nothing happened", () => {
-    expect(appliedBeforeStop([deny, allow])).toBe(false);
+  it("reports null — NOT false — when Atlas said nothing", () => {
+    // Absence means no gate ran, or an Atlas that predates the field. Rendering it as
+    // `false` would assert something nobody measured, in the direction that makes a caller
+    // retry a task that already half-applied.
+    expect(build({}).applied_before_stop).toBeNull();
   });
 
-  it("is true when an allow preceded a deny: some steps applied, then it stopped", () => {
-    expect(appliedBeforeStop([allow, deny])).toBe(true);
+  it("ignores a non-boolean rather than coercing it", () => {
+    expect(build({ applied_before_stop: "true" }).applied_before_stop).toBeNull();
+    expect(build({ applied_before_stop: 1 }).applied_before_stop).toBeNull();
+    expect(build({ applied_before_stop: null }).applied_before_stop).toBeNull();
   });
 
-  it("is false when everything was allowed, because nothing stopped", () => {
-    expect(appliedBeforeStop([allow, allow])).toBe(false);
+  it("does not re-derive it from the trail it can see", () => {
+    // The old rule ("any allow preceded a deny") would have said true here. Atlas says
+    // false, because the approved step's request never landed — which only Atlas knows.
+    const result = build({
+      approvals: [
+        { description: "a", decision: "allow", reason: "", applied: false },
+        { description: "b", decision: "deny", reason: "declined", applied: false },
+      ],
+      applied_before_stop: false,
+    });
+    expect(result.applied_before_stop).toBe(false);
+  });
+});
+
+describe("the authoritative approval trail (D4)", () => {
+  const MINE: ApprovalRecord[] = [
+    { description: "Creating the Alpha folder", decision: "allow", reason: "" },
+  ];
+
+  function build(body: Record<string, unknown>, mine = MINE) {
+    return buildResult({ status: 200, body: { status: "ok", answer: "", ...body } }, mine, true);
+  }
+
+  it("prefers Atlas's trail over ours, and says which it used", () => {
+    const result = build({
+      approvals: [
+        { description: "Creating the Alpha folder", decision: "allow", reason: "", applied: true },
+      ],
+    });
+    expect(result.approvals_source).toBe("atlas");
+    expect(result.approvals[0].applied).toBe(true);
+  });
+
+  it("keeps our own trail beside it, because the disagreement IS the signal", () => {
+    // A callback answered with no prompt appearing — an attacker probing the loopback port
+    // — is a denial to Atlas and nothing at all to us. Folding the two together would
+    // destroy the only evidence that it happened.
+    const result = build({
+      approvals: [{ description: "Creating the Alpha folder", decision: "deny", reason: "error", applied: false }],
+    }, []);
+    expect(result.approvals_source).toBe("atlas");
+    expect(result.approvals[0].decision).toBe("deny");
+    expect(result.elicitations).toEqual([]);
+  });
+
+  it("falls back to ours only when Atlas sent no trail at all", () => {
+    const result = build({});
+    expect(result.approvals_source).toBe("mcp");
+    expect(result.approvals[0].description).toBe("Creating the Alpha folder");
+  });
+
+  it("treats an EMPTY trail from Atlas as a trail, not as absence", () => {
+    // "The relay ran and nothing was asked" is a fact Atlas sent; ours is not a better
+    // answer to it.
+    const result = build({ approvals: [] });
+    expect(result.approvals_source).toBe("atlas");
+    expect(result.approvals).toEqual([]);
+  });
+
+  it("rebuilds each entry rather than trusting it, failing closed on a garbled decision", () => {
+    const result = build({
+      approvals: [
+        { description: "x", decision: "ALLOW", reason: "" },
+        { description: "y", decision: "allow", reason: "" },
+        "not an entry",
+        null,
+      ],
+    });
+    // Anything that is not exactly "allow" reports as a refusal.
+    expect(result.approvals.map((e) => e.decision)).toEqual(["deny", "allow"]);
+  });
+
+  it("carries `applied` only when it is genuinely a boolean", () => {
+    const result = build({
+      approvals: [
+        { description: "a", decision: "allow", reason: "", applied: "yes" },
+        { description: "b", decision: "allow", reason: "" },
+      ],
+    });
+    expect("applied" in result.approvals[0]).toBe(false);
+    expect("applied" in result.approvals[1]).toBe(false);
+  });
+});
+
+describe("approvalOutcome — 'approved then failed' must not read like a refusal", () => {
+  const base = { description: "Creating the Alpha folder", reason: "" };
+
+  it("distinguishes an applied allow from one whose request failed", () => {
+    const applied = approvalOutcome({ ...base, decision: "allow", applied: true });
+    const failed = approvalOutcome({ ...base, decision: "allow", applied: false });
+    expect(applied).toBe("approved, and the change went through");
+    expect(failed).toMatch(/APPROVED, BUT THE CHANGE DID NOT GO THROUGH/);
+    expect(failed).toMatch(/nobody refused it/);
+    expect(applied).not.toBe(failed);
+  });
+
+  it("does not render an unmeasured allow as a failure", () => {
+    // An older Atlas, or our own trail, simply does not know.
+    const unknown = approvalOutcome({ ...base, decision: "allow" });
+    expect(unknown).toBe("approved; whether the change went through was not reported");
+    expect(unknown).not.toMatch(/DID NOT GO THROUGH/);
+  });
+
+  it("keeps a failed write clearly apart from every kind of refusal", () => {
+    const failed = approvalOutcome({ ...base, decision: "allow", applied: false });
+    for (const reason of ["declined", "cancelled", "timeout", "error", "anything-else"]) {
+      const refusal = approvalOutcome({ ...base, decision: "deny", reason });
+      expect(refusal).toMatch(/^refused/);
+      expect(refusal).not.toBe(failed);
+    }
+  });
+
+  it("says WHICH kind of refusal, since they call for different things", () => {
+    const of = (reason: string) => approvalOutcome({ ...base, decision: "deny", reason });
+    expect(of("declined")).toMatch(/a human said no/);
+    expect(of("cancelled")).toMatch(/nobody was there/);
+    expect(of("timeout")).toMatch(/nobody answered in time/);
+    expect(of("error")).toMatch(/channel broke/);
+    expect(of("something-new")).toBe("refused");
+  });
+
+  it("is attached to every entry in both trails", () => {
+    const result = buildResult(
+      {
+        status: 200,
+        body: {
+          status: "ok", answer: "",
+          approvals: [{ description: "a", decision: "allow", reason: "", applied: false }],
+        },
+      },
+      [{ description: "a", decision: "allow", reason: "" }],
+      true,
+    );
+    expect(result.approvals[0].outcome).toMatch(/DID NOT GO THROUGH/);
+    expect(result.elicitations[0].outcome).toMatch(/not reported/);
   });
 });
 
@@ -532,7 +672,8 @@ describe("pre-run refusals — the request never reached the agent (D3)", () => 
     expect(typeof result.error).toBe("string");
     expect(result.error!.length).toBeGreaterThan(0);
     expect(result.approvals).toEqual([]);
-    expect(result.applied_before_stop).toBe(false);
+    // Nobody measured anything, so the field asserts nothing.
+    expect(result.applied_before_stop).toBeNull();
   });
 
   it("names the HTTP status and quotes Atlas's detail on a 400 and a 503", () => {

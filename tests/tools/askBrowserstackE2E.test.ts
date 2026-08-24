@@ -126,7 +126,15 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       ]);
       const stub = atlas({
         asks: [{ perm_id: PERM_A, description: "Create folder \"Regression\"." }],
-        payload: () => ({ status: "ok", answer: "Created folder 12.", needs_approval: [] }),
+        payload: () => ({
+          ok: true, status: "ok", answer: "Created folder 12.", steps: [],
+          // Atlas's authoritative trail, with the `applied` bit only it can fill in.
+          approvals: [
+            { description: "Create folder \"Regression\".", decision: "allow", reason: "", applied: true },
+          ],
+          applied_before_stop: false,
+          permission_relay: { used: true, reason: "" },
+        }),
       });
 
       const { payload } = await call(server.getTools());
@@ -165,8 +173,16 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       // 4. the result
       expect(payload.ok).toBe(true);
       expect(payload.answer).toBe("Created folder 12.");
-      expect(payload.approvals)
-        .toEqual([{ description: "Create folder \"Regression\".", decision: "allow", reason: "" }]);
+      // Atlas's trail wins, carrying the applied bit; ours is kept beside it.
+      expect(payload.approvals_source).toBe("atlas");
+      expect(payload.approvals).toEqual([{
+        description: "Create folder \"Regression\".", decision: "allow", reason: "",
+        applied: true, outcome: "approved, and the change went through",
+      }]);
+      expect(payload.elicitations).toEqual([{
+        description: "Create folder \"Regression\".", decision: "allow", reason: "",
+        outcome: "approved; whether the change went through was not reported",
+      }]);
       expect(payload.applied_before_stop).toBe(false);
       expect(payload.permission_relay.used).toBe(true);
     });
@@ -178,7 +194,13 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       ]);
       const stub = atlas({
         asks: [{ perm_id: PERM_A, description: "Delete the sprint." }],
-        payload: () => ({ status: "blocked", answer: "", needs_approval: ["Delete the sprint."] }),
+        payload: () => ({
+          status: "blocked", answer: "", needs_approval: ["Delete the sprint."],
+          approvals: [
+            { description: "Delete the sprint.", decision: "deny", reason: "declined", applied: false },
+          ],
+          applied_before_stop: false,
+        }),
       });
 
       const { payload } = await call(server.getTools());
@@ -188,6 +210,8 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(payload.status).toBe("blocked");
       expect(payload.approvals[0].reason).toBe("declined");
+      expect(payload.approvals[0].outcome).toBe("refused: a human said no");
+      // Nothing had applied, so a retry of the whole task is safe.
       expect(payload.applied_before_stop).toBe(false);
     });
 
@@ -240,6 +264,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(stub.decisions[0].status).toBe(500);
       expect(payload.approvals[0]).toEqual({
         description: "Archive the plan.", decision: "deny", reason: "error",
+        outcome: "refused: the approval channel broke before any answer arrived",
       });
     });
 
@@ -272,13 +297,24 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         payload: () => ({
           status: "blocked", answer: "Created the folder; the move was refused.",
           needs_approval: ["Move 40 test cases into it."],
+          approvals: [
+            { description: "Create folder \"Regression\".", decision: "allow", reason: "", applied: true },
+            { description: "Move 40 test cases into it.", decision: "deny", reason: "declined", applied: false },
+          ],
+          // Atlas's own verdict: it stopped on a refusal AND something had already changed.
+          applied_before_stop: true,
         }),
       });
 
       const { payload } = await call(server.getTools());
-      // The whole point of the field: a caller must not retry this task from scratch.
+      // The whole point of the field: a caller must not retry this task from scratch. It is
+      // READ from Atlas, which is the only side that knows the folder creation landed.
       expect(payload.applied_before_stop).toBe(true);
+      expect(payload.approvals_source).toBe("atlas");
       expect(payload.approvals.map((a: any) => a.decision)).toEqual(["allow", "deny"]);
+      expect(payload.approvals.map((a: any) => a.applied)).toEqual([true, false]);
+      expect(payload.approvals[0].outcome).toBe("approved, and the change went through");
+      expect(payload.approvals[1].outcome).toBe("refused: a human said no");
       expect(payload.needs_approval).toEqual(["Move 40 test cases into it."]);
     });
 
@@ -305,7 +341,8 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         detail: expect.stringContaining("NOBODY DECLINED THIS"),
       });
       expect(payload.approvals).toEqual([]);
-      expect(payload.applied_before_stop).toBe(false);
+      // No gate ran, so Atlas omits the field and we must not invent a measured `false`.
+      expect(payload.applied_before_stop).toBeNull();
       // A refusal is not a tool failure, and rendering it as one invites the retry loop
       // these distinct reasons exist to prevent.
       expect(result.isError).toBeUndefined();
@@ -350,6 +387,60 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(result.isError).toBe(true);
     });
 
+    it("keeps the two trails apart when a probe is answered with no prompt (D4)", async () => {
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
+      // A callback arriving with the wrong bearer: 401, zero prompts. Atlas sees the STEP
+      // refused and records a denial; we saw nobody, and recorded nothing.
+      const stub = atlas({
+        asks: [{ perm_id: PERM_A, description: "Create folder." }],
+        token: () => "a-stray-local-process",
+        payload: () => ({
+          status: "blocked", answer: "", needs_approval: ["Create folder."],
+          approvals: [
+            { description: "Create folder.", decision: "deny", reason: "error", applied: false },
+          ],
+          applied_before_stop: false,
+          permission_relay: { used: true, reason: "" },
+        }),
+      });
+
+      const { payload } = await call(server.getTools());
+
+      expect(stub.decisions[0].status).toBe(401);
+      expect(elicit).not.toHaveBeenCalled();
+      // Atlas's is authoritative...
+      expect(payload.approvals_source).toBe("atlas");
+      expect(payload.approvals[0].decision).toBe("deny");
+      // ...and ours is empty, which is the ONLY record that no prompt ever appeared. That
+      // difference is what a probe of the loopback port looks like, so it must survive.
+      expect(payload.elicitations).toEqual([]);
+      expect(payload.applied_before_stop).toBe(false);
+    });
+
+    it("degrades cleanly when an older Atlas sends a trail with no applied bit", async () => {
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "accept", content: { confirm: true } },
+      ]);
+      atlas({
+        asks: [{ perm_id: PERM_A, description: "Create folder." }],
+        payload: () => ({
+          status: "ok", answer: "done",
+          approvals: [{ description: "Create folder.", decision: "allow", reason: "" }],
+          // and no applied_before_stop either
+        }),
+      });
+
+      const { payload } = await call(server.getTools());
+      expect("applied" in payload.approvals[0]).toBe(false);
+      // Not rendered as a failure: nobody measured it.
+      expect(payload.approvals[0].outcome).toBe(
+        "approved; whether the change went through was not reported",
+      );
+      expect(payload.applied_before_stop).toBeNull();
+    });
+
     it("tears the listener down once the call ends, even when the call failed", async () => {
       const server = await buildServer();
       fakeClient(server.getInstance(), { elicitation: {} }, []);
@@ -386,7 +477,8 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
       expect(payload.status).toBe("blocked");
       expect(payload.approvals).toEqual([]);
-      expect(payload.applied_before_stop).toBe(false);
+      expect(payload.approvals_source).toBe("mcp");
+      expect(payload.applied_before_stop).toBeNull();
       expect(payload.needs_approval).toEqual(["Create folder \"Regression\"."]);
       expect(payload.permission_relay).toEqual({
         used: false,
@@ -479,7 +571,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       // Nothing was ever asked, so nothing can look like a refusal.
       expect(elicit).not.toHaveBeenCalled();
       expect(payload.approvals).toEqual([]);
-      expect(payload.applied_before_stop).toBe(false);
+      expect(payload.applied_before_stop).toBeNull();
       // ...and the relay verdict must agree with `error` rather than contradict it.
       expect(payload.permission_relay).toEqual({
         used: false,

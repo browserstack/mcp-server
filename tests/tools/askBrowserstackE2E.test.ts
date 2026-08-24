@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AskError } from "../../src/tools/ask-browserstack/config.js";
 import { addAskBrowserstackAITool } from "../../src/tools/ask-browserstack/register.js";
 
 /** Captured before anything stubs the global, so the loopback hop stays real. */
@@ -94,6 +95,7 @@ async function call(tools: Record<string, any>, args = { product: "tm", query: "
 describe("askBrowserstackAI, end to end through the server factory", () => {
   beforeEach(() => {
     process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
+    process.env.ASK_BROWSERSTACK_ATLAS_TOKEN = "shared-delegation-token";
     delete process.env.ASK_BROWSERSTACK_DISABLED;
     delete process.env.ASK_BROWSERSTACK_ENV;
     vi.resetModules();
@@ -101,6 +103,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
   afterEach(() => {
     delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
+    delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -128,11 +131,17 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
 
-      // 1. the request: relay offered, on loopback, with a per-run token
+      // 1. the request: authenticated with the SHARED DELEGATION TOKEN, attributed, relay
+      //    offered on loopback with a per-run token
       expect(stub.calls[0].url).toBe("https://atlas.example/agent");
-      expect(stub.calls[0].headers["Api-Token"]).toBe("ing_Xx:SECRET");
+      expect(stub.calls[0].headers.Authorization).toBe("Bearer shared-delegation-token");
+      // The EXACT key set. /agent has no Api-Token path, and that header carries the user's
+      // access key — this assertion is what stops it creeping back in.
+      expect(Object.keys(stub.calls[0].headers).sort())
+        .toEqual(["Authorization", "Content-Type", "request-source"]);
       expect(stub.calls[0].body.task).toBe("make a folder");
       expect(stub.calls[0].body.product).toBe("tm");
+      expect(stub.calls[0].body.user_id).toBe("ing_Xx");
       expect(stub.calls[0].body.permission_relay.callback_url)
         .toMatch(/^http:\/\/127\.0\.0\.1:\d+\/atlas-permission$/);
       expect(stub.calls[0].body.permission_relay.token).toHaveLength(64);
@@ -371,7 +380,8 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
       // Absence is what selects Atlas's read-only HeadlessGate — not an empty object.
       expect("permission_relay" in stub.calls[0].body).toBe(false);
-      expect(Object.keys(stub.calls[0].body).sort()).toEqual(["product", "task"]);
+      expect(Object.keys(stub.calls[0].body).sort())
+        .toEqual(["product", "task", "user_id"]);
       expect(elicit).not.toHaveBeenCalled();
 
       expect(payload.status).toBe("blocked");
@@ -409,6 +419,111 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
     });
   });
 
+  describe("POST /agent authentication — CONTRACT v1.2", () => {
+    it("omits user_id entirely, never as \"\", when no username is configured", async () => {
+      const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
+      const server = new BrowserStackMcpServer({
+        "browserstack-username": "",
+        "browserstack-access-key": "",
+      } as any);
+      fakeClient(server.getInstance(), { roots: {} }, []);
+      const stub = atlas({});
+
+      await call(server.getTools());
+      expect("user_id" in stub.calls[0].body).toBe(false);
+      expect(Object.keys(stub.calls[0].body).sort()).toEqual(["product", "task"]);
+    });
+
+    it("refuses by name when the token is unset, and never leaks it", async () => {
+      delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, []);
+
+      const { result, payload } = await call(server.getTools());
+      expect(result.isError).toBe(true);
+      expect(payload.error).toMatch(/ASK_BROWSERSTACK_ATLAS_TOKEN/);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("never puts the token in the result, on success or on failure", async () => {
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "accept", content: { confirm: true } },
+      ]);
+      atlas({ asks: [{ perm_id: PERM_A, description: "Create folder." }] });
+
+      const { result } = await call(server.getTools());
+      // The whole serialised result, not just the fields we happen to check.
+      expect(result.content[0].text).not.toContain("shared-delegation-token");
+    });
+
+    it("reads a 401 as rejected credentials, not as anyone declining", async () => {
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
+      vi.stubGlobal("fetch", async () => ({
+        status: 401,
+        headers: { get: () => "application/json" },
+        // Exactly what Atlas answers a bad bearer with: no `error` string of its own.
+        json: async () => ({ detail: "unauthorized" }),
+      }));
+
+      const { result, payload } = await call(server.getTools());
+
+      expect(payload.status).toBe("error");
+      expect(result.isError).toBe(true);
+      expect(payload.error).toMatch(/rejected this server's credentials/);
+      expect(payload.error).toMatch(/NOBODY DECLINED ANYTHING/);
+      expect(payload.error).toMatch(/ASK_BROWSERSTACK_ATLAS_TOKEN/);
+      // Nothing was ever asked, so nothing can look like a refusal.
+      expect(elicit).not.toHaveBeenCalled();
+      expect(payload.approvals).toEqual([]);
+      expect(payload.applied_before_stop).toBe(false);
+    });
+
+    it("keeps a 401 and a permission denial from reading alike", async () => {
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, [{ action: "decline" }]);
+      atlas({
+        asks: [{ perm_id: PERM_A, description: "Delete the sprint." }],
+        payload: () => ({
+          ok: true, status: "blocked", answer: "", steps: [],
+          needs_approval: ["Delete the sprint."],
+          permission_relay: { used: true, reason: "" },
+        }),
+      });
+
+      const { result, payload } = await call(server.getTools());
+      // A denial: not an error, and the trail says who said no.
+      expect(payload.status).toBe("blocked");
+      expect(result.isError).toBeUndefined();
+      expect(payload.error).toBeUndefined();
+      expect(payload.approvals[0]).toMatchObject({ decision: "deny", reason: "declined" });
+    });
+
+    it("lets the named environment pick the token, so preprod cannot borrow prod's", async () => {
+      delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
+      process.env.ASK_BROWSERSTACK_ENV = "preprod";
+      process.env.ASK_BROWSERSTACK_ATLAS_URL_PREPROD = "https://atlas-preprod.example";
+      process.env.ASK_BROWSERSTACK_ATLAS_TOKEN_PREPROD = "preprod-token";
+      delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
+      try {
+        const server = await buildServer();
+        fakeClient(server.getInstance(), { roots: {} }, []);
+        const stub = atlas({});
+
+        await call(server.getTools());
+        expect(stub.calls[0].url).toBe("https://atlas-preprod.example/agent");
+        expect(stub.calls[0].headers.Authorization).toBe("Bearer preprod-token");
+      } finally {
+        delete process.env.ASK_BROWSERSTACK_ENV;
+        delete process.env.ASK_BROWSERSTACK_ATLAS_URL_PREPROD;
+        delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN_PREPROD;
+      }
+    });
+  });
+
   it("refuses by name when no host is configured, without calling anything", async () => {
     delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
     const fetchSpy = vi.fn();
@@ -426,20 +541,45 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 describe("askBrowserstackAI, against the injected seam", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("refuses rather than calling Atlas unauthenticated", async () => {
+  it("refuses rather than calling Atlas unauthenticated, and never names the token", async () => {
     const mcp = new McpServer({ name: "t", version: "0" });
     const transport = vi.fn();
     const tools = addAskBrowserstackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
-      credentialsFor: () => ({ username: "u", accessKey: "" }),
+      atlasToken: () => {
+        throw new AskError(
+          "BrowserStack AI is not authenticated: set ASK_BROWSERSTACK_ATLAS_TOKEN to the " +
+            "shared delegation token",
+        );
+      },
+      credentialsFor: () => ({ username: "u", accessKey: "k" }),
       transport: transport as never,
       startListener: (async () => ({ url: "x", token: "y", close: async () => {} })) as never,
     });
 
     const { payload } = await call(tools);
     expect(payload.ok).toBe(false);
-    expect(payload.error).toMatch(/not authenticated/);
+    expect(payload.error).toMatch(/ASK_BROWSERSTACK_ATLAS_TOKEN/);
     expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("does not need the user's access key to reach /agent", async () => {
+    // It is not sent on this route, so its absence must not refuse the call the way the
+    // product-API path would.
+    const mcp = new McpServer({ name: "t", version: "0" });
+    const transport = vi.fn(async () => ({ status: 200, body: { status: "ok", answer: "" } }));
+    const tools = addAskBrowserstackAITool(mcp, {
+      agentUrl: () => "https://atlas.example/agent",
+      atlasToken: () => "shared-delegation-token",
+      credentialsFor: () => ({ username: "ing_Xx", accessKey: "" }),
+      transport: transport as never,
+      startListener: (async () => ({ url: "x", token: "y", close: async () => {} })) as never,
+    });
+
+    const { payload } = await call(tools);
+    expect(payload.ok).toBe(true);
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect((transport.mock.calls[0] as any)[2].user_id).toBe("ing_Xx");
   });
 
   it("closes the listener even when the transport throws", async () => {
@@ -448,6 +588,7 @@ describe("askBrowserstackAI, against the injected seam", () => {
     const close = vi.fn(async () => {});
     const tools = addAskBrowserstackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
+      atlasToken: () => "shared-delegation-token",
       credentialsFor: () => ({ username: "u", accessKey: "k" }),
       transport: (async () => {
         throw new Error("boom");

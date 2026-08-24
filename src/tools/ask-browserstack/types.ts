@@ -73,6 +73,18 @@ export interface PermissionRelay {
 export interface AgentRequest {
   task: string;
   product: string;
+  /**
+   * Who the run is for (CONTRACT v1.2 §3).
+   *
+   * The shared delegation token authenticates the caller but not the principal
+   * (`principal_verified=false`), so Atlas reads the acting user from here. Omitted entirely
+   * when no username is configured — never sent as `""`.
+   *
+   * Note the asymmetry and do not try to close it: on this path a caller can CLAIM any
+   * `user_id`. That is Atlas's documented design for the shared-token route; a signed
+   * principal requires the central-JWT path, which is out of scope.
+   */
+  user_id?: string;
   permission_relay?: PermissionRelay;
 }
 

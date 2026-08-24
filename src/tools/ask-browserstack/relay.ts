@@ -256,16 +256,34 @@ export function buildResult(
 }
 
 /**
+ * A rejected credential and a refused action are unrelated problems, and a result that lets
+ * them read alike sends someone hunting for a human who said no when the real answer is that
+ * this server never got through the door.
+ *
+ * Atlas answers a bad `Authorization` with `401 {"detail": "unauthorized"}` — no `error`
+ * string of its own — so without this the caller would see a bare "error" and nothing else.
+ * A denial, by contrast, is `status: "blocked"` with a populated `approvals` trail.
+ *
+ * The token itself is NOT named here, only the variable that should hold it.
+ */
+export const UNAUTHENTICATED_DETAIL =
+  "BrowserStack AI rejected this server's credentials (HTTP 401). NOBODY DECLINED " +
+  "ANYTHING — the request never reached the agent, so no permission was sought and nothing " +
+  "was refused. The shared delegation token in ASK_BROWSERSTACK_ATLAS_TOKEN is missing, " +
+  "wrong, or not the one this environment expects.";
+
+/**
  * The `error` field, from whichever side has one.
  *
- * Ours when there was no response to speak for itself; otherwise Atlas's own string, which
- * `public()` includes ONLY when non-empty (v1.1 §B).
+ * Ours when there was no response to speak for itself, or when the response was a 401;
+ * otherwise Atlas's own string, which `public()` includes ONLY when non-empty (v1.1 §B).
  */
 function atlasError(
   response: AgentResponse,
   payload: Record<string, unknown>,
 ): { error?: string } {
   if (response.status === 0 && response.error) return { error: response.error };
+  if (response.status === 401) return { error: UNAUTHENTICATED_DETAIL };
   const reported = payload.error;
   return typeof reported === "string" && reported ? { error: reported } : {};
 }

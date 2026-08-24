@@ -39,12 +39,13 @@ import {
   AskError,
   ELICITATION_TIMEOUT_MS,
   agentUrl,
+  atlasToken,
   isEnabled,
 } from "./config.js";
 import {
   AgentTransport,
   Credentials,
-  authHeaders,
+  agentHeaders,
   fetchAgentTransport,
 } from "./egress.js";
 import {
@@ -64,9 +65,15 @@ import {
 export interface AskDeps {
   /** Resolved per call: a deployment's host is configuration, not a constructor argument. */
   agentUrl: () => string;
+  /** The shared delegation token, resolved per call and for the same reason. A secret. */
+  atlasToken: () => string;
   /**
    * Read per call, not captured: the remote server rebuilds config per session, so a
    * captured credential would outlive the session it belongs to.
+   *
+   * ONLY `username` is used, and only to attribute the run (`user_id`). The access key does
+   * NOT leave this process on this route: `/agent` has no use for it, so sending it would be
+   * exposure for nothing. Product calls are the place for `authHeaders`.
    */
   credentialsFor: () => Credentials;
   transport?: AgentTransport;
@@ -225,8 +232,15 @@ export function addAskBrowserstackAITool(
 
       try {
         const url = deps.agentUrl();
-        const headers = authHeaders(deps.credentialsFor());
+        const headers = agentHeaders(deps.atlasToken());
         const body: AgentRequest = { task: query, product };
+
+        // Attribution. The shared token authenticates the CALLER only, leaving
+        // `principal_verified=false`, so Atlas takes the acting user from the body — without
+        // it the run is unattributed, per-user limits cannot apply and the audit row cannot
+        // name who asked. Omitted ENTIRELY when unset, never sent as "".
+        const username = (deps.credentialsFor().username || "").trim();
+        if (username) body.user_id = username;
 
         if (canElicit) {
           listener = await startListener((ask) =>
@@ -286,6 +300,7 @@ export function addAskBrowserstackAIToolFromConfig(
       // Both resolved per call. An unconfigured host surfaces as a named error from the
       // tool rather than as a missing tool, so the cause is visible to whoever hits it.
       agentUrl,
+      atlasToken,
       credentialsFor: () => ({
         username: config["browserstack-username"],
         accessKey: config["browserstack-access-key"],

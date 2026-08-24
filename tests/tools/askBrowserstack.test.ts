@@ -6,7 +6,10 @@ import {
   parseAsk,
   startCallbackListener,
 } from "../../src/tools/ask-browserstack/callback.js";
-import { AskError, atlasBaseUrl } from "../../src/tools/ask-browserstack/config.js";
+import {
+  AskError, atlasBaseUrl, atlasToken,
+} from "../../src/tools/ask-browserstack/config.js";
+import { agentHeaders } from "../../src/tools/ask-browserstack/egress.js";
 import {
   appliedBeforeStop,
   buildResult,
@@ -437,5 +440,54 @@ describe("the elicitation message — CONTRACT v1.1 §G", () => {
     expect(elicitationMessage("tm", withheld)).toBe(
       "BrowserStack AI (Test Management) needs your approval to continue:\n\n" + withheld,
     );
+  });
+});
+
+describe("POST /agent headers — CONTRACT v1.2 §4", () => {
+  it("is exactly three headers, and Api-Token is not one of them", () => {
+    // /agent has no Api-Token path, and that header carries the user's access key. Asserting
+    // the exact key set is what stops it being reintroduced by a helpful future edit.
+    expect(agentHeaders("shared-delegation-token")).toEqual({
+      Authorization: "Bearer shared-delegation-token",
+      "Content-Type": "application/json",
+      "request-source": "ai-chatbot",
+    });
+  });
+});
+
+describe("the delegation token", () => {
+  const saved = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...saved };
+  });
+
+  it("refuses by name, naming the variable and never a value", () => {
+    delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
+    delete process.env.ASK_BROWSERSTACK_ENV;
+    delete process.env.CAPABILITY_REGISTRY_ENV;
+    expect(() => atlasToken()).toThrow(AskError);
+    expect(() => atlasToken()).toThrow(/ASK_BROWSERSTACK_ATLAS_TOKEN/);
+  });
+
+  it("treats a blank token as unset rather than sending `Bearer `", () => {
+    process.env.ASK_BROWSERSTACK_ATLAS_TOKEN = "   ";
+    delete process.env.ASK_BROWSERSTACK_ENV;
+    delete process.env.CAPABILITY_REGISTRY_ENV;
+    expect(() => atlasToken()).toThrow(AskError);
+  });
+
+  it("takes the environment's token when one is named, and trims it", () => {
+    delete process.env.ASK_BROWSERSTACK_ATLAS_TOKEN;
+    process.env.ASK_BROWSERSTACK_ENV = "preprod";
+    process.env.ASK_BROWSERSTACK_ATLAS_TOKEN_PREPROD = "  preprod-token  ";
+    expect(atlasToken()).toBe("preprod-token");
+  });
+
+  it("lets an explicit token win", () => {
+    process.env.ASK_BROWSERSTACK_ENV = "preprod";
+    process.env.ASK_BROWSERSTACK_ATLAS_TOKEN_PREPROD = "preprod-token";
+    process.env.ASK_BROWSERSTACK_ATLAS_TOKEN = "explicit-token";
+    expect(atlasToken()).toBe("explicit-token");
   });
 });

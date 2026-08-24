@@ -5,17 +5,37 @@
  * not exist yet, so every test substitutes this rather than reaching a live service — the
  * same role `RegistryDeps.transport` plays for the capability registry.
  *
- * Auth is the CALLER'S OWN CREDENTIALS, forwarded as `Api-Token: <username>:<access_key>`.
- * Nothing is minted here; `authHeaders` is reused rather than reimplemented so the two
- * surfaces cannot drift on a security-relevant header.
+ * AUTH HERE IS NOT THE PRODUCT-API AUTH. `/agent` accepts exactly two credentials, both in
+ * `Authorization`: the shared delegation token or a BrowserStack central JWT. There is no
+ * `Api-Token` path on this route (CONTRACT v1.2 §I), so sending one would not merely be
+ * useless — it would push the user's `access_key` across a trust boundary to an endpoint
+ * that has no use for it, and into every request log on the way. The capability registry's
+ * `authHeaders` remains right for PRODUCT calls; it is simply not the header set for this
+ * one, and is deliberately not imported here.
  */
 
-import { authHeaders, Credentials } from "../capability-registry/egress.js";
 import { AGENT_TIMEOUT_MS } from "./config.js";
 import { AgentRequest } from "./types.js";
 
-export { authHeaders };
-export type { Credentials };
+export interface Credentials {
+  username: string;
+  accessKey: string;
+}
+
+/**
+ * The complete header set for `POST /agent` (CONTRACT v1.2 §4). Three headers, no more.
+ *
+ * The token is a secret and appears nowhere else: not in a log line, not in a result, not in
+ * an error message.
+ */
+export function agentHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    // Attribution, so the downstream service can see the call came from an agent.
+    "request-source": "ai-chatbot",
+  };
+}
 
 export interface AgentResponse {
   status: number;

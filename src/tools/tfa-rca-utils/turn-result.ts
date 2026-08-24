@@ -5,7 +5,6 @@ import {
   getO11yBaseUrl,
   getRcaViewGuidance,
   RCA_CHAT_POLL_PATH,
-  RCA_GLIMPSE_ROOT_CAUSE_MAX,
 } from "./constants.js";
 import {
   PENDING_STATUS,
@@ -87,11 +86,11 @@ export function readStructuredTurn(data: any): TurnResponse {
   };
 }
 
-/** Truncate to `max` chars total (ellipsis included when cut). */
-function truncate(text: string | undefined, max: number): string | undefined {
-  if (text === undefined) return undefined;
-  return text.length > max ? text.slice(0, max - 1) + "…" : text;
-}
+// /** Truncate to `max` chars total (ellipsis included when cut). */
+// function truncate(text: string | undefined, max: number): string | undefined {
+//   if (text === undefined) return undefined;
+//   return text.length > max ? text.slice(0, max - 1) + "…" : text;
+// }
 
 /**
  * Trim a completed turn to the status-discriminated contract:
@@ -113,7 +112,7 @@ export function toTrimmedResult(
         confidence: turn.confidence,
         threadId,
         glimpse: {
-          root_cause: truncate(rca.root_cause, RCA_GLIMPSE_ROOT_CAUSE_MAX),
+          root_cause: rca.root_cause,
           failure_type: rca.failure_type,
           related_prs: rca.related_prs,
         },

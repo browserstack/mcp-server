@@ -200,16 +200,13 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         "BrowserStack AI (Test Management) needs your approval to continue:\n\n" +
           "Create folder \"Regression\".",
       );
-      // NEITHER of these may come back. A required boolean defaulting to false made the
-      // approve button unable to approve: the client rendered an unchecked box and
-      // submitted accept + confirm: false.
+      // NOTHING IS REQUESTED. A `confirm` boolean here made the approve button unable to
+      // approve — the client rendered a form field and submitted its unset value, so an
+      // approval came back as a refusal. The action is the whole answer now, and this
+      // assertion is what stops the field creeping back.
+      expect(request.requestedSchema).toEqual({ type: "object", properties: {} });
       expect(request.requestedSchema.required).toBeUndefined();
-      expect(request.requestedSchema.properties.confirm).toEqual({
-        type: "boolean",
-        title: "Approve this change",
-        description: expect.stringContaining("Yes, make this change"),
-      });
-      expect("default" in request.requestedSchema.properties.confirm).toBe(false);
+      expect(Object.keys(request.requestedSchema.properties)).toEqual([]);
       // The inner rung of the timeout ladder, shorter than Atlas's 300s gate.
       expect((elicit.mock.calls[0][1] as any).timeout).toBe(270_000);
 
@@ -266,6 +263,37 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.elicitations[0]).toMatchObject({ decision: "allow", reason: "" });
       expect(payload.approvals[0].outcome).toBe("approved, and the change went through");
       expect(payload.status).toBe("ok");
+    });
+
+    it("logs the SHAPE of the answer, never the description or a credential", async () => {
+      // The module's default export is a Proxy, so it is swapped wholesale rather than spied.
+      const { setLogger } = await import("../../src/logger.js");
+      const lines: string[] = [];
+      const capture = (...args: unknown[]) => lines.push(args.map(String).join(" "));
+      const previous = (await import("pino")).pino({ level: "silent" });
+      setLogger({ info: capture, warn: capture, error: capture, debug: capture, flush: () => {} });
+
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, [{ action: "accept" }]);
+      atlas({
+        asks: [{ perm_id: PERM_A, description: 'Creating the root folder "askrelay-smoke-1".' }],
+      });
+
+      try {
+        await call(server.getTools());
+      } finally {
+        setLogger(previous);
+      }
+
+      const answered = lines.filter((line) => line.includes("elicitation answered"));
+      expect(answered).toHaveLength(1);   // once per ask, never per retry
+      expect(answered[0]).toContain("action=accept");
+      expect(answered[0]).toContain("content=absent");
+      // The whole point: readable next time, and safe to leave switched on.
+      const everything = lines.join("\n");
+      expect(everything).not.toContain("askrelay-smoke-1");
+      expect(everything).not.toContain("SECRET");
+      expect(everything).not.toContain(MINTED);
     });
 
     it("denies when the human confirms false, and never asks a second time", async () => {

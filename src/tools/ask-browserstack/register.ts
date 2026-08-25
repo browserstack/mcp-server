@@ -53,7 +53,13 @@ import {
   CallbackListener,
   startCallbackListener,
 } from "./callback.js";
-import { buildResult, decide, elicitationMessage, errorResult } from "./relay.js";
+import {
+  buildResult,
+  decide,
+  elicitationMessage,
+  elicitationShape,
+  errorResult,
+} from "./relay.js";
 import {
   AgentRequest,
   ApprovalRecord,
@@ -94,10 +100,6 @@ const DESCRIPTION =
   "your own client; deletes are refused outright. If your client cannot show you a prompt, " +
   "the run is read-only and everything it wanted to change comes back in `needs_approval` " +
   "instead. One task per call.";
-
-const CONFIRM_TITLE = "Approve this change";
-const CONFIRM_DESCRIPTION =
-  "Yes, make this change. Anything else — including dismissing this prompt — refuses it.";
 
 /**
  * `isError` marks a call that FAILED, not one that was refused.
@@ -144,30 +146,18 @@ async function relayOneAsk(
         // withheld-placeholder sentence, which reads correctly after the prefix.
         message: elicitationMessage(ask.product, ask.description),
         requestedSchema: {
+          // NOTHING IS REQUESTED. The action IS the answer: `accept` already means the human
+          // approved, and `decline` already gives them an unambiguous refusal in the same
+          // dialog. A `confirm` boolean used to live here and produced a FALSE DENIAL — a
+          // user approved on preprod and was told they had refused, because a client renders
+          // a form field and submits its unset value. We cannot distinguish that from a
+          // deliberate untick, so the field is gone rather than guessed at.
+          //
+          // Fail-closed is untouched by this and never rested on the boolean: a headless
+          // client with nobody at the terminal returns `cancel` (measured, HANDOFF.md), and
+          // `cancel` is a deny. That is what stops an unattended run self-approving.
           type: "object",
-          properties: {
-            confirm: {
-              type: "boolean",
-              title: CONFIRM_TITLE,
-              description: CONFIRM_DESCRIPTION,
-            },
-          },
-          // NEITHER `required` NOR `default: false`, and this is not the loosening it looks
-          // like. Both were here so that a form submitted untouched would refuse rather than
-          // approve — but "form" is the only elicitation mode the SDK has, so a client
-          // renders this as an unchecked checkbox, and pressing APPROVE sent
-          // `accept` + `confirm: false`. That made the approve path literally unreachable:
-          // a human who approved got back "refused: a human said no".
-          //
-          // The guard against an unattended run was never this boolean. It is that a
-          // headless client returns `cancel`, which is measured (HANDOFF.md) and unchanged,
-          // and `accept` means the protocol itself says a human accepted. The cost of the
-          // old shape was not caution, it was a FALSE DENIAL — indistinguishable in the
-          // result from a real refusal, which is the exact confusion D3 and N1 existed to
-          // remove.
-          //
-          // The field stays so a client that does render it still offers an explicit tick,
-          // and an explicit untick is still honoured as a refusal. Only ABSENCE is consent.
+          properties: {},
         },
       },
       // The inner rung of CONTRACT §4's ladder, strictly shorter than Atlas's 300s gate.
@@ -192,6 +182,11 @@ async function relayOneAsk(
     });
     throw error;
   }
+
+  // The SHAPE of the answer only — a fixed action enum and a boolean, never the description
+  // or anything a user typed. Logged so that what a client actually submits can be read next
+  // time rather than inferred from a compiled binary.
+  logger.info("askBrowserstackAI: elicitation answered %s", elicitationShape(answer));
 
   const { decision, reason } = decide(answer);
   approvals.push({ description: ask.description, decision, reason });

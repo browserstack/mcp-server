@@ -168,45 +168,66 @@ export function elicitationMessage(product: string, description: string): string
 }
 
 /**
- * CONTRACT §7.
+ * CONTRACT §7. THE ACTION IS THE WHOLE ANSWER.
  *
- * | accept, `confirm` absent    | allow | ""        |
- * | accept + confirm: true      | allow | ""        |
- * | accept + confirm: false     | deny  | declined  |
- * | accept + anything else      | deny  | declined  |
- * | decline                     | deny  | declined  |
- * | cancel                      | deny  | cancelled |
+ * | accept  | allow | ""        |
+ * | decline | deny  | declined  |
+ * | cancel  | deny  | cancelled |
  *
- * THE ACTION IS THE ANSWER. `accept`/`decline`/`cancel` already carry the three outcomes a
- * yes/no approval needs; a boolean inside the form duplicates that signal, and while it was
- * mandatory with `default: false` it CONTRADICTED it — a client renders one unchecked
- * checkbox, approve submits `accept` + `confirm: false`, and a human who approved was told
- * "refused: a human said no". So absence of the field is consent now.
+ * Nothing is requested in the form any more, so nothing can contradict the action. There used
+ * to be a `confirm` boolean, and it had to go: with an `accept` action that ALREADY means the
+ * human approved, `accept` + `confirm: false` is genuinely ambiguous between "I approved, and
+ * a checkbox I never saw defaulted to false" and "I unticked it deliberately". The first is a
+ * FALSE DENIAL — indistinguishable in the result from a human refusing, which is the exact
+ * confusion D3 and N1 existed to remove — and a user hit it live. We cannot tell the two
+ * apart, and guessing either way is wrong for the other. `decline` already gives an
+ * unambiguous refusal in the same dialog, so the boolean bought nothing.
  *
- * `cancel` IS STILL THE LOAD-BEARING ROW, and it is the whole of the fail-closed guarantee.
- * A headless Claude Code with no human at a terminal returns `cancel` — measured, not
- * assumed — so an unattended run still cannot self-approve. That never depended on the
- * boolean. It is also why an elicitation is never retried: a second ask cannot conjure a
- * human, it can only wear one down.
- *
- * An EXPLICIT `false` is still a refusal, because a client that does render the checkbox and
- * a user who unticks it have said no, and that must be honoured. Nothing is coerced: a
- * string "true", a 1 or a null is not consent either — only `true`, or nothing at all.
+ * FAIL-CLOSED IS UNCHANGED, and the boolean was never what provided it. A headless client with
+ * no human at a terminal returns `cancel` — measured, not assumed (HANDOFF.md) — and `cancel`
+ * is a deny. That is why an unattended run still cannot self-approve. It is also why an
+ * elicitation is never retried: a second ask cannot conjure a human, only wear one down.
  */
 export function decide(result: ElicitResult): {
   decision: Decision;
   reason: DecisionReason;
 } {
   if (result.action === "accept") {
-    const confirm = result.content?.confirm;
-    return confirm === undefined || confirm === true
-      ? { decision: "allow", reason: "" }
-      : { decision: "deny", reason: "declined" };
+    // DEFENSIVE ONLY. We no longer request this field, so no client can be expected to send
+    // it — but one that volunteers an explicit `false` has said something, and honouring it
+    // costs nothing. Absence, which is the normal case, is consent.
+    if (result.content?.confirm === false) {
+      return { decision: "deny", reason: "declined" };
+    }
+    return { decision: "allow", reason: "" };
   }
   if (result.action === "decline") return { decision: "deny", reason: "declined" };
   // `cancel`, and anything a future client sends that we do not recognise: no explicit
   // answer was given, which is not an answer we may read as yes.
   return { decision: "deny", reason: "cancelled" };
+}
+
+/**
+ * A one-line description of the SHAPE of what a client answered with — never its content.
+ *
+ * Which client sends what is currently guesswork: the elicitation bug in task 9 had to be
+ * fixed without being able to confirm what Claude Code actually submits, because its binary
+ * is compiled and its strings too fragmented to read. This line means the next person can
+ * look it up instead of inferring it.
+ *
+ * `action` and `confirm` are a fixed enum and a boolean; neither can carry a description, a
+ * credential or anything else a user typed.
+ */
+export function elicitationShape(result: ElicitResult): string {
+  const content = result.content;
+  const confirm = content?.confirm;
+  const seen =
+    confirm === undefined
+      ? "absent"
+      : typeof confirm === "boolean"
+        ? String(confirm)
+        : "non-boolean";
+  return `action=${result.action} content=${content ? "present" : "absent"} confirm=${seen}`;
 }
 
 /**

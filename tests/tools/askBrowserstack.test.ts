@@ -25,6 +25,7 @@ import {
   approvalOutcome,
   buildResult,
   decide,
+  elicitationShape,
   errorResult,
   deriveStatus,
   elicitationMessage,
@@ -79,7 +80,7 @@ describe("decide — CONTRACT §7, and nothing but", () => {
       .toEqual({ decision: "allow", reason: "" });
   });
 
-  it("allows an explicit accept AND confirm: true", () => {
+  it("allows an accept that volunteers confirm: true", () => {
     expect(decide({ action: "accept", content: { confirm: true } }))
       .toEqual({ decision: "allow", reason: "" });
   });
@@ -101,13 +102,38 @@ describe("decide — CONTRACT §7, and nothing but", () => {
       .toEqual({ decision: "deny", reason: "cancelled" });
   });
 
-  it("does not accept a truthy stand-in for consent", () => {
-    // Only the boolean `true`, or nothing at all. A string "true" or a 1 is a client bug,
-    // and coercing it would be inventing consent from a malformed answer.
-    for (const confirm of ["true", 1, "yes", null]) {
+  it("ignores whatever a client volunteers, except an explicit false", () => {
+    // Nothing is requested any more, so the action decides. A volunteered `false` is still
+    // honoured as defensive belt, but no other value can override an accept.
+    for (const confirm of ["true", 1, "yes", null, undefined]) {
       expect(decide({ action: "accept", content: { confirm } } as never))
-        .toEqual({ decision: "deny", reason: "declined" });
+        .toEqual({ decision: "allow", reason: "" });
     }
+    expect(decide({ action: "accept", content: { confirm: false } }))
+      .toEqual({ decision: "deny", reason: "declined" });
+  });
+
+  it("describes the shape a client answered with, and nothing a human wrote", () => {
+    expect(elicitationShape({ action: "accept" }))
+      .toBe("action=accept content=absent confirm=absent");
+    expect(elicitationShape({ action: "accept", content: {} }))
+      .toBe("action=accept content=present confirm=absent");
+    expect(elicitationShape({ action: "accept", content: { confirm: false } }))
+      .toBe("action=accept content=present confirm=false");
+    expect(elicitationShape({ action: "cancel" }))
+      .toBe("action=cancel content=absent confirm=absent");
+    expect(elicitationShape({ action: "accept", content: { confirm: "yes" } } as never))
+      .toBe("action=accept content=present confirm=non-boolean");
+
+    // It can only ever contain a fixed action enum and a boolean — never a description, a
+    // credential, or anything a user typed into a form.
+    const line = elicitationShape({
+      action: "accept",
+      content: { confirm: "SECRET", notes: 'Creating the folder "askrelay-smoke-1"' },
+    } as never);
+    expect(line).not.toContain("SECRET");
+    expect(line).not.toContain("askrelay-smoke-1");
+    expect(line).toBe("action=accept content=present confirm=non-boolean");
   });
 
   it("treats an action it does not recognise as no answer at all", () => {

@@ -150,12 +150,24 @@ async function relayOneAsk(
               type: "boolean",
               title: CONFIRM_TITLE,
               description: CONFIRM_DESCRIPTION,
-              // Defaulting to false so that a client which submits the form untouched
-              // refuses rather than approves.
-              default: false,
             },
           },
-          required: ["confirm"],
+          // NEITHER `required` NOR `default: false`, and this is not the loosening it looks
+          // like. Both were here so that a form submitted untouched would refuse rather than
+          // approve — but "form" is the only elicitation mode the SDK has, so a client
+          // renders this as an unchecked checkbox, and pressing APPROVE sent
+          // `accept` + `confirm: false`. That made the approve path literally unreachable:
+          // a human who approved got back "refused: a human said no".
+          //
+          // The guard against an unattended run was never this boolean. It is that a
+          // headless client returns `cancel`, which is measured (HANDOFF.md) and unchanged,
+          // and `accept` means the protocol itself says a human accepted. The cost of the
+          // old shape was not caution, it was a FALSE DENIAL — indistinguishable in the
+          // result from a real refusal, which is the exact confusion D3 and N1 existed to
+          // remove.
+          //
+          // The field stays so a client that does render it still offers an explicit tick,
+          // and an explicit untick is still honoured as a refusal. Only ABSENCE is consent.
         },
       },
       // The inner rung of CONTRACT §4's ladder, strictly shorter than Atlas's 300s gate.

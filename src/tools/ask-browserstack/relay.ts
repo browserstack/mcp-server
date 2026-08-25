@@ -168,28 +168,38 @@ export function elicitationMessage(product: string, description: string): string
 }
 
 /**
- * CONTRACT §7, exactly.
+ * CONTRACT §7.
  *
- * | accept + confirm: true  | allow | ""        |
- * | accept + confirm: false | deny  | declined  |
- * | decline                 | deny  | declined  |
- * | cancel                  | deny  | cancelled |
+ * | accept, `confirm` absent    | allow | ""        |
+ * | accept + confirm: true      | allow | ""        |
+ * | accept + confirm: false     | deny  | declined  |
+ * | accept + anything else      | deny  | declined  |
+ * | decline                     | deny  | declined  |
+ * | cancel                      | deny  | cancelled |
  *
- * `cancel` IS THE LOAD-BEARING ROW. A headless Claude Code with no human at a terminal
- * returns `cancel` — measured, not assumed — so treating it as anything but a deny would
- * let an unattended run self-approve, which is the one property that makes this feature
- * safe to ship. It is also why the caller never retries an elicitation: a second ask cannot
- * conjure a human, it can only wear one down.
+ * THE ACTION IS THE ANSWER. `accept`/`decline`/`cancel` already carry the three outcomes a
+ * yes/no approval needs; a boolean inside the form duplicates that signal, and while it was
+ * mandatory with `default: false` it CONTRADICTED it — a client renders one unchecked
+ * checkbox, approve submits `accept` + `confirm: false`, and a human who approved was told
+ * "refused: a human said no". So absence of the field is consent now.
  *
- * `confirm` is compared to the boolean `true` and nothing else. A string "true", a 1, or a
- * missing field is not consent.
+ * `cancel` IS STILL THE LOAD-BEARING ROW, and it is the whole of the fail-closed guarantee.
+ * A headless Claude Code with no human at a terminal returns `cancel` — measured, not
+ * assumed — so an unattended run still cannot self-approve. That never depended on the
+ * boolean. It is also why an elicitation is never retried: a second ask cannot conjure a
+ * human, it can only wear one down.
+ *
+ * An EXPLICIT `false` is still a refusal, because a client that does render the checkbox and
+ * a user who unticks it have said no, and that must be honoured. Nothing is coerced: a
+ * string "true", a 1 or a null is not consent either — only `true`, or nothing at all.
  */
 export function decide(result: ElicitResult): {
   decision: Decision;
   reason: DecisionReason;
 } {
   if (result.action === "accept") {
-    return result.content?.confirm === true
+    const confirm = result.content?.confirm;
+    return confirm === undefined || confirm === true
       ? { decision: "allow", reason: "" }
       : { decision: "deny", reason: "declined" };
   }

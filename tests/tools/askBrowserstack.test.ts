@@ -68,12 +68,23 @@ async function post(
 }
 
 describe("decide — CONTRACT §7, and nothing but", () => {
-  it("allows only an explicit accept AND confirm: true", () => {
+  it("allows an accept whose form carried no confirm field at all", () => {
+    // THE LIVE BUG. `confirm` used to be required with `default: false`, so a client
+    // rendered one unchecked checkbox and pressing APPROVE sent accept + confirm: false —
+    // and a human who approved was told "refused: a human said no". The approve path was
+    // unreachable. Absence of the field is now consent; `accept` already IS the answer.
+    expect(decide({ action: "accept" }))
+      .toEqual({ decision: "allow", reason: "" });
+    expect(decide({ action: "accept", content: {} }))
+      .toEqual({ decision: "allow", reason: "" });
+  });
+
+  it("allows an explicit accept AND confirm: true", () => {
     expect(decide({ action: "accept", content: { confirm: true } }))
       .toEqual({ decision: "allow", reason: "" });
   });
 
-  it("denies accept + confirm: false as the human saying no", () => {
+  it("still honours an explicit untick as the human saying no", () => {
     expect(decide({ action: "accept", content: { confirm: false } }))
       .toEqual({ decision: "deny", reason: "declined" });
   });
@@ -91,10 +102,12 @@ describe("decide — CONTRACT §7, and nothing but", () => {
   });
 
   it("does not accept a truthy stand-in for consent", () => {
-    // A string "true" or a 1 is a client bug, not an approval.
-    expect(decide({ action: "accept", content: { confirm: "true" } }).decision).toBe("deny");
-    expect(decide({ action: "accept", content: {} }).decision).toBe("deny");
-    expect(decide({ action: "accept" }).decision).toBe("deny");
+    // Only the boolean `true`, or nothing at all. A string "true" or a 1 is a client bug,
+    // and coercing it would be inventing consent from a malformed answer.
+    for (const confirm of ["true", 1, "yes", null]) {
+      expect(decide({ action: "accept", content: { confirm } } as never))
+        .toEqual({ decision: "deny", reason: "declined" });
+    }
   });
 
   it("treats an action it does not recognise as no answer at all", () => {

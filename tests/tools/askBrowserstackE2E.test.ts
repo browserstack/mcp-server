@@ -200,8 +200,16 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         "BrowserStack AI (Test Management) needs your approval to continue:\n\n" +
           "Create folder \"Regression\".",
       );
-      expect(request.requestedSchema.properties.confirm.type).toBe("boolean");
-      expect(request.requestedSchema.required).toEqual(["confirm"]);
+      // NEITHER of these may come back. A required boolean defaulting to false made the
+      // approve button unable to approve: the client rendered an unchecked box and
+      // submitted accept + confirm: false.
+      expect(request.requestedSchema.required).toBeUndefined();
+      expect(request.requestedSchema.properties.confirm).toEqual({
+        type: "boolean",
+        title: "Approve this change",
+        description: expect.stringContaining("Yes, make this change"),
+      });
+      expect("default" in request.requestedSchema.properties.confirm).toBe(false);
       // The inner rung of the timeout ladder, shorter than Atlas's 300s gate.
       expect((elicit.mock.calls[0][1] as any).timeout).toBe(270_000);
 
@@ -224,6 +232,40 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       }]);
       expect(payload.applied_before_stop).toBe(false);
       expect(payload.permission_relay.used).toBe(true);
+    });
+
+    it("APPROVES when the client accepts without sending a confirm field", async () => {
+      // Exactly what a real client sends for a schema with no required fields, and the
+      // shape the user hit on preprod when they pressed approve and were told they had
+      // refused.
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "accept" },
+      ]);
+      const stub = atlas({
+        asks: [{ perm_id: PERM_A, description: 'Creating the root folder "askrelay-smoke-1".' }],
+        payload: () => ({
+          ok: true, status: "ok", answer: "Created it.", steps: [],
+          approvals: [{
+            description: 'Creating the root folder "askrelay-smoke-1".',
+            decision: "allow", reason: "", applied: true,
+          }],
+          applied_before_stop: false,
+          permission_relay: { used: true, reason: "" },
+        }),
+      });
+
+      const { payload } = await call(server.getTools());
+
+      expect(elicit).toHaveBeenCalledTimes(1);
+      // On the wire to Atlas: an allow, not a denial.
+      expect(stub.decisions[0].body)
+        .toEqual({ perm_id: PERM_A, decision: "allow", reason: "" });
+      // And the two trails agree that it was approved.
+      expect(payload.approvals[0]).toMatchObject({ decision: "allow", applied: true });
+      expect(payload.elicitations[0]).toMatchObject({ decision: "allow", reason: "" });
+      expect(payload.approvals[0].outcome).toBe("approved, and the change went through");
+      expect(payload.status).toBe("ok");
     });
 
     it("denies when the human confirms false, and never asks a second time", async () => {

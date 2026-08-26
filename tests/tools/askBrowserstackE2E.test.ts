@@ -696,17 +696,30 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(Object.keys(body).sort()).toEqual(["product", "task"]);
     });
 
-    it("refuses by name when there is nowhere to sign in", async () => {
+    it("signs in against the built-in staging endpoint when nothing is configured", async () => {
+      // No refusal any more: the hosts ship with the tool, so an install needs no env var.
       delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
-      const fetchSpy = vi.fn();
-      vi.stubGlobal("fetch", fetchSpy);
+      delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
+      const seen: string[] = [];
+      vi.stubGlobal("fetch", async (url: string) => {
+        seen.push(String(url));
+        return {
+          status: 200,
+          headers: { get: () => "application/json" },
+          json: async () => (String(url).includes("oauth2")
+            ? { access_token: MINTED, expires_in: 3600 }
+            : { ok: true, status: "ok", answer: "" }),
+        };
+      });
       const server = await buildServer();
-      fakeClient(server.getInstance(), { elicitation: {} }, []);
+      fakeClient(server.getInstance(), { roots: {} }, []);
 
-      const { result, payload } = await call(server.getTools());
-      expect(result.isError).toBe(true);
-      expect(payload.error).toMatch(/ASK_BROWSERSTACK_AUTH_TOKEN_URL/);
-      expect(fetchSpy).not.toHaveBeenCalled();
+      const { payload } = await call(server.getTools());
+      expect(payload.status).toBe("ok");
+      expect(seen).toEqual([
+        "https://auth-preprod.bsstag.com/oauth2/v2/token",
+        "https://ai-platform-service.bsstag.com/agent",
+      ]);
     });
 
     it("mints the token with the exact client_credentials grant", async () => {
@@ -918,25 +931,23 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.approvals[0]).toMatchObject({ decision: "deny", reason: "declined" });
     });
 
-    it("signs in against the named environment, so preprod cannot use prod's auth", async () => {
-      process.env.ASK_BROWSERSTACK_ENV = "preprod";
-      process.env.ASK_BROWSERSTACK_ATLAS_URL_PREPROD = "https://atlas-preprod.example";
-      process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL_PREPROD = AUTH_URL;
-      delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
-      delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
+    it("an environment selector no longer changes anything", async () => {
+      // The map and ASK_BROWSERSTACK_ENV are gone; a leftover selector must be inert rather
+      // than quietly repointing the tool.
+      process.env.ASK_BROWSERSTACK_ENV = "prod";
+      process.env.ASK_BROWSERSTACK_ATLAS_URL_PROD = "https://should-be-ignored.example";
       try {
         const server = await buildServer();
         fakeClient(server.getInstance(), { roots: {} }, []);
         const stub = atlas({});
 
         await call(server.getTools());
-        expect(stub.calls[0].url).toBe("https://atlas-preprod.example/agent");
+        // Still the explicit override this suite sets, never the selector's host.
+        expect(stub.calls[0].url).toBe("https://atlas.example/agent");
         expect(stub.calls[0].headers.Authorization).toBe(`Bearer ${MINTED}`);
-        expect(stub.mints).toHaveLength(1);
       } finally {
         delete process.env.ASK_BROWSERSTACK_ENV;
-        delete process.env.ASK_BROWSERSTACK_ATLAS_URL_PREPROD;
-        delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL_PREPROD;
+        delete process.env.ASK_BROWSERSTACK_ATLAS_URL_PROD;
       }
     });
   });
@@ -1092,17 +1103,26 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
     });
   });
 
-  it("refuses by name when no host is configured, without calling anything", async () => {
+  it("falls back to the built-in staging host when no override is set", async () => {
     delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
-    const fetchSpy = vi.fn();
-    vi.stubGlobal("fetch", fetchSpy);
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      seen.push(String(url));
+      return {
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: async () => (String(url).includes("oauth2")
+          ? { access_token: MINTED, expires_in: 3600 }
+          : { ok: true, status: "ok", answer: "" }),
+      };
+    });
     const server = await buildServer();
-    fakeClient(server.getInstance(), { elicitation: {} }, []);
+    fakeClient(server.getInstance(), { roots: {} }, []);
 
-    const { result, payload } = await call(server.getTools());
-    expect(result.isError).toBe(true);
-    expect(payload.error).toMatch(/ASK_BROWSERSTACK_ATLAS_URL/);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    const { result } = await call(server.getTools());
+    expect(result.isError).toBeUndefined();
+    // TEMPORARY-STAGING-DEFAULT: asserted literally so repointing must be deliberate.
+    expect(seen).toContain("https://ai-platform-service.bsstag.com/agent");
   });
 });
 

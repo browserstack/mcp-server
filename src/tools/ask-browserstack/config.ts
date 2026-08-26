@@ -1,10 +1,12 @@
+import logger from "../../logger.js";
+
 /**
  * Where Atlas lives, and the timeout ladder.
  *
- * No host is compiled in. A guessed host fails as a DNS error or a 404 that reads like the
- * caller's problem when it is our missing configuration, and a hardcoded default would send
- * a preprod deployment at production — the same reasoning as the capability registry's
- * `resolveBaseUrl`, and the same precedence rungs.
+ * The host IS compiled in, matching every other tool here — `TM_BASE_URLS`, the
+ * instrumentation endpoint — so an install needs no configuration to work. One env var
+ * overrides it. See the warning on `DEFAULT_ATLAS_URL`: the compiled-in value is currently
+ * STAGING and is a deliberate placeholder.
  */
 
 /**
@@ -30,119 +32,78 @@ export function isEnabled(): boolean {
 }
 
 /**
- * The environment this DEPLOYMENT points at, e.g. "preprod".
+ * ============================================================================
+ * TEMPORARY STAGING DEFAULT — REPOINT BEFORE PRODUCTION USERS GET THIS TOOL
+ * ============================================================================
  *
- * `CAPABILITY_REGISTRY_ENV` is honoured as a fallback on purpose: it is the same deployment
- * pointing at the same environment, and making an operator state that fact twice is how the
- * two drift.
+ * These hosts are STAGING. They are hardcoded on purpose, as an explicit interim step:
+ * "for now lets hardcode the base_url to staging only then we will point this to prod url
+ * later." This is a placeholder, not the end state.
+ *
+ * PRODUCTION IS `https://workflows.browserstack.com` — verified, not guessed: its
+ * `/api/profiles` answers `401 {"detail":"authentication required"}`, byte-identical to
+ * staging Atlas. (`/agent` 404s there today only because prod runs an image without the
+ * delegation route yet, and `/fe` 404s because prod is API-only by design.) The production
+ * auth endpoint is `https://auth.browserstack.com/oauth2/v2/token`.
+ *
+ * WHY THIS MATTERS: this package publishes to npm as `@browserstack/mcp-server`, so an
+ * install with no environment variables set talks to STAGING. That is the safer direction —
+ * it cannot touch production data — but it is still wrong for a production deployment, which
+ * would silently read and write the wrong environment's data. The resolved host is therefore
+ * logged at info on first use, naming whether it came from the env var or from here, so a
+ * deployment pointing at the wrong Atlas is visible in a log line rather than inferred later
+ * from confusing data.
+ *
+ * BEFORE SHIPPING TO PRODUCTION USERS: change these two constants, and change the tests that
+ * assert them — they assert the literals precisely so that repointing has to be deliberate
+ * rather than something that slips through.
+ *
+ * grep: TEMPORARY-STAGING-DEFAULT
  */
-export function selectedEnvironment(): string {
-  return (
-    process.env.ASK_BROWSERSTACK_ENV ||
-    process.env.CAPABILITY_REGISTRY_ENV ||
-    ""
-  ).trim();
-}
+export const DEFAULT_ATLAS_URL = "https://ai-platform-service.bsstag.com";
+export const DEFAULT_AUTH_TOKEN_URL =
+  "https://auth-preprod.bsstag.com/oauth2/v2/token";
 
-/**
- * The hosts this tool ships with, so an install needs an ENVIRONMENT NAME and not a URL.
- *
- * Every other tool here bakes its production host into the code and treats env vars as an
- * override — `TM_BASE_URLS`, the instrumentation endpoint — and the capability registry's
- * `resolveBaseUrl` is the richer form of the same idea. This is that, for Atlas.
- *
- * Each pair was established rather than assumed:
- *
- *   - `prod` — `workflows.browserstack.com/api/profiles` answers
- *     `401 {"detail":"authentication required"}`, byte-identical to staging Atlas. `/agent`
- *     404s there only because prod runs an image without the delegation route yet, and `/fe`
- *     404s because prod is API-only by design.
- *   - `stag` / `preprod` — the two ingress hosts in `ai-platform-infra-ops` `stag`
- *     `values-atlas.yaml`, both serving the same `atlas-server` backend.
- *   - `stag` pointing at **auth-preprod is deliberate, not a copy-paste.** Staging's
- *     `oauth.issuer` is `auth-rengg-reg-ai-agent-dev.bsstag.com`, but preprod is configured
- *     as an EXTRA ENVIRONMENT and `_accepted_configs` returns the default PLUS extras, so a
- *     preprod-minted token validates there. Confirmed live: a token minted at `auth-preprod`
- *     was accepted by staging Atlas (`matched=scope`, verified `user_id`).
- */
-export const ATLAS_HOSTS: Record<string, { agent: string; auth: string }> = {
-  prod: {
-    agent: "https://workflows.browserstack.com",
-    auth: "https://auth.browserstack.com/oauth2/v2/token",
-  },
-  preprod: {
-    agent: "https://ai-platform-service-preprod.bsstag.com",
-    auth: "https://auth-preprod.bsstag.com/oauth2/v2/token",
-  },
-  stag: {
-    agent: "https://ai-platform-service.bsstag.com",
-    auth: "https://auth-preprod.bsstag.com/oauth2/v2/token",
-  },
-};
-
-const KNOWN_ENVIRONMENTS = Object.keys(ATLAS_HOSTS).join(", ");
-
-/** Map entries are literals and an operator's override may not be; normalise both. */
+/** An operator's override may carry a trailing slash; the constants above do not. */
 function trimUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
 }
 
 /**
- * Why an unset environment REFUSES rather than defaulting to production.
+ * Announced ONCE per distinct resolution, not per tool call.
  *
- * The capability registry refuses when an environment is named but has no host, because
- * *"falling back to the harness default here would send a preprod deployment at production,
- * silently."* The same reasoning applies harder to an environment that was never named at
- * all, and hardest of all to this tool, because this one WRITES.
- *
- * The cost of refusing is one documented environment name at install time, reported by name
- * the first time the tool is used. The cost of defaulting is an unconfigured install quietly
- * changing production data. Those are not comparable, and a selector that is wrong refuses
- * by name where a URL that is wrong talks to the wrong place in silence.
+ * The point is that a deployment talking to the wrong Atlas shows up in the log; repeating it
+ * on every call would only make it easier to scroll past.
  */
-function noEnvironment(explicitVar: string): AskError {
-  return new AskError(
-    `no BrowserStack AI environment is selected. Set ASK_BROWSERSTACK_ENV to one of ` +
-      `${KNOWN_ENVIRONMENTS} — or set ${explicitVar} to a host directly. Nothing is ` +
-      `assumed here on purpose: this tool can change data, so it will not guess at ` +
-      `production.`,
-  );
+const announced = new Set<string>();
+
+/** For tests, and for anything that legitimately re-resolves. */
+export function resetHostAnnouncements(): void {
+  announced.clear();
 }
 
-function unknownEnvironment(environment: string, suffixedVar: string): AskError {
-  return new AskError(
-    `environment '${environment}' has no built-in BrowserStack AI host. Known ` +
-      `environments: ${KNOWN_ENVIRONMENTS}. Set ${suffixedVar} to add one.`,
-  );
+function announce(what: string, url: string, source: "env" | "default"): void {
+  const line = `${what}|${url}|${source}`;
+  if (announced.has(line)) return;
+  announced.add(line);
+  logger.info("askBrowserstackAI: %s is %s (source: %s)", what, url, source);
 }
 
 /**
  * Resolve Atlas's base URL:
  *
- *   1. ASK_BROWSERSTACK_ATLAS_URL          explicit, environment-agnostic
- *   2. ASK_BROWSERSTACK_ATLAS_URL_<ENV>    this environment's host
- *   3. the built-in map for <ENV>
- *   4. refuse, by name
+ *   1. ASK_BROWSERSTACK_ATLAS_URL   explicit override
+ *   2. the built-in staging default (see the warning above)
  *
- * The overrides stay ahead of the map so nothing that works today stops working.
+ * Matching every other tool here, which ships its host in the code and treats the env var as
+ * an override — `TM_BASE_URLS`, the instrumentation endpoint. There is no environment map and
+ * no selector: one default, one override.
  */
 export function atlasBaseUrl(): string {
   const explicit = process.env.ASK_BROWSERSTACK_ATLAS_URL;
-  if (explicit && explicit.trim()) return trimUrl(explicit);
-
-  const environment = selectedEnvironment();
-  if (!environment) {
-    throw noEnvironment("ASK_BROWSERSTACK_ATLAS_URL");
-  }
-
-  const suffixedVar = `ASK_BROWSERSTACK_ATLAS_URL_${environment.toUpperCase()}`;
-  const suffixed = process.env[suffixedVar];
-  if (suffixed && suffixed.trim()) return trimUrl(suffixed);
-
-  const builtIn = ATLAS_HOSTS[environment.toLowerCase()];
-  if (builtIn) return trimUrl(builtIn.agent);
-
-  throw unknownEnvironment(environment, suffixedVar);
+  const url = explicit && explicit.trim() ? trimUrl(explicit) : DEFAULT_ATLAS_URL;
+  announce("Atlas", url, explicit && explicit.trim() ? "env" : "default");
+  return url;
 }
 
 /** Resolved per call, never captured at construction. */
@@ -154,26 +115,12 @@ export function agentUrl(): string {
  * Where a central-OAuth JWT is minted (CONTRACT v1.2 §I, as amended by task 7).
  *
  * The shared `delegation.token` path is gone from Atlas, so a user-attested central JWT is
- * now the only way in. This is the endpoint that issues one from a username and access key.
- *
- * Same four rungs as the host, and refusing rather than guessing for the same reason: a
- * deployment pointing at preprod must not sign in against production's auth server.
+ * the only way in. Same two rungs as the host, and the same staging default.
  */
 export function authTokenUrl(): string {
   const explicit = process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
-  if (explicit && explicit.trim()) return trimUrl(explicit);
-
-  const environment = selectedEnvironment();
-  if (!environment) {
-    throw noEnvironment("ASK_BROWSERSTACK_AUTH_TOKEN_URL");
-  }
-
-  const suffixedVar = `ASK_BROWSERSTACK_AUTH_TOKEN_URL_${environment.toUpperCase()}`;
-  const suffixed = process.env[suffixedVar];
-  if (suffixed && suffixed.trim()) return trimUrl(suffixed);
-
-  const builtIn = ATLAS_HOSTS[environment.toLowerCase()];
-  if (builtIn) return trimUrl(builtIn.auth);
-
-  throw unknownEnvironment(environment, suffixedVar);
+  const url =
+    explicit && explicit.trim() ? trimUrl(explicit) : DEFAULT_AUTH_TOKEN_URL;
+  announce("auth token endpoint", url, explicit && explicit.trim() ? "env" : "default");
+  return url;
 }

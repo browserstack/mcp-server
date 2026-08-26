@@ -7,7 +7,7 @@ import {
   startCallbackListener,
 } from "../../src/tools/ask-browserstack/callback.js";
 import {
-  AskError, atlasBaseUrl, authTokenUrl,
+  ATLAS_HOSTS, AskError, atlasBaseUrl, authTokenUrl,
 } from "../../src/tools/ask-browserstack/config.js";
 import {
   AUTH_REJECTED_DETAIL,
@@ -1217,5 +1217,113 @@ describe("a 2xx carrying no delegation result is internally consistent (N4)", ()
       expect(result.status).toBe("error");
       expect(result.error).toBe("BrowserStack AI answered HTTP 200 with no delegation result.");
     }
+  });
+});
+
+describe("the built-in Atlas host map", () => {
+  const saved = { ...process.env };
+
+  beforeEach(() => {
+    // Nothing but the selector: the whole point is that an install needs no URL.
+    delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
+    delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
+    delete process.env.ASK_BROWSERSTACK_ENV;
+    delete process.env.CAPABILITY_REGISTRY_ENV;
+  });
+
+  afterEach(() => {
+    process.env = { ...saved };
+  });
+
+  it.each([
+    ["prod", "https://workflows.browserstack.com", "https://auth.browserstack.com/oauth2/v2/token"],
+    ["preprod", "https://ai-platform-service-preprod.bsstag.com", "https://auth-preprod.bsstag.com/oauth2/v2/token"],
+    ["stag", "https://ai-platform-service.bsstag.com", "https://auth-preprod.bsstag.com/oauth2/v2/token"],
+  ])("resolves %s from the selector alone", (env, agent, auth) => {
+    process.env.ASK_BROWSERSTACK_ENV = env;
+    expect(atlasBaseUrl()).toBe(agent);
+    expect(authTokenUrl()).toBe(auth);
+  });
+
+  it("sends staging at auth-preprod on purpose, not by copy-paste", () => {
+    // Staging's own issuer is auth-rengg-reg-ai-agent-dev, but preprod is configured as an
+    // extra environment and `_accepted_configs` returns the default PLUS extras, so a
+    // preprod-minted token validates there. Confirmed live (matched=scope).
+    expect(ATLAS_HOSTS.stag.auth).toBe(ATLAS_HOSTS.preprod.auth);
+    expect(ATLAS_HOSTS.stag.agent).not.toBe(ATLAS_HOSTS.preprod.agent);
+  });
+
+  it("takes the selector from CAPABILITY_REGISTRY_ENV too, without a third variable", () => {
+    process.env.CAPABILITY_REGISTRY_ENV = "preprod";
+    expect(atlasBaseUrl()).toBe("https://ai-platform-service-preprod.bsstag.com");
+  });
+
+  it("is case-insensitive about the environment name", () => {
+    process.env.ASK_BROWSERSTACK_ENV = "PreProd";
+    expect(atlasBaseUrl()).toBe("https://ai-platform-service-preprod.bsstag.com");
+  });
+
+  it("lets an explicit override beat the map", () => {
+    process.env.ASK_BROWSERSTACK_ENV = "prod";
+    process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example/";
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = "https://auth.example/t/";
+    expect(atlasBaseUrl()).toBe("https://atlas.example");
+    expect(authTokenUrl()).toBe("https://auth.example/t");
+  });
+
+  it("lets an env-suffixed override beat the map", () => {
+    process.env.ASK_BROWSERSTACK_ENV = "prod";
+    process.env.ASK_BROWSERSTACK_ATLAS_URL_PROD = "https://atlas-pinned.example";
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL_PROD = "https://auth-pinned.example/t";
+    expect(atlasBaseUrl()).toBe("https://atlas-pinned.example");
+    expect(authTokenUrl()).toBe("https://auth-pinned.example/t");
+  });
+
+  it("strips trailing slashes from overrides, since the map entries carry none", () => {
+    process.env.ASK_BROWSERSTACK_ENV = "prod";
+    process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example///";
+    // Otherwise `${base}/agent` becomes `//agent`.
+    expect(atlasBaseUrl()).toBe("https://atlas.example");
+    for (const host of Object.values(ATLAS_HOSTS)) {
+      expect(host.agent.endsWith("/")).toBe(false);
+      expect(host.auth.endsWith("/")).toBe(false);
+    }
+  });
+
+  it("refuses an environment the map has never heard of, by name", () => {
+    process.env.ASK_BROWSERSTACK_ENV = "dev";
+    expect(() => atlasBaseUrl()).toThrow(AskError);
+    expect(() => atlasBaseUrl()).toThrow(/environment 'dev' has no built-in/);
+    // ...and names both the known set and the way to add one.
+    expect(() => atlasBaseUrl()).toThrow(/prod, preprod, stag/);
+    expect(() => atlasBaseUrl()).toThrow(/ASK_BROWSERSTACK_ATLAS_URL_DEV/);
+    expect(() => authTokenUrl()).toThrow(/ASK_BROWSERSTACK_AUTH_TOKEN_URL_DEV/);
+  });
+
+  it("REFUSES when no environment is selected — it does not default to production", () => {
+    // The decision, asserted deliberately so it cannot drift. An unconfigured install
+    // quietly writing to production Atlas is the failure the capability registry's own
+    // comment warns about, and this tool changes data.
+    expect(() => atlasBaseUrl()).toThrow(AskError);
+    expect(() => atlasBaseUrl()).toThrow(/no BrowserStack AI environment is selected/);
+    expect(() => atlasBaseUrl()).toThrow(/will not guess at production/);
+    expect(() => authTokenUrl()).toThrow(/no BrowserStack AI environment is selected/);
+
+    // Specifically: NOT the prod host, even though the map contains one.
+    let resolved: string | undefined;
+    try {
+      resolved = atlasBaseUrl();
+    } catch {
+      resolved = undefined;
+    }
+    expect(resolved).toBeUndefined();
+  });
+
+  it("still works with only an explicit URL and no selector at all", () => {
+    // The pre-existing escape hatch keeps working for anyone already using it.
+    process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = "https://auth.example/t";
+    expect(atlasBaseUrl()).toBe("https://atlas.example");
+    expect(authTokenUrl()).toBe("https://auth.example/t");
   });
 });

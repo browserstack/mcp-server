@@ -45,31 +45,104 @@ export function selectedEnvironment(): string {
 }
 
 /**
+ * The hosts this tool ships with, so an install needs an ENVIRONMENT NAME and not a URL.
+ *
+ * Every other tool here bakes its production host into the code and treats env vars as an
+ * override — `TM_BASE_URLS`, the instrumentation endpoint — and the capability registry's
+ * `resolveBaseUrl` is the richer form of the same idea. This is that, for Atlas.
+ *
+ * Each pair was established rather than assumed:
+ *
+ *   - `prod` — `workflows.browserstack.com/api/profiles` answers
+ *     `401 {"detail":"authentication required"}`, byte-identical to staging Atlas. `/agent`
+ *     404s there only because prod runs an image without the delegation route yet, and `/fe`
+ *     404s because prod is API-only by design.
+ *   - `stag` / `preprod` — the two ingress hosts in `ai-platform-infra-ops` `stag`
+ *     `values-atlas.yaml`, both serving the same `atlas-server` backend.
+ *   - `stag` pointing at **auth-preprod is deliberate, not a copy-paste.** Staging's
+ *     `oauth.issuer` is `auth-rengg-reg-ai-agent-dev.bsstag.com`, but preprod is configured
+ *     as an EXTRA ENVIRONMENT and `_accepted_configs` returns the default PLUS extras, so a
+ *     preprod-minted token validates there. Confirmed live: a token minted at `auth-preprod`
+ *     was accepted by staging Atlas (`matched=scope`, verified `user_id`).
+ */
+export const ATLAS_HOSTS: Record<string, { agent: string; auth: string }> = {
+  prod: {
+    agent: "https://workflows.browserstack.com",
+    auth: "https://auth.browserstack.com/oauth2/v2/token",
+  },
+  preprod: {
+    agent: "https://ai-platform-service-preprod.bsstag.com",
+    auth: "https://auth-preprod.bsstag.com/oauth2/v2/token",
+  },
+  stag: {
+    agent: "https://ai-platform-service.bsstag.com",
+    auth: "https://auth-preprod.bsstag.com/oauth2/v2/token",
+  },
+};
+
+const KNOWN_ENVIRONMENTS = Object.keys(ATLAS_HOSTS).join(", ");
+
+/** Map entries are literals and an operator's override may not be; normalise both. */
+function trimUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+/**
+ * Why an unset environment REFUSES rather than defaulting to production.
+ *
+ * The capability registry refuses when an environment is named but has no host, because
+ * *"falling back to the harness default here would send a preprod deployment at production,
+ * silently."* The same reasoning applies harder to an environment that was never named at
+ * all, and hardest of all to this tool, because this one WRITES.
+ *
+ * The cost of refusing is one documented environment name at install time, reported by name
+ * the first time the tool is used. The cost of defaulting is an unconfigured install quietly
+ * changing production data. Those are not comparable, and a selector that is wrong refuses
+ * by name where a URL that is wrong talks to the wrong place in silence.
+ */
+function noEnvironment(explicitVar: string): AskError {
+  return new AskError(
+    `no BrowserStack AI environment is selected. Set ASK_BROWSERSTACK_ENV to one of ` +
+      `${KNOWN_ENVIRONMENTS} — or set ${explicitVar} to a host directly. Nothing is ` +
+      `assumed here on purpose: this tool can change data, so it will not guess at ` +
+      `production.`,
+  );
+}
+
+function unknownEnvironment(environment: string, suffixedVar: string): AskError {
+  return new AskError(
+    `environment '${environment}' has no built-in BrowserStack AI host. Known ` +
+      `environments: ${KNOWN_ENVIRONMENTS}. Set ${suffixedVar} to add one.`,
+  );
+}
+
+/**
  * Resolve Atlas's base URL:
  *
  *   1. ASK_BROWSERSTACK_ATLAS_URL          explicit, environment-agnostic
  *   2. ASK_BROWSERSTACK_ATLAS_URL_<ENV>    this environment's host
- *   3. refuse, by name
+ *   3. the built-in map for <ENV>
+ *   4. refuse, by name
  *
- * Refusing rather than guessing is the point of rung 3.
+ * The overrides stay ahead of the map so nothing that works today stops working.
  */
 export function atlasBaseUrl(): string {
   const explicit = process.env.ASK_BROWSERSTACK_ATLAS_URL;
-  if (explicit && explicit.trim()) return explicit.trim().replace(/\/$/, "");
+  if (explicit && explicit.trim()) return trimUrl(explicit);
 
   const environment = selectedEnvironment();
-  if (environment) {
-    const suffixed =
-      process.env[`ASK_BROWSERSTACK_ATLAS_URL_${environment.toUpperCase()}`];
-    if (suffixed && suffixed.trim()) return suffixed.trim().replace(/\/$/, "");
+  if (!environment) {
+    throw noEnvironment("ASK_BROWSERSTACK_ATLAS_URL");
   }
 
-  throw new AskError(
-    "no host is configured for BrowserStack AI: set ASK_BROWSERSTACK_ATLAS_URL" +
-      (environment
-        ? ` or ASK_BROWSERSTACK_ATLAS_URL_${environment.toUpperCase()}`
-        : ""),
-  );
+  const suffixedVar = `ASK_BROWSERSTACK_ATLAS_URL_${environment.toUpperCase()}`;
+  const suffixed = process.env[suffixedVar];
+  if (suffixed && suffixed.trim()) return trimUrl(suffixed);
+
+  const builtIn = ATLAS_HOSTS[environment.toLowerCase()];
+  if (builtIn) return trimUrl(builtIn.agent);
+
+  throw unknownEnvironment(environment, suffixedVar);
 }
 
 /** Resolved per call, never captured at construction. */
@@ -83,25 +156,24 @@ export function agentUrl(): string {
  * The shared `delegation.token` path is gone from Atlas, so a user-attested central JWT is
  * now the only way in. This is the endpoint that issues one from a username and access key.
  *
- * Same precedence rungs as the host, and refusing rather than guessing for the same reason:
- * a deployment pointing at preprod must not sign in against production's auth server.
+ * Same four rungs as the host, and refusing rather than guessing for the same reason: a
+ * deployment pointing at preprod must not sign in against production's auth server.
  */
 export function authTokenUrl(): string {
   const explicit = process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
-  if (explicit && explicit.trim()) return explicit.trim();
+  if (explicit && explicit.trim()) return trimUrl(explicit);
 
   const environment = selectedEnvironment();
-  if (environment) {
-    const suffixed =
-      process.env[`ASK_BROWSERSTACK_AUTH_TOKEN_URL_${environment.toUpperCase()}`];
-    if (suffixed && suffixed.trim()) return suffixed.trim();
+  if (!environment) {
+    throw noEnvironment("ASK_BROWSERSTACK_AUTH_TOKEN_URL");
   }
 
-  throw new AskError(
-    "BrowserStack AI has nowhere to sign in: set ASK_BROWSERSTACK_AUTH_TOKEN_URL" +
-      (environment
-        ? ` or ASK_BROWSERSTACK_AUTH_TOKEN_URL_${environment.toUpperCase()}`
-        : "") +
-      " to the BrowserStack OAuth token endpoint",
-  );
+  const suffixedVar = `ASK_BROWSERSTACK_AUTH_TOKEN_URL_${environment.toUpperCase()}`;
+  const suffixed = process.env[suffixedVar];
+  if (suffixed && suffixed.trim()) return trimUrl(suffixed);
+
+  const builtIn = ATLAS_HOSTS[environment.toLowerCase()];
+  if (builtIn) return trimUrl(builtIn.auth);
+
+  throw unknownEnvironment(environment, suffixedVar);
 }

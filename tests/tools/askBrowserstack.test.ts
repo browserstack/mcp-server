@@ -35,6 +35,7 @@ import {
   errorResult,
   deriveStatus,
   elicitationMessage,
+  isNotEntitled,
   looksLikeDelegationResult,
   neverReachedAgent,
   UNAUTHENTICATED_DETAIL,
@@ -1113,7 +1114,8 @@ describe("a result body outranks the HTTP status (N1)", () => {
   });
 
   it("still calls a bare {detail} refusal not_reached, whatever else changed", () => {
-    for (const status of [400, 401, 403, 503]) {
+    // 403 is deliberately NOT in this list any more — it has its own outcome, below.
+    for (const status of [400, 401, 502, 503]) {
       const result = buildResult({ status, body: { detail: "nope" } }, [], true);
       expect(neverReachedAgent({ status, body: { detail: "nope" } })).toBe(true);
       expect(result.permission_relay.used).toBe(false);
@@ -1283,5 +1285,104 @@ describe("the resolved host is announced, so a wrong deployment is visible", () 
     process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
     atlasBaseUrl();
     expect(lines.filter((l) => l.includes("Atlas"))).toHaveLength(2);
+  });
+});
+
+describe("403 — the account is not entitled, which is none of the other failures", () => {
+  // The shape Atlas's entitlement gate returns; the sentence in it is deliberately not what
+  // we key on.
+  const REFUSED = { status: 403, body: { detail: "agent is not enabled for this account" } };
+
+  it("keys on the status, not the prose", () => {
+    expect(isNotEntitled(REFUSED)).toBe(true);
+    // A reworded body must classify identically — pattern-matching the sentence would fail
+    // silently into a generic error the first time someone edits it.
+    expect(isNotEntitled({ status: 403, body: { detail: "totally different wording" } }))
+      .toBe(true);
+    expect(isNotEntitled({ status: 403, body: null })).toBe(true);
+    expect(isNotEntitled({ status: 403, body: { ok: false, status: "error", answer: "" } }))
+      .toBe(true);
+    // ...and nothing else is an entitlement problem.
+    for (const status of [0, 200, 400, 401, 429, 500, 502, 503]) {
+      expect(isNotEntitled({ status, body: { detail: "agent is not enabled" } })).toBe(false);
+    }
+  });
+
+  it("gives the user the sentence they asked for, naming the product", () => {
+    const result = buildResult(REFUSED, [], "offered", "a11y");
+    expect(result.error).toContain(
+      "BrowserStack AI is not enabled for `a11y` on your account. Please contact your admin.",
+    );
+  });
+
+  it("drops the product clause rather than naming an empty one", () => {
+    expect(buildResult(REFUSED, [], "offered").error).toContain(
+      "BrowserStack AI is not enabled on your account. Please contact your admin.",
+    );
+    expect(buildResult(REFUSED, [], "offered", "   ").error).not.toContain("``");
+  });
+
+  it("says outright that the credentials are fine, so a working key is not rotated", () => {
+    const result = buildResult(REFUSED, [], "offered", "tm");
+    expect(result.error).toMatch(/YOUR CREDENTIALS ARE FINE/);
+    expect(result.error).toMatch(/per-product entitlement/);
+  });
+
+  it("is its own reason, not not_reached and not a denial", () => {
+    const result = buildResult(REFUSED, [], "offered", "tm");
+    expect(result.permission_relay.used).toBe(false);
+    expect(result.permission_relay.reason).toBe("not_entitled");
+    expect(result.permission_relay.detail).toMatch(/NOBODY DECLINED THIS AND NOTHING RAN/);
+    // The relay vocabulary stays clean.
+    expect(result.permission_relay.reason).not.toBe("not_reached");
+    expect(result.approvals).toEqual([]);
+    expect(result.elicitations).toEqual([]);
+  });
+
+  it("beats not_reached and remote_mode, which are both also true of a 403", () => {
+    expect(buildResult(REFUSED, [], "remote_mode", "tm").permission_relay.reason)
+      .toBe("not_entitled");
+    expect(buildResult(REFUSED, [], "no_human", "tm").permission_relay.reason)
+      .toBe("not_entitled");
+  });
+
+  it("leaves applied_before_stop null: no gate ran", () => {
+    const result = buildResult(REFUSED, [], "offered", "tm");
+    expect(result.applied_before_stop).toBeNull();
+    expect(result.status).toBe("error");
+    expect(result.ok).toBe(false);
+  });
+
+  it("is a FIFTH distinct thing, not any of the four auth failures", () => {
+    const entitlement = buildResult(REFUSED, [], "offered", "tm").error!;
+    // /agent's 401 is "we signed in fine, Atlas refused the token" — a server
+    // misconfiguration. A 403 is neither that nor a credential problem.
+    const atlasRefusedToken = buildResult(
+      { status: 401, body: { detail: "unauthorized" } }, [], "offered", "tm",
+    ).error!;
+
+    const all = [
+      entitlement,
+      atlasRefusedToken,
+      AUTH_SCOPE_REFUSED_DETAIL(400),
+      AUTH_REJECTED_DETAIL(401),
+      AUTH_UNREACHABLE_DETAIL,
+    ];
+    expect(new Set(all).size).toBe(5);
+
+    // The entitlement one sends the reader to an admin, and nowhere near a credential.
+    expect(entitlement).toMatch(/contact your admin/);
+    expect(entitlement).not.toMatch(/rejected/);
+    expect(entitlement).not.toMatch(/ASK_BROWSERSTACK/);
+    expect(entitlement).not.toMatch(/required_scope/);
+    expect(atlasRefusedToken).toMatch(/required_scope/);
+  });
+
+  it("prefers our actionable sentence over Atlas's bare detail", () => {
+    const withError = buildResult(
+      { status: 403, body: { detail: "nope", error: "forbidden" } }, [], "offered", "tm",
+    );
+    expect(withError.error).toMatch(/Please contact your admin/);
+    expect(withError.error).not.toBe("forbidden");
   });
 });

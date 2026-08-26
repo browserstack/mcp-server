@@ -315,7 +315,12 @@ export function addAskBrowserstackAITool(
           );
         }
 
-        return toResult(buildResult(await transport(url, headers, body), approvals, mode));
+        return toResult(
+          // `product` reaches the result so an entitlement refusal can name it: the flags
+          // are per product, and a bare "not enabled" sends the user to their admin asking
+          // about the wrong thing.
+          buildResult(await transport(url, headers, body), approvals, mode, product),
+        );
       } catch (error) {
         const message =
           error instanceof AskError || error instanceof Error

@@ -887,6 +887,51 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.approvals).toEqual([]);
     });
 
+    it("reads a 403 as 'AI is not enabled for your account', naming the product", async () => {
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
+      vi.stubGlobal("fetch", withAuth(async () => ({
+        status: 403,
+        headers: { get: () => "application/json" },
+        json: async () => ({ detail: "agent is not enabled for this account" }),
+      })));
+
+      const { result, payload } = await call(server.getTools(), {
+        product: "a11y", query: "scan the site",
+      });
+
+      expect(payload.error).toContain(
+        "BrowserStack AI is not enabled for `a11y` on your account. Please contact your admin.",
+      );
+      expect(payload.error).toMatch(/YOUR CREDENTIALS ARE FINE/);
+      expect(payload.permission_relay).toEqual({
+        used: false,
+        reason: "not_entitled",
+        detail: expect.stringContaining("NOBODY DECLINED THIS AND NOTHING RAN"),
+      });
+      // Nothing ran, nobody was asked, and no gate reported anything.
+      expect(elicit).not.toHaveBeenCalled();
+      expect(payload.approvals).toEqual([]);
+      expect(payload.applied_before_stop).toBeNull();
+      expect(payload.status).toBe("error");
+      expect(result.isError).toBe(true);
+    });
+
+    it("classifies a 403 the same way when Atlas rewords the body", async () => {
+      // Keyed on the status, never the prose.
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, []);
+      vi.stubGlobal("fetch", withAuth(async () => ({
+        status: 403,
+        headers: { get: () => "application/json" },
+        json: async () => ({ detail: "some entirely new sentence", code: "whatever" }),
+      })));
+
+      const { payload } = await call(server.getTools());
+      expect(payload.permission_relay.reason).toBe("not_entitled");
+      expect(payload.error).toMatch(/Please contact your admin/);
+    });
+
     it.each([
       [400, "task is required"],
       [503, "delegation is not enabled"],

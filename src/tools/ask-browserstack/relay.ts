@@ -62,6 +62,15 @@ export const RELAY_OFF_DETAILS: Record<string, string> = {
     "reason alone. Mid-run approval works when the server runs locally over stdio; retrying " +
     "against this deployment will keep failing the same way.",
 
+  // Not a refusal by anyone and not a relay problem at all: the account is not on the
+  // product's agent flag. The product-specific sentence and what to do about it live in
+  // `error`, so this one points there rather than duplicating the plumbing.
+  not_entitled:
+    "NOBODY DECLINED THIS AND NOTHING RAN. BrowserStack AI is not enabled for this account, " +
+    "so the request was refused before the agent started. `error` says which product and " +
+    "what to do about it. This is an entitlement on the account, not a problem with your " +
+    "credentials and not a decision anyone made about your request.",
+
   // The request never got as far as the agent. Distinct from `disabled` (the agent ran, with
   // the relay switched off) and from a decline (someone was asked and said no), because the
   // three call for completely different things from whoever reads them.
@@ -114,6 +123,43 @@ export function looksLikeDelegationResult(body: unknown): boolean {
     "approvals" in payload
   );
 }
+
+/**
+ * Is this Atlas saying the ACCOUNT is not enabled for the product's agent?
+ *
+ * Atlas gained an entitlement gate on `POST /agent` (`flags.is_agent_enabled`, AIC-386) that
+ * the WebSocket path already had. The flags are PER PRODUCT — `aiHarnessAgent` for tm,
+ * `aiHarnessAgentTRA`, `aiHarnessAgentA11y` — so an account can be entitled for one product
+ * and not another. It is also FAIL-OPEN on Atlas's side: Redis down, a flag never seeded, or
+ * an unknown product all allow the request. So a 403 here is a real, deliberate "this account
+ * is not enabled", never an outage.
+ *
+ * KEYED STRUCTURALLY, NEVER ON THE PROSE. Matching the sentence would break silently the
+ * first time someone rewords it, falling through to a generic error.
+ *
+ * TODO(atlas/9.md): Atlas is deciding whether to add a `code` field to this body. When it
+ * lands, prefer it over the status — add the check as the first rung here and leave the
+ * status as the fallback for an older Atlas. Until then the status IS the structural signal.
+ */
+export function isNotEntitled(response: AgentResponse): boolean {
+  return response.status === 403;
+}
+
+/**
+ * The sentence the user asked for, with the product named.
+ *
+ * Entitlement is per product, so a bare "not enabled" sends someone to their admin asking
+ * about the wrong thing. The disambiguation from a 401 is deliberate and load-bearing:
+ * without it, a working access key gets rotated in response to a permissions problem.
+ */
+export const NOT_ENTITLED_DETAIL = (product: string): string => {
+  const scope = product && product.trim() ? ` for \`${product.trim()}\`` : "";
+  return (
+    `BrowserStack AI is not enabled${scope} on your account. Please contact your admin. ` +
+    `YOUR CREDENTIALS ARE FINE — they authenticated successfully; this is a per-product ` +
+    `entitlement on the account. Nothing was run and nobody declined anything.`
+  );
+};
 
 export function neverReachedAgent(response: AgentResponse): boolean {
   // No response at all: nothing could have run.
@@ -376,7 +422,17 @@ function relayVerdict(
   payload: Record<string, unknown>,
   mode: RelayMode,
   reachedAgent: boolean,
+  notEntitled: boolean,
 ): AskResult["permission_relay"] {
+  // FIRST, ahead of `not_reached`. Both are true of a 403 — the request certainly did not
+  // reach the agent — but only one of them tells the reader what to do about it.
+  if (notEntitled) {
+    return {
+      used: false,
+      reason: "not_entitled",
+      detail: RELAY_OFF_DETAILS.not_entitled,
+    };
+  }
   // FIRST, because it outranks both of the cases below. If the request never reached the
   // agent then no channel was exercised whether or not one was offered, and saying the run
   // went read-only (`no_human`) would be just as wrong as saying it was used: nothing ran at
@@ -414,6 +470,8 @@ export function buildResult(
   response: AgentResponse,
   approvals: ApprovalRecord[],
   mode: RelayMode,
+  /** Named in the not-entitled sentence, because entitlement is per product. */
+  product = "",
 ): AskResult {
   const payload = asRecord(response.body);
   // ABSENT WHEN EMPTY, never `[]` (v1.1 §B): Atlas's `public()` omits the key entirely, as
@@ -441,9 +499,9 @@ export function buildResult(
     elicitations: withOutcomes(approvals),
     needs_approval: needsApproval,
     applied_before_stop: readAppliedBeforeStop(payload),
-    permission_relay: relayVerdict(payload, mode, reachedAgent),
+    permission_relay: relayVerdict(payload, mode, reachedAgent, isNotEntitled(response)),
     atlas_response: response.body ?? null,
-    ...atlasError(response, payload),
+    ...atlasError(response, payload, product),
   };
 }
 
@@ -479,8 +537,13 @@ export const UNAUTHENTICATED_DETAIL =
 function atlasError(
   response: AgentResponse,
   payload: Record<string, unknown>,
+  product: string,
 ): { error?: string } {
   if (response.status === 0 && response.error) return { error: response.error };
+
+  // BEFORE Atlas's own string: for an entitlement refusal ours names the product and says
+  // what to do, where Atlas's is a bare `detail` a user cannot act on.
+  if (isNotEntitled(response)) return { error: NOT_ENTITLED_DETAIL(product) };
 
   // Atlas's own error string wherever it sent one — on a 502 that carries a full result,
   // this is the run explaining its own failure, and nothing here should talk over it.

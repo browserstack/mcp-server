@@ -58,11 +58,15 @@ export const RELAY_OFF_DETAILS: Record<string, string> = {
     "configuration reason alone. Retrying will keep failing the same way until an " +
     "administrator turns the relay on.",
 
+  // ONLY AN ATLAS THAT PREDATES A1 CAN SEND THIS. It described the old outbound transport:
+  // the server was handed a URL to call back and refused the address. Nothing dials out any
+  // more, so the condition cannot arise — the reason stays mapped because an older
+  // deployment is still entitled to an explanation rather than a raw enum.
   host_not_allowed:
-    "BrowserStack refused to call this client back: the loopback address it was given is " +
-    "not on the server's allowed-callback list, which is the guard that stops a " +
-    "caller-supplied URL turning the server into a request proxy. The run went read-only. " +
-    "This normally means BrowserStack is not running on the same host as this MCP server.",
+    "BrowserStack refused to call this client back, which means it is running a version " +
+    "that predates the current approval channel: that version could only reach a client on " +
+    "the same host. The run went read-only. Nothing was declined by a person, and the fix " +
+    "is a BrowserStack-side upgrade rather than anything about this request.",
 
   malformed:
     "BrowserStack could not use the approval channel this client offered and ran read-only. " +
@@ -73,9 +77,9 @@ export const RELAY_OFF_DETAILS: Record<string, string> = {
   // change either of them can make will help.
   remote_mode:
     "NOBODY DECLINED THIS, AND YOUR CLIENT IS NOT THE PROBLEM. This BrowserStack MCP server " +
-    "is running in its hosted, multi-tenant mode, which has no way to receive the approval " +
-    "callback, so it ran read-only and everything in `needs_approval` was refused for that " +
-    "reason alone. Mid-run approval works when the server runs locally over stdio; retrying " +
+    "is running in its hosted, multi-tenant mode, which has no way to put an approval " +
+    "prompt in front of you, so it ran read-only and everything in `needs_approval` was " +
+    "refused for that reason alone. Mid-run approval works when the server runs locally over stdio; retrying " +
     "against this deployment will keep failing the same way.",
 
   // Not a refusal by anyone and not a relay problem at all: the account is not on the
@@ -205,7 +209,8 @@ export function atlasRelayVerdict(
   payload: Record<string, unknown>,
 ): { used: boolean; reason: string } | null {
   const raw = payload.permission_relay;
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
+    return null;
   const record = raw as Record<string, unknown>;
   if (typeof record.used !== "boolean") return null;
   return {
@@ -230,7 +235,10 @@ export const PRODUCT_LABELS: Record<string, string> = {
   tra: "Test Reporting & Analytics",
 };
 
-export function elicitationMessage(product: string, description: string): string {
+export function elicitationMessage(
+  product: string,
+  description: string,
+): string {
   const label = PRODUCT_LABELS[product] || product.trim();
   const who = label
     ? `BrowserStack AI (${label})`
@@ -273,7 +281,8 @@ export function decide(result: ElicitResult): {
     }
     return { decision: "allow", reason: "" };
   }
-  if (result.action === "decline") return { decision: "deny", reason: "declined" };
+  if (result.action === "decline")
+    return { decision: "deny", reason: "declined" };
   // `cancel`, and anything a future client sends that we do not recognise: no explicit
   // answer was given, which is not an answer we may read as yes.
   return { decision: "deny", reason: "cancelled" };
@@ -339,10 +348,12 @@ export function parseAtlasApprovals(
   if (!Array.isArray(raw)) return null;
   const trail: ApprovalRecord[] = [];
   for (const item of raw) {
-    if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
+    if (typeof item !== "object" || item === null || Array.isArray(item))
+      continue;
     const entry = item as Record<string, unknown>;
     trail.push({
-      description: typeof entry.description === "string" ? entry.description : "",
+      description:
+        typeof entry.description === "string" ? entry.description : "",
       decision: entry.decision === "allow" ? "allow" : "deny",
       reason: typeof entry.reason === "string" ? entry.reason : "",
       ...(typeof entry.applied === "boolean" ? { applied: entry.applied } : {}),
@@ -483,11 +494,19 @@ function relayVerdict(
   // client that CAN be prompted is of no use, so the deployment is the binding constraint and
   // the one the reader can act on; telling them to switch clients would waste their time.
   if (mode === "remote_mode") {
-    return { used: false, reason: "remote_mode", detail: RELAY_OFF_DETAILS.remote_mode };
+    return {
+      used: false,
+      reason: "remote_mode",
+      detail: RELAY_OFF_DETAILS.remote_mode,
+    };
   }
   if (mode === "no_human") {
     // CONTRACT §7's last row: no elicitation capability means the field was never sent.
-    return { used: false, reason: "no_human", detail: RELAY_OFF_DETAILS.no_human };
+    return {
+      used: false,
+      reason: "no_human",
+      detail: RELAY_OFF_DETAILS.no_human,
+    };
   }
   const verdict = atlasRelayVerdict(payload);
   if (verdict) {
@@ -515,14 +534,19 @@ export function buildResult(
     ? (payload.needs_approval as unknown[])
     : [];
   // ATLAS'S TRAIL WINS WHEN IT SENT ONE. It is the only side that can fill in `applied`, and
-  // it records what happened to the STEP: a callback answered without a prompt appearing is
-  // a denial there and nothing at all here. Ours is kept separately rather than discarded,
-  // because that difference is exactly how a probe of the loopback port shows up.
+  // it records what happened to the STEP: an ask answered without a prompt appearing is a
+  // denial there and nothing at all here. Ours is kept separately rather than discarded,
+  // because that difference is exactly how an answer this side never prompted for shows up.
   const atlasTrail = parseAtlasApprovals(payload);
   const trail = atlasTrail ?? approvals;
   const status = deriveStatus(response, trail, needsApproval);
   const reachedAgent = !neverReachedAgent(response);
-  const relay = relayVerdict(payload, mode, reachedAgent, isNotEntitled(response));
+  const relay = relayVerdict(
+    payload,
+    mode,
+    reachedAgent,
+    isNotEntitled(response),
+  );
   // Correct the sentence when the channel was fine but nobody was ever behind it. The
   // verdict is computed from the MODE and Atlas's advisory field, neither of which can
   // see what the elicitation actually returned — so only here, with the trail in hand,
@@ -630,7 +654,10 @@ function atlasError(
  * was granted is exactly the case where a caller most needs to know something may already
  * have been applied.
  */
-export function errorResult(message: string, approvals: ApprovalRecord[]): AskResult {
+export function errorResult(
+  message: string,
+  approvals: ApprovalRecord[],
+): AskResult {
   return {
     ok: false,
     status: "error",

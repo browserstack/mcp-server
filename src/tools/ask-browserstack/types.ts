@@ -10,7 +10,7 @@
 export const PRODUCTS = ["tm", "a11y", "tra"] as const;
 export type Product = (typeof PRODUCTS)[number];
 
-/** CONTRACT §2 — the body Atlas POSTs to our callback when its gate needs a human. */
+/** CONTRACT §2 — what Atlas emits on the run's stream when its gate needs a human. */
 export interface PermissionAsk {
   /**
    * Atlas's own `perm-<32 hex>` uuid4, carried, never re-minted.
@@ -50,7 +50,7 @@ export type DecisionReason =
   // It appears only in `ApprovalRecord.reason`, where the caller can see what happened.
   | "error";
 
-/** CONTRACT §2 — what we answer the still-open callback request with. */
+/** CONTRACT §2 — the body we POST to `/agent/{run_id}/permission` to answer one ask. */
 export interface PermissionDecision {
   perm_id: string;
   decision: Decision;
@@ -59,21 +59,20 @@ export interface PermissionDecision {
 
 /** CONTRACT §1 — the one new optional field on `POST /agent`. */
 /**
- * The `permission_relay` block. Two shapes, one per transport:
+ * The `permission_relay` block — one shape, because there is one transport.
  *
- * * `{ mode: "stream" }` — A1 / CONTRACT v2. Nothing to address and nothing to
- *   authenticate inbound, because nothing dials in. This is what ships.
- * * `{ callback_url, token }` — A2 / CONTRACT v1. Retained for a co-located caller
- *   until every Atlas serves A1 (v2 §7.5); unused by the tool today.
+ * `{ mode: "stream" }` is A1 / CONTRACT v2: nothing to address and nothing to
+ * authenticate inbound, because nothing dials in. A2's `{ callback_url, token }` was
+ * removed on both halves (v2 §7.4) — it could only ever reach a co-located caller, and
+ * an Atlas that still sees that shape now reports the relay as `disabled` rather than
+ * trying it.
  *
- * Both optional rather than a union so a caller cannot half-fill either one: Atlas
- * checks for `mode` first, so a block carrying both is read as a stream and never
- * silently routed onto the transport that cannot reach the caller.
+ * `mode` stays optional rather than required so this stays a superset of the block an
+ * older Atlas will simply ignore: the field's ABSENCE is what selects the read-only
+ * gate, and that has to remain expressible.
  */
 export interface PermissionRelay {
   mode?: string;
-  callback_url?: string;
-  token?: string;
 }
 
 /**
@@ -138,11 +137,11 @@ export interface ApprovalRecord {
  * thing from whoever reads the result — so they are three values rather than one boolean.
  */
 export type RelayMode =
-  /** A callback listener was bound and `permission_relay` was sent. */
+  /** `permission_relay` was sent and the run's stream carried the asks. */
   | "offered"
   /** The client declares no `elicitation` capability, so nobody could be prompted. */
   | "no_human"
-  /** This process is the hosted multi-tenant server, which cannot receive the callback. */
+  /** This process is the hosted multi-tenant server, which cannot prompt a human. */
   | "remote_mode";
 
 export const ASK_STATUSES = ["ok", "blocked", "error", "rate_limited"] as const;
@@ -157,7 +156,7 @@ export interface AskResult {
    * THE AUTHORITATIVE approval trail: Atlas's whenever it supplied one, ours otherwise.
    *
    * Atlas's wins because it is the only side that can populate `applied`, and because it
-   * records what happened to the STEP — a callback answered without a prompt appearing (a
+   * records what happened to the STEP — an ask answered without a prompt appearing (a
    * 401'd probe, a shape rejection) is a denial there and nothing at all here.
    */
   approvals: ApprovalRecord[];
@@ -168,7 +167,7 @@ export interface AskResult {
    *
    * Kept beside `approvals` rather than folded into it, because where the two disagree the
    * disagreement is the signal. An entry Atlas records as a denial with nothing here means a
-   * callback was answered without any prompt appearing — which is what an attacker probing
+   * ask was answered without any prompt appearing — which is what an attacker probing
    * the loopback port looks like.
    */
   elicitations: ApprovalRecord[];

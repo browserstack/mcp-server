@@ -15,7 +15,7 @@ import logger from "../../logger.js";
  *
  *   MCP client -> tool call        longest, client-side, not ours
  *   POST /agent HTTP request       330s   <- here
- *   Atlas gate -> callback POST    300s   Atlas's `permission_relay_timeout`
+ *   Atlas gate -> stream ask       300s   Atlas's `permission_relay_timeout`
  *   elicitInput                    270s   <- here
  *
  * 300s is the browser path's existing PERMISSION_TIMEOUT, which also auto-rejects.
@@ -101,7 +101,8 @@ function announce(what: string, url: string, source: "env" | "default"): void {
  */
 export function atlasBaseUrl(): string {
   const explicit = process.env.ASK_BROWSERSTACK_ATLAS_URL;
-  const url = explicit && explicit.trim() ? trimUrl(explicit) : DEFAULT_ATLAS_URL;
+  const url =
+    explicit && explicit.trim() ? trimUrl(explicit) : DEFAULT_ATLAS_URL;
   announce("Atlas", url, explicit && explicit.trim() ? "env" : "default");
   return url;
 }
@@ -121,6 +122,10 @@ export function authTokenUrl(): string {
   const explicit = process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
   const url =
     explicit && explicit.trim() ? trimUrl(explicit) : DEFAULT_AUTH_TOKEN_URL;
-  announce("auth token endpoint", url, explicit && explicit.trim() ? "env" : "default");
+  announce(
+    "auth token endpoint",
+    url,
+    explicit && explicit.trim() ? "env" : "default",
+  );
   return url;
 }

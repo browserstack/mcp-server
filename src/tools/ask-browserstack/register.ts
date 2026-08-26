@@ -24,7 +24,10 @@
  * itself because a headless client returns `cancel`, which is a deny.
  */
 
-import { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  McpServer,
+  RegisteredTool,
+} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   CallToolResult,
   ElicitResult,
@@ -45,11 +48,7 @@ import {
   isEnabled,
 } from "./config.js";
 import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
-import { AgentTransport, Credentials, agentHeaders } from "./egress.js";
-// A2's transport lives on per CONTRACT v2 §7.5 and nothing here calls it: until every
-// Atlas serves A1, deleting `callback.ts` would leave a co-located caller with no working
-// transport at all. Only the TYPE is needed, to keep `AskDeps.startListener` declared.
-import { startCallbackListener } from "./callback.js";
+import { Credentials, agentHeaders } from "./egress.js";
 import {
   EVENT_PERMISSION,
   EVENT_RESULT,
@@ -57,6 +56,7 @@ import {
   decisionUrl,
   fetchAgentStreamTransport,
   fetchDecisionTransport,
+  parseAsk,
 } from "./stream.js";
 import type { AgentStreamTransport, DecisionTransport } from "./stream.js";
 import {
@@ -95,13 +95,9 @@ export interface AskDeps {
    * as the human rather than as a shared service account.
    */
   credentialsFor: () => Credentials;
-  /** A2's seam. Unused by the tool today; kept while callback.ts is (v2 §7.5). */
-  transport?: AgentTransport;
-  /** A2's seam. Same. */
-  startListener?: typeof startCallbackListener;
   /**
-   * A1's seams. Injectable for the same reason A2's were: a test must be able to drive
-   * a whole approval round trip — ask, elicit, decide, result — without a socket.
+   * The two transport seams, injectable so a test can drive a whole approval round trip
+   * — ask, elicit, decide, result — without a socket.
    */
   streamTransport?: AgentStreamTransport;
   decisionTransport?: DecisionTransport;
@@ -139,7 +135,8 @@ const DESCRIPTION =
  * `permission_relay` reasons exist to prevent. `ok` still means `status === "ok"`.
  */
 function toResult(payload: AskResult): CallToolResult {
-  const failed = payload.status === "error" || payload.status === "rate_limited";
+  const failed =
+    payload.status === "error" || payload.status === "rate_limited";
   return {
     content: [{ type: "text", text: JSON.stringify(payload) }],
     ...(failed ? { isError: true } : {}),
@@ -202,8 +199,9 @@ async function relayOneAsk(
       return { perm_id: ask.perm_id, decision: "deny", reason: "timeout" };
     }
     // An unexpected failure has no honest `reason` in CONTRACT §2's vocabulary, so it is
-    // not given one: rethrowing makes the callback answer 500, which Atlas's fail-closed
-    // rule already reads as a deny and records as `error_relay`.
+    // not given one on the wire: the throw says "this side broke" without claiming a human
+    // decided anything. `runStreamed` catches it and sends the explicit deny the throw
+    // implies — see the comment there for why A1 cannot let it escape.
     approvals.push({
       description: ask.description,
       decision: "deny",
@@ -215,7 +213,10 @@ async function relayOneAsk(
   // The SHAPE of the answer only — a fixed action enum and a boolean, never the description
   // or anything a user typed. Logged so that what a client actually submits can be read next
   // time rather than inferred from a compiled binary.
-  logger.info("askBrowserstackAI: elicitation answered %s", elicitationShape(answer));
+  logger.info(
+    "askBrowserstackAI: elicitation answered %s",
+    elicitationShape(answer),
+  );
 
   const { decision, reason } = decide(answer);
   approvals.push({ description: ask.description, decision, reason });
@@ -226,38 +227,35 @@ async function relayOneAsk(
  * Decide whether to offer the approval channel at all — and in the hosted deployment, do not.
  *
  * THE RELAY IS A STDIO-ONLY FEATURE, and that is a designed property rather than an accident.
- * Three things break in `REMOTE_MCP` mode, in increasing order of how hard they are to fix:
+ * A1 fixed the two reachability problems A2 had — nothing binds a loopback port per tool
+ * call, and Atlas never dials back, so its SSRF allowlist is not in the path at all — but it
+ * cannot fix the one that actually blocks remote mode:
  *
- *   1. The callback listener binds `127.0.0.1:<ephemeral>` PER TOOL CALL. In the shared,
- *      multi-tenant process that is N concurrent listeners on one host, with the per-run
- *      bearer as the only thing keeping tenants apart.
- *   2. Atlas cannot reach it anyway. A `127.0.0.1` callback URL means the ATLAS POD'S OWN
- *      loopback, so every remote call is refused by its SSRF allowlist as `host_not_allowed`.
- *      Confirmed live against staging.
- *   3. Elicitation is a SERVER-INITIATED message, and the remote `/mcp` is stateless BY
- *      DELIBERATE DESIGN. Commit `841c6358` removed sessions because they broke behind two
- *      replicas — "Session not found on roughly half of every client's post-handshake calls"
- *      — and justified it precisely on the grounds that "we use neither server-initiated
- *      messages nor subscriptions/sampling". This feature is the exception that commit did
- *      not have to consider, and it needs the machinery that commit removed.
+ *   Elicitation is a SERVER-INITIATED message, and the remote `/mcp` is stateless BY
+ *   DELIBERATE DESIGN. Commit `841c6358` removed sessions because they broke behind two
+ *   replicas — "Session not found on roughly half of every client's post-handshake calls"
+ *   — and justified it precisely on the grounds that "we use neither server-initiated
+ *   messages nor subscriptions/sampling". This feature is the exception that commit did
+ *   not have to consider, and it needs the machinery that commit removed.
  *
- * So do not start the listener and do not send `permission_relay`: Atlas then runs read-only,
- * which is a supported path that already works. Attempting the relay instead would buy a slow
- * and confusing failure in place of a clear one.
+ * So do not send `permission_relay` in remote mode: Atlas then runs read-only, which is a
+ * supported path that already works. Attempting the relay instead would buy a slow and
+ * confusing failure in place of a clear one — the run would stream asks nobody can be shown,
+ * and every one of them would expire into a deny 300s later.
  *
- * BEFORE RE-ENABLING THIS IN REMOTE MODE: the blocker is (3), not configuration. It needs
- * PLAN.md's option (c) — resolve the run in Postgres and nudge the pod holding the waiter over
- * Redis, the pattern `POST /api/agent-callback/{correlation_id}` already uses — plus a callback
- * URL that addresses a specific replica. A config flag will not do it.
+ * BEFORE RE-ENABLING THIS IN REMOTE MODE: the blocker is server-initiated messaging, not
+ * configuration, and A1 does NOT need a per-replica address any more (the decision is an
+ * ordinary inbound POST that Atlas routes to the owning pod itself). What is still missing is
+ * a way for a stateless replica to prompt the client. A config flag will not do it.
  */
 /**
  * CONTRACT v2 (A1) — drive one run over the stream.
  *
  * The loop is the whole orchestration: read events, elicit on each `permission`, POST
  * the decision, hand the `result` to `buildResult`. It decides nothing itself —
- * `relayOneAsk` still owns the elicitation and the allow/deny mapping, and it is the
- * SAME function the callback transport used. That is deliberate: the transport changed,
- * the judgement did not.
+ * `relayOneAsk` owns the elicitation and the allow/deny mapping, unchanged from the
+ * transport it replaced. That is deliberate: the transport changed, the judgement did
+ * not, and the judgement is the part that is dangerous to get wrong.
  *
  * Reading pauses while a human is being prompted, which is correct rather than merely
  * tolerable: Atlas is blocked on that decision and will emit nothing but heartbeats
@@ -298,7 +296,15 @@ async function runStreamed(
     }
     if (event.event !== EVENT_PERMISSION) continue;
 
-    const ask = event.data as PermissionAsk;
+    // Validated, not cast: a frame missing a usable `perm_id` or carrying a blank
+    // description cannot produce an answerable prompt, so it must not produce a prompt.
+    const ask = parseAsk(event.data);
+    if (!ask) {
+      logger.error(
+        "askBrowserstackAI: unusable permission ask on the stream; ignoring",
+      );
+      continue;
+    }
     if (!runId) {
       // Atlas emits `run` before any ask precisely so this cannot happen. If it does,
       // there is nowhere to send a decision — so do not prompt a human for an answer
@@ -326,15 +332,11 @@ async function runStreamed(
       );
       decision = { perm_id: ask.perm_id, decision: "deny", reason: "error" };
     }
-    const status = await decisionTransport(
-      decisionUrl(url, runId),
-      headers,
-      {
-        perm_id: decision.perm_id,
-        decision: decision.decision,
-        reason: decision.reason || "",
-      },
-    );
+    const status = await decisionTransport(decisionUrl(url, runId), headers, {
+      perm_id: decision.perm_id,
+      decision: decision.decision,
+      reason: decision.reason || "",
+    });
     if (status !== 204) {
       // Never fatal, and never re-sent. Atlas's gate is still waiting and denies on its
       // own expiry, so a lost decision is safe — it can only cost an approval, never
@@ -355,9 +357,14 @@ async function runStreamed(
       approvals,
     );
   }
-  // Shaped as an `AgentResponse` so `buildResult` — shared with the callback transport
+  // Shaped as an `AgentResponse` so `buildResult` — written for the transport A1 replaced
   // and unchanged — sees exactly what it always saw.
-  return buildResult({ status: resultStatus, body: result }, approvals, mode, product);
+  return buildResult(
+    { status: resultStatus, body: result },
+    approvals,
+    mode,
+    product,
+  );
 }
 
 export function relayMode(server: McpServer): RelayMode {
@@ -372,11 +379,10 @@ export function addAskBrowserstackAITool(
   deps: AskDeps,
   config?: BrowserStackConfig,
 ): Record<string, RegisteredTool> {
-  // A1 (CONTRACT v2) is the path. `transport`/`startListener` remain wired for the
-  // callback transport, which stays on disk per v2 §7.5 — until every Atlas serves A1,
-  // deleting it would leave nothing that works for a co-located caller. Nothing calls
-  // it today; the stream degrades to a read-only JSON answer against an older Atlas,
-  // so no version flag is needed to be safe.
+  // A1 (CONTRACT v2) is the only path; A2 is gone. No version flag is needed to talk to
+  // an Atlas that predates the stream: such a server answers `POST /agent` with ordinary
+  // JSON, the parser sees no `text/event-stream`, and the run degrades to a read-only
+  // answer carrying that response's own status.
   const streamTransport = deps.streamTransport || fetchAgentStreamTransport();
   const decisionTransport = deps.decisionTransport || fetchDecisionTransport();
   const tools: Record<string, RegisteredTool> = {};
@@ -456,8 +462,15 @@ export function addAskBrowserstackAITool(
         // asking about the wrong thing.
         return toResult(
           await runStreamed(
-            server, streamTransport, decisionTransport,
-            url, headers, body, approvals, mode, product,
+            server,
+            streamTransport,
+            decisionTransport,
+            url,
+            headers,
+            body,
+            approvals,
+            mode,
+            product,
           ),
         );
       } catch (error) {

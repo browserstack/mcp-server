@@ -1,11 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import {
-  CALLBACK_PATH,
-  CallbackListener,
-  parseAsk,
-  startCallbackListener,
-} from "../../src/tools/ask-browserstack/callback.js";
+import { parseAsk } from "../../src/tools/ask-browserstack/stream.js";
 import {
   AskError,
   DEFAULT_ATLAS_URL,
@@ -52,27 +47,6 @@ function ask(overrides: Record<string, unknown> = {}) {
     description: "Create the folder \"Regression\" under Sprint 42.",
     ...overrides,
   };
-}
-
-async function post(
-  listener: CallbackListener,
-  body: unknown,
-  token: string | null = listener.token,
-  path = CALLBACK_PATH,
-  method = "POST",
-) {
-  const response = await fetch(
-    listener.url.replace(CALLBACK_PATH, path),
-    {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token === null ? {} : { Authorization: `Bearer ${token}` }),
-      },
-      body: typeof body === "string" ? body : JSON.stringify(body),
-    },
-  );
-  return { status: response.status, body: await response.json().catch(() => null) };
 }
 
 describe("decide — CONTRACT §7, and nothing but", () => {
@@ -205,9 +179,9 @@ describe("the authoritative approval trail (D4)", () => {
   });
 
   it("keeps our own trail beside it, because the disagreement IS the signal", () => {
-    // A callback answered with no prompt appearing — an attacker probing the loopback port
-    // — is a denial to Atlas and nothing at all to us. Folding the two together would
-    // destroy the only evidence that it happened.
+    // An ask Atlas recorded as answered while no prompt ever appeared on this side is a
+    // denial to Atlas and nothing at all to us. Folding the two together would destroy
+    // the only evidence that it happened.
     const result = build({
       approvals: [{ description: "Creating the Alpha folder", decision: "deny", reason: "error", applied: false }],
     }, []);
@@ -355,105 +329,8 @@ describe("result assembly", () => {
   });
 });
 
-describe("the loopback callback listener", () => {
-  const open: CallbackListener[] = [];
-
-  afterEach(async () => {
-    while (open.length) await open.pop()!.close();
-  });
-
-  async function listen(handler: Parameters<typeof startCallbackListener>[0]) {
-    const listener = await startCallbackListener(handler);
-    open.push(listener);
-    return listener;
-  }
-
-  it("binds loopback on a port the OS chose, never 0.0.0.0 and never a fixed one", async () => {
-    const first = await listen(async () => ({ perm_id: PERM, decision: "deny", reason: "" }));
-    const second = await listen(async () => ({ perm_id: PERM, decision: "deny", reason: "" }));
-
-    expect(first.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/atlas-permission$/);
-    expect(first.url).not.toBe(second.url);
-    // Two concurrent calls must not be able to answer each other's asks.
-    expect(first.token).not.toBe(second.token);
-    expect(first.token).toHaveLength(64);
-  });
-
-  it("answers a properly authenticated ask, echoing perm_id exactly", async () => {
-    const seen: string[] = [];
-    const listener = await listen(async (incoming) => {
-      seen.push(incoming.description);
-      return { perm_id: incoming.perm_id, decision: "allow", reason: "" };
-    });
-
-    const response = await post(listener, ask());
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ perm_id: PERM, decision: "allow", reason: "" });
-    expect(seen).toEqual(["Create the folder \"Regression\" under Sprint 42."]);
-  });
-
-  it("401s a callback with a wrong or missing token, and elicits NOTHING", async () => {
-    // A stray local process must not be able to make an approval prompt appear.
-    const handler = vi.fn();
-    const listener = await listen(handler as never);
-
-    expect((await post(listener, ask(), null)).status).toBe(401);
-    expect((await post(listener, ask(), "")).status).toBe(401);
-    expect((await post(listener, ask(), "not-the-token")).status).toBe(401);
-    expect((await post(listener, ask(), listener.token + "x")).status).toBe(401);
-    expect(handler).not.toHaveBeenCalled();
-  });
-
-  it("refuses a perm_id that is not Atlas's shape, without asking anyone", async () => {
-    const handler = vi.fn();
-    const listener = await listen(handler as never);
-
-    expect((await post(listener, ask({ perm_id: "perm-nope" }))).status).toBe(400);
-    expect((await post(listener, ask({ perm_id: "1234" }))).status).toBe(400);
-    expect((await post(listener, ask({ perm_id: undefined }))).status).toBe(400);
-    expect(handler).not.toHaveBeenCalled();
-  });
-
-  it("refuses a blank description: a prompt asking a human to approve nothing", async () => {
-    const handler = vi.fn();
-    const listener = await listen(handler as never);
-    expect((await post(listener, ask({ description: "   " }))).status).toBe(400);
-    expect(handler).not.toHaveBeenCalled();
-  });
-
-  it("refuses a body it cannot parse", async () => {
-    const handler = vi.fn();
-    const listener = await listen(handler as never);
-    expect((await post(listener, "{not json")).status).toBe(400);
-    expect(handler).not.toHaveBeenCalled();
-  });
-
-  it("404s anything that is not a POST to the callback path", async () => {
-    const handler = vi.fn();
-    const listener = await listen(handler as never);
-    expect((await post(listener, ask(), listener.token, "/", "POST")).status).toBe(404);
-    expect((await post(listener, ask(), listener.token, CALLBACK_PATH, "PUT")).status).toBe(404);
-    expect(handler).not.toHaveBeenCalled();
-  });
-
-  it("fails closed with a non-200 when the relay itself throws", async () => {
-    const listener = await listen(async () => {
-      throw new Error("client went away");
-    });
-    // Atlas maps a non-200 to a deny, so a broken relay cannot approve anything.
-    expect((await post(listener, ask())).status).toBe(500);
-  });
-
-  it("stops accepting connections once closed", async () => {
-    const listener = await startCallbackListener(async (incoming) => ({
-      perm_id: incoming.perm_id, decision: "allow", reason: "",
-    }));
-    const url = listener.url;
-    await listener.close();
-    await expect(fetch(url, { method: "POST", body: "{}" })).rejects.toThrow();
-  });
-});
-
+// The transport it was written for is gone; every reason it exists survived the move,
+// because they are all properties of the ASK rather than of how the ask arrived.
 describe("parseAsk", () => {
   it("keeps only the four fields of CONTRACT §2", () => {
     // op_key, method, path and host stay on Atlas's side; if one ever arrived it would not
@@ -466,6 +343,30 @@ describe("parseAsk", () => {
     expect(parseAsk(null)).toBeNull();
     expect(parseAsk([ask()])).toBeNull();
     expect(parseAsk("perm-x")).toBeNull();
+  });
+
+  it("refuses a perm_id that is not Atlas's shape", () => {
+    // It is the only thing that routes the decision back, so an id we could not have
+    // been sent is an answer that could never be delivered. Better to drop the frame
+    // than to prompt a human for a decision with nowhere to go.
+    expect(parseAsk(ask({ perm_id: "perm-nope" }))).toBeNull();
+    expect(parseAsk(ask({ perm_id: "1234" }))).toBeNull();
+    expect(parseAsk(ask({ perm_id: undefined }))).toBeNull();
+    expect(parseAsk(ask({ perm_id: PERM.toUpperCase() }))).toBeNull();
+  });
+
+  it("refuses a blank description: a prompt asking a human to approve nothing", () => {
+    expect(parseAsk(ask({ description: "   " }))).toBeNull();
+    expect(parseAsk(ask({ description: "" }))).toBeNull();
+    expect(parseAsk(ask({ description: 42 }))).toBeNull();
+  });
+
+  it("defaults product and mode rather than rejecting, because neither is load-bearing", () => {
+    // `description` is the whole of what the human reads and `perm_id` is what routes
+    // the answer. These two only decorate the prompt, so a missing one degrades it
+    // instead of dropping an ask a person could still have answered.
+    expect(parseAsk(ask({ product: undefined, mode: undefined })))
+      .toEqual({ ...ask(), product: "", mode: "" });
   });
 });
 
@@ -537,9 +438,12 @@ describe("Atlas's permission_relay verdict — CONTRACT v1.1 §D", () => {
   });
 
   it("gives host_not_allowed and malformed their own distinct sentences", () => {
+    // `host_not_allowed` can now only come from an Atlas older than A1 — the current one
+    // never dials out, so there is no host to refuse. The sentence stays mapped because
+    // such a deployment still deserves an explanation rather than a raw enum.
     const host = relayOf({ used: false, reason: "host_not_allowed" }).detail;
     const malformed = relayOf({ used: false, reason: "malformed" }).detail;
-    expect(host).toMatch(/allowed-callback list/);
+    expect(host).toMatch(/predates the current approval channel/);
     expect(host).toMatch(/same host/);
     expect(malformed).toMatch(/bug on this side/);
     expect(host).not.toBe(malformed);

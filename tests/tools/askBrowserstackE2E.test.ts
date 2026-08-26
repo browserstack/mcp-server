@@ -6,9 +6,6 @@ import { AskError } from "../../src/tools/ask-browserstack/config.js";
 import { resetTokenCache } from "../../src/tools/ask-browserstack/central-oauth.js";
 import { addAskBrowserstackAITool } from "../../src/tools/ask-browserstack/register.js";
 
-/** Captured before anything stubs the global, so the loopback hop stays real. */
-const realFetch = globalThis.fetch.bind(globalThis);
-
 const CONFIG = {
   "browserstack-username": "ing_Xx",
   "browserstack-access-key": "SECRET",
@@ -692,19 +689,13 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.applied_before_stop).toBe(false);
     });
 
-    it("tears the listener down once the call ends, even when the call failed", async () => {
-      const server = await buildServer();
-      fakeClient(server.getInstance(), { elicitation: {} }, []);
-      const stub = atlas({ throws: true });
-
-      const { payload } = await call(server.getTools());
-      expect(payload.ok).toBe(false);
-      expect(payload.status).toBe("error");
-
-      // The port must not survive the call that opened it.
-      const url = stub.calls[0].body.permission_relay.callback_url;
-      await expect(realFetch(url, { method: "POST", body: "{}" })).rejects.toThrow();
-    });
+    // REMOVED WITH A2: "tears the listener down once the call ends". Its subject was the
+    // ephemeral loopback port the callback transport opened per tool call, and A1 opens
+    // none — there is nothing left to leak. It had also gone vacuous before it was
+    // deleted: it read `permission_relay.callback_url` off a body that now carries only
+    // `{mode}`, so it was probing `undefined` and passing on the resulting throw. The
+    // half of it that still means something (a failed call reports the relay as
+    // `not_reached` and prompts nobody) is asserted below, against the same stub.
   });
 
   describe("the client CANNOT elicit — the opencode/goose path", () => {
@@ -1137,12 +1128,13 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.needs_approval).toEqual(["Create folder \"Regression\"."]);
     });
 
-    it("binds no port at all — the listener is never even constructed", async () => {
-      // Not "bound and left to fail on a callback that cannot arrive": never bound. In the
-      // shared process that would be one ephemeral listener per concurrent tool call.
+    it("offers no relay at all — `permission_relay` is never put on the body", async () => {
+      // Not "offered and left to fail on an ask nobody can be shown": never offered. The
+      // ask channel A1 uses needs a server-initiated elicitation, which the stateless
+      // hosted `/mcp` cannot do across replicas (v2 §5).
       //
       // Asserted through the injected seam rather than a module spy, so a negative result
-      // means the code did not call it — not that the spy failed to attach. The positive
+      // means the code did not send it — not that the spy failed to attach. The positive
       // control below is what makes this assertion mean anything.
       vi.resetModules();
       process.env.REMOTE_MCP = "true";
@@ -1270,7 +1262,7 @@ describe("askBrowserstackAI, against the injected seam", () => {
 
   it("refuses rather than calling Atlas unauthenticated, and never names the token", async () => {
     const mcp = new McpServer({ name: "t", version: "0" });
-    const transport = vi.fn();
+    const streamed = vi.fn();
     const tools = addAskBrowserstackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
       mintToken: async () => {
@@ -1280,14 +1272,15 @@ describe("askBrowserstackAI, against the injected seam", () => {
         );
       },
       credentialsFor: () => ({ username: "u", accessKey: "k" }),
-      transport: transport as never,
-      startListener: (async () => ({ url: "x", token: "y", close: async () => {} })) as never,
+      streamTransport: streamed as never,
     });
 
     const { payload } = await call(tools);
     expect(payload.ok).toBe(false);
     expect(payload.error).toMatch(/BROWSERSTACK_ACCESS_KEY/);
-    expect(transport).not.toHaveBeenCalled();
+    // The point of the test: no token, so the stream is never opened at all — the
+    // refusal happens before anything reaches the network.
+    expect(streamed).not.toHaveBeenCalled();
   });
 
   it("does not need the user's access key to reach /agent", async () => {

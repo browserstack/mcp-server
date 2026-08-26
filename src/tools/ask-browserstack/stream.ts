@@ -25,7 +25,7 @@
 
 import logger from "../../logger.js";
 import { AskError } from "./config.js";
-import type { AgentRequest } from "./types.js";
+import type { AgentRequest, PermissionAsk } from "./types.js";
 
 /** One SSE frame, already parsed. `data` is whatever JSON the frame carried. */
 export interface StreamEvent {
@@ -55,10 +55,47 @@ export const EVENT_RUN = "run";
 export const EVENT_PERMISSION = "permission";
 export const EVENT_RESULT = "result";
 
+/** Atlas's `f"perm-{uuid.uuid4().hex}"`, and nothing else. */
+export const PERM_ID_PATTERN = /^perm-[0-9a-f]{32}$/;
+
 /**
- * The A1 transport seam, mirroring `AgentTransport` but yielding many events instead of
- * returning one body. Injectable for the same reason that one is: the tests must be able
- * to drive a whole approval round trip without a socket.
+ * Read an ask out of a `permission` frame's data, or return null.
+ *
+ * Came over from the transport this one replaced, and the reasons it existed did not
+ * change with the transport — only the direction the ask arrives from did. It is not a
+ * trust check on Atlas: it is what keeps a malformed frame from turning into a prompt
+ * that cannot be honoured.
+ *
+ * A blank description is rejected rather than relayed: the description IS the whole of
+ * what the human is shown, so an empty one is a prompt asking a person to approve
+ * nothing. A `perm_id` off Atlas's shape is rejected because it is the only thing that
+ * routes the answer back — the decision endpoint matches on it, so an id we could not
+ * have received is an answer that can never be delivered.
+ *
+ * Only the four fields of CONTRACT §2 are carried forward. `op_key`, `method`, `path`
+ * and `host` are Atlas-private (v1.1 §A) and it does not send them; if a future one
+ * ever did, they would stop here rather than reach an elicitation prompt or a result.
+ */
+export function parseAsk(data: unknown): PermissionAsk | null {
+  if (typeof data !== "object" || data === null || Array.isArray(data))
+    return null;
+  const record = data as Record<string, unknown>;
+  const permId = record.perm_id;
+  const description = record.description;
+  if (typeof permId !== "string" || !PERM_ID_PATTERN.test(permId)) return null;
+  if (typeof description !== "string" || !description.trim()) return null;
+  return {
+    perm_id: permId,
+    product: typeof record.product === "string" ? record.product : "",
+    mode: typeof record.mode === "string" ? record.mode : "",
+    description,
+  };
+}
+
+/**
+ * The transport seam: the shape `AgentTransport` had before A2 was removed, except that it
+ * yields many events instead of returning one body. Injectable for the same reason that one
+ * was: the tests must be able to drive a whole approval round trip without a socket.
  */
 export type AgentStreamTransport = (
   url: string,
@@ -82,7 +119,10 @@ export type DecisionTransport = (
  * ask that is silently dropped — a write that never gets approved and never explains
  * why — so it is tested directly rather than only through the happy path.
  */
-export function splitFrames(buffer: string): { frames: string[]; rest: string } {
+export function splitFrames(buffer: string): {
+  frames: string[];
+  rest: string;
+} {
   const frames: string[] = [];
   let rest = buffer;
   for (;;) {
@@ -168,7 +208,11 @@ export function fetchAgentStreamTransport(
           // parse failure against a body that was never SSE.
           if (contentType.includes("json")) {
             const parsed = await response.json().catch(() => null);
-            yield { event: EVENT_RESULT, data: parsed, status: response.status };
+            yield {
+              event: EVENT_RESULT,
+              data: parsed,
+              status: response.status,
+            };
             return;
           }
 

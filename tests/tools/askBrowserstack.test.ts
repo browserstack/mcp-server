@@ -33,7 +33,7 @@ import {
   neverReachedAgent,
   UNAUTHENTICATED_DETAIL,
 } from "../../src/tools/ask-browserstack/relay.js";
-import { ApprovalRecord } from "../../src/tools/ask-browserstack/types.js";
+import { ApprovalRecord, RelayMode } from "../../src/tools/ask-browserstack/types.js";
 
 const PERM = "perm-" + "a".repeat(32);
 
@@ -338,7 +338,7 @@ describe("result assembly", () => {
   it("explains a read-only run rather than leaving a refused write unexplained", () => {
     const result = buildResult(
       { status: 200, body: { status: "blocked", answer: "", needs_approval: ["create folder"] } },
-      [], false,
+      [], "no_human",
     );
     expect(result.status).toBe("blocked");
     expect(result.needs_approval).toEqual(["create folder"]);
@@ -534,10 +534,10 @@ describe("the verified /agent response shape — CONTRACT v1.1 §B", () => {
 });
 
 describe("Atlas's permission_relay verdict — CONTRACT v1.1 §D", () => {
-  function relayOf(permission_relay: unknown, relayUsed = true) {
+  function relayOf(permission_relay: unknown, mode: RelayMode = "offered") {
     return buildResult(
       { status: 200, body: { status: "blocked", answer: "", permission_relay } },
-      [], relayUsed,
+      [], mode,
     ).permission_relay;
   }
 
@@ -595,12 +595,57 @@ describe("Atlas's permission_relay verdict — CONTRACT v1.1 §D", () => {
 
   it("keeps no_human ours: Atlas is never told the client cannot be prompted", () => {
     // We omitted the block, so anything Atlas says about a relay cannot be about this run.
-    const relay = relayOf({ used: true, reason: "" }, false);
+    const relay = relayOf({ used: true, reason: "" }, "no_human");
     expect(relay).toEqual({
       used: false,
       reason: "no_human",
       detail: expect.stringContaining("does not support MCP elicitation"),
     });
+  });
+});
+
+describe("REMOTE_MCP — the relay is a stdio-only feature", () => {
+  function relayOf(mode: RelayMode, permission_relay?: unknown) {
+    return buildResult(
+      { status: 200, body: { status: "blocked", answer: "", permission_relay } },
+      [], mode,
+    ).permission_relay;
+  }
+
+  it("says the DEPLOYMENT is why, not the human and not the client", () => {
+    const relay = relayOf("remote_mode");
+    expect(relay).toEqual({
+      used: false,
+      reason: "remote_mode",
+      detail: expect.stringContaining("NOBODY DECLINED THIS, AND YOUR CLIENT IS NOT THE PROBLEM"),
+    });
+    expect(relay.detail).toMatch(/hosted, multi-tenant mode/);
+    expect(relay.detail).toMatch(/works when the server runs locally over stdio/);
+  });
+
+  it("reads differently from every other reason", () => {
+    const remote = relayOf("remote_mode").detail;
+    const noHuman = relayOf("no_human").detail;
+    const notReached = buildResult(
+      { status: 401, body: { detail: "unauthorized" } }, [], "remote_mode",
+    ).permission_relay.detail;
+    const disabled = relayOf("offered", { used: false, reason: "disabled" }).detail;
+    expect(new Set([remote, noHuman, notReached, disabled]).size).toBe(4);
+    // Telling a hosted user to switch to a client that can be prompted would waste their time.
+    expect(remote).not.toMatch(/does not support MCP elicitation/);
+  });
+
+  it("beats no_human, because switching clients cannot help a hosted deployment", () => {
+    // Both facts can be true at once. The deployment is the binding constraint and the only
+    // one the reader can act on.
+    expect(relayOf("remote_mode").reason).toBe("remote_mode");
+  });
+
+  it("still loses to not_reached: a request that never arrived says so first", () => {
+    const relay = buildResult(
+      { status: 401, body: { detail: "unauthorized" } }, [], "remote_mode",
+    ).permission_relay;
+    expect(relay.reason).toBe("not_reached");
   });
 });
 
@@ -979,7 +1024,7 @@ describe("pre-run refusals — the request never reached the agent (D3)", () => 
     // Saying the run went read-only would be as wrong as saying the channel was used —
     // nothing ran at all. The elicitation gap resurfaces on the next run.
     const relay = buildResult(
-      { status: 401, body: { detail: "unauthorized" } }, [], false,
+      { status: 401, body: { detail: "unauthorized" } }, [], "no_human",
     ).permission_relay;
     expect(relay.reason).toBe("not_reached");
     expect(relay.detail).not.toMatch(/does not support MCP elicitation/);

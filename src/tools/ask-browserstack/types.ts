@@ -118,6 +118,20 @@ export interface ApprovalRecord {
   outcome?: string;
 }
 
+/**
+ * Whether the approval channel was offered to Atlas at all, and if not, why not.
+ *
+ * Three different facts about this deployment and this client, each needing a different
+ * thing from whoever reads the result — so they are three values rather than one boolean.
+ */
+export type RelayMode =
+  /** A callback listener was bound and `permission_relay` was sent. */
+  | "offered"
+  /** The client declares no `elicitation` capability, so nobody could be prompted. */
+  | "no_human"
+  /** This process is the hosted multi-tenant server, which cannot receive the callback. */
+  | "remote_mode";
+
 export const ASK_STATUSES = ["ok", "blocked", "error", "rate_limited"] as const;
 export type AskStatus = (typeof ASK_STATUSES)[number];
 

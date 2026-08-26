@@ -941,6 +941,157 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
     });
   });
 
+  describe("REMOTE_MCP — the hosted deployment must not attempt the relay", () => {
+    /**
+     * `appConfig` reads `process.env.REMOTE_MCP` once at module load, so the whole graph is
+     * re-imported with the env in place — the same trick `tests/lib/tm-base-url.test.ts` uses.
+     */
+    async function buildRemoteServer() {
+      vi.resetModules();
+      process.env.REMOTE_MCP = "true";
+      const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
+      return new BrowserStackMcpServer(CONFIG);
+    }
+
+    afterEach(() => {
+      delete process.env.REMOTE_MCP;
+      vi.resetModules();
+    });
+
+    it("never binds a listener, omits permission_relay, and says why", async () => {
+      const server = await buildRemoteServer();
+      // A client that CAN be prompted — this is the case where remote_mode has to beat
+      // no_human, because switching clients would not help.
+      const elicit = fakeClient(server.getInstance(), { roots: {}, elicitation: {} }, []);
+      const stub = atlas({
+        payload: () => ({
+          ok: true, status: "blocked", answer: "I could not create the folder.", steps: [],
+          needs_approval: ["Create folder \"Regression\"."],
+        }),
+      });
+
+      const { result, payload } = await call(server.getTools());
+
+      // 1. nothing was offered to Atlas
+      expect("permission_relay" in stub.calls[0].body).toBe(false);
+      expect(Object.keys(stub.calls[0].body).sort())
+        .toEqual(["product", "task", "user_id"]);
+      // 2. nothing was ever asked
+      expect(elicit).not.toHaveBeenCalled();
+      // 3. the result blames the deployment, not the human and not the client
+      expect(payload.permission_relay).toEqual({
+        used: false,
+        reason: "remote_mode",
+        detail: expect.stringContaining("hosted, multi-tenant mode"),
+      });
+      expect(payload.permission_relay.detail)
+        .not.toMatch(/does not support MCP elicitation/);
+      // 4. a read-only run is not a tool failure
+      expect(result.isError).toBeUndefined();
+      expect(payload.needs_approval).toEqual(["Create folder \"Regression\"."]);
+    });
+
+    it("binds no port at all — the listener is never even constructed", async () => {
+      // Not "bound and left to fail on a callback that cannot arrive": never bound. In the
+      // shared process that would be one ephemeral listener per concurrent tool call.
+      //
+      // Asserted through the injected seam rather than a module spy, so a negative result
+      // means the code did not call it — not that the spy failed to attach. The positive
+      // control below is what makes this assertion mean anything.
+      vi.resetModules();
+      process.env.REMOTE_MCP = "true";
+      const { addAskBrowserstackAITool } = await import(
+        "../../src/tools/ask-browserstack/register.js"
+      );
+      const { McpServer: RemoteMcpServer } = await import(
+        "@modelcontextprotocol/sdk/server/mcp.js"
+      );
+
+      const startListener = vi.fn(async () => ({
+        url: "http://127.0.0.1:1/atlas-permission", token: "t", close: async () => {},
+      }));
+      const transport = vi.fn(async () => ({ status: 200, body: { status: "ok", answer: "" } }));
+
+      const remote = new RemoteMcpServer({ name: "t", version: "0" });
+      vi.spyOn(remote.server, "getClientCapabilities")
+        .mockReturnValue({ elicitation: {} } as never);
+      const tools = addAskBrowserstackAITool(remote, {
+        agentUrl: () => "https://atlas.example/agent",
+        mintToken: async () => MINTED,
+        credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
+        transport: transport as never,
+        startListener: startListener as never,
+      });
+
+      const { payload } = await call(tools);
+      expect(startListener).not.toHaveBeenCalled();
+      expect("permission_relay" in (transport.mock.calls[0] as any)[2]).toBe(false);
+      expect(payload.permission_relay.reason).toBe("remote_mode");
+    });
+
+    it("positive control: the same seam IS called when not in remote mode", async () => {
+      // Without this, the assertion above would pass just as happily if the seam were
+      // broken and nothing ever called it.
+      vi.resetModules();
+      delete process.env.REMOTE_MCP;
+      const { addAskBrowserstackAITool } = await import(
+        "../../src/tools/ask-browserstack/register.js"
+      );
+      const { McpServer: StdioMcpServer } = await import(
+        "@modelcontextprotocol/sdk/server/mcp.js"
+      );
+
+      const startListener = vi.fn(async () => ({
+        url: "http://127.0.0.1:1/atlas-permission", token: "t", close: async () => {},
+      }));
+      const transport = vi.fn(async () => ({ status: 200, body: { status: "ok", answer: "" } }));
+
+      const stdio = new StdioMcpServer({ name: "t", version: "0" });
+      vi.spyOn(stdio.server, "getClientCapabilities")
+        .mockReturnValue({ elicitation: {} } as never);
+      const tools = addAskBrowserstackAITool(stdio, {
+        agentUrl: () => "https://atlas.example/agent",
+        mintToken: async () => MINTED,
+        credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
+        transport: transport as never,
+        startListener: startListener as never,
+      });
+
+      await call(tools);
+      expect(startListener).toHaveBeenCalledTimes(1);
+      expect((transport.mock.calls[0] as any)[2].permission_relay).toBeDefined();
+    });
+
+    it("stdio does not regress: the listener still binds and the block is still sent", async () => {
+      // REMOTE_MCP unset — byte-identical to every other test in this file.
+      const server = await buildServer();
+      fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "accept" },
+      ]);
+      const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Create folder." }] });
+
+      const { payload } = await call(server.getTools());
+      expect(stub.calls[0].body.permission_relay.callback_url)
+        .toMatch(/^http:\/\/127\.0\.0\.1:\d+\/atlas-permission$/);
+      expect(stub.calls[0].body.permission_relay.token).toHaveLength(64);
+      expect(payload.permission_relay.used).toBe(true);
+      expect(payload.permission_relay.reason).toBe("");
+    });
+
+    it("REMOTE_MCP=\"false\" is stdio, not remote", async () => {
+      vi.resetModules();
+      process.env.REMOTE_MCP = "false";
+      const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
+      const server = new BrowserStackMcpServer(CONFIG);
+      fakeClient(server.getInstance(), { elicitation: {} }, [{ action: "accept" }]);
+      const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Create folder." }] });
+
+      const { payload } = await call(server.getTools());
+      expect(stub.calls[0].body.permission_relay).toBeDefined();
+      expect(payload.permission_relay.used).toBe(true);
+    });
+  });
+
   it("refuses by name when no host is configured, without calling anything", async () => {
     delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
     const fetchSpy = vi.fn();

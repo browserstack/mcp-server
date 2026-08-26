@@ -13,6 +13,7 @@ import {
   ASK_STATUSES,
   Decision,
   DecisionReason,
+  RelayMode,
 } from "./types.js";
 
 export const RELAY_ON_DETAIL =
@@ -51,6 +52,15 @@ export const RELAY_OFF_DETAILS: Record<string, string> = {
     "BrowserStack could not use the approval channel this client offered and ran read-only. " +
     "That is a bug on this side, not something you did; everything in `needs_approval` was " +
     "refused because of it.",
+
+  // Neither the human nor the client is the constraint here — the DEPLOYMENT is, and no
+  // change either of them can make will help.
+  remote_mode:
+    "NOBODY DECLINED THIS, AND YOUR CLIENT IS NOT THE PROBLEM. This BrowserStack MCP server " +
+    "is running in its hosted, multi-tenant mode, which has no way to receive the approval " +
+    "callback, so it ran read-only and everything in `needs_approval` was refused for that " +
+    "reason alone. Mid-run approval works when the server runs locally over stdio; retrying " +
+    "against this deployment will keep failing the same way.",
 
   // The request never got as far as the agent. Distinct from `disabled` (the agent ran, with
   // the relay switched off) and from a decline (someone was asked and said no), because the
@@ -364,7 +374,7 @@ export function deriveStatus(
  */
 function relayVerdict(
   payload: Record<string, unknown>,
-  relayUsed: boolean,
+  mode: RelayMode,
   reachedAgent: boolean,
 ): AskResult["permission_relay"] {
   // FIRST, because it outranks both of the cases below. If the request never reached the
@@ -379,7 +389,13 @@ function relayVerdict(
       detail: RELAY_OFF_DETAILS.not_reached,
     };
   }
-  if (!relayUsed) {
+  // BEFORE `no_human`, deliberately, when both are true. In the hosted deployment even a
+  // client that CAN be prompted is of no use, so the deployment is the binding constraint and
+  // the one the reader can act on; telling them to switch clients would waste their time.
+  if (mode === "remote_mode") {
+    return { used: false, reason: "remote_mode", detail: RELAY_OFF_DETAILS.remote_mode };
+  }
+  if (mode === "no_human") {
     // CONTRACT §7's last row: no elicitation capability means the field was never sent.
     return { used: false, reason: "no_human", detail: RELAY_OFF_DETAILS.no_human };
   }
@@ -397,7 +413,7 @@ function relayVerdict(
 export function buildResult(
   response: AgentResponse,
   approvals: ApprovalRecord[],
-  relayUsed: boolean,
+  mode: RelayMode,
 ): AskResult {
   const payload = asRecord(response.body);
   // ABSENT WHEN EMPTY, never `[]` (v1.1 §B): Atlas's `public()` omits the key entirely, as
@@ -425,7 +441,7 @@ export function buildResult(
     elicitations: withOutcomes(approvals),
     needs_approval: needsApproval,
     applied_before_stop: readAppliedBeforeStop(payload),
-    permission_relay: relayVerdict(payload, relayUsed, reachedAgent),
+    permission_relay: relayVerdict(payload, mode, reachedAgent),
     atlas_response: response.body ?? null,
     ...atlasError(response, payload),
   };

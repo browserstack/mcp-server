@@ -4,23 +4,24 @@
  *
  * The shape, and why:
  *
- *   1. NEGOTIATE FIRST. `getClientCapabilities()?.elicitation` is checked BEFORE Atlas is
- *      called, so Atlas learns whether a human is reachable before it starts rather than
- *      discovering it at the gate. No capability means `permission_relay` is omitted
- *      entirely and Atlas runs read-only — today's exact behaviour, and the path opencode
- *      and goose stay on. Nothing here depends on `sampling`, which Claude Code does not
- *      declare.
+ *   1. NEGOTIATE FIRST. `relayMode()` is consulted BEFORE Atlas is called, so Atlas learns
+ *      whether a human is reachable before it starts rather than discovering it at the gate.
+ *      Anything other than "offered" means `permission_relay` is omitted entirely and Atlas
+ *      runs read-only — today's exact behaviour, and the path opencode and goose stay on.
+ *      That also covers the hosted `REMOTE_MCP` deployment, where the relay cannot work at
+ *      all; see `relayMode` for why. Nothing here depends on `sampling`, which Claude Code
+ *      does not declare.
  *   2. LISTEN ON LOOPBACK. Transport is A2, so Atlas calls US back; because it initiates,
  *      the decision returns on the same connection to the same pod and PLAN.md's affinity
  *      problem never arises for this stdio deployment.
- *   3. ELICIT, ONCE. Atlas's `description` is the message, `{ confirm: boolean }` the
- *      schema, and the answer is mapped by CONTRACT §7 with no second chances.
+ *   3. ELICIT, ONCE. Atlas's `description` is the message, nothing is requested in the form,
+ *      and the ACTION is mapped by CONTRACT §7 with no second chances.
  *   4. RETURN THE TRAIL. `approvals` and `applied_before_stop` are what let a caller tell
  *      "nothing happened" from "some steps applied, then stopped".
  *
- * FAIL CLOSED THROUGHOUT. Only `accept` plus `confirm: true` is an allow. Everything else —
- * a decline, a cancel, a timeout, a bad token, a body we cannot parse, a handler that throws
- * — denies.
+ * FAIL CLOSED THROUGHOUT. A decline, a cancel, a timeout, a bad token, a body we cannot
+ * parse, a handler that throws — every one of them denies. An unattended run cannot approve
+ * itself because a headless client returns `cancel`, which is a deny.
  */
 
 import { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -32,6 +33,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
+import appConfig from "../../config.js";
 import { trackMCP } from "../../lib/instrumentation.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import logger from "../../logger.js";
@@ -67,6 +69,7 @@ import {
   PermissionAsk,
   PermissionDecision,
   PRODUCTS,
+  RelayMode,
 } from "./types.js";
 
 export interface AskDeps {
@@ -193,6 +196,41 @@ async function relayOneAsk(
   return { perm_id: ask.perm_id, decision, reason };
 }
 
+/**
+ * Decide whether to offer the approval channel at all — and in the hosted deployment, do not.
+ *
+ * THE RELAY IS A STDIO-ONLY FEATURE, and that is a designed property rather than an accident.
+ * Three things break in `REMOTE_MCP` mode, in increasing order of how hard they are to fix:
+ *
+ *   1. The callback listener binds `127.0.0.1:<ephemeral>` PER TOOL CALL. In the shared,
+ *      multi-tenant process that is N concurrent listeners on one host, with the per-run
+ *      bearer as the only thing keeping tenants apart.
+ *   2. Atlas cannot reach it anyway. A `127.0.0.1` callback URL means the ATLAS POD'S OWN
+ *      loopback, so every remote call is refused by its SSRF allowlist as `host_not_allowed`.
+ *      Confirmed live against staging.
+ *   3. Elicitation is a SERVER-INITIATED message, and the remote `/mcp` is stateless BY
+ *      DELIBERATE DESIGN. Commit `841c6358` removed sessions because they broke behind two
+ *      replicas — "Session not found on roughly half of every client's post-handshake calls"
+ *      — and justified it precisely on the grounds that "we use neither server-initiated
+ *      messages nor subscriptions/sampling". This feature is the exception that commit did
+ *      not have to consider, and it needs the machinery that commit removed.
+ *
+ * So do not start the listener and do not send `permission_relay`: Atlas then runs read-only,
+ * which is a supported path that already works. Attempting the relay instead would buy a slow
+ * and confusing failure in place of a clear one.
+ *
+ * BEFORE RE-ENABLING THIS IN REMOTE MODE: the blocker is (3), not configuration. It needs
+ * PLAN.md's option (c) — resolve the run in Postgres and nudge the pod holding the waiter over
+ * Redis, the pattern `POST /api/agent-callback/{correlation_id}` already uses — plus a callback
+ * URL that addresses a specific replica. A config flag will not do it.
+ */
+export function relayMode(server: McpServer): RelayMode {
+  if (appConfig.REMOTE_MCP) return "remote_mode";
+  return server.server.getClientCapabilities()?.elicitation
+    ? "offered"
+    : "no_human";
+}
+
 export function addAskBrowserstackAITool(
   server: McpServer,
   deps: AskDeps,
@@ -238,9 +276,7 @@ export function addAskBrowserstackAITool(
       const approvals: ApprovalRecord[] = [];
       // Negotiated before anything else so the failure paths below report the mode they
       // would have run in.
-      const canElicit = Boolean(
-        server.server.getClientCapabilities()?.elicitation,
-      );
+      const mode = relayMode(server);
       let listener: CallbackListener | undefined;
 
       try {
@@ -260,7 +296,9 @@ export function addAskBrowserstackAITool(
         const username = (deps.credentialsFor().username || "").trim();
         if (username) body.user_id = username;
 
-        if (canElicit) {
+        // NOT started at all in remote mode — see `relayMode`. Never bound, rather than
+        // bound and left to fail on a callback that cannot arrive.
+        if (mode === "offered") {
           listener = await startListener((ask) =>
             relayOneAsk(server, ask, approvals),
           );
@@ -272,12 +310,12 @@ export function addAskBrowserstackAITool(
           // Omitted ENTIRELY, not sent empty: its absence is what selects Atlas's
           // read-only HeadlessGate.
           logger.info(
-            "askBrowserstackAI: client declares no elicitation capability; running " +
-              "read-only without a permission relay",
+            "askBrowserstackAI: no permission relay (%s); running read-only",
+            mode,
           );
         }
 
-        return toResult(buildResult(await transport(url, headers, body), approvals, canElicit));
+        return toResult(buildResult(await transport(url, headers, body), approvals, mode));
       } catch (error) {
         const message =
           error instanceof AskError || error instanceof Error

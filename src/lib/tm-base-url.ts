@@ -17,8 +17,8 @@ export const TM_BASE_URLS = [
 /**
  * A TEST-HARNESS AFFORDANCE. Point region discovery at a non-production environment.
  *
- * Named and parsed after `CAPABILITY_REGISTRY_BASE_URLS`, plural because the probe loop takes
- * a list. It REPLACES the built-in list rather than extending it — appending would leave the
+ * Plural because the probe loop takes a list. It REPLACES the built-in list rather than
+ * extending it — appending would leave the
  * production hosts probed first, which is the whole problem it exists to avoid: preprod-only
  * credentials 401 against production, and a 401 can send the model off to retry with a
  * different tool, so a tool-selection measurement stops meaning what it says.

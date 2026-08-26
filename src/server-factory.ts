@@ -20,7 +20,6 @@ import addBuildInsightsTools from "./tools/build-insights.js";
 import { setupOnInitialized } from "./oninitialized.js";
 import { BrowserStackConfig } from "./lib/types.js";
 import addRCATools from "./tools/rca-agent.js";
-import addCapabilityRegistryTools from "./tools/capability-registry/register.js";
 import addAskBrowserstackAITool from "./tools/ask-browserstack/register.js";
 
 /**
@@ -63,10 +62,6 @@ export class BrowserStackMcpServer {
       addSelfHealTools,
       addBuildInsightsTools,
       addRCATools,
-      // Driven by a prebuilt index rather than hand-written per endpoint. Registers
-      // nothing (and logs why) when the artifact is absent, so a packaging problem cannot
-      // take the other products' tools down with it.
-      addCapabilityRegistryTools,
       // Hands a plain-language task to BrowserStack's agent and relays its mid-run
       // permission asks back to this client, so a write can be confirmed by the human
       // sitting in front of it rather than refused for want of anyone to ask.

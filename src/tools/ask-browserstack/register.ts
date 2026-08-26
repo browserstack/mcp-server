@@ -96,13 +96,28 @@ export interface AskDeps {
   startListener?: typeof startCallbackListener;
 }
 
+/**
+ * THE FALLBACK POSITIONING IN THE FIRST SENTENCE IS LOAD-BEARING.
+ *
+ * This server registers 45 tools, most of them hand-written for one endpoint each. Those are
+ * faster, cheaper and more predictable than handing a task to an agent that has to work out
+ * its own API calls, so they should win whenever one of them actually fits. What this tool
+ * covers is the gap: a task nothing here has a tool for, or one where the specific tools were
+ * tried and did not get there.
+ *
+ * A description is the ONLY thing steering that choice — the client picks a tool from these
+ * words alone, before any call is made — so the ordering is deliberate: when to reach for it
+ * first, what it does second, and the consent behaviour last.
+ */
 const DESCRIPTION =
-  "Ask a question or request a change in plain language about a BrowserStack product. " +
-  "BrowserStack's agent decides which calls to make and returns its answer plus the steps " +
-  "it took. Anything that would change data pauses and asks you to confirm it first, in " +
-  "your own client; deletes are refused outright. If your client cannot show you a prompt, " +
-  "the run is read-only and everything it wanted to change comes back in `needs_approval` " +
-  "instead. One task per call.";
+  "Use this when no other BrowserStack tool here fits the task, or when the ones you tried " +
+  "did not get you there. Prefer a specific tool whenever one fits: it is faster and more " +
+  "predictable than handing the job to an agent. " +
+  "Otherwise, describe what you want in plain language and BrowserStack's agent decides " +
+  "which calls to make, then returns its answer plus the steps it took. Anything that would " +
+  "change data pauses and asks you to confirm it first, in your own client; deletes are " +
+  "refused outright. If your client cannot show you a prompt, the run is read-only and " +
+  "everything it wanted to change comes back in `needs_approval` instead. One task per call.";
 
 /**
  * `isError` marks a call that FAILED, not one that was refused.

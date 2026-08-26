@@ -158,6 +158,23 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
   });
 
   describe("the client CAN elicit", () => {
+    it("advertises itself as the fallback, so specific tools win when one fits", async () => {
+      // The description is the ONLY thing steering tool choice — the client picks from these
+      // words before any call happens — so the fallback framing has to be in it, and near
+      // the front where it is read.
+      const server = await buildServer();
+      const description = (server.getTools().askBrowserstackAI as any).description as string;
+
+      expect(description).toMatch(/^Use this when no other BrowserStack tool here fits/);
+      expect(description).toMatch(/or when the ones you tried did not get you there/);
+      expect(description).toMatch(/Prefer a specific tool whenever one fits/);
+      // ...and it still says what it does and what consent looks like.
+      expect(description).toMatch(/plain language/);
+      expect(description).toMatch(/asks you to confirm/);
+      expect(description).toMatch(/deletes are refused outright/);
+      expect(description).toMatch(/One task per call/);
+    });
+
     it("relays an ask, approves it, and forwards the caller's own credentials", async () => {
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [

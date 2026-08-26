@@ -88,8 +88,16 @@ export type TokenTransport = (
  * code is ever looked at and only when it is one of these. Anything else is ignored entirely
  * and the classification falls back to the status.
  */
-const SCOPE_ERROR_CODES = ["invalid_scope", "unauthorized_client", "invalid_request"];
-const CREDENTIAL_ERROR_CODES = ["invalid_client", "invalid_grant", "access_denied"];
+const SCOPE_ERROR_CODES = [
+  "invalid_scope",
+  "unauthorized_client",
+  "invalid_request",
+];
+const CREDENTIAL_ERROR_CODES = [
+  "invalid_client",
+  "invalid_grant",
+  "access_denied",
+];
 
 /**
  * Was this refusal about the SCOPE or about the CREDENTIAL?
@@ -103,7 +111,9 @@ const CREDENTIAL_ERROR_CODES = ["invalid_client", "invalid_grant", "access_denie
  */
 export function refusalIsAboutScope(status: number, body: unknown): boolean {
   const payload =
-    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+    typeof body === "object" && body !== null
+      ? (body as Record<string, unknown>)
+      : {};
   const code = typeof payload.error === "string" ? payload.error : "";
   if (SCOPE_ERROR_CODES.includes(code)) return true;
   if (CREDENTIAL_ERROR_CODES.includes(code)) return false;
@@ -139,6 +149,23 @@ export const AUTH_UNREACHABLE_DETAIL =
   "was made, no prompt appeared and nothing was changed. This is a connectivity or " +
   "auth-server problem, not a problem with your credentials.";
 
+/**
+ * A 5xx from auth: their service is down, not your password.
+ *
+ * Split out because routing 5xx to `AUTH_REJECTED_DETAIL` actively misdirects the reader,
+ * and did: a preprod outage returned 503 and the tool answered "Your BrowserStack
+ * credentials were rejected … Check BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY",
+ * sending someone to audit env vars that had worked minutes earlier. The status alone
+ * settles it — OAuth2 says a bad client is 401/403 and a bad request is 400, so nothing in
+ * the 5xx range is ever a statement about the caller.
+ */
+export const AUTH_SERVER_ERROR_DETAIL = (status: number): string =>
+  `BrowserStack auth is unavailable (HTTP ${status}). YOUR CREDENTIALS ARE NOT THE ` +
+  `PROBLEM — a 5xx is the auth service failing, not a rejection, so there is nothing to ` +
+  `change on your side and nothing to retry differently. NOTHING REACHED THE AGENT — no ` +
+  `request was made, no prompt appeared and nothing was changed. Try again once ` +
+  `BrowserStack auth is back.`;
+
 export const AUTH_UNUSABLE_DETAIL = (status: number): string =>
   `BrowserStack auth answered HTTP ${status} without issuing a token. NOTHING REACHED THE ` +
   `AGENT — no request was made, no prompt appeared and nothing was changed.`;
@@ -165,7 +192,9 @@ export function resetTokenCache(): void {
  * secret is not left sitting in a map key for the life of the process.
  */
 function cacheKey(url: string, credentials: Credentials): string {
-  const digest = createHash("sha256").update(credentials.accessKey).digest("hex");
+  const digest = createHash("sha256")
+    .update(credentials.accessKey)
+    .digest("hex");
   return `${url} ${credentials.username} ${CENTRAL_SCOPE} ${digest}`;
 }
 
@@ -224,6 +253,11 @@ async function mintOnce(
   const response = await transport(url, mintForm(credentials));
 
   if (response.status === 0) throw new AskError(AUTH_UNREACHABLE_DETAIL);
+  // 5xx BEFORE the refusal branch: a server error is not a refusal, and reading it as one
+  // is worse than saying nothing — it names the caller's credentials as the fault.
+  if (response.status >= 500) {
+    throw new AskError(AUTH_SERVER_ERROR_DETAIL(response.status));
+  }
   if (response.status !== 200) {
     // ONLY THE STATUS CROSSES. The body is read solely to tell a provisioning problem from a
     // credential one, and nothing out of it is ever put in the message — a non-200 body can
@@ -247,7 +281,8 @@ async function mintOnce(
   // Trust the SERVER's lifetime over what we asked for — it clamps to its own maximum, and
   // caching for the requested hour when it granted less would hand out a dead token.
   const granted = Number(body.expires_in);
-  const seconds = Number.isFinite(granted) && granted > 0 ? granted : REQUESTED_EXPIRES_IN;
+  const seconds =
+    Number.isFinite(granted) && granted > 0 ? granted : REQUESTED_EXPIRES_IN;
   return { token, lifetimeMs: seconds * 1000 };
 }
 

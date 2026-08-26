@@ -314,3 +314,51 @@ describe("the relay never claims a person answered when none did", () => {
     ).toBe(false);
   });
 });
+
+describe("an auth outage is not a credential problem", () => {
+  it("a 5xx says the service is down, and never names your credentials", async () => {
+    // Observed live: preprod auth returned 503 during an outage and the tool answered
+    // "Your BrowserStack credentials were rejected … Check BROWSERSTACK_USERNAME and
+    // BROWSERSTACK_ACCESS_KEY" — sending someone to audit env vars that had worked
+    // minutes earlier. The reader asked "is preprod down?", which was right, and the
+    // message argued against it.
+    const { AUTH_SERVER_ERROR_DETAIL, mintCentralToken } = await import(
+      "../../src/tools/ask-browserstack/central-oauth.js"
+    );
+
+    for (const status of [500, 502, 503, 504]) {
+      const transport = vi.fn(async () => ({ status, body: null }));
+      await expect(
+        mintCentralToken(
+          "https://auth.example/token",
+          { username: "u", accessKey: "k" },
+          transport as never,
+        ),
+      ).rejects.toThrow(/auth is unavailable/);
+    }
+
+    const text = AUTH_SERVER_ERROR_DETAIL(503);
+    expect(text).toMatch(/CREDENTIALS ARE NOT THE PROBLEM/);
+    expect(text).not.toMatch(/BROWSERSTACK_USERNAME/);
+    expect(text).not.toMatch(/rejected/);
+  });
+
+  it("still blames the credentials on a 401", async () => {
+    // The split must not make a genuine rejection sound like an outage: those need
+    // opposite actions from the reader.
+    const { mintCentralToken } = await import(
+      "../../src/tools/ask-browserstack/central-oauth.js"
+    );
+    const transport = vi.fn(async () => ({
+      status: 401,
+      body: { error: "invalid_client" },
+    }));
+    await expect(
+      mintCentralToken(
+        "https://auth.example/token",
+        { username: "u", accessKey: "k" },
+        transport as never,
+      ),
+    ).rejects.toThrow(/credentials were rejected/);
+  });
+});

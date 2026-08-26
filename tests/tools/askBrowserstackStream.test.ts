@@ -226,3 +226,91 @@ describe("decisionUrl", () => {
     );
   });
 });
+
+describe("the relay never claims a person answered when none did", () => {
+  it("says nobody was present, instead of 'the answers are in approvals'", async () => {
+    // Observed live against a real Atlas: a headless client returned `cancel`, and the
+    // result carried BOTH "BrowserStack asked before each change and the answers are in
+    // `approvals`" AND an approvals entry reading "refused: nobody was there to be
+    // asked". Two sentences in one payload contradicting each other.
+    const { buildResult, RELAY_ON_NO_ANSWER_DETAIL, nobodyAnswered } = await import(
+      "../../src/tools/ask-browserstack/relay.js"
+    );
+
+    expect(
+      nobodyAnswered([
+        { description: "Create folder.", decision: "deny", reason: "cancelled" },
+      ]),
+    ).toBe(true);
+
+    const result = buildResult(
+      {
+        status: 200,
+        body: {
+          status: "blocked",
+          answer: null,
+          approvals: [
+            { description: "Create folder.", decision: "deny", reason: "cancelled",
+              applied: false },
+          ],
+          applied_before_stop: false,
+          permission_relay: { used: true, reason: "" },
+        },
+      },
+      [{ description: "Create folder.", decision: "deny", reason: "cancelled" }],
+      "offered",
+      "tm",
+    );
+
+    expect(result.permission_relay.used).toBe(true);
+    expect(result.permission_relay.detail).toBe(RELAY_ON_NO_ANSWER_DETAIL);
+    // And the two halves of the payload now agree with each other.
+    expect(result.approvals[0].outcome).toMatch(/nobody was there/);
+    expect(result.permission_relay.detail).toMatch(/without a person/);
+  });
+
+  it("still credits a real human answer", async () => {
+    // The correction must not fire when somebody actually declined — "a person said no"
+    // and "no person was there" call for different things from the reader.
+    const { buildResult, RELAY_ON_DETAIL, nobodyAnswered } = await import(
+      "../../src/tools/ask-browserstack/relay.js"
+    );
+    expect(
+      nobodyAnswered([
+        { description: "x", decision: "deny", reason: "declined" },
+      ]),
+    ).toBe(false);
+
+    const result = buildResult(
+      {
+        status: 200,
+        body: {
+          status: "blocked",
+          approvals: [{ description: "x", decision: "deny", reason: "declined",
+                        applied: false }],
+          permission_relay: { used: true, reason: "" },
+        },
+      },
+      [{ description: "x", decision: "deny", reason: "declined" }],
+      "offered",
+      "tm",
+    );
+    expect(result.permission_relay.detail).toBe(RELAY_ON_DETAIL);
+  });
+
+  it("does not fire on an empty trail", async () => {
+    // Nothing asked at all is a different state, already described correctly.
+    const { nobodyAnswered } = await import("../../src/tools/ask-browserstack/relay.js");
+    expect(nobodyAnswered([])).toBe(false);
+  });
+
+  it("does not fire when one ask was allowed", async () => {
+    const { nobodyAnswered } = await import("../../src/tools/ask-browserstack/relay.js");
+    expect(
+      nobodyAnswered([
+        { description: "a", decision: "allow", reason: "" },
+        { description: "b", decision: "deny", reason: "cancelled" },
+      ]),
+    ).toBe(false);
+  });
+});

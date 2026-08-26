@@ -21,6 +21,22 @@ export const RELAY_ON_DETAIL =
   "are in `approvals`.";
 
 /**
+ * Used when the channel worked and every ask came back with nobody behind it.
+ *
+ * `RELAY_ON_DETAIL` cannot be used here and saying it was a bug, observed live: it claims
+ * "BrowserStack asked before each change and the answers are in `approvals`" while the
+ * trail says `refused: nobody was there to be asked`. Both sentences were in the same
+ * result, contradicting each other — the same class of confusion as `disabled` vs a human
+ * saying no, and it is the reader who pays for it. The channel being usable and a person
+ * actually answering are different facts, and only the second one licenses the word
+ * "answers".
+ */
+export const RELAY_ON_NO_ANSWER_DETAIL =
+  "BrowserStack asked before each change, but this client answered without a person " +
+  "present, so every change was refused. Nothing was modified. Approve from a client " +
+  "that can show you the prompt.";
+
+/**
  * One sentence per way the relay can fail to run, because they call for different things
  * from the person reading them, and a caller who cannot tell them apart retries forever.
  *
@@ -342,6 +358,24 @@ export function parseAtlasApprovals(
  * An `allow` with no `applied` key is NOT rendered as a failure: nobody measured it, and
  * saying otherwise would invent the very fact this is meant to report.
  */
+/**
+ * Every ask was refused because no person was there — not because one said no.
+ *
+ * `cancelled` is what a client with nobody at the terminal returns (measured), and
+ * `no_human` is our own word for the same thing. An EMPTY trail is not this case: nothing
+ * was asked at all, which the existing sentences already describe correctly.
+ */
+export function nobodyAnswered(trail: ApprovalRecord[]): boolean {
+  return (
+    trail.length > 0 &&
+    trail.every(
+      (e) =>
+        e.decision !== "allow" &&
+        (e.reason === "cancelled" || e.reason === "no_human"),
+    )
+  );
+}
+
 export function approvalOutcome(entry: ApprovalRecord): string {
   if (entry.decision === "allow") {
     if (entry.applied === true) return "approved, and the change went through";
@@ -488,6 +522,14 @@ export function buildResult(
   const trail = atlasTrail ?? approvals;
   const status = deriveStatus(response, trail, needsApproval);
   const reachedAgent = !neverReachedAgent(response);
+  const relay = relayVerdict(payload, mode, reachedAgent, isNotEntitled(response));
+  // Correct the sentence when the channel was fine but nobody was ever behind it. The
+  // verdict is computed from the MODE and Atlas's advisory field, neither of which can
+  // see what the elicitation actually returned — so only here, with the trail in hand,
+  // is "was a person really asked" knowable.
+  if (relay.used && relay.reason === "" && nobodyAnswered(trail)) {
+    relay.detail = RELAY_ON_NO_ANSWER_DETAIL;
+  }
 
   return {
     ok: status === "ok",
@@ -499,7 +541,7 @@ export function buildResult(
     elicitations: withOutcomes(approvals),
     needs_approval: needsApproval,
     applied_before_stop: readAppliedBeforeStop(payload),
-    permission_relay: relayVerdict(payload, mode, reachedAgent, isNotEntitled(response)),
+    permission_relay: relay,
     atlas_response: response.body ?? null,
     ...atlasError(response, payload, product),
   };

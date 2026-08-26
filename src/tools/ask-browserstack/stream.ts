@@ -31,6 +31,16 @@ import type { AgentRequest } from "./types.js";
 export interface StreamEvent {
   event: string;
   data: unknown;
+  /**
+   * The HTTP status, carried ONLY on a `result` synthesised from a non-stream reply.
+   *
+   * Load-bearing, and it was a bug to omit it. `relay.ts` reads the status to tell a
+   * rejected credential (401) from an account without the feature (403) from an
+   * ordinary failure, and those produce three different sentences for the user. A
+   * result event that dropped the status made every one of them read as a generic
+   * error. On a real SSE stream the status is 200 by definition, so this is absent.
+   */
+  status?: number;
 }
 
 /**
@@ -128,20 +138,44 @@ export function fetchAgentStreamTransport(
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
         try {
-          const response = await fetch(url, {
-            method: "POST",
-            headers: { ...headers, Accept: "text/event-stream" },
-            body: JSON.stringify(body),
-            // A redirect from an authenticated API is usually a login bounce, and
-            // following it turns a clear 401 into a 200 carrying an HTML page.
-            redirect: "manual",
-            signal: controller.signal,
-          });
+          let response: Response;
+          try {
+            response = await fetch(url, {
+              method: "POST",
+              headers: { ...headers, Accept: "text/event-stream" },
+              body: JSON.stringify(body),
+              // A redirect from an authenticated API is usually a login bounce, and
+              // following it turns a clear 401 into a 200 carrying an HTML page.
+              redirect: "manual",
+              signal: controller.signal,
+            });
+          } catch {
+            // The same sentence the request/response transport gives, and for the same
+            // reason: the upstream detail ("connection reset", "fetch failed") names our
+            // plumbing rather than anything the reader can act on, and letting it through
+            // once already produced a result that read like the user had done something
+            // wrong. What they need to know is that BrowserStack was not reachable.
+            throw new AskError("BrowserStack AI could not be reached");
+          }
+
+          const contentType = response.headers.get("content-type") || "";
+
+          // GRACEFUL DEGRADE, and the reason A1 is safe to ship before Atlas has it
+          // everywhere: an Atlas that does not know `mode: "stream"` answers with an
+          // ordinary JSON body (a read-only run, `permission_relay.reason: "disabled"`).
+          // Yielding it as a single `result` means the caller needs no version
+          // negotiation and no flag — it gets a correct read-only answer instead of a
+          // parse failure against a body that was never SSE.
+          if (contentType.includes("json")) {
+            const parsed = await response.json().catch(() => null);
+            yield { event: EVENT_RESULT, data: parsed, status: response.status };
+            return;
+          }
 
           if (!response.ok || !response.body) {
-            // Not a stream. Surface it as a first-class failure rather than an empty
-            // iteration, which the caller could not tell apart from "the run finished
-            // and said nothing".
+            // Neither a stream nor a JSON result. Surface it as a first-class failure
+            // rather than an empty iteration, which the caller could not tell apart
+            // from "the run finished and said nothing".
             throw new AskError(
               `BrowserStack AI refused the stream (HTTP ${response.status}).`,
             );

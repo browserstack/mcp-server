@@ -45,16 +45,20 @@ import {
   isEnabled,
 } from "./config.js";
 import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
+import { AgentTransport, Credentials, agentHeaders } from "./egress.js";
+// A2's transport lives on per CONTRACT v2 §7.5 and nothing here calls it: until every
+// Atlas serves A1, deleting `callback.ts` would leave a co-located caller with no working
+// transport at all. Only the TYPE is needed, to keep `AskDeps.startListener` declared.
+import { startCallbackListener } from "./callback.js";
 import {
-  AgentTransport,
-  Credentials,
-  agentHeaders,
-  fetchAgentTransport,
-} from "./egress.js";
-import {
-  CallbackListener,
-  startCallbackListener,
-} from "./callback.js";
+  EVENT_PERMISSION,
+  EVENT_RESULT,
+  EVENT_RUN,
+  decisionUrl,
+  fetchAgentStreamTransport,
+  fetchDecisionTransport,
+} from "./stream.js";
+import type { AgentStreamTransport, DecisionTransport } from "./stream.js";
 import {
   buildResult,
   decide,
@@ -91,9 +95,16 @@ export interface AskDeps {
    * as the human rather than as a shared service account.
    */
   credentialsFor: () => Credentials;
+  /** A2's seam. Unused by the tool today; kept while callback.ts is (v2 §7.5). */
   transport?: AgentTransport;
-  /** The seam the tests bind a fake listener to. */
+  /** A2's seam. Same. */
   startListener?: typeof startCallbackListener;
+  /**
+   * A1's seams. Injectable for the same reason A2's were: a test must be able to drive
+   * a whole approval round trip — ask, elicit, decide, result — without a socket.
+   */
+  streamTransport?: AgentStreamTransport;
+  decisionTransport?: DecisionTransport;
 }
 
 /**
@@ -239,6 +250,116 @@ async function relayOneAsk(
  * Redis, the pattern `POST /api/agent-callback/{correlation_id}` already uses — plus a callback
  * URL that addresses a specific replica. A config flag will not do it.
  */
+/**
+ * CONTRACT v2 (A1) — drive one run over the stream.
+ *
+ * The loop is the whole orchestration: read events, elicit on each `permission`, POST
+ * the decision, hand the `result` to `buildResult`. It decides nothing itself —
+ * `relayOneAsk` still owns the elicitation and the allow/deny mapping, and it is the
+ * SAME function the callback transport used. That is deliberate: the transport changed,
+ * the judgement did not.
+ *
+ * Reading pauses while a human is being prompted, which is correct rather than merely
+ * tolerable: Atlas is blocked on that decision and will emit nothing but heartbeats
+ * until it arrives, and heartbeats are dropped by the parser.
+ *
+ * A run that ends with no `result` is an error, not an empty success. A stream that
+ * simply stops is indistinguishable from a network drop, and reporting it as a finished
+ * run with no answer would be the transport quietly speaking for the agent.
+ */
+async function runStreamed(
+  server: McpServer,
+  streamTransport: AgentStreamTransport,
+  decisionTransport: DecisionTransport,
+  url: string,
+  headers: Record<string, string>,
+  body: AgentRequest,
+  approvals: ApprovalRecord[],
+  mode: RelayMode,
+  product: string,
+): Promise<AskResult> {
+  let runId = "";
+  let result: unknown;
+  let sawResult = false;
+  // 200 unless the reply was not a stream at all, in which case the transport carries
+  // the real status — `relay.ts` needs it to tell 401 from 403 from a plain failure.
+  let resultStatus = 200;
+
+  for await (const event of streamTransport(url, headers, body)) {
+    if (event.event === EVENT_RUN) {
+      runId = String((event.data as { run_id?: string })?.run_id || "");
+      continue;
+    }
+    if (event.event === EVENT_RESULT) {
+      result = event.data;
+      sawResult = true;
+      if (typeof event.status === "number") resultStatus = event.status;
+      continue;
+    }
+    if (event.event !== EVENT_PERMISSION) continue;
+
+    const ask = event.data as PermissionAsk;
+    if (!runId) {
+      // Atlas emits `run` before any ask precisely so this cannot happen. If it does,
+      // there is nowhere to send a decision — so do not prompt a human for an answer
+      // that could never be delivered.
+      logger.error(
+        "askBrowserstackAI: permission ask arrived before run_id; cannot answer",
+      );
+      continue;
+    }
+
+    // `relayOneAsk` RETHROWS on an unexpected elicitation failure. Under A2 that was
+    // load-bearing: the throw made the inbound callback answer 500, which Atlas's
+    // fail-closed rule read as a deny. Under A1 there is no inbound request to fail, so
+    // letting it escape would abandon the run and leave Atlas waiting out its full 300s
+    // gate — turning a client hiccup into a five-minute stall. So it is caught here and
+    // converted into the explicit deny the throw used to imply. `relayOneAsk` has
+    // already recorded the approvals entry, so only the wire decision is missing.
+    let decision: PermissionDecision;
+    try {
+      decision = await relayOneAsk(server, ask, approvals);
+    } catch (error) {
+      logger.warn(
+        "askBrowserstackAI: elicitation failed, denying explicitly: %s",
+        error instanceof Error ? error.message : String(error),
+      );
+      decision = { perm_id: ask.perm_id, decision: "deny", reason: "error" };
+    }
+    const status = await decisionTransport(
+      decisionUrl(url, runId),
+      headers,
+      {
+        perm_id: decision.perm_id,
+        decision: decision.decision,
+        reason: decision.reason || "",
+      },
+    );
+    if (status !== 204) {
+      // Never fatal, and never re-sent. Atlas's gate is still waiting and denies on its
+      // own expiry, so a lost decision is safe — it can only cost an approval, never
+      // grant one. Retrying risks the opposite: a duplicate that 409s, or worse, an
+      // approval applied to a step the run has already moved past.
+      logger.warn(
+        "askBrowserstackAI: decision for %s was not accepted (HTTP %s)",
+        decision.perm_id,
+        status,
+      );
+    }
+  }
+
+  if (!sawResult) {
+    return errorResult(
+      "BrowserStack AI ended the run without a result. Nothing was changed " +
+        "beyond any step you already approved.",
+      approvals,
+    );
+  }
+  // Shaped as an `AgentResponse` so `buildResult` — shared with the callback transport
+  // and unchanged — sees exactly what it always saw.
+  return buildResult({ status: resultStatus, body: result }, approvals, mode, product);
+}
+
 export function relayMode(server: McpServer): RelayMode {
   if (appConfig.REMOTE_MCP) return "remote_mode";
   return server.server.getClientCapabilities()?.elicitation
@@ -251,8 +372,13 @@ export function addAskBrowserstackAITool(
   deps: AskDeps,
   config?: BrowserStackConfig,
 ): Record<string, RegisteredTool> {
-  const transport = deps.transport || fetchAgentTransport();
-  const startListener = deps.startListener || startCallbackListener;
+  // A1 (CONTRACT v2) is the path. `transport`/`startListener` remain wired for the
+  // callback transport, which stays on disk per v2 §7.5 — until every Atlas serves A1,
+  // deleting it would leave nothing that works for a co-located caller. Nothing calls
+  // it today; the stream degrades to a read-only JSON answer against an older Atlas,
+  // so no version flag is needed to be safe.
+  const streamTransport = deps.streamTransport || fetchAgentStreamTransport();
+  const decisionTransport = deps.decisionTransport || fetchDecisionTransport();
   const tools: Record<string, RegisteredTool> = {};
 
   /** Instrumentation in the house style, and never fatal to the call it wraps. */
@@ -292,7 +418,6 @@ export function addAskBrowserstackAITool(
       // Negotiated before anything else so the failure paths below report the mode they
       // would have run in.
       const mode = relayMode(server);
-      let listener: CallbackListener | undefined;
 
       try {
         const url = deps.agentUrl();
@@ -311,16 +436,12 @@ export function addAskBrowserstackAITool(
         const username = (deps.credentialsFor().username || "").trim();
         if (username) body.user_id = username;
 
-        // NOT started at all in remote mode — see `relayMode`. Never bound, rather than
-        // bound and left to fail on a callback that cannot arrive.
+        // A1: asking for a stream costs nothing to set up — no port, no listener, no
+        // per-run bearer, because nothing dials in. Which is the whole point: the
+        // callback this replaces could never reach a laptop behind NAT, so the feature
+        // was read-only for every real user regardless of what was configured.
         if (mode === "offered") {
-          listener = await startListener((ask) =>
-            relayOneAsk(server, ask, approvals),
-          );
-          body.permission_relay = {
-            callback_url: listener.url,
-            token: listener.token,
-          };
+          body.permission_relay = { mode: "stream" };
         } else {
           // Omitted ENTIRELY, not sent empty: its absence is what selects Atlas's
           // read-only HeadlessGate.
@@ -330,11 +451,14 @@ export function addAskBrowserstackAITool(
           );
         }
 
+        // `product` reaches the result so an entitlement refusal can name it: the flags
+        // are per product, and a bare "not enabled" sends the user to their admin
+        // asking about the wrong thing.
         return toResult(
-          // `product` reaches the result so an entitlement refusal can name it: the flags
-          // are per product, and a bare "not enabled" sends the user to their admin asking
-          // about the wrong thing.
-          buildResult(await transport(url, headers, body), approvals, mode, product),
+          await runStreamed(
+            server, streamTransport, decisionTransport,
+            url, headers, body, approvals, mode, product,
+          ),
         );
       } catch (error) {
         const message =
@@ -345,18 +469,10 @@ export function addAskBrowserstackAITool(
         // No `canElicit` argument: the request never left this process, so whether the
         // client could have been prompted is not what the reader needs to know.
         return toResult(errorResult(message, approvals));
-      } finally {
-        // Torn down here so it cannot leak across calls or survive an error, and awaited
-        // so the port is released before the tool result is handed back.
-        if (listener) {
-          await listener.close().catch((error) => {
-            logger.warn(
-              "askBrowserstackAI: permission callback listener did not close cleanly: %s",
-              error instanceof Error ? error.message : String(error),
-            );
-          });
-        }
       }
+      // No teardown: A1 opens no port and binds nothing, so there is nothing that can
+      // leak across calls or survive an error. The stream is closed by its own
+      // iteration ending, and Atlas drops the run when the response completes.
     },
   );
 

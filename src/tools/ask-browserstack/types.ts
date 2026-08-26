@@ -58,9 +58,22 @@ export interface PermissionDecision {
 }
 
 /** CONTRACT §1 — the one new optional field on `POST /agent`. */
+/**
+ * The `permission_relay` block. Two shapes, one per transport:
+ *
+ * * `{ mode: "stream" }` — A1 / CONTRACT v2. Nothing to address and nothing to
+ *   authenticate inbound, because nothing dials in. This is what ships.
+ * * `{ callback_url, token }` — A2 / CONTRACT v1. Retained for a co-located caller
+ *   until every Atlas serves A1 (v2 §7.5); unused by the tool today.
+ *
+ * Both optional rather than a union so a caller cannot half-fill either one: Atlas
+ * checks for `mode` first, so a block carrying both is read as a stream and never
+ * silently routed onto the transport that cannot reach the caller.
+ */
 export interface PermissionRelay {
-  callback_url: string;
-  token: string;
+  mode?: string;
+  callback_url?: string;
+  token?: string;
 }
 
 /**

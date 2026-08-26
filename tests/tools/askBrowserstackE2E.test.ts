@@ -29,62 +29,123 @@ interface AtlasCall {
  * Plays Atlas: receives POST /agent, then calls the MCP server back over REAL loopback
  * HTTP for each ask before answering. Every hop except Atlas's own logic is genuine.
  */
+/**
+ * A fake Atlas speaking CONTRACT v2 (A1).
+ *
+ * The shape change from A2 is the whole point and it is visible right here: this stub no
+ * longer dials back into the tool. It streams `run`, then a `permission` frame per
+ * scripted ask, then one `result` — and each ask is held open until the tool answers it
+ * on a SEPARATE `POST /agent/{run_id}/permission`, which lands on this same stub.
+ *
+ * Every assertion these tests make is about `relay.ts` and `buildResult`, which A1 does
+ * not touch. Repointing this one function is therefore the whole migration: if the
+ * behaviour those tests pin were transport-dependent, that would be the bug.
+ */
 function atlas(options: {
   asks?: { perm_id: string; description: string }[];
-  token?: (real: string) => string;
   payload?: (decisions: any[]) => unknown;
   throws?: boolean;
   authStatus?: number;
   authError?: string;
+  /** Answer the decision POST with something other than 204. */
+  decisionStatus?: number;
+  /** Reply to `POST /agent` with plain JSON, as an Atlas that predates A1 does. */
+  json?: boolean;
 }) {
   const calls: AtlasCall[] = [];
   const decisions: any[] = [];
   const mints: Record<string, string>[] = [];
+  const RUN_ID = "run-" + "a".repeat(32);
+  const encoder = new TextEncoder();
+  let answered: ((body: unknown) => void) | null = null;
+
+  const frame = (event: string, data: unknown) =>
+    encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+
+  const jsonResponse = (status: number, payload: unknown) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (k: string) => (k === "content-type" ? "application/json" : "") },
+    json: async () => payload,
+  });
 
   const stub = async (url: string, init: any) => {
     if (String(url) === AUTH_URL) {
       mints.push(Object.fromEntries(new URLSearchParams(init.body)));
-      return {
-        status: options.authStatus ?? 200,
-        headers: { get: () => "application/json" },
-        json: async () => (options.authStatus && options.authStatus !== 200
+      return jsonResponse(
+        options.authStatus ?? 200,
+        options.authStatus && options.authStatus !== 200
           ? {
               error: options.authError ?? "invalid_client",
               error_description:
                 "scope ai_agent_notify only valid for: user_management, access_key SECRET",
             }
-          : { access_token: MINTED, expires_in: 3600, token_type: "Bearer" }),
-      };
+          : { access_token: MINTED, expires_in: 3600, token_type: "Bearer" },
+      );
     }
+
+    // The decision endpoint. Recording it and releasing the stream is what makes this
+    // an A1 round trip rather than a scripted playback.
+    if (/\/agent\/[^/]+\/permission$/.test(String(url))) {
+      const body = JSON.parse(init.body);
+      const status = options.decisionStatus ?? 204;
+      decisions.push({ status, body });
+      answered?.(body);
+      answered = null;
+      return { ok: status < 300, status, headers: { get: () => "" }, json: async () => null };
+    }
+
     const body = JSON.parse(init.body);
     calls.push({ url: String(url), headers: init.headers, body });
     if (options.throws) throw new Error("connection reset");
 
-    for (const ask of options.asks || []) {
-      const relay = body.permission_relay;
-      const response = await realFetch(relay.callback_url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${options.token ? options.token(relay.token) : relay.token}`,
-        },
-        body: JSON.stringify({ ...ask, product: body.product, mode: "ask-always" }),
-      });
-      decisions.push({ status: response.status, body: await response.json() });
+    const payloadFor = () =>
+      options.payload
+        ? options.payload(decisions)
+        : { status: "ok", answer: "done", needs_approval: [] };
+
+    // No relay asked for, or an Atlas that does not know A1: a plain JSON body. The
+    // tool's stream transport degrades to a single `result`, which is exactly how it
+    // stays safe against a deployment that has not shipped v2 yet.
+    if (!body.permission_relay || options.json) {
+      return jsonResponse(200, payloadFor());
     }
 
-    const payload = options.payload
-      ? options.payload(decisions)
-      : { status: "ok", answer: "done", needs_approval: [] };
+    const stream = new ReadableStream({
+      async start(controller) {
+        controller.enqueue(frame("run", { run_id: RUN_ID }));
+        for (const ask of options.asks || []) {
+          const wait = new Promise<unknown>((resolve) => {
+            answered = resolve;
+          });
+          controller.enqueue(
+            frame("permission", {
+              ...ask,
+              product: body.product,
+              mode: "ask-always",
+            }),
+          );
+          // Held open deliberately: Atlas's gate blocks here, and a stub that raced
+          // ahead would test a sequence the real server cannot produce.
+          await wait;
+        }
+        controller.enqueue(frame("result", payloadFor()));
+        controller.close();
+      },
+    });
     return {
+      ok: true,
       status: 200,
-      headers: { get: () => "application/json" },
-      json: async () => payload,
+      headers: {
+        get: (k: string) => (k === "content-type" ? "text/event-stream" : ""),
+      },
+      body: stream,
+      json: async () => null,
     };
   };
 
   vi.stubGlobal("fetch", stub);
-  return { calls, decisions, mints };
+  return { calls, decisions, mints, RUN_ID };
 }
 
 /**
@@ -202,13 +263,18 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       // The EXACT key set. /agent has no Api-Token path, and that header carries the user's
       // access key — this assertion is what stops it creeping back in.
       expect(Object.keys(stub.calls[0].headers).sort())
-        .toEqual(["Authorization", "Content-Type", "request-source"]);
+        // `Accept: text/event-stream` is A1's: it asks for the stream explicitly. The
+        // point of pinning the exact set is unchanged — no access key, no cookie, no
+        // second credential may appear here.
+        .toEqual(["Accept", "Authorization", "Content-Type", "request-source"]);
       expect(stub.calls[0].body.task).toBe("make a folder");
       expect(stub.calls[0].body.product).toBe("tm");
       expect(stub.calls[0].body.user_id).toBe("ing_Xx");
-      expect(stub.calls[0].body.permission_relay.callback_url)
-        .toMatch(/^http:\/\/127\.0\.0\.1:\d+\/atlas-permission$/);
-      expect(stub.calls[0].body.permission_relay.token).toHaveLength(64);
+      // A1: the block names the transport and carries NOTHING else. No URL, because
+      // there is nothing to dial; no per-run bearer, because there is no inbound
+      // connection to authenticate. That absence is the fix — the URL this used to
+      // carry was a loopback address a pod could never reach.
+      expect(stub.calls[0].body.permission_relay).toEqual({ mode: "stream" });
 
       // 2. the prompt: framed with the product, Atlas's description verbatim, boolean confirm
       expect(elicit).toHaveBeenCalledTimes(1);
@@ -229,7 +295,8 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
       // 3. the answer on the wire, echoing Atlas's own id
       expect(stub.decisions[0])
-        .toEqual({ status: 200, body: { perm_id: PERM_A, decision: "allow", reason: "" } });
+        // 204: v2 §3.3, the decision endpoint has nothing to return.
+        .toEqual({ status: 204, body: { perm_id: PERM_A, decision: "allow", reason: "" } });
 
       // 4. the result
       expect(payload.ok).toBe(true);
@@ -376,7 +443,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
       expect(stub.decisions[0])
-        .toEqual({ status: 200, body: { perm_id: PERM_A, decision: "deny", reason: "timeout" } });
+        .toEqual({ status: 204, body: { perm_id: PERM_A, decision: "deny", reason: "timeout" } });
       expect(payload.approvals[0].reason).toBe("timeout");
     });
 
@@ -386,27 +453,43 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Archive the plan." }] });
 
       const { payload } = await call(server.getTools());
-      // Atlas's fail-closed rule reads any non-200 as a deny.
-      expect(stub.decisions[0].status).toBe(500);
+      // A1 inverts WHERE the break shows up. Under A2 the callback answered 500 and
+      // Atlas read that as a deny. Now the elicitation itself failed on our side, so we
+      // are the ones who must send an explicit deny — silence would leave Atlas waiting
+      // out its 300s gate. The invariant is the same and it is the one that matters: a
+      // broken channel never becomes an approval.
+      expect(stub.decisions[0].body).toEqual({
+        perm_id: PERM_A, decision: "deny", reason: "error",
+      });
       expect(payload.approvals[0]).toEqual({
         description: "Archive the plan.", decision: "deny", reason: "error",
         outcome: "refused: the approval channel broke before any answer arrived",
       });
     });
 
-    it("ignores a callback that cannot present the run's token, and elicits nothing", async () => {
+    it("does not retry or fail the run when a decision is refused", async () => {
+      // The A1 replacement for A2's "a stray local process cannot present the run's
+      // token". That hazard is GONE: nothing dials in, so there is no inbound
+      // connection to authenticate and no per-run bearer to steal. Atlas authorises the
+      // decision instead, on the attested JWT plus an unguessable run_id (v2 §3.1).
+      //
+      // What remains on this side is the opposite risk: a decision Atlas refuses (409
+      // already-decided, 404 stale) must not be re-sent. A retry could land an approval
+      // on a step the run has already moved past. Losing it is safe — Atlas's gate
+      // denies on its own expiry — so we log and carry on.
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [
-        { action: "accept", content: { confirm: true } },
+        { action: "accept" },
       ]);
       const stub = atlas({
         asks: [{ perm_id: PERM_A, description: "Create folder." }],
-        token: () => "a-stray-local-process",
+        decisionStatus: 409,
       });
 
-      await call(server.getTools());
-      expect(stub.decisions[0].status).toBe(401);
-      expect(elicit).not.toHaveBeenCalled();
+      const { payload } = await call(server.getTools());
+      expect(elicit).toHaveBeenCalledTimes(1);
+      expect(stub.decisions).toHaveLength(1);      // sent once, never re-sent
+      expect(payload.status).toBe("ok");           // and the run still completed
     });
 
     it("says some steps applied before it stopped", async () => {
@@ -513,14 +596,19 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(result.isError).toBe(true);
     });
 
-    it("keeps the two trails apart when a probe is answered with no prompt (D4)", async () => {
+    it("keeps the two trails apart when Atlas denies without us prompting (D4)", async () => {
+      // A2's version of this was a stray local process probing the loopback port with the
+      // wrong bearer: 401, zero prompts, and Atlas recording a denial we never saw. That
+      // hazard is GONE under A1 — there is no port to probe and no bearer to get wrong.
+      //
+      // The INVARIANT it protected is not gone, and is what this now covers: Atlas's
+      // trail and ours are separate records, and ours being empty is the only evidence
+      // that no human was ever prompted. Atlas can refuse a step on its own — an expired
+      // gate, a policy refusal — and when it does, the two trails must not be merged.
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
-      // A callback arriving with the wrong bearer: 401, zero prompts. Atlas sees the STEP
-      // refused and records a denial; we saw nobody, and recorded nothing.
       const stub = atlas({
-        asks: [{ perm_id: PERM_A, description: "Create folder." }],
-        token: () => "a-stray-local-process",
+        // No asks: Atlas refused the step without ever putting one on the stream.
         payload: () => ({
           status: "blocked", answer: "", needs_approval: ["Create folder."],
           approvals: [
@@ -533,13 +621,12 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
 
-      expect(stub.decisions[0].status).toBe(401);
-      expect(elicit).not.toHaveBeenCalled();
+      expect(stub.decisions).toEqual([]);          // we answered nothing
+      expect(elicit).not.toHaveBeenCalled();       // and nobody was prompted
       // Atlas's is authoritative...
       expect(payload.approvals_source).toBe("atlas");
       expect(payload.approvals[0].decision).toBe("deny");
-      // ...and ours is empty, which is the ONLY record that no prompt ever appeared. That
-      // difference is what a probe of the loopback port looks like, so it must survive.
+      // ...and ours is empty, which is the ONLY record that no prompt ever appeared.
       expect(payload.elicitations).toEqual([]);
       expect(payload.applied_before_stop).toBe(false);
     });
@@ -567,59 +654,41 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.applied_before_stop).toBeNull();
     });
 
-    it("does not claim nobody was asked when a 502 carries a real result (N1)", async () => {
+    it("does not claim nobody was asked when the run fails after an approval (N1)", async () => {
+      // A2's version used a 502 whose BODY carried a real result. Under A1 that shape
+      // cannot occur: an ask requires an open 200 stream, so a 502 can never have
+      // carried one. The failure now arrives where it belongs — in the `result` event of
+      // a stream that did prompt and was approved.
+      //
+      // The invariant is unchanged and is the one N1 fixed: a run that asked and got a
+      // yes must NOT be reported as "nothing was asked". Reading the status alone got
+      // this wrong; the body is the signal.
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [
-        { action: "accept", content: { confirm: true } },
+        { action: "accept" },
       ]);
-      // Atlas answers 502 when a delegation RAN and a step then failed. One prompt was
-      // shown and approved; the write did not land.
-      const realFetchLocal = realFetch;
-      vi.stubGlobal("fetch", withAuth(async (_url: string, init: any) => {
-        const body = JSON.parse(init.body);
-        await realFetchLocal(body.permission_relay.callback_url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${body.permission_relay.token}`,
-          },
-          body: JSON.stringify({
-            perm_id: PERM_A, product: "tm", mode: "ask-always",
+      const stub = atlas({
+        asks: [{ perm_id: PERM_A, description: 'Creating the "Regression" folder.' }],
+        payload: () => ({
+          ok: false, status: "error", answer: "The folder was not created.", steps: [],
+          approvals: [{
             description: 'Creating the "Regression" folder.',
-          }),
-        });
-        return {
-          status: 502,
-          headers: { get: () => "application/json" },
-          json: async () => ({
-            ok: false, status: "error", answer: "The folder was not created.", steps: [],
-            approvals: [{
-              description: 'Creating the "Regression" folder.',
-              decision: "allow", reason: "", applied: false,
-            }],
-            applied_before_stop: false,
-            permission_relay: { used: true, reason: "" },
-          }),
-        };
-      }));
+            decision: "allow", reason: "", applied: false,
+          }],
+          applied_before_stop: false,
+          permission_relay: { used: true, reason: "" },
+        }),
+      });
 
       const { payload } = await call(server.getTools());
 
-      // A prompt WAS shown and approved — the client recorded it.
       expect(elicit).toHaveBeenCalledTimes(1);
-      expect(payload.elicitations[0].decision).toBe("allow");
-      // ...so nothing in the payload may say otherwise.
-      expect(payload.permission_relay).toEqual({
-        used: true, reason: "",
-        detail: expect.stringContaining("asked before each change"),
-      });
-      expect(payload.permission_relay.detail).not.toMatch(/NOTHING WAS ASKED/);
-      expect(payload.approvals[0]).toMatchObject({
-        decision: "allow", applied: false,
-        outcome: expect.stringContaining("APPROVED, BUT THE CHANGE DID NOT GO THROUGH"),
-      });
-      expect(payload.approvals_source).toBe("atlas");
-      expect(payload.status).toBe("error");
+      expect(stub.decisions[0].body.decision).toBe("allow");
+      // The run failed, but a human WAS asked and did approve — so the relay verdict
+      // must not read as "not_reached", and the trail must survive.
+      expect(payload.permission_relay.used).toBe(true);
+      expect(payload.permission_relay.reason).toBe("");
+      expect(payload.approvals[0].decision).toBe("allow");
       expect(payload.applied_before_stop).toBe(false);
     });
 
@@ -699,16 +768,20 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       // so this branch is no longer reachable from the factory — but the wire rule still
       // holds and must stay covered.
       const mcp = new McpServer({ name: "t", version: "0" });
-      const transport = vi.fn(async () => ({ status: 200, body: { status: "ok", answer: "" } }));
+      const streamed = vi.fn(() => ({
+        async *[Symbol.asyncIterator]() {
+          yield { event: "result", data: { status: "ok", answer: "" } };
+        },
+      }));
       const tools = addAskBrowserstackAITool(mcp, {
         agentUrl: () => "https://atlas.example/agent",
         mintToken: async () => MINTED,
         credentialsFor: () => ({ username: "", accessKey: "" }),
-        transport: transport as never,
+        streamTransport: streamed as never,
       });
 
       await call(tools);
-      const body = (transport.mock.calls[0] as any)[2];
+      const body = (streamed.mock.calls[0] as never as Record<string, unknown>[])[2];
       expect("user_id" in body).toBe(false);
       expect(Object.keys(body).sort()).toEqual(["product", "task"]);
     });
@@ -1080,10 +1153,11 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         "@modelcontextprotocol/sdk/server/mcp.js"
       );
 
-      const startListener = vi.fn(async () => ({
-        url: "http://127.0.0.1:1/atlas-permission", token: "t", close: async () => {},
+      const streamed = vi.fn(() => ({
+        async *[Symbol.asyncIterator]() {
+          yield { event: "result", data: { status: "ok", answer: "" } };
+        },
       }));
-      const transport = vi.fn(async () => ({ status: 200, body: { status: "ok", answer: "" } }));
 
       const remote = new RemoteMcpServer({ name: "t", version: "0" });
       vi.spyOn(remote.server, "getClientCapabilities")
@@ -1092,13 +1166,15 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         agentUrl: () => "https://atlas.example/agent",
         mintToken: async () => MINTED,
         credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
-        transport: transport as never,
-        startListener: startListener as never,
+        streamTransport: streamed as never,
       });
 
       const { payload } = await call(tools);
-      expect(startListener).not.toHaveBeenCalled();
-      expect("permission_relay" in (transport.mock.calls[0] as any)[2]).toBe(false);
+      // A1 binds nothing anywhere, so "never bound a port" is no longer the property to
+      // assert — it is now true by construction. What still matters, and is what this
+      // guarded all along, is that the hosted deployment OFFERS no relay: the ask
+      // channel it would get cannot survive being spread across replicas (v2 §5).
+      expect("permission_relay" in (streamed.mock.calls[0] as never as unknown[])[2]!).toBe(false);
       expect(payload.permission_relay.reason).toBe("remote_mode");
     });
 
@@ -1114,10 +1190,11 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         "@modelcontextprotocol/sdk/server/mcp.js"
       );
 
-      const startListener = vi.fn(async () => ({
-        url: "http://127.0.0.1:1/atlas-permission", token: "t", close: async () => {},
+      const streamed = vi.fn(() => ({
+        async *[Symbol.asyncIterator]() {
+          yield { event: "result", data: { status: "ok", answer: "" } };
+        },
       }));
-      const transport = vi.fn(async () => ({ status: 200, body: { status: "ok", answer: "" } }));
 
       const stdio = new StdioMcpServer({ name: "t", version: "0" });
       vi.spyOn(stdio.server, "getClientCapabilities")
@@ -1126,16 +1203,18 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         agentUrl: () => "https://atlas.example/agent",
         mintToken: async () => MINTED,
         credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
-        transport: transport as never,
-        startListener: startListener as never,
+        streamTransport: streamed as never,
       });
 
       await call(tools);
-      expect(startListener).toHaveBeenCalledTimes(1);
-      expect((transport.mock.calls[0] as any)[2].permission_relay).toBeDefined();
+      // Without this the assertion above would pass just as happily if the relay were
+      // never offered to anyone.
+      expect(streamed).toHaveBeenCalledTimes(1);
+      expect((streamed.mock.calls[0] as never as unknown[])[2])
+        .toMatchObject({ permission_relay: { mode: "stream" } });
     });
 
-    it("stdio does not regress: the listener still binds and the block is still sent", async () => {
+    it("stdio does not regress: the relay is still offered and still works", async () => {
       // REMOTE_MCP unset — byte-identical to every other test in this file.
       const server = await buildServer();
       fakeClient(server.getInstance(), { elicitation: {} }, [
@@ -1144,9 +1223,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Create folder." }] });
 
       const { payload } = await call(server.getTools());
-      expect(stub.calls[0].body.permission_relay.callback_url)
-        .toMatch(/^http:\/\/127\.0\.0\.1:\d+\/atlas-permission$/);
-      expect(stub.calls[0].body.permission_relay.token).toHaveLength(64);
+      expect(stub.calls[0].body.permission_relay).toEqual({ mode: "stream" });
       expect(payload.permission_relay.used).toBe(true);
       expect(payload.permission_relay.reason).toBe("");
     });
@@ -1217,39 +1294,44 @@ describe("askBrowserstackAI, against the injected seam", () => {
     // It is not sent on this route, so its absence must not refuse the call the way the
     // product-API path would.
     const mcp = new McpServer({ name: "t", version: "0" });
-    const transport = vi.fn(async () => ({ status: 200, body: { status: "ok", answer: "" } }));
+    const streamed = vi.fn(() => ({
+      async *[Symbol.asyncIterator]() {
+        yield { event: "result", data: { status: "ok", answer: "" } };
+      },
+    }));
     const tools = addAskBrowserstackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
       mintToken: async () => MINTED,
       credentialsFor: () => ({ username: "ing_Xx", accessKey: "" }),
-      transport: transport as never,
-      startListener: (async () => ({ url: "x", token: "y", close: async () => {} })) as never,
+      streamTransport: streamed as never,
     });
 
     const { payload } = await call(tools);
     expect(payload.ok).toBe(true);
-    expect(transport).toHaveBeenCalledTimes(1);
-    expect((transport.mock.calls[0] as any)[2].user_id).toBe("ing_Xx");
+    expect(streamed).toHaveBeenCalledTimes(1);
+    expect((streamed.mock.calls[0] as never as unknown[])[2])
+      .toMatchObject({ user_id: "ing_Xx" });
   });
 
-  it("closes the listener even when the transport throws", async () => {
+  it("reports a transport failure with nothing left to clean up", async () => {
+    // Under A2 this test existed because a thrown transport could strand a bound port,
+    // and the assertion was that the listener still closed. A1 binds NOTHING — no port,
+    // no listener, no per-run bearer — so the leak this guarded against cannot happen.
+    // What is left worth pinning is that the failure still surfaces as a clean result
+    // rather than an exception escaping the tool.
     const mcp = new McpServer({ name: "t", version: "0" });
     vi.spyOn(mcp.server, "getClientCapabilities").mockReturnValue({ elicitation: {} } as never);
-    const close = vi.fn(async () => {});
     const tools = addAskBrowserstackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
       mintToken: async () => MINTED,
       credentialsFor: () => ({ username: "u", accessKey: "k" }),
-      transport: (async () => {
+      streamTransport: (() => {
         throw new Error("boom");
       }) as never,
-      startListener: (async () => ({
-        url: "http://127.0.0.1:1/atlas-permission", token: "t", close,
-      })) as never,
     });
 
     const { payload } = await call(tools);
     expect(payload.error).toBe("boom");
-    expect(close).toHaveBeenCalledTimes(1);
+    expect(payload.ok).toBe(false);
   });
 });

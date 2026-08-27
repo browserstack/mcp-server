@@ -33,6 +33,7 @@ import {
   ElicitResult,
   ErrorCode,
   McpError,
+  RequestId,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
@@ -158,9 +159,21 @@ async function relayOneAsk(
   server: McpServer,
   ask: PermissionAsk,
   approvals: ApprovalRecord[],
+  relatedRequestId?: RequestId,
 ): Promise<PermissionDecision> {
   let answer: ElicitResult;
   try {
+    // `relatedRequestId` IS LOAD-BEARING OVER HTTP, and its absence fails silently.
+    // Streamable HTTP routes a server->client message onto the stream of the request it
+    // relates to (`_requestToStreamMapping`). With no id the SDK falls back to the
+    // standalone SSE stream, and a host that answers GET /mcp with 405 has none — so the
+    // SDK drops the message with "Stream is disconnected", the tool waits out its 270s,
+    // and Atlas's gate expires into `reason: "timeout"`. The human is told they did not
+    // answer a question they were never shown.
+    //
+    // Measured exactly that way against the hosted server before this was threaded
+    // through. On stdio it is irrelevant — one pipe, nothing to route — which is why no
+    // local test could have caught it.
     answer = await server.server.elicitInput(
       {
         mode: "form",
@@ -191,7 +204,7 @@ async function relayOneAsk(
         },
       },
       // The inner rung of CONTRACT §4's ladder, strictly shorter than Atlas's 300s gate.
-      { timeout: ELICITATION_TIMEOUT_MS },
+      { timeout: ELICITATION_TIMEOUT_MS, relatedRequestId },
     );
   } catch (error) {
     if (isTimeout(error)) {
@@ -284,6 +297,7 @@ async function runStreamed(
   approvals: ApprovalRecord[],
   mode: RelayMode,
   product: string,
+  relatedRequestId?: RequestId,
 ): Promise<AskResult> {
   let runId = "";
   let result: unknown;
@@ -333,7 +347,7 @@ async function runStreamed(
     // already recorded the approvals entry, so only the wire decision is missing.
     let decision: PermissionDecision;
     try {
-      decision = await relayOneAsk(server, ask, approvals);
+      decision = await relayOneAsk(server, ask, approvals, relatedRequestId);
     } catch (error) {
       logger.warn(
         "askBrowserstackAI: elicitation failed, denying explicitly: %s",
@@ -433,7 +447,7 @@ export function addAskBrowserstackAITool(
       destructiveHint: false,
       title: "Ask BrowserStack AI",
     },
-    async ({ product, query }): Promise<CallToolResult> => {
+    async ({ product, query }, extra): Promise<CallToolResult> => {
       track("askBrowserstackAI");
       const approvals: ApprovalRecord[] = [];
       // Negotiated before anything else so the failure paths below report the mode they
@@ -486,6 +500,9 @@ export function addAskBrowserstackAITool(
             approvals,
             mode,
             product,
+            // The tool call's own id, so each elicitation is routed onto THIS request's
+            // stream. Over Streamable HTTP there is nowhere else for it to go.
+            extra?.requestId,
           ),
         );
       } catch (error) {

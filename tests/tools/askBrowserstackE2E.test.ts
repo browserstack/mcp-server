@@ -444,6 +444,36 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.approvals[0].reason).toBe("timeout");
     });
 
+    it("routes each elicitation onto the tool call's own stream (relatedRequestId)", async () => {
+      // THE BUG THIS EXISTS FOR, found only against the hosted server.
+      //
+      // Streamable HTTP sends a server->client message on the stream of the request it
+      // relates to. With no `relatedRequestId` the SDK falls back to the standalone SSE
+      // stream — and a host answering GET /mcp with 405 has none, so the elicitation is
+      // DROPPED SILENTLY ("Stream is disconnected"). The tool then waits out its 270s and
+      // Atlas's gate expires into `reason: "timeout"`: the person is told they failed to
+      // answer a question they were never shown.
+      //
+      // Invisible on stdio, which has one pipe and nothing to route — which is why every
+      // local test passed while the hosted run timed out. Note the shared `call()` helper
+      // passes `{}` as `extra`, so it could never have caught this; this test supplies a
+      // request id the way the SDK does.
+      const server = await buildServer();
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "accept" },
+      ]);
+      atlas({ asks: [{ perm_id: PERM_A, description: "Archive the plan." }] });
+
+      await server.getTools().askBrowserstackAI.handler(
+        { product: "tm", query: "make a folder" },
+        { requestId: 4242 } as never,
+      );
+
+      expect(elicit).toHaveBeenCalledTimes(1);
+      const options = elicit.mock.calls[0][1];
+      expect(options).toMatchObject({ relatedRequestId: 4242 });
+    });
+
     it("fails closed with a non-200 when the relay breaks in an unexpected way", async () => {
       const server = await buildServer();
       fakeClient(server.getInstance(), { elicitation: {} }, [new Error("client went away")]);

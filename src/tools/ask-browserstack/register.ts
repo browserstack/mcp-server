@@ -44,6 +44,7 @@ import {
   AskError,
   ELICITATION_TIMEOUT_MS,
   agentUrl,
+  allowRemoteRelay,
   authTokenUrl,
   isEnabled,
 } from "./config.js";
@@ -227,29 +228,34 @@ async function relayOneAsk(
 }
 
 /**
- * Decide whether to offer the approval channel at all — and in the hosted deployment, do not.
+ * Decide whether to offer the approval channel at all.
  *
- * THE RELAY IS A STDIO-ONLY FEATURE, and that is a designed property rather than an accident.
- * A1 fixed the two reachability problems A2 had — nothing binds a loopback port per tool
- * call, and Atlas never dials back, so its SSRF allowlist is not in the path at all — but it
- * cannot fix the one that actually blocks remote mode:
+ * STDIO ALWAYS. HOSTED ONLY WHEN ITS OPERATOR OPTS IN — and the reason is a property of
+ * the HOST, not of this tool.
  *
- *   Elicitation is a SERVER-INITIATED message, and the remote `/mcp` is stateless BY
- *   DELIBERATE DESIGN. Commit `841c6358` removed sessions because they broke behind two
- *   replicas — "Session not found on roughly half of every client's post-handshake calls"
- *   — and justified it precisely on the grounds that "we use neither server-initiated
- *   messages nor subscriptions/sampling". This feature is the exception that commit did
- *   not have to consider, and it needs the machinery that commit removed.
+ * Elicitation is a SERVER-INITIATED message whose answer arrives on a SEPARATE POST. A
+ * stateless host builds a fresh `McpServer` per POST, so that answer reaches an instance
+ * which never asked anything, while the one actually suspended on `await` waits out its
+ * timeout. Nothing in this package can fix that; what it holds is a live Promise resolver
+ * and a paused function in the host's heap, and a paused call cannot be moved.
  *
- * So do not send `permission_relay` in remote mode: Atlas then runs read-only, which is a
- * supported path that already works. Attempting the relay instead would buy a slow and
- * confusing failure in place of a clear one — the run would stream asks nobody can be shown,
- * and every one of them would expire into a deny 300s later.
+ * This is why `841c6358` was right to remove sessions from the hosted server on the
+ * grounds that "we use neither server-initiated messages nor subscriptions/sampling" —
+ * this feature is the exception that commit did not have to consider.
  *
- * BEFORE RE-ENABLING THIS IN REMOTE MODE: the blocker is server-initiated messaging, not
- * configuration, and A1 does NOT need a per-replica address any more (the decision is an
- * ordinary inbound POST that Atlas routes to the owning pod itself). What is still missing is
- * a way for a stateless replica to prompt the client. A config flag will not do it.
+ * MEASURED, not assumed: with the host keeping one server per session
+ * (browserstack/remote-mcp-server#96), a tool call and its elicitation answer were served
+ * by the same instance over hosted Streamable HTTP, and the relay completed. So the
+ * refusal below is now conditional rather than absolute.
+ *
+ * It stays OFF by default because it depends on a deployment property this package cannot
+ * observe. A hosted operator turns it on only once their host keeps sessions AND pins a
+ * session to a pod — sessions are per-process, so without affinity the answer POST can
+ * land on a replica that has never seen it. That failure is intermittent and reads like a
+ * client bug, which is exactly why it must not be the default.
+ *
+ * When refused, Atlas runs read-only — a supported path that already works — and
+ * `permission_relay.reason` says `remote_mode` so nobody mistakes it for a human's no.
  */
 /**
  * CONTRACT v2 (A1) — drive one run over the stream.
@@ -371,7 +377,13 @@ async function runStreamed(
 }
 
 export function relayMode(server: McpServer): RelayMode {
-  if (appConfig.REMOTE_MCP) return "remote_mode";
+  // The hosted deployment refuses UNLESS its operator has opted in, because whether an
+  // elicitation can be answered there depends on the host keeping one server alive per
+  // session — see `allowRemoteRelay`. Verified working against the hosted Streamable
+  // HTTP server once it does (browserstack/remote-mcp-server#96).
+  if (appConfig.REMOTE_MCP && !allowRemoteRelay()) return "remote_mode";
+  // The real gate either way: can THIS client be asked? A client that never declared
+  // `elicitation` gets a read-only run whatever the deployment.
   return server.server.getClientCapabilities()?.elicitation
     ? "offered"
     : "no_human";

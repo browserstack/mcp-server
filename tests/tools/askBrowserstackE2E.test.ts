@@ -1170,6 +1170,84 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       expect(payload.permission_relay.reason).toBe("remote_mode");
     });
 
+    it("DOES offer the relay in remote mode once the operator opts in", async () => {
+      // The refusal above is about the HOST, not this tool: a stateless host cannot
+      // deliver an elicitation answer to the instance waiting for it. Once the host keeps
+      // one server per session (verified against the hosted Streamable HTTP server,
+      // browserstack/remote-mcp-server#96) the refusal is wrong, so it is opt-in rather
+      // than absolute.
+      vi.resetModules();
+      process.env.REMOTE_MCP = "true";
+      process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY = "true";
+      try {
+        const { addAskBrowserstackAITool } = await import(
+          "../../src/tools/ask-browserstack/register.js"
+        );
+        const { McpServer: RemoteMcpServer } = await import(
+          "@modelcontextprotocol/sdk/server/mcp.js"
+        );
+        const streamed = vi.fn(() => ({
+          async *[Symbol.asyncIterator]() {
+            yield { event: "result", data: { status: "ok", answer: "" } };
+          },
+        }));
+        const remote = new RemoteMcpServer({ name: "t", version: "0" });
+        vi.spyOn(remote.server, "getClientCapabilities")
+          .mockReturnValue({ elicitation: {} } as never);
+        const tools = addAskBrowserstackAITool(remote, {
+          agentUrl: () => "https://atlas.example/agent",
+          mintToken: async () => MINTED,
+          credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
+          streamTransport: streamed as never,
+        });
+
+        const { payload } = await call(tools);
+        expect((streamed.mock.calls[0] as never as unknown[])[2])
+          .toMatchObject({ permission_relay: { mode: "stream" } });
+        expect(payload.permission_relay.reason).not.toBe("remote_mode");
+      } finally {
+        delete process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
+      }
+    });
+
+    it("the opt-in does NOT force the relay onto a client that cannot be asked", async () => {
+      // The flag only lifts the blanket refusal. Whether a human can actually be reached
+      // is still per-client, and a client that never declared `elicitation` must still get
+      // a read-only run — otherwise the hosted server would stream asks nobody can see.
+      vi.resetModules();
+      process.env.REMOTE_MCP = "true";
+      process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY = "true";
+      try {
+        const { addAskBrowserstackAITool } = await import(
+          "../../src/tools/ask-browserstack/register.js"
+        );
+        const { McpServer: RemoteMcpServer } = await import(
+          "@modelcontextprotocol/sdk/server/mcp.js"
+        );
+        const streamed = vi.fn(() => ({
+          async *[Symbol.asyncIterator]() {
+            yield { event: "result", data: { status: "ok", answer: "" } };
+          },
+        }));
+        const remote = new RemoteMcpServer({ name: "t", version: "0" });
+        vi.spyOn(remote.server, "getClientCapabilities")
+          .mockReturnValue({ roots: {} } as never);      // no elicitation
+        const tools = addAskBrowserstackAITool(remote, {
+          agentUrl: () => "https://atlas.example/agent",
+          mintToken: async () => MINTED,
+          credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
+          streamTransport: streamed as never,
+        });
+
+        const { payload } = await call(tools);
+        expect("permission_relay" in (streamed.mock.calls[0] as never as unknown[])[2]!)
+          .toBe(false);
+        expect(payload.permission_relay.reason).toBe("no_human");
+      } finally {
+        delete process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
+      }
+    });
+
     it("positive control: the same seam IS called when not in remote mode", async () => {
       // Without this, the assertion above would pass just as happily if the seam were
       // broken and nothing ever called it.

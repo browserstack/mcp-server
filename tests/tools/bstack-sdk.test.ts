@@ -27,7 +27,9 @@ describe("BStack SDK Tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     serverMock = {
-      tool: vi.fn((name, desc, schema, handler) => {
+      tool: vi.fn((...toolArgs: any[]) => {
+        const name = toolArgs[0];
+        const handler = toolArgs[toolArgs.length - 1];
         serverMock.handlers = serverMock.handlers || {};
         serverMock.handlers[name] = handler;
       }),
@@ -40,6 +42,7 @@ describe("BStack SDK Tool", () => {
     expect(serverMock.tool).toHaveBeenCalledWith(
       "setupBrowserStackAutomateTests",
       expect.any(String),
+      expect.any(Object),
       expect.any(Object),
       expect.any(Function),
     );

@@ -77,6 +77,13 @@ export default function addBuildInsightsTools(
     {
       buildId: z.string().describe("The build UUID of the BrowserStack build"),
     },
+    {
+      title: "Fetch Build Insights",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(

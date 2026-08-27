@@ -828,8 +828,8 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       const { payload } = await call(server.getTools());
       expect(payload.status).toBe("ok");
       expect(seen).toEqual([
-        "https://auth-preprod.bsstag.com/oauth2/v2/token",
-        "https://ai-platform-service.bsstag.com/agent",
+        "https://auth.browserstack.com/oauth2/v2/token",
+        "https://workflows.browserstack.com/agent",
       ]);
     });
 
@@ -1360,8 +1360,8 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
     const { result } = await call(server.getTools());
     expect(result.isError).toBeUndefined();
-    // TEMPORARY-STAGING-DEFAULT: asserted literally so repointing must be deliberate.
-    expect(seen).toContain("https://ai-platform-service.bsstag.com/agent");
+    // DEFAULT-PROD-HOSTS: asserted literally so repointing must be deliberate.
+    expect(seen).toContain("https://workflows.browserstack.com/agent");
   });
 });
 

@@ -52,36 +52,39 @@ export function allowRemoteRelay(): boolean {
 
 /**
  * ============================================================================
- * TEMPORARY STAGING DEFAULT — REPOINT BEFORE PRODUCTION USERS GET THIS TOOL
+ * PRODUCTION DEFAULTS
  * ============================================================================
  *
- * These hosts are STAGING. They are hardcoded on purpose, as an explicit interim step:
- * "for now lets hardcode the base_url to staging only then we will point this to prod url
- * later." This is a placeholder, not the end state.
+ * These hosts are PRODUCTION. They replace the interim staging placeholders that this
+ * package shipped with while the relay was being built ("for now lets hardcode the
+ * base_url to staging only then we will point this to prod url later") — that step is
+ * now done.
  *
- * PRODUCTION IS `https://workflows.browserstack.com` — verified, not guessed: its
- * `/api/profiles` answers `401 {"detail":"authentication required"}`, byte-identical to
- * staging Atlas. (`/agent` 404s there today only because prod runs an image without the
- * delegation route yet, and `/fe` 404s because prod is API-only by design.) The production
- * auth endpoint is `https://auth.browserstack.com/oauth2/v2/token`.
+ * `https://workflows.browserstack.com` was verified, not guessed: its `/api/profiles`
+ * answers `401 {"detail":"authentication required"}`, byte-identical to staging Atlas.
+ * The production auth endpoint is `https://auth.browserstack.com/oauth2/v2/token`.
  *
  * WHY THIS MATTERS: this package publishes to npm as `@browserstack/mcp-server`, so an
- * install with no environment variables set talks to STAGING. That is the safer direction —
- * it cannot touch production data — but it is still wrong for a production deployment, which
- * would silently read and write the wrong environment's data. The resolved host is therefore
- * logged at info on first use, naming whether it came from the env var or from here, so a
- * deployment pointing at the wrong Atlas is visible in a log line rather than inferred later
- * from confusing data.
+ * install with no environment variables set now talks to PRODUCTION. That is correct for
+ * a production deployment, but it removes the old safety property — a misconfigured or
+ * test deployment that forgets `ASK_BROWSERSTACK_ATLAS_URL` no longer fails safe onto
+ * staging, it reads and writes REAL customer data. Non-production deployments MUST set
+ * that variable explicitly. The resolved host is logged at info on first use, naming
+ * whether it came from the env var or from here, so a deployment pointing at the wrong
+ * Atlas is visible in a log line rather than inferred later from confusing data.
  *
- * BEFORE SHIPPING TO PRODUCTION USERS: change these two constants, and change the tests that
- * assert them — they assert the literals precisely so that repointing has to be deliberate
+ * Staging hosts, for anyone setting the override:
+ *   ASK_BROWSERSTACK_ATLAS_URL      = https://ai-platform-service.bsstag.com
+ *   ASK_BROWSERSTACK_AUTH_TOKEN_URL = https://auth-preprod.bsstag.com/oauth2/v2/token
+ *
+ * The tests assert these literals precisely so that repointing has to be deliberate
  * rather than something that slips through.
  *
- * grep: TEMPORARY-STAGING-DEFAULT
+ * grep: DEFAULT-PROD-HOSTS
  */
-export const DEFAULT_ATLAS_URL = "https://ai-platform-service.bsstag.com";
+export const DEFAULT_ATLAS_URL = "https://workflows.browserstack.com";
 export const DEFAULT_AUTH_TOKEN_URL =
-  "https://auth-preprod.bsstag.com/oauth2/v2/token";
+  "https://auth.browserstack.com/oauth2/v2/token";
 
 /** An operator's override may carry a trailing slash; the constants above do not. */
 function trimUrl(value: string): string {

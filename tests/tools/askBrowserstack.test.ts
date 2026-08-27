@@ -1093,12 +1093,12 @@ describe("host resolution — one hardcoded staging default, one override", () =
 
   it("with NO env vars, resolves the staging pair — exact literals", () => {
     // Asserted literally so repointing to production has to be a deliberate test change
-    // rather than something that slips through. See TEMPORARY-STAGING-DEFAULT.
-    expect(atlasBaseUrl()).toBe("https://ai-platform-service.bsstag.com");
-    expect(agentUrl()).toBe("https://ai-platform-service.bsstag.com/agent");
-    expect(authTokenUrl()).toBe("https://auth-preprod.bsstag.com/oauth2/v2/token");
-    expect(DEFAULT_ATLAS_URL).toBe("https://ai-platform-service.bsstag.com");
-    expect(DEFAULT_AUTH_TOKEN_URL).toBe("https://auth-preprod.bsstag.com/oauth2/v2/token");
+    // rather than something that slips through. See DEFAULT-PROD-HOSTS.
+    expect(atlasBaseUrl()).toBe("https://workflows.browserstack.com");
+    expect(agentUrl()).toBe("https://workflows.browserstack.com/agent");
+    expect(authTokenUrl()).toBe("https://auth.browserstack.com/oauth2/v2/token");
+    expect(DEFAULT_ATLAS_URL).toBe("https://workflows.browserstack.com");
+    expect(DEFAULT_AUTH_TOKEN_URL).toBe("https://auth.browserstack.com/oauth2/v2/token");
   });
 
   it("never refuses for want of configuration — an install needs no env var", () => {
@@ -1164,9 +1164,9 @@ describe("the resolved host is announced, so a wrong deployment is visible", () 
     // The logger is printf-style, so the captured args arrive alongside the format string.
     const everything = lines.join("\n");
     expect(everything).toContain("source:");
-    expect(everything).toContain("Atlas https://ai-platform-service.bsstag.com default");
+    expect(everything).toContain("Atlas https://workflows.browserstack.com default");
     expect(everything).toContain(
-      "auth token endpoint https://auth-preprod.bsstag.com/oauth2/v2/token default",
+      "auth token endpoint https://auth.browserstack.com/oauth2/v2/token default",
     );
   });
 

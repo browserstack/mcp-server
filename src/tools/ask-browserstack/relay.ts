@@ -225,9 +225,9 @@ export function atlasRelayVerdict(
  * `product` is the ONLY thing added — it is all §2 carries, and the route, method and path
  * never reach this side by design. The description itself is passed through untouched:
  * paraphrasing or truncating it would mean the human approves something other than what the
- * model actually said, and Atlas has already route-checked it (v1.1 §A), so a description
- * that quoted an internal path arrives as a withheld-placeholder sentence which reads
- * perfectly well after this prefix.
+ * model actually said. Atlas sends it as the model wrote it (its route guard was removed —
+ * CONTRACT v2 §3, amended), so this prefix is the only thing in front of the model's own
+ * sentence. A placeholder can still arrive from an older Atlas and reads fine after it.
  */
 export const PRODUCT_LABELS: Record<string, string> = {
   tm: "Test Management",

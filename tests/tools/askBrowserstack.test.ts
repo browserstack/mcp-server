@@ -558,11 +558,13 @@ describe("the elicitation message — CONTRACT v1.1 §G", () => {
     );
   });
 
-  it("still reads as a prompt when Atlas withheld a route-shaped description", () => {
-    // v1.1 §A: a description that trips Atlas's route guard is replaced, not dropped, so
-    // what arrives is a sentence — and must not look like a bug once framed.
+  it("still reads as a prompt when an older Atlas withheld the description", () => {
+    // BACK-COMPAT ONLY NOW. Atlas used to replace a route-shaped description with this
+    // placeholder; that guard is gone (CONTRACT v2 §3, amended) because it asked a human to
+    // approve a sentence they could not read. A deployment predating the change still sends
+    // it, so the framing must not make it look like a bug.
     //
-    // THE REAL BYTES, from `collector.py:172-176` — `f"({kind} withheld: it referenced
+    // THE REAL BYTES, as `permissions.py` emitted them — `f"({kind} withheld: it referenced
     // internal API detail)"` with kind="approval request" — and observed on the wire in the
     // integration run. An invented placeholder is the one string in this feature a test can
     // assert on and be confidently wrong about.

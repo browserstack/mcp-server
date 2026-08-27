@@ -165,11 +165,14 @@ async function relayOneAsk(
         mode: "form",
         // Framed with the PRODUCT and nothing else (v1.1 §G): a bare sentence with no
         // attribution is a worse prompt than a framed one, and `product` is all the
-        // callback carries — the route, method, path and op_key never reach this side by
-        // design. The description itself goes through VERBATIM: paraphrasing it would mean
-        // the human approves something other than what the model actually said. Atlas
-        // route-checks it first (v1.1 §A), so one that quoted an internal path arrives as a
-        // withheld-placeholder sentence, which reads correctly after the prefix.
+        // ask carries — the route, method, path and op_key never reach this side by design,
+        // and that is the whole privacy boundary (the ask is four named fields). The
+        // description goes through VERBATIM: paraphrasing it would mean the human approves
+        // something other than what the model actually said. Atlas no longer rewrites it
+        // either — it used to replace a route-shaped one with a placeholder, which asked a
+        // person to approve a sentence they could not read; CONTRACT v2 §3 was amended and
+        // that guard removed. An older Atlas can still send the placeholder, which is why
+        // the framing is tested against it.
         message: elicitationMessage(ask.product, ask.description),
         requestedSchema: {
           // NOTHING IS REQUESTED. The action IS the answer: `accept` already means the human

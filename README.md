@@ -135,23 +135,35 @@ Create and manage test cases, create test plans and trigger test runs using natu
 "update test results as passed for Login tests test run from My Demo Project"
 ```
 
-### 🧪 Access BrowserStack AI agents 
+### 🧪 Access BrowserStack AI agents
 
-Generate test cases from PRDs, convert manual tests to low-code automation, and auto-heal flaky scripts powered by BrowserStack’s AI agents, seamlessly integrated into your workflow.  Below are few example prompts to access Browserstack AI agents
+Generate test cases from PRDs, convert manual tests to low-code automation, and auto-heal flaky scripts powered by BrowserStack's AI agents, seamlessly integrated into your workflow. Below are few example prompts to access Browserstack AI agents
 
-```bash
+```
 #Test case generator agent
 "With Browserstack AI, create relevant test cases for my PRD located at /usr/file/location"
 
-
 #Low code authoring agent
-“With Browserstack AI, automate my manual test case X, added in Test Management”
-
+"With Browserstack AI, automate my manual test case X, added in Test Management"
 
 #Self healing agent
-“Help fix flaky tests in my test script with Browserstack AI self healing”
+"Help fix flaky tests in my test script with Browserstack AI self healing"
 ```
 
+#### 🧠 Ask AI (multi-step workflows)
+
+The agents above each do one job. Ask AI takes one natural-language instruction, works out which BrowserStack capabilities it needs, and runs the steps in sequence — searching, updating, analysing, and reporting back. It runs when the ask spans several operations. Currently covers Test Management and Test Reporting & Analytics, with support for more products coming soon.
+
+```
+# Bulk workflow across test cases
+"Find all payment test cases in project Shopping App and add the 'regression' tag to them"
+
+# Build-level failure analysis
+"Debug my latest build, separate real failures from flaky ones, and tell me if it's safe to ship"
+
+# Reporting in natural language
+"Build me a dashboard showing flaky % by team for the last 30 days"
+```
 
 ## 🛠️ Installation
 
@@ -585,61 +597,58 @@ As of now we support 44 tools.
 
 ## 🤖 BrowserStack AI Agents
 
- 37. `uploadProductRequirementFile` — Upload a PRD/screenshot/PDF and get a file mapping ID (used with `createTestCasesFromFile`). _(not available in Remote MCP)_
+ 37. `askBrowserStackAI` — Run a multi-step Test Management or Test Reporting & Analytics workflow from a single natural-language instruction. "Ask AI" plans the steps, calls the required BrowserStack capabilities and returns the result. Use for open-ended or multi-step asks. _Requires an active Test Management or Test Reporting & Analytics license._
+  **Prompt examples**
+```text
+  Find all payment test cases in project 'Shopping App' and add the 'regression' tag to them
+```
+```text
+  Find the always-failing tests in my last build, tell me which are real product bugs versus broken automation, and suggest fixes
+```
+```text
+  Which tests wasted the most CI time last week across my top two projects?
+```
+ 38. `uploadProductRequirementFile` — Upload a PRD/screenshot/PDF and get a file mapping ID (used with `createTestCasesFromFile`). _(not available in Remote MCP)_
   **Prompt example**
-
-  ```text
+```text
   Upload PRD from /Users/xyz/Desktop/login-flow.pdf and use BrowserStack AI to generate test cases
-  ```
-
- 38. `createLCASteps` — Generate Low Code Automation (LCA) steps from a manual test case in Test Management.
+```
+ 39. `createLCASteps` — Generate Low Code Automation (LCA) steps from a manual test case in Test Management.
   **Prompt example**
-
-  ```text
+```text
   Convert the manual test case 'Add to Cart' in the 'Shopping App' project into LCA steps
-  ```
-
- 39. `fetchSelfHealedSelectors` — Retrieve AI self-healed selectors (plus test source) to fix flaky tests caused by DOM changes.
+```
+ 40. `fetchSelfHealedSelectors` — Retrieve AI self-healed selectors (plus test source) to fix flaky tests caused by DOM changes.
   **Prompt example**
-
-  ```text
+```text
   Fetch and fix flaky test selectors in Automate session ID session_9482 using MCP
-  ```
-
- 40. `prepareSelfHealingPlan` — Build a self-healing edit plan that bundles locator pairs with test source for your LLM to apply. Does NOT modify files itself.
+```
+ 41. `prepareSelfHealingPlan` — Build a self-healing edit plan that bundles locator pairs with test source for your LLM to apply. Does NOT modify files itself.
   **Prompt example**
-
-  ```text
+```text
   Prepare a self-healing plan from the self-healed selectors for my build
-  ```
-
- 41. `fetchRCA` — Fetch AI Root Cause Analysis for your failed Automate/App-Automate tests (by numeric test ID). Suggests fixes only; never auto-applies.
+```
+ 42. `fetchRCA` — Fetch AI Root Cause Analysis for your failed Automate/App-Automate tests (by numeric test ID). Suggests fixes only; never auto-applies.
   **Prompt example**
-
-  ```text
+```text
   Fetch the root cause analysis for failed test IDs 101 and 102 on BrowserStack
-  ```
-
- 42. `getBuildId` — Get the BrowserStack build ID for a given project and build name, scoped to your builds.
+```
+ 43. `getBuildId` — Get the BrowserStack build ID for a given project and build name, scoped to your builds.
   **Prompt example**
-
-  ```text
+```text
   Get the build ID for build 'nightly-regression' in project 'Checkout Flow'
-  ```
-
- 43. `listBuildId` — Get the latest build ID for a project and build name, across all users (no user filter).
+```
+ 44. `listBuildId` — Get the latest build ID for a project and build name, across all users (no user filter).
   **Prompt example**
-
-  ```text
+```text
   Get the latest build ID for build 'nightly-regression' in project 'Checkout Flow'
-  ```
-
- 44. `listTestIds` — List test IDs from a BrowserStack Automate build, filtered by status (passed/failed/pending/skipped).
+```
+ 45. `listTestIds` — List test IDs from a BrowserStack Automate build, filtered by status (passed/failed/pending/skipped).
   **Prompt example**
-
-  ```text
+```text
   List the failed test IDs from build UUID <your-build-uuid> on BrowserStack
-  ```
+```
+
 
 ##  🚀 Remote MCP Server
 

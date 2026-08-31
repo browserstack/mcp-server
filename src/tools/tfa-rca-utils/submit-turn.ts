@@ -120,9 +120,10 @@ function buildPrClientContext(
 
 /**
  * Append a COMPACT PR marker to the message. The full objects travel in
- * `clientContext`; the message keeps only `repo#number` refs so the agent still
- * sees, in the trusted message body, that PR context exists and which PRs it
- * covers — the mandate is preserved without paying the full serialization.
+ * `clientContext`; the message keeps `repo#number [tag]` refs plus a one-line
+ * tag legend, so the agent sees in the TRUSTED message body that PR context
+ * exists, which PRs it covers, and how the client classified each — the mandate
+ * is preserved without paying the full serialization.
  *
  * Guarded against the very cap this fix exists to respect: the marker is
  * downgraded (refs dropped, then omitted entirely) rather than allowed to push
@@ -137,13 +138,40 @@ function composeMessageWithPrMarker(
     message.length + suffix.length <= MESSAGE_MAX_LENGTH;
 
   if (!prDetails || prDetails.length === 0) {
-    const none = "\n\nPR_DETAILS: none provided";
+    // The anti-fabrication clause IS the payload here; the "none" alone was not
+    // enough. A bare marker left the agent free to synthesise a RelatedPR out of
+    // a repo shorthand in the prose: one live turn published
+    // `github.com/browserstack/obs-api/pull/9317` — that repo 404s, the real one
+    // is `observability-api` — with `author='unknown'`, because number/title/
+    // merged_at were recoverable from the message and repo/author were not.
+    const noneFull =
+      "\n\nPR_DETAILS: none provided — no client-supplied PR this turn. Do not" +
+      " infer a repo, URL or author from prose; leave related_prs empty and state" +
+      " what was searched.";
+    if (fits(noneFull)) return `${message}${noneFull}`;
+
+    const none = "\n\nPR_DETAILS: none provided — do not infer PRs from prose.";
     return fits(none) ? `${message}${none}` : message;
   }
 
-  const refs = prDetails.map((pr) => `${pr.repo}#${pr.number}`).join(", ");
-  const full = `\n\nPR_DETAILS: ${prDetails.length} in clientContext (${refs})`;
+  // `tag` rides in the TRUSTED message body, not only in clientContext. It is the
+  // client's classification of a suspect it already falsified, and it changes what
+  // a human does next: a regression gets reverted, a latent-exposing PR must be
+  // fixed where the fault actually lives — reverting it only masks the symptom.
+  // `RelatedPR` carries no tag field, so an agent that never sees the tag cannot
+  // put that distinction in the RCA.
+  const refs = prDetails
+    .map((pr) => `${pr.repo}#${pr.number} [${pr.tag}]`)
+    .join(", ");
+  const legend =
+    " — regression = the PR introduced the fault; latent = the fault predates the" +
+    " PR and the PR exposed it. Carry the distinction into the RCA.";
+
+  const full = `\n\nPR_DETAILS: ${prDetails.length} in clientContext (${refs})${legend}`;
   if (fits(full)) return `${message}${full}`;
+
+  const noLegend = `\n\nPR_DETAILS: ${prDetails.length} in clientContext (${refs})`;
+  if (fits(noLegend)) return `${message}${noLegend}`;
 
   const terse = `\n\nPR_DETAILS: ${prDetails.length} in clientContext`;
   return fits(terse) ? `${message}${terse}` : message;

@@ -46,7 +46,8 @@ export function isEnabled(): boolean {
  */
 export function allowRemoteRelay(): boolean {
   return (
-    (process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY || "").toLowerCase() === "true"
+    (process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY || "").toLowerCase() ===
+    "true"
   );
 }
 

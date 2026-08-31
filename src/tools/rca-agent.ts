@@ -12,6 +12,7 @@ import { TestStatus } from "./rca-agent-utils/types.js";
 import { handleMCPError } from "../lib/utils.js";
 import { trackMCP } from "../index.js";
 import { BuildIdArgs } from "./rca-agent-utils/types.js";
+import { NEEDS_BUILD_ID, NEEDS_TEST_IDS } from "./tool-handoff.js";
 import {
   FETCH_RCA_PARAMS,
   GET_BUILD_ID_PARAMS,
@@ -187,7 +188,8 @@ export default function addRCATools(
 
   tools.fetchRCA = server.tool(
     "fetchRCA",
-    "Fetch AI Root Cause Analysis for the current user's failed BrowserStack Automate/App-Automate tests. Suggests fixes only; never auto-apply, require explicit user approval.",
+    "Fetch AI Root Cause Analysis for the current user's failed BrowserStack Automate/App-Automate tests. Suggests fixes only; never auto-apply, require explicit user approval." +
+      NEEDS_TEST_IDS,
     FETCH_RCA_PARAMS,
     {
       title: "Fetch Root Cause Analysis",
@@ -265,7 +267,8 @@ export default function addRCATools(
 
   tools.listTestIds = server.tool(
     "listTestIds",
-    "List test IDs from a BrowserStack Automate build, optionally filtered by status",
+    "List test IDs from a BrowserStack Automate build, optionally filtered by status" +
+      NEEDS_BUILD_ID,
     LIST_TEST_IDS_PARAMS,
     {
       title: "List Test IDs",

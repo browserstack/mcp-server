@@ -38,7 +38,8 @@ export interface ResolvedBaseUrls {
 
 export function resolveTMBaseUrls(): ResolvedBaseUrls {
   const raw = process.env[TM_BASE_URLS_ENV];
-  if (!raw || !raw.trim()) return { urls: [...TM_BASE_URLS], source: "built-in" };
+  if (!raw || !raw.trim())
+    return { urls: [...TM_BASE_URLS], source: "built-in" };
 
   const urls = raw
     .split(",")

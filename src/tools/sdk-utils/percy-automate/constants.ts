@@ -167,7 +167,7 @@ Install or upgrade the BrowserStack SDK:
   - Install the SDK:
     npm i -D browserstack-node-sdk@latest
   - Run the setup:
-    npx setup --username "YOUR_USERNAME" --key "YOUR_ACCESS_KEY"
+    npx browserstack-node-sdk setup --username "YOUR_USERNAME" --key "YOUR_ACCESS_KEY"
 
 ---STEP---
 Manually capture screenshots:

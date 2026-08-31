@@ -1,9 +1,12 @@
 import { z } from "zod";
+// Import enums directly from types.js (not the index barrel) so this module has
+// no cycle back through index → instructions → languages/*, letting other
+// modules safely read the placeholder constants below at module scope.
 import {
   AppSDKSupportedFrameworkEnum,
   AppSDKSupportedTestingFrameworkEnum,
   AppSDKSupportedLanguageEnum,
-} from "./index.js";
+} from "./types.js";
 
 // App Automate specific device configurations
 export const APP_DEVICE_CONFIGS = {
@@ -21,6 +24,11 @@ export const APP_DEVICE_CONFIGS = {
 
 // Step delimiter for parsing instructions
 export const STEP_DELIMITER = "---STEP---";
+
+export {
+  USERNAME_PLACEHOLDER,
+  ACCESS_KEY_PLACEHOLDER,
+} from "../../sdk-utils/common/credentials.js";
 
 // Default app path for examples
 export const DEFAULT_APP_PATH = "bs://sample.app";

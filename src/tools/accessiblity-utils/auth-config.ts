@@ -17,6 +17,24 @@ export interface AuthConfigResponse {
   errors?: string[];
 }
 
+/**
+ * Allowlist of non-sensitive fields safe to return to the LLM/tool caller.
+ * Everything else (site username/password, selectors, undeclared keys) is
+ * dropped rather than echoed — see rules/tool-design.md "never echo".
+ */
+export function safeAuthConfigData(response?: AuthConfigResponse) {
+  const data = response?.data;
+  if (!data) {
+    return undefined;
+  }
+  return {
+    id: data.id,
+    name: data.name,
+    type: data.type,
+    ...(data.url ? { url: data.url } : {}),
+  };
+}
+
 export interface FormAuthData {
   username: string;
   usernameSelector: string;
@@ -91,7 +109,9 @@ export class AccessibilityAuthConfig {
       });
 
       const data = response.data;
-      logger.info(`The data returned from the API is: ${JSON.stringify(data)}`);
+      logger.info(
+        `Auth config API returned: ${JSON.stringify(safeAuthConfigData(data))}`,
+      );
       if (!data.success) {
         throw new Error(
           `Unable to create auth config: ${data.errors?.join(", ")}`,
@@ -100,7 +120,7 @@ export class AccessibilityAuthConfig {
       return data;
     } catch (err: any) {
       logger.error(
-        `Error creating form auth config: ${JSON.stringify(err?.response?.data)}`,
+        `Error creating form auth config (status ${err?.response?.status ?? "unknown"})`,
       );
       const msg =
         err?.response?.data?.error ||

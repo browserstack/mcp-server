@@ -195,6 +195,13 @@ export default function addRCATools(
     "fetchRCA",
     "Fetch AI Root Cause Analysis for the current user's failed BrowserStack Automate/App-Automate tests. Suggests fixes only; never auto-apply, require explicit user approval.",
     FETCH_RCA_PARAMS,
+    {
+      title: "Fetch Root Cause Analysis",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -214,6 +221,13 @@ export default function addRCATools(
     "getBuildId",
     "Get the BrowserStack build ID for a given project and build name, scoped to the current user's builds.",
     GET_BUILD_ID_PARAMS,
+    {
+      title: "Get Build ID",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -233,6 +247,13 @@ export default function addRCATools(
     "listBuildId",
     "Get the latest build ID for a project and build name, across all users (no user filter).",
     GET_BUILD_ID_PARAMS,
+    {
+      title: "List Build IDs",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -252,6 +273,13 @@ export default function addRCATools(
     "listTestIds",
     "List all tests of a BrowserStack build (each with its status); optional status filter.",
     LIST_TEST_IDS_PARAMS,
+    {
+      title: "List Test IDs",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(

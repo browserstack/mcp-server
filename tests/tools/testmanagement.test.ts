@@ -97,11 +97,17 @@ vi.mock('../../src/lib/inmemory-store', () => ({ signedUrlMap: new Map() }));
 vi.mock('../../src/lib/get-auth', () => ({
   getBrowserStackAuth: vi.fn(() => 'fake-user:fake-key')
 }));
-vi.mock('../../src/tools/testmanagement-utils/TCG-utils/api', () => ({
-  projectIdentifierToId: vi.fn(() => Promise.resolve('999')),
-  fetchFormFields: vi.fn(),
-  normalizeDefaultFieldValue: vi.fn(),
-}));
+vi.mock('../../src/tools/testmanagement-utils/TCG-utils/api', async (importActual) => {
+  const actual = await importActual<
+    typeof import('../../src/tools/testmanagement-utils/TCG-utils/api')
+  >();
+  return {
+    ...actual,
+    projectIdentifierToId: vi.fn(() => Promise.resolve('999')),
+    fetchFormFields: vi.fn(),
+    normalizeDefaultFieldValue: vi.fn(),
+  };
+});
 vi.mock('form-data', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
@@ -676,6 +682,87 @@ describe("createLCAStepsTool", () => {
     expect(result.isError).toBe(false);
   });
 
+  it("elicits credentials when requires_authentication is set and the client supports elicitation", async () => {
+    (createLCASteps as Mock).mockResolvedValue({ content: [], isError: false });
+    const localServer = {
+      server: {
+        getClientVersion: () => "test",
+        getClientCapabilities: () => ({ elicitation: {} }),
+        elicitInput: vi.fn().mockResolvedValue({
+          action: "accept",
+          content: { username: "elicited-user", password: "elicited-pass" },
+        }),
+      },
+    } as any;
+    const args = { ...validArgs, credentials: undefined, requires_authentication: true };
+
+    await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
+
+    expect(localServer.server.elicitInput).toHaveBeenCalledTimes(1);
+    expect(createLCASteps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentials: { username: "elicited-user", password: "elicited-pass" },
+      }),
+      mockContext,
+      mockConfig,
+    );
+  });
+
+  it("does not elicit when requires_authentication is false", async () => {
+    (createLCASteps as Mock).mockResolvedValue({ content: [], isError: false });
+    const elicitInput = vi.fn();
+    const localServer = {
+      server: {
+        getClientVersion: () => "test",
+        getClientCapabilities: () => ({ elicitation: {} }),
+        elicitInput,
+      },
+    } as any;
+    const args = { ...validArgs, credentials: undefined, requires_authentication: false };
+
+    await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
+
+    expect(elicitInput).not.toHaveBeenCalled();
+  });
+
+  it("errors (does not proceed) when requires_authentication but the client cannot elicit and no creds are passed", async () => {
+    (createLCASteps as Mock).mockResolvedValue({ content: [], isError: false });
+    const elicitInput = vi.fn();
+    const localServer = {
+      server: {
+        getClientVersion: () => "test",
+        getClientCapabilities: () => ({}),
+        elicitInput,
+      },
+    } as any;
+    const args = { ...validArgs, credentials: undefined, requires_authentication: true };
+
+    const result = await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
+
+    expect(elicitInput).not.toHaveBeenCalled();
+    // No login test case is created without credentials — it fails clearly.
+    expect(createLCASteps).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
+  it("uses the credentials passed as args when requires_authentication is set (backward-compat)", async () => {
+    (createLCASteps as Mock).mockResolvedValue({ content: [], isError: false });
+    const elicitInput = vi.fn();
+    const localServer = {
+      server: {
+        getClientVersion: () => "test",
+        getClientCapabilities: () => ({}),
+        elicitInput,
+      },
+    } as any;
+    const args = { ...validArgs, requires_authentication: true }; // validArgs has credentials
+
+    await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
+
+    expect(elicitInput).not.toHaveBeenCalled();
+    expect(createLCASteps).toHaveBeenCalledWith(args, mockContext, mockConfig);
+  });
+
   it("handles errors when creating LCA steps", async () => {
     (createLCASteps as Mock).mockRejectedValue(new Error("API Error"));
 
@@ -1077,7 +1164,6 @@ describe('createTestCase — priority normalization', () => {
   let createTestCaseReal: typeof import('../../src/tools/testmanagement-utils/create-testcase').createTestCase;
   let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
   let fetchFormFieldsMock: Mock;
-  let normalizeMock: Mock;
 
   beforeAll(async () => {
     const actual = await vi.importActual<
@@ -1087,7 +1173,6 @@ describe('createTestCase — priority normalization', () => {
     apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
     const api = await import('../../src/tools/testmanagement-utils/TCG-utils/api');
     fetchFormFieldsMock = api.fetchFormFields as unknown as Mock;
-    normalizeMock = api.normalizeDefaultFieldValue as unknown as Mock;
   });
 
   beforeEach(() => {
@@ -1126,7 +1211,6 @@ describe('createTestCase — priority normalization', () => {
 
   it('looks up the project form fields and sends the normalized priority in the request body', async () => {
     fetchFormFieldsMock.mockResolvedValue(formFields);
-    normalizeMock.mockReturnValue('Critical');
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     const result = await createTestCaseReal(
@@ -1135,7 +1219,8 @@ describe('createTestCase — priority normalization', () => {
     );
 
     expect(result.isError).toBeFalsy();
-    expect(normalizeMock).toHaveBeenCalledWith(priorityValues, 'critical', 'name');
+    // Real normalizeDefaultFields maps the internal name 'critical' to the
+    // display name 'Critical' the create endpoint requires.
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
     expect(body.test_case.priority).toBe('Critical');
   });
@@ -1161,6 +1246,72 @@ describe('createTestCase — priority normalization', () => {
 
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
     expect(body.test_case.priority).toBe('critical');
+  });
+
+  const caseTypeValues = [
+    { name: 'Functional', internal_name: 'functional', value: 1 },
+    { name: 'Regression', internal_name: 'regression', value: 2 },
+  ];
+
+  it('looks up the project form fields and sends the normalized case_type in the request body', async () => {
+    fetchFormFieldsMock.mockResolvedValue({
+      default_fields: { case_type: { values: caseTypeValues } },
+      custom_fields: {},
+    });
+    (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
+
+    const result = await createTestCaseReal(
+      { ...baseArgs, case_type: 'functional' },
+      mockConfig as any,
+    );
+
+    expect(result.isError).toBeFalsy();
+    // Real normalizeDefaultFields maps 'functional' to the display name 'Functional'.
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case.case_type).toBe('Functional');
+  });
+
+  it('omits case_type from the request body when not provided (preserves project default)', async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
+
+    await createTestCaseReal({ ...baseArgs }, mockConfig as any);
+
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case).not.toHaveProperty('case_type');
+  });
+
+  it('passes the raw case_type through when the form-fields lookup fails (graceful fallback)', async () => {
+    fetchFormFieldsMock.mockRejectedValue(new Error('Network Error'));
+    (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
+
+    await createTestCaseReal(
+      { ...baseArgs, case_type: 'functional' },
+      mockConfig as any,
+    );
+
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case.case_type).toBe('functional');
+  });
+
+  it('normalizes both priority and case_type in a single form-fields lookup', async () => {
+    fetchFormFieldsMock.mockResolvedValue({
+      default_fields: {
+        priority: { values: priorityValues },
+        case_type: { values: caseTypeValues },
+      },
+      custom_fields: {},
+    });
+    (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
+
+    await createTestCaseReal(
+      { ...baseArgs, priority: 'critical', case_type: 'functional' },
+      mockConfig as any,
+    );
+
+    expect(fetchFormFieldsMock).toHaveBeenCalledTimes(1);
+    const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
+    expect(body.test_case.priority).toBe('Critical');
+    expect(body.test_case.case_type).toBe('Functional');
   });
 });
 
@@ -1338,6 +1489,30 @@ describe('createTestCase — template & multi-select custom_fields', () => {
     // MCP-only params must not leak into the v1 test_case payload.
     expect(call.body.test_case.project_identifier).toBeUndefined();
     expect(call.body.test_case.folder_id).toBeUndefined();
+  });
+
+  // case_type must survive into the v1 test_case body (spread from
+  // testCaseParams), normalized to the display name the endpoint accepts.
+  it('carries the normalized case_type into the v1 body when template_id is set', async () => {
+    const api = await import('../../src/tools/testmanagement-utils/TCG-utils/api');
+    (api.fetchFormFields as Mock).mockResolvedValue({
+      default_fields: {
+        case_type: {
+          values: [{ name: 'Functional', internal_name: 'functional', value: 1 }],
+        },
+      },
+      custom_fields: [],
+    });
+    (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(656127));
+
+    await createTestCaseReal(
+      { ...baseArgs, template_id: 656127, case_type: 'functional' },
+      mockConfig as any,
+    );
+
+    const call = (apiClientMock.post as Mock).mock.calls[0][0];
+    expect(call.url).toContain('/api/v1/projects/');
+    expect(call.body.test_case.case_type).toBe('Functional');
   });
 
   it('translates custom_fields name→id and option value→id on the v1 path', async () => {

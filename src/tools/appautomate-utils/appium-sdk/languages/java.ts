@@ -4,6 +4,8 @@ import {
   combineInstructions,
   createEnvStep,
   PLATFORM_UTILS,
+  USERNAME_PLACEHOLDER,
+  ACCESS_KEY_PLACEHOLDER,
 } from "../index.js";
 
 // Java-specific constants and mappings
@@ -74,8 +76,6 @@ function getMavenCommandForWindows(
   framework: string,
   mavenFramework: string,
   version: string,
-  username: string,
-  accessKey: string,
   appPath?: string,
 ): string {
   let command =
@@ -86,8 +86,8 @@ function getMavenCommandForWindows(
     `-DgroupId="${MAVEN_ARCHETYPE_GROUP_ID}" ` +
     `-DartifactId="${mavenFramework}" ` +
     `-Dversion="${version}" ` +
-    `-DBROWSERSTACK_USERNAME="${username}" ` +
-    `-DBROWSERSTACK_ACCESS_KEY="${accessKey}"`;
+    `-DBROWSERSTACK_USERNAME="${USERNAME_PLACEHOLDER}" ` +
+    `-DBROWSERSTACK_ACCESS_KEY="${ACCESS_KEY_PLACEHOLDER}"`;
 
   // Add framework parameter for browserstack-sdk-archetype-integrate
   if (mavenFramework === "browserstack-sdk-archetype-integrate") {
@@ -106,8 +106,6 @@ function getMavenCommandForUnix(
   framework: string,
   mavenFramework: string,
   version: string,
-  username: string,
-  accessKey: string,
   appPath?: string,
 ): string {
   let command =
@@ -118,8 +116,8 @@ function getMavenCommandForUnix(
     `-DgroupId="${MAVEN_ARCHETYPE_GROUP_ID}" ` +
     `-DartifactId="${mavenFramework}" ` +
     `-Dversion="${version}" ` +
-    `-DBROWSERSTACK_USERNAME="${username}" ` +
-    `-DBROWSERSTACK_ACCESS_KEY="${accessKey}"`;
+    `-DBROWSERSTACK_USERNAME="${USERNAME_PLACEHOLDER}" ` +
+    `-DBROWSERSTACK_ACCESS_KEY="${ACCESS_KEY_PLACEHOLDER}"`;
 
   // Add framework parameter for browserstack-sdk-archetype-integrate
   if (mavenFramework === "browserstack-sdk-archetype-integrate") {
@@ -134,12 +132,7 @@ function getMavenCommandForUnix(
   return command;
 }
 
-export function getJavaSDKCommand(
-  framework: string,
-  username: string,
-  accessKey: string,
-  appPath?: string,
-): string {
+export function getJavaSDKCommand(framework: string, appPath?: string): string {
   const { isWindows = false, getPlatformLabel } = PLATFORM_UTILS || {};
 
   const mavenFramework = getJavaAppFrameworkForMaven(framework);
@@ -152,8 +145,6 @@ export function getJavaSDKCommand(
       framework,
       mavenFramework,
       version,
-      username,
-      accessKey,
       appPath,
     );
   } else {
@@ -161,18 +152,11 @@ export function getJavaSDKCommand(
       framework,
       mavenFramework,
       version,
-      username,
-      accessKey,
       appPath,
     );
   }
 
-  const envStep = createEnvStep(
-    username,
-    accessKey,
-    isWindows,
-    getPlatformLabel(),
-  );
+  const envStep = createEnvStep(isWindows, getPlatformLabel());
 
   const mavenStep = createStep(
     "Install BrowserStack SDK using Maven Archetype for App Automate",

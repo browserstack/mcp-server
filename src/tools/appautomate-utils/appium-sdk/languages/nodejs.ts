@@ -6,22 +6,18 @@ import {
   combineInstructions,
 } from "../index.js";
 
-export function getNodejsSDKCommand(
-  testingFramework: string,
-  username: string,
-  accessKey: string,
-): string {
+export function getNodejsSDKCommand(testingFramework: string): string {
   switch (testingFramework) {
     case "webdriverio":
-      return getWebDriverIOCommand(username, accessKey);
+      return getWebDriverIOCommand();
     case "nightwatch":
-      return getNightwatchCommand(username, accessKey);
+      return getNightwatchCommand();
     case "jest":
-      return getJestCommand(username, accessKey);
+      return getJestCommand();
     case "mocha":
-      return getMochaCommand(username, accessKey);
+      return getMochaCommand();
     case "cucumberJs":
-      return getCucumberJSCommand(username, accessKey);
+      return getCucumberJSCommand();
     default:
       return "";
   }
@@ -51,25 +47,25 @@ export function getNodejsAppInstructions(
     case AppSDKSupportedTestingFrameworkEnum.jest:
       return createStep(
         "Run your Jest test suite with BrowserStack SDK:",
-        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx run browserstack-node-sdk jest specs/single_test.js\n\`\`\``,
+        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx browserstack-node-sdk jest specs/single_test.js\n\`\`\``,
       );
     case AppSDKSupportedTestingFrameworkEnum.mocha:
       return createStep(
         "Run your Mocha test suite with BrowserStack SDK:",
-        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx run browserstack-node-sdk mocha specs/single_test.js\n\`\`\``,
+        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx browserstack-node-sdk mocha specs/single_test.js\n\`\`\``,
       );
 
     case AppSDKSupportedTestingFrameworkEnum.cucumberJs:
       return createStep(
         "Run your Cucumber JS test suite with BrowserStack SDK:",
-        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx run browserstack-node-sdk cucumber-js specs/single_test.js\n\`\`\``,
+        `Use the npm script defined in your package.json. For example:\n\n\`\`\`bash\nnpx browserstack-node-sdk cucumber-js specs/single_test.js\n\`\`\``,
       );
     default:
       return "";
   }
 }
 
-function getWebDriverIOCommand(username: string, accessKey: string): string {
+function getWebDriverIOCommand(): string {
   const prerequisiteStep = createStep(
     "Prerequisite Setup:",
     `a. Ensure you do not modify or replace any existing local driver code, 
@@ -81,8 +77,8 @@ function getWebDriverIOCommand(username: string, accessKey: string): string {
   const envStep = createStep(
     "Set your BrowserStack credentials as environment variables:",
     `\`\`\`bash
-export BROWSERSTACK_USERNAME=${username}
-export BROWSERSTACK_ACCESS_KEY=${accessKey}
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 
@@ -97,8 +93,8 @@ npm install @wdio/browserstack-service@^7 --save-dev
     "Update your WebdriverIO config file (e.g., \\`wdio.conf.js\\`) to add the BrowserStack service and capabilities:",
     `\`\`\`js
 exports.config = {
-  user: process.env.BROWSERSTACK_USERNAME || '${username}',
-  key: process.env.BROWSERSTACK_ACCESS_KEY || '${accessKey}',
+  user: process.env.BROWSERSTACK_USERNAME || '<your_browserstack_username>',
+  key: process.env.BROWSERSTACK_ACCESS_KEY || '<your_browserstack_access_key>',
   hostname: 'hub.browserstack.com',
   services: [
     [
@@ -144,7 +140,7 @@ exports.config = {
   );
 }
 
-function getNightwatchCommand(username: string, accessKey: string): string {
+function getNightwatchCommand(): string {
   const prerequisiteStep = createStep(
     "Prerequisite Setup:",
     ` a. Ensure you do not modify or replace any existing local driver code, 
@@ -156,8 +152,8 @@ function getNightwatchCommand(username: string, accessKey: string): string {
   const envStep = createStep(
     "Set your BrowserStack credentials as environment variables:",
     `\`\`\`bash 
-export BROWSERSTACK_USERNAME=${username}
-export BROWSERSTACK_ACCESS_KEY=${accessKey}
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 
@@ -240,12 +236,12 @@ npm install --save-dev @nightwatch/browserstack
   );
 }
 
-function getJestCommand(username: string, accessKey: string): string {
+function getJestCommand(): string {
   const envStep = createStep(
     "Set your BrowserStack credentials as environment variables:",
     `\`\`\`bash
-export BROWSERSTACK_USERNAME=${username}
-export BROWSERSTACK_ACCESS_KEY=${accessKey}
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 
@@ -259,12 +255,12 @@ npm install --save-dev browserstack-node-sdk
   return combineInstructions(envStep, installStep);
 }
 
-function getMochaCommand(username: string, accessKey: string): string {
+function getMochaCommand(): string {
   const envStep = createStep(
     "Set your BrowserStack credentials as environment variables:",
     `\`\`\`bash
-export BROWSERSTACK_USERNAME=${username}
-export BROWSERSTACK_ACCESS_KEY=${accessKey}
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 
@@ -278,12 +274,12 @@ npm install --save-dev browserstack-node-sdk
   return combineInstructions(envStep, installStep);
 }
 
-function getCucumberJSCommand(username: string, accessKey: string): string {
+function getCucumberJSCommand(): string {
   return createStep(
     "Set your BrowserStack credentials as environment variables:",
     `\`\`\`bash
-export BROWSERSTACK_USERNAME=${username}
-export BROWSERSTACK_ACCESS_KEY=${accessKey}
+export BROWSERSTACK_USERNAME="<your_browserstack_username>"
+export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 }

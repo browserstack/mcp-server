@@ -16,8 +16,6 @@ export const getInstructionsForProjectConfiguration = (
   detectedBrowserAutomationFramework: SDKSupportedBrowserAutomationFramework,
   detectedTestingFramework: SDKSupportedTestingFramework,
   detectedLanguage: SDKSupportedLanguage,
-  username: string,
-  accessKey: string,
 ) => {
   const configuration = SUPPORTED_CONFIGURATIONS[detectedLanguage];
 
@@ -45,5 +43,5 @@ export const getInstructionsForProjectConfiguration = (
     configuration[detectedBrowserAutomationFramework][detectedTestingFramework]
       .instructions;
 
-  return instructionFunction(username, accessKey);
+  return instructionFunction();
 };

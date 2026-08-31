@@ -8,12 +8,10 @@ import {
   TestFailureSignature,
 } from "./types.js";
 
-// Cap on the failure summary line — keep the response payload lean (we never
-// return full stack traces into the MCP client's context window).
+// Keeps the response payload lean — never full stack traces.
 const ERROR_SUMMARY_MAX = 200;
 
-// Safety bound on pagination — high enough to cover large builds, low enough to
-// prevent a runaway loop. Truncation (if ever hit) is logged, never silent.
+// Safety bound on pagination; hitting it is logged, never silent.
 const MAX_PAGES = 100;
 
 export async function getTestIds(
@@ -22,8 +20,7 @@ export async function getTestIds(
   status?: TestStatus,
   includeFailureDetail = false,
 ): Promise<FailedTestInfo[]> {
-  // No `status` → no `test_statuses` filter → the endpoint returns ALL tests
-  // (the default). A `status` narrows both the query and the extraction.
+  // No `status` → returns ALL tests; a `status` narrows the query.
   const baseUrl = `${getAutomationBaseUrl()}/ext/v1/builds/${buildId}/testRuns`;
   let url = status ? `${baseUrl}?test_statuses=${status}` : baseUrl;
   let allTests: FailedTestInfo[] = [];
@@ -62,10 +59,6 @@ export async function getTestIds(
         allTests = allTests.concat(currentTests);
       }
 
-      // Paginate to the end. A safety bound prevents a runaway loop, but it is
-      // high enough to cover large builds (the old cap of 5 pages silently
-      // truncated builds with more than ~5 pages of tests). If we ever hit the
-      // bound we log it rather than returning a silently-partial list.
       if (!data.pagination?.has_next || !data.pagination.next_page) {
         break;
       }
@@ -99,12 +92,8 @@ export function extractTestIds(
   let tests: FailedTestInfo[] = [];
 
   for (const node of hierarchy) {
-    // Include every REAL test node. The observability_url `details=<id>` check
-    // already filters out suite/hook nodes (they carry no such URL). We do NOT
-    // require run_count: JUnit-uploaded builds report run_count=0 even for
-    // genuine tests, which would drop them all.
-    // Status filtering is optional: when `status` is omitted we return ALL
-    // tests (the default); when provided we narrow to that status.
+    // observability_url `details=<id>` filters out suite/hook nodes. run_count
+    // is not required — JUnit-uploaded builds report run_count=0 for real tests too.
     const nodeStatus = node.details?.status;
     const statusMatches = status === undefined || nodeStatus === status;
     if (statusMatches && node.details?.observability_url) {

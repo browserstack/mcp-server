@@ -30,33 +30,14 @@ for (const key of BROWSERSTACK_LOCAL_OPTION_KEYS) {
   }
 }
 
-/**
- * Default o11y base URL for the `tfaRcaTurn` collaborative-RCA tool —
- * PRODUCTION (verified: api-automation.browserstack.com routes the
- * /ext/v1 testRca + rcaChat endpoints). Same value for every user served by
- * the process; overridable at startup via `O11Y_TFA_RCA_BASE_URL` to target a
- * staging tenant (e.g. api-observability-<tenant>.bsstag.com) where a build's
- * representatives actually live. Per-process config, never a per-call arg.
- */
+// Overridable via O11Y_TFA_RCA_BASE_URL to target a staging tenant.
 const DEFAULT_O11Y_TFA_RCA_BASE_URL = "https://api-automation.browserstack.com";
 
-/**
- * Base URL for the Automate test-runs API (`/ext/v1/builds/{id}/testRuns`) that
- * `listTestIds` calls. Overridable at startup via `BROWSERSTACK_AUTOMATION_BASE_URL`
- * so the tool can target a non-prod env (e.g. rengg-tfa staging) where a build
- * actually lives, instead of the prod default. Per-process config, never a
- * per-call arg.
- */
+// Overridable via BROWSERSTACK_AUTOMATION_BASE_URL to target a non-prod env.
 const DEFAULT_BROWSERSTACK_AUTOMATION_BASE_URL =
   "https://api-automation.browserstack.com";
 
-/**
- * Base URL of the Test Observability (TRA) web UI used to build the
- * human-facing "view the full report" links returned by the RCA tools.
- * Same value for every user served by the process; overridable at startup via
- * `BROWSERSTACK_O11Y_UI_BASE_URL` (e.g. to point at a staging UI). Per-process
- * config, never a per-call arg.
- */
+// Overridable via BROWSERSTACK_O11Y_UI_BASE_URL to point at a staging UI.
 const DEFAULT_BROWSERSTACK_O11Y_UI_BASE_URL =
   "https://automation.browserstack.com";
 

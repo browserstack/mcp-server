@@ -13,17 +13,10 @@ export interface TriggerRcaReportArgs {
   force?: boolean;
 }
 
-/**
- * Domain error carrying a client-safe message. The tool maps these to a
- * `{ isError: true }` envelope; the message never contains credentials.
- */
 export class TriggerRcaReportError extends Error {}
 
-/**
- * Trimmed glimpse of the Release Readiness report. The raw o11y response —
- * including the `prs[]` and `workflows[]` arrays — is NEVER echoed; the full
- * report lives on the Test Observability dashboard (`viewReport`).
- */
+// Trimmed glimpse of the Release Readiness report — raw prs[]/workflows[] are
+// never echoed; the full report lives on the dashboard (`viewReport`).
 export interface RcaReportGlimpse {
   state?: string;
   verdict?: string;
@@ -71,11 +64,6 @@ function mapTriggerError(status: number, data: unknown): TriggerRcaReportError {
   );
 }
 
-/**
- * Trigger (or read, when one already exists) the Release Readiness report for
- * a build via the o11y external API, returning a trimmed glimpse. Stateless:
- * nothing persists between calls.
- */
 export async function triggerRcaReport(
   args: TriggerRcaReportArgs,
   config: BrowserStackConfig,

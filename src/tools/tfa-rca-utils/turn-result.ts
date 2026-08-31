@@ -14,10 +14,6 @@ import {
   TurnResponse,
 } from "./types.js";
 
-/**
- * Domain error carrying a client-safe message. The tool maps these to a
- * `{ isError: true }` envelope; the message never contains credentials.
- */
 export class TfaRcaTurnError extends Error {}
 
 export interface GetTfaTurnResultArgs {
@@ -52,16 +48,9 @@ function toAsk(raw: any): TfaAsk {
   };
 }
 
-/**
- * Read the LLM-enforced structured turn from the completed `rcaChat` poll body.
- *
- * The poll envelope's own `status` field is the lifecycle state
- * (`working`/`completed`/`failed`); the agent's `TurnResponse` is passed
- * through under `turn` so its `status` (NEEDS_INFO/RESOLVED/BLOCKED) never
- * collides with the lifecycle one. The agent's model validator guarantees the
- * sub-object matching the turn status is present; we still default-fill the
- * lists so the skill never sees `undefined`.
- */
+// The poll envelope's `status` is the lifecycle state (working/completed/failed);
+// the agent's TurnResponse under `turn` has its own status (NEEDS_INFO/RESOLVED/
+// BLOCKED). Default-fills lists so the skill never sees `undefined`.
 export function readStructuredTurn(data: any): TurnResponse {
   const turn = data.turn ?? {};
   const status = toTfaStatus(turn.status);
@@ -86,20 +75,9 @@ export function readStructuredTurn(data: any): TurnResponse {
   };
 }
 
-// /** Truncate to `max` chars total (ellipsis included when cut). */
-// function truncate(text: string | undefined, max: number): string | undefined {
-//   if (text === undefined) return undefined;
-//   return text.length > max ? text.slice(0, max - 1) + "…" : text;
-// }
-
-/**
- * Trim a completed turn to the status-discriminated contract:
- * - NEEDS_INFO: questions/asks/suggestions/hypotheses VERBATIM (the client
- *   loop consumes them).
- * - RESOLVED: glimpse only (root_cause truncated, failure_type, related_prs)
- *   + a `viewRca` pointer — the full RCA lives on the TRA dashboard.
- * - BLOCKED: reason + unmetAsks.
- */
+// Trim a completed turn to the status-discriminated contract: NEEDS_INFO
+// carries questions/asks/suggestions/hypotheses verbatim; RESOLVED carries a
+// glimpse + viewRca pointer; BLOCKED carries reason + unmetAsks.
 export function toTrimmedResult(
   turn: TurnResponse,
   threadId: string | undefined,
@@ -151,13 +129,8 @@ export function buildPollUrl(testRunId: string, turnId: string): string {
   );
 }
 
-/**
- * Read an already-submitted turn ONCE (no polling loop, no submit) and return
- * the same trimmed, status-discriminated contract as `tfaRcaTurn`. A turn still
- * in flight yields the soft `PENDING` status carrying `turnId`/`threadId` so the
- * caller decides when to read again. Stateless: all identifiers are
- * function-scoped; nothing persists between calls.
- */
+// Read an already-submitted turn once (no polling loop, no submit); a turn
+// still in flight yields the soft PENDING status carrying turnId/threadId.
 export async function getTfaTurnResult(
   args: GetTfaTurnResultArgs,
   config: BrowserStackConfig,

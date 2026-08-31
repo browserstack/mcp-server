@@ -11,10 +11,6 @@ import {
 } from "./constants.js";
 import { buildAuthHeader } from "./turn-result.js";
 
-/**
- * Domain error carrying a client-safe message. The tool maps these to a
- * `{ isError: true }` envelope; the message never contains credentials.
- */
 export class BuildFailureThemesError extends Error {}
 
 export interface BuildFailureTheme {
@@ -37,20 +33,8 @@ export interface BuildFailureWorkflow {
   themeIdentifiedCount?: number;
 }
 
-/**
- * Result of `fetchBuildFailureThemes`. `ready: false` is NOT an error — it
- * means the server-side clustering (triggered by this call if needed) hasn't
- * reached `SUCCESS` within the poll budget, OR the trigger itself failed
- * (`status: "trigger-unavailable"` — see `fetchBuildFailureThemes`'s doc
- * comment). The trigger endpoint (`POST /ext/v1/ai/failures/{buildUuid}`) is
- * deployed, so for a healthy server a never-computed build now reaches
- * `ready: true` on its own; `ready: false` signals a genuine server outage
- * (endpoint erroring, computation failed, or a real backlog outrunning the
- * poll budget), not the routine path for a fresh build. Either way this
- * util never blocks past its budget and never throws for "not ready yet"; the
- * caller (`rca-build`) keeps a client-side clustering net for exactly this
- * outage case.
- */
+// `ready: false` is not an error — clustering hasn't reached SUCCESS within the
+// poll budget, or the trigger itself failed (`status: "trigger-unavailable"`).
 export interface BuildFailureThemesResult {
   ready: boolean;
   /** Last observed `buildThemeWorkflow.status`, or "PENDING" if budget spent with no status yet. */
@@ -68,7 +52,7 @@ export interface TestInFailureTheme {
   raw: unknown;
 }
 
-/** Minimal shape of one `/flat` entry — the wire may carry more, we only read these. */
+// Minimal shape of one `/flat` entry — the wire may carry more, we only read these.
 interface RawFlatTestRun {
   id?: string | number;
   title?: string;
@@ -85,8 +69,7 @@ export interface ListTestsInFailureThemeArgs {
 
 export interface ListTestsInFailureThemeResult {
   tests: TestInFailureTheme[];
-  /** Cursor for the next page, if any (field name unconfirmed against a real
-   * paginated build — checked against every plausible key the wire might use). */
+  /** Cursor for the next page, if any. */
   nextCursor?: string;
 }
 
@@ -99,9 +82,7 @@ function authHeaders(config: BrowserStackConfig): Record<string, string> {
   };
 }
 
-/** Normalize a response body to a plain object — a malformed 200 (empty
- * string, null, array) is treated as "no data", never accessed as if it were
- * the expected shape. */
+// Normalize a response body to a plain object — a malformed 200 is treated as "no data".
 function asObject(data: unknown): Record<string, any> {
   return typeof data === "object" && data !== null && !Array.isArray(data)
     ? (data as Record<string, any>)
@@ -126,10 +107,7 @@ async function fetchFailuresOnce(
   });
 }
 
-/** Same URL as the GET read, different verb — the `/ext/v1/ai/failures/{buildUuid}`
- * mirror of `AIController.triggerBuildLevelAIRca`. Kicks off build-level theme
- * computation; a no-op (existing-report fast-path) if already
- * SUCCESS/RETRIED_AND_FAILED. */
+// Same URL as the GET read, different verb — kicks off build-level theme computation.
 async function triggerFailuresOnce(
   buildUuid: string,
   config: BrowserStackConfig,
@@ -142,27 +120,9 @@ async function triggerFailuresOnce(
   });
 }
 
-/**
- * Fetch a build's server-computed failure-theme clusters (`buildThemes` +
- * `buildWorkflows`), triggering computation if nothing has ever run for this
- * build. Cadence: GET first; a single POST trigger (at most once — see below);
- * then GET every `BUILD_THEMES_POLL_INTERVAL_MS` (3s) until
- * `buildThemeWorkflow.status` reaches `SUCCESS` or the wall-clock budget
- * `BUILD_THEMES_POLL_MAX_WAIT_MS` (90s) is spent. Never blocks past ~90s.
- *
- * Triggers (POST, same URL as the GET) at most ONCE per call — on a 404, a
- * missing `buildThemeWorkflow`, or a terminal failure status — never on an
- * in-progress status (PENDING/PROCESSING), since someone/something else's
- * computation may already be running. After a trigger that SUCCEEDS, a
- * still-not-ready result is treated as "waiting on the async computation to
- * start," not a reason to give up — it keeps polling within budget same as
- * any other in-progress state. A trigger that FAILS (for any reason — a
- * permission error or a server error; the route itself now exists) returns
- * immediately with `ready: false, status: "trigger-unavailable"` rather than
- * throwing or entering the poll loop at all: the caller (`rca-build`) keeps a
- * client-side clustering net for exactly this server-outage case, so failing
- * fast beats failing slow.
- */
+// Fetch a build's server-computed failure-theme clusters, triggering computation
+// if nothing has run yet. Triggers at most once per call, then polls until
+// SUCCESS or BUILD_THEMES_POLL_MAX_WAIT_MS is spent — never blocks past that.
 export async function fetchBuildFailureThemes(
   buildUuid: string,
   config: BrowserStackConfig,

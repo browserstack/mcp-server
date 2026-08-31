@@ -1,33 +1,15 @@
-/**
- * Collaboration status emitted by the TFA agent for one RCA turn.
- * - NEEDS_INFO: TFA needs more digested input; the skill should execute the
- *   returned asks/questions and submit another turn on the same thread.
- * - RESOLVED: an agreed root cause was reached (carries `rca`); the loop stops.
- * - BLOCKED: TFA cannot proceed; the loop stops with a best-effort result.
- */
+// Collaboration status emitted by the TFA agent for one RCA turn.
 export enum TfaStatus {
   NEEDS_INFO = "NEEDS_INFO",
   RESOLVED = "RESOLVED",
   BLOCKED = "BLOCKED",
 }
 
-/**
- * Soft, tool-emitted status used when an in-call poll exceeds its wall-clock
- * cap. Not produced by the agent — produced by the turn util so the skill can
- * resume polling on a later turn via the optional `turnId` arg.
- */
+// Soft, tool-emitted status when an in-call poll exceeds its wall-clock cap.
 export const PENDING_STATUS = "PENDING" as const;
 
-/**
- * Confidence the agent attaches to a turn. Mirrors the misc-services
- * `TurnResponse.confidence` Literal; PENDING turns carry `unknown`.
- */
 export type Confidence = "low" | "medium" | "high" | "unknown";
 
-/**
- * Evidence category the skill routes an ask to. Mirrors the misc-services
- * `Ask.evidence_type` Literal.
- */
 export type EvidenceType =
   | "test_logs"
   | "product_code"
@@ -46,11 +28,7 @@ export interface TfaAsk {
   priority: "high" | "medium" | "low";
 }
 
-/**
- * The agreed root-cause analysis carried on a RESOLVED turn. Mirrors the
- * misc-services `TestFailureAnalysis` schema; passed through verbatim from the
- * o11y `rcaChat` response and never reshaped client-side.
- */
+// The agreed root-cause analysis carried on a RESOLVED turn.
 export interface TfaRca {
   root_cause?: string;
   description?: string;
@@ -61,11 +39,7 @@ export interface TfaRca {
   [key: string]: unknown;
 }
 
-/**
- * Structured turn the o11y `rcaChat` poll returns once `status === "completed"`.
- * Mirrors the misc-services `TurnResponse`; sub-objects are status-discriminated
- * (the agent's model validator guarantees the matching one is present).
- */
+// Structured turn the o11y `rcaChat` poll returns once status === "completed".
 export interface TurnResponse {
   status: TfaStatus;
   confidence: Confidence;
@@ -80,11 +54,7 @@ export interface TurnResponse {
   unmetAsks?: string[];
 }
 
-/**
- * Trimmed glimpse of a RESOLVED turn's RCA. The full `TfaRca` payload
- * (analysis, log_evidence, alternatives, ...) is intentionally dropped — the
- * complete report lives on the Test Observability dashboard (`viewRca`).
- */
+// Trimmed glimpse of a RESOLVED turn's RCA — the full report lives on the dashboard.
 export interface TfaRcaGlimpse {
   /** Truncated to `RCA_GLIMPSE_ROOT_CAUSE_MAX` chars. */
   root_cause?: string;
@@ -92,15 +62,7 @@ export interface TfaRcaGlimpse {
   related_prs?: unknown[];
 }
 
-/**
- * Trimmed, status-discriminated result returned by the turn util / tool. The
- * raw o11y envelope, `meta` blob, and full RCA payload are never echoed:
- * - NEEDS_INFO carries questions/asks/suggestions/hypotheses VERBATIM (the
- *   client loop executes them).
- * - RESOLVED carries only a `glimpse` + a `viewRca` UI pointer.
- * - BLOCKED carries reason/unmetAsks.
- * - PENDING carries only turnId/threadId to resume polling.
- */
+// Trimmed, status-discriminated result returned by the turn util / tool.
 export interface TfaRcaTurnResult {
   status: TfaStatus | typeof PENDING_STATUS;
   confidence?: Confidence;

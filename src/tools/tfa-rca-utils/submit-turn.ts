@@ -138,12 +138,6 @@ function composeMessageWithPrMarker(
     message.length + suffix.length <= MESSAGE_MAX_LENGTH;
 
   if (!prDetails || prDetails.length === 0) {
-    // The anti-fabrication clause IS the payload here; the "none" alone was not
-    // enough. A bare marker left the agent free to synthesise a RelatedPR out of
-    // a repo shorthand in the prose: one live turn published
-    // `github.com/browserstack/obs-api/pull/9317` — that repo 404s, the real one
-    // is `observability-api` — with `author='unknown'`, because number/title/
-    // merged_at were recoverable from the message and repo/author were not.
     const noneFull =
       "\n\nPR_DETAILS: none provided — no client-supplied PR this turn. Do not" +
       " infer a repo, URL or author from prose; leave related_prs empty and state" +
@@ -154,12 +148,6 @@ function composeMessageWithPrMarker(
     return fits(none) ? `${message}${none}` : message;
   }
 
-  // `tag` rides in the TRUSTED message body, not only in clientContext. It is the
-  // client's classification of a suspect it already falsified, and it changes what
-  // a human does next: a regression gets reverted, a latent-exposing PR must be
-  // fixed where the fault actually lives — reverting it only masks the symptom.
-  // `RelatedPR` carries no tag field, so an agent that never sees the tag cannot
-  // put that distinction in the RCA.
   const refs = prDetails
     .map((pr) => `${pr.repo}#${pr.number} [${pr.tag}]`)
     .join(", ");

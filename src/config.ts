@@ -63,6 +63,10 @@ const config = new Config(
   browserstackLocalOptions,
   process.env.USE_OWN_LOCAL_BINARY_PROCESS === "true",
   process.env.REMOTE_MCP === "true",
+  // Undefined when MCP_UPLOAD_BASE_DIR is unset; validateUploadPath() then
+  // falls back to the process working directory (fail-closed containment).
+  // The default lives in the validator — the enforcement point — so it can
+  // distinguish a defaulted base dir from a configured one.
   process.env.MCP_UPLOAD_BASE_DIR && process.env.MCP_UPLOAD_BASE_DIR.length > 0
     ? process.env.MCP_UPLOAD_BASE_DIR
     : undefined,

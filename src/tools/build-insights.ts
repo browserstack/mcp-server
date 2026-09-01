@@ -15,9 +15,13 @@ export async function fetchBuildInsightsTool(
     const buildUrl = `https://api-automation.browserstack.com/ext/v1/builds/${args.buildId}`;
     const qualityGateUrl = `https://api-automation.browserstack.com/ext/v1/quality-gates/${args.buildId}`;
 
+    // Quality gate data is optional — a failure there should not block build insights
     const [buildData, qualityData] = await Promise.all([
       fetchFromBrowserStackAPI(buildUrl, config),
-      fetchFromBrowserStackAPI(qualityGateUrl, config),
+      fetchFromBrowserStackAPI(qualityGateUrl, config).catch((error) => {
+        logger.warn("Failed to fetch quality gate data", error);
+        return null;
+      }),
     ]);
 
     // Select useful fields for users
@@ -34,10 +38,13 @@ export async function fetchBuildInsightsTool(
       unique_errors: buildData.unique_errors?.overview,
       observability_url: buildData?.observability_url,
       ci_build_url: buildData.ci_info?.build_url,
-      quality_gate_result: qualityData.quality_gate_result,
+      branch: buildData.vcs_info?.branch,
+      commit_sha: buildData.vcs_info?.sha,
+      vcs_name: buildData.vcs_info?.name,
+      quality_gate_result: qualityData?.quality_gate_result,
     };
 
-    const qualityProfiles = qualityData.quality_profiles?.map(
+    const qualityProfiles = qualityData?.quality_profiles?.map(
       (profile: any) => ({
         name: profile.name,
         result: profile.result,

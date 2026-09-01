@@ -146,15 +146,21 @@ export async function listTestIdsTool(
   args: {
     buildId: string;
     status?: TestStatus;
+    includeFailureDetail?: boolean;
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const { buildId, status } = args;
+    const { buildId, status, includeFailureDetail } = args;
     const authString = getBrowserStackAuth(config);
 
     // Get test IDs
-    const testIds = await getTestIds(buildId, authString, status);
+    const testIds = await getTestIds(
+      buildId,
+      authString,
+      status,
+      includeFailureDetail,
+    );
 
     return {
       content: [
@@ -267,7 +273,7 @@ export default function addRCATools(
 
   tools.listTestIds = server.tool(
     "listTestIds",
-    "List test IDs from a BrowserStack Automate build, optionally filtered by status" +
+    "List all tests of a BrowserStack build (each with its status); optional status filter." +
       NEEDS_BUILD_ID,
     LIST_TEST_IDS_PARAMS,
     {

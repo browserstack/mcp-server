@@ -115,7 +115,7 @@ export default function addBuildInsightsTools(
 
   tools.fetchBuildInsights = server.tool(
     "fetchBuildInsights",
-    "Fetches insights about a BrowserStack build by combining build details and quality gate results. The insights JSON includes hashed_id (the Automate/App Automate REST build id used by listSessionIds) when it can be resolved from observability or Automate REST.",
+    "Fetches insights about a BrowserStack build by combining build details and quality gate results. The insights JSON includes hashed_id (the Automate/App Automate build id used by listSessions)",
     {
       buildId: z.string().describe("The build UUID of the BrowserStack build"),
     },

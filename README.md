@@ -426,11 +426,11 @@ As of now we support 44 tools.
   Get screenshots from Automate session ID abc123xyz for my desktop test run
   ```
 
- 18. `listSessionIds` — List Automate/App Automate session hashed IDs for a REST hashed build ID (dashboard URL). This is **not** the observability UUID from `getBuildId` / `listBuildId`. If you only have that UUID, use `hashed_id` from `fetchBuildInsights` when present. Same build-id family as App Automate `getFailureLogs`. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`.
+ 18. `listSessions` — List Automate/App Automate sessions for a REST hashed build ID (dashboard URL), including hashed session IDs and session details (name, status, OS, browser/device, dashboard URL). This is **not** the observability UUID from `getBuildId` / `listBuildId`. If you only have that UUID, use `hashed_id` from `fetchBuildInsights` when present. Same build-id family as App Automate `getFailureLogs`. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`.
   **Prompt example**
 
   ```text
-  List session IDs for Automate hashed build ID ca9cccc228cf0e3ff3cb90dd62e2e2bfb4b20bc7
+  List sessions for Automate hashed build ID ca9cccc228cf0e3ff3cb90dd62e2e2bfb4b20bc7
   ```
 
 ---

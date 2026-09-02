@@ -173,13 +173,14 @@ export default function addAutomationTools(
     },
   );
 
-  tools.listSessionIds = server.tool(
-    "listSessionIds",
-    "List Automate/App Automate session hashed IDs for a REST hashed build ID. " +
-      "Use the dashboard hashed build id (same family as App Automate " +
-      "getFailureLogs buildId). If you only have an observability UUID from " +
-      "getBuildId or listBuildId, call fetchBuildInsights and use hashed_id " +
-      "when present. Returned sessionId values work with getFailureLogs, " +
+  tools.listSessions = server.tool(
+    "listSessions",
+    "List Automate/App Automate sessions for a hashed build ID, including " +
+      "hashed session IDs and session details (name, status, OS, browser/device, " +
+      "and dashboard URL). Use the dashboard hashed build id (same family as " +
+      "App Automate getFailureLogs buildId). If you only have an observability " +
+      "UUID from getBuildId or listBuildId, call fetchBuildInsights and use " +
+      "hashed_id when present. Returned sessionId values work with getFailureLogs, " +
       "fetchAutomationScreenshots, and fetchSelfHealedSelectors.",
     {
       sessionType: z
@@ -215,7 +216,7 @@ export default function addAutomationTools(
         ),
     },
     {
-      title: "List Session IDs",
+      title: "List Sessions",
       readOnlyHint: true,
       openWorldHint: false,
       destructiveHint: false,
@@ -224,7 +225,7 @@ export default function addAutomationTools(
     async (args) => {
       try {
         trackMCP(
-          "listSessionIds",
+          "listSessions",
           server.server.getClientVersion()!,
           undefined,
           config,
@@ -232,7 +233,7 @@ export default function addAutomationTools(
         return await listSessionIdsTool(args, config);
       } catch (error) {
         trackMCP(
-          "listSessionIds",
+          "listSessions",
           server.server.getClientVersion()!,
           error,
           config,

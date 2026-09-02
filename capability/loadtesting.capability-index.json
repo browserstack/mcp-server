@@ -1,0 +1,1750 @@
+{
+  "schema_version": 1,
+  "version": "1.0",
+  "build_id": "43eba70_2026-09-02T14:27:14Z",
+  "loadtesting": {
+    "summary": "Load and performance testing: run k6, JMeter, Gatling and Locust load tests at scale. List and inspect projects and load tests; create, update, start, stop and monitor runs; read run reports, AI insights and historical trends; compare runs; and check VU-hour quota and cost estimates. Test definitions, runs and their results live here. Account plan and billing do not — only VU-hour entitlement is exposed, via quota.",
+    "base_url": "https://load-testing-rengg-lts.bsstag.com",
+    "capabilities": [
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/platform/status",
+        "mode": "read",
+        "entity": "platform",
+        "intent": "Check whether the Load Testing service is operational — use this if calls are failing or to confirm availability before starting work.",
+        "guidance": [
+          "Always returns HTTP 200; read platformState (operational|degraded), not the status code.",
+          "Shallow dependency probe (database, redis) — it does not check a specific test or run."
+        ],
+        "returns": [
+          "platformState",
+          "components",
+          "checkedAt"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/projects",
+        "mode": "read",
+        "entity": "project",
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "description": "Max items to return (1-100, default 50)."
+          },
+          {
+            "name": "cursor",
+            "type": "string",
+            "description": "Opaque pagination cursor from a previous response's nextCursor; pass back verbatim."
+          },
+          {
+            "name": "search",
+            "type": "string",
+            "description": "Filter projects by name (<=200 chars)."
+          },
+          {
+            "name": "fields",
+            "type": "string",
+            "description": "Comma-separated response fields to include."
+          }
+        ],
+        "intent": "List the caller's load-testing projects, most recently active first — use this to find a projectId or answer 'what projects do I have?'",
+        "guidance": [
+          "projectId from here is required by listLoadTests and createLoadTest.",
+          "Page with cursor + limit; nextCursor is opaque."
+        ],
+        "returns": [
+          "projects",
+          "hasMore",
+          "nextCursor"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        },
+        "paginated": true,
+        "max_page_size": 100
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/projects/{projectId}/loadTests",
+        "mode": "read",
+        "entity": "loadTest",
+        "path_params": [
+          {
+            "name": "projectId",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "description": "Max items to return (1-100, default 50)."
+          },
+          {
+            "name": "cursor",
+            "type": "string",
+            "description": "Opaque pagination cursor from a previous response's nextCursor; pass back verbatim."
+          },
+          {
+            "name": "testType",
+            "type": "string",
+            "values": [
+              "plu",
+              "blu",
+              "hybrid"
+            ],
+            "description": "Filter by test type."
+          },
+          {
+            "name": "framework",
+            "type": "string",
+            "values": [
+              "k6",
+              "jmeter",
+              "gatling",
+              "locust"
+            ],
+            "description": "Filter by framework."
+          },
+          {
+            "name": "tag",
+            "type": "string",
+            "description": "Filter by tag."
+          },
+          {
+            "name": "search",
+            "type": "string",
+            "description": "Filter by test name."
+          },
+          {
+            "name": "updatedSince",
+            "type": "string",
+            "description": "ISO-8601 timestamp; only tests updated after it.",
+            "example": "2026-08-01T00:00:00Z"
+          }
+        ],
+        "intent": "List the load tests in a project — use this to find a testId or browse tests, optionally filtered by type, framework, tag or recent activity.",
+        "guidance": [
+          "Resolve projectId via listLoadTestProjects first.",
+          "The numeric testId returned here is what getLoadTest and startLoadTestRun need — not a runId.",
+          "lastRun summarises the most recent execution when present."
+        ],
+        "returns": [
+          "tests",
+          "hasMore",
+          "nextCursor"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        },
+        "paginated": true,
+        "max_page_size": 100
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/projects/{projectId}/trends",
+        "mode": "read",
+        "entity": "trend",
+        "path_params": [
+          {
+            "name": "projectId",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "query": [
+          {
+            "name": "windowRuns",
+            "type": "integer",
+            "description": "How many recent runs to aggregate (1-100, default 10)."
+          },
+          {
+            "name": "aggregation",
+            "type": "string",
+            "values": [
+              "perRun"
+            ],
+            "description": "Aggregation granularity. Only perRun is supported today."
+          },
+          {
+            "name": "verdictFilter",
+            "type": "string",
+            "values": [
+              "passed",
+              "failed",
+              "all"
+            ],
+            "description": "Restrict to runs of this verdict."
+          },
+          {
+            "name": "metrics",
+            "type": "string",
+            "description": "Comma-separated dotted metric names or @ aliases (e.g. @vitals, @all). Resolve valid names via getLoadTestMetricsManifest."
+          },
+          {
+            "name": "sinceIso",
+            "type": "string",
+            "description": "ISO-8601 lower bound.",
+            "example": "2026-08-01T00:00:00Z"
+          },
+          {
+            "name": "untilIso",
+            "type": "string",
+            "description": "ISO-8601 upper bound."
+          }
+        ],
+        "intent": "Show how a project's load-test metrics trend across recent runs — use this for 'is performance getting better or worse across this project?'",
+        "guidance": [
+          "metrics accepts dotted names or @ aliases; @vitals / @all expand to metric sets.",
+          "windowRuns bounds how many recent runs are aggregated."
+        ],
+        "returns": [
+          "metrics"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/projects/{projectId}/runs",
+        "mode": "read",
+        "entity": "run",
+        "path_params": [
+          {
+            "name": "projectId",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "description": "Max items to return (1-100, default 50)."
+          },
+          {
+            "name": "cursor",
+            "type": "string",
+            "description": "Opaque pagination cursor from a previous response's nextCursor; pass back verbatim."
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "values": [
+              "active",
+              "terminal",
+              "all"
+            ],
+            "description": "Filter by lifecycle state."
+          },
+          {
+            "name": "verdict",
+            "type": "string",
+            "values": [
+              "passed",
+              "failed",
+              "error"
+            ],
+            "description": "Filter by run verdict."
+          },
+          {
+            "name": "startedBy",
+            "type": "string",
+            "description": "Filter by the user id that started the run."
+          },
+          {
+            "name": "sinceIso",
+            "type": "string",
+            "description": "ISO-8601 lower bound.",
+            "example": "2026-08-01T00:00:00Z"
+          },
+          {
+            "name": "untilIso",
+            "type": "string",
+            "description": "ISO-8601 upper bound."
+          },
+          {
+            "name": "hadSlaBreach",
+            "type": "boolean",
+            "description": "Filter to runs that did / did not breach SLA."
+          }
+        ],
+        "intent": "List the execution history across every load test in a project — newest first, paginated. Use for 'what ran last week in this project?' or to find runs across tests to compare.",
+        "guidance": [
+          "Returns run metadata only, not metrics — use getLoadTestRunReport for a run's KPIs.",
+          "Page with cursor + limit; nextCursor is opaque.",
+          "For a single test's history use /loadTests/{testId}/runs; for currently-live runs use /loadTests/runs/active."
+        ],
+        "returns": [
+          "runs",
+          "hasMore",
+          "nextCursor"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        },
+        "paginated": true,
+        "max_page_size": 100
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/loadTests/runs/active",
+        "mode": "read",
+        "entity": "run",
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "description": "Max items to return (1-200, default 50)."
+          },
+          {
+            "name": "minElapsedSec",
+            "type": "integer",
+            "description": "Only runs elapsed at least this many seconds."
+          },
+          {
+            "name": "projectId",
+            "type": "integer",
+            "description": "Restrict to a project."
+          },
+          {
+            "name": "userId",
+            "type": "integer",
+            "description": "Restrict to runs started by a user."
+          }
+        ],
+        "intent": "List load-test runs currently executing — use this for 'what's running right now?' or to find a runId to stop or monitor.",
+        "guidance": [
+          "Returns non-terminal runs across the account.",
+          "runId here is the UUID needed by getLoadTestRunStatus and stopLoadTestRun.",
+          "vuHoursBurnedSoFar reflects consumption at the moment of the call."
+        ],
+        "returns": [
+          "runs"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/loadTests/runs/{jobId}/status",
+        "mode": "read",
+        "entity": "run",
+        "path_params": [
+          {
+            "name": "jobId",
+            "type": "string",
+            "required": true,
+            "example": "b1e2c3d4-...",
+            "description": "Run UUID (runId)."
+          }
+        ],
+        "query": [
+          {
+            "name": "metrics",
+            "type": "string",
+            "description": "Comma-separated dotted metric names or @ aliases (e.g. @vitals, @all). Resolve valid names via getLoadTestMetricsManifest."
+          }
+        ],
+        "intent": "Poll the live status and progress of a run — use this to wait for a run to finish or check elapsed/remaining time.",
+        "guidance": [
+          "jobId is the run UUID from startLoadTestRun or listLoadTestRuns.",
+          "Respect pollAfterSeconds between polls instead of tight-looping.",
+          "slaBreachFlags surfaces threshold breaches as they trip."
+        ],
+        "returns": [
+          "status",
+          "elapsedSec",
+          "remainingSec",
+          "pollAfterSeconds",
+          "slaBreachFlags"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/loadTests/runs/{jobId}/insights",
+        "mode": "read",
+        "entity": "insight",
+        "path_params": [
+          {
+            "name": "jobId",
+            "type": "string",
+            "required": true,
+            "description": "Run UUID (runId)."
+          }
+        ],
+        "query": [
+          {
+            "name": "sections",
+            "type": "string",
+            "values": [
+              "summary",
+              "rootCause",
+              "recommendations",
+              "evidence"
+            ],
+            "description": "Comma-separated subset of insight sections (default summary)."
+          }
+        ],
+        "intent": "Get the AI insight (summary, root cause, recommendations) for a completed run — use this for 'why did this run regress or fail?'",
+        "guidance": [
+          "Only meaningful after the run is terminal; a running job returns an in_progress state, not a report.",
+          "May return 503 if the insight backend is unavailable — retry later."
+        ],
+        "returns": [
+          "state",
+          "status",
+          "report"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "503": {
+            "$response": "ServiceUnavailable"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/loadTests/runs/{jobId}/report",
+        "mode": "read",
+        "entity": "report",
+        "path_params": [
+          {
+            "name": "jobId",
+            "type": "string",
+            "required": true,
+            "description": "Run UUID (runId)."
+          }
+        ],
+        "query": [
+          {
+            "name": "detail",
+            "type": "string",
+            "values": [
+              "aggregate",
+              "per-txn",
+              "full"
+            ],
+            "description": "Level of detail (default aggregate)."
+          },
+          {
+            "name": "view",
+            "type": "string",
+            "values": [
+              "summary",
+              "detail",
+              "full"
+            ],
+            "description": "Response view."
+          },
+          {
+            "name": "topN",
+            "type": "integer",
+            "description": "Top-N transactions/errors to include (1-100, default 10)."
+          },
+          {
+            "name": "byteCap",
+            "type": "integer",
+            "description": "Hard response size cap in KB (1-256, default 128). Sets meta.truncated when hit."
+          },
+          {
+            "name": "groupBy",
+            "type": "string",
+            "description": "Rollup dimension (url/browser/location/transaction/step)."
+          },
+          {
+            "name": "slaOnly",
+            "type": "boolean",
+            "description": "Return only SLA-related data."
+          },
+          {
+            "name": "errorCategory",
+            "type": "string",
+            "values": [
+              "5xx",
+              "4xx",
+              "timeout",
+              "connection",
+              "assertion"
+            ],
+            "description": "Comma-separated error categories to include."
+          },
+          {
+            "name": "metrics",
+            "type": "string",
+            "description": "Comma-separated dotted metric names or @ aliases (e.g. @vitals, @all). Resolve valid names via getLoadTestMetricsManifest."
+          },
+          {
+            "name": "fields",
+            "type": "string",
+            "description": "Comma-separated response fields to include."
+          },
+          {
+            "name": "sinceIso",
+            "type": "string",
+            "description": "ISO-8601 lower bound; slices the report to data in this time window."
+          },
+          {
+            "name": "untilIso",
+            "type": "string",
+            "description": "ISO-8601 upper bound for the time-window slice."
+          }
+        ],
+        "intent": "Get the full metrics report for a completed run — KPIs, SLA verdicts, per-transaction and error breakdowns. Use this to answer 'how did this run perform?'",
+        "guidance": [
+          "Only valid for a terminal run.",
+          "Start with detail=aggregate; escalate to per-txn or full only when you need transaction- or network-level detail — full is large.",
+          "groupBy and errorCategory narrow the payload; byteCap hard-caps the response (max 256 KB).",
+          "metrics accepts dotted names or @ aliases; see getLoadTestMetricsManifest for what applies to this test type."
+        ],
+        "returns": [
+          "runId",
+          "testType",
+          "status",
+          "testName",
+          "durationSec",
+          "kpis",
+          "slaVerdicts",
+          "transactions",
+          "errorsByCategory",
+          "meta"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/agent/loadTests/runs/{jobId}/stop",
+        "mode": "write",
+        "entity": "run",
+        "path_params": [
+          {
+            "name": "jobId",
+            "type": "string",
+            "required": true,
+            "description": "Run UUID (runId) to stop."
+          }
+        ],
+        "intent": "Stop a running load test — use this to abort an execution that is running or queued.",
+        "guidance": [
+          "Idempotent: stopping an already-terminal run returns alreadyTerminal:true, not an error.",
+          "Returns status:'stopping'; poll getLoadTestRunStatus to confirm it reaches a terminal state."
+        ],
+        "returns": [
+          "runId",
+          "status",
+          "stoppedAt"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/loadTests/quota",
+        "mode": "read",
+        "entity": "quota",
+        "intent": "Check the account's remaining VU-hours and concurrency headroom — use this before starting runs to confirm capacity.",
+        "guidance": [
+          "Account-scoped from the caller's credentials; takes no parameters.",
+          "Pair with estimateLoadTestRunCost to check a specific run fits before starting it."
+        ],
+        "returns": [
+          "plan",
+          "vuHours",
+          "concurrency"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/agent/loadTests/estimate",
+        "mode": "read",
+        "entity": "quota",
+        "body": [
+          {
+            "name": "testId",
+            "type": "integer",
+            "required": true,
+            "description": "The test to price."
+          },
+          {
+            "name": "overrides",
+            "type": "object",
+            "description": "Hypothetical run configuration to price instead of the saved one.",
+            "fields": [
+              {
+                "name": "vus",
+                "type": "integer"
+              },
+              {
+                "name": "durationSec",
+                "type": "integer"
+              }
+            ]
+          }
+        ],
+        "intent": "Estimate the VU-hour cost of running a test before starting it — use this to answer 'how much will this run cost / will it fit in my quota?'",
+        "guidance": [
+          "Read-only despite being a POST — nothing is started.",
+          "fitsInQuota / remainingAfterEstimate compare the estimate against current quota.",
+          "For the same check at start time, call startLoadTestRun with dryRun:true."
+        ],
+        "returns": [
+          "estimatedVuHours",
+          "estimationBasis",
+          "rangeBasis",
+          "rangeExplanation",
+          "fitsInQuota",
+          "remainingAfterEstimate"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/agent/loadTests/compare",
+        "mode": "read",
+        "entity": "report",
+        "body": [
+          {
+            "name": "baselineRunId",
+            "type": "string",
+            "required": true,
+            "description": "Run UUID to compare against."
+          },
+          {
+            "name": "candidateRunId",
+            "type": "string",
+            "required": true,
+            "description": "Run UUID being evaluated; must differ from baselineRunId."
+          },
+          {
+            "name": "dimensions",
+            "type": "array",
+            "description": "Which delta dimensions to compute (any of kpi, transaction, sla).",
+            "values": [
+              "kpi",
+              "transaction",
+              "sla"
+            ]
+          },
+          {
+            "name": "metrics",
+            "type": "string",
+            "description": "Comma-separated dotted metric names or @ aliases (e.g. @vitals, @all). Resolve valid names via getLoadTestMetricsManifest."
+          },
+          {
+            "name": "groupBy",
+            "type": "string",
+            "description": "Rollup dimension for transaction deltas."
+          },
+          {
+            "name": "topN",
+            "type": "integer",
+            "description": "Top-N deltas to include (1-100)."
+          },
+          {
+            "name": "regressedOnly",
+            "type": "boolean",
+            "description": "Return only regressed rows."
+          },
+          {
+            "name": "pctChangeMin",
+            "type": "number",
+            "description": "Minimum percent change to include."
+          }
+        ],
+        "intent": "Compare two completed runs and surface the deltas — use this for 'did this run regress vs the baseline?'",
+        "guidance": [
+          "baselineRunId and candidateRunId are run UUIDs and must differ; both runs must be terminal.",
+          "regressedOnly + pctChangeMin filter to material regressions; dimensions accepts kpi, transaction, sla."
+        ],
+        "returns": [
+          "kpiDeltas",
+          "transactionDeltas"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/agent/loadTests",
+        "mode": "write",
+        "entity": "loadTest",
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "description": "Test name."
+          },
+          {
+            "name": "testType",
+            "type": "string",
+            "required": true,
+            "values": [
+              "plu",
+              "blu",
+              "hybrid"
+            ]
+          },
+          {
+            "name": "framework",
+            "type": "string",
+            "required": true,
+            "values": [
+              "k6",
+              "jmeter",
+              "gatling",
+              "locust"
+            ]
+          },
+          {
+            "name": "projectId",
+            "type": "integer",
+            "description": "Target project. Provide this OR projectName, not both."
+          },
+          {
+            "name": "projectName",
+            "type": "string",
+            "description": "Target project by name; created if it does not exist. Provide this OR projectId."
+          },
+          {
+            "name": "config",
+            "type": "object",
+            "description": "Test configuration incl. scriptRef {source: s3|s3_upload|existing_zip_id, value|identifier}, vuRamp, durationSec, loadGeneratorLocations, slaThresholds, envVarKeys, tags. To supply a script from a local file or URL, use the pendingScriptUpload flow, then source='s3'."
+          },
+          {
+            "name": "children",
+            "type": "array",
+            "description": "Child scenarios for hybrid tests."
+          },
+          {
+            "name": "idempotencyKey",
+            "type": "string",
+            "description": "Dedupe key so a retried create does not duplicate the test."
+          },
+          {
+            "name": "validationToken",
+            "type": "string",
+            "description": "Token from a prior validate step, when required."
+          },
+          {
+            "name": "pendingScriptUpload",
+            "type": "object",
+            "description": "Request a presigned upload URL instead of creating; returns uploadUrl + s3Key to PUT the script to, then call create again with config.scriptRef.source='s3_upload'.",
+            "fields": [
+              {
+                "name": "framework",
+                "type": "string"
+              },
+              {
+                "name": "expectedContentType",
+                "type": "string"
+              }
+            ]
+          }
+        ],
+        "intent": "Create a new load test in a project — use this to define a test before running it. JSON body only (no multipart).",
+        "guidance": [
+          "Provide exactly one of projectId or projectName; projectName creates the project if absent.",
+          "Script upload is two-phase: send pendingScriptUpload to get a presigned uploadUrl + s3Key, PUT the file, then call create again with the scriptRef source and s3Key returned in the response's nextStep.",
+          "Pass idempotencyKey so a retried create does not duplicate the test."
+        ],
+        "returns": [
+          "testId",
+          "name",
+          "projectId",
+          "version",
+          "dashboardLink"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/agent/loadTests/{testId}/runs",
+        "mode": "write",
+        "entity": "run",
+        "path_params": [
+          {
+            "name": "testId",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "body": [
+          {
+            "name": "overrides",
+            "type": "object",
+            "description": "Per-run overrides.",
+            "fields": [
+              {
+                "name": "vus",
+                "type": "integer"
+              },
+              {
+                "name": "durationSec",
+                "type": "integer"
+              },
+              {
+                "name": "loadGeneratorLocations",
+                "type": "array"
+              },
+              {
+                "name": "envOverrides",
+                "type": "object"
+              }
+            ]
+          },
+          {
+            "name": "dryRun",
+            "type": "boolean",
+            "description": "Return the VU-hour estimate and quota fit without starting a run."
+          },
+          {
+            "name": "idempotencyKey",
+            "type": "string",
+            "description": "Dedupe key so a retried start does not launch a duplicate run."
+          },
+          {
+            "name": "validationToken",
+            "type": "string",
+            "description": "Token from a prior validate step, when required."
+          }
+        ],
+        "intent": "Start a run of an existing load test — use this to execute a test, optionally overriding VUs, duration or locations.",
+        "guidance": [
+          "testId is the numeric test id, not a run id.",
+          "dryRun:true returns the VU-hour estimate and quota fit without starting anything.",
+          "On success returns runId (UUID) + dashboardLink; poll getLoadTestRunStatus with the runId."
+        ],
+        "returns": [
+          "runId",
+          "status",
+          "startedAt",
+          "dashboardLink",
+          "estimatedVuHoursRange"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/loadTests/{testId}/runs",
+        "mode": "read",
+        "entity": "run",
+        "path_params": [
+          {
+            "name": "testId",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "description": "Max items to return (1-100, default 50)."
+          },
+          {
+            "name": "cursor",
+            "type": "string",
+            "description": "Opaque pagination cursor from a previous response's nextCursor; pass back verbatim."
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "values": [
+              "active",
+              "terminal",
+              "all"
+            ],
+            "description": "Lifecycle filter (default all)."
+          },
+          {
+            "name": "sinceIso",
+            "type": "string",
+            "description": "ISO-8601 lower bound."
+          },
+          {
+            "name": "untilIso",
+            "type": "string",
+            "description": "ISO-8601 upper bound."
+          },
+          {
+            "name": "verdict",
+            "type": "string",
+            "description": "Filter by run verdict."
+          },
+          {
+            "name": "startedBy",
+            "type": "integer",
+            "description": "Filter by the user who started the run."
+          },
+          {
+            "name": "hadSlaBreach",
+            "type": "boolean",
+            "description": "Only runs that breached an SLA."
+          }
+        ],
+        "intent": "List the execution history of a test — use this to find past runs of a specific test or to get a runId.",
+        "guidance": [
+          "testId is numeric; runId values returned are UUIDs.",
+          "Filter with status / verdict / date range; page with cursor + limit."
+        ],
+        "returns": [
+          "runs",
+          "hasMore",
+          "nextCursor"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        },
+        "paginated": true,
+        "max_page_size": 100
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/loadTests/{testId}/trends",
+        "mode": "read",
+        "entity": "trend",
+        "path_params": [
+          {
+            "name": "testId",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "query": [
+          {
+            "name": "windowRuns",
+            "type": "integer",
+            "description": "How many recent runs to aggregate (1-100, default 10)."
+          },
+          {
+            "name": "aggregation",
+            "type": "string",
+            "values": [
+              "perRun"
+            ],
+            "description": "Aggregation granularity. Only perRun is supported today."
+          },
+          {
+            "name": "verdictFilter",
+            "type": "string",
+            "values": [
+              "passed",
+              "failed",
+              "all"
+            ],
+            "description": "Restrict to runs of this verdict."
+          },
+          {
+            "name": "metrics",
+            "type": "string",
+            "description": "Comma-separated dotted metric names or @ aliases (e.g. @vitals, @all). Resolve valid names via getLoadTestMetricsManifest."
+          },
+          {
+            "name": "sinceIso",
+            "type": "string",
+            "description": "ISO-8601 lower bound."
+          },
+          {
+            "name": "untilIso",
+            "type": "string",
+            "description": "ISO-8601 upper bound."
+          }
+        ],
+        "intent": "Show how one test's metrics trend across its recent runs — use this for 'is this test getting slower over time?'",
+        "guidance": [
+          "metrics accepts dotted names or @ aliases; @vitals / @all expand to metric sets.",
+          "windowRuns bounds how many recent runs are aggregated."
+        ],
+        "returns": [
+          "metrics"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/loadTests/{testId}/metricsManifest",
+        "mode": "read",
+        "entity": "metrics",
+        "path_params": [
+          {
+            "name": "testId",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "intent": "Discover which metrics, @ aliases and groupBy options a test supports — call this before requesting a report, trend or comparison so metric names are valid.",
+        "guidance": [
+          "Depends only on the test's type; cache the result client-side.",
+          "Use the returned names/aliases in the metrics parameter of report, trends and compare."
+        ],
+        "returns": [
+          "testType",
+          "metrics",
+          "aliases"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "PUT",
+        "path": "/api/v1/agent/loadTests/{testId}",
+        "mode": "write",
+        "entity": "loadTest",
+        "path_params": [
+          {
+            "name": "testId",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "description": "New test name."
+          },
+          {
+            "name": "config",
+            "type": "object",
+            "description": "Partial config update (tags, envVarKeys, slaThresholds, scriptRef, integrations)."
+          },
+          {
+            "name": "ifVersion",
+            "type": "string",
+            "description": "Optimistic-concurrency guard (ISO timestamp of the version being edited)."
+          },
+          {
+            "name": "validationToken",
+            "type": "string",
+            "description": "Token from a prior validate step, when required."
+          },
+          {
+            "name": "pendingScriptUpload",
+            "type": "object",
+            "description": "Two-phase script replacement, same flow as createLoadTest.",
+            "fields": [
+              {
+                "name": "framework",
+                "type": "string"
+              },
+              {
+                "name": "expectedContentType",
+                "type": "string"
+              }
+            ]
+          }
+        ],
+        "intent": "Update an existing load test's name or configuration — use this to change tags, SLA thresholds, script or settings.",
+        "guidance": [
+          "Partial update: send only the fields to change.",
+          "Pass ifVersion for optimistic concurrency; a stale value returns 409 VERSION_CONFLICT.",
+          "Script replacement uses the same two-phase pendingScriptUpload flow as create."
+        ],
+        "returns": [
+          "testId",
+          "version"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "409": {
+            "$response": "Conflict"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/v1/agent/loadTests/{testId}",
+        "mode": "read",
+        "entity": "loadTest",
+        "path_params": [
+          {
+            "name": "testId",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "query": [
+          {
+            "name": "include",
+            "type": "string",
+            "values": [
+              "config",
+              "thresholds",
+              "tags",
+              "children"
+            ],
+            "description": "Comma-separated sub-resources to expand."
+          },
+          {
+            "name": "fields",
+            "type": "string",
+            "description": "Comma-separated response fields to include."
+          }
+        ],
+        "intent": "Get the full configuration of a single load test — use this to inspect a test's settings, script reference, SLA thresholds and children.",
+        "guidance": [
+          "testId is numeric (from listLoadTests).",
+          "Use include to expand config / thresholds / tags / children."
+        ],
+        "returns": [
+          "testId",
+          "name",
+          "testType",
+          "framework",
+          "version",
+          "projectId",
+          "ownerUserId",
+          "config"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      }
+    ],
+    "schemas": {
+      "SuccessEnvelope": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "description": "Operation payload; its fields are listed in each capability's `returns`."
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "errorCode": {
+            "type": "string",
+            "example": "NOT_FOUND"
+          },
+          "error": {
+            "type": "string",
+            "example": "The requested resource was not found."
+          }
+        },
+        "required": [
+          "success",
+          "error"
+        ]
+      }
+    },
+    "responses": {
+      "Success": {
+        "description": "Standard success envelope; operation data under `data`.",
+        "schema": {
+          "$schema": "SuccessEnvelope"
+        }
+      },
+      "BadRequest": {
+        "description": "Invalid parameters or body.",
+        "schema": {
+          "$schema": "ErrorResponse"
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid credentials.",
+        "schema": {
+          "$schema": "ErrorResponse"
+        }
+      },
+      "NotFound": {
+        "description": "The referenced project, test or run was not found or not visible to the caller.",
+        "schema": {
+          "$schema": "ErrorResponse"
+        }
+      },
+      "Conflict": {
+        "description": "Optimistic-concurrency version conflict (ifVersion mismatch).",
+        "schema": {
+          "$schema": "ErrorResponse"
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "A dependency (e.g. the AI insight backend) is temporarily unavailable.",
+        "schema": {
+          "$schema": "ErrorResponse"
+        }
+      },
+      "InternalServerError": {
+        "description": "Unexpected server error.",
+        "schema": {
+          "$schema": "ErrorResponse"
+        }
+      }
+    },
+    "paging": {
+      "GET /api/v1/agent/projects": {
+        "page": "cursor",
+        "size": "limit"
+      },
+      "GET /api/v1/agent/projects/{projectId}/loadTests": {
+        "page": "cursor",
+        "size": "limit"
+      },
+      "GET /api/v1/agent/loadTests/{testId}/runs": {
+        "page": "cursor",
+        "size": "limit"
+      }
+    },
+    "entities": {
+      "loadTest": {
+        "entity": "loadTest",
+        "title": "Load Test",
+        "aliases": [
+          "test",
+          "load test",
+          "test configuration",
+          "test config",
+          "scenario",
+          "k6 test",
+          "jmeter test",
+          "gatling test"
+        ],
+        "id_convention": "testId is a numeric JobConfiguration id (integer). It is NOT the run id. Always discover it via listLoadTests for a project — never assume a value. A test also carries a version — an opaque ISO-8601 token that advances on each edit; pass it back verbatim as ifVersion for optimistic concurrency.",
+        "parents": [
+          "project"
+        ],
+        "relations": [
+          {
+            "entity": "project",
+            "via": "belongs to"
+          },
+          {
+            "entity": "run",
+            "via": "is executed as"
+          },
+          {
+            "entity": "metrics",
+            "via": "declares"
+          }
+        ],
+        "capabilities": [
+          "listLoadTests",
+          "getLoadTest",
+          "createLoadTest",
+          "updateLoadTest"
+        ]
+      },
+      "run": {
+        "entity": "run",
+        "title": "Run",
+        "aliases": [
+          "execution",
+          "job",
+          "test run",
+          "load test run",
+          "run",
+          "job execution"
+        ],
+        "id_convention": "A run is addressed by runId (also called jobId), a UUID hashedId string — NOT the numeric testId. Discover run ids via listLoadTestRuns or listActiveLoadTestRuns; never assume or fabricate one.",
+        "parents": [
+          "loadTest"
+        ],
+        "relations": [
+          {
+            "entity": "loadTest",
+            "via": "executes"
+          },
+          {
+            "entity": "report",
+            "via": "produces"
+          },
+          {
+            "entity": "insight",
+            "via": "produces"
+          }
+        ],
+        "capabilities": [
+          "startLoadTestRun",
+          "stopLoadTestRun",
+          "getLoadTestRunStatus",
+          "listLoadTestRuns",
+          "listActiveLoadTestRuns"
+        ]
+      },
+      "project": {
+        "entity": "project",
+        "title": "Project",
+        "aliases": [
+          "project",
+          "workspace",
+          "folder",
+          "test group"
+        ],
+        "id_convention": "projectId is a numeric Project id (integer). Discover it via listLoadTestProjects; a project can also be created implicitly by createLoadTest via projectName.",
+        "parents": [],
+        "relations": [
+          {
+            "entity": "loadTest",
+            "via": "contains"
+          },
+          {
+            "entity": "trend",
+            "via": "aggregates"
+          }
+        ],
+        "capabilities": [
+          "listLoadTestProjects"
+        ]
+      },
+      "report": {
+        "entity": "report",
+        "title": "Run Report",
+        "aliases": [
+          "report",
+          "result",
+          "results",
+          "metrics report",
+          "run report",
+          "summary",
+          "kpis"
+        ],
+        "id_convention": "A report is not independently identified — it is addressed by the run's runId (jobId). Fetch it only after a run reaches a terminal state.",
+        "parents": [
+          "run"
+        ],
+        "relations": [
+          {
+            "entity": "run",
+            "via": "belongs to"
+          }
+        ],
+        "capabilities": [
+          "getLoadTestRunReport",
+          "compareLoadTestRuns"
+        ]
+      },
+      "insight": {
+        "entity": "insight",
+        "title": "AI Insight",
+        "aliases": [
+          "insight",
+          "ai insight",
+          "root cause",
+          "rca",
+          "analysis",
+          "recommendation",
+          "summary"
+        ],
+        "id_convention": "Addressed by the run's runId (jobId). Insights are AI-generated after a run completes; a non-terminal run returns an in_progress state rather than a report.",
+        "parents": [
+          "run"
+        ],
+        "relations": [
+          {
+            "entity": "run",
+            "via": "belongs to"
+          }
+        ],
+        "capabilities": [
+          "getLoadTestInsightSummary"
+        ]
+      },
+      "trend": {
+        "entity": "trend",
+        "title": "Historical Trend",
+        "aliases": [
+          "trend",
+          "trends",
+          "history",
+          "time series",
+          "over time",
+          "historical trends",
+          "regression trend"
+        ],
+        "id_convention": "Not independently identified — scoped by either a testId (per-test trend) or a projectId (project rollup). Resolve those ids first.",
+        "parents": [
+          "loadTest",
+          "project"
+        ],
+        "relations": [
+          {
+            "entity": "loadTest",
+            "via": "aggregates"
+          },
+          {
+            "entity": "project",
+            "via": "aggregates"
+          }
+        ],
+        "capabilities": [
+          "getLoadTestHistoricalTrends"
+        ]
+      },
+      "quota": {
+        "entity": "quota",
+        "title": "Quota & Cost",
+        "aliases": [
+          "quota",
+          "vu hours",
+          "vuh",
+          "vu-hours",
+          "credits",
+          "entitlement",
+          "plan limits",
+          "concurrency",
+          "cost",
+          "estimate",
+          "budget"
+        ],
+        "id_convention": "Account/group-scoped — there is no id. Resolved from the authenticated caller's credentials; never pass a tenant or group id as a parameter.",
+        "parents": [],
+        "relations": [
+          {
+            "entity": "run",
+            "via": "is consumed by"
+          }
+        ],
+        "capabilities": [
+          "getLoadTestQuota",
+          "estimateLoadTestRunCost"
+        ]
+      },
+      "metrics": {
+        "entity": "metrics",
+        "title": "Metrics Manifest",
+        "aliases": [
+          "metric",
+          "metrics",
+          "kpi",
+          "measurement",
+          "manifest",
+          "available metrics",
+          "metric names",
+          "aliases"
+        ],
+        "id_convention": "Not an instance — a per-testType catalogue of the metric names, @ aliases and groupBy options a test supports. Scoped by testId; fetch once and cache client-side.",
+        "parents": [
+          "loadTest"
+        ],
+        "relations": [
+          {
+            "entity": "loadTest",
+            "via": "describes"
+          }
+        ],
+        "capabilities": [
+          "getLoadTestMetricsManifest"
+        ]
+      },
+      "platform": {
+        "entity": "platform",
+        "title": "Platform Status",
+        "aliases": [
+          "platform",
+          "status",
+          "health",
+          "service status",
+          "availability",
+          "uptime"
+        ],
+        "id_convention": "Singleton — no id. A shallow health probe of the Load Testing service dependencies.",
+        "parents": [],
+        "relations": [],
+        "capabilities": [
+          "getLoadTestPlatformStatus"
+        ]
+      }
+    }
+  }
+}

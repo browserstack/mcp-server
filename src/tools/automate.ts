@@ -2,6 +2,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { fetchAutomationScreenshots } from "./automate-utils/fetch-screenshots.js";
+import {
+  DEFAULT_SESSION_LIST_LIMIT,
+  listSessionIds,
+} from "./automate-utils/list-session-ids.js";
 import { SessionType } from "../lib/constants.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import logger from "../logger.js";
@@ -66,6 +70,53 @@ export async function fetchAutomationScreenshotsTool(
   }
 }
 
+export async function listSessionIdsTool(
+  args: {
+    sessionType: SessionType;
+    buildId: string;
+    limit?: number;
+    offset?: number;
+    status?: string;
+  },
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  try {
+    const sessions = await listSessionIds(args, config);
+    if (sessions.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "No sessions found for this hashed build ID.",
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(sessions, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    logger.error("Error listing session IDs", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error listing session IDs: ${errorMessage}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
 //Registers the fetchAutomationScreenshots tool with the MCP server
 export default function addAutomationTools(
   server: McpServer,
@@ -114,6 +165,85 @@ export default function addAutomationTools(
             {
               type: "text",
               text: `Error during fetching automate screenshots: ${errorMessage}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  tools.listSessionIds = server.tool(
+    "listSessionIds",
+    "List Automate/App Automate session hashed IDs for a REST hashed build ID. " +
+      "Use the dashboard hashed build id (same family as App Automate " +
+      "getFailureLogs buildId). If you only have an observability UUID from " +
+      "getBuildId or listBuildId, call fetchBuildInsights and use hashed_id " +
+      "when present. Returned sessionId values work with getFailureLogs, " +
+      "fetchAutomationScreenshots, and fetchSelfHealedSelectors.",
+    {
+      sessionType: z
+        .enum([SessionType.Automate, SessionType.AppAutomate])
+        .describe("Type of BrowserStack session"),
+      buildId: z
+        .string()
+        .describe(
+          "REST hashed Automate/App Automate build ID from the dashboard URL " +
+            "or hashed_id from fetchBuildInsights (not the observability UUID " +
+            "from getBuildId / listBuildId). Same ID family as App Automate " +
+            "getFailureLogs buildId.",
+        ),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          `Max sessions to return. Defaults to ${DEFAULT_SESSION_LIST_LIMIT}.`,
+        ),
+      offset: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe("Pagination offset for the REST session list."),
+      status: z
+        .string()
+        .optional()
+        .describe(
+          "Optional session status filter (e.g. done, running, error). Applied client-side.",
+        ),
+    },
+    {
+      title: "List Session IDs",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "listSessionIds",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
+        return await listSessionIdsTool(args, config);
+      } catch (error) {
+        trackMCP(
+          "listSessionIds",
+          server.server.getClientVersion()!,
+          error,
+          config,
+        );
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error listing session IDs: ${errorMessage}`,
             },
           ],
           isError: true,

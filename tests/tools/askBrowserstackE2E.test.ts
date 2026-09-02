@@ -223,7 +223,13 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const server = await buildServer();
       const description = (server.getTools().askBrowserStackAI as any).description as string;
 
-      expect(description).toMatch(/^Use this when no other BrowserStack tool here fits/);
+      // The alpha/entitlement note leads now — a tool that may not be enabled for the
+      // account is worth saying before what it does — but the fallback framing has to
+      // survive, because that is what stops the model reaching for this over a specific
+      // tool. Both are asserted, and the alpha note is asserted to come FIRST.
+      expect(description).toMatch(/^\(Alpha, limited availability\./);
+      expect(description).toMatch(/complete the task with the individual tools instead/);
+      expect(description).toMatch(/Use this when no other BrowserStack tool here fits/);
       expect(description).toMatch(/or when the ones you tried did not get you there/);
       expect(description).toMatch(/Prefer a specific tool whenever one fits/);
       // ...and it still says what it does and what consent looks like.
@@ -1012,9 +1018,9 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       });
 
       expect(payload.error).toContain(
-        "BrowserStack AI is not enabled for `a11y` on your account. Please contact your admin.",
+        "Ask AI (Alpha) is not enabled for `a11y` on this account.",
       );
-      expect(payload.error).toMatch(/YOUR CREDENTIALS ARE FINE/);
+      expect(payload.error).toMatch(/Authentication succeeded and nothing was run/);
       expect(payload.permission_relay).toEqual({
         used: false,
         reason: "not_entitled",
@@ -1040,7 +1046,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
       expect(payload.permission_relay.reason).toBe("not_entitled");
-      expect(payload.error).toMatch(/Please contact your admin/);
+      expect(payload.error).toMatch(/contact your BrowserStack account owner/);
     });
 
     it.each([

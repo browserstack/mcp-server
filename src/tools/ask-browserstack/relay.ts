@@ -86,10 +86,11 @@ export const RELAY_OFF_DETAILS: Record<string, string> = {
   // product's agent flag. The product-specific sentence and what to do about it live in
   // `error`, so this one points there rather than duplicating the plumbing.
   not_entitled:
-    "NOBODY DECLINED THIS AND NOTHING RAN. BrowserStack AI is not enabled for this account, " +
-    "so the request was refused before the agent started. `error` says which product and " +
-    "what to do about it. This is an entitlement on the account, not a problem with your " +
-    "credentials and not a decision anyone made about your request.",
+    "NOBODY DECLINED THIS AND NOTHING RAN. Ask AI (Alpha) is not enabled on this account. " +
+    "Ask AI is in limited alpha and available only to enrolled accounts, so the request was " +
+    "refused before the agent started. `error` names the product. This is an entitlement on " +
+    "the account, not a problem with your credentials and not a decision anyone made about " +
+    "your request.",
 
   // The request never got as far as the agent. Distinct from `disabled` (the agent ran, with
   // the relay switched off) and from a decline (someone was asked and said no), because the
@@ -175,9 +176,10 @@ export function isNotEntitled(response: AgentResponse): boolean {
 export const NOT_ENTITLED_DETAIL = (product: string): string => {
   const scope = product && product.trim() ? ` for \`${product.trim()}\`` : "";
   return (
-    `BrowserStack AI is not enabled${scope} on your account. Please contact your admin. ` +
-    `YOUR CREDENTIALS ARE FINE — they authenticated successfully; this is a per-product ` +
-    `entitlement on the account. Nothing was run and nobody declined anything.`
+    `Ask AI (Alpha) is not enabled${scope} on this account. Ask AI is in limited alpha and ` +
+    `available only to enrolled accounts. Authentication succeeded and nothing was run. ` +
+    `To request access, contact your BrowserStack account owner, or reach out at ` +
+    `https://www.browserstack.com/contact-sales`
   );
 };
 

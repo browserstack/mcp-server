@@ -119,6 +119,14 @@ export interface AskDeps {
  * first, what it does second, and the consent behaviour last.
  */
 const DESCRIPTION =
+  // Alpha status leads, deliberately. The model reads this before deciding to call, and a
+  // tool that is not enabled for the account cannot do the job at all — so "there is a
+  // per-account gate, fall back to the individual tools" is the most useful thing to say
+  // first. Parenthesised so it reads as a status note, not as the tool's purpose.
+  "(Alpha, limited availability. Enabled per account and per product; if it is not enabled " +
+  "the call returns an entitlement error, nothing runs, and you should complete the task " +
+  "with the individual tools instead. To request access, the user should contact their " +
+  "BrowserStack account owner.) " +
   "Use this when no other BrowserStack tool here fits the task, or when the ones you tried " +
   "did not get you there. Prefer a specific tool whenever one fits: it is faster and more " +
   "predictable than handing the job to an agent. " +
@@ -445,7 +453,7 @@ export function addAskBrowserStackAITool(
       // sets it false: consent is not a licence to delete.
       readOnlyHint: false,
       destructiveHint: false,
-      title: "Ask BrowserStack AI",
+      title: "Ask BrowserStack AI (Alpha)",
     },
     async ({ product, query }, extra): Promise<CallToolResult> => {
       track("askBrowserStackAI");

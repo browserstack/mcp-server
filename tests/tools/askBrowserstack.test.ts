@@ -1217,21 +1217,23 @@ describe("403 — the account is not entitled, which is none of the other failur
   it("gives the user the sentence they asked for, naming the product", () => {
     const result = buildResult(REFUSED, [], "offered", "a11y");
     expect(result.error).toContain(
-      "BrowserStack AI is not enabled for `a11y` on your account. Please contact your admin.",
+      "Ask AI (Alpha) is not enabled for `a11y` on this account.",
     );
   });
 
   it("drops the product clause rather than naming an empty one", () => {
     expect(buildResult(REFUSED, [], "offered").error).toContain(
-      "BrowserStack AI is not enabled on your account. Please contact your admin.",
+      "Ask AI (Alpha) is not enabled on this account.",
     );
     expect(buildResult(REFUSED, [], "offered", "   ").error).not.toContain("``");
   });
 
   it("says outright that the credentials are fine, so a working key is not rotated", () => {
     const result = buildResult(REFUSED, [], "offered", "tm");
-    expect(result.error).toMatch(/YOUR CREDENTIALS ARE FINE/);
-    expect(result.error).toMatch(/per-product entitlement/);
+    // The point survives the rewording: whoever reads this must not go and rotate a key
+    // that works. "Authentication succeeded" is what now carries that.
+    expect(result.error).toMatch(/Authentication succeeded and nothing was run/);
+    expect(result.error).toMatch(/limited alpha/);
   });
 
   it("is its own reason, not not_reached and not a denial", () => {
@@ -1277,7 +1279,7 @@ describe("403 — the account is not entitled, which is none of the other failur
     expect(new Set(all).size).toBe(5);
 
     // The entitlement one sends the reader to an admin, and nowhere near a credential.
-    expect(entitlement).toMatch(/contact your admin/);
+    expect(entitlement).toMatch(/contact your BrowserStack account owner/);
     expect(entitlement).not.toMatch(/rejected/);
     expect(entitlement).not.toMatch(/ASK_BROWSERSTACK/);
     expect(entitlement).not.toMatch(/required_scope/);
@@ -1288,7 +1290,7 @@ describe("403 — the account is not entitled, which is none of the other failur
     const withError = buildResult(
       { status: 403, body: { detail: "nope", error: "forbidden" } }, [], "offered", "tm",
     );
-    expect(withError.error).toMatch(/Please contact your admin/);
+    expect(withError.error).toMatch(/contact your BrowserStack account owner/);
     expect(withError.error).not.toBe("forbidden");
   });
 });

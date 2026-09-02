@@ -1,0 +1,129 @@
+{
+  "note": "Query -> the endpoint that should answer it. `maxRank` is the worst position the expected endpoint may occupy in the top 8; `miss` records a query the lexical scorer is known not to serve, with the reason. Tighten these when the ranker improves; never loosen one without saying why.",
+  "cases": [
+    {
+      "q": "list all folders in a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folders",
+      "maxRank": 1
+    },
+    {
+      "q": "create a new folder",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folders",
+      "maxRank": 2
+    },
+    {
+      "q": "show me the test runs for a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs",
+      "maxRank": 2
+    },
+    {
+      "q": "create a test run",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs",
+      "maxRank": 1
+    },
+    {
+      "q": "create a test plan",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans",
+      "maxRank": 1
+    },
+    {
+      "q": "clone a test plan",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/clone",
+      "maxRank": 1
+    },
+    {
+      "q": "archive test plans in bulk",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/bulk-archive",
+      "maxRank": 1
+    },
+    {
+      "q": "upload an attachment to a test case",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/attachments",
+      "maxRank": 2
+    },
+    {
+      "q": "merge one tag into another",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/tags/merge",
+      "maxRank": 1
+    },
+    {
+      "q": "who has access to this project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/users/search",
+      "maxRank": 1
+    },
+    {
+      "q": "what changed recently, who edited what",
+      "method": "GET",
+      "path": "/api/v1/activities",
+      "maxRank": 1
+    },
+    {
+      "q": "audit log",
+      "method": "GET",
+      "path": "/api/v1/activities",
+      "maxRank": 1
+    },
+    {
+      "q": "tc list for a folder",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
+      "maxRank": 2
+    },
+    {
+      "q": "get full detail of one test case including steps",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/detail",
+      "maxRank": 3
+    },
+    {
+      "q": "test_case detail",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/detail",
+      "maxRank": 2,
+      "why": "the entity name listEntities returns, verbatim \u2014 the documented flow must not be the losing one"
+    },
+    {
+      "q": "list test_runs",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs",
+      "maxRank": 3,
+      "why": "same, plural: underscore has to tokenize like a space"
+    },
+    {
+      "q": "record a pass or fail for a test case in a run",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
+      "maxRank": 4,
+      "why": "reached only through the status enum [pass, fail, bug, retest, block, note] on the parameter \u2014 the words appear nowhere in the prose"
+    },
+    {
+      "q": "mark a test as passed",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
+      "maxRank": 2,
+      "why": "same: the caller's word is a parameter VALUE, not a noun in the description"
+    },
+    {
+      "q": "make a new bucket for my tests",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folders",
+      "miss": "'bucket' is nobody's word for a folder; no lexical scorer reaches this"
+    },
+    {
+      "q": "get rid of a test plan",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
+      "miss": "'get' trips the READ verb list, so the destructive endpoint takes the mode penalty. Harmless: destructive endpoints are refused before binding anyway."
+    }
+  ]
+}

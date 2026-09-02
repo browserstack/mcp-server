@@ -1,5 +1,5 @@
 /**
- * `askBrowserstackAI` — one tool call in, one tool result out, with a human's approval
+ * `askBrowserStackAI` — one tool call in, one tool result out, with a human's approval
  * relayed through the middle of it.
  *
  * The shape, and why:
@@ -231,7 +231,7 @@ async function relayOneAsk(
   // or anything a user typed. Logged so that what a client actually submits can be read next
   // time rather than inferred from a compiled binary.
   logger.info(
-    "askBrowserstackAI: elicitation answered %s",
+    "askBrowserStackAI: elicitation answered %s",
     elicitationShape(answer),
   );
 
@@ -324,7 +324,7 @@ async function runStreamed(
     const ask = parseAsk(event.data);
     if (!ask) {
       logger.error(
-        "askBrowserstackAI: unusable permission ask on the stream; ignoring",
+        "askBrowserStackAI: unusable permission ask on the stream; ignoring",
       );
       continue;
     }
@@ -333,7 +333,7 @@ async function runStreamed(
       // there is nowhere to send a decision — so do not prompt a human for an answer
       // that could never be delivered.
       logger.error(
-        "askBrowserstackAI: permission ask arrived before run_id; cannot answer",
+        "askBrowserStackAI: permission ask arrived before run_id; cannot answer",
       );
       continue;
     }
@@ -350,7 +350,7 @@ async function runStreamed(
       decision = await relayOneAsk(server, ask, approvals, relatedRequestId);
     } catch (error) {
       logger.warn(
-        "askBrowserstackAI: elicitation failed, denying explicitly: %s",
+        "askBrowserStackAI: elicitation failed, denying explicitly: %s",
         error instanceof Error ? error.message : String(error),
       );
       decision = { perm_id: ask.perm_id, decision: "deny", reason: "error" };
@@ -366,7 +366,7 @@ async function runStreamed(
       // grant one. Retrying risks the opposite: a duplicate that 409s, or worse, an
       // approval applied to a step the run has already moved past.
       logger.warn(
-        "askBrowserstackAI: decision for %s was not accepted (HTTP %s)",
+        "askBrowserStackAI: decision for %s was not accepted (HTTP %s)",
         decision.perm_id,
         status,
       );
@@ -403,7 +403,7 @@ export function relayMode(server: McpServer): RelayMode {
     : "no_human";
 }
 
-export function addAskBrowserstackAITool(
+export function addAskBrowserStackAITool(
   server: McpServer,
   deps: AskDeps,
   config?: BrowserStackConfig,
@@ -425,8 +425,8 @@ export function addAskBrowserstackAITool(
     }
   };
 
-  tools.askBrowserstackAI = server.tool(
-    "askBrowserstackAI",
+  tools.askBrowserStackAI = server.tool(
+    "askBrowserStackAI",
     DESCRIPTION,
     {
       product: z
@@ -448,7 +448,7 @@ export function addAskBrowserstackAITool(
       title: "Ask BrowserStack AI",
     },
     async ({ product, query }, extra): Promise<CallToolResult> => {
-      track("askBrowserstackAI");
+      track("askBrowserStackAI");
       const approvals: ApprovalRecord[] = [];
       // Negotiated before anything else so the failure paths below report the mode they
       // would have run in.
@@ -481,7 +481,7 @@ export function addAskBrowserstackAITool(
           // Omitted ENTIRELY, not sent empty: its absence is what selects Atlas's
           // read-only HeadlessGate.
           logger.info(
-            "askBrowserstackAI: no permission relay (%s); running read-only",
+            "askBrowserStackAI: no permission relay (%s); running read-only",
             mode,
           );
         }
@@ -510,7 +510,7 @@ export function addAskBrowserstackAITool(
           error instanceof AskError || error instanceof Error
             ? error.message
             : String(error);
-        logger.error("askBrowserstackAI failed: %s", message);
+        logger.error("askBrowserStackAI failed: %s", message);
         // No `canElicit` argument: the request never left this process, so whether the
         // client could have been prompted is not what the reader needs to know.
         return toResult(errorResult(message, approvals));
@@ -525,12 +525,12 @@ export function addAskBrowserstackAITool(
 }
 
 /** The tool-adder the server factory calls. */
-export function addAskBrowserstackAIToolFromConfig(
+export function addAskBrowserStackAIToolFromConfig(
   server: McpServer,
   config: BrowserStackConfig,
 ): Record<string, RegisteredTool> {
   if (!isEnabled()) {
-    logger.info("askBrowserstackAI disabled by ASK_BROWSERSTACK_DISABLED");
+    logger.info("askBrowserStackAI disabled by ASK_BROWSERSTACK_DISABLED");
     return {};
   }
   const credentials = () => ({
@@ -538,7 +538,7 @@ export function addAskBrowserstackAIToolFromConfig(
     accessKey: config["browserstack-access-key"],
   });
   const tokenTransport = fetchTokenTransport();
-  return addAskBrowserstackAITool(
+  return addAskBrowserStackAITool(
     server,
     {
       // Both resolved per call. An unconfigured host surfaces as a named error from the
@@ -552,4 +552,4 @@ export function addAskBrowserstackAIToolFromConfig(
   );
 }
 
-export default addAskBrowserstackAIToolFromConfig;
+export default addAskBrowserStackAIToolFromConfig;

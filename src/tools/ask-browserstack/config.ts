@@ -109,7 +109,7 @@ function announce(what: string, url: string, source: "env" | "default"): void {
   const line = `${what}|${url}|${source}`;
   if (announced.has(line)) return;
   announced.add(line);
-  logger.info("askBrowserstackAI: %s is %s (source: %s)", what, url, source);
+  logger.info("askBrowserStackAI: %s is %s (source: %s)", what, url, source);
 }
 
 /**

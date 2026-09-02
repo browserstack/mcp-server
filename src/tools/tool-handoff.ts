@@ -8,7 +8,7 @@
  * where the missing identifier comes from.
  *
  * Point at a sibling tool whenever one can produce the id — it is faster and more
- * predictable than an agent. Point at `askBrowserstackAI` only when NO tool here can.
+ * predictable than an agent. Point at `askBrowserStackAI` only when NO tool here can.
  *
  * The one that matters most: 15 of the 17 Test Management tools require a project
  * identifier and NONE of them accepts its absence, yet no tool in this server lists
@@ -23,7 +23,7 @@
 /** No tool lists projects, so this genuinely has to go to the agent. */
 export const NEEDS_PROJECT_ID =
   " Requires a project identifier (PR-*). No tool here lists projects, so if you do not " +
-  'have one, call askBrowserstackAI with product "tm" and ask which projects exist, then ' +
+  'have one, call askBrowserStackAI with product "tm" and ask which projects exist, then ' +
   "retry this tool with the identifier it returns.";
 
 /** A sibling tool can produce the id — prefer it over the agent. */
@@ -46,19 +46,19 @@ export const NEEDS_BUILD_ID = needsIdFrom(
 /** Session ids are not listable by any tool here. */
 export const NEEDS_SESSION_ID =
   " Requires a session id, which no tool here lists. If you only know the build, call " +
-  "getBuildId or listBuildId; if you have neither, call askBrowserstackAI with product " +
+  "getBuildId or listBuildId; if you have neither, call askBrowserStackAI with product " +
   '"tra" and describe the run you mean.';
 
 /** A completed scan's ids come from startAccessibilityScan, or from the agent. */
 export const NEEDS_A11Y_SCAN_ID =
   " Requires the ids of a completed scan. They are returned by startAccessibilityScan; " +
-  'for a scan run earlier, call askBrowserstackAI with product "a11y" to locate it, since ' +
+  'for a scan run earlier, call askBrowserStackAI with product "a11y" to locate it, since ' +
   "no tool here lists past scans.";
 
 /** Auth-config ids are not listable by any tool here. */
 export const NEEDS_A11Y_CONFIG_ID =
   " Requires the numeric id returned by createAccessibilityAuthConfig. No tool here lists " +
-  "existing configurations, so if you do not have the id, call askBrowserstackAI with " +
+  "existing configurations, so if you do not have the id, call askBrowserStackAI with " +
   'product "a11y".';
 
 /** Test ids come from listTestIds, which itself needs a build id. */

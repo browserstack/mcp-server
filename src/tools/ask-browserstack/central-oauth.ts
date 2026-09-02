@@ -320,7 +320,7 @@ export async function mintCentralToken(
     .then(({ token, lifetimeMs }) => {
       cache.set(key, { token, expiresAt: now + lifetimeMs });
       logger.info(
-        "askBrowserstackAI: signed in as %s (lifetime %ss)",
+        "askBrowserStackAI: signed in as %s (lifetime %ss)",
         credentials.username,
         Math.round(lifetimeMs / 1000),
       );

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AskError } from "../../src/tools/ask-browserstack/config.js";
 import { resetTokenCache } from "../../src/tools/ask-browserstack/central-oauth.js";
-import { addAskBrowserstackAITool } from "../../src/tools/ask-browserstack/register.js";
+import { addAskBrowserStackAITool } from "../../src/tools/ask-browserstack/register.js";
 
 const CONFIG = {
   "browserstack-username": "ing_Xx",
@@ -183,11 +183,11 @@ function fakeClient(
 }
 
 async function call(tools: Record<string, any>, args = { product: "tm", query: "make a folder" }) {
-  const result = await tools.askBrowserstackAI.handler(args, {} as any);
+  const result = await tools.askBrowserStackAI.handler(args, {} as any);
   return { result, payload: JSON.parse(result.content[0].text) };
 }
 
-describe("askBrowserstackAI, end to end through the server factory", () => {
+describe("askBrowserStackAI, end to end through the server factory", () => {
   beforeEach(() => {
     process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
     process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = AUTH_URL;
@@ -207,12 +207,12 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
 
   it("registers alongside the existing surface, and honours its kill switch", async () => {
     const server = await buildServer();
-    expect(server.getTools().askBrowserstackAI).toBeDefined();
+    expect(server.getTools().askBrowserStackAI).toBeDefined();
     expect(server.getTools().listTestCases ?? server.getTools().createTestCase).toBeDefined();
 
     process.env.ASK_BROWSERSTACK_DISABLED = "true";
     vi.resetModules();
-    expect((await buildServer()).getTools().askBrowserstackAI).toBeUndefined();
+    expect((await buildServer()).getTools().askBrowserStackAI).toBeUndefined();
   });
 
   describe("the client CAN elicit", () => {
@@ -221,7 +221,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       // words before any call happens — so the fallback framing has to be in it, and near
       // the front where it is read.
       const server = await buildServer();
-      const description = (server.getTools().askBrowserstackAI as any).description as string;
+      const description = (server.getTools().askBrowserStackAI as any).description as string;
 
       expect(description).toMatch(/^Use this when no other BrowserStack tool here fits/);
       expect(description).toMatch(/or when the ones you tried did not get you there/);
@@ -464,7 +464,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       ]);
       atlas({ asks: [{ perm_id: PERM_A, description: "Archive the plan." }] });
 
-      await server.getTools().askBrowserstackAI.handler(
+      await server.getTools().askBrowserStackAI.handler(
         { product: "tm", query: "make a folder" },
         { requestId: 4242 } as never,
       );
@@ -794,7 +794,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
           yield { event: "result", data: { status: "ok", answer: "" } };
         },
       }));
-      const tools = addAskBrowserstackAITool(mcp, {
+      const tools = addAskBrowserStackAITool(mcp, {
         agentUrl: () => "https://atlas.example/agent",
         mintToken: async () => MINTED,
         credentialsFor: () => ({ username: "", accessKey: "" }),
@@ -1168,7 +1168,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       // control below is what makes this assertion mean anything.
       vi.resetModules();
       process.env.REMOTE_MCP = "true";
-      const { addAskBrowserstackAITool } = await import(
+      const { addAskBrowserStackAITool } = await import(
         "../../src/tools/ask-browserstack/register.js"
       );
       const { McpServer: RemoteMcpServer } = await import(
@@ -1184,7 +1184,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       const remote = new RemoteMcpServer({ name: "t", version: "0" });
       vi.spyOn(remote.server, "getClientCapabilities")
         .mockReturnValue({ elicitation: {} } as never);
-      const tools = addAskBrowserstackAITool(remote, {
+      const tools = addAskBrowserStackAITool(remote, {
         agentUrl: () => "https://atlas.example/agent",
         mintToken: async () => MINTED,
         credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
@@ -1210,7 +1210,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       process.env.REMOTE_MCP = "true";
       process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY = "true";
       try {
-        const { addAskBrowserstackAITool } = await import(
+        const { addAskBrowserStackAITool } = await import(
           "../../src/tools/ask-browserstack/register.js"
         );
         const { McpServer: RemoteMcpServer } = await import(
@@ -1224,7 +1224,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         const remote = new RemoteMcpServer({ name: "t", version: "0" });
         vi.spyOn(remote.server, "getClientCapabilities")
           .mockReturnValue({ elicitation: {} } as never);
-        const tools = addAskBrowserstackAITool(remote, {
+        const tools = addAskBrowserStackAITool(remote, {
           agentUrl: () => "https://atlas.example/agent",
           mintToken: async () => MINTED,
           credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
@@ -1248,7 +1248,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       process.env.REMOTE_MCP = "true";
       process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY = "true";
       try {
-        const { addAskBrowserstackAITool } = await import(
+        const { addAskBrowserStackAITool } = await import(
           "../../src/tools/ask-browserstack/register.js"
         );
         const { McpServer: RemoteMcpServer } = await import(
@@ -1262,7 +1262,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
         const remote = new RemoteMcpServer({ name: "t", version: "0" });
         vi.spyOn(remote.server, "getClientCapabilities")
           .mockReturnValue({ roots: {} } as never);      // no elicitation
-        const tools = addAskBrowserstackAITool(remote, {
+        const tools = addAskBrowserStackAITool(remote, {
           agentUrl: () => "https://atlas.example/agent",
           mintToken: async () => MINTED,
           credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
@@ -1283,7 +1283,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       // broken and nothing ever called it.
       vi.resetModules();
       delete process.env.REMOTE_MCP;
-      const { addAskBrowserstackAITool } = await import(
+      const { addAskBrowserStackAITool } = await import(
         "../../src/tools/ask-browserstack/register.js"
       );
       const { McpServer: StdioMcpServer } = await import(
@@ -1299,7 +1299,7 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
       const stdio = new StdioMcpServer({ name: "t", version: "0" });
       vi.spyOn(stdio.server, "getClientCapabilities")
         .mockReturnValue({ elicitation: {} } as never);
-      const tools = addAskBrowserstackAITool(stdio, {
+      const tools = addAskBrowserStackAITool(stdio, {
         agentUrl: () => "https://atlas.example/agent",
         mintToken: async () => MINTED,
         credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
@@ -1365,13 +1365,13 @@ describe("askBrowserstackAI, end to end through the server factory", () => {
   });
 });
 
-describe("askBrowserstackAI, against the injected seam", () => {
+describe("askBrowserStackAI, against the injected seam", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("refuses rather than calling Atlas unauthenticated, and never names the token", async () => {
     const mcp = new McpServer({ name: "t", version: "0" });
     const streamed = vi.fn();
-    const tools = addAskBrowserstackAITool(mcp, {
+    const tools = addAskBrowserStackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
       mintToken: async () => {
         throw new AskError(
@@ -1400,7 +1400,7 @@ describe("askBrowserstackAI, against the injected seam", () => {
         yield { event: "result", data: { status: "ok", answer: "" } };
       },
     }));
-    const tools = addAskBrowserstackAITool(mcp, {
+    const tools = addAskBrowserStackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
       mintToken: async () => MINTED,
       credentialsFor: () => ({ username: "ing_Xx", accessKey: "" }),
@@ -1422,7 +1422,7 @@ describe("askBrowserstackAI, against the injected seam", () => {
     // rather than an exception escaping the tool.
     const mcp = new McpServer({ name: "t", version: "0" });
     vi.spyOn(mcp.server, "getClientCapabilities").mockReturnValue({ elicitation: {} } as never);
-    const tools = addAskBrowserstackAITool(mcp, {
+    const tools = addAskBrowserStackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
       mintToken: async () => MINTED,
       credentialsFor: () => ({ username: "u", accessKey: "k" }),

@@ -156,7 +156,7 @@ export function parseFrame(frame: string): StreamEvent | null {
     // A frame we cannot read is not a frame we may guess at. Dropping it is safe
     // because the only consequence is that an ask goes unanswered and the gate denies
     // on its own expiry — never that something is approved.
-    logger.warn("askBrowserstackAI: unparseable stream frame, ignoring");
+    logger.warn("askBrowserStackAI: unparseable stream frame, ignoring");
     return null;
   }
 }

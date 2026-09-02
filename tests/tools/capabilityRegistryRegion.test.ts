@@ -8,7 +8,9 @@ vi.mock("../../src/lib/tm-base-url.js", () => ({
   getTMBaseURL: vi.fn(async () => "https://test-management-eu.browserstack.com"),
 }));
 
-const FIXTURE = fileURLToPath(new URL("../fixtures/registry-index.json", import.meta.url));
+const FIXTURE = fileURLToPath(
+  new URL("../fixtures/capability/tm.capability-index.json", import.meta.url),
+);
 const CONFIG = {
   "browserstack-username": "ing_Xx",
   "browserstack-access-key": "SECRET",
@@ -75,24 +77,50 @@ describe("base URL resolution", () => {
   });
 });
 
-describe("harness declares, config overrides — the same precedence Atlas uses", () => {
-  const HARNESS_HOST = "https://tm.harness-declared.example";
+describe("the host declared in the product's own index file", () => {
+  const DECLARED = "https://tm.declared-in-index.example";
 
-  it("uses the harness-declared host when config says nothing", async () => {
+  it("uses it for a product that is not region-sharded", async () => {
+    const { resolveBaseUrl, isRegionSharded } =
+      await import("../../src/tools/capability-registry/config.js");
+    expect(isRegionSharded("a11y")).toBe(false);
+    // Trailing slash trimmed, so the caller can author it either way.
+    expect(await resolveBaseUrl("a11y", CONFIG, { base_url: `${DECLARED}/` })).toBe(DECLARED);
+  });
+
+  it("lets config override it", async () => {
+    process.env.CAPABILITY_REGISTRY_BASE_URL_A11Y = "https://a11y-preprod.example";
+    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    expect(await resolveBaseUrl("a11y", CONFIG, { base_url: DECLARED })).toBe("https://a11y-preprod.example");
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_A11Y;
+  });
+
+  it("does NOT let it beat discovery for a region-sharded product", async () => {
+    // The whole point: a declared host is one fixed origin, so honouring it here would send
+    // every EU and IN account to the US — and would pass any test run on a US account.
     delete process.env.CAPABILITY_REGISTRY_BASE_URL_TM;
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
-    expect(await resolveBaseUrl("tm", CONFIG, `${HARNESS_HOST}/`)).toBe(HARNESS_HOST);
+    const { resolveBaseUrl, isRegionSharded } =
+      await import("../../src/tools/capability-registry/config.js");
+    expect(isRegionSharded("tm")).toBe(true);
+    expect(await resolveBaseUrl("tm", CONFIG, { base_url: DECLARED }))
+      .toBe("https://test-management-eu.browserstack.com");
   });
 
-  it("lets config override the harness", async () => {
-    process.env.CAPABILITY_REGISTRY_BASE_URL_TM = "https://tm-preprod.example";
+  it("uses it as the fallback when discovery cannot answer", async () => {
+    const { getTMBaseURL } = await import("../../src/lib/tm-base-url.js");
+    vi.mocked(getTMBaseURL).mockRejectedValueOnce(new Error("all regions unreachable"));
     const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
-    expect(await resolveBaseUrl("tm", CONFIG, HARNESS_HOST)).toBe("https://tm-preprod.example");
+    expect(await resolveBaseUrl("tm", CONFIG, { base_url: DECLARED })).toBe(DECLARED);
   });
 
-  it("falls through to region discovery when the harness declares nothing", async () => {
-    // Which is tm's actual situation: its product.yaml leaves the host to config precisely
-    // so that per-account region sharding is honoured.
+  it("surfaces the discovery failure when there is nothing to fall back to", async () => {
+    const { getTMBaseURL } = await import("../../src/lib/tm-base-url.js");
+    vi.mocked(getTMBaseURL).mockRejectedValueOnce(new Error("all regions unreachable"));
+    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    await expect(resolveBaseUrl("tm", CONFIG, undefined)).rejects.toThrow(/all regions unreachable/);
+  });
+
+  it("discovers when nothing is declared, which is tm's situation today", async () => {
     delete process.env.CAPABILITY_REGISTRY_BASE_URL_TM;
     const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
     expect(await resolveBaseUrl("tm", CONFIG, undefined))
@@ -116,7 +144,7 @@ describe("multiple environments, the way Atlas defines them", () => {
   it("picks this environment's host from a per-env variable", async () => {
     process.env.CAPABILITY_REGISTRY_ENV = "preprod";
     process.env.CAPABILITY_REGISTRY_BASE_URL_TM_PREPROD = "https://tm-preprod.example/";
-    expect(await (await resolver())("tm", CONFIG, HARNESS_HOST))
+    expect(await (await resolver())("tm", CONFIG, { base_url: HARNESS_HOST }))
       .toBe("https://tm-preprod.example");
   });
 
@@ -125,7 +153,7 @@ describe("multiple environments, the way Atlas defines them", () => {
     process.env.CAPABILITY_REGISTRY_BASE_URLS = JSON.stringify({
       tm: { preprod: "https://tm-preprod.example", prod: "https://tm.example" },
     });
-    expect(await (await resolver())("tm", CONFIG, HARNESS_HOST))
+    expect(await (await resolver())("tm", CONFIG, { base_url: HARNESS_HOST }))
       .toBe("https://tm-preprod.example");
   });
 
@@ -133,7 +161,7 @@ describe("multiple environments, the way Atlas defines them", () => {
     process.env.CAPABILITY_REGISTRY_ENV = "preprod";
     process.env.CAPABILITY_REGISTRY_BASE_URL_TM = "https://seam.example";
     process.env.CAPABILITY_REGISTRY_BASE_URL_TM_PREPROD = "https://tm-preprod.example";
-    expect(await (await resolver())("tm", CONFIG, HARNESS_HOST)).toBe("https://seam.example");
+    expect(await (await resolver())("tm", CONFIG, { base_url: HARNESS_HOST })).toBe("https://seam.example");
     delete process.env.CAPABILITY_REGISTRY_BASE_URL_TM;
   });
 
@@ -141,21 +169,31 @@ describe("multiple environments, the way Atlas defines them", () => {
     // Falling through to the harness default here would point a preprod deployment at
     // production, silently — the worst available outcome.
     process.env.CAPABILITY_REGISTRY_ENV = "preprod";
-    await expect((await resolver())("tm", CONFIG, HARNESS_HOST))
+    await expect((await resolver())("tm", CONFIG, { base_url: HARNESS_HOST }))
       .rejects.toThrow(/environment 'preprod' has no host/);
   });
 
   it("refuses a malformed map instead of reading it as 'no override'", async () => {
     process.env.CAPABILITY_REGISTRY_ENV = "preprod";
     process.env.CAPABILITY_REGISTRY_BASE_URLS = "{not json";
-    await expect((await resolver())("tm", CONFIG, HARNESS_HOST))
+    await expect((await resolver())("tm", CONFIG, { base_url: HARNESS_HOST }))
       .rejects.toThrow(/not valid JSON/);
   });
 
   it("ignores the environment entirely when none is selected", async () => {
+    // Asserted on a product that is NOT region-sharded, so the declared host is the
+    // observable outcome; for tm, discovery would answer before it and hide the point.
     process.env.CAPABILITY_REGISTRY_BASE_URLS = JSON.stringify({
-      tm: { preprod: "https://tm-preprod.example" },
+      a11y: { preprod: "https://a11y-preprod.example" },
     });
-    expect(await (await resolver())("tm", CONFIG, HARNESS_HOST)).toBe(HARNESS_HOST);
+    expect(await (await resolver())("a11y", CONFIG, { base_url: HARNESS_HOST })).toBe(HARNESS_HOST);
+  });
+
+  it("still refuses a named environment with no host for a region-sharded product", async () => {
+    // Discovery must NOT rescue a misconfigured environment: it would answer with the
+    // account's PRODUCTION region while the deployment believes it is on preprod.
+    process.env.CAPABILITY_REGISTRY_ENV = "preprod";
+    await expect((await resolver())("tm", CONFIG, undefined))
+      .rejects.toThrow(/environment 'preprod' has no host/);
   });
 });

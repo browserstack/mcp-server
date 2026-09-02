@@ -35,7 +35,10 @@ export function coerce(value: unknown, param: WireParam): unknown {
   if (expected === "object" || expected === "array") {
     // An opaque body object is passed through as given: the spec does not describe its
     // fields, so validating or reshaping it would mean inventing a contract.
-    if (expected === "object" && (typeof value !== "object" || value === null || Array.isArray(value))) {
+    if (
+      expected === "object" &&
+      (typeof value !== "object" || value === null || Array.isArray(value))
+    ) {
       throw new InvocationError(`'${param.name}' must be an object`);
     }
     if (expected === "array" && !Array.isArray(value)) {
@@ -61,14 +64,20 @@ export function coerce(value: unknown, param: WireParam): unknown {
   if (param.values && param.values.length > 0) {
     const allowed = param.values.map((v) => String(v));
     if (!allowed.includes(text)) {
-      throw new InvocationError(`'${param.name}' must be one of: ${allowed.join(", ")}`);
+      throw new InvocationError(
+        `'${param.name}' must be one of: ${allowed.join(", ")}`,
+      );
     }
   }
   return text;
 }
 
 /** Place a value at a JSON-pointer-ish path, creating the objects on the way. */
-function place(root: Record<string, unknown>, pointer: string, value: unknown): void {
+function place(
+  root: Record<string, unknown>,
+  pointer: string,
+  value: unknown,
+): void {
   const segments = pointer.split("/").filter((segment) => segment !== "");
   let cursor = root;
   for (const segment of segments.slice(0, -1)) {
@@ -81,20 +90,28 @@ function place(root: Record<string, unknown>, pointer: string, value: unknown): 
   cursor[segments[segments.length - 1]] = value;
 }
 
-const GROUPS: { group: keyof GroupedArguments; declared: keyof Capability }[] = [
-  { group: "path_params", declared: "path_params" },
-  { group: "query", declared: "query" },
-  { group: "body", declared: "body" },
-];
+const GROUPS: { group: keyof GroupedArguments; declared: keyof Capability }[] =
+  [
+    { group: "path_params", declared: "path_params" },
+    { group: "query", declared: "query" },
+    { group: "body", declared: "body" },
+  ];
 
-export function bind(capability: Capability, args: GroupedArguments): BoundRequest {
+export function bind(
+  capability: Capability,
+  args: GroupedArguments,
+): BoundRequest {
   let path = capability.path;
   const query: Record<string, unknown> = {};
   const body: Record<string, unknown> = {};
 
   for (const { group, declared } of GROUPS) {
     const supplied = args[group] || {};
-    if (typeof supplied !== "object" || supplied === null || Array.isArray(supplied)) {
+    if (
+      typeof supplied !== "object" ||
+      supplied === null ||
+      Array.isArray(supplied)
+    ) {
       throw new InvocationError(`${group} must be an object of name -> value`);
     }
     const params = (capability[declared] as WireParam[] | undefined) || [];
@@ -132,7 +149,8 @@ export function bind(capability: Capability, args: GroupedArguments): BoundReque
   for (const { group, declared } of GROUPS) {
     if (group === "query") continue;
     const supplied = args[group] || {};
-    for (const param of (capability[declared] as WireParam[] | undefined) || []) {
+    for (const param of (capability[declared] as WireParam[] | undefined) ||
+      []) {
       if (param.required && !(param.name in supplied)) missing.push(param.name);
     }
   }

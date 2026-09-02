@@ -8,7 +8,10 @@
  * read/write tool pair was buying.
  */
 
-import { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  McpServer,
+  RegisteredTool,
+} from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
@@ -16,9 +19,14 @@ import logger from "../../logger.js";
 import { trackMCP } from "../../lib/instrumentation.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { GroupedArguments } from "./bind.js";
-import { indexPath, isEnabled, resolveBaseUrl } from "./config.js";
+import { indexPaths, isEnabled, resolveBaseUrl } from "./config.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
-import { CapabilityRegistry, InvocationError } from "./index-loader.js";
+import {
+  CapabilityRegistry,
+  InvocationError,
+  ResponseSelection,
+  resolveResponses,
+} from "./index-loader.js";
 import { invoke } from "./resolve.js";
 import { searchCapabilities } from "./search.js";
 import { Mode } from "./types.js";
@@ -51,39 +59,58 @@ export function addCapabilityRegistryToolsFromConfig(
     logger.info("capability registry disabled by CAPABILITY_REGISTRY_DISABLED");
     return {};
   }
-  const file = indexPath();
-  if (!file) {
+  const files = indexPaths();
+  if (files.length === 0) {
     logger.warn(
       "capability registry index not found; its tools are not registered. Set " +
-        "CAPABILITY_REGISTRY_INDEX or ship capability-index.json at the package root.",
+        "CAPABILITY_REGISTRY_INDEX_DIR, or ship capabilities/<product>.capability-index.json " +
+        "at the package root.",
     );
     return {};
   }
   let registry: CapabilityRegistry;
   try {
-    registry = CapabilityRegistry.fromFile(file);
+    registry = CapabilityRegistry.fromFiles(files);
   } catch (error) {
+    // One unreadable file fails the whole load on purpose (see `fromFiles`), so this is
+    // the only place that decides the surface is absent, and it says why.
     logger.error(
-      "capability registry index at %s is unusable: %s",
-      file, error instanceof Error ? error.message : String(error),
+      "capability registry index unusable (%s): %s",
+      files.join(", "),
+      error instanceof Error ? error.message : String(error),
     );
     return {};
   }
+  const loaded = registry.buildInfo();
   logger.info(
-    "capability registry loaded: build %s, %d product(s)",
-    registry.buildId, registry.productNames().length,
+    "capability registry loaded: %d product(s) — %s",
+    registry.productNames().length,
+    registry
+      .productNames()
+      .map(
+        (name) =>
+          `${name} build ${loaded[name]?.build_id || "?"}` +
+          (loaded[name]?.version ? ` v${loaded[name].version}` : ""),
+      )
+      .join(", "),
   );
-  return addCapabilityRegistryTools(server, {
-    registry,
-    baseUrlFor: (product) =>
-      resolveBaseUrl(product, config, registry.index.products[product]?.base_url),
-    // Read per call, not captured: the remote server rebuilds config per session, so a
-    // captured credential would outlive the session it belongs to.
-    credentialsFor: () => ({
-      username: config["browserstack-username"],
-      accessKey: config["browserstack-access-key"],
-    }),
-  }, config);
+  return addCapabilityRegistryTools(
+    server,
+    {
+      registry,
+      // The whole product bundle, not just its host: a region-sharded product declares
+      // several candidates and the probe needs an endpoint from its own capabilities.
+      baseUrlFor: (product) =>
+        resolveBaseUrl(product, config, registry.index.products[product]),
+      // Read per call, not captured: the remote server rebuilds config per session, so a
+      // captured credential would outlive the session it belongs to.
+      credentialsFor: () => ({
+        username: config["browserstack-username"],
+        accessKey: config["browserstack-access-key"],
+      }),
+    },
+    config,
+  );
 }
 
 function ok(payload: unknown): CallToolResult {
@@ -91,7 +118,12 @@ function ok(payload: unknown): CallToolResult {
 }
 
 function failed(message: string): CallToolResult {
-  return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: message }) }], isError: true };
+  return {
+    content: [
+      { type: "text", text: JSON.stringify({ ok: false, error: message }) },
+    ],
+    isError: true,
+  };
 }
 
 export function addCapabilityRegistryTools(
@@ -119,11 +151,17 @@ export function addCapabilityRegistryTools(
     {},
     async () => {
       track("listProducts");
+      const info = registry.buildInfo();
       return ok({
-      build_id: registry.buildId,
-      products: registry.productNames().map((name) => ({
-        name, summary: registry.index.products[name].summary,
-      })),
+        build_id: registry.buildId,
+        products: registry.productNames().map((name) => ({
+          name,
+          summary: registry.index.products[name].summary,
+          // Provenance for logging and cache-busting only — capability resolution must
+          // never depend on it.
+          build_id: info[name]?.build_id,
+          ...(info[name]?.version ? { version: info[name].version } : {}),
+        })),
       });
     },
   );
@@ -169,24 +207,70 @@ export function addCapabilityRegistryTools(
     "Find endpoints this surface can call, by plain language, optionally narrowed to one " +
       "entity, product or mode. Each result carries the endpoint's `method` and `path` plus " +
       "its parameters grouped into path_params / query / body under the spec's own names — " +
-      "pass them straight back to invokeEndpoint, no renaming. `guidance` is how to call it " +
-      "correctly; `mode` tells you whether it writes. Results are ranked and capped, and " +
-      "`truncated` says when more matched. Search before invoking.",
+      "pass them straight back to invokeEndpoint, no renaming. `intent` says what it does, " +
+      "`mode` tells you whether it writes, `product` says which product owns it, and " +
+      "`responses` describes what a successful call returns, fully expanded. Results are " +
+      "ranked and capped, and `truncated` says when more matched. Search before invoking.",
     {
-      query: z.string().describe("What you are trying to do, in plain language."),
-      entity: z.string().optional().describe("Restrict to one entity (see listEntities)."),
+      query: z
+        .string()
+        .describe("What you are trying to do, in plain language."),
+      entity: z
+        .string()
+        .optional()
+        .describe("Restrict to one entity (see listEntities)."),
       product: z.string().optional().describe("Restrict to one product."),
-      mode: z.enum(["read", "write", "destructive"]).optional()
+      mode: z
+        .enum(["read", "write", "destructive"])
+        .optional()
         .describe("Restrict to reads or writes. Omit to let the query decide."),
       limit: z.number().optional().describe("Max results (default 8)."),
+      include_responses: z
+        .enum(["success", "all", "none"])
+        .optional()
+        .describe(
+          "Which declared responses to expand: 'success' (default, the 2xx shape), 'all' " +
+            "(adds the error shapes — several times larger, and near-identical across " +
+            "endpoints), or 'none'.",
+        ),
     },
-    async ({ query, entity, product, mode, limit }) => {
+    async ({ query, entity, product, mode, limit, include_responses }) => {
       track("searchCapability");
+      const selection = (include_responses || "success") as ResponseSelection;
+      const { hits, ...rest } = searchCapabilities(
+        registry.index.products,
+        query,
+        {
+          entity,
+          product,
+          mode: mode as Mode | undefined,
+          limit,
+        },
+      );
       return ok({
-      build_id: registry.buildId,
-      ...searchCapabilities(registry.index.products, query, {
-        entity, product, mode: mode as Mode | undefined, limit,
-      }),
+        build_id: registry.buildId,
+        // Dereferenced HERE rather than in the artifact: the tables store each response and
+        // schema once and the capabilities name them, so the file stays a third of the size
+        // it would be inlined. Expanding on the way out means the caller never has to
+        // resolve a `{"$schema": "…"}` itself, and never sees one.
+        capabilities: hits.map(({ product: owner, capability }) => {
+          const responses = resolveResponses(
+            registry.index.products[owner],
+            capability,
+            selection,
+          );
+          // The raw field is dropped, not merely overwritten: it holds `{"$response": …}`
+          // references, and spreading the capability would leak them straight through
+          // whenever the resolved value is absent.
+          const { responses: unresolved, ...rest } = capability;
+          void unresolved;
+          return {
+            ...rest,
+            product: owner,
+            ...(responses ? { responses } : {}),
+          };
+        }),
+        ...rest,
       });
     },
   );
@@ -195,32 +279,60 @@ export function addCapabilityRegistryTools(
     "invokeEndpoint",
     "Call an endpoint returned by searchCapability. Pass `method` and `path` exactly as " +
       "given, with arguments grouped into path_params / query / body under the spec's own " +
-      "names. Paging is handled for you — a read is complete unless `complete` is false; use " +
-      "order_by (prefix '-' to reverse) and top_n to sort and trim rather than fetching " +
-      "everything. If the endpoint's mode is 'write' you MUST ask the user first, then " +
+      "names. One call makes exactly one request and returns the product's own response " +
+      "untouched; when `completed` is false there is another page, which you fetch by " +
+      "sending the endpoint's own page parameter. If the endpoint's mode is 'write' you " +
+      "MUST ask the user first, then " +
       "resend with user_permission='granted' and a change_summary; both are recorded. " +
       "Endpoints whose mode is 'destructive' (deletes) are refused outright — archiving, " +
       "closing and merging are ordinary writes and DO run, so read the mode and intent " +
       "before confirming with the user.",
     {
-      method: z.string().describe("HTTP method, exactly as searchCapability returned it."),
-      path: z.string().describe("Path with {placeholders} intact, exactly as returned."),
-      path_params: z.record(z.string(), z.any()).optional().describe("Values for the {placeholders}."),
-      query: z.record(z.string(), z.any()).optional().describe("Query parameters."),
-      body: z.record(z.string(), z.any()).optional().describe("Body fields, under the spec's names."),
-      product: z.string().optional().describe("Required only if two products share the endpoint."),
-      user_permission: z.enum(PERMISSION_VALUES).optional()
-        .describe("Set to 'granted' only after the user has confirmed a write."),
-      change_summary: z.string().optional().describe("What will change. Required for writes."),
+      method: z
+        .string()
+        .describe("HTTP method, exactly as searchCapability returned it."),
+      path: z
+        .string()
+        .describe("Path with {placeholders} intact, exactly as returned."),
+      path_params: z
+        .record(z.string(), z.any())
+        .optional()
+        .describe("Values for the {placeholders}."),
+      query: z
+        .record(z.string(), z.any())
+        .optional()
+        .describe("Query parameters."),
+      body: z
+        .record(z.string(), z.any())
+        .optional()
+        .describe("Body fields, under the spec's names."),
+      product: z
+        .string()
+        .optional()
+        .describe("Required only if two products share the endpoint."),
+      user_permission: z
+        .enum(PERMISSION_VALUES)
+        .optional()
+        .describe(
+          "Set to 'granted' only after the user has confirmed a write.",
+        ),
+      change_summary: z
+        .string()
+        .optional()
+        .describe("What will change. Required for writes."),
     },
     async (input): Promise<CallToolResult> => {
       track("invokeEndpoint");
       try {
         const { product, capability } = registry.byEndpointLookup(
-          input.method, input.path, input.product,
+          input.method,
+          input.path,
+          input.product,
         );
         const args: GroupedArguments = {
-          path_params: input.path_params, query: input.query, body: input.body,
+          path_params: input.path_params,
+          query: input.query,
+          body: input.body,
         };
 
         if (capability.mode === "destructive") {
@@ -253,13 +365,19 @@ export function addCapabilityRegistryTools(
         }
 
         const result = await invoke(
-          capability, args, await deps.baseUrlFor(product), deps.credentialsFor(), transport,
-
+          capability,
+          args,
+          await deps.baseUrlFor(product),
+          deps.credentialsFor(),
+          transport,
         );
         return ok(result);
       } catch (error) {
         if (error instanceof InvocationError) return failed(error.message);
-        logger.error("invokeEndpoint failed: %s", error instanceof Error ? error.message : String(error));
+        logger.error(
+          "invokeEndpoint failed: %s",
+          error instanceof Error ? error.message : String(error),
+        );
         return failed("that endpoint could not be invoked");
       }
     },

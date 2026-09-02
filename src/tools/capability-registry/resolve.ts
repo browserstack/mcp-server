@@ -39,7 +39,8 @@ export interface InvokeResult {
 }
 
 function hasNextPage(body: unknown): boolean {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) return false;
+  if (typeof body !== "object" || body === null || Array.isArray(body))
+    return false;
   const info = (body as Record<string, unknown>).info;
   if (typeof info !== "object" || info === null) return false;
   const next = (info as Record<string, unknown>).next;
@@ -53,7 +54,8 @@ export async function invoke(
   credentials: Credentials,
   transport: Transport,
 ): Promise<InvokeResult> {
-  if (!baseUrl) throw new InvocationError("no base URL is configured for that product");
+  if (!baseUrl)
+    throw new InvocationError("no base URL is configured for that product");
   const bound = bind(capability, args);
   const headers = authHeaders(credentials);
 

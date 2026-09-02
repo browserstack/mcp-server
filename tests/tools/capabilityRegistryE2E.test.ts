@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fileURLToPath } from "node:url";
 
-const FIXTURE = fileURLToPath(new URL("../fixtures/registry-index.json", import.meta.url));
+const FIXTURE = fileURLToPath(
+  new URL("../fixtures/capability/tm.capability-index.json", import.meta.url),
+);
+/** The stored layout: `capability/<product>.capability-index.json`, one file per product. */
+const FIXTURE_DIR = fileURLToPath(new URL("../fixtures/capability/", import.meta.url));
 
 const CONFIG = {
   "browserstack-username": "ing_Xx",
@@ -23,6 +27,7 @@ describe("capability registry, end to end through the server factory", () => {
 
   afterEach(() => {
     delete process.env.CAPABILITY_REGISTRY_INDEX;
+    delete process.env.CAPABILITY_REGISTRY_INDEX_DIR;
     delete process.env.CAPABILITY_REGISTRY_BASE_URL_TM;
     vi.unstubAllGlobals();
   });
@@ -36,6 +41,20 @@ describe("capability registry, end to end through the server factory", () => {
     }
     // the existing surface is untouched
     expect(tools.listTestCases ?? tools.createTestCase).toBeDefined();
+  });
+
+  it("loads the stored layout: capability/<product>.capability-index.json", async () => {
+    delete process.env.CAPABILITY_REGISTRY_INDEX;
+    process.env.CAPABILITY_REGISTRY_INDEX_DIR = FIXTURE_DIR;
+    const server = await buildServer();
+    const result: any = await (server.getTools().listProducts as any).handler(
+      {}, {} as any,
+    );
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.products.map((p: any) => p.name)).toEqual(["tm"]);
+    // Provenance travels per product, because each product is its own file.
+    expect(payload.products[0].build_id).toMatch(/^[0-9a-f]{7,}_/);
+    expect(payload.products[0].version).toMatch(/^\d+\.\d+$/);
   });
 
   it("registers nothing, and does not throw, when the artifact is missing", async () => {
@@ -58,9 +77,48 @@ describe("capability registry, end to end through the server factory", () => {
       { query: "list the test cases in a folder" }, {} as any,
     );
     const payload = JSON.parse(result.content[0].text);
-    expect(payload.build_id).toMatch(/caps/);
+    expect(payload.build_id).toMatch(/^[0-9a-f]{7,}_/);
     expect(payload.capabilities.length).toBeGreaterThan(0);
     expect(payload.capabilities[0].path.startsWith("/api/")).toBe(true);
+  });
+
+  it("hands back response shapes with nothing left to dereference", async () => {
+    const server = await buildServer();
+    const result: any = await (server.getTools().searchCapability as any).handler(
+      { query: "create a folder in a project" }, {} as any,
+    );
+    const payload = JSON.parse(result.content[0].text);
+    const top = payload.capabilities[0];
+
+    // Which product owns it — needed to disambiguate, and to know whose tables were read.
+    expect(top.product).toBe("tm");
+    // The 2xx shape, expanded: no `{"$response": …}` or `{"$schema": …}` reaches the caller.
+    expect(Object.keys(top.responses)).toContain("200");
+    expect(JSON.stringify(payload)).not.toContain('"$schema"');
+    expect(JSON.stringify(payload)).not.toContain('"$response"');
+    expect(top.responses["200"].schema).toBeDefined();
+  });
+
+  it("returns the success shape by default and the error shapes only on request", async () => {
+    const server = await buildServer();
+    const search = server.getTools().searchCapability as any;
+    const run = async (args: Record<string, unknown>) =>
+      JSON.parse((await search.handler(
+        { query: "create a folder in a project", ...args }, {} as any,
+      )).content[0].text);
+
+    const dflt = await run({});
+    const all = await run({ include_responses: "all" });
+    const none = await run({ include_responses: "none" });
+
+    expect(Object.keys(dflt.capabilities[0].responses)).toEqual(["200"]);
+    expect(Object.keys(all.capabilities[0].responses)).toContain("404");
+    expect(none.capabilities[0].responses).toBeUndefined();
+
+    // The error shapes are near-identical across endpoints, so carrying them by default
+    // would multiply the payload several times over to repeat boilerplate.
+    expect(JSON.stringify(all).length).toBeGreaterThan(JSON.stringify(dflt).length * 1.5);
+    expect(JSON.stringify(none).length).toBeLessThan(JSON.stringify(dflt).length);
   });
 
   it("invokes a real endpoint: forwards Api-Token and returns the response untouched", async () => {

@@ -17,26 +17,89 @@ import { Capability, EntityDoc, Mode, ProductIndex } from "./types.js";
 const WORD = /[a-z0-9_]+/g;
 
 const STOPWORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "for", "from",
-  "how", "i", "in", "is", "it", "me", "my", "of", "on", "or",
-  "that", "the", "to", "want", "what", "which", "with", "you",
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "can",
+  "do",
+  "for",
+  "from",
+  "how",
+  "i",
+  "in",
+  "is",
+  "it",
+  "me",
+  "my",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "to",
+  "want",
+  "what",
+  "which",
+  "with",
+  "you",
 ]);
 
 // Verbs that reveal what the caller means to DO. A preference, not a filter — an explicit
 // `mode` argument is the filter.
-const READ_VERBS = new Set(["list", "get", "show", "find", "fetch", "read", "count",
-  "search", "view", "which", "how"]);
-const WRITE_VERBS = new Set(["create", "add", "update", "edit", "delete", "remove", "move",
-  "copy", "archive", "assign", "restore", "reorder", "bulk", "set", "upload", "import",
-  "clone"]);
+const READ_VERBS = new Set([
+  "list",
+  "get",
+  "show",
+  "find",
+  "fetch",
+  "read",
+  "count",
+  "search",
+  "view",
+  "which",
+  "how",
+]);
+const WRITE_VERBS = new Set([
+  "create",
+  "add",
+  "update",
+  "edit",
+  "delete",
+  "remove",
+  "move",
+  "copy",
+  "archive",
+  "assign",
+  "restore",
+  "reorder",
+  "bulk",
+  "set",
+  "upload",
+  "import",
+  "clone",
+]);
 
 // Words that mean "give me many", which is what makes a single-record getter the wrong answer.
-const PLURAL_INTENT = new Set(["list", "all", "every", "many", "count", "search", "find",
-  "which", "each"]);
+const PLURAL_INTENT = new Set([
+  "list",
+  "all",
+  "every",
+  "many",
+  "count",
+  "search",
+  "find",
+  "which",
+  "each",
+]);
 
 /** Query/haystack terms. Verbs are deliberately NOT stopwords — they carry the intent. */
 export function terms(text: string | undefined): string[] {
-  return [...((text || "").toLowerCase().matchAll(WORD))]
+  return [...(text || "").toLowerCase().matchAll(WORD)]
     .map((match) => match[0])
     .filter((word) => !STOPWORDS.has(word));
 }
@@ -50,8 +113,9 @@ export function modeHint(query: string | undefined): "" | Mode {
 }
 
 export function wantsCollection(query: string | undefined): boolean {
-  return [...((query || "").toLowerCase().matchAll(WORD))]
-    .some((match) => PLURAL_INTENT.has(match[0]));
+  return [...(query || "").toLowerCase().matchAll(WORD)].some((match) =>
+    PLURAL_INTENT.has(match[0]),
+  );
 }
 
 /**
@@ -64,7 +128,9 @@ export function wantsCollection(query: string | undefined): boolean {
  */
 export function isCollection(capability: Capability): boolean {
   if (capability.paginated) return true;
-  const segments = capability.path.split("/").filter((s) => s && !s.startsWith("{"));
+  const segments = capability.path
+    .split("/")
+    .filter((s) => s && !s.startsWith("{"));
   const tail = segments[segments.length - 1] || "";
   return tail.endsWith("s") && !tail.endsWith("ss");
 }
@@ -73,7 +139,9 @@ export function isCollection(capability: Capability): boolean {
 function identityText(capability: Capability): string {
   return capability.path
     .split("/")
-    .filter((segment) => segment && !segment.startsWith("{") && segment !== "api")
+    .filter(
+      (segment) => segment && !segment.startsWith("{") && segment !== "api",
+    )
     .join(" ")
     .replace(/[-_]/g, " ");
 }
@@ -114,8 +182,21 @@ function score(
   return { matched, ranked };
 }
 
+/**
+ * One ranked match, WITH the product it belongs to.
+ *
+ * Attribution is not decoration: the response tables are per product, so dereferencing a
+ * hit's schemas needs to know whose tables to read. It is also what lets a caller pass
+ * `product` to invokeEndpoint when two products share an endpoint — until now search
+ * ranked across products and then threw away the only thing that could disambiguate them.
+ */
+export interface SearchHit {
+  product: string;
+  capability: Capability;
+}
+
 export interface SearchResult {
-  capabilities: Capability[];
+  hits: SearchHit[];
   truncated: boolean;
   total_matched: number;
 }
@@ -123,14 +204,24 @@ export interface SearchResult {
 export function searchCapabilities(
   products: Record<string, ProductIndex>,
   query?: string,
-  options: { entity?: string; product?: string; mode?: Mode; limit?: number } = {},
+  options: {
+    entity?: string;
+    product?: string;
+    mode?: Mode;
+    limit?: number;
+  } = {},
 ): SearchResult {
   const limit = options.limit && options.limit > 0 ? options.limit : 8;
   const wanted = terms(query);
   const hint = options.mode ? "" : modeHint(query);
   const plural = wantsCollection(query);
 
-  const scored: { matched: number; ranked: number; capability: Capability }[] = [];
+  const scored: {
+    matched: number;
+    ranked: number;
+    product: string;
+    capability: Capability;
+  }[] = [];
   for (const [name, bundle] of Object.entries(products)) {
     if (options.product && name !== options.product) continue;
     const aliases: Record<string, string[]> = {};
@@ -140,14 +231,25 @@ export function searchCapabilities(
     for (const capability of bundle.capabilities) {
       if (options.entity && capability.entity !== options.entity) continue;
       if (options.mode && capability.mode !== options.mode) continue;
-      const { matched, ranked } = score(capability, wanted, aliases, hint, plural);
-      if (matched > 0) scored.push({ matched, ranked, capability });
+      const { matched, ranked } = score(
+        capability,
+        wanted,
+        aliases,
+        hint,
+        plural,
+      );
+      if (matched > 0)
+        scored.push({ matched, ranked, product: name, capability });
     }
   }
-  scored.sort((a, b) => b.ranked - a.ranked ||
-    a.capability.path.localeCompare(b.capability.path));
+  scored.sort(
+    (a, b) =>
+      b.ranked - a.ranked || a.capability.path.localeCompare(b.capability.path),
+  );
   return {
-    capabilities: scored.slice(0, limit).map((row) => row.capability),
+    hits: scored
+      .slice(0, limit)
+      .map(({ product, capability }) => ({ product, capability })),
     truncated: scored.length > limit,
     total_matched: scored.length,
   };

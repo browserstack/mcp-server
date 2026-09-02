@@ -54,7 +54,8 @@ export function fetchTransport(timeoutMs = 45_000): Transport {
   return async (method, url, headers, query, body) => {
     const target = new URL(url);
     for (const [key, value] of Object.entries(query || {})) {
-      if (value !== undefined && value !== null) target.searchParams.set(key, String(value));
+      if (value !== undefined && value !== null)
+        target.searchParams.set(key, String(value));
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -79,7 +80,11 @@ export function fetchTransport(timeoutMs = 45_000): Transport {
       return { status: response.status, body: parsed };
     } catch {
       // Upstream detail stays out of the reply; the resolver treats status 0 as a failed call.
-      return { status: 0, body: null, error: "the product could not be reached" };
+      return {
+        status: 0,
+        body: null,
+        error: "the product could not be reached",
+      };
     } finally {
       clearTimeout(timer);
     }

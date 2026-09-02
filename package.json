@@ -22,7 +22,7 @@
   },
   "files": [
     "dist",
-    "capability-index.json"
+    "capability"
   ],
   "keywords": [
     "mcp",

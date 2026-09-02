@@ -270,6 +270,102 @@
       },
       {
         "method": "GET",
+        "path": "/api/v1/agent/projects/{projectId}/runs",
+        "mode": "read",
+        "entity": "run",
+        "path_params": [
+          {
+            "name": "projectId",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "description": "Max items to return (1-100, default 50)."
+          },
+          {
+            "name": "cursor",
+            "type": "string",
+            "description": "Opaque pagination cursor from a previous response's nextCursor; pass back verbatim."
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "values": [
+              "active",
+              "terminal",
+              "all"
+            ],
+            "description": "Filter by lifecycle state."
+          },
+          {
+            "name": "verdict",
+            "type": "string",
+            "values": [
+              "passed",
+              "failed",
+              "error"
+            ],
+            "description": "Filter by run verdict."
+          },
+          {
+            "name": "startedBy",
+            "type": "string",
+            "description": "Filter by the user id that started the run."
+          },
+          {
+            "name": "sinceIso",
+            "type": "string",
+            "description": "ISO-8601 lower bound.",
+            "example": "2026-08-01T00:00:00Z"
+          },
+          {
+            "name": "untilIso",
+            "type": "string",
+            "description": "ISO-8601 upper bound."
+          },
+          {
+            "name": "hadSlaBreach",
+            "type": "boolean",
+            "description": "Filter to runs that did / did not breach SLA."
+          }
+        ],
+        "intent": "List the execution history across every load test in a project — newest first, paginated. Use for 'what ran last week in this project?' or to find runs across tests to compare.",
+        "guidance": [
+          "Returns run metadata only, not metrics — use getLoadTestRunReport for a run's KPIs.",
+          "Page with cursor + limit; nextCursor is opaque.",
+          "For a single test's history use /loadTests/{testId}/runs; for currently-live runs use /loadTests/runs/active."
+        ],
+        "returns": [
+          "runs",
+          "hasMore",
+          "nextCursor"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        },
+        "paginated": true,
+        "max_page_size": 100
+      },
+      {
+        "method": "GET",
         "path": "/api/v1/agent/loadTests/runs/active",
         "mode": "read",
         "entity": "run",

@@ -5,6 +5,10 @@ import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { fetchFromBrowserStackAPI, handleMCPError } from "../lib/utils.js";
 import { trackMCP } from "../lib/instrumentation.js";
+import {
+  extractDirectHashedId,
+  resolveHashedBuildId,
+} from "./automate-utils/resolve-hashed-build-id.js";
 
 // Tool function that fetches build insights from two APIs
 export async function fetchBuildInsightsTool(
@@ -24,6 +28,12 @@ export async function fetchBuildInsightsTool(
       }),
     ]);
 
+    const hashed_id = await resolveInsightsHashedId(
+      args.buildId,
+      buildData,
+      config,
+    );
+
     // Select useful fields for users
     const insights = {
       name: buildData.name,
@@ -42,6 +52,7 @@ export async function fetchBuildInsightsTool(
       commit_sha: buildData.vcs_info?.sha,
       vcs_name: buildData.vcs_info?.name,
       quality_gate_result: qualityData?.quality_gate_result,
+      ...(hashed_id ? { hashed_id } : {}),
     };
 
     const qualityProfiles = qualityData?.quality_profiles?.map(
@@ -71,6 +82,30 @@ export async function fetchBuildInsightsTool(
   }
 }
 
+async function resolveInsightsHashedId(
+  observabilityId: string,
+  buildData: unknown,
+  config: BrowserStackConfig,
+): Promise<string | undefined> {
+  const direct = extractDirectHashedId(
+    (buildData ?? {}) as Parameters<typeof extractDirectHashedId>[0],
+  );
+  if (direct) {
+    return direct;
+  }
+
+  try {
+    const resolved = await resolveHashedBuildId({ observabilityId }, config);
+    return resolved.hashedBuildId;
+  } catch (error) {
+    logger.error(
+      "Could not resolve Automate hashed_id for build insights",
+      error,
+    );
+    return undefined;
+  }
+}
+
 // Registers the fetchBuildInsights tool with the MCP server
 export default function addBuildInsightsTools(
   server: McpServer,
@@ -80,7 +115,7 @@ export default function addBuildInsightsTools(
 
   tools.fetchBuildInsights = server.tool(
     "fetchBuildInsights",
-    "Fetches insights about a BrowserStack build by combining build details and quality gate results.",
+    "Fetches insights about a BrowserStack build by combining build details and quality gate results. The insights JSON includes hashed_id (the Automate/App Automate build id used by listSessions)",
     {
       buildId: z.string().describe("The build UUID of the BrowserStack build"),
     },

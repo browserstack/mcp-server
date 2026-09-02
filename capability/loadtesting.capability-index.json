@@ -204,11 +204,9 @@
             "name": "aggregation",
             "type": "string",
             "values": [
-              "perRun",
-              "weekly",
-              "monthly"
+              "perRun"
             ],
-            "description": "Aggregation granularity."
+            "description": "Aggregation granularity. Only perRun is supported today."
           },
           {
             "name": "verdictFilter",
@@ -235,11 +233,6 @@
             "name": "untilIso",
             "type": "string",
             "description": "ISO-8601 upper bound."
-          },
-          {
-            "name": "groupBy",
-            "type": "string",
-            "description": "Optional rollup dimension."
           }
         ],
         "intent": "Show how a project's load-test metrics trend across recent runs — use this for 'is performance getting better or worse across this project?'",
@@ -1155,11 +1148,9 @@
             "name": "aggregation",
             "type": "string",
             "values": [
-              "perRun",
-              "weekly",
-              "monthly"
+              "perRun"
             ],
-            "description": "Aggregation granularity."
+            "description": "Aggregation granularity. Only perRun is supported today."
           },
           {
             "name": "verdictFilter",
@@ -1185,11 +1176,6 @@
             "name": "untilIso",
             "type": "string",
             "description": "ISO-8601 upper bound."
-          },
-          {
-            "name": "groupBy",
-            "type": "string",
-            "description": "Optional rollup dimension."
           }
         ],
         "intent": "Show how one test's metrics trend across its recent runs — use this for 'is this test getting slower over time?'",

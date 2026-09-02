@@ -804,7 +804,7 @@
           {
             "name": "config",
             "type": "object",
-            "description": "Test configuration incl. scriptRef {source: s3|s3_upload|url|inline|existing_zip_id, value|identifier}, vuRamp, durationSec, loadGeneratorLocations, slaThresholds, envVarKeys, tags."
+            "description": "Test configuration incl. scriptRef {source: s3|s3_upload|existing_zip_id, value|identifier}, vuRamp, durationSec, loadGeneratorLocations, slaThresholds, envVarKeys, tags. To supply a script from a local file or URL, use the pendingScriptUpload flow, then source='s3'."
           },
           {
             "name": "children",
@@ -1418,7 +1418,7 @@
           "jmeter test",
           "gatling test"
         ],
-        "id_convention": "testId is a numeric JobConfiguration id (integer). It is NOT the run id. Always discover it via listLoadTests for a project — never assume a value. A test also carries a version (serialId) that increments per edit.",
+        "id_convention": "testId is a numeric JobConfiguration id (integer). It is NOT the run id. Always discover it via listLoadTests for a project — never assume a value. A test also carries a version — an opaque ISO-8601 token that advances on each edit; pass it back verbatim as ifVersion for optimistic concurrency.",
         "parents": [
           "project"
         ],

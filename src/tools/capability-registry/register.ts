@@ -256,6 +256,10 @@ export function addCapabilityRegistryTools(
     "Find endpoints this surface can call, by plain language, optionally narrowed to one " +
       "entity, product or mode. " +
       `Currently loaded products: ${productList} — call listProducts for what each does. ` +
+      "Search matches the product's OWN words, not synonyms, so when a query returns " +
+      "nothing that fits, do not just rephrase it: call listEntities for the product and " +
+      "describeEntity on the closest entity, then search again using the vocabulary they " +
+      "return. Narrowing with `product` or `entity` sharpens results further. " +
       "Each result carries the endpoint's `method` and `path` plus " +
       "its parameters grouped into path_params / query / body under the spec's own names — " +
       "pass them straight back to invokeEndpoint, no renaming. `intent` says what it does, " +

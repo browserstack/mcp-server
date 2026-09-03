@@ -104,6 +104,6 @@ describe("search ranking", () => {
     // fail the build over one position.
     expect(top8, `top-8 ${top8}/${expected.length}`).toBe(expected.length);
     expect(top3, `top-3 ${top3}/${expected.length}`).toBeGreaterThanOrEqual(expected.length - 1);
-    expect(top1, `top-1 ${top1}/${expected.length}`).toBeGreaterThanOrEqual(12);
+    expect(top1, `top-1 ${top1}/${expected.length}`).toBeGreaterThanOrEqual(13);
   });
 });

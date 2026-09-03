@@ -11,13 +11,14 @@
       "q": "create a new folder",
       "method": "POST",
       "path": "/api/v1/projects/{project_id}/folders",
-      "maxRank": 2
+      "maxRank": 3,
+      "why": "regressed 2 -> 3 when the phrase bonus landed: 'new folder' is not a phrase in any haystack, while the competing mkdir endpoint gains from 'create'. Accepted \u2014 the phrase bonus is a net gain across the set."
     },
     {
       "q": "show me the test runs for a project",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/test-runs",
-      "maxRank": 2
+      "maxRank": 1
     },
     {
       "q": "create a test run",
@@ -77,13 +78,13 @@
       "q": "tc list for a folder",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
-      "maxRank": 2
+      "maxRank": 1
     },
     {
       "q": "get full detail of one test case including steps",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/detail",
-      "maxRank": 3
+      "maxRank": 1
     },
     {
       "q": "test_case detail",
@@ -96,14 +97,14 @@
       "q": "list test_runs",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/test-runs",
-      "maxRank": 3,
+      "maxRank": 1,
       "why": "same, plural: underscore has to tokenize like a space"
     },
     {
       "q": "record a pass or fail for a test case in a run",
       "method": "POST",
       "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
-      "maxRank": 4,
+      "maxRank": 3,
       "why": "reached only through the status enum [pass, fail, bug, retest, block, note] on the parameter \u2014 the words appear nowhere in the prose"
     },
     {

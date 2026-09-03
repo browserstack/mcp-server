@@ -7,7 +7,9 @@ import {
 } from "../../src/tools/capability-registry/index-loader.js";
 import { invoke } from "../../src/tools/capability-registry/resolve.js";
 import { isCollection, searchCapabilities, terms } from "../../src/tools/capability-registry/search.js";
-import { Capability, RegistryIndex } from "../../src/tools/capability-registry/types.js";
+import {
+  Capability, ProductIndex, RegistryIndex,
+} from "../../src/tools/capability-registry/types.js";
 
 const LIST_CASES: Capability = {
   method: "GET", path: "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
@@ -152,6 +154,54 @@ describe("merging one file per product", () => {
     expect(() => registry.byEndpointLookup("POST", CREATE_FOLDER.path))
       .toThrow(/exists in several products/);
     expect(registry.byEndpointLookup("POST", CREATE_FOLDER.path, "tm").product).toBe("tm");
+  });
+});
+
+describe("rarity across products", () => {
+  /**
+   * The shape that broke Load Testing: a big product whose vocabulary incidentally
+   * contains the small product's identifying word.
+   *
+   * `load` is in every one of `lts`'s capabilities, so measured per product it looked
+   * common there and scored as noise; it appears in two of `tcm`'s twelve — via
+   * `uploads` / `downloads`, which contain it as a substring — so it looked rare there and
+   * scored as gold. The word that identifies a product was worth least inside it.
+   */
+  const read = (path: string, entity: string): Capability => ({
+    method: "GET", path, mode: "read", entity, paginated: true,
+  });
+  const PRODUCTS = {
+    tcm: {
+      summary: "Test management",
+      capabilities: [
+        ...["test-cases", "test-runs", "test-plans", "folders", "tags", "users",
+          "reports", "datasets", "filters", "activities"].map((seg) =>
+          read(`/api/v1/projects/{project_id}/${seg}`, "test_case")),
+        read("/api/v1/projects/{project_id}/uploads", "attachment"),
+        read("/api/v1/projects/{project_id}/downloads", "attachment"),
+      ],
+      entities: { test_case: {}, attachment: {} },
+    },
+    lts: {
+      summary: "Load testing",
+      capabilities: [
+        read("/api/v1/agent/load-tests", "load_test"),
+        read("/api/v1/agent/load-tests/{test_id}/runs", "load_test"),
+        read("/api/v1/agent/projects/{project_id}/load-tests", "load_test"),
+      ],
+      entities: { load_test: {} },
+    },
+  } as unknown as Record<string, ProductIndex>;
+
+  it("does not let the larger product starve the smaller one", () => {
+    const hits = searchCapabilities(PRODUCTS, "list load tests", { limit: 3 });
+    expect(hits.hits[0].product).toBe("lts");
+    expect(hits.hits[0].capability.path).toBe("/api/v1/agent/load-tests");
+  });
+
+  it("still ranks within a single product when only one is searched", () => {
+    const hits = searchCapabilities(PRODUCTS, "list load tests", { product: "tcm" });
+    expect(hits.hits.every((hit) => hit.product === "tcm")).toBe(true);
   });
 });
 

@@ -277,6 +277,20 @@ function score(
         ranked += weight * weights[i];
     }
   }
+  // PHRASE. Adjacent query terms occurring together say more than the same two words
+  // scattered: "test case" is one noun in this vocabulary, "test" and "case" separately
+  // are two of the commonest words in the index. Scored at half the field's weight and
+  // still scaled by rarity, so it sharpens an existing match rather than creating one.
+  for (const [text, weight] of haystacks) {
+    const blob = haystack(text);
+    if (!blob) continue;
+    for (let i = 0; i + 1 < wanted.length; i += 1) {
+      if (blob.includes(`${wanted[i][0]} ${wanted[i + 1][0]}`)) {
+        ranked += weight * 0.5 * (weights[i] + weights[i + 1]);
+      }
+    }
+  }
+
   const matched = ranked;
 
   if (hint && capability.mode !== hint) ranked -= 20;
@@ -328,28 +342,46 @@ export function searchCapabilities(
     product: string;
     capability: Capability;
   }[] = [];
-  for (const [name, bundle] of Object.entries(products)) {
-    if (options.product && name !== options.product) continue;
+  const searched = Object.entries(products).filter(
+    ([name]) => !options.product || name === options.product,
+  );
+  const aliasesByProduct: Record<string, Record<string, string[]>> = {};
+  for (const [name, bundle] of searched) {
     const aliases: Record<string, string[]> = {};
     for (const [entity, doc] of Object.entries(bundle.entities)) {
       aliases[entity] = ((doc as EntityDoc).aliases || []) as string[];
     }
-    // Rarity is measured once per product against EVERY capability, not against the
-    // filtered subset — narrowing by entity must not make a common word look rare.
-    const corpus = bundle.capabilities.map((capability) =>
+    aliasesByProduct[name] = aliases;
+  }
+
+  // ONE CORPUS ACROSS EVERY SEARCHED PRODUCT, not one per product.
+  //
+  // Measured per product, a term's rarity inverts across them: `load` appears in nearly
+  // every Load Testing capability, so it scored as noise there, while it appears in 16 of
+  // tm's 173 (`upload`, `download`, reached by containment), so it scored as gold there.
+  // The word that identifies a product was worth least inside it, and "list load tests"
+  // returned five tm results and no Load Testing ones at all.
+  //
+  // It is also measured against EVERY capability, not the entity- or mode-filtered subset:
+  // narrowing a search must not make a common word look rare.
+  const corpus = searched.flatMap(([name, bundle]) =>
+    bundle.capabilities.map((capability) =>
       [
         identityText(capability),
         capability.entity,
-        (aliases[capability.entity] || []).join(" "),
+        (aliasesByProduct[name][capability.entity] || []).join(" "),
         capability.intent || "",
         (capability.returns || []).join(" "),
         parameterText(capability),
       ]
         .map(haystack)
         .join(" "),
-    );
-    const weights = wanted.map((forms) => rarity(corpus, forms));
+    ),
+  );
+  const weights = wanted.map((forms) => rarity(corpus, forms));
 
+  for (const [name, bundle] of searched) {
+    const aliases = aliasesByProduct[name];
     for (const capability of bundle.capabilities) {
       if (options.entity && capability.entity !== options.entity) continue;
       if (options.mode && capability.mode !== options.mode) continue;

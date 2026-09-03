@@ -5,6 +5,10 @@
   "loadtesting": {
     "summary": "Load and performance testing: run k6, JMeter, Gatling and Locust load tests at scale. List and inspect projects and load tests; create, update, start, stop and monitor runs; read run reports, AI insights and historical trends; compare runs; and check VU-hour quota and cost estimates. Test definitions, runs and their results live here. Account plan and billing do not — only VU-hour entitlement is exposed, via quota.",
     "base_url": "https://load-api.browserstack.com",
+    "auth": {
+      "type": "http",
+      "scheme": "basic"
+    },
     "capabilities": [
       {
         "method": "GET",

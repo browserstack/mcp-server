@@ -192,6 +192,13 @@ export function addCapabilityRegistryTools(
       "Start here when you do not know which product a task belongs to. " +
       `This build carries ${productCatalog}.`,
     {},
+    {
+      title: "List Capability Products",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     async () => {
       track("listProducts");
       const info = registry.buildInfo();
@@ -218,6 +225,13 @@ export function addCapabilityRegistryTools(
         `Which product to list entities for: ${productList}.`,
       ),
     },
+    {
+      title: "List Product Entities",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     async ({ product }) => {
       track("listEntities");
       const bundle = registry.index.products[product];
@@ -236,6 +250,13 @@ export function addCapabilityRegistryTools(
         `Which product the entity belongs to: ${productList}.`,
       ),
       entity: z.string().describe("Entity name from listEntities."),
+    },
+    {
+      title: "Describe Entity",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
     },
     async ({ product, entity }) => {
       track("describeEntity");
@@ -292,6 +313,13 @@ export function addCapabilityRegistryTools(
             "(adds the error shapes — several times larger, and near-identical across " +
             "endpoints), or 'none'.",
         ),
+    },
+    {
+      title: "Search Capabilities",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
     },
     async ({ query, entity, product, mode, limit, include_responses }) => {
       track("searchCapability");
@@ -381,6 +409,17 @@ export function addCapabilityRegistryTools(
         .string()
         .optional()
         .describe("What will change. Required for writes."),
+    },
+    {
+      title: "Invoke Endpoint",
+      // Not read-only: this is the one tool that writes. Never destructive, because
+      // destructive endpoints are refused before binding — the refusal is enforced here,
+      // not merely hinted at. Not idempotent: it creates, clones and starts runs. Closed
+      // world: it reaches BrowserStack products the index describes, nothing else.
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
     },
     async (input): Promise<CallToolResult> => {
       track("invokeEndpoint");

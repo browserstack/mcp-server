@@ -134,8 +134,41 @@ export interface PagingRule {
   max?: number;
 }
 
+/**
+ * How a product wants the caller's credentials presented.
+ *
+ * The OpenAPI `securityScheme` vocabulary, verbatim — `type` / `in` / `name` / `scheme` —
+ * because the spec already describes this and inventing a parallel taxonomy would mean
+ * translating between two of them forever. ONE scheme per product, not OpenAPI's list of
+ * alternatives: this server holds a username and an access key and nothing else, so
+ * "the first alternative we can satisfy" only ever had one answer.
+ *
+ * `template` is what makes it a contract rather than a guess — a product taking
+ * `{username}_{access_key}` is expressible instead of being a special case in the server.
+ * It names placeholders, never values: the credential itself stays in config, and the
+ * harness's `{ env: … }` value sources must NOT cross the boundary into the artifact.
+ */
+export interface AuthScheme {
+  /** "apiKey" puts the rendered template in a header; "http" with scheme "basic" encodes it. */
+  type: "apiKey" | "http";
+  /** apiKey only. Header is the sole supported location — see `egress.authHeaders`. */
+  in?: "header" | "cookie" | "query";
+  /** apiKey only: the header name, e.g. "Api-Token". */
+  name?: string;
+  /** http only. */
+  scheme?: string;
+  /** Defaults to `{username}:{access_key}`. */
+  template?: string;
+}
+
 export interface ProductIndex {
   summary: string;
+  /**
+   * How to authenticate to this product. Absent means the historical default: the caller's
+   * credentials as `Api-Token: {username}:{access_key}`, which is what every shipped index
+   * relies on today.
+   */
+  auth?: AuthScheme;
   /**
    * The single host this product is served from, when it has one.
    *

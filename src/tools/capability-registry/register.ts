@@ -470,6 +470,7 @@ export function addCapabilityRegistryTools(
           await deps.baseUrlFor(product),
           deps.credentialsFor(),
           transport,
+          registry.index.products[product]?.auth,
         );
         return ok(result);
       } catch (error) {

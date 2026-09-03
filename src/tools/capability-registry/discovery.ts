@@ -21,7 +21,7 @@ import { Capability, ProductIndex } from "./types.js";
 /** What the resolver needs from a product's index to find its host. */
 export type HostSource = Pick<
   ProductIndex,
-  "base_url" | "base_urls" | "probe_path"
+  "base_url" | "base_urls" | "probe_path" | "auth"
 > & {
   capabilities?: Capability[];
 };
@@ -109,7 +109,8 @@ export async function discoverBaseUrl(
     );
   }
 
-  const headers = authHeaders(credentials);
+  // The same scheme the invocation will use, so a host that answers here answers there.
+  const headers = authHeaders(credentials, source.auth);
   const failures: string[] = [];
   for (const candidate of candidates) {
     const response = await transport("GET", `${candidate}${path}`, headers, {});

@@ -339,6 +339,69 @@ describe("auth", () => {
   });
 });
 
+describe("auth schemes", () => {
+  const CREDS = { username: "ing_Xx", accessKey: "SECRET" };
+
+  it("defaults to Api-Token when a product declares nothing", () => {
+    // Every shipped index relies on this; the default must survive the mechanism.
+    expect(authHeaders(CREDS)["Api-Token"]).toBe("ing_Xx:SECRET");
+  });
+
+  it("honours a declared header name and template", () => {
+    const headers = authHeaders(CREDS, {
+      type: "apiKey", in: "header", name: "X-Agent-Key",
+      template: "{username}_{access_key}",
+    });
+    // The separator is the product's to choose, not ours to hardcode.
+    expect(headers["X-Agent-Key"]).toBe("ing_Xx_SECRET");
+    expect(headers["Api-Token"]).toBeUndefined();
+  });
+
+  it("encodes HTTP Basic, which is what Load Testing is reported to want", () => {
+    const headers = authHeaders(CREDS, { type: "http", scheme: "basic" });
+    expect(headers.Authorization).toBe(
+      `Basic ${Buffer.from("ing_Xx:SECRET").toString("base64")}`,
+    );
+  });
+
+  it("keeps the attribution headers whatever the scheme", () => {
+    for (const auth of [undefined, { type: "http" as const, scheme: "basic" }]) {
+      expect(authHeaders(CREDS, auth)["request-source"]).toBe("ai-chatbot");
+    }
+  });
+
+  it("refuses a placeholder it cannot fill instead of sending it literally", () => {
+    // The harness really carries `{user_id}_{group_id}`. Emitting that verbatim would be a
+    // well-formed header that 401s, indistinguishable from bad credentials.
+    expect(() => authHeaders(CREDS, {
+      type: "apiKey", in: "header", name: "X-Auth-Override",
+      template: "{user_id}_{group_id}",
+    })).toThrow(/cannot fill: group_id, user_id/);
+  });
+
+  it("refuses to put a credential anywhere but a header", () => {
+    // A query parameter would leave the credential in access logs and proxies.
+    expect(() => authHeaders(CREDS, {
+      type: "apiKey", in: "query", name: "token",
+    })).toThrow(/can only send credentials in a header/);
+    expect(() => authHeaders(CREDS, {
+      type: "apiKey", in: "cookie", name: "session",
+    })).toThrow(/unsupported auth location/);
+  });
+
+  it("refuses a scheme it does not implement, by name", () => {
+    expect(() => authHeaders(CREDS, { type: "http", scheme: "bearer" }))
+      .toThrow(/unsupported auth scheme/);
+    expect(() => authHeaders(CREDS, { type: "oauth2" as never }))
+      .toThrow(/unsupported auth scheme/);
+  });
+
+  it("still refuses to send anything unauthenticated", () => {
+    expect(() => authHeaders({ username: "", accessKey: "" }, { type: "http", scheme: "basic" }))
+      .toThrow(/not authenticated/);
+  });
+});
+
 describe("invoke — one request, response returned untouched", () => {
   const credentials = { username: "u", accessKey: "k" };
 
@@ -363,6 +426,21 @@ describe("invoke — one request, response returned untouched", () => {
       status: 200,
       body: { test_cases: [{ id: 1, leaked: "kept" }], info: { count: 880, next: null } },
     });
+  });
+
+  it("sends the product's declared scheme, not the default", async () => {
+    // The whole point: a product that wants Basic gets Basic, without the server knowing
+    // anything about that product by name.
+    const seen: Record<string, string>[] = [];
+    const transport = async (_m: string, _u: string, headers: Record<string, string>) => {
+      seen.push(headers);
+      return { status: 200, body: {} };
+    };
+    await invoke(LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
+      "https://x.example", { username: "u", accessKey: "k" }, transport,
+      { type: "http", scheme: "basic" });
+    expect(seen[0].Authorization).toBe(`Basic ${Buffer.from("u:k").toString("base64")}`);
+    expect(seen[0]["Api-Token"]).toBeUndefined();
   });
 
   it("says the answer is incomplete when the envelope declares another page", async () => {

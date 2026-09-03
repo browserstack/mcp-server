@@ -15,6 +15,7 @@
 
 import { bind, GroupedArguments } from "./bind.js";
 import { authHeaders, Credentials, Transport } from "./egress.js";
+import { AuthScheme } from "./types.js";
 import { InvocationError } from "./index-loader.js";
 import { Capability } from "./types.js";
 
@@ -53,11 +54,12 @@ export async function invoke(
   baseUrl: string,
   credentials: Credentials,
   transport: Transport,
+  auth?: AuthScheme,
 ): Promise<InvokeResult> {
   if (!baseUrl)
     throw new InvocationError("no base URL is configured for that product");
   const bound = bind(capability, args);
-  const headers = authHeaders(credentials);
+  const headers = authHeaders(credentials, auth);
 
   const response = await transport(
     capability.method,

@@ -57,6 +57,25 @@ describe("capability registry, end to end through the server factory", () => {
     expect(payload.products[0].version).toMatch(/^\d+\.\d+$/);
   });
 
+  it("names the loaded products in the descriptions and the schema", async () => {
+    const server = await buildServer();
+    const tools: any = server.getTools();
+
+    // The accepted values travel in the SCHEMA, so a client validates them and the model
+    // sees them without spending a listProducts call.
+    const shape = tools.listEntities.inputSchema?.shape ?? tools.listEntities._def?.shape;
+    const entries = shape.product._def?.entries ?? shape.product._def?.values;
+    expect(Object.values(entries)).toEqual(["tm"]);
+
+    // listProducts is the routing tool, so it is the one that carries the summaries.
+    expect(tools.listProducts.description).toContain("tm —");
+    expect(tools.listProducts.description).toContain("Test Management");
+    // Everywhere else, the names are enough; repeating unbounded authored prose across
+    // five descriptions would cost more static context than the round trip it saves.
+    expect(tools.searchCapability.description).toContain("loaded products: tm");
+    expect(tools.searchCapability.description).not.toContain("SSO/OAuth");
+  });
+
   it("registers nothing, and does not throw, when the artifact is missing", async () => {
     process.env.CAPABILITY_REGISTRY_INDEX = "/nonexistent/index.json";
     const server = await buildServer();

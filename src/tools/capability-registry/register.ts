@@ -132,6 +132,48 @@ export function addCapabilityRegistryTools(
   config?: BrowserStackConfig,
 ): Record<string, RegisteredTool> {
   const { registry } = deps;
+  const productNames = registry.productNames();
+
+  /**
+   * The `product` argument, typed to what this build actually carries.
+   *
+   * An enum rather than a free string, so the accepted values travel in the SCHEMA the
+   * client validates against — the model sees them without spending a `listProducts` call,
+   * and a typo is rejected before the handler runs instead of coming back as a tool error.
+   * The set is fixed for the session because the index is read once at registration.
+   */
+  const productArg = () =>
+    productNames.length > 0
+      ? z.enum(productNames as [string, ...string[]])
+      : z.string();
+
+  /** "tm, loadtesting" — for prose that has to name them. */
+  const productList = productNames.join(", ") || "none loaded";
+
+  /**
+   * One line per product, for the ONE tool whose job is routing between them.
+   *
+   * Only listProducts carries the summaries. They are authored prose of unbounded length —
+   * tm's is 90 characters, loadtesting's is 470 — and a tool description is static context
+   * on every request, so repeating them across five tools would cost more than the round
+   * trip they save. Everywhere else the names alone are what a caller needs.
+   *
+   * Each summary is cut to its first sentence and capped, and the whole catalog is
+   * budgeted: past the budget the names still route, which is the part that matters.
+   */
+  const productCatalog = (() => {
+    const lines = productNames.map((name) => {
+      const summary = registry.index.products[name].summary.trim();
+      const firstSentence = summary.split(/(?<=\.)\s/)[0] ?? summary;
+      const trimmed =
+        firstSentence.length > 130
+          ? `${firstSentence.slice(0, 127).trimEnd()}…`
+          : firstSentence;
+      return `${name} — ${trimmed.replace(/\.$/, "")}`;
+    });
+    const joined = lines.join("; ");
+    return joined.length <= 500 ? joined : productList;
+  })();
   const transport = deps.transport || fetchTransport();
   const tools: Record<string, RegisteredTool> = {};
 
@@ -147,7 +189,8 @@ export function addCapabilityRegistryTools(
   tools.listProducts = server.tool(
     "listProducts",
     "List the BrowserStack products this surface can reach, with a one-line summary each. " +
-      "Start here when you do not know which product a task belongs to.",
+      "Start here when you do not know which product a task belongs to. " +
+      `This build carries ${productCatalog}.`,
     {},
     async () => {
       track("listProducts");
@@ -170,7 +213,11 @@ export function addCapabilityRegistryTools(
     "listEntities",
     "List the entities a product models (test case, folder, test plan, …). Use it to scope " +
       "searchCapability, or to find the entity name describeEntity wants.",
-    { product: z.string().describe("Product name from listProducts.") },
+    {
+      product: productArg().describe(
+        `Which product to list entities for: ${productList}.`,
+      ),
+    },
     async ({ product }) => {
       track("listEntities");
       const bundle = registry.index.products[product];
@@ -185,7 +232,9 @@ export function addCapabilityRegistryTools(
       "vocabulary the product uses for it. Read this before filtering or writing, because " +
       "ids and field values usually have to be resolved first.",
     {
-      product: z.string().describe("Product name from listProducts."),
+      product: productArg().describe(
+        `Which product the entity belongs to: ${productList}.`,
+      ),
       entity: z.string().describe("Entity name from listEntities."),
     },
     async ({ product, entity }) => {
@@ -205,7 +254,9 @@ export function addCapabilityRegistryTools(
   tools.searchCapability = server.tool(
     "searchCapability",
     "Find endpoints this surface can call, by plain language, optionally narrowed to one " +
-      "entity, product or mode. Each result carries the endpoint's `method` and `path` plus " +
+      "entity, product or mode. " +
+      `Currently loaded products: ${productList} — call listProducts for what each does. ` +
+      "Each result carries the endpoint's `method` and `path` plus " +
       "its parameters grouped into path_params / query / body under the spec's own names — " +
       "pass them straight back to invokeEndpoint, no renaming. `intent` says what it does, " +
       "`mode` tells you whether it writes, `product` says which product owns it, and " +
@@ -219,7 +270,11 @@ export function addCapabilityRegistryTools(
         .string()
         .optional()
         .describe("Restrict to one entity (see listEntities)."),
-      product: z.string().optional().describe("Restrict to one product."),
+      product: productArg()
+        .optional()
+        .describe(
+          `Restrict to one product: ${productList}. Omit to search all of them.`,
+        ),
       mode: z
         .enum(["read", "write", "destructive"])
         .optional()
@@ -306,10 +361,12 @@ export function addCapabilityRegistryTools(
         .record(z.string(), z.any())
         .optional()
         .describe("Body fields, under the spec's names."),
-      product: z
-        .string()
+      product: productArg()
         .optional()
-        .describe("Required only if two products share the endpoint."),
+        .describe(
+          `Which product owns the endpoint (${productList}). searchCapability returns it ` +
+            "on every result; required only when two products share a path.",
+        ),
       user_permission: z
         .enum(PERMISSION_VALUES)
         .optional()

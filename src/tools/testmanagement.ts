@@ -90,6 +90,7 @@ import {
 
 import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
+import { NEEDS_PROJECT_ID, NEEDS_TEST_PLAN_ID } from "./tool-handoff.js";
 
 //TODO: Moving the traceMCP and catch block to the parent(server) function
 
@@ -728,7 +729,8 @@ export default function addTestManagementTools(
 
   tools.createProjectOrFolder = server.tool(
     "createProjectOrFolder",
-    "Create a project and/or folder in BrowserStack Test Management.",
+    "Create a project and/or folder in BrowserStack Test Management." +
+      NEEDS_PROJECT_ID,
     CreateProjFoldSchema.shape,
     {
       title: "Create Project or Folder",
@@ -742,7 +744,8 @@ export default function addTestManagementTools(
 
   tools.createTestCase = server.tool(
     "createTestCase",
-    "Use this tool to create a test case in BrowserStack Test Management.",
+    "Use this tool to create a test case in BrowserStack Test Management." +
+      NEEDS_PROJECT_ID,
     CreateTestCaseSchema.shape,
     {
       title: "Create Test Case",
@@ -756,7 +759,8 @@ export default function addTestManagementTools(
 
   tools.updateTestCase = server.tool(
     "updateTestCase",
-    "Update an existing test case in BrowserStack Test Management. Any subset of the following fields may be changed: name, description, preconditions, test_case_steps, owner, priority, case_type, automation_status, status, tags, issues, custom_fields. Only the supplied fields are modified.",
+    "Update an existing test case in BrowserStack Test Management. Any subset of the following fields may be changed: name, description, preconditions, test_case_steps, owner, priority, case_type, automation_status, status, tags, issues, custom_fields. Only the supplied fields are modified." +
+      NEEDS_PROJECT_ID,
     UpdateTestCaseSchema.shape,
     {
       title: "Update Test Case",
@@ -770,7 +774,8 @@ export default function addTestManagementTools(
 
   tools.listTestCases = server.tool(
     "listTestCases",
-    "List test cases in a project, optionally scoped to a specific folder. Omit folder_id to list all test cases in the project; provide folder_id (discoverable via listFolders) to list only that folder's cases. Supports filters: case_type, priority, pagination.",
+    "List test cases in a project, optionally scoped to a specific folder. Omit folder_id to list all test cases in the project; provide folder_id (discoverable via listFolders) to list only that folder's cases. Supports filters: case_type, priority, pagination." +
+      NEEDS_PROJECT_ID,
     ListTestCasesSchema.shape,
     {
       title: "List Test Cases",
@@ -784,7 +789,8 @@ export default function addTestManagementTools(
 
   tools.listFolders = server.tool(
     "listFolders",
-    "List folders in a BrowserStack Test Management project, returning each folder's id and name (plus case counts and sub-folder counts). Pass parent_id to list sub-folders under a specific folder instead of top-level folders.",
+    "List folders in a BrowserStack Test Management project, returning each folder's id and name (plus case counts and sub-folder counts). Pass parent_id to list sub-folders under a specific folder instead of top-level folders." +
+      NEEDS_PROJECT_ID,
     ListFoldersSchema.shape,
     {
       title: "List Folders",
@@ -812,7 +818,7 @@ export default function addTestManagementTools(
 
   tools.createTestRun = server.tool(
     "createTestRun",
-    "Create a test run in BrowserStack Test Management.",
+    "Create a test run in BrowserStack Test Management." + NEEDS_PROJECT_ID,
     CreateTestRunSchema.shape,
     {
       title: "Create Test Run",
@@ -826,7 +832,8 @@ export default function addTestManagementTools(
 
   tools.listTestRuns = server.tool(
     "listTestRuns",
-    "List test runs in a project with optional filters (date ranges, assignee, state, etc.)",
+    "List test runs in a project with optional filters (date ranges, assignee, state, etc.)" +
+      NEEDS_PROJECT_ID,
     ListTestRunsSchema.shape,
     {
       title: "List Test Runs",
@@ -840,7 +847,8 @@ export default function addTestManagementTools(
 
   tools.updateTestRun = server.tool(
     "updateTestRun",
-    "Update a test run's metadata and/or add test cases to it.",
+    "Update a test run's metadata and/or add test cases to it." +
+      NEEDS_PROJECT_ID,
     UpdateTestRunSchema.shape,
     {
       title: "Update Test Run",
@@ -854,7 +862,8 @@ export default function addTestManagementTools(
 
   tools.addTestResult = server.tool(
     "addTestResult",
-    "Add a test result to a specific test run via BrowserStack Test Management API.",
+    "Add a test result to a specific test run via BrowserStack Test Management API." +
+      NEEDS_PROJECT_ID,
     AddTestResultSchema.shape,
     {
       title: "Add Test Result",
@@ -868,7 +877,8 @@ export default function addTestManagementTools(
 
   tools.uploadProductRequirementFile = server.tool(
     "uploadProductRequirementFile",
-    "Upload files (e.g., PDRs, PDFs) to BrowserStack Test Management and retrieve a file mapping ID. This is utilized for generating test cases from files and is part of the Test Case Generator AI Agent in BrowserStack.",
+    "Upload files (e.g., PDRs, PDFs) to BrowserStack Test Management and retrieve a file mapping ID. This is utilized for generating test cases from files and is part of the Test Case Generator AI Agent in BrowserStack." +
+      NEEDS_PROJECT_ID,
     UploadFileSchema.shape,
     {
       title: "Upload Product Requirement File",
@@ -897,7 +907,8 @@ export default function addTestManagementTools(
 
   tools.createLCASteps = server.tool(
     "createLCASteps",
-    "Generate Low Code Automation (LCA) steps for a test case in BrowserStack Test Management using the Low Code Automation Agent.",
+    "Generate Low Code Automation (LCA) steps for a test case in BrowserStack Test Management using the Low Code Automation Agent." +
+      NEEDS_PROJECT_ID,
     CreateLCAStepsSchema.shape,
     {
       title: "Create LCA Steps",
@@ -911,7 +922,8 @@ export default function addTestManagementTools(
 
   tools.listTestPlans = server.tool(
     "listTestPlans",
-    "List test plans in a BrowserStack Test Management project. Returns each plan's identifier (TP-*), name, status, description, dates, and active/closed test-run counts. Supports pagination.",
+    "List test plans in a BrowserStack Test Management project. Returns each plan's identifier (TP-*), name, status, description, dates, and active/closed test-run counts. Supports pagination." +
+      NEEDS_PROJECT_ID,
     ListTestPlansSchema.shape,
     {
       title: "List Test Plans",
@@ -925,7 +937,9 @@ export default function addTestManagementTools(
 
   tools.getTestPlan = server.tool(
     "getTestPlan",
-    "Fetch a test plan by identifier (TP-*) from BrowserStack Test Management. Returns plan metadata, the full list of linked test runs, total test-case count across runs, and a status summary — suitable for generating test documentation or QA status reports.",
+    "Fetch a test plan by identifier (TP-*) from BrowserStack Test Management. Returns plan metadata, the full list of linked test runs, total test-case count across runs, and a status summary — suitable for generating test documentation or QA status reports." +
+      NEEDS_PROJECT_ID +
+      NEEDS_TEST_PLAN_ID,
     GetTestPlanSchema.shape,
     {
       title: "Get Test Plan",
@@ -939,7 +953,9 @@ export default function addTestManagementTools(
 
   tools.listSubTestPlans = server.tool(
     "listSubTestPlans",
-    "List sub-test-plans under a parent test plan (TP-*) in a Test Management project. Supports pagination.",
+    "List sub-test-plans under a parent test plan (TP-*) in a Test Management project. Supports pagination." +
+      NEEDS_PROJECT_ID +
+      NEEDS_TEST_PLAN_ID,
     ListSubTestPlansSchema.shape,
     {
       title: "List Sub Test Plans",
@@ -953,7 +969,9 @@ export default function addTestManagementTools(
 
   tools.getSubTestPlan = server.tool(
     "getSubTestPlan",
-    "Fetch a sub-test-plan (STP-*) under a parent plan (TP-*). Returns metadata and linked test runs.",
+    "Fetch a sub-test-plan (STP-*) under a parent plan (TP-*). Returns metadata and linked test runs." +
+      NEEDS_PROJECT_ID +
+      NEEDS_TEST_PLAN_ID,
     GetSubTestPlanSchema.shape,
     {
       title: "Get Sub Test Plan",

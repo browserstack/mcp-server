@@ -20,6 +20,7 @@ import addBuildInsightsTools from "./tools/build-insights.js";
 import { setupOnInitialized } from "./oninitialized.js";
 import { BrowserStackConfig } from "./lib/types.js";
 import addRCATools from "./tools/rca-agent.js";
+import addAskBrowserStackAITool from "./tools/ask-browserstack/register.js";
 
 /**
  * Wrapper class for BrowserStack MCP Server
@@ -61,6 +62,10 @@ export class BrowserStackMcpServer {
       addSelfHealTools,
       addBuildInsightsTools,
       addRCATools,
+      // Hands a plain-language task to BrowserStack's agent and relays its mid-run
+      // permission asks back to this client, so a write can be confirmed by the human
+      // sitting in front of it rather than refused for want of anyone to ask.
+      addAskBrowserStackAITool,
     ];
 
     toolAdders.forEach((adder) => {

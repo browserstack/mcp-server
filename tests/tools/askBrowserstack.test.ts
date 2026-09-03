@@ -1215,9 +1215,9 @@ describe("403 — the account is not entitled, which is none of the other failur
   });
 
   it("gives the user the sentence they asked for, naming the product", () => {
-    const result = buildResult(REFUSED, [], "offered", "a11y");
+    const result = buildResult(REFUSED, [], "offered", "tra");
     expect(result.error).toContain(
-      "Ask AI (Alpha) is not enabled for `a11y` on this account.",
+      "Ask AI (Alpha) is not enabled for `tra` on this account.",
     );
   });
 

@@ -239,6 +239,22 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(description).toMatch(/One task per call/);
     });
 
+    it("offers tm and tra only — a11y is not on the tool while it is in alpha", async () => {
+      // Atlas serves a11y; this TOOL does not offer it yet. Pinned because dropping a
+      // product is a one-word edit that four other places have to agree with, and the two
+      // a11y handoffs in tool-handoff.ts used to send the model here with product "a11y" —
+      // which the schema now rejects, so a silent re-add would strand them again.
+      const server = await buildServer();
+      const shape = (server.getTools().askBrowserStackAI as any).inputSchema?.shape;
+      const values = shape?.product?._def?.values ?? shape?.product?.options;
+
+      expect(values).toEqual(["tm", "tra"]);
+      expect(values).not.toContain("a11y");
+
+      const description = (server.getTools().askBrowserStackAI as any).description as string;
+      expect(description).not.toMatch(/a11y/);
+    });
+
     it("relays an ask, approves it, and forwards the caller's own credentials", async () => {
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [
@@ -1014,11 +1030,11 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       })));
 
       const { result, payload } = await call(server.getTools(), {
-        product: "a11y", query: "scan the site",
+        product: "tra", query: "why did the nightly build fail",
       });
 
       expect(payload.error).toContain(
-        "Ask AI (Alpha) is not enabled for `a11y` on this account.",
+        "Ask AI (Alpha) is not enabled for `tra` on this account.",
       );
       expect(payload.error).toMatch(/Authentication succeeded and nothing was run/);
       expect(payload.permission_relay).toEqual({

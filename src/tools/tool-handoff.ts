@@ -51,15 +51,14 @@ export const NEEDS_SESSION_ID =
 
 /** A completed scan's ids come from startAccessibilityScan, or from the agent. */
 export const NEEDS_A11Y_SCAN_ID =
-  " Requires the ids of a completed scan. They are returned by startAccessibilityScan; " +
-  'for a scan run earlier, call askBrowserStackAI with product "a11y" to locate it, since ' +
-  "no tool here lists past scans.";
+  " Requires the ids of a completed scan, which are returned by startAccessibilityScan. " +
+  "No tool here lists past scans, so if you do not have the ids, start a new scan rather " +
+  "than guessing.";
 
 /** Auth-config ids are not listable by any tool here. */
 export const NEEDS_A11Y_CONFIG_ID =
   " Requires the numeric id returned by createAccessibilityAuthConfig. No tool here lists " +
-  "existing configurations, so if you do not have the id, call askBrowserStackAI with " +
-  'product "a11y".';
+  "existing configurations, so if you do not have the id, create one rather than guessing.";
 
 /** Test ids come from listTestIds, which itself needs a build id. */
 export const NEEDS_TEST_IDS = needsIdFrom("test ids", "listTestIds");

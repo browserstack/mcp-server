@@ -440,7 +440,7 @@ export function addAskBrowserStackAITool(
       product: z
         .enum(PRODUCTS)
         .describe(
-          "Which product to work in: tm (Test Management), a11y (Accessibility), " +
+          "Which product to work in: tm (Test Management), " +
             "tra (Test Reporting & Analytics).",
         ),
       query: z

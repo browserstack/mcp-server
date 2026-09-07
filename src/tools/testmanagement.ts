@@ -730,6 +730,13 @@ export default function addTestManagementTools(
     "createProjectOrFolder",
     "Create a project and/or folder in BrowserStack Test Management.",
     CreateProjFoldSchema.shape,
+    {
+      title: "Create Project or Folder",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     (args) => createProjectOrFolderTool(args, config, server),
   );
 
@@ -737,6 +744,13 @@ export default function addTestManagementTools(
     "createTestCase",
     "Use this tool to create a test case in BrowserStack Test Management.",
     CreateTestCaseSchema.shape,
+    {
+      title: "Create Test Case",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     (args) => createTestCaseTool(args, config, server),
   );
 
@@ -744,6 +758,13 @@ export default function addTestManagementTools(
     "updateTestCase",
     "Update an existing test case in BrowserStack Test Management. Any subset of the following fields may be changed: name, description, preconditions, test_case_steps, owner, priority, case_type, automation_status, status, tags, issues, custom_fields. Only the supplied fields are modified.",
     UpdateTestCaseSchema.shape,
+    {
+      title: "Update Test Case",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    },
     (args) => updateTestCaseTool(args, config, server),
   );
 
@@ -751,6 +772,13 @@ export default function addTestManagementTools(
     "listTestCases",
     "List test cases in a project, optionally scoped to a specific folder. Omit folder_id to list all test cases in the project; provide folder_id (discoverable via listFolders) to list only that folder's cases. Supports filters: case_type, priority, pagination.",
     ListTestCasesSchema.shape,
+    {
+      title: "List Test Cases",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     (args) => listTestCasesTool(args, config, server),
   );
 
@@ -758,6 +786,13 @@ export default function addTestManagementTools(
     "listFolders",
     "List folders in a BrowserStack Test Management project, returning each folder's id and name (plus case counts and sub-folder counts). Pass parent_id to list sub-folders under a specific folder instead of top-level folders.",
     ListFoldersSchema.shape,
+    {
+      title: "List Folders",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     (args) => listFoldersTool(args, config, server),
   );
 
@@ -765,6 +800,13 @@ export default function addTestManagementTools(
     "listTestCaseTemplates",
     "List test-case templates with their numeric template_id. Use the id with createTestCase to apply a custom template (the 'template' slug only selects system templates).",
     ListTemplatesSchema.shape,
+    {
+      title: "List Test Case Templates",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     (args) => listTemplatesTool(args, config, server),
   );
 
@@ -772,6 +814,13 @@ export default function addTestManagementTools(
     "createTestRun",
     "Create a test run in BrowserStack Test Management.",
     CreateTestRunSchema.shape,
+    {
+      title: "Create Test Run",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     (args) => createTestRunTool(args, config, server),
   );
 
@@ -779,6 +828,13 @@ export default function addTestManagementTools(
     "listTestRuns",
     "List test runs in a project with optional filters (date ranges, assignee, state, etc.)",
     ListTestRunsSchema.shape,
+    {
+      title: "List Test Runs",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     (args) => listTestRunsTool(args, config, server),
   );
 
@@ -786,6 +842,13 @@ export default function addTestManagementTools(
     "updateTestRun",
     "Update a test run's metadata and/or add test cases to it.",
     UpdateTestRunSchema.shape,
+    {
+      title: "Update Test Run",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    },
     (args) => updateTestRunTool(args, config, server),
   );
 
@@ -793,6 +856,13 @@ export default function addTestManagementTools(
     "addTestResult",
     "Add a test result to a specific test run via BrowserStack Test Management API.",
     AddTestResultSchema.shape,
+    {
+      title: "Add Test Result",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     (args) => addTestResultTool(args, config, server),
   );
 
@@ -800,6 +870,13 @@ export default function addTestManagementTools(
     "uploadProductRequirementFile",
     "Upload files (e.g., PDRs, PDFs) to BrowserStack Test Management and retrieve a file mapping ID. This is utilized for generating test cases from files and is part of the Test Case Generator AI Agent in BrowserStack.",
     UploadFileSchema.shape,
+    {
+      title: "Upload Product Requirement File",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     (args) => uploadProductRequirementFileTool(args, config, server),
   );
 
@@ -807,6 +884,13 @@ export default function addTestManagementTools(
     "createTestCasesFromFile",
     "Generate test cases from a file in BrowserStack Test Management using the Test Case Generator AI Agent.",
     CreateTestCasesFromFileSchema.shape,
+    {
+      title: "Create Test Cases from File",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     (args, context) =>
       createTestCasesFromFileTool(args, context, config, server),
   );
@@ -815,6 +899,13 @@ export default function addTestManagementTools(
     "createLCASteps",
     "Generate Low Code Automation (LCA) steps for a test case in BrowserStack Test Management using the Low Code Automation Agent.",
     CreateLCAStepsSchema.shape,
+    {
+      title: "Create LCA Steps",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     (args, context) => createLCAStepsTool(args, context, config, server),
   );
 
@@ -822,6 +913,13 @@ export default function addTestManagementTools(
     "listTestPlans",
     "List test plans in a BrowserStack Test Management project. Returns each plan's identifier (TP-*), name, status, description, dates, and active/closed test-run counts. Supports pagination.",
     ListTestPlansSchema.shape,
+    {
+      title: "List Test Plans",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     (args) => listTestPlansTool(args, config, server),
   );
 
@@ -829,6 +927,13 @@ export default function addTestManagementTools(
     "getTestPlan",
     "Fetch a test plan by identifier (TP-*) from BrowserStack Test Management. Returns plan metadata, the full list of linked test runs, total test-case count across runs, and a status summary — suitable for generating test documentation or QA status reports.",
     GetTestPlanSchema.shape,
+    {
+      title: "Get Test Plan",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     (args) => getTestPlanTool(args, config, server),
   );
 
@@ -836,6 +941,13 @@ export default function addTestManagementTools(
     "listSubTestPlans",
     "List sub-test-plans under a parent test plan (TP-*) in a Test Management project. Supports pagination.",
     ListSubTestPlansSchema.shape,
+    {
+      title: "List Sub Test Plans",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     (args) => listSubTestPlansTool(args, config, server),
   );
 
@@ -843,6 +955,13 @@ export default function addTestManagementTools(
     "getSubTestPlan",
     "Fetch a sub-test-plan (STP-*) under a parent plan (TP-*). Returns metadata and linked test runs.",
     GetSubTestPlanSchema.shape,
+    {
+      title: "Get Sub Test Plan",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     (args) => getSubTestPlanTool(args, config, server),
   );
 

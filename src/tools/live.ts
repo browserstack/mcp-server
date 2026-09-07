@@ -128,6 +128,13 @@ export default function addBrowserLiveTools(
     "runBrowserLiveSession",
     "Launch a BrowserStack Live session (desktop or mobile).",
     LiveArgsShape,
+    {
+      title: "Run Browser Live Session",
+      readOnlyHint: false,
+      openWorldHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     async (args) => {
       try {
         trackMCP(

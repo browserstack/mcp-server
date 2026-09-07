@@ -1,5 +1,10 @@
 import { z } from "zod";
+import appConfig from "../../config.js";
 import { TestStatus } from "./types.js";
+
+export function getAutomationBaseUrl(): string {
+  return appConfig.BROWSERSTACK_AUTOMATION_BASE_URL;
+}
 
 export const FETCH_RCA_PARAMS = {
   testId: z
@@ -34,4 +39,8 @@ export const LIST_TEST_IDS_PARAMS = {
     .describe(
       "Filter tests by status. If not provided, all tests are returned. Example for RCA usecase always use failed status",
     ),
+  includeFailureDetail: z
+    .boolean()
+    .optional()
+    .describe("Add per-test failure signature for clustering. Default false."),
 };

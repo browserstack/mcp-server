@@ -32,7 +32,8 @@ describe('startBrowserLiveSession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     serverMock = {
-      tool: vi.fn((name, desc, schema, handler) => {
+      tool: vi.fn((...toolArgs: any[]) => {
+        const handler = toolArgs[toolArgs.length - 1];
         serverMock.handler = handler;
       }),
       server: {

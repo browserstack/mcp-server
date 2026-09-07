@@ -41,6 +41,8 @@ Click on the buttons below to install MCP in your respective IDE:
 
 <a href="http://mcp.browserstack.com/one-click-setup?client=vscode"><img src="assets/one-click-vs-code.png" alt="Install in VS Code" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="http://mcp.browserstack.com/one-click-setup?client=cursor"><img src="assets/one-click-cursor.png" alt="Install in Cursor" width="150" height="70"></a>
 
+> **Note:** The hosted Remote MCP server (`mcp.browserstack.com`) is now fully stateless over Streamable HTTP — any Streamable-HTTP client (Claude, Cursor, VS Code, ChatGPT) connects with no configuration change.
+
 #### Note : Ensure you are using Node version >= `18.0` 
 - Check your node version using `node --version`. Recommended version: `v22.15.0` (LTS)
 - To Upgrade Node :

@@ -11,6 +11,7 @@ import { getTestIds } from "../../src/tools/rca-agent-utils/get-failed-test-id";
 import { getRCAData } from "../../src/tools/rca-agent-utils/rca-data";
 import { formatRCAData } from "../../src/tools/rca-agent-utils/format-rca";
 import { getBrowserStackAuth } from "../../src/lib/get-auth";
+import { TestStatus } from "../../src/tools/rca-agent-utils/types";
 
 vi.mock("../../src/tools/rca-agent-utils/get-build-id", () => ({
   getBuildId: vi.fn(),
@@ -90,13 +91,52 @@ describe("RCA Agent Tools", () => {
       expect(parsed).toEqual([101, 102, 103]);
     });
 
+    it("SUCCESS: defaults includeFailureDetail to undefined when omitted", async () => {
+      (getTestIds as Mock).mockResolvedValue([
+        { test_id: 101, test_name: "a" },
+      ]);
+
+      await listTestIdsTool(
+        { buildId: "build-123", status: TestStatus.FAILED },
+        mockConfig,
+      );
+
+      expect(getTestIds).toHaveBeenCalledWith(
+        "build-123",
+        "fake-user:fake-key",
+        TestStatus.FAILED,
+        undefined,
+      );
+    });
+
+    it("SUCCESS: threads includeFailureDetail through to getTestIds", async () => {
+      (getTestIds as Mock).mockResolvedValue([
+        { test_id: 101, test_name: "a", failure: { category: "Assertion" } },
+      ]);
+
+      const result = await listTestIdsTool(
+        {
+          buildId: "build-123",
+          status: TestStatus.FAILED,
+          includeFailureDetail: true,
+        },
+        mockConfig,
+      );
+
+      expect(getTestIds).toHaveBeenCalledWith(
+        "build-123",
+        "fake-user:fake-key",
+        TestStatus.FAILED,
+        true,
+      );
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed[0].failure.category).toBe("Assertion");
+    });
+
     it("FAIL: returns isError on API failure", async () => {
       (getTestIds as Mock).mockRejectedValue(new Error("Invalid build"));
 
-      const result = await listTestIdsTool(
-        { buildId: "invalid" },
-        mockConfig,
-      );
+      const result = await listTestIdsTool({ buildId: "invalid" }, mockConfig);
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error listing test IDs");
@@ -141,10 +181,7 @@ describe("RCA Agent Tools", () => {
       (getRCAData as Mock).mockResolvedValue({ analysis: "root cause" });
       (formatRCAData as Mock).mockReturnValue("Formatted RCA: root cause");
 
-      const result = await fetchRCADataTool(
-        { testId: [101] },
-        mockConfig,
-      );
+      const result = await fetchRCADataTool({ testId: [101] }, mockConfig);
 
       expect(result.isError).toBeFalsy();
       expect(result.content[0].text).toBe("Formatted RCA: root cause");
@@ -153,10 +190,7 @@ describe("RCA Agent Tools", () => {
     it("FAIL: returns isError on API failure", async () => {
       (getRCAData as Mock).mockRejectedValue(new Error("RCA failed"));
 
-      const result = await fetchRCADataTool(
-        { testId: [999] },
-        mockConfig,
-      );
+      const result = await fetchRCADataTool({ testId: [999] }, mockConfig);
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error fetching RCA data");

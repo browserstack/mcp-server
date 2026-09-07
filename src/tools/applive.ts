@@ -106,6 +106,13 @@ export default function addAppLiveTools(
           "The path to the .ipa or .apk file to install on the device. Always ask the user for the app path, do not assume it.",
         ),
     },
+    {
+      title: "Run App Live Session",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     async (args) => {
       try {
         trackMCP(

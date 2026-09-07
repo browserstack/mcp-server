@@ -336,6 +336,13 @@ export default function addAppAutomationTools(
           "The path to the .apk or .ipa file. Required for app installation.",
         ),
     },
+    {
+      title: "Take App Screenshot",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -371,6 +378,13 @@ export default function addAppAutomationTools(
     "runAppTestsOnBrowserStack",
     RUN_APP_AUTOMATE_DESCRIPTION,
     RUN_APP_AUTOMATE_SCHEMA,
+    {
+      title: "Run App Tests on BrowserStack",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -412,6 +426,13 @@ export default function addAppAutomationTools(
     "setupBrowserStackAppAutomateTests",
     SETUP_APP_AUTOMATE_DESCRIPTION,
     SETUP_APP_AUTOMATE_SCHEMA,
+    {
+      title: "Set Up App Automate Tests",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         return await setupAppAutomateHandler(args, config);

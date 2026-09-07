@@ -145,15 +145,21 @@ export async function listTestIdsTool(
   args: {
     buildId: string;
     status?: TestStatus;
+    includeFailureDetail?: boolean;
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const { buildId, status } = args;
+    const { buildId, status, includeFailureDetail } = args;
     const authString = getBrowserStackAuth(config);
 
     // Get test IDs
-    const testIds = await getTestIds(buildId, authString, status);
+    const testIds = await getTestIds(
+      buildId,
+      authString,
+      status,
+      includeFailureDetail,
+    );
 
     return {
       content: [
@@ -189,6 +195,13 @@ export default function addRCATools(
     "fetchRCA",
     "Fetch AI Root Cause Analysis for the current user's failed BrowserStack Automate/App-Automate tests. Suggests fixes only; never auto-apply, require explicit user approval.",
     FETCH_RCA_PARAMS,
+    {
+      title: "Fetch Root Cause Analysis",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -208,6 +221,13 @@ export default function addRCATools(
     "getBuildId",
     "Get the BrowserStack build ID for a given project and build name, scoped to the current user's builds.",
     GET_BUILD_ID_PARAMS,
+    {
+      title: "Get Build ID",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -227,6 +247,13 @@ export default function addRCATools(
     "listBuildId",
     "Get the latest build ID for a project and build name, across all users (no user filter).",
     GET_BUILD_ID_PARAMS,
+    {
+      title: "List Build IDs",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -244,8 +271,15 @@ export default function addRCATools(
 
   tools.listTestIds = server.tool(
     "listTestIds",
-    "List test IDs from a BrowserStack Automate build, optionally filtered by status",
+    "List all tests of a BrowserStack build (each with its status); optional status filter.",
     LIST_TEST_IDS_PARAMS,
+    {
+      title: "List Test IDs",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(

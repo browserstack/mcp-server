@@ -59,6 +59,13 @@ export function registerPercyTools(
     "percyVisualTestIntegrationAgent",
     SIMULATE_PERCY_CHANGE_DESCRIPTION,
     SetUpPercyParamsShape,
+    {
+      title: "Percy Visual Test Integration Agent",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -82,6 +89,13 @@ export function registerPercyTools(
     "expandPercyVisualTesting",
     SETUP_PERCY_DESCRIPTION,
     SetUpPercyParamsShape,
+    {
+      title: "Expand Percy Visual Testing",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -100,6 +114,13 @@ export function registerPercyTools(
     "addPercySnapshotCommands",
     PERCY_SNAPSHOT_COMMANDS_DESCRIPTION,
     UpdateTestFileWithInstructionsParams,
+    {
+      title: "Add Percy Snapshot Commands",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -123,6 +144,13 @@ export function registerPercyTools(
     "listTestFiles",
     LIST_TEST_FILES_DESCRIPTION,
     {},
+    {
+      title: "List Test Files",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async () => {
       try {
         trackMCP("listTestFiles", server.server.getClientVersion()!, config);
@@ -137,6 +165,13 @@ export function registerPercyTools(
     "runPercyScan",
     "Run a Percy visual test scan. Example prompts : Run this Percy build/scan. Never run percy scan/build without this tool",
     RunPercyScanParamsShape,
+    {
+      title: "Run Percy Scan",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP("runPercyScan", server.server.getClientVersion()!, config);
@@ -151,6 +186,13 @@ export function registerPercyTools(
     "fetchPercyChanges",
     "Retrieves and summarizes all visual changes detected by Percy AI between the latest and previous builds, helping quickly review what has changed in your project.",
     FetchPercyChangesParamsShape,
+    {
+      title: "Fetch Percy Changes",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -169,6 +211,13 @@ export function registerPercyTools(
     "managePercyBuildApproval",
     "Approve or reject a Percy build",
     ManagePercyBuildApprovalParamsShape,
+    {
+      title: "Manage Percy Build Approval",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(

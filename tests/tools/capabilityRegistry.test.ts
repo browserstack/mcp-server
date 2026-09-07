@@ -3,15 +3,17 @@ import { describe, expect, it } from "vitest";
 import { bind, coerce } from "../../src/tools/capability-registry/bind.js";
 import { authHeaders } from "../../src/tools/capability-registry/egress.js";
 import {
-  CapabilityRegistry, InvocationError, IndexError,
+  CapabilityRegistry, InvocationError, IndexError, readIndexFile, resolveComponent,
 } from "../../src/tools/capability-registry/index-loader.js";
 import { invoke } from "../../src/tools/capability-registry/resolve.js";
 import { isCollection, searchCapabilities, terms } from "../../src/tools/capability-registry/search.js";
-import { Capability, RegistryIndex } from "../../src/tools/capability-registry/types.js";
+import {
+  Capability, ProductIndex, RegistryIndex,
+} from "../../src/tools/capability-registry/types.js";
 
 const LIST_CASES: Capability = {
   method: "GET", path: "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
-  mode: "read", entity: "test_case", paginated: true, max_items: 300,
+  mode: "read", entity: "test_case", paginated: true, max_page_size: 300,
   intent: "List the test cases in one folder",
   path_params: [
     { name: "project_id", type: "integer", required: true },
@@ -60,6 +62,173 @@ const INDEX: RegistryIndex = {
     },
   },
 };
+
+/** The released envelope: one product, at the top level, under its own name. */
+const RELEASED = {
+  schema_version: 1,
+  version: "1.2",
+  build_id: "050a1860_2026-09-02T08:36:09Z",
+  tm: INDEX.products.tm,
+};
+
+describe("reading the released envelope", () => {
+  it("finds the product under its own top-level key", () => {
+    const loaded = readIndexFile(RELEASED);
+    expect(loaded.name).toBe("tm");
+    expect(loaded.product.capabilities).toHaveLength(4);
+    expect(loaded.provenance).toEqual({
+      build_id: "050a1860_2026-09-02T08:36:09Z", version: "1.2",
+    });
+  });
+
+  it("distinguishes the shapes by the `products` wrapper, never by the version number", () => {
+    // Both envelopes declare schema_version 1, so the number cannot tell them apart.
+    expect(readIndexFile(INDEX as unknown).name).toBe("tm");
+    expect(readIndexFile(RELEASED).name).toBe("tm");
+    expect((INDEX as { schema_version: number }).schema_version)
+      .toBe((RELEASED as { schema_version: number }).schema_version);
+  });
+
+  it("carries `version` when the file has one, and copes when it does not", () => {
+    const { version, ...noVersion } = RELEASED;
+    expect(version).toBe("1.2");
+    expect(readIndexFile(noVersion).provenance.version).toBeUndefined();
+  });
+
+  it("refuses a file carrying more than one product", () => {
+    // One file describes one product; guessing which is meant decides what exists.
+    expect(() => readIndexFile({ ...RELEASED, a11y: INDEX.products.tm }))
+      .toThrow(/one file describes one product/);
+  });
+
+  it("refuses a file carrying none", () => {
+    expect(() => readIndexFile({ schema_version: 1, build_id: "x" }))
+      .toThrow(/no product object found/);
+  });
+
+  it("refuses a schema version it does not read", () => {
+    expect(() => readIndexFile({ ...RELEASED, schema_version: 2 })).toThrow(IndexError);
+  });
+});
+
+describe("the product name, stated by the path and by the file", () => {
+  it("reads the product from either layout", async () => {
+    const { productFromPath } =
+      await import("../../src/tools/capability-registry/index-loader.js");
+    // How they are stored here, and the flat name the export publishes.
+    expect(productFromPath("/pkg/capability/tm/index.json")).toBe("tm");
+    expect(productFromPath("/pkg/exported/a11y.capability-index.json")).toBe("a11y");
+    expect(productFromPath("/pkg/something-else.json")).toBeUndefined();
+  });
+});
+
+describe("merging one file per product", () => {
+  it("refuses a file stored under the wrong product's name", async () => {
+    // The name is stated twice — by the path and by the key inside. Trusting the path would
+    // serve tm's endpoints as a11y's, against a11y's host.
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "capability-"));
+    mkdirSync(join(root, "a11y"));
+    writeFileSync(
+      join(root, "a11y", "index.json"),
+      JSON.stringify({ schema_version: 1, build_id: "x", tm: INDEX.products.tm }),
+    );
+    expect(() => CapabilityRegistry.fromFiles([join(root, "a11y", "index.json")]))
+      .toThrow(/stored as product 'a11y' but declares 'tm'/);
+  });
+
+
+  it("ranks across products loaded from separate files", () => {
+    const registry = new CapabilityRegistry(
+      {
+        schema_version: 1, build_id: "tm:a a11y:b",
+        products: { tm: INDEX.products.tm, a11y: INDEX.products.tm },
+      },
+      { tm: { build_id: "a", version: "1.0" }, a11y: { build_id: "b" } },
+    );
+    expect(registry.productNames()).toEqual(["a11y", "tm"]);
+    expect(registry.buildInfo().tm.version).toBe("1.0");
+    // The same endpoint in two products is ambiguous until one is named.
+    expect(() => registry.byEndpointLookup("POST", CREATE_FOLDER.path))
+      .toThrow(/exists in several products/);
+    expect(registry.byEndpointLookup("POST", CREATE_FOLDER.path, "tm").product).toBe("tm");
+  });
+});
+
+describe("rarity across products", () => {
+  /**
+   * The shape that broke Load Testing: a big product whose vocabulary incidentally
+   * contains the small product's identifying word.
+   *
+   * `load` is in every one of `lts`'s capabilities, so measured per product it looked
+   * common there and scored as noise; it appears in two of `tcm`'s twelve — via
+   * `uploads` / `downloads`, which contain it as a substring — so it looked rare there and
+   * scored as gold. The word that identifies a product was worth least inside it.
+   */
+  const read = (path: string, entity: string): Capability => ({
+    method: "GET", path, mode: "read", entity, paginated: true,
+  });
+  const PRODUCTS = {
+    tcm: {
+      summary: "Test management",
+      capabilities: [
+        ...["test-cases", "test-runs", "test-plans", "folders", "tags", "users",
+          "reports", "datasets", "filters", "activities"].map((seg) =>
+          read(`/api/v1/projects/{project_id}/${seg}`, "test_case")),
+        read("/api/v1/projects/{project_id}/uploads", "attachment"),
+        read("/api/v1/projects/{project_id}/downloads", "attachment"),
+      ],
+      entities: { test_case: {}, attachment: {} },
+    },
+    lts: {
+      summary: "Load testing",
+      capabilities: [
+        read("/api/v1/agent/load-tests", "load_test"),
+        read("/api/v1/agent/load-tests/{test_id}/runs", "load_test"),
+        read("/api/v1/agent/projects/{project_id}/load-tests", "load_test"),
+      ],
+      entities: { load_test: {} },
+    },
+  } as unknown as Record<string, ProductIndex>;
+
+  it("does not let the larger product starve the smaller one", () => {
+    const hits = searchCapabilities(PRODUCTS, "list load tests", { limit: 3 });
+    expect(hits.hits[0].product).toBe("lts");
+    expect(hits.hits[0].capability.path).toBe("/api/v1/agent/load-tests");
+  });
+
+  it("still ranks within a single product when only one is searched", () => {
+    const hits = searchCapabilities(PRODUCTS, "list load tests", { product: "tcm" });
+    expect(hits.hits.every((hit) => hit.product === "tcm")).toBe(true);
+  });
+});
+
+describe("response component tables", () => {
+  // Additive and not yet emitted; absence must read as "no schema available", not an error.
+  const product = {
+    ...INDEX.products.tm,
+    responses: { NotFound: { description: "missing", schema: { $schema: "ErrorResponse" } } },
+    schemas: { ErrorResponse: { type: "object" }, Folder: { type: "object" } },
+  };
+
+  it("resolves a named reference in one hop", () => {
+    expect(resolveComponent(product, { $response: "NotFound" }))
+      .toEqual(product.responses.NotFound);
+    expect(resolveComponent(product, { $schema: "Folder" })).toEqual(product.schemas.Folder);
+  });
+
+  it("returns an inline node untouched", () => {
+    const inline = { description: "ok", schema: { type: "object" } };
+    expect(resolveComponent(product, inline)).toBe(inline);
+  });
+
+  it("yields undefined rather than throwing when the tables are absent", () => {
+    expect(resolveComponent(INDEX.products.tm, { $schema: "Folder" })).toBeUndefined();
+    expect(resolveComponent(product, undefined)).toBeUndefined();
+  });
+});
 
 describe("index loader", () => {
   it("refuses an index whose schema it does not understand", () => {
@@ -141,12 +310,12 @@ describe("search", () => {
 
   it("matches through the aliases the harness authored", () => {
     const hits = searchCapabilities(INDEX.products, "tc");
-    expect(hits.capabilities.map((c) => c.entity)).toContain("test_case");
+    expect(hits.hits.map((h) => h.capability.entity)).toContain("test_case");
   });
 
   it("ranks a write query onto the write endpoint", () => {
     const hits = searchCapabilities(INDEX.products, "create a folder");
-    expect(hits.capabilities[0].path).toBe(CREATE_FOLDER.path);
+    expect(hits.hits[0].capability.path).toBe(CREATE_FOLDER.path);
   });
 
   it("lets a penalty reorder without excluding", () => {
@@ -167,6 +336,69 @@ describe("auth", () => {
 
   it("refuses rather than sending unauthenticated", () => {
     expect(() => authHeaders({ username: "u", accessKey: "" })).toThrow(InvocationError);
+  });
+});
+
+describe("auth schemes", () => {
+  const CREDS = { username: "ing_Xx", accessKey: "SECRET" };
+
+  it("defaults to Api-Token when a product declares nothing", () => {
+    // Every shipped index relies on this; the default must survive the mechanism.
+    expect(authHeaders(CREDS)["Api-Token"]).toBe("ing_Xx:SECRET");
+  });
+
+  it("honours a declared header name and template", () => {
+    const headers = authHeaders(CREDS, {
+      type: "apiKey", in: "header", name: "X-Agent-Key",
+      template: "{username}_{access_key}",
+    });
+    // The separator is the product's to choose, not ours to hardcode.
+    expect(headers["X-Agent-Key"]).toBe("ing_Xx_SECRET");
+    expect(headers["Api-Token"]).toBeUndefined();
+  });
+
+  it("encodes HTTP Basic, which is what Load Testing is reported to want", () => {
+    const headers = authHeaders(CREDS, { type: "http", scheme: "basic" });
+    expect(headers.Authorization).toBe(
+      `Basic ${Buffer.from("ing_Xx:SECRET").toString("base64")}`,
+    );
+  });
+
+  it("keeps the attribution headers whatever the scheme", () => {
+    for (const auth of [undefined, { type: "http" as const, scheme: "basic" }]) {
+      expect(authHeaders(CREDS, auth)["request-source"]).toBe("ai-chatbot");
+    }
+  });
+
+  it("refuses a placeholder it cannot fill instead of sending it literally", () => {
+    // The harness really carries `{user_id}_{group_id}`. Emitting that verbatim would be a
+    // well-formed header that 401s, indistinguishable from bad credentials.
+    expect(() => authHeaders(CREDS, {
+      type: "apiKey", in: "header", name: "X-Auth-Override",
+      template: "{user_id}_{group_id}",
+    })).toThrow(/cannot fill: group_id, user_id/);
+  });
+
+  it("refuses to put a credential anywhere but a header", () => {
+    // A query parameter would leave the credential in access logs and proxies.
+    expect(() => authHeaders(CREDS, {
+      type: "apiKey", in: "query", name: "token",
+    })).toThrow(/can only send credentials in a header/);
+    expect(() => authHeaders(CREDS, {
+      type: "apiKey", in: "cookie", name: "session",
+    })).toThrow(/unsupported auth location/);
+  });
+
+  it("refuses a scheme it does not implement, by name", () => {
+    expect(() => authHeaders(CREDS, { type: "http", scheme: "bearer" }))
+      .toThrow(/unsupported auth scheme/);
+    expect(() => authHeaders(CREDS, { type: "oauth2" as never }))
+      .toThrow(/unsupported auth scheme/);
+  });
+
+  it("still refuses to send anything unauthenticated", () => {
+    expect(() => authHeaders({ username: "", accessKey: "" }, { type: "http", scheme: "basic" }))
+      .toThrow(/not authenticated/);
   });
 });
 
@@ -194,6 +426,21 @@ describe("invoke — one request, response returned untouched", () => {
       status: 200,
       body: { test_cases: [{ id: 1, leaked: "kept" }], info: { count: 880, next: null } },
     });
+  });
+
+  it("sends the product's declared scheme, not the default", async () => {
+    // The whole point: a product that wants Basic gets Basic, without the server knowing
+    // anything about that product by name.
+    const seen: Record<string, string>[] = [];
+    const transport = async (_m: string, _u: string, headers: Record<string, string>) => {
+      seen.push(headers);
+      return { status: 200, body: {} };
+    };
+    await invoke(LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
+      "https://x.example", { username: "u", accessKey: "k" }, transport,
+      { type: "http", scheme: "basic" });
+    expect(seen[0].Authorization).toBe(`Basic ${Buffer.from("u:k").toString("base64")}`);
+    expect(seen[0]["Api-Token"]).toBeUndefined();
   });
 
   it("says the answer is incomplete when the envelope declares another page", async () => {

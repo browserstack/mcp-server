@@ -294,7 +294,7 @@ Select the “Installed” tab. Click the “Configure MCP Servers” button at 
 
 ### 💡 List of BrowserStack MCP Tools
 
-As of now we support 50 tools.
+As of now we support 45 tools.
 
 > **Remote MCP note:** Tools marked _(not available in Remote MCP)_ rely on local file/process state and are disabled in the multi-tenant [Remote MCP Server](#-remote-mcp-server). They are available in the local (npx) setup.
 

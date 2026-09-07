@@ -1,3 +1,4 @@
+import appConfig from "../../config.js";
 import logger from "../../logger.js";
 
 /**
@@ -26,7 +27,13 @@ export const ELICITATION_TIMEOUT_MS = 270_000;
 /** Thrown for anything this tool refuses to attempt. Never carries a credential. */
 export class AskError extends Error {}
 
-/** Off by default is wrong for a shipped feature, but a kill switch is not. */
+/**
+ * Off by default is wrong for a shipped feature, but a kill switch is not.
+ *
+ * The only setting here still read from `process.env` per call, and deliberately: a kill
+ * switch that needs a process restart is slowest exactly when it is needed fastest. The
+ * other three are on the config singleton (rules/tool-design.md).
+ */
 export function isEnabled(): boolean {
   return (process.env.ASK_BROWSERSTACK_DISABLED || "").toLowerCase() !== "true";
 }
@@ -45,10 +52,7 @@ export function isEnabled(): boolean {
  * run. This flag only removes the blanket refusal.
  */
 export function allowRemoteRelay(): boolean {
-  return (
-    (process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY || "").toLowerCase() ===
-    "true"
-  );
+  return appConfig.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
 }
 
 /**
@@ -123,7 +127,7 @@ function announce(what: string, url: string, source: "env" | "default"): void {
  * no selector: one default, one override.
  */
 export function atlasBaseUrl(): string {
-  const explicit = process.env.ASK_BROWSERSTACK_ATLAS_URL;
+  const explicit = appConfig.ASK_BROWSERSTACK_ATLAS_URL;
   const url =
     explicit && explicit.trim() ? trimUrl(explicit) : DEFAULT_ATLAS_URL;
   announce("Atlas", url, explicit && explicit.trim() ? "env" : "default");
@@ -142,7 +146,7 @@ export function agentUrl(): string {
  * the only way in. Same two rungs as the host, and the same staging default.
  */
 export function authTokenUrl(): string {
-  const explicit = process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
+  const explicit = appConfig.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
   const url =
     explicit && explicit.trim() ? trimUrl(explicit) : DEFAULT_AUTH_TOKEN_URL;
   announce(

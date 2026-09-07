@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { parseAsk } from "../../src/tools/ask-browserstack/stream.js";
 import {
@@ -1077,6 +1077,40 @@ describe("a 2xx carrying no delegation result is internally consistent (N4)", ()
   });
 });
 
+
+/**
+ * The host settings live on the config singleton now, which reads process.env ONCE at module
+ * load (rules/tool-design.md), so setting env mid-test no longer changes anything. A test
+ * that wants a different value sets it and reloads the graph — the same shape
+ * tests/lib/tm-base-url.test.ts uses, and what askBrowserstackE2E's buildRemoteServer
+ * already does for REMOTE_MCP.
+ *
+ * `capture` exists because the reload also gives the config module a FRESH logger module,
+ * dropping any capture installed on the old one — so the announce tests reinstall theirs
+ * here, after the reset, or they assert against an empty array.
+ */
+async function withHostEnv(
+  env: Record<string, string | undefined>,
+  capture?: (...args: unknown[]) => void,
+) {
+  vi.resetModules();
+  for (const [k, v] of Object.entries(env)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  if (capture) {
+    const { setLogger } = await import("../../src/logger.js");
+    setLogger({
+      info: capture,
+      warn: capture,
+      error: capture,
+      debug: capture,
+      flush: () => {},
+    } as any);
+  }
+  return await import("../../src/tools/ask-browserstack/config.js");
+}
+
 describe("host resolution — one hardcoded staging default, one override", () => {
   const saved = { ...process.env };
 
@@ -1106,11 +1140,13 @@ describe("host resolution — one hardcoded staging default, one override", () =
     expect(() => authTokenUrl()).not.toThrow();
   });
 
-  it("lets the explicit override win, for both", () => {
-    process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
-    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = "https://auth.example/t";
-    expect(atlasBaseUrl()).toBe("https://atlas.example");
-    expect(authTokenUrl()).toBe("https://auth.example/t");
+  it("lets the explicit override win, for both", async () => {
+    const m = await withHostEnv({
+      ASK_BROWSERSTACK_ATLAS_URL: "https://atlas.example",
+      ASK_BROWSERSTACK_AUTH_TOKEN_URL: "https://auth.example/t",
+    });
+    expect(m.atlasBaseUrl()).toBe("https://atlas.example");
+    expect(m.authTokenUrl()).toBe("https://auth.example/t");
   });
 
   it("ignores a blank override rather than resolving to an empty host", () => {
@@ -1118,13 +1154,15 @@ describe("host resolution — one hardcoded staging default, one override", () =
     expect(atlasBaseUrl()).toBe(DEFAULT_ATLAS_URL);
   });
 
-  it("strips trailing slashes, and the defaults carry none", () => {
-    process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example///";
+  it("strips trailing slashes, and the defaults carry none", async () => {
+    const m = await withHostEnv({
+      ASK_BROWSERSTACK_ATLAS_URL: "https://atlas.example///",
+    });
     // Otherwise `${base}/agent` becomes `//agent`.
-    expect(atlasBaseUrl()).toBe("https://atlas.example");
-    expect(agentUrl()).toBe("https://atlas.example/agent");
-    expect(DEFAULT_ATLAS_URL.endsWith("/")).toBe(false);
-    expect(DEFAULT_AUTH_TOKEN_URL.endsWith("/")).toBe(false);
+    expect(m.atlasBaseUrl()).toBe("https://atlas.example");
+    expect(m.agentUrl()).toBe("https://atlas.example/agent");
+    expect(m.DEFAULT_ATLAS_URL.endsWith("/")).toBe(false);
+    expect(m.DEFAULT_AUTH_TOKEN_URL.endsWith("/")).toBe(false);
   });
 
   it("takes no notice of an environment selector any more", () => {
@@ -1140,27 +1178,32 @@ describe("host resolution — one hardcoded staging default, one override", () =
 describe("the resolved host is announced, so a wrong deployment is visible", () => {
   const saved = { ...process.env };
   let lines: string[];
+  // The module under test, re-imported per test. The host is a startup setting on the config
+  // singleton now, so every case here is really "start with this env and see what is
+  // announced" — and the reload has to happen BEFORE the logger capture is installed, or the
+  // capture lands on a logger module the reloaded config no longer holds a reference to.
+  let mod: typeof import("../../src/tools/ask-browserstack/config.js");
 
   beforeEach(async () => {
-    delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
-    resetHostAnnouncements();
     lines = [];
-    const { setLogger } = await import("../../src/logger.js");
-    const capture = (...args: unknown[]) => lines.push(args.map(String).join(" "));
-    setLogger({ info: capture, warn: capture, error: capture, debug: capture, flush: () => {} });
+    mod = await withHostEnv(
+      { ASK_BROWSERSTACK_ATLAS_URL: undefined },
+      (...args: unknown[]) => lines.push(args.map(String).join(" ")),
+    );
+    mod.resetHostAnnouncements();
   });
 
   afterEach(async () => {
     process.env = { ...saved };
-    resetHostAnnouncements();
+    mod.resetHostAnnouncements();
     const { setLogger } = await import("../../src/logger.js");
     const { pino } = await import("pino");
     setLogger(pino({ level: "silent" }));
   });
 
   it("names the default as the source when nothing is configured", () => {
-    atlasBaseUrl();
-    authTokenUrl();
+    mod.atlasBaseUrl();
+    mod.authTokenUrl();
     // The logger is printf-style, so the captured args arrive alongside the format string.
     const everything = lines.join("\n");
     expect(everything).toContain("source:");
@@ -1170,15 +1213,18 @@ describe("the resolved host is announced, so a wrong deployment is visible", () 
     );
   });
 
-  it("names the env var as the source when one is set", () => {
-    process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
-    atlasBaseUrl();
+  it("names the env var as the source when one is set", async () => {
+    const m = await withHostEnv(
+      { ASK_BROWSERSTACK_ATLAS_URL: "https://atlas.example" },
+      (...args: unknown[]) => lines.push(args.map(String).join(" ")),
+    );
+    m.atlasBaseUrl();
     expect(lines.join("\n")).toContain("Atlas https://atlas.example env");
     expect(lines.join("\n")).not.toContain("default");
   });
 
   it("announces once, not on every call, and never carries a credential", () => {
-    for (let i = 0; i < 5; i += 1) atlasBaseUrl();
+    for (let i = 0; i < 5; i += 1) mod.atlasBaseUrl();
     expect(lines.filter((l) => l.includes("Atlas"))).toHaveLength(1);
     const everything = lines.join("\n");
     expect(everything).not.toContain("SECRET");
@@ -1186,11 +1232,22 @@ describe("the resolved host is announced, so a wrong deployment is visible", () 
     expect(everything).not.toMatch(/Bearer/);
   });
 
-  it("announces again when the host actually changes", () => {
-    atlasBaseUrl();
+  it("cannot change host mid-process; a fresh start announces the new one", async () => {
+    // This used to set the env var between two calls and expect a SECOND announcement. That
+    // is no longer possible, and the change is the point: the host is a startup setting on
+    // the config singleton, so within one process it is fixed. What is still worth
+    // asserting is that a different startup announces its own host.
+    mod.atlasBaseUrl();
     process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
-    atlasBaseUrl();
-    expect(lines.filter((l) => l.includes("Atlas"))).toHaveLength(2);
+    mod.atlasBaseUrl();
+    expect(lines.filter((l) => l.includes("Atlas"))).toHaveLength(1);
+
+    const m = await withHostEnv(
+      { ASK_BROWSERSTACK_ATLAS_URL: "https://atlas.example" },
+      (...args: unknown[]) => lines.push(args.map(String).join(" ")),
+    );
+    m.atlasBaseUrl();
+    expect(lines.join("\n")).toContain("Atlas https://atlas.example env");
   });
 });
 

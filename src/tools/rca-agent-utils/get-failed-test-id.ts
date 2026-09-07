@@ -84,6 +84,16 @@ export async function getTestIds(
   }
 }
 
+/**
+ * The test listing API serialises a missing BrowserStack session id as the
+ * literal string "null", so treat that (and blanks) as absent.
+ */
+function extractSessionId(rawSessionId: unknown): string | undefined {
+  if (typeof rawSessionId !== "string") return undefined;
+  const sessionId = rawSessionId.trim();
+  return sessionId && sessionId !== "null" ? sessionId : undefined;
+}
+
 export function extractTestIds(
   hierarchy: TestDetails[],
   status?: TestStatus,
@@ -99,10 +109,12 @@ export function extractTestIds(
     if (statusMatches && node.details?.observability_url) {
       const idMatch = node.details.observability_url.match(/details=(\d+)/);
       if (idMatch) {
+        const sessionId = extractSessionId(node.details.session_id);
         const entry: FailedTestInfo = {
           test_id: idMatch[1],
           test_name: node.display_name || `Test ${idMatch[1]}`,
           status: nodeStatus,
+          ...(sessionId && { session_id: sessionId }),
         };
         // Failure signatures only exist for failed tests; include when asked.
         if (includeFailureDetail && nodeStatus === TestStatus.FAILED) {

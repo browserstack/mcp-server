@@ -6,6 +6,53 @@ import { AskError } from "../../src/tools/ask-browserstack/config.js";
 import { resetTokenCache } from "../../src/tools/ask-browserstack/central-oauth.js";
 import { addAskBrowserStackAITool } from "../../src/tools/ask-browserstack/register.js";
 
+// `apiClient` adapted onto the global `fetch` stub these tests already install.
+//
+// The token mint and the decision POST moved off bare `fetch` onto `src/lib/apiClient.ts`
+// (rules/security.md), which would otherwise bypass every `vi.stubGlobal("fetch", ...)` here
+// and leave the mint unanswered. Rather than restub every test at the axios layer, the seam
+// is adapted: same stubs, same assertions, same coverage.
+//
+// Scoped to those TWO urls on purpose. `trackMCP` also posts through apiClient, so a
+// blanket delegation sent instrumentation into the fetch stubs — which made
+// api.browserstack.com/sdk/v1/event show up in url assertions and hung tests whose stub had
+// no answer for it. Anything that is not the mint or a decision resolves benignly without
+// touching fetch, which is how instrumentation behaved before this change.
+const DELEGATED_TO_FETCH = (url: string) =>
+  /\/oauth2\/v2\/token$/.test(url) || /\/agent\/[^/]+\/permission$/.test(url);
+
+vi.mock("../../src/lib/apiClient.js", () => ({
+  apiClient: {
+    post: async ({ url, headers, body }: any) => {
+      const target = String(url);
+      if (!DELEGATED_TO_FETCH(target)) {
+        return { status: 200, data: null, ok: true };
+      }
+      const res: any = await (globalThis.fetch as any)(target, {
+        method: "POST",
+        headers,
+        // Serialised the way axios would. apiClient takes the body as an OBJECT, while the
+        // old bare-fetch transports pre-stringified it — and these stubs read `init.body`
+        // with JSON.parse, so passing the object through made them throw, which surfaced as
+        // a 5s timeout rather than an assertion failure.
+        body: typeof body === "string" ? body : JSON.stringify(body),
+      });
+      let data: unknown = null;
+      try {
+        data = await res.json?.();
+      } catch {
+        data = null;
+      }
+      return {
+        status: res.status,
+        data,
+        ok: res.status >= 200 && res.status < 300,
+      };
+    },
+  },
+}));
+
+
 const CONFIG = {
   "browserstack-username": "ing_Xx",
   "browserstack-access-key": "SECRET",

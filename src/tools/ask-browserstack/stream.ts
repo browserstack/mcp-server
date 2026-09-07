@@ -23,6 +23,7 @@
  * not risk the fail-closed behaviour.
  */
 
+import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
 import { AskError } from "./config.js";
 import type { AgentRequest, PermissionAsk } from "./types.js";
@@ -250,15 +251,16 @@ export function fetchAgentStreamTransport(
 /** The decision POST. 30s, because it is an ordinary short request. */
 export function fetchDecisionTransport(timeoutMs = 30_000): DecisionTransport {
   return async (url, headers, body) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, {
-        method: "POST",
+      // Through `apiClient` per rules/security.md. `raise_error: false` because the caller
+      // reads the STATUS: a 404 (run gone) and a 409 (already decided) are both answers,
+      // and a thrown AxiosError would collapse them into the unreachable case below.
+      const response = await apiClient.post<unknown>({
+        url,
         headers,
-        body: JSON.stringify(body),
-        redirect: "manual",
-        signal: controller.signal,
+        body,
+        timeout: timeoutMs,
+        raise_error: false,
       });
       return response.status;
     } catch {
@@ -266,8 +268,6 @@ export function fetchDecisionTransport(timeoutMs = 30_000): DecisionTransport {
       // a lost decision is safe — it is never an approval. 0 says "never delivered" so
       // the caller can say that rather than implying a human refused.
       return 0;
-    } finally {
-      clearTimeout(timer);
     }
   };
 }

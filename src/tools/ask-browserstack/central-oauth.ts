@@ -16,6 +16,7 @@
 
 import { createHash } from "node:crypto";
 
+import { apiClient } from "../../lib/apiClient.js";
 import appConfig from "../../config.js";
 import logger from "../../logger.js";
 import { AGENT_TIMEOUT_MS, AskError } from "./config.js";
@@ -199,38 +200,33 @@ function cacheKey(url: string, credentials: Credentials): string {
   return `${url} ${credentials.username} ${CENTRAL_SCOPE} ${digest}`;
 }
 
-/** A fetch-based transport for the token endpoint. */
+/**
+ * The token endpoint, through `apiClient` per rules/security.md — no bare `fetch`.
+ *
+ * `raise_error: false` keeps the status-first contract this transport has always had: the
+ * caller distinguishes a 400 scope refusal from a 401 rejection from an unreachable host,
+ * so a thrown AxiosError on any non-2xx would destroy the only signal it reads.
+ */
 export function fetchTokenTransport(
   timeoutMs = TOKEN_TIMEOUT_MS,
 ): TokenTransport {
   return async (url, form) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, {
-        method: "POST",
+      const response = await apiClient.post<unknown>({
+        url,
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
           Accept: "application/json",
         },
         body: new URLSearchParams(form).toString(),
-        redirect: "manual",
-        signal: controller.signal,
+        timeout: timeoutMs,
+        raise_error: false,
       });
-      let parsed: unknown = null;
-      try {
-        parsed = await response.json();
-      } catch {
-        // An HTML error page behind any status. The caller only reads the status.
-        parsed = null;
-      }
-      return { status: response.status, body: parsed };
+      return { status: response.status, body: response.data ?? null };
     } catch {
       // DNS, TLS, timeout — all of them mean "no token". The reason is deliberately not
       // carried: it can name the URL and, on some stacks, echo the request body.
       return { status: 0, body: null, error: "auth could not be reached" };
-    } finally {
-      clearTimeout(timer);
     }
   };
 }

@@ -37,6 +37,28 @@ export const NEEDS_TEST_PLAN_ID = needsIdFrom(
   "listTestPlans",
 );
 
+/**
+ * The ONLY capability handoff here: every other constant points at a tool that produces a
+ * missing *id*, but plan WRITES have no tool at all — the surface is `listTestPlans`,
+ * `getTestPlan`, `listSubTestPlans`, `getSubTestPlan` and nothing else. Atlas can do them
+ * (the tm harness allows POST /api/v1/projects/{id}/test-plans plus /update, /delete,
+ * /clone, /test-runs and /test-runs/unlink), so without this line the model reads the four
+ * read tools, finds no create, and reports the capability as absent — which is exactly what
+ * a QA eval concluded.
+ *
+ * Deliberately narrow: it names the specific operations that are missing rather than
+ * inviting the model to route plan work to the agent generally, because the tool
+ * descriptions otherwise say to prefer a specific tool whenever one fits.
+ *
+ * Caveat worth knowing: askBrowserStackAI pins every write to human approval, so this path
+ * only completes on a client that can show a prompt. On one that cannot, the intended write
+ * comes back in `needs_approval` instead of happening.
+ */
+export const PLAN_WRITES_VIA_AGENT =
+  " Creating a test plan or sub-plan, and linking or unlinking test runs on one, are not " +
+  'available as tools here: call askBrowserStackAI with product "tm" and describe what you ' +
+  "want. It asks you to confirm before changing anything.";
+
 /** A build id comes from either build-lookup tool. */
 export const NEEDS_BUILD_ID = needsIdFrom(
   "a BrowserStack build id",

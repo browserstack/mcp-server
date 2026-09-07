@@ -1658,3 +1658,56 @@ describe('listTemplates', () => {
     expect(text).toContain('No templates matching "nope"');
   });
 });
+
+describe("test-plan tools point writes at askBrowserStackAI", () => {
+  // There is no createTestPlan tool and no link/unlink tool — the plan surface here is four
+  // READ tools. Atlas can do the writes (the tm harness allows POST .../test-plans plus
+  // /update, /delete, /clone, /test-runs and /test-runs/unlink), so without a pointer the
+  // model finds no create and reports the capability as absent. A QA eval concluded exactly
+  // that, which is why this is pinned rather than left to the description prose.
+  //
+  // Registrations are captured into a fresh fake server rather than read off the
+  // module-scope `mockServer.tool` spy: that spy's calls are cleared between tests, so its
+  // boot-time registrations are gone by the time this runs.
+  const captured: Record<string, string> = {};
+  const capturing: any = { server: { getClientVersion: () => "test-version" } };
+  capturing.tool = (name: string, description: string) => {
+    captured[name] = description;
+  };
+  addTestManagementTools(capturing, mockConfig as any);
+
+  const descriptionOf = (name: string): string => {
+    expect(captured[name], `tool ${name} is not registered`).toBeTruthy();
+    return captured[name];
+  };
+
+  const PLAN_TOOLS = [
+    "listTestPlans",
+    "getTestPlan",
+    "listSubTestPlans",
+    "getSubTestPlan",
+  ];
+
+  it.each(PLAN_TOOLS)("%s names the agent as the way to write a plan", (name) => {
+    const d = descriptionOf(name);
+    expect(d).toMatch(/not available as tools here/);
+    expect(d).toMatch(/askBrowserStackAI with product "tm"/);
+    // The consent property matters: nobody should think this happens silently.
+    expect(d).toMatch(/asks you to confirm/);
+  });
+
+  it("names the missing OPERATIONS, so it is not a general invitation to use the agent", () => {
+    // If this ever broadens to "use the agent for plans", the routing advantage of the
+    // specific read tools is lost — the descriptions elsewhere say to prefer a real tool.
+    const d = descriptionOf("listTestPlans");
+    expect(d).toMatch(/Creating a test plan or sub-plan/);
+    expect(d).toMatch(/linking or unlinking test runs/);
+  });
+
+  it("leaves non-plan tools alone", () => {
+    // Scoped deliberately: LCA and accessibility tools were excluded from this change.
+    for (const name of ["createTestCase", "createTestRun", "createLCASteps"]) {
+      expect(descriptionOf(name)).not.toMatch(/not available as tools here/);
+    }
+  });
+});

@@ -294,7 +294,7 @@ Select the “Installed” tab. Click the “Configure MCP Servers” button at 
 
 ### 💡 List of BrowserStack MCP Tools
 
-As of now we support 44 tools.
+As of now we support 50 tools.
 
 > **Remote MCP note:** Tools marked _(not available in Remote MCP)_ rely on local file/process state and are disabled in the multi-tenant [Remote MCP Server](#-remote-mcp-server). They are available in the local (npx) setup.
 
@@ -426,25 +426,25 @@ As of now we support 44 tools.
   Get screenshots from Automate session ID abc123xyz for my desktop test run
   ```
 
- 18. `listSessions` — List Automate/App Automate sessions for a REST hashed build ID (dashboard URL), including hashed session IDs and session details (name, status, OS, browser/device, dashboard URL). This is **not** the observability UUID from `getBuildId` / `listBuildId`. If you only have that UUID, use `hashed_id` from `fetchBuildInsights` when present. Same build-id family as App Automate `getFailureLogs`. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`.
+ 18. `listSessions` — List the sessions in an Automate/App Automate build. Each record carries `sessionId`, `name`, `status`, `os`, `osVersion`, `browser`, `device`, and `browserUrl` (dashboard link), with optional `limit` / `offset` paging and a client-side `status` filter. Takes the **hashed** build ID from the dashboard URL — not the observability UUID returned by `getBuildId` / `listBuildId`; if you only have that UUID, use `hashed_id` from `fetchBuildInsights` when present. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`.
   **Prompt example**
 
   ```text
-  List sessions for Automate hashed build ID ca9cccc228cf0e3ff3cb90dd62e2e2bfb4b20bc7
+  List sessions for Automate hashed build ID <hashed build id>
   ```
 
 ---
 
 ## 🔍 Observability
 
- 19. `getFailureLogs` — Retrieve error logs for Automate/App Automate sessions (optionally by hashed Build ID for App Automate; if you only have an observability UUID, use `hashed_id` from `fetchBuildInsights` when present).
+ 19. `getFailureLogs` — Retrieve error logs for Automate/App Automate sessions. App Automate log endpoints are build-scoped, so a hashed build ID is required there — pass one if you have it, otherwise it is resolved from the session automatically.
   **Prompt example**
 
   ```text
-  Get the error logs from the session ID: 21a864032a7459f1e7634222249b316759d6827f, Build ID: dt7ung4wmjittzff8kksrjadjax9gzvbscoyf9qn of App Automate test session
+  Get the Appium logs for App Automate session ID <session id>
   ```
 
- 20. `fetchBuildInsights` — Fetch insights about a BrowserStack build by combining build details and quality-gate results. Includes `hashed_id` (Automate REST build id) when observability provides it or Automate REST can resolve it.
+ 20. `fetchBuildInsights` — Fetch insights about a BrowserStack build by combining build details and quality-gate results. Includes `hashed_id` (the hashed build id `listSessions` takes) when the build payload reports one.
   **Prompt example**
 
   ```text

@@ -16,6 +16,8 @@ import {
   retrieveCrashLogs,
 } from "./failurelogs-utils/app-automate.js";
 
+import { resolveAppAutomateBuildId } from "./failurelogs-utils/resolve-app-build-id.js";
+
 import {
   AppAutomateLogType,
   AutomateLogType,
@@ -43,8 +45,12 @@ export async function getFailureLogs(
     throw new Error("Session ID is required");
   }
 
-  if (args.sessionType === SessionType.AppAutomate && !args.buildId) {
-    throw new Error("Build ID is required for app-automate sessions");
+  let buildId = args.buildId;
+  if (args.sessionType === SessionType.AppAutomate && !buildId) {
+    buildId = await resolveAppAutomateBuildId(args.sessionId, config);
+    if (!buildId) {
+      throw new Error("Build ID is required for app-automate sessions");
+    }
   }
 
   // Validate log types and collect errors
@@ -118,31 +124,19 @@ export async function getFailureLogs(
         }
 
         case AppAutomateLogType.DeviceLogs: {
-          response = await retrieveDeviceLogs(
-            args.sessionId,
-            args.buildId!,
-            config,
-          );
+          response = await retrieveDeviceLogs(args.sessionId, buildId!, config);
           results.push({ type: "text", text: response });
           break;
         }
 
         case AppAutomateLogType.AppiumLogs: {
-          response = await retrieveAppiumLogs(
-            args.sessionId,
-            args.buildId!,
-            config,
-          );
+          response = await retrieveAppiumLogs(args.sessionId, buildId!, config);
           results.push({ type: "text", text: response });
           break;
         }
 
         case AppAutomateLogType.CrashLogs: {
-          response = await retrieveCrashLogs(
-            args.sessionId,
-            args.buildId!,
-            config,
-          );
+          response = await retrieveCrashLogs(args.sessionId, buildId!, config);
           results.push({ type: "text", text: response });
           break;
         }
@@ -187,7 +181,7 @@ export default function registerGetFailureLogs(
         .string()
         .optional()
         .describe(
-          "Required only when sessionType is 'app-automate'. If sessionType is 'app-automate', always ask the user to provide the build ID before proceeding.",
+          "App Automate build ID. Optional — resolved from the session if omitted.",
         ),
       logTypes: z
         .array(

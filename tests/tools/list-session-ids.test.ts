@@ -233,7 +233,9 @@ describe("listSessionIdsTool", () => {
     expect(result.content[0].text).toContain("No sessions found");
   });
 
-  it("returns isError on API failure", async () => {
+  // Rethrows rather than returning isError, so the registered tool handler
+  // records the failure in telemetry before replying to the client.
+  it("throws on API failure", async () => {
     (apiClient.get as Mock).mockResolvedValue({
       ok: false,
       status: 404,
@@ -241,12 +243,11 @@ describe("listSessionIdsTool", () => {
       data: {},
     });
 
-    const result = await listSessionIdsTool(
-      { sessionType: SessionType.Automate, buildId: "bad" },
-      mockConfig,
-    );
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Error listing session IDs");
+    await expect(
+      listSessionIdsTool(
+        { sessionType: SessionType.Automate, buildId: "bad" },
+        mockConfig,
+      ),
+    ).rejects.toThrow();
   });
 });

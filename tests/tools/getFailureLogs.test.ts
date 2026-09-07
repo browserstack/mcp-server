@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getFailureLogs } from '../../src/tools/get-failure-logs';
 import * as automate from '../../src/tools/failurelogs-utils/automate';
 import * as appAutomate from '../../src/tools/failurelogs-utils/app-automate';
+import { resolveAppAutomateBuildId } from '../../src/tools/failurelogs-utils/resolve-app-build-id';
 
 vi.mock('../../src/config', () => ({
   __esModule: true,
@@ -13,6 +14,10 @@ vi.mock('../../src/config', () => ({
 
 vi.mock('../../src/lib/instrumentation', () => ({
   trackMCP: vi.fn()
+}));
+
+vi.mock('../../src/tools/failurelogs-utils/resolve-app-build-id', () => ({
+  resolveAppAutomateBuildId: vi.fn(),
 }));
 
 // Mock the utility functions with implementations
@@ -73,13 +78,53 @@ describe('BrowserStack Failure Logs', () => {
       }, mockServer)).rejects.toThrow('Session ID is required');
     });
 
-    it('should throw error if buildId is not provided for app-automate session', async () => {
+    it('should throw error if buildId is not provided and cannot be resolved for app-automate session', async () => {
       const mockServer = { server: { getClientVersion: () => "test-version" } };
+      (resolveAppAutomateBuildId as any).mockResolvedValue(undefined);
       await expect(getFailureLogs({
         sessionId: 'test-session',
         logTypes: ['deviceLogs'],
         sessionType: 'app-automate'
       }, mockServer)).rejects.toThrow('Build ID is required for app-automate sessions');
+    });
+
+    it('should resolve buildId from the session when not provided', async () => {
+      const mockServer = { server: { getClientVersion: () => "test-version" } };
+      (resolveAppAutomateBuildId as any).mockResolvedValue('resolved-build-id');
+      vi.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue('device logs');
+
+      const result = await getFailureLogs({
+        sessionId: 'test-session',
+        logTypes: ['deviceLogs'],
+        sessionType: 'app-automate'
+      }, mockServer);
+
+      expect(resolveAppAutomateBuildId).toHaveBeenCalledWith('test-session', mockServer);
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(
+        'test-session',
+        'resolved-build-id',
+        mockServer,
+      );
+      expect(result.isError).toBeFalsy();
+    });
+
+    it('should not resolve buildId when the caller supplies one', async () => {
+      const mockServer = { server: { getClientVersion: () => "test-version" } };
+      vi.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue('device logs');
+
+      await getFailureLogs({
+        sessionId: 'test-session',
+        buildId: 'explicit-build-id',
+        logTypes: ['deviceLogs'],
+        sessionType: 'app-automate'
+      }, mockServer);
+
+      expect(resolveAppAutomateBuildId).not.toHaveBeenCalled();
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(
+        'test-session',
+        'explicit-build-id',
+        mockServer,
+      );
     });
 
     it('should return error for invalid log types', async () => {

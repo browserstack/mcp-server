@@ -103,17 +103,7 @@ export async function listSessionIdsTool(
     };
   } catch (error) {
     logger.error("Error listing session IDs", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error listing session IDs: ${errorMessage}`,
-        },
-      ],
-      isError: true,
-    };
+    throw error;
   }
 }
 
@@ -175,13 +165,7 @@ export default function addAutomationTools(
 
   tools.listSessions = server.tool(
     "listSessions",
-    "List Automate/App Automate sessions for a hashed build ID, including " +
-      "hashed session IDs and session details (name, status, OS, browser/device, " +
-      "and dashboard URL). Use the dashboard hashed build id (same family as " +
-      "App Automate getFailureLogs buildId). If you only have an observability " +
-      "UUID from getBuildId or listBuildId, call fetchBuildInsights and use " +
-      "hashed_id when present. Returned sessionId values work with getFailureLogs, " +
-      "fetchAutomationScreenshots, and fetchSelfHealedSelectors.",
+    "List sessions for a hashed Automate/App Automate build: session IDs, status, OS, browser/device, dashboard URL.",
     {
       sessionType: z
         .enum([SessionType.Automate, SessionType.AppAutomate])
@@ -189,10 +173,7 @@ export default function addAutomationTools(
       buildId: z
         .string()
         .describe(
-          "REST hashed Automate/App Automate build ID from the dashboard URL " +
-            "or hashed_id from fetchBuildInsights (not the observability UUID " +
-            "from getBuildId / listBuildId). Same ID family as App Automate " +
-            "getFailureLogs buildId.",
+          "Dashboard hashed build id or fetchBuildInsights hashed_id — not the getBuildId UUID.",
         ),
       limit: z
         .number()

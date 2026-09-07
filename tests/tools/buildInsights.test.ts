@@ -1,26 +1,11 @@
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import { fetchBuildInsightsTool } from "../../src/tools/build-insights";
 import { fetchFromBrowserStackAPI } from "../../src/lib/utils";
-import { resolveHashedBuildId } from "../../src/tools/automate-utils/resolve-hashed-build-id";
-import { SessionType } from "../../src/lib/constants";
 
 vi.mock("../../src/lib/utils", () => ({
   fetchFromBrowserStackAPI: vi.fn(),
   handleMCPError: vi.fn(),
 }));
-vi.mock(
-  "../../src/tools/automate-utils/resolve-hashed-build-id",
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import("../../src/tools/automate-utils/resolve-hashed-build-id")
-      >();
-    return {
-      ...actual,
-      resolveHashedBuildId: vi.fn(),
-    };
-  },
-);
 vi.mock("../../src/logger", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
@@ -36,7 +21,6 @@ const HASHED_ID = "ca9cccc228cf0e3ff3cb90dd62e2e2bfb4b20bc7";
 describe("fetchBuildInsightsTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (resolveHashedBuildId as Mock).mockRejectedValue(new Error("no hashed id"));
   });
 
   it("SUCCESS: returns build details and quality gates", async () => {
@@ -86,30 +70,19 @@ describe("fetchBuildInsightsTool", () => {
     );
 
     expect(result.content[0].text).toContain(`"hashed_id": "${HASHED_ID}"`);
-    expect(resolveHashedBuildId).not.toHaveBeenCalled();
   });
 
-  it("SUCCESS: includes hashed_id from Automate REST when TRA omits it", async () => {
+  it("SUCCESS: omits hashed_id when the build payload has none", async () => {
     (fetchFromBrowserStackAPI as Mock)
       .mockResolvedValueOnce({ name: "Test Build" })
       .mockResolvedValueOnce({});
-    (resolveHashedBuildId as Mock).mockResolvedValue({
-      hashedBuildId: HASHED_ID,
-      sessionType: SessionType.Automate,
-      name: "Test Build",
-      observabilityId: "build-123",
-    });
 
     const result = await fetchBuildInsightsTool(
       { buildId: "build-123" },
       mockConfig,
     );
 
-    expect(result.content[0].text).toContain(`"hashed_id": "${HASHED_ID}"`);
-    expect(resolveHashedBuildId).toHaveBeenCalledWith(
-      { observabilityId: "build-123" },
-      mockConfig,
-    );
+    expect(result.content[0].text).not.toContain("hashed_id");
   });
 
   it("SUCCESS: handles missing quality gates data", async () => {

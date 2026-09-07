@@ -3,8 +3,8 @@
   "version": "1.0",
   "build_id": "43eba70_2026-09-02T14:26:51Z",
   "loadtesting": {
-    "summary": "Load and performance testing: run k6, JMeter, Gatling and Locust load tests at scale. List and inspect projects and load tests; create, update, start, stop and monitor runs; read run reports, AI insights and historical trends; compare runs; and check VU-hour quota and cost estimates. Test definitions, runs and their results live here. Account plan and billing do not — only VU-hour entitlement is exposed, via quota.",
-    "base_url": "https://load-api.browserstack.com",
+    "summary": "Load and performance testing: run k6, JMeter, Gatling and Locust load tests at scale. List and inspect projects and load tests; create, update, start, stop and monitor runs; read run reports, AI insights and historical trends; compare runs; and check VU-hour quota and cost estimates. Test definitions, runs and their results live here. Account plan and billing do not — only VU-hour entitlement is exposed, via quota. There is no capability to delete a load test or schedule recurring runs — for those, point the user to the web dashboard. Each capability returns its full result in one call; reuse a result within a task rather than re-fetching the same data.",
+    "base_url": "https://load-testing-rengg-lts.bsstag.com",
     "auth": {
       "type": "http",
       "scheme": "basic"
@@ -242,7 +242,8 @@
         "intent": "Show how a project's load-test metrics trend across recent runs — use this for 'is performance getting better or worse across this project?'",
         "guidance": [
           "metrics accepts dotted names or @ aliases; @vitals / @all expand to metric sets.",
-          "windowRuns bounds how many recent runs are aggregated."
+          "windowRuns bounds how many recent runs are aggregated.",
+          "Returns the whole windowed series across metrics in one call — request all needed metrics together; do not call once per metric or re-fetch the same window."
         ],
         "returns": [
           "metrics"
@@ -334,7 +335,8 @@
         "guidance": [
           "Returns run metadata only, not metrics — use getLoadTestRunReport for a run's KPIs.",
           "Page with cursor + limit; nextCursor is opaque.",
-          "For a single test's history use /loadTests/{testId}/runs; for currently-live runs use /loadTests/runs/active."
+          "For a single test's history use /loadTests/{testId}/runs; for currently-live runs use /loadTests/runs/active.",
+          "One call returns the page of run history — reuse it for follow-ups and page with cursor only when more rows are needed; do not re-list the same window."
         ],
         "returns": [
           "runs",
@@ -437,7 +439,8 @@
         "guidance": [
           "jobId is the run UUID from startLoadTestRun or listLoadTestRuns.",
           "Respect pollAfterSeconds between polls instead of tight-looping.",
-          "slaBreachFlags surfaces threshold breaches as they trip."
+          "slaBreachFlags surfaces threshold breaches as they trip.",
+          "For 'is it done?' / 'how much time is left?', this status call is sufficient — do not fetch the run report to answer a status question."
         ],
         "returns": [
           "status",
@@ -613,7 +616,9 @@
           "Only valid for a terminal run.",
           "Start with detail=aggregate; escalate to per-txn or full only when you need transaction- or network-level detail — full is large.",
           "groupBy and errorCategory narrow the payload; byteCap hard-caps the response (max 256 KB).",
-          "metrics accepts dotted names or @ aliases; see getLoadTestMetricsManifest for what applies to this test type."
+          "metrics accepts dotted names or @ aliases; see getLoadTestMetricsManifest for what applies to this test type.",
+          "Answer a scoped question with the narrowest slice instead of the whole report: one metric → metrics=; error breakdown → errorCategory= (or slaOnly=true); a time window → sinceIso/untilIso; slowest transaction → detail=per-txn with groupBy=transaction and topN.",
+          "One call with the right params returns everything for that question — do not re-fetch the same run with the same params. Fetch the full report (view=full / detail=full) only when the user explicitly asks for the raw or complete report."
         ],
         "returns": [
           "runId",
@@ -748,7 +753,8 @@
         "guidance": [
           "Read-only despite being a POST — nothing is started.",
           "fitsInQuota / remainingAfterEstimate compare the estimate against current quota.",
-          "For the same check at start time, call startLoadTestRun with dryRun:true."
+          "For the same check at start time, call startLoadTestRun with dryRun:true.",
+          "Always use this for a cost or VU-hour estimate of a hypothetical run — it models ramp-up. Do not compute VU-hours by hand from VUs × duration."
         ],
         "returns": [
           "estimatedVuHours",
@@ -830,7 +836,8 @@
         "intent": "Compare two completed runs and surface the deltas — use this for 'did this run regress vs the baseline?'",
         "guidance": [
           "baselineRunId and candidateRunId are run UUIDs and must differ; both runs must be terminal.",
-          "regressedOnly + pctChangeMin filter to material regressions; dimensions accepts kpi, transaction, sla."
+          "regressedOnly + pctChangeMin filter to material regressions; dimensions accepts kpi, transaction, sla.",
+          "Use this to compare two runs — it returns per-KPI and per-transaction deltas directly. Do not fetch both run reports and diff them yourself."
         ],
         "returns": [
           "kpiDeltas",
@@ -1103,7 +1110,8 @@
         "intent": "List the execution history of a test — use this to find past runs of a specific test or to get a runId.",
         "guidance": [
           "testId is numeric; runId values returned are UUIDs.",
-          "Filter with status / verdict / date range; page with cursor + limit."
+          "Filter with status / verdict / date range; page with cursor + limit.",
+          "One call returns this test's run history — reuse it and page with cursor when needed; do not re-list the same window."
         ],
         "returns": [
           "runs",
@@ -1185,7 +1193,8 @@
         "intent": "Show how one test's metrics trend across its recent runs — use this for 'is this test getting slower over time?'",
         "guidance": [
           "metrics accepts dotted names or @ aliases; @vitals / @all expand to metric sets.",
-          "windowRuns bounds how many recent runs are aggregated."
+          "windowRuns bounds how many recent runs are aggregated.",
+          "Returns the whole windowed series across metrics in one call — request all needed metrics together; do not call once per metric or re-fetch the same window."
         ],
         "returns": [
           "metrics"
@@ -1361,7 +1370,8 @@
         "intent": "Get the full configuration of a single load test — use this to inspect a test's settings, script reference, SLA thresholds and children.",
         "guidance": [
           "testId is numeric (from listLoadTests).",
-          "Use include to expand config / thresholds / tags / children."
+          "Use include to expand config / thresholds / tags / children.",
+          "A single call returns the complete configuration — VU/ramp profile, duration, load-generator regions and SLA thresholds (expand them with include=config,thresholds). Do not call again for the same testId within a task; reuse the result."
         ],
         "returns": [
           "testId",

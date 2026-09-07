@@ -31,6 +31,17 @@ export function needsIdFrom(idLabel: string, sourceTool: string): string {
   return ` Requires ${idLabel}. Call ${sourceTool} first if you do not have it.`;
 }
 
+/**
+ * createProjectOrFolder must NOT carry NEEDS_PROJECT_ID: `project_identifier` is optional
+ * there, and the create-a-PROJECT half needs no id at all. With the generic constant the
+ * tool read "Requires a project identifier ... call askBrowserStackAI", which routed
+ * "create me a project" through the agent before letting the tool run.
+ */
+export const PROJECT_ID_ONLY_FOR_FOLDER =
+  " Creating a project needs no identifier. Creating a folder inside an EXISTING project " +
+  "needs that project's identifier (PR-*); no tool here lists projects, so ask " +
+  'askBrowserStackAI with product "tm" for it.';
+
 /** A test plan id (TP-*) comes from listTestPlans. */
 export const NEEDS_TEST_PLAN_ID = needsIdFrom(
   "a test plan identifier (TP-*)",

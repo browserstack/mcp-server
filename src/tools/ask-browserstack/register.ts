@@ -453,6 +453,11 @@ export function addAskBrowserStackAITool(
       // sets it false: consent is not a licence to delete.
       readOnlyHint: false,
       destructiveHint: false,
+      // openWorldHint: the agent fans out to product APIs chosen at runtime, so the set of
+      // effects is not knowable from this schema. idempotentHint false because a repeated
+      // call can create a second record — the relay asks again, it does not dedupe.
+      openWorldHint: true,
+      idempotentHint: false,
       title: "Ask BrowserStack AI (Alpha)",
     },
     async ({ product, query }, extra): Promise<CallToolResult> => {
@@ -519,6 +524,18 @@ export function addAskBrowserStackAITool(
             ? error.message
             : String(error);
         logger.error("askBrowserStackAI failed: %s", message);
+        // Error telemetry, in the same never-fatal shape as the success-path `track()`:
+        // a failing tool call must not be made worse by a failing analytics call.
+        try {
+          trackMCP(
+            "askBrowserStackAI",
+            server.server.getClientVersion()!,
+            error,
+            config,
+          );
+        } catch {
+          /* ignore */
+        }
         // No `canElicit` argument: the request never left this process, so whether the
         // client could have been prompted is not what the reader needs to know.
         return toResult(errorResult(message, approvals));

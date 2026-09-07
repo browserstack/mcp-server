@@ -94,6 +94,7 @@ import {
   NEEDS_PROJECT_ID,
   NEEDS_TEST_PLAN_ID,
   PLAN_WRITES_VIA_AGENT,
+  PROJECT_ID_ONLY_FOR_FOLDER,
 } from "./tool-handoff.js";
 
 //TODO: Moving the traceMCP and catch block to the parent(server) function
@@ -734,7 +735,7 @@ export default function addTestManagementTools(
   tools.createProjectOrFolder = server.tool(
     "createProjectOrFolder",
     "Create a project and/or folder in BrowserStack Test Management." +
-      NEEDS_PROJECT_ID,
+      PROJECT_ID_ONLY_FOR_FOLDER,
     CreateProjFoldSchema.shape,
     {
       title: "Create Project or Folder",

@@ -1704,6 +1704,18 @@ describe("test-plan tools point writes at askBrowserStackAI", () => {
     expect(d).toMatch(/linking or unlinking test runs/);
   });
 
+  it("does not tell createProjectOrFolder that a project id is required", () => {
+    // Review finding: with the generic NEEDS_PROJECT_ID this tool read "Requires a project
+    // identifier (PR-*) ... call askBrowserStackAI", which routed "create me a project"
+    // through the agent before letting the tool run. `project_identifier` is OPTIONAL here
+    // and only the folder-in-an-existing-project half needs one.
+    const d = descriptionOf("createProjectOrFolder");
+    expect(d).not.toMatch(/Requires a project identifier/);
+    expect(d).toMatch(/Creating a project needs no identifier/);
+    // The folder half still says where an id comes from.
+    expect(d).toMatch(/folder inside an EXISTING project/);
+  });
+
   it("leaves non-plan tools alone", () => {
     // Scoped deliberately: LCA and accessibility tools were excluded from this change.
     for (const name of ["createTestCase", "createTestRun", "createLCASteps"]) {

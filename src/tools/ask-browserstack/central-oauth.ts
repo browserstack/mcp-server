@@ -16,6 +16,7 @@
 
 import { createHash } from "node:crypto";
 
+import appConfig from "../../config.js";
 import logger from "../../logger.js";
 import { AGENT_TIMEOUT_MS, AskError } from "./config.js";
 import { Credentials } from "./egress.js";
@@ -306,6 +307,18 @@ export async function mintCentralToken(
       "BrowserStack AI is not authenticated: BROWSERSTACK_USERNAME and " +
         "BROWSERSTACK_ACCESS_KEY are required to sign in",
     );
+  }
+
+  // NOT CACHED IN HOSTED MODE. These tokens are per-user, attested credentials, and the
+  // process is shared by every tenant — `rules/multi-tenant-safety.md` forbids holding user
+  // data in module-level state there, so remote mode mints per call. Keying on
+  // username + sha256(accessKey) already means one user can never be SERVED another's token,
+  // but containment is not the contract; not holding it at all is.
+  if (appConfig.REMOTE_MCP) {
+    return mintOnce(url, credentials, transport).then(({ token }) => {
+      logger.info("askBrowserStackAI: signed in as %s", credentials.username);
+      return token;
+    });
   }
 
   const key = cacheKey(url, credentials);

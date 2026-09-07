@@ -24,6 +24,8 @@ export async function fetchBuildInsightsTool(
       }),
     ]);
 
+    const hashed_id = extractHashedBuildId(buildData);
+
     // Select useful fields for users
     const insights = {
       name: buildData.name,
@@ -42,6 +44,7 @@ export async function fetchBuildInsightsTool(
       commit_sha: buildData.vcs_info?.sha,
       vcs_name: buildData.vcs_info?.name,
       quality_gate_result: qualityData?.quality_gate_result,
+      ...(hashed_id ? { hashed_id } : {}),
     };
 
     const qualityProfiles = qualityData?.quality_profiles?.map(
@@ -71,6 +74,22 @@ export async function fetchBuildInsightsTool(
   }
 }
 
+function extractHashedBuildId(buildData: any): string | undefined {
+  const candidates = [
+    buildData?.hashed_id,
+    buildData?.automate_hashed_id,
+    buildData?.hashedId,
+  ];
+  for (const candidate of candidates) {
+    if (
+      typeof candidate === "string" &&
+      /^[a-z0-9]{40}$/i.test(candidate.trim())
+    )
+      return candidate.trim();
+  }
+  return undefined;
+}
+
 // Registers the fetchBuildInsights tool with the MCP server
 export default function addBuildInsightsTools(
   server: McpServer,
@@ -80,7 +99,7 @@ export default function addBuildInsightsTools(
 
   tools.fetchBuildInsights = server.tool(
     "fetchBuildInsights",
-    "Fetches insights about a BrowserStack build by combining build details and quality gate results.",
+    "Fetch build details and quality gate results. Includes hashed_id, the build id listSessions takes.",
     {
       buildId: z.string().describe("The build UUID of the BrowserStack build"),
     },

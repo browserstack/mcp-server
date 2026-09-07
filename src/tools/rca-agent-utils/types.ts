@@ -23,6 +23,7 @@ export interface TestRun {
 export interface FailedTestInfo {
   test_id: number;
   test_name: string;
+  session_id?: string;
 }
 
 export enum RCAState {

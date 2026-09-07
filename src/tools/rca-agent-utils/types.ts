@@ -40,6 +40,9 @@ export interface FailedTestInfo {
   // Present only when listTestIds is called with includeFailureDetail=true
   // (only failed tests carry a signature).
   failure?: TestFailureSignature;
+  // BrowserStack session id, when the test listing reports one. Feed straight
+  // to getFailureLogs — no build-id lookup needed for Automate.
+  session_id?: string;
 }
 
 export enum RCAState {

@@ -16,8 +16,12 @@ const mockConfig = {
   "browserstack-access-key": "fake-key",
 };
 
+const HASHED_ID = "ca9cccc228cf0e3ff3cb90dd62e2e2bfb4b20bc7";
+
 describe("fetchBuildInsightsTool", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it("SUCCESS: returns build details and quality gates", async () => {
     (fetchFromBrowserStackAPI as Mock)
@@ -48,7 +52,37 @@ describe("fetchBuildInsightsTool", () => {
     expect(result.content.length).toBe(2);
     expect(result.content[0].text).toContain("Build insights");
     expect(result.content[0].text).toContain("Test Build");
+    expect(result.content[0].text).not.toContain("hashed_id");
     expect(result.content[1].text).toContain("Quality Gate Profiles");
+  });
+
+  it("SUCCESS: includes hashed_id when TRA returns a 40-char hex id", async () => {
+    (fetchFromBrowserStackAPI as Mock)
+      .mockResolvedValueOnce({
+        name: "Test Build",
+        hashed_id: HASHED_ID,
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await fetchBuildInsightsTool(
+      { buildId: "build-123" },
+      mockConfig,
+    );
+
+    expect(result.content[0].text).toContain(`"hashed_id": "${HASHED_ID}"`);
+  });
+
+  it("SUCCESS: omits hashed_id when the build payload has none", async () => {
+    (fetchFromBrowserStackAPI as Mock)
+      .mockResolvedValueOnce({ name: "Test Build" })
+      .mockResolvedValueOnce({});
+
+    const result = await fetchBuildInsightsTool(
+      { buildId: "build-123" },
+      mockConfig,
+    );
+
+    expect(result.content[0].text).not.toContain("hashed_id");
   });
 
   it("SUCCESS: handles missing quality gates data", async () => {

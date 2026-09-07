@@ -49,6 +49,53 @@ describe("extractFailedTestIds", () => {
     expect(extractFailedTestIds(hierarchy, TestStatus.FAILED)).toEqual([]);
   });
 
+  it("includes the session id when the listing returns one", () => {
+    const hierarchy = [
+      node(
+        {
+          status: TestStatus.FAILED,
+          observability_url: "https://observability.bs.com/x?details=555",
+          session_id: "abc123def456",
+        },
+        "failure with session",
+      ),
+    ];
+
+    expect(extractFailedTestIds(hierarchy, TestStatus.FAILED)).toEqual([
+      {
+        test_id: "555",
+        test_name: "failure with session",
+        status: TestStatus.FAILED,
+        session_id: "abc123def456",
+      },
+    ]);
+  });
+
+  it.each([
+    ["the literal string null", "null"],
+    ["a blank string", "   "],
+    ["a missing field", undefined],
+  ])("omits session_id for %s", (_label, session_id) => {
+    const hierarchy = [
+      node(
+        {
+          status: TestStatus.FAILED,
+          observability_url: "https://observability.bs.com/x?details=666",
+          session_id,
+        },
+        "no usable session",
+      ),
+    ];
+
+    expect(extractFailedTestIds(hierarchy, TestStatus.FAILED)).toEqual([
+      {
+        test_id: "666",
+        test_name: "no usable session",
+        status: TestStatus.FAILED,
+      },
+    ]);
+  });
+
   it("recurses into children and collects nested matches", () => {
     const hierarchy = [
       node({ status: TestStatus.PASSED }, "parent", [

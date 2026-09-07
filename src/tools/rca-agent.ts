@@ -273,7 +273,7 @@ export default function addRCATools(
 
   tools.listTestIds = server.tool(
     "listTestIds",
-    "List all tests of a BrowserStack build (each with its status); optional status filter." +
+    "List all tests of a BrowserStack build (each with its status and session id); optional status filter." +
       NEEDS_BUILD_ID,
     LIST_TEST_IDS_PARAMS,
     {

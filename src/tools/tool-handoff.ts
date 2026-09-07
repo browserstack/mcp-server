@@ -76,11 +76,14 @@ export const NEEDS_BUILD_ID = needsIdFrom(
   "getBuildId or listBuildId",
 );
 
-/** Session ids are not listable by any tool here. */
+/**
+ * Session ids ARE listable now — PR #395 added `listSessions`, which merged into main while
+ * this branch was open. This used to send the model to askBrowserStackAI for want of a tool;
+ * pointing at the agent when a real tool exists is exactly what the header above forbids.
+ */
 export const NEEDS_SESSION_ID =
-  " Requires a session id, which no tool here lists. If you only know the build, call " +
-  "getBuildId or listBuildId; if you have neither, call askBrowserStackAI with product " +
-  '"tra" and describe the run you mean.';
+  " Requires a session id. listSessions lists them for a build; if you do not have the " +
+  "build either, getBuildId or listBuildId resolves one from a project and build name.";
 
 /** A completed scan's ids come from startAccessibilityScan, or from the agent. */
 export const NEEDS_A11Y_SCAN_ID =

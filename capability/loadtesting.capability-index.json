@@ -329,11 +329,17 @@
             "name": "hadSlaBreach",
             "type": "boolean",
             "description": "Filter to runs that did / did not breach SLA."
+          },
+          {
+            "name": "tag",
+            "type": "string",
+            "description": "Filter to runs carrying this tag (a run's own tags, or the tags it inherits from its test when it has none of its own)."
           }
         ],
         "intent": "List the execution history across every load test in a project — newest first, paginated. Use for 'what ran last week in this project?' or to find runs across tests to compare.",
         "guidance": [
           "Returns run metadata only, not metrics — use getLoadTestRunReport for a run's KPIs.",
+          "Each run carries a tags array — its own run-level tags if set (via updateLoadTest with runId), otherwise the tags inherited from its test. Filter with the tag query param.",
           "Page with cursor + limit; nextCursor is opaque.",
           "For a single test's history use /loadTests/{testId}/runs; for currently-live runs use /loadTests/runs/active.",
           "One call returns the page of run history — reuse it for follow-ups and page with cursor only when more rows are needed; do not re-list the same window."
@@ -388,12 +394,18 @@
             "name": "userId",
             "type": "integer",
             "description": "Restrict to runs started by a user."
+          },
+          {
+            "name": "tag",
+            "type": "string",
+            "description": "Filter to runs carrying this tag (a run's own tags, or the tags it inherits from its test when it has none of its own)."
           }
         ],
         "intent": "List load-test runs currently executing — use this for 'what's running right now?' or to find a runId to stop or monitor.",
         "guidance": [
           "Returns non-terminal runs across the account.",
           "runId here is the UUID needed by getLoadTestRunStatus and stopLoadTestRun.",
+          "Each run carries a tags array — its own run-level tags if set, otherwise the tags inherited from its test. Filter with the tag query param.",
           "vuHoursBurnedSoFar reflects consumption at the moment of the call."
         ],
         "returns": [
@@ -1104,11 +1116,17 @@
             "name": "hadSlaBreach",
             "type": "boolean",
             "description": "Only runs that breached an SLA."
+          },
+          {
+            "name": "tag",
+            "type": "string",
+            "description": "Filter to runs carrying this tag (a run's own tags, or the tags it inherits from the test when it has none of its own)."
           }
         ],
         "intent": "List the execution history of a test — use this to find past runs of a specific test or to get a runId.",
         "guidance": [
           "testId is numeric; runId values returned are UUIDs.",
+          "Each run carries a tags array — its own run-level tags if set (via updateLoadTest with runId), otherwise the tags inherited from the test. Filter with the tag query param.",
           "Filter with status / verdict / date range; page with cursor + limit.",
           "One call returns this test's run history — reuse it and page with cursor when needed; do not re-list the same window."
         ],

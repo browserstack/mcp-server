@@ -116,7 +116,7 @@ export default function addAutomationTools(
 
   tools.fetchAutomationScreenshots = server.tool(
     "fetchAutomationScreenshots",
-    "Fetch and process screenshots from a BrowserStack Automate session",
+    "Fetch screenshots captured during an Automate/App Automate session.",
     {
       sessionId: z
         .string()

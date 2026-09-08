@@ -35,6 +35,7 @@ const samplePayload = [
       browser: "chrome",
       device: null,
       browser_url: "https://automate.browserstack.com/sessions/sess-aaa",
+      video_url: "https://automate.browserstack.com/sessions/sess-aaa/video",
     },
   },
   {
@@ -83,6 +84,7 @@ describe("mapSessionRecords", () => {
         browser: "chrome",
         device: null,
         browserUrl: "https://automate.browserstack.com/sessions/sess-aaa",
+        videoUrl: "https://automate.browserstack.com/sessions/sess-aaa/video",
       },
       {
         sessionId: "sess-bbb",

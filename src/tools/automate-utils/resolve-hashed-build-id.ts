@@ -7,10 +7,10 @@ import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
 import { extractTestIds } from "../rca-agent-utils/get-failed-test-id.js";
 import { TestRun } from "../rca-agent-utils/types.js";
 
-// Observability (Test Reporting & Analytics) build ids are UUIDs; Automate and
-// App Automate REST build ids are 40-char hex "hashed ids". The two are not
-// interchangeable, and the observability build API does not expose the hashed
-// id. The deterministic bridge is any BrowserStack session that belongs to the
+// Observability (Test Reporting & Analytics) build ids are usually UUIDs but
+// some are 40-char hex, the same shape as Automate / App Automate "hashed ids".
+// The two are never interchangeable, and the observability build API does not
+// expose the hashed id. The deterministic bridge is any BrowserStack session that belongs to the
 // build: the session detail endpoint reports its parent `build_hashed_id`.
 const OBSERVABILITY_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

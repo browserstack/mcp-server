@@ -5,6 +5,7 @@ import { fetchAutomationScreenshots } from "./automate-utils/fetch-screenshots.j
 import {
   DEFAULT_SESSION_LIST_LIMIT,
   listSessionIds,
+  UnknownBuildError,
 } from "./automate-utils/list-session-ids.js";
 import {
   isObservabilityBuildUuid,
@@ -85,21 +86,45 @@ export async function listSessionIdsTool(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    // Accept the observability build UUID too: resolve it to the hashed id
-    // before hitting the Automate / App Automate REST session list.
-    let buildId = args.buildId.trim();
+    // Accept the observability build id too. Observability ids are usually
+    // UUIDs but can also be 40-char hex like Automate hashed ids, so shape
+    // alone is not enough: try the REST list first and resolve on a miss.
+    const inputId = args.buildId.trim();
+    let buildId = inputId;
     let resolvedNote: string | undefined;
-    if (isObservabilityBuildUuid(buildId)) {
+
+    const resolve = async () => {
       const resolved = await resolveHashedBuildId(
-        buildId,
+        inputId,
         config,
         args.sessionType,
       );
       buildId = resolved.hashedBuildId;
-      resolvedNote = `Resolved observability build ${args.buildId.trim()} to hashed build id ${buildId}.`;
+      resolvedNote = `Resolved observability build ${inputId} to hashed build id ${buildId}.`;
+    };
+
+    let sessions;
+    if (isObservabilityBuildUuid(inputId)) {
+      await resolve();
+      sessions = await listSessionIds({ ...args, buildId }, config);
+    } else {
+      try {
+        sessions = await listSessionIds({ ...args, buildId }, config);
+      } catch (error) {
+        if (!(error instanceof UnknownBuildError)) throw error;
+        try {
+          await resolve();
+        } catch (resolveError) {
+          logger.debug(
+            "listSessions: id is neither a known hashed build nor a resolvable observability build",
+            resolveError,
+          );
+          throw error;
+        }
+        sessions = await listSessionIds({ ...args, buildId }, config);
+      }
     }
 
-    const sessions = await listSessionIds({ ...args, buildId }, config);
     const content: CallToolResult["content"] = [];
     if (resolvedNote) {
       content.push({ type: "text", text: resolvedNote });
@@ -185,7 +210,7 @@ export default function addAutomationTools(
       buildId: z
         .string()
         .describe(
-          "Hashed build id from the dashboard, or the observability build UUID from getBuildId.",
+          "Hashed build id from the dashboard, or the observability build id from getBuildId.",
         ),
       limit: z
         .number()

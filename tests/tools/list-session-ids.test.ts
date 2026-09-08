@@ -190,7 +190,7 @@ describe("listSessionIds", () => {
         { sessionType: SessionType.Automate, buildId: "bad" },
         mockConfig,
       ),
-    ).rejects.toThrow(/Invalid hashed build ID/);
+    ).rejects.toThrow(/No automate build found/);
   });
 
   it("throws on other HTTP errors", async () => {
@@ -263,6 +263,56 @@ describe("listSessionIdsTool", () => {
     );
     const parsed = JSON.parse(result.content[1].text as string);
     expect(parsed[0].sessionId).toBe("sess-aaa");
+  });
+
+  it("falls back to resolution when a 40-hex id is an observability id, not a hashed id", async () => {
+    const OBS_HEX = "419836ad9989011f736793ef058e802bac257be3";
+    (apiClient.get as Mock)
+      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found", data: {} })
+      .mockResolvedValueOnce({ ok: true, status: 200, data: samplePayload });
+    (resolveHashedBuildId as Mock).mockResolvedValue({
+      hashedBuildId: HASHED_BUILD,
+      sessionId: "sess-aaa",
+      sessionType: SessionType.Automate,
+    });
+
+    const result = await listSessionIdsTool(
+      { sessionType: SessionType.Automate, buildId: OBS_HEX },
+      mockConfig,
+    );
+
+    expect(resolveHashedBuildId).toHaveBeenCalledWith(
+      OBS_HEX,
+      mockConfig,
+      SessionType.Automate,
+    );
+    expect((apiClient.get as Mock).mock.calls[0][0].url).toContain(
+      `/builds/${OBS_HEX}/sessions.json`,
+    );
+    expect((apiClient.get as Mock).mock.calls[1][0].url).toContain(
+      `/builds/${HASHED_BUILD}/sessions.json`,
+    );
+    expect(result.content[0].text).toContain(
+      `Resolved observability build ${OBS_HEX} to hashed build id ${HASHED_BUILD}`,
+    );
+  });
+
+  it("rethrows the original 404 when a 40-hex id resolves to nothing", async () => {
+    (apiClient.get as Mock).mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+      data: {},
+    });
+    (resolveHashedBuildId as Mock).mockRejectedValue(new Error("No BrowserStack sessions found"));
+
+    await expect(
+      listSessionIdsTool(
+        { sessionType: SessionType.Automate, buildId: "deadbeef".repeat(5) },
+        mockConfig,
+      ),
+    ).rejects.toThrow(/No automate build found/);
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces the resolver error for a UUID with no sessions", async () => {

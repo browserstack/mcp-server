@@ -102,6 +102,18 @@ export interface Capability {
   /** The largest page the operation declares. */
   max_page_size?: number;
   /**
+   * Opt-in response cache for a read whose answer is stable within a task.
+   *
+   * ABSENT MEANS NEVER CACHED — the default, and the only safe one for a volatile read (a
+   * run's live status, the active-run list, a run report). A capability declares this only
+   * when repeating it inside one task must return the same thing: a test's configuration or
+   * its metrics manifest, a project or test listing. Honoured solely for `mode: "read"`;
+   * ignored on a write. The stored answer is scoped to the calling credential and dropped
+   * when a write to the same product succeeds — the caching itself lives in `register.ts`,
+   * not here.
+   */
+  cache?: { ttlSec: number };
+  /**
    * Declared responses by status code, values possibly `{$response: "Name"}` references.
    *
    * ADDITIVE and not yet emitted: no capability in the current export carries it. Absence

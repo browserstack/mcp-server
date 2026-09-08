@@ -27,7 +27,7 @@ import {
   ResponseSelection,
   resolveResponses,
 } from "./index-loader.js";
-import { invoke } from "./resolve.js";
+import { invoke, InvokeResult } from "./resolve.js";
 import { searchCapabilities } from "./search.js";
 import { Mode } from "./types.js";
 
@@ -117,6 +117,23 @@ function ok(payload: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(payload) }] };
 }
 
+/**
+ * A deterministic string for a cache key: object keys sorted at every level, so the same
+ * arguments in a different order produce the same key. Not a general serialiser — it handles
+ * exactly what grouped arguments are (nested objects, arrays, primitives).
+ */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    return `{${Object.keys(obj)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
 function failed(message: string): CallToolResult {
   return {
     content: [
@@ -176,6 +193,37 @@ export function addCapabilityRegistryTools(
   })();
   const transport = deps.transport || fetchTransport();
   const tools: Record<string, RegisteredTool> = {};
+
+  // A response cache for reads a capability explicitly marks cacheable, so a task that asks
+  // for the same stable thing twice pays for one request, not two. It exists because the
+  // discover→invoke surface has no other memory: nothing else stops an agent re-fetching a
+  // test's configuration three times in one task.
+  //
+  // Scoped to the CALLING CREDENTIAL, not merely to this closure. The remote host may reuse
+  // one registration across sessions — the same reason `credentialsFor` is read per call and
+  // never captured — so a key that left the username out could serve one account's read to
+  // another. Only `mode:"read"` capabilities that declare `cache.ttlSec` are stored, and only
+  // a complete 2xx answer; a successful write to a product drops that product's entries for
+  // the writer. Bounded so a long-lived registration cannot grow without limit.
+  const READ_CACHE_MAX = 256;
+  const readCache = new Map<
+    string,
+    { expiresAt: number; result: InvokeResult }
+  >();
+  const cacheKeyFor = (
+    username: string,
+    product: string,
+    method: string,
+    path: string,
+    args: GroupedArguments,
+  ) =>
+    `${username}\n${product}\n${method.toUpperCase()} ${path}\n${stableStringify(args)}`;
+  const dropProductReads = (username: string, product: string) => {
+    const prefix = `${username}\n${product}\n`;
+    for (const key of readCache.keys()) {
+      if (key.startsWith(prefix)) readCache.delete(key);
+    }
+  };
 
   /** Instrumentation in the house style, and never fatal to the call it wraps. */
   const track = (name: string) => {
@@ -464,14 +512,58 @@ export function addCapabilityRegistryTools(
           }
         }
 
+        const credentials = deps.credentialsFor();
+        const cacheable =
+          capability.mode === "read" &&
+          typeof capability.cache?.ttlSec === "number" &&
+          capability.cache.ttlSec > 0 &&
+          !!credentials?.username;
+        const cacheKey = cacheable
+          ? cacheKeyFor(
+              credentials.username,
+              product,
+              input.method,
+              input.path,
+              args,
+            )
+          : null;
+
+        if (cacheKey) {
+          const hit = readCache.get(cacheKey);
+          if (hit && hit.expiresAt > Date.now()) {
+            // A repeat of a read already answered this task: the same body, flagged so the
+            // caller can see it did not need to ask again. The product is not touched.
+            return ok({ ...hit.result, cached: true });
+          }
+          if (hit) readCache.delete(cacheKey);
+        }
+
         const result = await invoke(
           capability,
           args,
           await deps.baseUrlFor(product),
-          deps.credentialsFor(),
+          credentials,
           transport,
           registry.index.products[product]?.auth,
         );
+
+        if (capability.mode === "write" && result.ok && credentials?.username) {
+          // A successful write can change what a later read returns; drop this credential's
+          // cached reads for the product so the next read re-fetches.
+          dropProductReads(credentials.username, product);
+        }
+
+        if (cacheKey && result.ok && result.completed) {
+          if (readCache.size >= READ_CACHE_MAX) {
+            const oldest = readCache.keys().next().value;
+            if (oldest !== undefined) readCache.delete(oldest);
+          }
+          readCache.set(cacheKey, {
+            expiresAt: Date.now() + capability.cache!.ttlSec * 1000,
+            result,
+          });
+        }
+
         return ok(result);
       } catch (error) {
         if (error instanceof InvocationError) return failed(error.message);

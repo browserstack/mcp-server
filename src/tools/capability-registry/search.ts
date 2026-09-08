@@ -175,8 +175,9 @@ export function wantsCollection(query: string | undefined): boolean {
  *
  * Pagination is the reliable signal — a paged operation is a listing by construction. The
  * plural terminal path segment is a weaker fallback for unpaged collections. (The Python
- * side used the capability NAME here; the artifact publishes no name, and the path's own
- * terminal noun carries the same signal because operationIds were derived from it.)
+ * side used the capability NAME here. tm now publishes one, but its verbs are not
+ * consistent — the endpoint that lists folders is `get_root_folders_v1` — so the path's
+ * terminal noun remains the better signal.)
  */
 export function isCollection(capability: Capability): boolean {
   if (capability.paginated) return true;
@@ -204,7 +205,32 @@ function parameterText(capability: Capability): string {
   return parts.join(" ");
 }
 
-/** Path words stand in for the capability name as the identity haystack. */
+/**
+ * Path words are the identity haystack. The published `name` is deliberately NOT scored.
+ *
+ * That is a measured result, not an oversight. tm now names every capability, and adding
+ * the name to the ranking was tried three ways against tests/fixtures/search-eval.json,
+ * which the pre-names index serves 18/18:
+ *
+ *   folded into this field, weight 6          17/18
+ *   its own field, weights 1 / 2 / 3 / 4 / 6  17 / 17 / 17 / 17 / 16
+ *   only the words the path lacks, 1..6       17 / 16 / 15 / 15 / 14
+ *
+ * Every variant loses, for two reasons. The nouns in a name are the route restated — the
+ * name is snake-cased from the operationId, itself derived from the path — so scoring them
+ * again rewards verbose names for repeating themselves: `get_test_cases_for_v1_test_run`
+ * displaced `create_test_result_for_test_case` on "record a pass or fail for a test case in
+ * a run", putting a read above the write that answers it. And what a name adds beyond the
+ * route is mostly its verb, which tm applies inconsistently (`get_root_folders_v1` lists,
+ * `list_folder_test_cases_v1` also lists), so the verb is noise as often as signal.
+ *
+ * The query this was meant to fix, "list all projects", only went 7 -> 4 even where it
+ * helped: `projects` is in ~150 of 173 paths as a scope prefix, so rarity correctly values
+ * it near zero and no amount of name weighting recovers it. That query needs the terminal
+ * resource distinguished from the scope prefix, which is a different change.
+ *
+ * Revisit when a product ships a consistent verb convention — then the verb becomes signal.
+ */
 function identityText(capability: Capability): string {
   return capability.path
     .split("/")

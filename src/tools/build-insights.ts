@@ -5,6 +5,7 @@ import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { fetchFromBrowserStackAPI, handleMCPError } from "../lib/utils.js";
 import { trackMCP } from "../lib/instrumentation.js";
+import { resolveHashedBuildId } from "./automate-utils/resolve-hashed-build-id.js";
 
 // Tool function that fetches build insights from two APIs
 export async function fetchBuildInsightsTool(
@@ -24,7 +25,11 @@ export async function fetchBuildInsightsTool(
       }),
     ]);
 
-    const hashed_id = extractHashedBuildId(buildData);
+    const { hashed_id, session_type } = await resolveInsightsHashedId(
+      args.buildId,
+      buildData,
+      config,
+    );
 
     // Select useful fields for users
     const insights = {
@@ -45,6 +50,7 @@ export async function fetchBuildInsightsTool(
       vcs_name: buildData.vcs_info?.name,
       quality_gate_result: qualityData?.quality_gate_result,
       ...(hashed_id ? { hashed_id } : {}),
+      ...(session_type ? { session_type } : {}),
     };
 
     const qualityProfiles = qualityData?.quality_profiles?.map(
@@ -74,6 +80,32 @@ export async function fetchBuildInsightsTool(
   }
 }
 
+/**
+ * The observability build payload does not carry the Automate hashed build id
+ * today. Prefer it if the API ever adds one; otherwise resolve it through any
+ * session of the build (two deterministic REST calls). Never blocks insights.
+ */
+async function resolveInsightsHashedId(
+  observabilityBuildId: string,
+  buildData: unknown,
+  config: BrowserStackConfig,
+): Promise<{ hashed_id?: string; session_type?: string }> {
+  const direct = extractHashedBuildId(buildData);
+  if (direct) {
+    return { hashed_id: direct };
+  }
+  try {
+    const resolved = await resolveHashedBuildId(observabilityBuildId, config);
+    return {
+      hashed_id: resolved.hashedBuildId,
+      session_type: resolved.sessionType,
+    };
+  } catch (error) {
+    logger.warn("Could not resolve hashed build id for build insights", error);
+    return {};
+  }
+}
+
 function extractHashedBuildId(buildData: any): string | undefined {
   const candidates = [
     buildData?.hashed_id,
@@ -99,7 +131,7 @@ export default function addBuildInsightsTools(
 
   tools.fetchBuildInsights = server.tool(
     "fetchBuildInsights",
-    "Fetch build details and quality gate results. Includes hashed_id, the build id listSessions takes.",
+    "Fetch build details and quality gate results. Includes hashed_id and session_type for listSessions.",
     {
       buildId: z.string().describe("The build UUID of the BrowserStack build"),
     },

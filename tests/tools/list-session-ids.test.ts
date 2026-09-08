@@ -8,6 +8,7 @@ import {
   sessionsListUrl,
 } from "../../src/tools/automate-utils/list-session-ids";
 import { listSessionIdsTool } from "../../src/tools/automate";
+import { resolveHashedBuildId } from "../../src/tools/automate-utils/resolve-hashed-build-id";
 
 vi.mock("../../src/lib/apiClient", () => ({
   apiClient: {
@@ -18,6 +19,18 @@ vi.mock("../../src/logger", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 vi.mock("../../src/lib/instrumentation", () => ({ trackMCP: vi.fn() }));
+vi.mock(
+  "../../src/tools/automate-utils/resolve-hashed-build-id",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("../../src/tools/automate-utils/resolve-hashed-build-id")
+    >()),
+    resolveHashedBuildId: vi.fn(),
+  }),
+);
+
+const OBS_UUID = "3f2c1a4e-9b7d-4c6e-8a1f-2d3e4f5a6b7c";
+const HASHED_BUILD = "001a4e3bced4a35275f5e39160a205fbcd2ba65b";
 
 const mockConfig = {
   "browserstack-username": "fake-user",
@@ -215,6 +228,55 @@ describe("listSessionIdsTool", () => {
     expect(result.isError).toBeFalsy();
     const parsed = JSON.parse(result.content[0].text as string);
     expect(parsed[0].sessionId).toBe("sess-aaa");
+    expect(resolveHashedBuildId).not.toHaveBeenCalled();
+  });
+
+  it("resolves an observability build UUID to the hashed id before listing", async () => {
+    (resolveHashedBuildId as Mock).mockResolvedValue({
+      hashedBuildId: HASHED_BUILD,
+      sessionId: "sess-aaa",
+      sessionType: SessionType.AppAutomate,
+    });
+    (apiClient.get as Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: samplePayload,
+    });
+
+    const result = await listSessionIdsTool(
+      { sessionType: SessionType.AppAutomate, buildId: OBS_UUID },
+      mockConfig,
+    );
+
+    expect(resolveHashedBuildId).toHaveBeenCalledWith(
+      OBS_UUID,
+      mockConfig,
+      SessionType.AppAutomate,
+    );
+    expect(apiClient.get).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: `https://api-cloud.browserstack.com/app-automate/builds/${HASHED_BUILD}/sessions.json`,
+      }),
+    );
+    expect(result.content[0].text).toContain(
+      `Resolved observability build ${OBS_UUID} to hashed build id ${HASHED_BUILD}`,
+    );
+    const parsed = JSON.parse(result.content[1].text as string);
+    expect(parsed[0].sessionId).toBe("sess-aaa");
+  });
+
+  it("surfaces the resolver error for a UUID with no sessions", async () => {
+    (resolveHashedBuildId as Mock).mockRejectedValue(
+      new Error("No BrowserStack sessions found for observability build"),
+    );
+
+    await expect(
+      listSessionIdsTool(
+        { sessionType: SessionType.Automate, buildId: OBS_UUID },
+        mockConfig,
+      ),
+    ).rejects.toThrow(/No BrowserStack sessions found/);
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
 
   it("returns success with a note when the list is empty", async () => {

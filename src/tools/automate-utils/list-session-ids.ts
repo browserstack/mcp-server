@@ -124,10 +124,9 @@ export async function listSessionIds(
     if (response.status === 404) {
       throw new Error(
         `Invalid hashed build ID "${buildId}" for ${args.sessionType}. ` +
-          "Use the Automate/App Automate dashboard hashed build id " +
-          "(same family as App Automate getFailureLogs buildId), not the " +
-          "observability UUID from getBuildId or listBuildId. " +
-          "If you only have an observability UUID, call fetchBuildInsights and use hashed_id when present.",
+          "Use the Automate/App Automate dashboard hashed build id, or pass the " +
+          "observability build UUID from getBuildId / listBuildId and it will be resolved. " +
+          "Check that sessionType matches the product the build ran on.",
       );
     }
     throw new Error(

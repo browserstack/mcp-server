@@ -6,6 +6,10 @@ import {
   DEFAULT_SESSION_LIST_LIMIT,
   listSessionIds,
 } from "./automate-utils/list-session-ids.js";
+import {
+  isObservabilityBuildUuid,
+  resolveHashedBuildId,
+} from "./automate-utils/resolve-hashed-build-id.js";
 import { SessionType } from "../lib/constants.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import logger from "../logger.js";
@@ -81,26 +85,34 @@ export async function listSessionIdsTool(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const sessions = await listSessionIds(args, config);
-    if (sessions.length === 0) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "No sessions found for this hashed build ID.",
-          },
-        ],
-      };
+    // Accept the observability build UUID too: resolve it to the hashed id
+    // before hitting the Automate / App Automate REST session list.
+    let buildId = args.buildId.trim();
+    let resolvedNote: string | undefined;
+    if (isObservabilityBuildUuid(buildId)) {
+      const resolved = await resolveHashedBuildId(
+        buildId,
+        config,
+        args.sessionType,
+      );
+      buildId = resolved.hashedBuildId;
+      resolvedNote = `Resolved observability build ${args.buildId.trim()} to hashed build id ${buildId}.`;
     }
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(sessions, null, 2),
-        },
-      ],
-    };
+    const sessions = await listSessionIds({ ...args, buildId }, config);
+    const content: CallToolResult["content"] = [];
+    if (resolvedNote) {
+      content.push({ type: "text", text: resolvedNote });
+    }
+    content.push({
+      type: "text",
+      text:
+        sessions.length === 0
+          ? "No sessions found for this hashed build ID."
+          : JSON.stringify(sessions, null, 2),
+    });
+
+    return { content };
   } catch (error) {
     logger.error("Error listing session IDs", error);
     throw error;
@@ -173,7 +185,7 @@ export default function addAutomationTools(
       buildId: z
         .string()
         .describe(
-          "Dashboard hashed build id or fetchBuildInsights hashed_id — not the getBuildId UUID.",
+          "Hashed build id from the dashboard, or the observability build UUID from getBuildId.",
         ),
       limit: z
         .number()

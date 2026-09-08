@@ -426,7 +426,7 @@ As of now we support 45 tools.
   Get screenshots from Automate session ID abc123xyz for my desktop test run
   ```
 
- 18. `listSessions` — List the sessions in an Automate/App Automate build. Each record carries `sessionId`, `name`, `status`, `os`, `osVersion`, `browser`, `device`, and `browserUrl` (dashboard link), with optional `limit` / `offset` paging and a client-side `status` filter. Takes the **hashed** build ID from the dashboard URL — not the observability UUID returned by `getBuildId` / `listBuildId`; if you only have that UUID, use `hashed_id` from `fetchBuildInsights` when present. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`.
+ 18. `listSessions` — List the sessions in an Automate/App Automate build. Each record carries `sessionId`, `name`, `status`, `os`, `osVersion`, `browser`, `device`, and `browserUrl` (dashboard link), with optional `limit` / `offset` paging and a client-side `status` filter. Takes either the **hashed** build ID from the dashboard URL or the observability build UUID returned by `getBuildId` / `listBuildId` — the UUID is resolved to the hashed id automatically via the build's sessions. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`.
   **Prompt example**
 
   ```text
@@ -444,7 +444,7 @@ As of now we support 45 tools.
   Get the Appium logs for App Automate session ID <session id>
   ```
 
- 20. `fetchBuildInsights` — Fetch insights about a BrowserStack build by combining build details and quality-gate results. Includes `hashed_id` (the hashed build id `listSessions` takes) when the build payload reports one.
+ 20. `fetchBuildInsights` — Fetch insights about a BrowserStack build by combining build details and quality-gate results. Includes `hashed_id` (the hashed build id `listSessions` takes) and `session_type`, resolved through the build's sessions when the build ran on Automate / App Automate.
   **Prompt example**
 
   ```text

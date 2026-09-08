@@ -581,14 +581,7 @@
           {
             "name": "errorCategory",
             "type": "string",
-            "values": [
-              "5xx",
-              "4xx",
-              "timeout",
-              "connection",
-              "assertion"
-            ],
-            "description": "Comma-separated error categories to include."
+            "description": "Comma-separated error categories — any combination of: 5xx, 4xx, timeout, connection, assertion (e.g. \"5xx,4xx\")."
           },
           {
             "name": "metrics",
@@ -754,7 +747,9 @@
           "Read-only despite being a POST — nothing is started.",
           "fitsInQuota / remainingAfterEstimate compare the estimate against current quota.",
           "For the same check at start time, call startLoadTestRun with dryRun:true.",
-          "Always use this for a cost or VU-hour estimate of a hypothetical run — it models ramp-up. Do not compute VU-hours by hand from VUs × duration."
+          "Always use this for a cost or VU-hour estimate of a hypothetical run — it models ramp-up. Do not compute VU-hours by hand from VUs × duration.",
+          "A protocol (plu) run is billed at a full load-generator pod's capacity (e.g. 1000 VUs for k6), not the VUs it actually uses, and carries a minimum billing floor (5 minutes) — so a small or short plu run can estimate far higher than VUs × duration would suggest. That is expected; report the returned estimatedVuHours as-is rather than second-guessing it as an error.",
+          "The estimate is for the test's OWN type: a browser (blu) run costs about 10x a protocol (plu) run at the same VUs and duration (browser VUs carry a 10x weight). So the number depends heavily on whether the test is plu, blu or hybrid — always state which type the estimate is for. When the user asks about a hypothetical run without fixing the type, do not silently inherit the type of whatever test you priced against: say the type explicitly, and if it is genuinely open, give both the plu and blu figures (they differ ~10x) or ask which they mean."
         ],
         "returns": [
           "estimatedVuHours",
@@ -941,7 +936,10 @@
         "guidance": [
           "Provide exactly one of projectId or projectName; projectName creates the project if absent.",
           "Script upload is two-phase: send pendingScriptUpload to get a presigned uploadUrl + s3Key, PUT the file, then call create again with the scriptRef source and s3Key returned in the response's nextStep.",
-          "Pass idempotencyKey so a retried create does not duplicate the test."
+          "Pass idempotencyKey so a retried create does not duplicate the test.",
+          "testType and framework are required and are never inferred: testType is plu (protocol / API load), blu (real-browser load) or hybrid (both); framework is the load tool (k6, jmeter, gatling, locust). If the user has not stated them, ask — do not guess a default.",
+          "There is no clone capability. To duplicate a test, getLoadTest the source and copy its full config into this create — vuRamp/vus, durationSec, loadGeneratorLocations and slaThresholds included; nothing is inherited from the source, so anything you omit is dropped.",
+          "The load profile is required too and is never defaulted: the concurrency (config.vus, or a config.vuRamp for a ramp) and the run length (config.durationSec). If the user has not given the VUs and duration, ask for them — do not assume a value."
         ],
         "returns": [
           "testId",
@@ -1021,7 +1019,8 @@
         "guidance": [
           "testId is the numeric test id, not a run id.",
           "dryRun:true returns the VU-hour estimate and quota fit without starting anything.",
-          "On success returns runId (UUID) + dashboardLink; poll getLoadTestRunStatus with the runId."
+          "On success returns runId (UUID) + dashboardLink; poll getLoadTestRunStatus with the runId.",
+          "A run without dryRun generates real load and consumes VU-hours. Unless the user has already asked to run it now, dryRun:true first, show the estimate/quota fit and the parameters that will be used (VUs, duration, target), and start the real run only after the user confirms — do not treat your own confirmation as the user's."
         ],
         "returns": [
           "runId",
@@ -1310,7 +1309,9 @@
         "guidance": [
           "Partial update: send only the fields to change.",
           "Pass ifVersion for optimistic concurrency; a stale value returns 409 VERSION_CONFLICT.",
-          "Script replacement uses the same two-phase pendingScriptUpload flow as create."
+          "Script replacement uses the same two-phase pendingScriptUpload flow as create.",
+          "config is a partial update, but each field it carries REPLACES that field wholesale — it does not merge. tags overwrites the entire tag set; it does not append. To add a tag to a test (or the same tag across several tests), getLoadTest each one first and send the union under config.tags.",
+          "Tags live on the load test, not on its runs — there is no per-run tagging, so do not touch runs when asked to tag a test. To tag every test in a project, list them with listLoadTests and page through with cursor until hasMore is false, then updateLoadTest each one — do not stop after the first page or a subset."
         ],
         "returns": [
           "testId",
@@ -1353,13 +1354,7 @@
           {
             "name": "include",
             "type": "string",
-            "values": [
-              "config",
-              "thresholds",
-              "tags",
-              "children"
-            ],
-            "description": "Comma-separated sub-resources to expand."
+            "description": "Comma-separated sub-resources to expand — any combination of: config, thresholds, tags, children (e.g. \"config,thresholds\"). Ask for everything you need in ONE call (include=config,thresholds,tags) rather than one request per sub-resource."
           },
           {
             "name": "fields",

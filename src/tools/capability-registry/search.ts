@@ -225,12 +225,30 @@ function parameterText(capability: Capability): string {
  * `list_folder_test_cases_v1` also lists), so the verb is noise as often as signal.
  *
  * The query this was meant to fix, "list all projects", only went 7 -> 4 even where it
- * helped: `projects` is in ~150 of 173 paths as a scope prefix, so rarity correctly values
- * it near zero and no amount of name weighting recovers it. That query needs the terminal
- * resource distinguished from the scope prefix, which is a different change.
+ * helped: `projects` is in 156 of 173 paths as a scope prefix, so rarity correctly values it
+ * near zero and no amount of name weighting recovers it. That one is fixed instead by the
+ * terminal-segment bonus in `score`, which tells "is that thing" from "is scoped by it".
  *
  * Revisit when a product ships a consistent verb convention — then the verb becomes signal.
  */
+/**
+ * The terminal path segment — the thing this endpoint is actually ABOUT.
+ *
+ * A REST path mixes two different things: the resources it is SCOPED BY, and the resource it
+ * ADDRESSES. Only the last segment is the latter. See the bonus in `score` for why that
+ * distinction matters and why it is applied flat rather than weighted.
+ *
+ * Trailing placeholders are skipped, so `/test-cases/{id}` is still about test cases.
+ * Action tails (`close`, `edit`, `delete`) are kept rather than skipped: for "close a test
+ * run" the tail IS the most specific thing the caller said.
+ */
+function resourceText(capability: Capability): string {
+  const segments = capability.path
+    .split("/")
+    .filter((s) => s && !s.startsWith("{") && s !== "api");
+  return (segments[segments.length - 1] || "").replace(/[-_]/g, " ");
+}
+
 function identityText(capability: Capability): string {
   return capability.path
     .split("/")
@@ -262,6 +280,14 @@ function rarity(documents: string[], forms: string[]): number {
   const total = documents.length || 1;
   return Math.log((total + 1) / (df + 1)) / Math.log(total + 1);
 }
+
+/**
+ * Sized to sit alongside the mode (+6) and cardinality (+8) constants, not to dwarf them.
+ * The pinned eval is unchanged at every value from 2 to 14 — the bonus only ever fires on
+ * queries it does not cover — so this was chosen on the wider sweep: at 10, "close a test
+ * run" starts pulling `close_exploratory_session` into second place on the tail match alone.
+ */
+const RESOURCE_BONUS = 6;
 
 function score(
   capability: Capability,
@@ -318,6 +344,33 @@ function score(
   }
 
   const matched = ranked;
+
+  // THE ENDPOINT IS THAT THING, not merely scoped by it.
+  //
+  // A REST path mixes the resources it is SCOPED BY with the one it ADDRESSES. `projects` is
+  // in 156 of tm's 173 paths but is the terminal segment in 3, so whole-corpus rarity —
+  // correctly — values it near nothing, and every project-scoped listing scored the same as
+  // the projects listing itself. The top 8 for "list all projects" spanned 15.9 to 14.8,
+  // where +8 collection and +6 mode already account for 14: the term signal was ~1 point of
+  // noise and the right answer sat 7th.
+  //
+  // Flat, and deliberately NOT rarity-scaled. Rarity would reintroduce the same problem in
+  // reverse — a rare scope noun outranking the real target, which is exactly how a weighted
+  // version of this put `/projects/{id}/folders` above `/folder/{id}/test-cases` for "tc list
+  // for a folder". This asks one yes/no question instead: is the caller's own word the last
+  // thing in the path?
+  //
+  // Equality is against the QUERY's forms, never the haystack's — the same one-directional
+  // rule as containment. `projects` is in forms("projects"), so the projects listing hits;
+  // `folders` is not in forms("folder"), so a folder-scoped query does not drag in the
+  // folders listing.
+  const tail = terms(resourceText(capability));
+  if (
+    tail.length &&
+    wanted.some((forms) => tail.every((word) => forms.includes(word)))
+  ) {
+    ranked += RESOURCE_BONUS;
+  }
 
   if (hint && capability.mode !== hint) ranked -= 20;
   else if (hint && capability.mode === hint) ranked += 6;

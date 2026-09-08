@@ -125,6 +125,20 @@
       "method": "POST",
       "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
       "miss": "'get' trips the READ verb list, so the destructive endpoint takes the mode penalty. Harmless: destructive endpoints are refused before binding anyway."
+    },
+    {
+      "q": "list all projects",
+      "method": "GET",
+      "path": "/api/v1/projects",
+      "maxRank": 1,
+      "why": "the terminal-segment bonus: `projects` is in 156 of 173 paths as a scope prefix, so rarity values it near zero and this ranked 7th on term score alone. Pinned at 1 to keep the scope/target distinction from regressing."
+    },
+    {
+      "q": "list custom fields",
+      "method": "GET",
+      "path": "/api/v1/admin-v2/settings/fields",
+      "maxRank": 2,
+      "why": "a bare `list` query must prefer the paginated listing over the single-definition getter it used to rank first."
     }
   ]
 }

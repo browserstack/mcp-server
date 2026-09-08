@@ -42,7 +42,7 @@ describe("base URL resolution", () => {
 
     const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
     const server = new BrowserStackMcpServer(CONFIG);
-    const result: any = await (server.getTools().invokeEndpoint as any).handler(
+    const result: any = await (server.getTools().invokeCapability as any).handler(
       { method: "GET", path: "/api/v1/projects/basic" }, {} as any,
     );
 
@@ -64,7 +64,7 @@ describe("base URL resolution", () => {
 
     const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
     const server = new BrowserStackMcpServer(CONFIG);
-    await (server.getTools().invokeEndpoint as any).handler(
+    await (server.getTools().invokeCapability as any).handler(
       { method: "GET", path: "/api/v1/projects/basic" }, {} as any,
     );
     expect(calls[0].startsWith("https://tm-preprod.example/")).toBe(true);

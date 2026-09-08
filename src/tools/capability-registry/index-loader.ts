@@ -142,6 +142,8 @@ export class CapabilityRegistry {
   readonly provenance: Record<string, Provenance>;
   /** product -> "METHOD /path" -> capability */
   private readonly byEndpoint = new Map<string, Map<string, Capability>>();
+  /** product -> capability name -> capability. Empty for products that publish no names. */
+  private readonly byName = new Map<string, Map<string, Capability>>();
 
   constructor(
     index: RegistryIndex,
@@ -160,10 +162,26 @@ export class CapabilityRegistry {
     this.provenance = provenance;
     for (const [product, bundle] of Object.entries(index.products)) {
       const lookup = new Map<string, Capability>();
+      const names = new Map<string, Capability>();
       for (const capability of bundle.capabilities) {
         lookup.set(endpointKey(capability.method, capability.path), capability);
+        if (!capability.name) continue;
+        const clash = names.get(capability.name);
+        if (clash) {
+          // A duplicate name makes one of the two permanently unreachable, and which one
+          // wins would depend on array order. The export gates this, but a hand-edited or
+          // stale artifact must not load and then silently drop an endpoint.
+          throw new IndexError(
+            `${product}: capability name '${capability.name}' is used by both ` +
+              `${endpointKey(clash.method, clash.path)} and ` +
+              `${endpointKey(capability.method, capability.path)}; names must be unique ` +
+              `within a product`,
+          );
+        }
+        names.set(capability.name, capability);
       }
       this.byEndpoint.set(product, lookup);
+      this.byName.set(product, names);
     }
   }
 
@@ -237,7 +255,55 @@ export class CapabilityRegistry {
   }
 
   /**
-   * Find a capability by the endpoint it exposes — the published handle.
+   * Find a capability by its published name — the preferred handle.
+   *
+   * Names are unique within a product but not across products, so an ambiguous name is
+   * reported rather than resolved by load order. A name that exists in no index is
+   * `unknown_capability`: a distinct outcome from a name that exists elsewhere, because the
+   * caller's next move differs — search again, versus pass `product`.
+   */
+  byNameLookup(
+    name: string,
+    product?: string,
+  ): {
+    product: string;
+    capability: Capability;
+  } {
+    const matches: { product: string; capability: Capability }[] = [];
+    for (const [owner, lookup] of this.byName) {
+      if (product && owner !== product) continue;
+      const capability = lookup.get(name);
+      if (capability) matches.push({ product: owner, capability });
+    }
+    if (matches.length === 0) {
+      // Say whether names are published at all for the product asked about: "no such name"
+      // and "this product does not name its capabilities" need different fixes.
+      const unnamed = [...this.byName]
+        .filter(
+          ([owner, lookup]) =>
+            (!product || owner === product) && lookup.size === 0,
+        )
+        .map(([owner]) => owner);
+      const hint = unnamed.length
+        ? ` ${unnamed.sort().join(", ")} ${unnamed.length > 1 ? "publish" : "publishes"} ` +
+          `no capability names yet — call those by \`method\` and \`path\` instead.`
+        : " Search again — names come from searchCapability and describeEntity.";
+      throw new InvocationError(`unknown_capability: ${name}.${hint}`);
+    }
+    if (matches.length > 1 && !product) {
+      const owners = matches
+        .map((m) => m.product)
+        .sort()
+        .join(", ");
+      throw new InvocationError(
+        `capability name '${name}' exists in several products (${owners}); pass product`,
+      );
+    }
+    return matches[0];
+  }
+
+  /**
+   * Find a capability by the endpoint it exposes — the handle for unnamed products.
    *
    * The endpoint is what searchCapability returns, so it is the only thing a caller can
    * hold. `unknown_endpoint` is a defined outcome rather than a generic failure: a caller

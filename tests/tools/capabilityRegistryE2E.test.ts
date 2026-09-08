@@ -36,7 +36,7 @@ describe("capability registry, end to end through the server factory", () => {
     const server = await buildServer();
     const tools = server.getTools();
     for (const name of ["listProducts", "listEntities", "describeEntity",
-      "searchCapability", "invokeEndpoint"]) {
+      "searchCapability", "invokeCapability"]) {
       expect(tools[name], name).toBeDefined();
     }
     // the existing surface is untouched
@@ -80,7 +80,7 @@ describe("capability registry, end to end through the server factory", () => {
     process.env.CAPABILITY_REGISTRY_INDEX = "/nonexistent/index.json";
     const server = await buildServer();
     // A packaging problem must not take every other product's tools down with it.
-    expect(server.getTools().invokeEndpoint).toBeUndefined();
+    expect(server.getTools().invokeCapability).toBeUndefined();
     expect(Object.keys(server.getTools()).length).toBeGreaterThan(5);
   });
 
@@ -156,7 +156,7 @@ describe("capability registry, end to end through the server factory", () => {
     });
 
     const server = await buildServer();
-    const result: any = await (server.getTools().invokeEndpoint as any).handler(
+    const result: any = await (server.getTools().invokeCapability as any).handler(
       { method: "GET", path: "/api/v1/projects/basic" }, {} as any,
     );
     const payload = JSON.parse(result.content[0].text);
@@ -176,7 +176,7 @@ describe("capability registry, end to end through the server factory", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const server = await buildServer();
-    const result: any = await (server.getTools().invokeEndpoint as any).handler(
+    const result: any = await (server.getTools().invokeCapability as any).handler(
       {
         method: "POST",
         path: "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
@@ -195,9 +195,9 @@ describe("capability registry, end to end through the server factory", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const server = await buildServer();
-    const invokeEndpoint = server.getTools().invokeEndpoint as any;
+    const invokeCapability = server.getTools().invokeCapability as any;
 
-    const noConsent: any = await invokeEndpoint.handler(
+    const noConsent: any = await invokeCapability.handler(
       { method: "POST", path: "/api/v1/projects/{project_id}/folders",
         path_params: { project_id: 1 }, body: { name: "New" } }, {} as any,
     );
@@ -205,7 +205,7 @@ describe("capability registry, end to end through the server factory", () => {
 
     // A typo must surface as a parameter error, NOT as "go ask a human" about a call that
     // was never going to run.
-    const typo: any = await invokeEndpoint.handler(
+    const typo: any = await invokeCapability.handler(
       { method: "POST", path: "/api/v1/projects/{project_id}/folders",
         path_params: { project_id: 1 }, body: { nmae: "New" } }, {} as any,
     );

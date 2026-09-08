@@ -305,7 +305,7 @@ function score(
  *
  * Attribution is not decoration: the response tables are per product, so dereferencing a
  * hit's schemas needs to know whose tables to read. It is also what lets a caller pass
- * `product` to invokeEndpoint when two products share an endpoint — until now search
+ * `product` to invokeCapability when two products share an endpoint — until now search
  * ranked across products and then threw away the only thing that could disambiguate them.
  */
 export interface SearchHit {

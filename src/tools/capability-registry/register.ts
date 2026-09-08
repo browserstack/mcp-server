@@ -281,9 +281,10 @@ export function addCapabilityRegistryTools(
       "nothing that fits, do not just rephrase it: call listEntities for the product and " +
       "describeEntity on the closest entity, then search again using the vocabulary they " +
       "return. Narrowing with `product` or `entity` sharpens results further. " +
-      "Each result carries the endpoint's `method` and `path` plus " +
-      "its parameters grouped into path_params / query / body under the spec's own names — " +
-      "pass them straight back to invokeEndpoint, no renaming. `intent` says what it does, " +
+      "Each result carries the capability's `name` — the handle you pass to " +
+      "invokeCapability — plus its `method` and `path` (use those two only when a result " +
+      "has no `name`), and its parameters grouped into path_params / query / body under " +
+      "the spec's own names. Pass them straight back, no renaming. `intent` says what it does, " +
       "`mode` tells you whether it writes, `product` says which product owns it, and " +
       "`responses` describes what a successful call returns, fully expanded. Results are " +
       "ranked and capped, and `truncated` says when more matched. Search before invoking.",
@@ -362,25 +363,39 @@ export function addCapabilityRegistryTools(
     },
   );
 
-  tools.invokeEndpoint = server.tool(
-    "invokeEndpoint",
-    "Call an endpoint returned by searchCapability. Pass `method` and `path` exactly as " +
-      "given, with arguments grouped into path_params / query / body under the spec's own " +
-      "names. One call makes exactly one request and returns the product's own response " +
-      "untouched; when `completed` is false there is another page, which you fetch by " +
-      "sending the endpoint's own page parameter. If the endpoint's mode is 'write' you " +
-      "MUST ask the user first, then " +
-      "resend with user_permission='granted' and a change_summary; both are recorded. " +
-      "Endpoints whose mode is 'destructive' (deletes) are refused outright — archiving, " +
-      "closing and merging are ordinary writes and DO run, so read the mode and intent " +
-      "before confirming with the user.",
+  tools.invokeCapability = server.tool(
+    "invokeCapability",
+    "Call a capability returned by searchCapability or describeEntity. Pass `name` exactly " +
+      "as given — that is the handle. Only when a result carries no `name` (some products " +
+      "do not publish them yet) pass `method` and `path` instead, exactly as returned. " +
+      "Arguments go in path_params / query / body under the spec's own names. One call " +
+      "makes exactly one request and returns the product's own response untouched; when " +
+      "`completed` is false there is another page, which you fetch by sending the " +
+      "capability's own page parameter. If the mode is 'write' you MUST ask the user " +
+      "first, then resend with user_permission='granted' and a change_summary; both are " +
+      "recorded. Capabilities whose mode is 'destructive' (deletes) are refused outright — " +
+      "archiving, closing and merging are ordinary writes and DO run, so read the mode and " +
+      "intent before confirming with the user.",
     {
+      name: z
+        .string()
+        .optional()
+        .describe(
+          "The capability's published name, exactly as returned (e.g. 'create_test_run_v1'). " +
+            "Preferred over method/path.",
+        ),
       method: z
         .string()
-        .describe("HTTP method, exactly as searchCapability returned it."),
+        .optional()
+        .describe(
+          "HTTP method — only for capabilities returned without a `name`.",
+        ),
       path: z
         .string()
-        .describe("Path with {placeholders} intact, exactly as returned."),
+        .optional()
+        .describe(
+          "Path with {placeholders} intact — only for capabilities returned without a `name`.",
+        ),
       path_params: z
         .record(z.string(), z.any())
         .optional()
@@ -396,8 +411,8 @@ export function addCapabilityRegistryTools(
       product: productArg()
         .optional()
         .describe(
-          `Which product owns the endpoint (${productList}). searchCapability returns it ` +
-            "on every result; required only when two products share a path.",
+          `Which product owns the capability (${productList}). searchCapability returns it ` +
+            "on every result; required only when two products share a name or a path.",
         ),
       user_permission: z
         .enum(PERMISSION_VALUES)
@@ -411,7 +426,7 @@ export function addCapabilityRegistryTools(
         .describe("What will change. Required for writes."),
     },
     {
-      title: "Invoke Endpoint",
+      title: "Invoke Capability",
       // Not read-only: this is the one tool that writes. Never destructive, because
       // destructive endpoints are refused before binding — the refusal is enforced here,
       // not merely hinted at. Not idempotent: it creates, clones and starts runs. Closed
@@ -422,13 +437,27 @@ export function addCapabilityRegistryTools(
       openWorldHint: false,
     },
     async (input): Promise<CallToolResult> => {
-      track("invokeEndpoint");
+      track("invokeCapability");
       try {
-        const { product, capability } = registry.byEndpointLookup(
-          input.method,
-          input.path,
-          input.product,
-        );
+        // Either handle resolves to the same capability. `name` wins when both are sent,
+        // rather than cross-checking them: a caller pasting a stale path alongside a good
+        // name should still reach the right operation, which is the point of naming.
+        if (!input.name && !(input.method && input.path)) {
+          return failed(
+            "pass `name` — or, for a capability returned without one, both `method` and " +
+              "`path`, exactly as searchCapability returned them",
+          );
+        }
+        const { product, capability } = input.name
+          ? registry.byNameLookup(input.name, input.product)
+          : registry.byEndpointLookup(
+              input.method as string,
+              input.path as string,
+              input.product,
+            );
+        /** What to call it in errors — the handle the caller actually used. */
+        const handle =
+          capability.name || `${capability.method} ${capability.path}`;
         const args: GroupedArguments = {
           path_params: input.path_params,
           query: input.query,
@@ -438,8 +467,7 @@ export function addCapabilityRegistryTools(
         if (capability.mode === "destructive") {
           // Refused before binding, so consent is never sought for something that cannot run.
           return failed(
-            `${input.method} ${input.path} is a destructive operation and is not available ` +
-              `through this surface`,
+            `${handle} is a destructive operation and is not available through this surface`,
           );
         }
 
@@ -476,10 +504,10 @@ export function addCapabilityRegistryTools(
       } catch (error) {
         if (error instanceof InvocationError) return failed(error.message);
         logger.error(
-          "invokeEndpoint failed: %s",
+          "invokeCapability failed: %s",
           error instanceof Error ? error.message : String(error),
         );
-        return failed("that endpoint could not be invoked");
+        return failed("that capability could not be invoked");
       }
     },
   );

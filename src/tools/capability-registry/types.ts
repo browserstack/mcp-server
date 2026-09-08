@@ -77,6 +77,17 @@ export interface ResponseDoc extends ComponentRef {
 
 /** A capability, keyed by the endpoint it exposes. There is deliberately no name. */
 export interface Capability {
+  /**
+   * The caller-facing handle — the snake-cased `operationId`, unique within its product.
+   *
+   * This is what `invokeCapability` takes, and what `entities[*].capabilities[]` lists. It
+   * is stable where a route is not: `/edit` becoming `/edit-v2` must not break a caller
+   * holding a handle.
+   *
+   * OPTIONAL because not every product publishes it yet — loadtesting's index carries none.
+   * For those, the endpoint remains the handle, so nothing may assume this is present.
+   */
+  name?: string;
   method: string;
   path: string;
   mode: Mode;

@@ -1,11 +1,12 @@
 {
   "schema_version": 1,
-  "version": "1.0",
-  "build_id": "83525474_2026-09-02T12:13:05Z",
+  "version": "1.1",
+  "build_id": "50ec01a6_2026-09-08T11:56:26Z",
   "tm": {
     "summary": "BrowserStack Test Management API (v1 — the SSO/OAuth app API, session-authenticated).",
     "capabilities": [
       {
+        "name": "assign_test_run_owner",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/assign",
         "mode": "write",
@@ -64,6 +65,7 @@
         }
       },
       {
+        "name": "bulk_archive_test_cases_by_project",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-cases/bulk-archive",
         "mode": "write",
@@ -139,6 +141,7 @@
         }
       },
       {
+        "name": "bulk_archive_test_plans_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-plans/bulk-archive",
         "mode": "write",
@@ -188,6 +191,7 @@
         }
       },
       {
+        "name": "bulk_assign_test_cases_to_test_run",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/bulk_assign",
         "mode": "write",
@@ -283,6 +287,7 @@
         }
       },
       {
+        "name": "bulk_copy_test_cases",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-cases/bulk-copy",
         "mode": "write",
@@ -386,6 +391,7 @@
         }
       },
       {
+        "name": "bulk_delete_test_cases",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-cases/bulk-delete",
         "mode": "destructive",
@@ -478,6 +484,7 @@
         }
       },
       {
+        "name": "bulk_delete_test_results_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-results/bulk-delete",
         "mode": "destructive",
@@ -559,6 +566,7 @@
         }
       },
       {
+        "name": "bulk_edit_test_cases",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-cases/bulk-edit",
         "mode": "write",
@@ -713,6 +721,7 @@
         }
       },
       {
+        "name": "bulk_edit_test_cases_in_test_run",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/edit",
         "mode": "write",
@@ -845,6 +854,7 @@
         }
       },
       {
+        "name": "bulk_edit_test_cases_v2",
         "method": "PATCH",
         "path": "/api/v1/projects/{project_id}/test-cases",
         "mode": "write",
@@ -1133,6 +1143,7 @@
         }
       },
       {
+        "name": "bulk_move_test_cases",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-cases/bulk-move",
         "mode": "write",
@@ -1229,6 +1240,7 @@
         }
       },
       {
+        "name": "bulk_retrieve_test_cases",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-cases/bulk-retrieve",
         "mode": "write",
@@ -1324,6 +1336,7 @@
         }
       },
       {
+        "name": "bulk_retrieve_test_plans_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-plans/bulk-retrieve",
         "mode": "write",
@@ -1373,6 +1386,7 @@
         }
       },
       {
+        "name": "clone_exploratory_session_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/clone",
         "mode": "write",
@@ -1403,6 +1417,7 @@
         }
       },
       {
+        "name": "clone_test_plan_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/clone",
         "mode": "write",
@@ -1467,6 +1482,7 @@
         }
       },
       {
+        "name": "clone_test_run",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/clone",
         "mode": "write",
@@ -1564,6 +1580,7 @@
         }
       },
       {
+        "name": "close_exploratory_session",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/close",
         "mode": "write",
@@ -1613,6 +1630,7 @@
         }
       },
       {
+        "name": "close_test_run_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/close",
         "mode": "write",
@@ -1670,6 +1688,7 @@
         }
       },
       {
+        "name": "copy_folder",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folders/copy",
         "mode": "write",
@@ -1738,6 +1757,7 @@
         }
       },
       {
+        "name": "count_run_selection_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/selection-count",
         "mode": "read",
@@ -1828,6 +1848,7 @@
         }
       },
       {
+        "name": "create_bulk_test_cases_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/bulk-test-cases",
         "mode": "write",
@@ -2052,6 +2073,7 @@
         }
       },
       {
+        "name": "create_configuration_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/configurations",
         "mode": "write",
@@ -2100,6 +2122,7 @@
         }
       },
       {
+        "name": "create_custom_field_dataset_option_v2",
         "method": "POST",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/options",
         "mode": "write",
@@ -2161,6 +2184,7 @@
         }
       },
       {
+        "name": "create_custom_field_dataset_v2",
         "method": "POST",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets",
         "mode": "write",
@@ -2236,6 +2260,7 @@
         }
       },
       {
+        "name": "create_custom_field_definition_v2",
         "method": "POST",
         "path": "/api/v1/admin-v2/settings/custom-fields",
         "mode": "write",
@@ -2343,6 +2368,7 @@
         }
       },
       {
+        "name": "create_dataset",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/datasets",
         "mode": "write",
@@ -2449,6 +2475,7 @@
         }
       },
       {
+        "name": "create_exploratory_session",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions",
         "mode": "write",
@@ -2612,6 +2639,7 @@
         }
       },
       {
+        "name": "create_exploratory_session_log",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/logs",
         "mode": "write",
@@ -2725,6 +2753,7 @@
         }
       },
       {
+        "name": "create_filter",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/filter",
         "mode": "write",
@@ -2801,6 +2830,7 @@
         }
       },
       {
+        "name": "create_project_v1",
         "method": "POST",
         "path": "/api/v1/projects",
         "mode": "write",
@@ -2851,6 +2881,7 @@
         }
       },
       {
+        "name": "create_report",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/reports",
         "mode": "write",
@@ -3149,6 +3180,7 @@
         }
       },
       {
+        "name": "create_root_folder_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folders",
         "mode": "write",
@@ -3205,6 +3237,7 @@
         }
       },
       {
+        "name": "create_shared_step_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/shared-steps",
         "mode": "write",
@@ -3284,6 +3317,7 @@
         }
       },
       {
+        "name": "create_step_result_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/step/{step_id}",
         "mode": "write",
@@ -3336,6 +3370,7 @@
         }
       },
       {
+        "name": "create_sub_folder_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/mkdir",
         "mode": "write",
@@ -3413,6 +3448,7 @@
         }
       },
       {
+        "name": "create_test_case_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-cases",
         "mode": "write",
@@ -3457,6 +3493,7 @@
         }
       },
       {
+        "name": "create_test_cases",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
         "mode": "write",
@@ -3649,6 +3686,7 @@
         }
       },
       {
+        "name": "create_test_plan_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-plans",
         "mode": "write",
@@ -3779,6 +3817,7 @@
         }
       },
       {
+        "name": "create_test_result_for_test_case",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
         "mode": "write",
@@ -3900,6 +3939,7 @@
         }
       },
       {
+        "name": "create_test_run_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs",
         "mode": "write",
@@ -4130,6 +4170,7 @@
         }
       },
       {
+        "name": "delete_custom_field_dataset_option_v2",
         "method": "POST",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/options/{option_id}/delete",
         "mode": "destructive",
@@ -4177,6 +4218,7 @@
         }
       },
       {
+        "name": "delete_custom_field_dataset_v2",
         "method": "POST",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/delete",
         "mode": "destructive",
@@ -4219,6 +4261,7 @@
         }
       },
       {
+        "name": "delete_custom_field_definition_v2",
         "method": "POST",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/delete",
         "mode": "destructive",
@@ -4256,6 +4299,7 @@
         }
       },
       {
+        "name": "delete_dataset",
         "method": "DELETE",
         "path": "/api/v1/projects/{project_id}/datasets/{uuid}",
         "mode": "destructive",
@@ -4313,6 +4357,7 @@
         }
       },
       {
+        "name": "delete_exploratory_session",
         "method": "DELETE",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}",
         "mode": "destructive",
@@ -4372,6 +4417,7 @@
         }
       },
       {
+        "name": "delete_exploratory_session_log",
         "method": "DELETE",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/logs/{log_id}",
         "mode": "destructive",
@@ -4424,6 +4470,7 @@
         }
       },
       {
+        "name": "delete_filter",
         "method": "DELETE",
         "path": "/api/v1/projects/{project_id}/filter/{filter_id}",
         "mode": "destructive",
@@ -4466,6 +4513,7 @@
         }
       },
       {
+        "name": "delete_folder_and_contents",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/rm",
         "mode": "destructive",
@@ -4534,6 +4582,7 @@
         }
       },
       {
+        "name": "delete_report_schedule",
         "method": "DELETE",
         "path": "/api/v1/projects/{project_id}/reports/schedules/{schedule_id}",
         "mode": "destructive",
@@ -4593,6 +4642,7 @@
         }
       },
       {
+        "name": "delete_shared_step_v1",
         "method": "DELETE",
         "path": "/api/v1/projects/{project_id}/shared-steps/{shared_step_id}",
         "mode": "destructive",
@@ -4635,6 +4685,7 @@
         }
       },
       {
+        "name": "delete_test_case_attachment",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/attachments/{attachment_id}/delete",
         "mode": "destructive",
@@ -4701,6 +4752,7 @@
         }
       },
       {
+        "name": "delete_test_plan_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
         "mode": "destructive",
@@ -4756,6 +4808,7 @@
         }
       },
       {
+        "name": "delete_test_result_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-results/{test_result_id}/delete",
         "mode": "destructive",
@@ -4800,6 +4853,7 @@
         }
       },
       {
+        "name": "delete_v1_test_run",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/delete",
         "mode": "destructive",
@@ -4857,6 +4911,7 @@
         }
       },
       {
+        "name": "discard_duplicate_v1",
         "method": "PUT",
         "path": "/api/v1/projects/{project_id}/ai-duplicates/{duplicate_id}",
         "mode": "write",
@@ -4913,6 +4968,7 @@
         }
       },
       {
+        "name": "download_report",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/reports/{report_id}/download",
         "mode": "write",
@@ -4974,6 +5030,7 @@
         }
       },
       {
+        "name": "edit_test_case_partial_v1",
         "method": "PATCH",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/edit-v2",
         "mode": "write",
@@ -5257,6 +5314,7 @@
         }
       },
       {
+        "name": "edit_test_case_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/edit",
         "mode": "write",
@@ -5471,6 +5529,7 @@
         }
       },
       {
+        "name": "edit_test_run",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/edit",
         "mode": "write",
@@ -5707,6 +5766,7 @@
         }
       },
       {
+        "name": "export_dashboard_analytics",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/dashboard-analytics/download",
         "mode": "write",
@@ -5773,6 +5833,7 @@
         }
       },
       {
+        "name": "get_active_test_runs_info_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/dashboard-analytics/active-test-runs-info",
         "mode": "read",
@@ -5811,6 +5872,7 @@
         }
       },
       {
+        "name": "get_archived_test_cases",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-cases/archived_test_cases",
         "mode": "read",
@@ -5856,6 +5918,7 @@
         }
       },
       {
+        "name": "get_archived_test_plan_count_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-plans/archive_count",
         "mode": "read",
@@ -5893,6 +5956,7 @@
         }
       },
       {
+        "name": "get_automation_stats_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/dashboard-analytics/automation-stats",
         "mode": "read",
@@ -5937,6 +6001,7 @@
         }
       },
       {
+        "name": "get_closed_test_runs",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-runs/closed",
         "mode": "read",
@@ -5988,6 +6053,7 @@
         }
       },
       {
+        "name": "get_closed_test_runs_info_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/dashboard-analytics/closed-test-runs-info",
         "mode": "read",
@@ -6028,6 +6094,7 @@
         }
       },
       {
+        "name": "get_closed_test_runs_split_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/dashboard-analytics/closed-test-runs-split",
         "mode": "read",
@@ -6068,6 +6135,7 @@
         }
       },
       {
+        "name": "get_configurations_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/configurations",
         "mode": "read",
@@ -6116,6 +6184,7 @@
         }
       },
       {
+        "name": "get_custom_field_dataset_v2",
         "method": "GET",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}",
         "mode": "read",
@@ -6159,6 +6228,7 @@
         }
       },
       {
+        "name": "get_custom_field_definition_v2",
         "method": "GET",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}",
         "mode": "read",
@@ -6197,6 +6267,7 @@
         }
       },
       {
+        "name": "get_custom_field_values_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/{entity_type}/custom-fields/{field_id}",
         "mode": "read",
@@ -6249,6 +6320,7 @@
         }
       },
       {
+        "name": "get_dataset",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/datasets/{uuid}",
         "mode": "read",
@@ -6310,6 +6382,7 @@
         }
       },
       {
+        "name": "get_dataset_linked_test_cases",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/datasets/{uuid}/test-cases",
         "mode": "read",
@@ -6379,6 +6452,7 @@
         }
       },
       {
+        "name": "get_dataset_variables",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/datasets/variables",
         "mode": "read",
@@ -6444,6 +6518,7 @@
         }
       },
       {
+        "name": "get_dedupe_status_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/ai-duplicates/status",
         "mode": "read",
@@ -6483,6 +6558,7 @@
         }
       },
       {
+        "name": "get_duplicate_source_test_case_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/ai-duplicates/{duplicate_id}/source_tc",
         "mode": "read",
@@ -6520,6 +6596,7 @@
         }
       },
       {
+        "name": "get_duplicate_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/ai-duplicates/{duplicate_id}",
         "mode": "read",
@@ -6557,6 +6634,7 @@
         }
       },
       {
+        "name": "get_entity_filter_details_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/{entity}/filter-details",
         "mode": "read",
@@ -6851,6 +6929,7 @@
         }
       },
       {
+        "name": "get_exploratory_session",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}",
         "mode": "read",
@@ -6917,6 +6996,7 @@
         }
       },
       {
+        "name": "get_exploratory_session_summary_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/reports/exploratory-session-summary",
         "mode": "read",
@@ -6968,6 +7048,7 @@
         }
       },
       {
+        "name": "get_filter",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/filter/{filter_id}",
         "mode": "read",
@@ -7020,6 +7101,7 @@
         }
       },
       {
+        "name": "get_folder_remove_summary",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/rm-summary",
         "mode": "read",
@@ -7062,6 +7144,7 @@
         }
       },
       {
+        "name": "get_folder_tree_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/repository/mapping",
         "mode": "read",
@@ -7099,6 +7182,7 @@
         }
       },
       {
+        "name": "get_group_users_v2_v1",
         "method": "GET",
         "path": "/api/v1/group/users-v2",
         "mode": "read",
@@ -7138,6 +7222,7 @@
         }
       },
       {
+        "name": "get_issues_count_info_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/dashboard-analytics/issues-count-info",
         "mode": "read",
@@ -7178,6 +7263,7 @@
         }
       },
       {
+        "name": "get_project_by_integer_id_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}",
         "mode": "read",
@@ -7220,6 +7306,7 @@
         }
       },
       {
+        "name": "get_project_id_custom_fields_v2_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/form-fields-v2",
         "mode": "read",
@@ -7268,6 +7355,7 @@
         }
       },
       {
+        "name": "get_project_settings",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/settings",
         "mode": "read",
@@ -7345,6 +7433,7 @@
         }
       },
       {
+        "name": "get_project_users_v2_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/users-v2",
         "mode": "read",
@@ -7394,6 +7483,7 @@
         }
       },
       {
+        "name": "get_projects_basic_v1",
         "method": "GET",
         "path": "/api/v1/projects/basic",
         "mode": "read",
@@ -7410,7 +7500,7 @@
           {
             "name": "q[query]",
             "type": "string",
-            "example": "jdoe42"
+            "example": "alice"
           },
           {
             "name": "q[identifier]",
@@ -7449,6 +7539,7 @@
         }
       },
       {
+        "name": "get_projects_minify_v1",
         "method": "GET",
         "path": "/api/v1/projects/minify",
         "mode": "read",
@@ -7494,6 +7585,7 @@
         }
       },
       {
+        "name": "get_report_attachment_url",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/reports/attachments/{attachment_id}",
         "mode": "read",
@@ -7554,6 +7646,7 @@
         }
       },
       {
+        "name": "get_report_detail",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/reports/{report_id}",
         "mode": "read",
@@ -7628,6 +7721,7 @@
         }
       },
       {
+        "name": "get_report_section_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/reports/{report_id}/{section_name}",
         "mode": "read",
@@ -7683,6 +7777,7 @@
         }
       },
       {
+        "name": "get_report_summary_by_type",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/reports/{report_id}/detail/{report_type}",
         "mode": "read",
@@ -7784,6 +7879,7 @@
         }
       },
       {
+        "name": "get_root_folders_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/folders",
         "mode": "read",
@@ -7842,6 +7938,7 @@
         }
       },
       {
+        "name": "get_selected_report_testcases",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/reports/{report_id}/selection/edit",
         "mode": "read",
@@ -7885,6 +7982,7 @@
         }
       },
       {
+        "name": "get_shared_steps_by_i_d_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/shared-steps/{shared_step_id}",
         "mode": "read",
@@ -7942,6 +8040,7 @@
         }
       },
       {
+        "name": "get_shared_steps_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/shared-steps",
         "mode": "read",
@@ -8000,6 +8099,7 @@
         }
       },
       {
+        "name": "get_system_field_values_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-case/{field_name}",
         "mode": "read",
@@ -8049,6 +8149,7 @@
         }
       },
       {
+        "name": "get_test_case_attachments_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/attachments",
         "mode": "read",
@@ -8116,6 +8217,7 @@
         }
       },
       {
+        "name": "get_test_case_by_integer_id_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}",
         "mode": "read",
@@ -8159,6 +8261,7 @@
         }
       },
       {
+        "name": "get_test_case_count_trend_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/dashboard-analytics/test-case-count-trend",
         "mode": "read",
@@ -8199,6 +8302,7 @@
         }
       },
       {
+        "name": "get_test_case_detail",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/detail",
         "mode": "read",
@@ -8278,6 +8382,7 @@
         }
       },
       {
+        "name": "get_test_case_histories_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories",
         "mode": "read",
@@ -8333,6 +8438,7 @@
         }
       },
       {
+        "name": "get_test_case_history_diff_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories/diff",
         "mode": "read",
@@ -8386,6 +8492,7 @@
         }
       },
       {
+        "name": "get_test_case_history_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories/{history_id}",
         "mode": "read",
@@ -8457,6 +8564,7 @@
         }
       },
       {
+        "name": "get_test_case_tags",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/tags",
         "mode": "read",
@@ -8526,6 +8634,7 @@
         }
       },
       {
+        "name": "get_test_case_type_split_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/dashboard-analytics/test-case-type-split",
         "mode": "read",
@@ -8569,6 +8678,7 @@
         }
       },
       {
+        "name": "get_test_cases_for_v1_test_run",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases",
         "mode": "read",
@@ -8619,6 +8729,7 @@
         }
       },
       {
+        "name": "get_test_cases_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-cases",
         "mode": "read",
@@ -8703,6 +8814,7 @@
         }
       },
       {
+        "name": "get_test_plan_by_integer_id_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}",
         "mode": "read",
@@ -8740,6 +8852,7 @@
         }
       },
       {
+        "name": "get_test_plan_execution_trend_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-plans/execution-trend",
         "mode": "read",
@@ -8805,6 +8918,7 @@
         }
       },
       {
+        "name": "get_test_plan_linked_sessions_chart_data_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/linked-sessions-chart-data",
         "mode": "read",
@@ -8842,6 +8956,7 @@
         }
       },
       {
+        "name": "get_test_plan_test_runs_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/test-runs",
         "mode": "read",
@@ -8904,6 +9019,7 @@
         }
       },
       {
+        "name": "get_test_results_custom_fields_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-results/custom-fields",
         "mode": "read",
@@ -8963,6 +9079,7 @@
         }
       },
       {
+        "name": "get_test_results_for_test_case",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
         "mode": "read",
@@ -9025,6 +9142,7 @@
         }
       },
       {
+        "name": "get_test_run_by_integer_id_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}",
         "mode": "read",
@@ -9064,6 +9182,7 @@
         }
       },
       {
+        "name": "get_test_run_cases_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/detail",
         "mode": "read",
@@ -9095,6 +9214,7 @@
         }
       },
       {
+        "name": "get_test_runs_form_fields_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-runs/form-fields",
         "mode": "read",
@@ -9146,6 +9266,7 @@
         }
       },
       {
+        "name": "get_test_runs_selection",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-runs/selection",
         "mode": "read",
@@ -9222,6 +9343,7 @@
         }
       },
       {
+        "name": "get_test_runs_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-runs",
         "mode": "read",
@@ -9283,6 +9405,7 @@
         }
       },
       {
+        "name": "import_dataset_c_s_v",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/datasets/import_csv",
         "mode": "write",
@@ -9345,6 +9468,7 @@
         }
       },
       {
+        "name": "list_activity_events_v1",
         "method": "GET",
         "path": "/api/v1/activities",
         "mode": "read",
@@ -9435,6 +9559,7 @@
         }
       },
       {
+        "name": "list_archived_test_plans_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-plans/archived_test_plans",
         "mode": "read",
@@ -9474,6 +9599,7 @@
         }
       },
       {
+        "name": "list_custom_field_dataset_options_v2",
         "method": "GET",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/options",
         "mode": "read",
@@ -9517,6 +9643,7 @@
         }
       },
       {
+        "name": "list_datasets",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/datasets",
         "mode": "read",
@@ -9590,6 +9717,7 @@
         }
       },
       {
+        "name": "list_duplicates_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/ai-duplicates",
         "mode": "read",
@@ -9641,6 +9769,7 @@
         }
       },
       {
+        "name": "list_exploratory_session_defects",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/defects",
         "mode": "read",
@@ -9735,6 +9864,7 @@
         }
       },
       {
+        "name": "list_exploratory_session_logs",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/logs",
         "mode": "read",
@@ -9801,6 +9931,7 @@
         }
       },
       {
+        "name": "list_exploratory_sessions",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions",
         "mode": "read",
@@ -9926,6 +10057,7 @@
         }
       },
       {
+        "name": "list_filters",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/filter",
         "mode": "read",
@@ -9989,6 +10121,7 @@
         }
       },
       {
+        "name": "list_folder_contents",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}",
         "mode": "read",
@@ -10032,6 +10165,7 @@
         }
       },
       {
+        "name": "list_folder_test_cases_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
         "mode": "read",
@@ -10097,6 +10231,7 @@
         }
       },
       {
+        "name": "list_projects_v1",
         "method": "GET",
         "path": "/api/v1/projects",
         "mode": "read",
@@ -10105,7 +10240,7 @@
           {
             "name": "q",
             "type": "string",
-            "example": "jdoe42"
+            "example": "alice"
           },
           {
             "name": "p",
@@ -10170,6 +10305,7 @@
         }
       },
       {
+        "name": "list_schedules",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/reports/schedules",
         "mode": "read",
@@ -10243,6 +10379,7 @@
         }
       },
       {
+        "name": "list_test_case_tags_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-case/tags-v2",
         "mode": "read",
@@ -10280,6 +10417,7 @@
         }
       },
       {
+        "name": "list_test_case_templates_v2",
         "method": "GET",
         "path": "/api/v1/admin-v2/settings/templates",
         "mode": "read",
@@ -10333,6 +10471,7 @@
         }
       },
       {
+        "name": "list_test_plans_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-plans",
         "mode": "read",
@@ -10402,6 +10541,7 @@
         }
       },
       {
+        "name": "list_workspace_fields_v2",
         "method": "GET",
         "path": "/api/v1/admin-v2/settings/fields",
         "mode": "read",
@@ -10464,6 +10604,7 @@
         }
       },
       {
+        "name": "merge_tags_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/tags/merge",
         "mode": "write",
@@ -10512,6 +10653,7 @@
         }
       },
       {
+        "name": "move_folder_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/mv",
         "mode": "write",
@@ -10618,6 +10760,7 @@
         }
       },
       {
+        "name": "rename_folder_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/rename",
         "mode": "write",
@@ -10691,6 +10834,7 @@
         }
       },
       {
+        "name": "reorder_folders",
         "method": "PATCH",
         "path": "/api/v1/projects/{project_id}/folders/reorder",
         "mode": "write",
@@ -10770,6 +10914,7 @@
         }
       },
       {
+        "name": "reorder_test_cases_by_folder_v1",
         "method": "PATCH",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/reorder",
         "mode": "write",
@@ -10864,6 +11009,7 @@
         }
       },
       {
+        "name": "resolve_duplicate_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/ai-duplicates",
         "mode": "write",
@@ -10930,6 +11076,7 @@
         }
       },
       {
+        "name": "restore_history_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories/{history_id}/restore",
         "mode": "write",
@@ -10985,6 +11132,7 @@
         }
       },
       {
+        "name": "search_duplicates_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/ai-duplicates/search-v2",
         "mode": "read",
@@ -11037,6 +11185,7 @@
         }
       },
       {
+        "name": "search_group_tags",
         "method": "GET",
         "path": "/api/v1/group/{entity_type}/tags",
         "mode": "read",
@@ -11086,6 +11235,7 @@
         }
       },
       {
+        "name": "search_project_entities",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/{entity}/search",
         "mode": "read",
@@ -11172,6 +11322,7 @@
         }
       },
       {
+        "name": "search_project_entities_v2",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/{entity}/search-v2",
         "mode": "read",
@@ -11446,6 +11597,7 @@
         }
       },
       {
+        "name": "search_project_users",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/users/search",
         "mode": "read",
@@ -11501,6 +11653,7 @@
         }
       },
       {
+        "name": "search_test_case_tags",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-case/tags/search",
         "mode": "read",
@@ -11547,6 +11700,7 @@
         }
       },
       {
+        "name": "search_test_cases_by_folder_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/search",
         "mode": "read",
@@ -11634,6 +11788,7 @@
         }
       },
       {
+        "name": "send_report_email_now_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/reports/{report_id}/send_email_now",
         "mode": "write",
@@ -11685,6 +11840,7 @@
         }
       },
       {
+        "name": "undo_remove_folder",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/undo-rm",
         "mode": "write",
@@ -11753,6 +11909,7 @@
         }
       },
       {
+        "name": "unlink_test_runs_from_test_plan",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/test-runs/unlink",
         "mode": "write",
@@ -11803,6 +11960,7 @@
         }
       },
       {
+        "name": "update_custom_field_dataset_option_v2",
         "method": "POST",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/options/{option_id}/update",
         "mode": "write",
@@ -11869,6 +12027,7 @@
         }
       },
       {
+        "name": "update_custom_field_dataset_project_mapping_v2",
         "method": "POST",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/project-mappings/update",
         "mode": "write",
@@ -11932,6 +12091,7 @@
         }
       },
       {
+        "name": "update_custom_field_definition_v2",
         "method": "POST",
         "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/update",
         "mode": "write",
@@ -12002,6 +12162,7 @@
         }
       },
       {
+        "name": "update_dataset",
         "method": "PUT",
         "path": "/api/v1/projects/{project_id}/datasets/{uuid}",
         "mode": "write",
@@ -12110,6 +12271,7 @@
         }
       },
       {
+        "name": "update_exploratory_session",
         "method": "PATCH",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}",
         "mode": "write",
@@ -12286,6 +12448,7 @@
         }
       },
       {
+        "name": "update_exploratory_session_log",
         "method": "PATCH",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/logs/{log_id}",
         "mode": "write",
@@ -12405,6 +12568,7 @@
         }
       },
       {
+        "name": "update_filter",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/filter/{filter_id}",
         "mode": "write",
@@ -12488,6 +12652,7 @@
         }
       },
       {
+        "name": "update_latest_test_result_for_test_case",
         "method": "PATCH",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
         "mode": "write",
@@ -12650,6 +12815,7 @@
         }
       },
       {
+        "name": "update_project_settings",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/settings",
         "mode": "write",
@@ -12696,6 +12862,7 @@
         }
       },
       {
+        "name": "update_report",
         "method": "PATCH",
         "path": "/api/v1/projects/{project_id}/reports/{report_id}",
         "mode": "write",
@@ -12998,6 +13165,7 @@
         }
       },
       {
+        "name": "update_shared_step_v1",
         "method": "PATCH",
         "path": "/api/v1/projects/{project_id}/shared-steps/{shared_step_id}",
         "mode": "write",
@@ -13084,6 +13252,7 @@
         }
       },
       {
+        "name": "update_test_plan_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/update",
         "mode": "write",
@@ -13219,6 +13388,7 @@
         }
       },
       {
+        "name": "upload_a_i_attachments",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/generic/attachments/ai_uploads",
         "mode": "write",
@@ -13255,6 +13425,7 @@
         }
       },
       {
+        "name": "upload_generic_attachments",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/generic/attachments",
         "mode": "write",
@@ -13291,6 +13462,7 @@
         }
       },
       {
+        "name": "upload_test_case_attachments_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/attachments",
         "mode": "write",
@@ -13358,6 +13530,7 @@
         }
       },
       {
+        "name": "user_workload_drilldown",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/reports/{report_id}/drilldown",
         "mode": "read",
@@ -17043,13 +17216,13 @@
             "type": "string",
             "format": "uri",
             "description": "Pre-signed S3 URL for viewing (inline, ~26 min expiry)",
-            "example": "https://example.com/media/genric/1/2921471/86de8094..."
+            "example": "https://example.com/media/attachment/1/2921471/86de8094..."
           },
           "download_url": {
             "type": "string",
             "format": "uri",
             "description": "Pre-signed S3 URL for downloading (attachment, ~26 min expiry)",
-            "example": "https://example.com/media/genric/1/2921471/86de8094..."
+            "example": "https://example.com/media/attachment/1/2921471/86de8094..."
           },
           "content_type": {
             "type": "string",
@@ -18160,7 +18333,7 @@
             },
             "selection": {
               "type": "object",
-              "description": "the primary project's persisted folder-structured test-case selection (with select_all / per-folder flags + unique_test_case_count), in the same shape as the test-run edit/selection endpoint. `{}` when the report has no saved selection for the primary project. Used by the Edit dialog to re-check saved test cases (including folder/project-level select_all, which the flat ids cannot represent).",
+              "description": "The primary project's persisted folder-structured test-case selection (with select_all / per-folder flags + unique_test_case_count), in the same shape as the test-run edit/selection endpoint. `{}` when the report has no saved selection for the primary project. Used by the Edit dialog to re-check saved test cases (including folder/project-level select_all, which the flat ids cannot represent).",
               "example": {
                 "select_all": false,
                 "folders": {
@@ -18177,7 +18350,7 @@
             },
             "shared_selection": {
               "type": "object",
-              "description": "per-project folder-structured selection for the report's non-primary projects, keyed by project id ({ \"<project_id>\": <selection> }). Present only for cross-project Test Case Activity reports; `{}` otherwise.",
+              "description": "Per-project folder-structured selection for the report's non-primary projects, keyed by project id ({ \"<project_id>\": <selection> }). Present only for cross-project Test Case Activity reports; `{}` otherwise.",
               "example": {
                 "10209": {
                   "select_all": true,

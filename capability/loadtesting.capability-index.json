@@ -581,14 +581,7 @@
           {
             "name": "errorCategory",
             "type": "string",
-            "values": [
-              "5xx",
-              "4xx",
-              "timeout",
-              "connection",
-              "assertion"
-            ],
-            "description": "Comma-separated error categories to include."
+            "description": "Comma-separated error categories — any combination of: 5xx, 4xx, timeout, connection, assertion (e.g. \"5xx,4xx\")."
           },
           {
             "name": "metrics",
@@ -1361,13 +1354,7 @@
           {
             "name": "include",
             "type": "string",
-            "values": [
-              "config",
-              "thresholds",
-              "tags",
-              "children"
-            ],
-            "description": "Comma-separated sub-resources to expand."
+            "description": "Comma-separated sub-resources to expand — any combination of: config, thresholds, tags, children (e.g. \"config,thresholds\"). Ask for everything you need in ONE call (include=config,thresholds,tags) rather than one request per sub-resource."
           },
           {
             "name": "fields",

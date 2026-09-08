@@ -891,11 +891,17 @@
             "name": "framework",
             "type": "string",
             "required": true,
+            "description": "PLU (protocol) frameworks: k6, jmeter, gatling, locust. BLU (browser) frameworks: playwright, selenium, webdriverio, nightwatch, lcncnightwatch. Must match testType — a PLU framework for testType plu, a BLU framework for testType blu (the backend rejects a mismatched pair).",
             "values": [
               "k6",
               "jmeter",
               "gatling",
-              "locust"
+              "locust",
+              "playwright",
+              "selenium",
+              "webdriverio",
+              "nightwatch",
+              "lcncnightwatch"
             ]
           },
           {

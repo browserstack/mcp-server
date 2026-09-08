@@ -1303,14 +1303,20 @@
                 "type": "string"
               }
             ]
+          },
+          {
+            "name": "runId",
+            "type": "string",
+            "description": "Tag a specific RUN instead of the test definition. When set, config.tags is applied to that run's own tags (the saved test is NOT changed); only config.tags may accompany runId. Omit it to edit the test."
           }
         ],
-        "intent": "Update an existing load test's name or configuration — use this to change tags, SLA thresholds, script or settings.",
+        "intent": "Update an existing load test's name or configuration — use this to change tags, SLA thresholds, script or settings; also tags a specific run when runId is set.",
         "guidance": [
           "Partial update: send only the fields to change.",
           "Pass ifVersion for optimistic concurrency; a stale value returns 409 VERSION_CONFLICT.",
           "Script replacement uses the same two-phase pendingScriptUpload flow as create.",
           "config is a partial update, but each field it carries REPLACES that field wholesale — it does not merge. tags overwrites the entire tag set; it does not append. To add a tag to a test (or the same tag across several tests), getLoadTest each one first and send the union under config.tags.",
+          "To tag a specific RUN rather than the test, pass runId (a run UUID from listLoadTestRuns) together with config.tags — the tags apply to that one run and the saved test is untouched. A run inherits the test's tags until you set its own; setting run tags overrides (they also replace wholesale, so send the union to add). Omit runId to tag the test itself.",
           "Tags live on the load test, not on its runs — there is no per-run tagging, so do not touch runs when asked to tag a test. To tag every test in a project, list them with listLoadTests and page through with cursor until hasMore is false, then updateLoadTest each one — do not stop after the first page or a subset."
         ],
         "returns": [

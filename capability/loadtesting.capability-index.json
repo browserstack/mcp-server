@@ -68,6 +68,9 @@
           }
         ],
         "intent": "List the caller's load-testing projects, most recently active first — use this to find a projectId or answer 'what projects do I have?'",
+        "cache": {
+          "ttlSec": 300
+        },
         "guidance": [
           "projectId from here is required by listLoadTests and createLoadTest.",
           "Page with cursor + limit; nextCursor is opaque."
@@ -156,6 +159,9 @@
           }
         ],
         "intent": "List the load tests in a project — use this to find a testId or browse tests, optionally filtered by type, framework, tag or recent activity.",
+        "cache": {
+          "ttlSec": 300
+        },
         "guidance": [
           "Resolve projectId via listLoadTestProjects first.",
           "The numeric testId returned here is what getLoadTest and startLoadTestRun need — not a runId.",
@@ -754,7 +760,8 @@
           "Read-only despite being a POST — nothing is started.",
           "fitsInQuota / remainingAfterEstimate compare the estimate against current quota.",
           "For the same check at start time, call startLoadTestRun with dryRun:true.",
-          "Always use this for a cost or VU-hour estimate of a hypothetical run — it models ramp-up. Do not compute VU-hours by hand from VUs × duration."
+          "Always use this for a cost or VU-hour estimate of a hypothetical run — it models ramp-up. Do not compute VU-hours by hand from VUs × duration.",
+          "A protocol (plu) run is billed at a full load-generator pod's capacity (e.g. 1000 VUs for k6), not the VUs it actually uses, and carries a minimum billing floor (5 minutes) — so a small or short plu run can estimate far higher than VUs × duration would suggest. That is expected: report the returned estimatedVuHours as-is rather than second-guessing it as an error."
         ],
         "returns": [
           "estimatedVuHours",
@@ -941,7 +948,9 @@
         "guidance": [
           "Provide exactly one of projectId or projectName; projectName creates the project if absent.",
           "Script upload is two-phase: send pendingScriptUpload to get a presigned uploadUrl + s3Key, PUT the file, then call create again with the scriptRef source and s3Key returned in the response's nextStep.",
-          "Pass idempotencyKey so a retried create does not duplicate the test."
+          "Pass idempotencyKey so a retried create does not duplicate the test.",
+          "testType and framework are required and are never inferred: testType is plu (protocol / API load), blu (real-browser load) or hybrid (both); framework is the load tool (k6, jmeter, gatling, locust). If the user has not stated them, ask — do not guess a default.",
+          "There is no clone capability. To duplicate a test, getLoadTest the source and copy its full config into this create — vuRamp/vus, durationSec, loadGeneratorLocations and slaThresholds included; nothing is inherited from the source, so anything you omit is dropped."
         ],
         "returns": [
           "testId",
@@ -1230,6 +1239,9 @@
           }
         ],
         "intent": "Discover which metrics, @ aliases and groupBy options a test supports — call this before requesting a report, trend or comparison so metric names are valid.",
+        "cache": {
+          "ttlSec": 900
+        },
         "guidance": [
           "Depends only on the test's type; cache the result client-side.",
           "Use the returned names/aliases in the metrics parameter of report, trends and compare."
@@ -1310,7 +1322,8 @@
         "guidance": [
           "Partial update: send only the fields to change.",
           "Pass ifVersion for optimistic concurrency; a stale value returns 409 VERSION_CONFLICT.",
-          "Script replacement uses the same two-phase pendingScriptUpload flow as create."
+          "Script replacement uses the same two-phase pendingScriptUpload flow as create.",
+          "config is a partial update, but each field it carries REPLACES that field wholesale — it does not merge. tags overwrites the entire tag set; it does not append. To add a tag to a test (or the same tag across several tests), getLoadTest each one first and send the union under config.tags."
         ],
         "returns": [
           "testId",
@@ -1368,6 +1381,9 @@
           }
         ],
         "intent": "Get the full configuration of a single load test — use this to inspect a test's settings, script reference, SLA thresholds and children.",
+        "cache": {
+          "ttlSec": 300
+        },
         "guidance": [
           "testId is numeric (from listLoadTests).",
           "Use include to expand config / thresholds / tags / children.",

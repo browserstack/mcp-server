@@ -1,4 +1,5 @@
 import { apiClient } from "../../lib/apiClient.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 export interface RAGChunk {
   url: string;
@@ -84,7 +85,9 @@ export async function queryAccessibilityRAG(
     )
     .join("\n\n---\n\n");
 
-  const formattedResponse = instruction + formattedChunks;
+  const formattedResponse =
+    instruction +
+    wrapUntrusted("BrowserStack accessibility documentation", formattedChunks);
 
   return {
     content: [

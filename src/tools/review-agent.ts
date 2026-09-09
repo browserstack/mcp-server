@@ -1,4 +1,5 @@
 import { BrowserStackConfig } from "../lib/types.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { getPercyBuildCount } from "./review-agent-utils/build-counts.js";
@@ -74,7 +75,10 @@ export async function fetchPercyChanges(
   return {
     content: allDiffs.map((diff: PercySnapshotDiff) => ({
       type: "text",
-      text: `${diff.name} → ${diff.title}: ${diff.description ?? ""}`,
+      text: wrapUntrusted(
+        "Percy AI visual-diff description",
+        `${diff.name} → ${diff.title}: ${diff.description ?? ""}`,
+      ),
     })),
   };
 }

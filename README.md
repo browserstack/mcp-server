@@ -426,7 +426,7 @@ As of now we support 45 tools.
   Get screenshots from Automate session ID abc123xyz for my desktop test run
   ```
 
- 18. `listSessions` — List the sessions in an Automate/App Automate build. Each record carries `sessionId`, `name`, `status`, `os`, `osVersion`, `browser`, `device`, and `browserUrl` (dashboard link), with optional `limit` / `offset` paging and a client-side `status` filter. Takes the **hashed** build ID from the dashboard URL — not the observability UUID returned by `getBuildId` / `listBuildId`; if you only have that UUID, use `hashed_id` from `fetchBuildInsights` when present. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`.
+ 18. `listSessions` — List the sessions in an Automate/App Automate build. Each record carries `sessionId`, `name`, `status`, `os`, `osVersion`, `browser`, `device`, `browserUrl` (dashboard link), and `videoUrl`, with optional `limit` / `offset` paging and a client-side `status` filter. Takes the **hashed** build ID from the dashboard URL — not the observability UUID returned by `getBuildId` / `listBuildId`; if you only have that UUID, use `hashed_id` from `fetchBuildInsights` when present. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`.
   **Prompt example**
 
   ```text
@@ -643,7 +643,7 @@ As of now we support 45 tools.
   Get the latest build ID for build 'nightly-regression' in project 'Checkout Flow'
   ```
 
- 45. `listTestIds` — List test IDs from a BrowserStack Automate build, filtered by status (passed/failed/pending/skipped).
+ 45. `listTestIds` — List the tests in a BrowserStack build (Automate or App Automate) with each test's `status` and `session_id`, optionally filtered by status (passed/failed/pending/skipped). The `session_id` feeds `getFailureLogs` and `fetchAutomationScreenshots` directly.
   **Prompt example**
 
   ```text

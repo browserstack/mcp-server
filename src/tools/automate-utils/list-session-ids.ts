@@ -22,6 +22,7 @@ export interface SessionIdRecord {
   browser?: string;
   device?: string | null;
   browserUrl?: string;
+  videoUrl?: string;
 }
 
 interface AutomationSessionPayload {
@@ -33,6 +34,7 @@ interface AutomationSessionPayload {
   browser?: string;
   device?: string | null;
   browser_url?: string;
+  video_url?: string;
 }
 
 interface SessionListItem {
@@ -88,6 +90,7 @@ export function mapSessionRecords(
       browser: session.browser,
       device: session.device,
       browserUrl: session.browser_url,
+      videoUrl: session.video_url,
     });
   }
   return records;

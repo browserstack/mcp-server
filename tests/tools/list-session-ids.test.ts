@@ -258,11 +258,12 @@ describe("listSessionIdsTool", () => {
         url: `https://api-cloud.browserstack.com/app-automate/builds/${HASHED_BUILD}/sessions.json`,
       }),
     );
-    expect(result.content[0].text).toContain(
+    // Session list stays in content[0] (JSON-parseable); the note follows.
+    const parsed = JSON.parse(result.content[0].text as string);
+    expect(parsed[0].sessionId).toBe("sess-aaa");
+    expect(result.content[1].text).toContain(
       `Resolved observability build ${OBS_UUID} to hashed build id ${HASHED_BUILD}`,
     );
-    const parsed = JSON.parse(result.content[1].text as string);
-    expect(parsed[0].sessionId).toBe("sess-aaa");
   });
 
   it("falls back to resolution when a 40-hex id is an observability id, not a hashed id", async () => {
@@ -292,7 +293,10 @@ describe("listSessionIdsTool", () => {
     expect((apiClient.get as Mock).mock.calls[1][0].url).toContain(
       `/builds/${HASHED_BUILD}/sessions.json`,
     );
-    expect(result.content[0].text).toContain(
+    expect(JSON.parse(result.content[0].text as string)[0].sessionId).toBe(
+      "sess-aaa",
+    );
+    expect(result.content[1].text).toContain(
       `Resolved observability build ${OBS_HEX} to hashed build id ${HASHED_BUILD}`,
     );
   });

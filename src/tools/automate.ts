@@ -125,17 +125,18 @@ export async function listSessionIdsTool(
       }
     }
 
-    const content: CallToolResult["content"] = [];
+    const content: CallToolResult["content"] = [
+      {
+        type: "text",
+        text:
+          sessions.length === 0
+            ? "No sessions found for this hashed build ID."
+            : JSON.stringify(sessions, null, 2),
+      },
+    ];
     if (resolvedNote) {
       content.push({ type: "text", text: resolvedNote });
     }
-    content.push({
-      type: "text",
-      text:
-        sessions.length === 0
-          ? "No sessions found for this hashed build ID."
-          : JSON.stringify(sessions, null, 2),
-    });
 
     return { content };
   } catch (error) {

@@ -881,6 +881,7 @@
             "name": "testType",
             "type": "string",
             "required": true,
+            "description": "plu = protocol/API load; blu = real-browser load; hybrid = BOTH in one test (one PLU leg + one BLU leg, supplied via children). These tokens are INTERNAL wire values — send them here but never show them to the user; the user-facing labels are 'API / Protocol' (plu), 'Browser' (blu) and 'Hybrid' (hybrid). All three are valid, user-selectable options — hybrid is not a rare/advanced variant, offer it alongside the other two.",
             "values": [
               "plu",
               "blu",
@@ -922,7 +923,7 @@
           {
             "name": "children",
             "type": "array",
-            "description": "Child scenarios for hybrid tests."
+            "description": "Child scenarios for a hybrid test. A hybrid is exactly one PLU (protocol) leg + one BLU (browser) leg — each leg carries its own framework + scriptRef (a sample or an uploaded script). Send the BLU leg as the top-level testType='blu'/framework/config and put the PLU leg in children[] (one entry, testType='plu' with its framework + config.scriptRef). The backend requires exactly one PLU and one BLU leg and rejects any other composition."
           },
           {
             "name": "idempotencyKey",
@@ -952,13 +953,16 @@
         ],
         "intent": "Create a new load test in a project — use this to define a test before running it. JSON body only (no multipart).",
         "guidance": [
+          "PRECONDITION — do NOT call this endpoint until THREE things are known: (1) testType (plu/blu/hybrid), (2) framework, (3) the script (a built-in sample or the user's own upload). These are MANDATORY and NOT defaultable — never infer or default them. If the user's request does not state one of the three, ASK the user for the missing ones and WAIT for their answer before creating. 'create a test' with no type/framework/script named means all three are missing → ask all three; do not silently pick k6/plu/sample. Only vus, duration, region and load profile are defaultable (see the DEFAULTS line) — the three above are not.",
+          "'plu' / 'blu' / 'hybrid' are INTERNAL wire values — send them in the request, but NEVER show them to the user. Do not print them in questions, option labels, confirmations, summaries, or prose (no 'Browser (BLU)', no '(plu+blu)'). User-facing labels are: plu → 'API / Protocol', blu → 'Browser', hybrid → 'Hybrid (both API and Browser)'. Frameworks (k6, jmeter, selenium, playwright, …) are real product names and ARE shown to the user.",
+          "When you ASK the user to pick testType or framework, present the FULL, exact option set — never drop, merge, or cross-contaminate options. testType: offer all THREE, using the user-facing labels above — 'API / Protocol', 'Browser', and 'Hybrid'; do not omit Hybrid. framework (ask AFTER testType is chosen, and show only that type's frameworks, each as its OWN separate option): for an API/Protocol test offer exactly k6, jmeter, gatling AND locust (all four — do not drop locust); for a Browser test offer exactly playwright, selenium, webdriverio AND nightwatch (all four — never list the API/Protocol frameworks under a Browser test, and never merge selenium and playwright into one option). For a Hybrid test, collect an API/Protocol leg (its framework + script) AND a Browser leg (its framework + script) and assemble them per the children field — Hybrid needs both legs, so it takes more than the three questions a single-type test does.",
           "Provide exactly one of projectId or projectName; projectName creates the project if absent.",
           "Script upload is two-phase: send pendingScriptUpload to get a presigned uploadUrl + s3Key, PUT the file, then call create again with the scriptRef source and s3Key returned in the response's nextStep.",
           "To spin up a test from a built-in sample with NO file handling (the dashboard's 'use sample script'), pass scriptRef:{source:'sample'} — the platform's bundled sample for the given framework is used. For Selenium, also pass scriptRef.subType (testng|junit|vanillajava|python|pytest|jest|serenity-cucumber) to pick the binding. testType and framework are still needed; the load profile defaults to constant 1 VU / 30s (see below).",
           "Pass idempotencyKey so a retried create does not duplicate the test.",
           "Only THREE things must be known before creating, and each is taken from the user's request when they've stated it — ask ONLY for the ones still missing, and ask about nothing else: (1) testType — plu (protocol / API load), blu (real-browser load) or hybrid (both); (2) framework — k6 / jmeter / gatling / locust for plu, playwright / selenium / webdriverio / nightwatch for blu; (3) the script — a built-in sample (scriptRef:{source:'sample'}; for Selenium also pass scriptRef.subType) OR the user's own script via the pendingScriptUpload flow. Do not guess a framework/testType, but do not re-ask for one the user already gave.",
           "There is no clone capability. To duplicate a test, getLoadTest the source and copy its full config into this create — vuRamp/vus, durationSec, loadGeneratorLocations and slaThresholds included; nothing is inherited from the source, so anything you omit is dropped.",
-          "Everything BEYOND those three DEFAULTS — do not ask about it; apply the default unless the user explicitly specifies otherwise: loadProfile='constant', config.vus=1, config.durationSec=30, region us-east-1 (omit loadGeneratorLocations so the backend defaults it), and NO advanced features (do not enable log capture, response capture, artifacts, thresholds, etc.). Send config.vus=1 + config.durationSec=30 with no vuRamp for the default constant profile.",
+          "DEFAULTS apply ONLY after the three mandatory fields (testType, framework, script) are known — they never substitute for a missing one of those. Everything BEYOND those three — do not ask about it; apply the default unless the user explicitly specifies otherwise: loadProfile='constant', config.vus=1, config.durationSec=30, region us-east-1 (omit loadGeneratorLocations so the backend defaults it), and NO advanced features (do not enable log capture, response capture, artifacts, thresholds, etc.). Send config.vus=1 + config.durationSec=30 with no vuRamp for the default constant profile.",
           "Only when the user explicitly asks for a different load shape, set config.loadProfile: 'ramping' (config.vuRamp: array of {vus, durationSec} stages; ramp up/down is inferred from adjacent VU deltas), 'iterations' (PLU only — config.iterations = fixed run count, plus config.vus), or 'throughput' (PLU and only JMeter/Gatling/locust/k6 — config.targetRps + config.maxVus + config.durationSec). A stage's own 'type' is NOT honored — every stage persists as a hold."
         ],
         "returns": [

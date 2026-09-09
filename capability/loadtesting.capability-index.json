@@ -881,6 +881,7 @@
             "name": "testType",
             "type": "string",
             "required": true,
+            "description": "plu = protocol/API load; blu = real-browser load; hybrid = BOTH in one test (one PLU leg + one BLU leg, supplied via children). All three are valid, user-selectable options — hybrid is not a rare/advanced variant, offer it alongside plu and blu.",
             "values": [
               "plu",
               "blu",
@@ -922,7 +923,7 @@
           {
             "name": "children",
             "type": "array",
-            "description": "Child scenarios for hybrid tests."
+            "description": "Child scenarios for a hybrid test. A hybrid is exactly one PLU (protocol) leg + one BLU (browser) leg — each leg carries its own framework + scriptRef (a sample or an uploaded script). Send the BLU leg as the top-level testType='blu'/framework/config and put the PLU leg in children[] (one entry, testType='plu' with its framework + config.scriptRef). The backend requires exactly one PLU and one BLU leg and rejects any other composition."
           },
           {
             "name": "idempotencyKey",
@@ -953,6 +954,7 @@
         "intent": "Create a new load test in a project — use this to define a test before running it. JSON body only (no multipart).",
         "guidance": [
           "PRECONDITION — do NOT call this endpoint until THREE things are known: (1) testType (plu/blu/hybrid), (2) framework, (3) the script (a built-in sample or the user's own upload). These are MANDATORY and NOT defaultable — never infer or default them. If the user's request does not state one of the three, ASK the user for the missing ones and WAIT for their answer before creating. 'create a test' with no type/framework/script named means all three are missing → ask all three; do not silently pick k6/plu/sample. Only vus, duration, region and load profile are defaultable (see the DEFAULTS line) — the three above are not.",
+          "When you ASK the user to pick testType or framework, present the FULL, exact option set — never drop, merge, or cross-contaminate options. testType: offer all THREE — 'API / Protocol' (plu), 'Browser' (blu), and 'Hybrid' (plu+blu); do not omit Hybrid. framework (ask AFTER testType is chosen, and show only that type's frameworks, each as its OWN separate option): for plu offer exactly k6, jmeter, gatling AND locust (all four — do not drop locust); for blu offer exactly playwright, selenium, webdriverio AND nightwatch (all four — never list PLU frameworks under blu, and never merge selenium and playwright into one option). For hybrid, collect a PLU leg (its framework + script) AND a BLU leg (its framework + script) and assemble them per the children field — hybrid needs both legs, so it takes more than the three questions a plu/blu test does.",
           "Provide exactly one of projectId or projectName; projectName creates the project if absent.",
           "Script upload is two-phase: send pendingScriptUpload to get a presigned uploadUrl + s3Key, PUT the file, then call create again with the scriptRef source and s3Key returned in the response's nextStep.",
           "To spin up a test from a built-in sample with NO file handling (the dashboard's 'use sample script'), pass scriptRef:{source:'sample'} — the platform's bundled sample for the given framework is used. For Selenium, also pass scriptRef.subType (testng|junit|vanillajava|python|pytest|jest|serenity-cucumber) to pick the binding. testType and framework are still needed; the load profile defaults to constant 1 VU / 30s (see below).",

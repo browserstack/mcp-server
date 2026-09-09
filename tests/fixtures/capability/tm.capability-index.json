@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.1",
-  "build_id": "50ec01a6_2026-09-08T11:56:26Z",
+  "version": "1.2",
+  "build_id": "3aece882_2026-09-09T11:34:27Z",
   "tm": {
     "summary": "BrowserStack Test Management API (v1 — the SSO/OAuth app API, session-authenticated).",
     "capabilities": [
@@ -121,6 +121,9 @@
           }
         ],
         "intent": "Bulk Archive Test Cases",
+        "guidance": [
+          "Archiving hides cases from the working set without deleting them; they can be retrieved again. Prefer it to deletion when the user says 'remove' or 'clean up' without being explicit."
+        ],
         "paginated": true,
         "responses": {
           "200": {
@@ -1097,6 +1100,9 @@
           }
         ],
         "intent": "Bulk edit test cases with per-field add / remove / replace operations (PREFERRED bulk write).",
+        "guidance": [
+          "Applies one change to many cases at once. Confirm the selection resolves to what the user meant before sending — there is no per-case confirmation and no undo."
+        ],
         "returns": [
           "async",
           "unique_id"
@@ -3900,6 +3906,9 @@
           }
         ],
         "intent": "Create a new test result for a test case in a test run",
+        "guidance": [
+          "This is how a pass or fail is recorded against a case in a run. Editing the run or the case does not record an outcome."
+        ],
         "returns": [
           "id",
           "status",
@@ -4131,6 +4140,13 @@
           }
         ],
         "intent": "Create a test run for a project",
+        "guidance": [
+          "Discovering cases does not put them in a run. Carry the case ids you found into this call — a create whose only case-bearing field is a filter rule succeeds and creates an EMPTY run.",
+          "run_state is required and is validated before the selection, so a bare 'invalid data' error means a bad run field, not a bad selection.",
+          "A filter rule also makes the run keep syncing as cases change, even if you did not ask for that. Create runs static unless the user explicitly wants a run that keeps updating.",
+          "Dynamic runs match on priority, status, category, owner, automation status, automation state, folder, tags and issues only. Creation and update dates are echoed back but never matched, so a 'last 7 days' dynamic run silently drops the date window and keeps collecting.",
+          "Preview the selection first if the count matters — it reports what the selection resolves to before anything is created."
+        ],
         "returns": [
           "id",
           "identifier",
@@ -7500,7 +7516,7 @@
           {
             "name": "q[query]",
             "type": "string",
-            "example": "alice"
+            "example": "jdoe"
           },
           {
             "name": "q[identifier]",
@@ -9160,6 +9176,9 @@
           }
         ],
         "intent": "Get a test run by INTEGER id (v1) — full detail + its TR-NNN identifier",
+        "guidance": [
+          "The run's id field is the display identifier string, while uuid is the integer. Take uuid whenever you carry this run into another call: the display string is rejected downstream."
+        ],
         "returns": [
           "id",
           "identifier",
@@ -10240,7 +10259,7 @@
           {
             "name": "q",
             "type": "string",
-            "example": "alice"
+            "example": "jdoe"
           },
           {
             "name": "p",
@@ -11563,6 +11582,9 @@
           }
         ],
         "intent": "Search for entities within a project (v2 - POST with body)",
+        "guidance": [
+          "The general way to find cases by attribute. Ask for a large page when collecting ids to feed into another call, so the follow-up gets the whole set rather than the first page."
+        ],
         "shape": "discovered",
         "max_page_size": 100,
         "paginated": true,
@@ -17216,13 +17238,13 @@
             "type": "string",
             "format": "uri",
             "description": "Pre-signed S3 URL for viewing (inline, ~26 min expiry)",
-            "example": "https://example.com/media/attachment/1/2921471/86de8094..."
+            "example": "https://example.com/media/genric/1/2921471/86de8094..."
           },
           "download_url": {
             "type": "string",
             "format": "uri",
             "description": "Pre-signed S3 URL for downloading (attachment, ~26 min expiry)",
-            "example": "https://example.com/media/attachment/1/2921471/86de8094..."
+            "example": "https://example.com/media/genric/1/2921471/86de8094..."
           },
           "content_type": {
             "type": "string",
@@ -18333,7 +18355,7 @@
             },
             "selection": {
               "type": "object",
-              "description": "The primary project's persisted folder-structured test-case selection (with select_all / per-folder flags + unique_test_case_count), in the same shape as the test-run edit/selection endpoint. `{}` when the report has no saved selection for the primary project. Used by the Edit dialog to re-check saved test cases (including folder/project-level select_all, which the flat ids cannot represent).",
+              "description": "the primary project's persisted folder-structured test-case selection (with select_all / per-folder flags + unique_test_case_count), in the same shape as the test-run edit/selection endpoint. `{}` when the report has no saved selection for the primary project. Used by the Edit dialog to re-check saved test cases (including folder/project-level select_all, which the flat ids cannot represent).",
               "example": {
                 "select_all": false,
                 "folders": {
@@ -18350,7 +18372,7 @@
             },
             "shared_selection": {
               "type": "object",
-              "description": "Per-project folder-structured selection for the report's non-primary projects, keyed by project id ({ \"<project_id>\": <selection> }). Present only for cross-project Test Case Activity reports; `{}` otherwise.",
+              "description": "per-project folder-structured selection for the report's non-primary projects, keyed by project id ({ \"<project_id>\": <selection> }). Present only for cross-project Test Case Activity reports; `{}` otherwise.",
               "example": {
                 "10209": {
                   "select_all": true,

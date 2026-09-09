@@ -82,14 +82,24 @@ describe("the released artifact", () => {
     expect(top.mode).toBe("read");
   });
 
-  it("ranks without guidance, which the released export no longer emits", () => {
-    // Search scores a `guidance` haystack that is now empty for every capability. It must
-    // still rank, or the drop would have silently degraded discovery.
+  it("ranks the same whether or not a capability carries guidance", () => {
+    // `guidance` is authored per capability in the harness's overrides/<product>.yaml, so it
+    // is deliberately SPARSE — the writes and multi-step flows have it, the obvious reads do
+    // not. It is also a scored haystack, so the risk is asymmetric: capabilities that happen
+    // to have been written up must not outrank a better answer that simply has none.
+    //
+    // This used to assert guidance was absent everywhere, which encoded the export dropping
+    // the field as though it were intended.
     const capabilities = registry.index.products.tm.capabilities;
-    expect(capabilities.some((capability) => capability.guidance)).toBe(false);
+    const guided = capabilities.filter((c) => c.guidance?.length);
+    expect(guided.length).toBeGreaterThan(0);
+    expect(guided.length).toBeLessThan(capabilities.length);
+
+    // The answer here carries no guidance, and still wins on its own merits.
     const hits = searchCapabilities(registry.index.products, "create a folder in a project");
     expect(hits.hits[0].capability.mode).toBe("write");
     expect(hits.hits[0].capability.entity).toBe("folder");
+    expect(hits.hits[0].capability.guidance ?? []).toHaveLength(0);
   });
 
   it("publishes the page ceiling under the name the artifact uses", () => {

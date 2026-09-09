@@ -917,7 +917,7 @@
           {
             "name": "config",
             "type": "object",
-            "description": "Test configuration incl. scriptRef {source: s3|s3_upload|existing_zip_id, value|identifier}, vuRamp, durationSec, loadGeneratorLocations, slaThresholds, envVarKeys, tags. To supply a script from a local file or URL, use the pendingScriptUpload flow, then source='s3'."
+            "description": "Test configuration incl. scriptRef {source: s3|s3_upload|existing_zip_id, value|identifier}, loadProfile (constant|ramping|iterations|throughput), vus, vuRamp, durationSec, iterations, targetRps, maxVus, loadGeneratorLocations, slaThresholds, envVarKeys, tags. See the load-profile guidance for which fields each loadProfile needs (iterations + throughput are PLU-only). To supply a script from a local file or URL, use the pendingScriptUpload flow, then source='s3'."
           },
           {
             "name": "children",
@@ -957,7 +957,7 @@
           "Pass idempotencyKey so a retried create does not duplicate the test.",
           "testType and framework are required and are never inferred: testType is plu (protocol / API load), blu (real-browser load) or hybrid (both); framework is the load tool (k6, jmeter, gatling, locust). If the user has not stated them, ask — do not guess a default.",
           "There is no clone capability. To duplicate a test, getLoadTest the source and copy its full config into this create — vuRamp/vus, durationSec, loadGeneratorLocations and slaThresholds included; nothing is inherited from the source, so anything you omit is dropped.",
-          "The load profile is required too and is never defaulted: the concurrency (config.vus, or a config.vuRamp for a ramp) and the run length (config.durationSec). If the user has not given the VUs and duration, ask for them — do not assume a value."
+          "The load profile is required and is never defaulted. Set config.loadProfile to one of: 'constant' (steady VUs — config.vus + config.durationSec, no vuRamp), 'ramping' (config.vuRamp: array of {vus, durationSec} stages; ramp up/down is inferred from adjacent VU deltas), 'iterations' (PLU only — config.iterations = fixed run count, plus config.vus), or 'throughput' (PLU and only JMeter/Gatling/locust/k6 — config.targetRps + config.maxVus + config.durationSec). Omitting config.loadProfile derives 'constant' (vus only) or 'ramping' (vuRamp present). A stage's own 'type' is NOT honored — every stage persists as a hold. If the user hasn't given the values a profile needs, ask — do not assume."
         ],
         "returns": [
           "testId",
@@ -1340,6 +1340,7 @@
           "Pass ifVersion for optimistic concurrency; a stale value returns 409 VERSION_CONFLICT.",
           "Script replacement uses the same two-phase pendingScriptUpload flow as create.",
           "config is a partial update, but each field it carries REPLACES that field wholesale — it does not merge. tags overwrites the entire tag set; it does not append. To add a tag to a test (or the same tag across several tests), getLoadTest each one first and send the union under config.tags.",
+          "To change the load profile, send config.loadProfile plus that profile's fields (see createLoadTest's load-profile guidance for the four shapes). Switching profiles clears the previous profile's fields — e.g. ramping→throughput empties the stages and drops iterations. iterations and throughput are PLU-only.",
           "To tag a specific RUN rather than the test, pass runId (a run UUID from listLoadTestRuns) together with config.tags — the tags apply to that one run and the saved test is untouched. A run inherits the test's tags until you set its own; setting run tags overrides (they also replace wholesale, so send the union to add). Omit runId to tag the test itself.",
           "Tags live on the load test, not on its runs — there is no per-run tagging, so do not touch runs when asked to tag a test. To tag every test in a project, list them with listLoadTests and page through with cursor until hasMore is false, then updateLoadTest each one — do not stop after the first page or a subset."
         ],

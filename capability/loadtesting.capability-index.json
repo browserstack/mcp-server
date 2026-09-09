@@ -917,7 +917,7 @@
           {
             "name": "config",
             "type": "object",
-            "description": "Test configuration incl. scriptRef {source: s3|s3_upload|existing_zip_id, value|identifier}, loadProfile (constant|ramping|iterations|throughput), vus, vuRamp, durationSec, iterations, targetRps, maxVus, loadGeneratorLocations, slaThresholds, envVarKeys, tags. See the load-profile guidance for which fields each loadProfile needs (iterations + throughput are PLU-only). To supply a script from a local file or URL, use the pendingScriptUpload flow, then source='s3'."
+            "description": "Test configuration incl. scriptRef {source: s3|s3_upload|existing_zip_id|sample, value|identifier}, loadProfile (constant|ramping|iterations|throughput), vus, vuRamp, durationSec, iterations, targetRps, maxVus, loadGeneratorLocations, slaThresholds, envVarKeys, tags. See the load-profile guidance for which fields each loadProfile needs (iterations + throughput are PLU-only). To supply a script from a local file or URL, use the pendingScriptUpload flow, then source='s3'. To create a test from the platform's built-in sample (no upload), use scriptRef:{source:'sample'} — for Selenium also pass scriptRef.subType (testng|junit|vanillajava|python|pytest|jest|serenity-cucumber)."
           },
           {
             "name": "children",
@@ -954,6 +954,7 @@
         "guidance": [
           "Provide exactly one of projectId or projectName; projectName creates the project if absent.",
           "Script upload is two-phase: send pendingScriptUpload to get a presigned uploadUrl + s3Key, PUT the file, then call create again with the scriptRef source and s3Key returned in the response's nextStep.",
+          "To spin up a test from a built-in sample with NO file handling (the dashboard's 'use sample script'), pass scriptRef:{source:'sample'} — the platform's bundled sample for the given framework is used. For Selenium, also pass scriptRef.subType (testng|junit|vanillajava|python|pytest|jest|serenity-cucumber) to pick the binding. testType, framework and the load profile are still required.",
           "Pass idempotencyKey so a retried create does not duplicate the test.",
           "testType and framework are required and are never inferred: testType is plu (protocol / API load), blu (real-browser load) or hybrid (both); framework is the load tool (k6, jmeter, gatling, locust). If the user has not stated them, ask — do not guess a default.",
           "There is no clone capability. To duplicate a test, getLoadTest the source and copy its full config into this create — vuRamp/vus, durationSec, loadGeneratorLocations and slaThresholds included; nothing is inherited from the source, so anything you omit is dropped.",

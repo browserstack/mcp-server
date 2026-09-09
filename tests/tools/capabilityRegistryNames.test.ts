@@ -128,6 +128,59 @@ describe("looking a capability up by its published name", () => {
   });
 });
 
+describe("entity key_facts — the entity-wide half of guidance", () => {
+  // What a caller gets wrong is often true of the ENTITY, not one call, so the build
+  // publishes the entity's key_facts and describeEntity hands them straight back. The
+  // filtering happens at build time; this side must not drop or reshape them.
+  const WITH_FACTS = {
+    summary: "p",
+    capabilities: [
+      {
+        name: "get_test_run_v1",
+        method: "GET",
+        path: "/api/v1/runs/{id}",
+        mode: "read",
+        entity: "test_run",
+      },
+    ],
+    entities: {
+      test_run: {
+        entity: "test_run",
+        title: "Test run",
+        aliases: ["run"],
+        key_facts: [
+          "A run's id field is the display string — take uuid when carrying it into another call.",
+        ],
+        capabilities: ["get_test_run_v1"],
+      },
+      // An entity whose facts were ALL withheld at build time carries no key_facts at all.
+      // Absent must read as "none passed the gate", never as an error.
+      result: { entity: "result", title: "Result", capabilities: [] },
+    },
+  };
+
+  it("carries key_facts through the loader onto the entity record", () => {
+    const r = registryWith({ tm: WITH_FACTS });
+    const doc = r.index.products.tm.entities.test_run;
+    expect(doc.key_facts).toHaveLength(1);
+    expect(doc.key_facts?.[0]).toContain("take uuid");
+  });
+
+  it("treats an entity with no key_facts as ordinary, not broken", () => {
+    const r = registryWith({ tm: WITH_FACTS });
+    expect(r.index.products.tm.entities.result.key_facts).toBeUndefined();
+  });
+
+  it("does not duplicate an entity-wide fact onto the capability", () => {
+    // The whole reason key_facts exist as a separate field: saying it once on the entity
+    // instead of on each of the ~20 capabilities that touch it. A capability picking the
+    // fact up would reintroduce the duplication and dilute search scoring.
+    const r = registryWith({ tm: WITH_FACTS });
+    const capability = r.byNameLookup("get_test_run_v1").capability;
+    expect(capability.guidance).toBeUndefined();
+  });
+});
+
 describe("invokeCapability", () => {
   beforeEach(() => {
     process.env.CAPABILITY_REGISTRY_INDEX = FIXTURE;

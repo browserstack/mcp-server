@@ -127,6 +127,19 @@ export interface EntityDoc {
   id_convention?: string;
   parents?: string[];
   relations?: { entity?: string; via?: string }[];
+  /**
+   * What a caller gets wrong about this ENTITY, as opposed to one operation.
+   *
+   * The entity-wide half of guidance: "a run's `id` is the display string, take `uuid`"
+   * holds for every capability returning a run, so it is stated once here rather than
+   * copied onto each capability's `guidance` — which would repeat across ~20 records and,
+   * since guidance is a search haystack, dilute ranking with boilerplate.
+   *
+   * Filtered at build time and often absent: of tm's 155 authored facts, 73 are publishable
+   * as written and the rest name routes, HTTP verbs or wire-shaped parameters. Absent means
+   * "none passed", never an error.
+   */
+  key_facts?: string[];
   [key: string]: unknown;
 }
 

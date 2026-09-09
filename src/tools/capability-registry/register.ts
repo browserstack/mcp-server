@@ -28,7 +28,7 @@ import {
   resolveResponses,
 } from "./index-loader.js";
 import { invoke } from "./resolve.js";
-import { searchCapabilities } from "./search.js";
+import { searchCapabilities, vocabularyOf } from "./search.js";
 import { Mode } from "./types.js";
 
 export const PERMISSION_VALUES = ["not_asked", "granted", "denied"] as const;
@@ -277,10 +277,13 @@ export function addCapabilityRegistryTools(
     "Find endpoints this surface can call, by plain language, optionally narrowed to one " +
       "entity, product or mode. " +
       `Currently loaded products: ${productList} — call listProducts for what each does. ` +
-      "Search matches the product's OWN words, not synonyms, so when a query returns " +
-      "nothing that fits, do not just rephrase it: call listEntities for the product and " +
-      "describeEntity on the closest entity, then search again using the vocabulary they " +
-      "return. Narrowing with `product` or `entity` sharpens results further. " +
+      "Search matches the product's OWN words, not synonyms. When your words are not the " +
+      "product's, the response says so: `weak_match: true` with a `suggested_vocabulary` " +
+      "map of the product's entities and their aliases. Results are still returned, but " +
+      "treat them as unconfirmed — pick the closest entity from that map and search again " +
+      "using its vocabulary, or call describeEntity on it for the fuller picture. That one " +
+      "extra round trip is far cheaper than invoking the wrong capability. " +
+      "Narrowing with `product` or `entity` sharpens results further. " +
       "Each result carries the capability's `name` — the handle you pass to " +
       "invokeCapability — plus its `method` and `path` (use those two only when a result " +
       "has no `name`), and its parameters grouped into path_params / query / body under " +
@@ -325,7 +328,7 @@ export function addCapabilityRegistryTools(
     async ({ query, entity, product, mode, limit, include_responses }) => {
       track("searchCapability");
       const selection = (include_responses || "success") as ResponseSelection;
-      const { hits, ...rest } = searchCapabilities(
+      const { hits, weak, top_matched, ...rest } = searchCapabilities(
         registry.index.products,
         query,
         {
@@ -359,6 +362,30 @@ export function addCapabilityRegistryTools(
           };
         }),
         ...rest,
+        // WHEN THE MATCH IS WEAK, HAND OVER THE VOCABULARY.
+        //
+        // A vocabulary miss returns a full page of confident-looking hits — nothing in the
+        // shape of the response says the caller's word does not exist in this product. This
+        // is that signal, plus the fix in the same round trip: the caller is a model, and it
+        // maps "bucket" to "folder" instantly once it can see the entity list.
+        //
+        // Additive, never a replacement — the results are still there, and the caller is
+        // told to re-search rather than to trust this. That is what makes a generous
+        // threshold safe.
+        ...(weak
+          ? {
+              weak_match: true,
+              suggested_vocabulary: vocabularyOf(
+                registry.index.products,
+                product,
+              ),
+              hint:
+                "Nothing matched the product's own words strongly (best term score " +
+                `${top_matched.toFixed(1)}). The results below may not answer the ` +
+                "question. Re-search using a term from suggested_vocabulary, or call " +
+                "describeEntity on the closest entity for its full vocabulary.",
+            }
+          : {}),
       });
     },
   );

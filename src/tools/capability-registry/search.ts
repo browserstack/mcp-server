@@ -188,6 +188,26 @@ export function isCollection(capability: Capability): boolean {
   return tail.endsWith("s") && !tail.endsWith("ss");
 }
 
+/**
+ * Does this capability's mode answer what the caller asked to DO?
+ *
+ * `destructive` counts as a write. It has to: `modeHint` reads "delete" and "remove" as
+ * WRITE verbs, but a delete endpoint's mode is `destructive`, so a strict equality check
+ * penalised every destructive capability by 20 FOR BEING A DELETE — on exactly the queries
+ * that wanted one. "bulk delete test cases" scored 15.8 on terms, the highest of any missed
+ * query in the eval, and still fell out of the top 8.
+ *
+ * That accounted for 15 of the eval's 36 misses. The mode hint exists to separate reading
+ * from changing; destructive is changing.
+ *
+ * A read hint still refuses destructive, which is the useful half: "show me the test plans"
+ * must not surface a delete.
+ */
+function satisfiesHint(mode: Mode, hint: Mode): boolean {
+  if (hint === "write") return mode === "write" || mode === "destructive";
+  return mode === hint;
+}
+
 /** Everything a caller might say that lives on a parameter rather than in the prose. */
 function parameterText(capability: Capability): string {
   const parts: string[] = [];
@@ -372,8 +392,7 @@ function score(
     ranked += RESOURCE_BONUS;
   }
 
-  if (hint && capability.mode !== hint) ranked -= 20;
-  else if (hint && capability.mode === hint) ranked += 6;
+  if (hint) ranked += satisfiesHint(capability.mode, hint) ? 6 : -20;
   if (plural) ranked += isCollection(capability) ? 8 : -8;
 
   return { matched, ranked };
@@ -396,6 +415,75 @@ export interface SearchResult {
   hits: SearchHit[];
   truncated: boolean;
   total_matched: number;
+  /**
+   * The best pre-penalty term score, and whether it is weak enough to doubt.
+   *
+   * A vocabulary miss does NOT look like a miss from the outside: "make a new bucket for my
+   * tests" returns a full page of eight confident hits, exactly like a query that worked,
+   * because containment finds *something* for `make`, `new` and `tests`. The only thing that
+   * separates them is how little the match is worth.
+   */
+  top_matched: number;
+  weak: boolean;
+}
+
+/**
+ * Below this, the caller is probably not speaking the product's language.
+ *
+ * Measured on tm: vocabulary misses top out at 1.98–2.15 ("where do my things live", "make a
+ * new bucket for my tests") while queries that work reach 6.5–12. The two ranges do NOT
+ * separate cleanly — "list all projects" scores 1.58 and is nonetheless answered correctly
+ * at rank 1, because `projects` is in 156 of 173 paths and worth almost nothing.
+ *
+ * So this is set generously and false positives are accepted, which is sound only because
+ * the vocabulary block is ADDITIVE: it arrives next to the results, never instead of them.
+ * Over-triggering costs ~1.5KB against a response that is routinely 38KB; under-triggering
+ * costs the caller a wrong answer with no hint that it is wrong. Those are not symmetric.
+ */
+const WEAK_MATCH = 3;
+
+/** One entity's caller-facing vocabulary: what it is called, and what else it is called. */
+export interface VocabularyEntry {
+  entity: string;
+  title?: string;
+  aliases?: string[];
+}
+
+/**
+ * The product's vocabulary, for a caller whose words are not the product's words.
+ *
+ * THE ONE FAILURE LEXICAL SEARCH CANNOT FIX. "make a new bucket for my tests" wants the
+ * folder-create capability, and `bucket` appears nowhere in the index — no scoring change
+ * reaches it, because the word is simply absent. What CAN reach it is the caller: it is a
+ * language model, and given tm's entity list it maps bucket -> folder without effort. It
+ * just cannot guess the list unprompted.
+ *
+ * Aliases only, deliberately. They are the vocabulary map — 19 entities in ~1.5KB, against a
+ * response that is routinely 38KB. The entity `key_facts` are richer prose but ten times the
+ * size, and a caller who needs them can ask describeEntity once it knows which entity to ask
+ * about — which is exactly what this hands over.
+ */
+export function vocabularyOf(
+  products: Record<string, ProductIndex>,
+  only?: string,
+): Record<string, VocabularyEntry[]> {
+  const out: Record<string, VocabularyEntry[]> = {};
+  for (const [name, bundle] of Object.entries(products)) {
+    if (only && name !== only) continue;
+    const entries: VocabularyEntry[] = [];
+    for (const [entity, doc] of Object.entries(bundle.entities || {})) {
+      const aliases = ((doc as EntityDoc).aliases || []) as string[];
+      entries.push({
+        entity,
+        ...((doc as EntityDoc).title
+          ? { title: (doc as EntityDoc).title }
+          : {}),
+        ...(aliases.length ? { aliases } : {}),
+      });
+    }
+    if (entries.length) out[name] = entries;
+  }
+  return out;
 }
 
 export function searchCapabilities(
@@ -480,11 +568,17 @@ export function searchCapabilities(
     (a, b) =>
       b.ranked - a.ranked || a.capability.path.localeCompare(b.capability.path),
   );
+  // Ranked order decides the page; the best TERM score decides confidence. They are
+  // different questions: the mode and cardinality constants can lift a weakly-matched
+  // capability to the top of a page that is entirely wrong.
+  const topMatched = scored.reduce((best, s) => Math.max(best, s.matched), 0);
   return {
     hits: scored
       .slice(0, limit)
       .map(({ product, capability }) => ({ product, capability })),
     truncated: scored.length > limit,
     total_matched: scored.length,
+    top_matched: topMatched,
+    weak: wanted.length > 0 && topMatched < WEAK_MATCH,
   };
 }

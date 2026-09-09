@@ -1,99 +1,277 @@
 {
-  "note": "Query -> the endpoint that should answer it. `maxRank` is the worst position the expected endpoint may occupy in the top 8; `miss` records a query the lexical scorer is known not to serve, with the reason. Tighten these when the ranker improves; never loosen one without saying why.",
+  "note": "Query -> the endpoint that should answer it. `maxRank` is the worst position the expected endpoint may occupy in the top 8, pinned at what the scorer does today; tighten it when the ranker improves, never loosen one without saying why. `miss` records a query the scorer does not serve at all, with the reason, and `defect` names the mechanism responsible so the misses can be counted by cause rather than one at a time. `group` is the entity or query style the case exercises, for per-area reporting. Authored against the tm index; queries are what a caller would actually type, including paraphrases that avoid the product's own words.",
+  "baseline": {
+    "measured_on": "tm.capability-index.json build f6a3eca0_2026-09-09T14:21:54Z",
+    "cases": 198,
+    "top1": 138,
+    "top3": 164,
+    "top8": 176,
+    "missed": 22,
+    "mrr_at_8": 0.765,
+    "misses_by_defect": {
+      "mode-penalty": 2,
+      "cardinality-penalty": 11,
+      "vocabulary-gap": 4,
+      "destructive-mode-penalty": 1,
+      "sibling-shadowing": 4
+    }
+  },
   "cases": [
     {
+      "group": "folder",
       "q": "list all folders in a project",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/folders",
       "maxRank": 1
     },
     {
+      "group": "folder",
       "q": "create a new folder",
       "method": "POST",
       "path": "/api/v1/projects/{project_id}/folders",
       "maxRank": 3,
-      "why": "regressed 2 -> 3 when the phrase bonus landed: 'new folder' is not a phrase in any haystack, while the competing mkdir endpoint gains from 'create'. Accepted \u2014 the phrase bonus is a net gain across the set."
+      "why": "regressed 2 -> 3 when the phrase bonus landed: 'new folder' is not a phrase in any haystack, while the competing mkdir endpoint gains from 'create'. Accepted — the phrase bonus is a net gain across the set."
     },
     {
-      "q": "show me the test runs for a project",
+      "group": "folder",
+      "q": "create a subfolder inside an existing folder",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/mkdir",
+      "maxRank": 1
+    },
+    {
+      "group": "folder",
+      "q": "rename a folder",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/rename",
+      "maxRank": 1
+    },
+    {
+      "group": "folder",
+      "q": "move a folder under a different parent",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/mv",
+      "maxRank": 1
+    },
+    {
+      "group": "folder",
+      "q": "copy a folder to another location",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folders/copy",
+      "maxRank": 1
+    },
+    {
+      "group": "folder",
+      "q": "delete a folder and everything inside it",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/rm",
+      "maxRank": 8,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "folder",
+      "q": "undo a folder deletion",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/undo-rm",
+      "maxRank": 1
+    },
+    {
+      "group": "folder",
+      "q": "what gets removed if I delete this folder",
       "method": "GET",
-      "path": "/api/v1/projects/{project_id}/test-runs",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/rm-summary",
+      "miss": "modeHint misreads the query's verb and the read target takes the -20 mismatch.",
+      "defect": "mode-penalty"
+    },
+    {
+      "group": "folder",
+      "q": "reorder folders in a project",
+      "method": "PATCH",
+      "path": "/api/v1/projects/{project_id}/folders/reorder",
       "maxRank": 1
     },
     {
-      "q": "create a test run",
-      "method": "POST",
-      "path": "/api/v1/projects/{project_id}/test-runs",
-      "maxRank": 1
-    },
-    {
-      "q": "create a test plan",
-      "method": "POST",
-      "path": "/api/v1/projects/{project_id}/test-plans",
-      "maxRank": 1
-    },
-    {
-      "q": "clone a test plan",
-      "method": "POST",
-      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/clone",
-      "maxRank": 1
-    },
-    {
-      "q": "archive test plans in bulk",
-      "method": "POST",
-      "path": "/api/v1/projects/{project_id}/test-plans/bulk-archive",
-      "maxRank": 1
-    },
-    {
-      "q": "upload an attachment to a test case",
-      "method": "POST",
-      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/attachments",
+      "group": "folder",
+      "q": "show me the folder tree for a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/repository/mapping",
       "maxRank": 2
     },
     {
-      "q": "merge one tag into another",
+      "group": "folder",
+      "q": "list the subfolders of one folder",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "folder",
+      "q": "make a new bucket for my tests",
       "method": "POST",
-      "path": "/api/v1/projects/{project_id}/tags/merge",
-      "maxRank": 1
+      "path": "/api/v1/projects/{project_id}/folders",
+      "miss": "'bucket' is nobody's word for a folder; no lexical scorer reaches this.",
+      "defect": "vocabulary-gap"
     },
     {
-      "q": "who has access to this project",
+      "group": "test_case",
+      "q": "list a project's test cases",
       "method": "GET",
-      "path": "/api/v1/projects/{project_id}/users/search",
+      "path": "/api/v1/projects/{project_id}/test-cases",
       "maxRank": 1
     },
     {
-      "q": "what changed recently, who edited what",
-      "method": "GET",
-      "path": "/api/v1/activities",
-      "maxRank": 1
-    },
-    {
-      "q": "audit log",
-      "method": "GET",
-      "path": "/api/v1/activities",
-      "maxRank": 1
-    },
-    {
+      "group": "test_case",
       "q": "tc list for a folder",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
       "maxRank": 1
     },
     {
+      "group": "test_case",
+      "q": "list the test cases in one folder",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
+      "maxRank": 1
+    },
+    {
+      "group": "test_case",
       "q": "get full detail of one test case including steps",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/detail",
       "maxRank": 1
     },
     {
+      "group": "test_case",
       "q": "test_case detail",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/detail",
-      "maxRank": 2,
-      "why": "the entity name listEntities returns, verbatim \u2014 the documented flow must not be the losing one"
+      "maxRank": 1,
+      "why": "the entity name listEntities returns, verbatim — the documented flow must not be the losing one"
     },
     {
+      "group": "test_case",
+      "q": "get a test case by its integer id",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "test_case",
+      "q": "create a test case in a folder",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
+      "maxRank": 1
+    },
+    {
+      "group": "test_case",
+      "q": "create several test cases at once in a folder",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/bulk-test-cases",
+      "maxRank": 2
+    },
+    {
+      "group": "test_case",
+      "q": "create the first test case in a project that has no folders",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-cases",
+      "maxRank": 2
+    },
+    {
+      "group": "test_case",
+      "q": "edit a test case",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/edit",
+      "maxRank": 2
+    },
+    {
+      "group": "test_case",
+      "q": "partially edit a test case v2",
+      "method": "PATCH",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/edit-v2",
+      "maxRank": 2
+    },
+    {
+      "group": "test_case",
+      "q": "archive test cases in bulk",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-cases/bulk-archive",
+      "maxRank": 1
+    },
+    {
+      "group": "test_case",
+      "q": "bulk copy test cases",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-cases/bulk-copy",
+      "maxRank": 1
+    },
+    {
+      "group": "test_case",
+      "q": "bulk move test cases to another folder",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-cases/bulk-move",
+      "maxRank": 1
+    },
+    {
+      "group": "test_case",
+      "q": "bulk delete test cases",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-cases/bulk-delete",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "test_case",
+      "q": "bulk update test cases",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-cases/bulk-edit",
+      "maxRank": 2
+    },
+    {
+      "group": "test_case",
+      "q": "retrieve many test cases at once by id",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-cases/bulk-retrieve",
+      "maxRank": 1
+    },
+    {
+      "group": "test_case",
+      "q": "reorder test cases within a folder",
+      "method": "PATCH",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/reorder",
+      "maxRank": 1
+    },
+    {
+      "group": "test_case",
+      "q": "search test cases in a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/search",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "test_case",
+      "q": "list archived test cases",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-cases/archived_test_cases",
+      "maxRank": 1
+    },
+    {
+      "group": "test_case",
+      "q": "what are the allowed priority values for a test case",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-case/{field_name}",
+      "maxRank": 1
+    },
+    {
+      "group": "test_run",
+      "q": "show me the test runs for a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs",
+      "maxRank": 1
+    },
+    {
+      "group": "test_run",
       "q": "list test_runs",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/test-runs",
@@ -101,13 +279,209 @@
       "why": "same, plural: underscore has to tokenize like a space"
     },
     {
+      "group": "test_run",
+      "q": "create a test run",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs",
+      "maxRank": 1
+    },
+    {
+      "group": "test_run",
+      "q": "close a test run",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/close",
+      "maxRank": 1
+    },
+    {
+      "group": "test_run",
+      "q": "clone a test run",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/clone",
+      "maxRank": 1
+    },
+    {
+      "group": "test_run",
+      "q": "edit a test run",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/edit",
+      "maxRank": 1
+    },
+    {
+      "group": "test_run",
+      "q": "assign an owner to a test run",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/assign",
+      "maxRank": 1
+    },
+    {
+      "group": "test_run",
+      "q": "add test cases to a test run in bulk",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/bulk_assign",
+      "maxRank": 1
+    },
+    {
+      "group": "test_run",
+      "q": "list the closed test runs",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs/closed",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "test_run",
+      "q": "which test cases are in a test run",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases",
+      "maxRank": 1
+    },
+    {
+      "group": "test_run",
+      "q": "get a run with its per case rows",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/detail",
+      "maxRank": 1
+    },
+    {
+      "group": "test_run",
+      "q": "custom field values for test results in test runs",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs/form-fields",
+      "maxRank": 5
+    },
+    {
+      "group": "test_run",
+      "q": "count the test cases a selection resolves to",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/selection-count",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "test_run",
+      "q": "get a test run by integer id",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "create a test plan",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "clone a test plan",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/clone",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "archive test plans in bulk",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/bulk-archive",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "get rid of a test plan",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
+      "miss": "'get' trips the READ verb list, so the destructive endpoint takes the -20 mode mismatch. Previously recorded as harmless because destructive endpoints are refused before binding — but searchCapability is discovery, and it currently answers with the wrong endpoint rather than none.",
+      "defect": "destructive-mode-penalty"
+    },
+    {
+      "group": "test_plan",
+      "q": "delete a test plan",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "test_plan",
+      "q": "list test plans in a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-plans",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "list archived test plans",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-plans/archived_test_plans",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "how many archived test plans are there",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-plans/archive_count",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "test_plan",
+      "q": "update a test plan",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/update",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "un-archive test plans in bulk",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/bulk-retrieve",
+      "maxRank": 2
+    },
+    {
+      "group": "test_plan",
+      "q": "list the test runs linked to a test plan",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/test-runs",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "unlink test runs from a test plan",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/test-runs/unlink",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "execution trend chart data for a plan",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-plans/execution-trend",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "chart data for exploratory sessions linked to a test plan",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/linked-sessions-chart-data",
+      "maxRank": 1
+    },
+    {
+      "group": "test_plan",
+      "q": "get a test plan by integer id",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "result",
       "q": "record a pass or fail for a test case in a run",
       "method": "POST",
       "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
-      "maxRank": 3,
-      "why": "reached only through the status enum [pass, fail, bug, retest, block, note] on the parameter \u2014 the words appear nowhere in the prose"
+      "maxRank": 1,
+      "why": "reached only through the status enum [pass, fail, bug, retest, block, note] on the parameter — the words appear nowhere in the prose"
     },
     {
+      "group": "result",
       "q": "mark a test as passed",
       "method": "POST",
       "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
@@ -115,18 +489,87 @@
       "why": "same: the caller's word is a parameter VALUE, not a noun in the description"
     },
     {
-      "q": "make a new bucket for my tests",
+      "group": "result",
+      "q": "create a new test result for a test case in a test run",
       "method": "POST",
-      "path": "/api/v1/projects/{project_id}/folders",
-      "miss": "'bucket' is nobody's word for a folder; no lexical scorer reaches this"
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
+      "maxRank": 1
     },
     {
-      "q": "get rid of a test plan",
-      "method": "POST",
-      "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
-      "miss": "'get' trips the READ verb list, so the destructive endpoint takes the mode penalty. Harmless: destructive endpoints are refused before binding anyway."
+      "group": "result",
+      "q": "update the latest test result",
+      "method": "PATCH",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
+      "maxRank": 1
     },
     {
+      "group": "result",
+      "q": "get the test results for a test case in a run",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
+      "maxRank": 1
+    },
+    {
+      "group": "result",
+      "q": "record a result for a single step",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/step/{step_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "result",
+      "q": "delete test results in bulk",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-results/bulk-delete",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "result",
+      "q": "delete one test result",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-results/{test_result_id}/delete",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "attachment",
+      "q": "upload an attachment to a test case",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/attachments",
+      "maxRank": 2
+    },
+    {
+      "group": "attachment",
+      "q": "list the attachments on a test case",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/attachments",
+      "maxRank": 1
+    },
+    {
+      "group": "attachment",
+      "q": "remove an attachment from a test case",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/attachments/{attachment_id}/delete",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "attachment",
+      "q": "upload a file from the rich text editor",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/generic/attachments",
+      "maxRank": 1
+    },
+    {
+      "group": "attachment",
+      "q": "upload AI generated attachments",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/generic/attachments/ai_uploads",
+      "maxRank": 1
+    },
+    {
+      "group": "project",
       "q": "list all projects",
       "method": "GET",
       "path": "/api/v1/projects",
@@ -134,11 +577,874 @@
       "why": "the terminal-segment bonus: `projects` is in 156 of 173 paths as a scope prefix, so rarity values it near zero and this ranked 7th on term score alone. Pinned at 1 to keep the scope/target distinction from regressing."
     },
     {
+      "group": "project",
+      "q": "create a new project",
+      "method": "POST",
+      "path": "/api/v1/projects",
+      "maxRank": 1
+    },
+    {
+      "group": "project",
+      "q": "get one project by id",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}",
+      "miss": "'get one X by id' has no term the single-project getter owns — 'project' is in 88% of paths, and the getter's path is a bare prefix of 150 others.",
+      "defect": "sibling-shadowing"
+    },
+    {
+      "group": "project",
+      "q": "read the project settings",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/settings",
+      "maxRank": 1
+    },
+    {
+      "group": "project",
+      "q": "update the project settings",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/settings",
+      "maxRank": 3
+    },
+    {
+      "group": "project",
+      "q": "paginated projects with a lean payload",
+      "method": "GET",
+      "path": "/api/v1/projects/basic",
+      "maxRank": 1
+    },
+    {
+      "group": "project",
+      "q": "minified project list for a dropdown",
+      "method": "GET",
+      "path": "/api/v1/projects/minify",
+      "maxRank": 1
+    },
+    {
+      "group": "project",
+      "q": "list the users on a project with pagination",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/users-v2",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "project",
+      "q": "active test run result statistics",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/dashboard-analytics/active-test-runs-info",
+      "maxRank": 1
+    },
+    {
+      "group": "project",
+      "q": "closed test run analytics",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/dashboard-analytics/closed-test-runs-info",
+      "maxRank": 2
+    },
+    {
+      "group": "project",
+      "q": "automation stats analytics",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/dashboard-analytics/automation-stats",
+      "maxRank": 1
+    },
+    {
+      "group": "project",
+      "q": "test case count trend",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/dashboard-analytics/test-case-count-trend",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "project",
+      "q": "test case type split",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/dashboard-analytics/test-case-type-split",
+      "maxRank": 1
+    },
+    {
+      "group": "project",
+      "q": "issues count analytics",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/dashboard-analytics/issues-count-info",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "project",
+      "q": "export the dashboard analytics data",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/dashboard-analytics/download",
+      "maxRank": 1
+    },
+    {
+      "group": "project",
+      "q": "closed test runs split analytics",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/dashboard-analytics/closed-test-runs-split",
+      "maxRank": 1
+    },
+    {
+      "group": "user",
+      "q": "who has access to this project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/users/search",
+      "maxRank": 1
+    },
+    {
+      "group": "user",
+      "q": "list the users in the group",
+      "method": "GET",
+      "path": "/api/v1/group/users-v2",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "activity",
+      "q": "what changed recently, who edited what",
+      "method": "GET",
+      "path": "/api/v1/activities",
+      "maxRank": 1
+    },
+    {
+      "group": "activity",
+      "q": "audit log",
+      "method": "GET",
+      "path": "/api/v1/activities",
+      "maxRank": 1
+    },
+    {
+      "group": "custom_field",
       "q": "list custom fields",
       "method": "GET",
       "path": "/api/v1/admin-v2/settings/fields",
-      "maxRank": 2,
+      "maxRank": 1,
       "why": "a bare `list` query must prefer the paginated listing over the single-definition getter it used to rank first."
+    },
+    {
+      "group": "custom_field",
+      "q": "create a custom field definition",
+      "method": "POST",
+      "path": "/api/v1/admin-v2/settings/custom-fields",
+      "maxRank": 1
+    },
+    {
+      "group": "custom_field",
+      "q": "update a custom field definition",
+      "method": "POST",
+      "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/update",
+      "maxRank": 1
+    },
+    {
+      "group": "custom_field",
+      "q": "delete a custom field definition",
+      "method": "POST",
+      "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/delete",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "custom_field",
+      "q": "read one custom field definition",
+      "method": "GET",
+      "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "custom_field",
+      "q": "add a dropdown option to a field",
+      "method": "POST",
+      "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/options",
+      "maxRank": 1
+    },
+    {
+      "group": "custom_field",
+      "q": "rename a dropdown option",
+      "method": "POST",
+      "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/options/{option_id}/update",
+      "maxRank": 2
+    },
+    {
+      "group": "custom_field",
+      "q": "delete a dropdown option",
+      "method": "POST",
+      "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/options/{option_id}/delete",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "custom_field",
+      "q": "list a dataset's options with their ids",
+      "method": "GET",
+      "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/options",
+      "maxRank": 1
+    },
+    {
+      "group": "custom_field",
+      "q": "add an option set to an existing custom field",
+      "method": "POST",
+      "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets",
+      "maxRank": 2
+    },
+    {
+      "group": "custom_field",
+      "q": "change which projects can see a custom field",
+      "method": "POST",
+      "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}/project-mappings/update",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "custom_field",
+      "q": "the allowed options of one custom field in a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/{entity_type}/custom-fields/{field_id}",
+      "maxRank": 3
+    },
+    {
+      "group": "custom_field",
+      "q": "project specific custom fields for test cases",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/form-fields-v2",
+      "maxRank": 7
+    },
+    {
+      "group": "custom_field",
+      "q": "custom fields for test results",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-results/custom-fields",
+      "maxRank": 1
+    },
+    {
+      "group": "dataset",
+      "q": "list the datasets in a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/datasets",
+      "maxRank": 1
+    },
+    {
+      "group": "dataset",
+      "q": "create a dataset",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/datasets",
+      "maxRank": 1
+    },
+    {
+      "group": "dataset",
+      "q": "update a dataset",
+      "method": "PUT",
+      "path": "/api/v1/projects/{project_id}/datasets/{uuid}",
+      "maxRank": 5
+    },
+    {
+      "group": "dataset",
+      "q": "delete a dataset",
+      "method": "DELETE",
+      "path": "/api/v1/projects/{project_id}/datasets/{uuid}",
+      "maxRank": 8,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "dataset",
+      "q": "get one dataset by uuid",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/datasets/{uuid}",
+      "maxRank": 1
+    },
+    {
+      "group": "dataset",
+      "q": "dataset variables and columns",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/datasets/variables",
+      "maxRank": 1
+    },
+    {
+      "group": "dataset",
+      "q": "which test cases are linked to a dataset",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/datasets/{uuid}/test-cases",
+      "maxRank": 1
+    },
+    {
+      "group": "dataset",
+      "q": "import a dataset from a csv file",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/datasets/import_csv",
+      "maxRank": 1
+    },
+    {
+      "group": "configuration",
+      "q": "create a configuration for a project",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/configurations",
+      "maxRank": 1
+    },
+    {
+      "group": "configuration",
+      "q": "get the configurations for a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/configurations",
+      "maxRank": 1
+    },
+    {
+      "group": "filter",
+      "q": "create a new filter",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/filter",
+      "maxRank": 1
+    },
+    {
+      "group": "filter",
+      "q": "list the saved filters",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/filter",
+      "maxRank": 1
+    },
+    {
+      "group": "filter",
+      "q": "get the details of one filter",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/filter/{filter_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "filter",
+      "q": "update a filter",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/filter/{filter_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "filter",
+      "q": "delete a filter",
+      "method": "DELETE",
+      "path": "/api/v1/projects/{project_id}/filter/{filter_id}",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "shared_step",
+      "q": "create a shared step",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/shared-steps",
+      "maxRank": 1
+    },
+    {
+      "group": "shared_step",
+      "q": "list all shared steps in a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/shared-steps",
+      "maxRank": 1
+    },
+    {
+      "group": "shared_step",
+      "q": "update a shared step",
+      "method": "PATCH",
+      "path": "/api/v1/projects/{project_id}/shared-steps/{shared_step_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "shared_step",
+      "q": "delete a shared step",
+      "method": "DELETE",
+      "path": "/api/v1/projects/{project_id}/shared-steps/{shared_step_id}",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "shared_step",
+      "q": "get one shared step",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/shared-steps/{shared_step_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "tag",
+      "q": "merge one tag into another",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/tags/merge",
+      "maxRank": 1
+    },
+    {
+      "group": "tag",
+      "q": "list the test case tags",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-case/tags-v2",
+      "maxRank": 3
+    },
+    {
+      "group": "tag",
+      "q": "search test case tags",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-case/tags/search",
+      "maxRank": 1
+    },
+    {
+      "group": "tag",
+      "q": "what tags are on a test case",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/tags",
+      "maxRank": 1
+    },
+    {
+      "group": "tag",
+      "q": "search the group tags for an entity type",
+      "method": "GET",
+      "path": "/api/v1/group/{entity_type}/tags",
+      "maxRank": 1
+    },
+    {
+      "group": "exploratory_session",
+      "q": "list the exploratory sessions in a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions",
+      "maxRank": 1
+    },
+    {
+      "group": "exploratory_session",
+      "q": "create an exploratory session",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions",
+      "maxRank": 1
+    },
+    {
+      "group": "exploratory_session",
+      "q": "close an exploratory session",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/close",
+      "maxRank": 1
+    },
+    {
+      "group": "exploratory_session",
+      "q": "clone an exploratory session",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/clone",
+      "maxRank": 1
+    },
+    {
+      "group": "exploratory_session",
+      "q": "delete an exploratory session",
+      "method": "DELETE",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "exploratory_session",
+      "q": "update an exploratory session",
+      "method": "PATCH",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "exploratory_session",
+      "q": "add a log entry to a session",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/logs",
+      "maxRank": 1
+    },
+    {
+      "group": "exploratory_session",
+      "q": "list the logs for an exploratory session",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/logs",
+      "maxRank": 1
+    },
+    {
+      "group": "exploratory_session",
+      "q": "update a session log entry",
+      "method": "PATCH",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/logs/{log_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "exploratory_session",
+      "q": "delete a session log entry",
+      "method": "DELETE",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/logs/{log_id}",
+      "maxRank": 1,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "exploratory_session",
+      "q": "what defects came out of an exploratory session",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/defects",
+      "maxRank": 1
+    },
+    {
+      "group": "exploratory_session",
+      "q": "get one exploratory session",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "report",
+      "q": "list all the scheduled reports",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/reports/schedules",
+      "maxRank": 3
+    },
+    {
+      "group": "report",
+      "q": "create a scheduled report",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/reports",
+      "maxRank": 1
+    },
+    {
+      "group": "report",
+      "q": "update a scheduled report",
+      "method": "PATCH",
+      "path": "/api/v1/projects/{project_id}/reports/{report_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "report",
+      "q": "delete a report",
+      "method": "DELETE",
+      "path": "/api/v1/projects/{project_id}/reports/schedules/{schedule_id}",
+      "maxRank": 8,
+      "why": "was a recorded destructive-mode-penalty miss: modeHint reads delete/remove as WRITE while the endpoint's mode is destructive, so the only capability that could answer was penalised 20 for being a delete. Retired by treating destructive as satisfying a write hint."
+    },
+    {
+      "group": "report",
+      "q": "email a report immediately",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/reports/{report_id}/send_email_now",
+      "maxRank": 1
+    },
+    {
+      "group": "report",
+      "q": "download a report as a file",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/reports/{report_id}/download",
+      "maxRank": 1
+    },
+    {
+      "group": "report",
+      "q": "retrieve a scheduled report's config and data",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/reports/{report_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "report",
+      "q": "fetch one widget or section of a report",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/reports/{report_id}/{section_name}",
+      "maxRank": 1
+    },
+    {
+      "group": "report",
+      "q": "summary statistics for a traceability report",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/reports/{report_id}/detail/{report_type}",
+      "maxRank": 1
+    },
+    {
+      "group": "report",
+      "q": "exploratory session summary report",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/reports/exploratory-session-summary",
+      "maxRank": 1
+    },
+    {
+      "group": "report",
+      "q": "download url for a report attachment",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/reports/attachments/{attachment_id}",
+      "maxRank": 2
+    },
+    {
+      "group": "report",
+      "q": "which test cases are selected for a traceability report",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/reports/{report_id}/selection/edit",
+      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
+      "defect": "cardinality-penalty"
+    },
+    {
+      "group": "report",
+      "q": "user workload drill down for one user",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/reports/{report_id}/drilldown",
+      "maxRank": 1
+    },
+    {
+      "group": "version",
+      "q": "test case history",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories",
+      "miss": "singular 'history' reaches 'histories' by containment, but the single-entry getter and the listing are indistinguishable on every scored field.",
+      "defect": "sibling-shadowing"
+    },
+    {
+      "group": "version",
+      "q": "diff two versions of a test case",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories/diff",
+      "maxRank": 1
+    },
+    {
+      "group": "version",
+      "q": "get one test case history entry",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories/{history_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "version",
+      "q": "restore an old version of a test case",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories/{history_id}/restore",
+      "maxRank": 1
+    },
+    {
+      "group": "duplicate",
+      "q": "list the AI suggested duplicate test cases",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/ai-duplicates",
+      "maxRank": 1
+    },
+    {
+      "group": "duplicate",
+      "q": "merge a duplicate test case",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/ai-duplicates",
+      "maxRank": 2
+    },
+    {
+      "group": "duplicate",
+      "q": "discard a duplicate suggestion",
+      "method": "PUT",
+      "path": "/api/v1/projects/{project_id}/ai-duplicates/{duplicate_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "duplicate",
+      "q": "dedupe job status",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/ai-duplicates/status",
+      "maxRank": 1
+    },
+    {
+      "group": "duplicate",
+      "q": "read one suggested duplicate",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/ai-duplicates/{duplicate_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "duplicate",
+      "q": "the pre merge snapshot of a merged duplicate",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/ai-duplicates/{duplicate_id}/source_tc",
+      "maxRank": 1
+    },
+    {
+      "group": "duplicate",
+      "q": "filtered search over suggested duplicates",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/ai-duplicates/search-v2",
+      "maxRank": 1
+    },
+    {
+      "group": "template",
+      "q": "list the test case templates",
+      "method": "GET",
+      "path": "/api/v1/admin-v2/settings/templates",
+      "maxRank": 1
+    },
+    {
+      "group": "template",
+      "q": "where do I get a template_id",
+      "method": "GET",
+      "path": "/api/v1/admin-v2/settings/templates",
+      "maxRank": 1
+    },
+    {
+      "group": "paraphrase",
+      "q": "stop accepting results for a run",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/close",
+      "miss": "the product's word is 'close'; 'stop accepting results' shares only 'run' with the endpoint.",
+      "defect": "vocabulary-gap"
+    },
+    {
+      "group": "paraphrase",
+      "q": "hand a test run over to someone else",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/assign",
+      "maxRank": 4
+    },
+    {
+      "group": "paraphrase",
+      "q": "make a copy of a test run",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/clone",
+      "maxRank": 3
+    },
+    {
+      "group": "paraphrase",
+      "q": "roll a test case back to an earlier version",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories/{history_id}/restore",
+      "maxRank": 4
+    },
+    {
+      "group": "paraphrase",
+      "q": "who edited this test case and when",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories",
+      "miss": "the histories endpoint says 'histories', never 'edited' or 'who'; the words that do match point at the bulk-edit writes.",
+      "defect": "sibling-shadowing"
+    },
+    {
+      "group": "paraphrase",
+      "q": "put archived test plans back",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/bulk-retrieve",
+      "maxRank": 6
+    },
+    {
+      "group": "paraphrase",
+      "q": "schedule a weekly email with the results",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/reports",
+      "miss": "'schedule' matches the reports/schedules listing and send_email_now; the create endpoint says none of the caller's words.",
+      "defect": "vocabulary-gap"
+    },
+    {
+      "group": "paraphrase",
+      "q": "variables for data driven testing",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/datasets/variables",
+      "maxRank": 1
+    },
+    {
+      "group": "paraphrase",
+      "q": "a saved search I can reuse",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/filter",
+      "maxRank": 6
+    },
+    {
+      "group": "paraphrase",
+      "q": "reusable steps I can share between test cases",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/shared-steps",
+      "maxRank": 5
+    },
+    {
+      "group": "paraphrase",
+      "q": "how is automation coverage trending",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/dashboard-analytics/automation-stats",
+      "maxRank": 1
+    },
+    {
+      "group": "paraphrase",
+      "q": "nest one folder inside another",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/mkdir",
+      "maxRank": 2
+    },
+    {
+      "group": "paraphrase",
+      "q": "attach a screenshot to a test case",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/attachments",
+      "maxRank": 3
+    },
+    {
+      "group": "paraphrase",
+      "q": "take a test case out of circulation without deleting it",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-cases/bulk-archive",
+      "maxRank": 1
+    },
+    {
+      "group": "paraphrase",
+      "q": "find near identical test cases",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/ai-duplicates",
+      "miss": "'near identical' is nobody's word for 'duplicate'.",
+      "defect": "sibling-shadowing"
+    },
+    {
+      "group": "disambiguation",
+      "q": "how many projects do we have",
+      "method": "GET",
+      "path": "/api/v1/projects/basic",
+      "miss": "'how many' is plural intent but carries no noun the projects listing owns beyond 'projects', which rarity values at 0.024.",
+      "defect": "vocabulary-gap"
+    },
+    {
+      "group": "disambiguation",
+      "q": "open test run TR-14",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "disambiguation",
+      "q": "metadata for a single folder",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}",
+      "maxRank": 1
+    },
+    {
+      "group": "disambiguation",
+      "q": "the datasets belonging to a project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/datasets",
+      "maxRank": 3
+    },
+    {
+      "group": "disambiguation",
+      "q": "the option set attached to a custom field",
+      "method": "GET",
+      "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}",
+      "miss": "'set' is in WRITE_VERBS, so the noun phrase 'option set' makes modeHint return 'write' and the read target takes -20.",
+      "defect": "mode-penalty"
+    },
+    {
+      "group": "disambiguation",
+      "q": "which cases are assigned to a run",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases",
+      "maxRank": 2
+    },
+    {
+      "group": "disambiguation",
+      "q": "the cases sitting inside a folder",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
+      "maxRank": 7
+    },
+    {
+      "group": "disambiguation",
+      "q": "archive a test plan rather than deleting it",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/test-plans/bulk-archive",
+      "maxRank": 1
+    },
+    {
+      "group": "disambiguation",
+      "q": "list every test run in the project",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs",
+      "maxRank": 3
+    },
+    {
+      "group": "disambiguation",
+      "q": "the newest result recorded against a case",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
+      "maxRank": 3
     }
   ]
 }

@@ -49,10 +49,37 @@ describe("the released artifact", () => {
 
   it("carries no internal machinery — the reason we ship an index, not the specs", () => {
     const blob = JSON.stringify(registry.index);
-    for (const forbidden of ["x-atlas-permission", '"target"', '"pointer"', "key_facts",
+    // `key_facts` was on this list until the build started publishing it. It is no longer
+    // machinery: it is the entity-wide half of guidance, gated on the way out. What it must
+    // never become is a hole in the boundary, which the next test asserts directly.
+    for (const forbidden of ["x-atlas-permission", '"target"', '"pointer"',
       '"operations"', "strip_prefix", "page_param", "count_param"]) {
       expect(blob).not.toContain(forbidden);
     }
+  });
+
+  it("publishes entity key_facts, and every one is caller-facing", () => {
+    // The build withholds any fact naming a route, a bare HTTP verb, an endpoint nickname,
+    // a wire-shaped parameter or a host — 83 of tm's 155. This asserts the OUTPUT of that
+    // gate rather than trusting it: a regression in the filter shows up here, on the file
+    // that actually ships.
+    const entities = Object.values(registry.index.products.tm.entities);
+    const facts = entities.flatMap((entity) => entity.key_facts ?? []);
+    expect(facts.length).toBeGreaterThan(0);
+
+    const forbidden: [RegExp, string][] = [
+      [/\/api\//, "route"],
+      [/\b(GET|POST|PUT|PATCH|DELETE)\b/, "bare HTTP verb"],
+      [/-v\d\b/, "endpoint nickname"],
+      [/\bq\.[a-z_]+|\b[a-z_]+\[\]/, "wire-shaped parameter"],
+      [/TMPD-\d+/, "internal ticket"],
+      [/\b(?!example\.com)[a-z0-9][a-z0-9-]*\.(?:com|net|org|io|dev)\b/, "hostname"],
+    ];
+    const offenders = facts.flatMap((fact) =>
+      forbidden.filter(([pattern]) => pattern.test(fact))
+        .map(([, label]) => `${label}: ${fact.slice(0, 70)}`),
+    );
+    expect(offenders).toEqual([]);
   });
 
   it("carries only a harness-declared host, and tm declares none", () => {

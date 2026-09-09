@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.2",
-  "build_id": "3aece882_2026-09-09T11:34:27Z",
+  "version": "1.4",
+  "build_id": "f6a3eca0_2026-09-09T14:21:54Z",
   "tm": {
     "summary": "BrowserStack Test Management API (v1 — the SSO/OAuth app API, session-authenticated).",
     "capabilities": [
@@ -7516,7 +7516,7 @@
           {
             "name": "q[query]",
             "type": "string",
-            "example": "jdoe"
+            "example": "example-project"
           },
           {
             "name": "q[identifier]",
@@ -10259,7 +10259,7 @@
           {
             "name": "q",
             "type": "string",
-            "example": "jdoe"
+            "example": "example-project"
           },
           {
             "name": "p",
@@ -17238,13 +17238,13 @@
             "type": "string",
             "format": "uri",
             "description": "Pre-signed S3 URL for viewing (inline, ~26 min expiry)",
-            "example": "https://example.com/media/genric/1/2921471/86de8094..."
+            "example": "https://example.com/media/1/2921471/86de8094..."
           },
           "download_url": {
             "type": "string",
             "format": "uri",
             "description": "Pre-signed S3 URL for downloading (attachment, ~26 min expiry)",
-            "example": "https://example.com/media/genric/1/2921471/86de8094..."
+            "example": "https://example.com/media/1/2921471/86de8094..."
           },
           "content_type": {
             "type": "string",
@@ -18355,7 +18355,7 @@
             },
             "selection": {
               "type": "object",
-              "description": "the primary project's persisted folder-structured test-case selection (with select_all / per-folder flags + unique_test_case_count), in the same shape as the test-run edit/selection endpoint. `{}` when the report has no saved selection for the primary project. Used by the Edit dialog to re-check saved test cases (including folder/project-level select_all, which the flat ids cannot represent).",
+              "description": "The primary project's persisted folder-structured test-case selection (with select_all / per-folder flags + unique_test_case_count), in the same shape as the test-run edit/selection endpoint. `{}` when the report has no saved selection for the primary project. Used by the Edit dialog to re-check saved test cases (including folder/project-level select_all, which the flat ids cannot represent).",
               "example": {
                 "select_all": false,
                 "folders": {
@@ -18372,7 +18372,7 @@
             },
             "shared_selection": {
               "type": "object",
-              "description": "per-project folder-structured selection for the report's non-primary projects, keyed by project id ({ \"<project_id>\": <selection> }). Present only for cross-project Test Case Activity reports; `{}` otherwise.",
+              "description": "Per-project folder-structured selection for the report's non-primary projects, keyed by project id ({ \"<project_id>\": <selection> }). Present only for cross-project Test Case Activity reports; `{}` otherwise.",
               "example": {
                 "10209": {
                   "select_all": true,
@@ -19285,6 +19285,15 @@
         ],
         "capabilities": [
           "list_activity_events_v1"
+        ],
+        "key_facts": [
+          "READ-ONLY by design. Activity events are emitted by the system as a side effect of other writes — there is no create, update, or delete, and there never will be. If asked to edit or remove an audit entry, say it is immutable.",
+          "HARD 15-DAY WINDOW. The server clamps every query to the last 15 days no matter what you ask for. For anything older, say the history is not retrievable through the API and point to the Test Management UI — do NOT report 'no activity' for an older period, which would be a false negative.",
+          "CURSOR pagination, not page numbers. Follow pagination.next_cursor and stop when pagination.has_next_page is false. There is no p param and no info.count, so you CANNOT state a total number of events or jump to a page.",
+          "Not project-scoped in the path — it is group-wide. Pass project_id as a QUERY param to narrow it to one project.",
+          "starred_only=true restricts to the caller's starred projects. When they have none the response is {events: [], no_starred_projects: true} — that means 'no starred projects', NOT 'no activity'. Check for that flag before reporting emptiness.",
+          "The response carries a projects map (project id → metadata) so you can resolve the project an event refers to without extra reads.",
+          "Gated by a group feature flag. If the call is refused, report that the activity feed isn't enabled for the group rather than that there is no activity."
         ]
       },
       "attachment": {
@@ -19316,6 +19325,10 @@
           "upload_a_i_attachments",
           "upload_generic_attachments",
           "upload_test_case_attachments_v1"
+        ],
+        "key_facts": [
+          "ai_uploads uploads a file as AI CONTEXT (restricted types, smaller cap) for seeding case content — see create-test-case.",
+          "Each blob/attachment row carries an integer id and a url (the file's location) — read the file from that url; there is no dedicated download endpoint."
         ]
       },
       "configuration": {
@@ -19384,6 +19397,15 @@
           "update_custom_field_dataset_option_v2",
           "update_custom_field_dataset_project_mapping_v2",
           "update_custom_field_definition_v2"
+        ],
+        "key_facts": [
+          "A field applies to ONE entity type (TestCase | TestResult | TestPlan) — pick the matching entity_type; project scope is via the integer project id in the path.",
+          "A definition write is workspace-wide, not project-scoped: it affects every project the field's datasets link to. Say which projects are affected BEFORE writing.",
+          "field_name IS editable via .../update; field_type is SILENTLY immutable — sending a new type returns 200 and changes nothing. Never report a type change as done; a real one means delete-and-recreate, which destroys every stored value.",
+          "Update is a full REPLACE: field_name + field_type + is_required must all be present (missing is_required = 400, missing field_name = 500). Read the field first and resend the whole set.",
+          "The project-mapping endpoint uses link_projects / unlink_projects — NOT the linked_projects of the create bodies. The wrong spelling is silently dropped: 200, nothing changed.",
+          "Three operations destroy stored data across every linked project: deleting a field, deleting an option, and unlinking a project. There is no bin. Count and name the affected projects before asking to proceed.",
+          "Don't confuse a DEFINITION with a VALUE. A definition is which attributes exist; a value is what one case holds. Only values are writable here, through the test-case create/update body's custom_fields."
         ]
       },
       "dataset": {
@@ -19417,6 +19439,9 @@
           "import_dataset_c_s_v",
           "list_datasets",
           "update_dataset"
+        ],
+        "key_facts": [
+          "Team Pro plan gated: without it EVERY dataset endpoint returns 422 \"Feature not available\". A 422 here means NOT-ENTITLED, not a bad payload — say so and stop, don't retry with a different body."
         ]
       },
       "duplicate": {
@@ -19449,6 +19474,13 @@
           "list_duplicates_v1",
           "resolve_duplicate_v1",
           "search_duplicates_v1"
+        ],
+        "key_facts": [
+          "There is NO create. Duplicate suggestions are produced by the dedupe pipeline; a caller cannot author one.",
+          "Only status=suggested can be read or resolved; already-merged/archived/discarded suggestions return 404. A 404 here usually means 'already handled', not 'never existed'.",
+          "source_tc works ONLY for status=merged, and the snapshot may legitimately be absent (404 with error 'Source test case snapshot not available'). Treat that as 'not retained', not as a retryable error.",
+          "This list family pages with `page`, not the `p` used elsewhere in the profile.",
+          "Dedupe REVIEW is exposed here; TCG test-case GENERATION is not. Don't offer to generate cases."
         ]
       },
       "exploratory_session": {
@@ -19495,6 +19527,12 @@
           "list_exploratory_sessions",
           "update_exploratory_session",
           "update_exploratory_session_log"
+        ],
+        "key_facts": [
+          "session_id and log_id are plain INTEGERS; the parent project takes the INTEGER project id (v1).",
+          "Logs hold rich-text HTML sanitised on write (off-project anchor/image links stripped); defects are the issues linked to the session.",
+          "Clone runs async when the session has many logs → re-fetch to confirm (see async-jobs).",
+          "No convert endpoint: turn session notes into test cases via the create-test-case flow."
         ]
       },
       "filter": {
@@ -19531,6 +19569,10 @@
           "get_filter",
           "list_filters",
           "update_filter"
+        ],
+        "key_facts": [
+          "A saved filter view persists a reusable filter: { name, entity, filters, is_project_level }. entity = testcase | testplan | testrun | exploratory_session; filter_id is an integer.",
+          "is_project_level scopes the view to the whole project vs. just the creator."
         ]
       },
       "folder": {
@@ -19567,6 +19609,10 @@
           "rename_folder_v1",
           "reorder_folders",
           "undo_remove_folder"
+        ],
+        "key_facts": [
+          "Folder ids are plain INTEGERS (e.g. 54) — never FL-… strings. Nesting is via parent_id (integer, null = root).",
+          "mv cross-project and copy run ASYNC ({ success, async, unique_id }) — confirm by re-reading the destination (see async-jobs)."
         ]
       },
       "project": {
@@ -19670,6 +19716,15 @@
           "send_report_email_now_v1",
           "update_report",
           "user_workload_drilldown"
+        ],
+        "key_facts": [
+          "report_id and schedule_id are INTEGERS; the parent project takes the INTEGER project id (v1).",
+          "report_type on create/update is a DISPLAY NAME and the set is CLOSED — exactly these nine: Test Run Summary, Test Run Detailed Report, Test Plan Summary, Requirement Traceability Report, Test Case Activity, Exploratory Session Summary, User Workload Report, Defects Summary, Defects Detailed Report. Never invent one and never substitute a neighbouring type: if the user asks for activity, it is 'Test Case Activity', not 'Test Run Summary'.",
+          "Defects Summary and Defects Detailed Report are accepted on create but have no data branch — they always read back report_data: null. For defect counts use Test Run Summary's issues_by_priority / issues_by_status sections instead.",
+          "null inside report_data means NOT COMPUTED, not 'no data'. A Test Case Activity report fills its headline counts on a bare read; a Test Run Summary leaves issues_data / test_run_status / test_cases_status / issues_by_priority / issues_by_status null until you name them in sections. Never conclude 'there is no defect or status data' from a null — request the section; an empty payload like {total: 0} is a real finding, null is not. And never answer a 400 on sections by retreating to a bare read.",
+          "*_drilldown sections return PAGINATED ROWS, not aggregates — never tally rows into a count; read the aggregate section or report_data.",
+          "frequency + frequency_details travel together or not at all; omit both for an unscheduled on-demand report. weekly needs day as a lowercase name, monthly needs day as an integer 1-28. There is no 'once'. report_timeframe: custom REQUIRES custom_date_range.",
+          "\"Understand a report\" = fetch the report + its section/widget data and summarise agent-side; the API returns structured data, not narrative."
         ]
       },
       "result": {
@@ -19702,6 +19757,11 @@
           "delete_test_result_v1",
           "get_test_results_for_test_case",
           "update_latest_test_result_for_test_case"
+        ],
+        "key_facts": [
+          "Bodies are wrapped in test_result; set status by NAME (status) or id (status_id) — use a real configured status (see statuses-and-states).",
+          "bulk-delete SUCCEEDS PARTIALLY and still returns 200. Authorisation is per id (author OR project admin); ids the caller may not delete come back in `skipped` — and BOTH lists are nested under a top-level `result` key, with `skipped` holding OBJECTS ({id, reason}) not bare ids, so read result.deleted_ids / result.skipped. Not as an error. ALWAYS compare deleted_ids against what you asked for and report the skipped ids — treating 200 as 'all deleted' will misreport.",
+          "bulk-delete needs a non-empty result_ids array (400 otherwise) of at most 300 ids (422 beyond) — batch bigger sets yourself."
         ]
       },
       "shared_step": {
@@ -19729,6 +19789,10 @@
           "get_shared_steps_by_i_d_v1",
           "get_shared_steps_v1",
           "update_shared_step_v1"
+        ],
+        "key_facts": [
+          "A shared step is embedded by MANY test cases, so editing or deleting it changes every one of them at once. That is the point of shared steps, but it also means a delete is a wide blast radius — say how it is used before changing it.",
+          "Reference a shared step from a test case's steps via shared_step_id in test_case_steps — see test-case-authoring."
         ]
       },
       "tag": {
@@ -19764,6 +19828,12 @@
           "merge_tags_v1",
           "search_group_tags",
           "search_test_case_tags"
+        ],
+        "key_facts": [
+          "Tags are referenced by NAME in filters and on cases; the merge endpoint takes integer source_id/target_id, so resolve ids via the tag reads first.",
+          "That body MUST carry custom_fields (send {} when not changing any) — omitting it returns 500 'undefined method each for nil', even though the server's validator lists it as optional.",
+          "tags/merge is admin-gated (tags_management flag) — may be unavailable for a group; degrade gracefully and say so.",
+          "TAG-OBJECT WRITES ARE NOT EXPOSED. Renaming or deleting a tag project-wide is deliberately out of this profile: the endpoints exist but sit behind the tags_management flag that most groups do not have, and tagging is always driven through the ENTITY. If asked to rename or delete a tag, say it is not available here and point to the Test Management UI."
         ]
       },
       "test_case": {
@@ -19827,6 +19897,14 @@
           "reorder_test_cases_by_folder_v1",
           "search_project_entities_v2",
           "search_test_cases_by_folder_v1"
+        ],
+        "key_facts": [
+          "A filter is a (key, value) pair and each half fails silently: an unknown KEY is dropped (you get the whole project with success: true), and a wrong-form VALUE matches nothing (count: 0, also success: true). So resolve both — never guess either — and see pagination-and-filtering for the key table and each value's source.",
+          "A surprising count means check the FORM, not try another value: 0 on a value the user plainly meant = wrong form, so go resolve ids; filtered count == unfiltered count = the key was dropped. Never take either count from a per_page: 1 call — it returns count: 1 regardless of the real total.",
+          "required.fields ADDS joined columns; it does NOT slim a row, so naming fields never buys more rows per page. required.fields=[\"count\"] ALONE is the only value that changes the response.",
+          "The compact response has a DIFFERENT envelope: no `success` key ({test_cases, info, filter_details} only — absence of success is NOT failure), info.page_size echoes the server ceiling not your per_page, and filter_details is {} so confirm filter intent before the call.",
+          "READING ROWS to show a user: leave per_page at its default and walk p until info.next is null. p advances by per_page and not by what came back, so paging over an incomplete read never recovers the gap.",
+          "Paths take INTEGER ids (project + folder + case). The case's TC-NNN comes back as data.test_case.identifier on any read; folder ids are plain integers."
         ]
       },
       "test_plan": {
@@ -19869,6 +19947,18 @@
           "list_test_plans_v1",
           "unlink_test_runs_from_test_plan",
           "update_test_plan_v1"
+        ],
+        "key_facts": [
+          "Paths take the INTEGER plan id. The prefixed identifier (TP-NNN / STP-NNN) is for display; never put it in a v1 path.",
+          "The read detail has NO data wrapper: the plan sits under a top-level test_plan key, and test_plan.identifier is the TP-NNN / STP-NNN.",
+          "Sub-plans are HIDDEN by default in the list. Without include_sub_plans=true you see only top-level plans, so a sub-plan the user named will look missing.",
+          "name IS REQUIRED ON EVERY PLAN UPDATE, including one that only touches test_runs. Omit it and the call is rejected with 400 {success: false, error: 'Invalid Update Params'} however valid the rest of the body is — the server's edit branch is gated on name being present. Read the plan first and echo its current name back unchanged. Only a pure plan_status transition and a reviewers-only edit are exempt. Verified live: {test_plan: {test_runs: [198]}} 400s; adding name makes the identical call succeed.",
+          "Run ids in test_runs are the INTEGER uuid from a run read — NOT the run's id field, which is the TR-NNN string on every run endpoint (list, plan's run list, single detail alike). Identifiers are forwarded to the upstream service uncoerced and fail upstream (observed 502 Upstream service error). Take uuid, never id.",
+          "Linking a run MOVES it: a run belongs to at most one plan, so linking silently unlinks it from the plan that held it, with nothing in the 200 to say so. Read the runs' current membership first and tell the user which plans will lose runs. Verified live.",
+          "test_runs accepts an id array OR a bulk-selection object {select_all, de_selected_ids, search_query}. select_all means 'the newest active runs', NOT 'everything matching' — and `filters` is accepted but SILENTLY IGNORED, so a filtered select_all links the whole recent set. Narrow with search_query (name/identifier substring) or send explicit ids. Verified live.",
+          "bulk-archive / bulk-retrieve go ASYNC above the bulk threshold and return {success, async: true, unique_id} — the plans are NOT changed yet. Re-read to confirm; see async-jobs.",
+          "execution-trend is scoped by EXACTLY ONE of test_plan_id / test_run_id. Both → 400 'Provide either test_plan_id or test_run_id, not both'; neither → 400 'test_plan_id or test_run_id is required'.",
+          "execution-trend and linked-sessions-chart-data return chart DATA. There is no insights-widget object to create, update, or delete in this profile."
         ]
       },
       "test_run": {
@@ -19918,6 +20008,13 @@
           "get_test_runs_form_fields_v1",
           "get_test_runs_selection",
           "get_test_runs_v1"
+        ],
+        "key_facts": [
+          "Only test_case_ids / selection / shared_selection put cases in a run. `filters` and `dynamic_filter` are a forward-sync rule, NOT a selection: a create carrying only `filters` returns 200 with ZERO cases, and sets is_dynamic: true even though you did not ask. Verified live.",
+          "Dynamic runs match on nine fields only: priority, status, category, owner, automation_status, automation_state, folder, tags, issues. created_at/updated_at are stored and echoed on read but NEVER matched, so a 'last 7 days' dynamic run drops the date window and over-collects forever. Create runs static unless the user explicitly asks for sync.",
+          "test_run.run_state is MANDATORY on create and edit (new_run | in_progress | under_review | rejected | done | closed). It is validated before the selection, so a bare 400 'invalid data' means a bad test_run field — NOT a bad selection shape.",
+          "A run's `id` FIELD is the TR-NNN STRING, not the integer — on the project list, a plan's linked-run list and the single-run detail alike. The integer lives in `uuid` ({id: 'TR-90', uuid: 198}). Paths tolerate either form, which hides this; bodies and UI paths do not. Carrying `id` into a test plan's test_runs array sends a string that reaches the upstream service uncoerced and 502s there. Take `uuid` whenever a run id leaves a read.",
+          "Full lifecycle is exposed: create, edit, assign, bulk-assign cases, bulk-edit results, clone, close, delete."
         ]
       },
       "user": {
@@ -19950,6 +20047,10 @@
         "capabilities": [
           "get_group_users_v2_v1",
           "search_project_users"
+        ],
+        "key_facts": [
+          "WRITE BODIES take the integer: test_case.owner, test_run.owner/assignee_id — send 14.",
+          "An unrecognised q key is dropped, not rejected — the server silently omits that condition and returns an unfiltered set that looks like a successful filter. Use the documented key names verbatim."
         ]
       },
       "version": {
@@ -19981,6 +20082,11 @@
           "get_test_case_history_diff_v1",
           "get_test_case_history_v1",
           "restore_history_v1"
+        ],
+        "key_facts": [
+          "Each record carries source (create/update), modified_fields, a modified map (per-field old/new), user and created_at.",
+          "diff (compare two versions) and restore require a PAID plan; listing + single-version reads work otherwise. Degrade gracefully.",
+          "A plain-language diff summary is agent-side — read the field deltas and describe them; the API returns structured data, not prose."
         ]
       }
     }

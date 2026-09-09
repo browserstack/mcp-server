@@ -444,7 +444,7 @@ As of now we support 45 tools.
   Get the Appium logs for App Automate session ID <session id>
   ```
 
- 20. `fetchBuildInsights` — Fetch insights about a BrowserStack build by combining build details and quality-gate results. Includes `hashed_id` (the hashed build id `listSessions` takes) when the build payload reports one.
+ 20. `fetchBuildInsights` — Fetch insights about a BrowserStack build by combining build details and quality-gate results. Includes `hashed_id` (the hashed build id `listSessions` takes) and `session_type`, resolved through the build's sessions when the build ran on Automate / App Automate.
   **Prompt example**
 
   ```text

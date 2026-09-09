@@ -5,7 +5,12 @@ import { fetchAutomationScreenshots } from "./automate-utils/fetch-screenshots.j
 import {
   DEFAULT_SESSION_LIST_LIMIT,
   listSessionIds,
+  UnknownBuildError,
 } from "./automate-utils/list-session-ids.js";
+import {
+  isObservabilityBuildUuid,
+  resolveHashedBuildId,
+} from "./automate-utils/resolve-hashed-build-id.js";
 import { SessionType } from "../lib/constants.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import logger from "../logger.js";
@@ -81,26 +86,59 @@ export async function listSessionIdsTool(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const sessions = await listSessionIds(args, config);
-    if (sessions.length === 0) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "No sessions found for this hashed build ID.",
-          },
-        ],
-      };
+    // Accept the observability build id too. Observability ids are usually
+    // UUIDs but can also be 40-char hex like Automate hashed ids, so shape
+    // alone is not enough: try the REST list first and resolve on a miss.
+    const inputId = args.buildId.trim();
+    let buildId = inputId;
+    let resolvedNote: string | undefined;
+
+    const resolve = async () => {
+      const resolved = await resolveHashedBuildId(
+        inputId,
+        config,
+        args.sessionType,
+      );
+      buildId = resolved.hashedBuildId;
+      resolvedNote = `Resolved observability build ${inputId} to hashed build id ${buildId}.`;
+    };
+
+    let sessions;
+    if (isObservabilityBuildUuid(inputId)) {
+      await resolve();
+      sessions = await listSessionIds({ ...args, buildId }, config);
+    } else {
+      try {
+        sessions = await listSessionIds({ ...args, buildId }, config);
+      } catch (error) {
+        if (!(error instanceof UnknownBuildError)) throw error;
+        try {
+          await resolve();
+        } catch (resolveError) {
+          logger.debug(
+            "listSessions: id is neither a known hashed build nor a resolvable observability build",
+            resolveError,
+          );
+          throw error;
+        }
+        sessions = await listSessionIds({ ...args, buildId }, config);
+      }
     }
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(sessions, null, 2),
-        },
-      ],
-    };
+    const content: CallToolResult["content"] = [
+      {
+        type: "text",
+        text:
+          sessions.length === 0
+            ? "No sessions found for this hashed build ID."
+            : JSON.stringify(sessions, null, 2),
+      },
+    ];
+    if (resolvedNote) {
+      content.push({ type: "text", text: resolvedNote });
+    }
+
+    return { content };
   } catch (error) {
     logger.error("Error listing session IDs", error);
     throw error;
@@ -173,7 +211,7 @@ export default function addAutomationTools(
       buildId: z
         .string()
         .describe(
-          "Dashboard hashed build id or fetchBuildInsights hashed_id — not the getBuildId UUID.",
+          "Hashed build id from the dashboard, or the observability build id from getBuildId.",
         ),
       limit: z
         .number()

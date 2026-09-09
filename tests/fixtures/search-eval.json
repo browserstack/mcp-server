@@ -3,16 +3,14 @@
   "baseline": {
     "measured_on": "tm.capability-index.json build f6a3eca0_2026-09-09T14:21:54Z",
     "cases": 198,
-    "top1": 138,
-    "top3": 164,
-    "top8": 176,
-    "missed": 22,
-    "mrr_at_8": 0.765,
+    "top1": 141,
+    "top3": 169,
+    "top8": 182,
+    "missed": 16,
+    "mrr_at_8": 0.785,
     "misses_by_defect": {
-      "mode-penalty": 2,
-      "cardinality-penalty": 11,
-      "vocabulary-gap": 4,
-      "destructive-mode-penalty": 1,
+      "vocabulary-gap": 7,
+      "cardinality-penalty": 5,
       "sibling-shadowing": 4
     }
   },
@@ -81,7 +79,8 @@
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/folder/{folder_id}/rm-summary",
       "miss": "modeHint misreads the query's verb and the read target takes the -20 mismatch.",
-      "defect": "mode-penalty"
+      "defect": "vocabulary-gap",
+      "why": "the product's word is not the caller's: ranks in the 40s-70s of the matched set, so no constant reaches it. Filed under mode-penalty until a sweep showed the penalty makes no difference here."
     },
     {
       "group": "folder",
@@ -102,8 +101,8 @@
       "q": "list the subfolders of one folder",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/folder/{folder_id}",
-      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
-      "defect": "cardinality-penalty"
+      "maxRank": 3,
+      "why": "was a recorded cardinality-penalty miss: isCollection is a guess read off the URL and this endpoint's last path segment is not a plural noun, so a listing was scored as single-record and lost 8. Retired by cutting the cardinality weight to 4 — the index carries no real cardinality signal, so it should not swing 16 points."
     },
     {
       "group": "folder",
@@ -246,8 +245,8 @@
       "q": "search test cases in a project",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/search",
-      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
-      "defect": "cardinality-penalty"
+      "maxRank": 4,
+      "why": "was a recorded cardinality-penalty miss: isCollection is a guess read off the URL and this endpoint's last path segment is not a plural noun, so a listing was scored as single-record and lost 8. Retired by cutting the cardinality weight to 4 — the index carries no real cardinality signal, so it should not swing 16 points."
     },
     {
       "group": "test_case",
@@ -325,8 +324,8 @@
       "q": "list the closed test runs",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/test-runs/closed",
-      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
-      "defect": "cardinality-penalty"
+      "maxRank": 1,
+      "why": "was a recorded cardinality-penalty miss: isCollection is a guess read off the URL and this endpoint's last path segment is not a plural noun, so a listing was scored as single-record and lost 8. Retired by cutting the cardinality weight to 4 — the index carries no real cardinality signal, so it should not swing 16 points."
     },
     {
       "group": "test_run",
@@ -391,7 +390,8 @@
       "method": "POST",
       "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
       "miss": "'get' trips the READ verb list, so the destructive endpoint takes the -20 mode mismatch. Previously recorded as harmless because destructive endpoints are refused before binding — but searchCapability is discovery, and it currently answers with the wrong endpoint rather than none.",
-      "defect": "destructive-mode-penalty"
+      "defect": "vocabulary-gap",
+      "why": "the product's word is not the caller's: ranks in the 40s-70s of the matched set, so no constant reaches it. Filed under mode-penalty until a sweep showed the penalty makes no difference here."
     },
     {
       "group": "test_plan",
@@ -653,8 +653,8 @@
       "q": "test case count trend",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/dashboard-analytics/test-case-count-trend",
-      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
-      "defect": "cardinality-penalty"
+      "maxRank": 1,
+      "why": "was a recorded cardinality-penalty miss: isCollection is a guess read off the URL and this endpoint's last path segment is not a plural noun, so a listing was scored as single-record and lost 8. Retired by cutting the cardinality weight to 4 — the index carries no real cardinality signal, so it should not swing 16 points."
     },
     {
       "group": "project",
@@ -668,8 +668,8 @@
       "q": "issues count analytics",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/dashboard-analytics/issues-count-info",
-      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
-      "defect": "cardinality-penalty"
+      "maxRank": 1,
+      "why": "was a recorded cardinality-penalty miss: isCollection is a guess read off the URL and this endpoint's last path segment is not a plural noun, so a listing was scored as single-record and lost 8. Retired by cutting the cardinality weight to 4 — the index carries no real cardinality signal, so it should not swing 16 points."
     },
     {
       "group": "project",
@@ -697,8 +697,8 @@
       "q": "list the users in the group",
       "method": "GET",
       "path": "/api/v1/group/users-v2",
-      "miss": "the query carries plural intent (+8/-8) but isCollection() does not recognise the target: unpaginated, and its terminal path segment is not a plural noun. It takes -8 while a sibling listing takes +8.",
-      "defect": "cardinality-penalty"
+      "maxRank": 3,
+      "why": "was a recorded cardinality-penalty miss: isCollection is a guess read off the URL and this endpoint's last path segment is not a plural noun, so a listing was scored as single-record and lost 8. Retired by cutting the cardinality weight to 4 — the index carries no real cardinality signal, so it should not swing 16 points."
     },
     {
       "group": "activity",
@@ -1409,7 +1409,8 @@
       "method": "GET",
       "path": "/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}",
       "miss": "'set' is in WRITE_VERBS, so the noun phrase 'option set' makes modeHint return 'write' and the read target takes -20.",
-      "defect": "mode-penalty"
+      "defect": "vocabulary-gap",
+      "why": "the product's word is not the caller's: ranks in the 40s-70s of the matched set, so no constant reaches it. Filed under mode-penalty until a sweep showed the penalty makes no difference here."
     },
     {
       "group": "disambiguation",

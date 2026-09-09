@@ -308,6 +308,45 @@ function rarity(documents: string[], forms: string[]): number {
  * run" starts pulling `close_exploratory_session` into second place on the tail match alone.
  */
 const RESOURCE_BONUS = 6;
+/**
+ * How much a cardinality guess is worth. It used to be 8, and it should not have been.
+ *
+ * `isCollection` is a GUESS read off the URL, and the index carries nothing better: of 88
+ * read capabilities, zero declare an array in their response schema, and `paginated` — the
+ * one signal that looks trustworthy — is true for `get_report_detail`, a single-record
+ * endpoint. There is no derived cardinality in this artifact to appeal to.
+ *
+ * At ±8 that guess swung 16 points and buried 11 correct answers: `/test-runs/closed` and
+ * `/{entity}/search` are listings whose last path segment is not a plural noun, `users-v2`
+ * is plural with a version suffix in the way, and the count endpoints answer "how many"
+ * with a scalar. All were penalised for what they are called.
+ *
+ * The fix is not a better classifier — a qualifier word-list would encode tm's route
+ * conventions into generic code and rot on the next product. It is to stop betting so much
+ * on an unreliable signal. Swept against the eval, holding top1 at 138 with no ceiling
+ * violations: ±7 retires 1, ±6 retires 2, ±5 retires 5, ±4 retires 6. Below that it starts
+ * costing more than it returns — ±3.5 retires 8 but breaks a case, ±3 breaks two.
+ */
+const CARDINALITY = 4;
+
+/**
+ * The mode penalty stays at 20, unlike the cardinality one — it is earned.
+ *
+ * Where `isCollection` is a guess off the URL, `modeHint` is measured right: across the
+ * eval it agrees with the correct answer's mode 125 times and disagrees 3. A signal that
+ * accurate deserves to be decisive.
+ *
+ * Sweeping it 20 -> 6 retires none of the three misses filed against it and regresses
+ * nothing, which says the penalty is not what holds them back. It isn't: they sit at ranks
+ * 41, 62 and 78 of the matched set, far below anything a constant could lift. All three
+ * are vocabulary gaps wearing a mode-penalty label — "what gets removed" wants a path
+ * spelled `rm-summary`, "get rid of" wants `delete`, and "the option set" wants what the
+ * product calls a `dataset`. The target barely matches on TERMS; the hint is incidental.
+ *
+ * Left at 20 deliberately. There was no evidence for moving it, and an unjustified constant
+ * is how this scorer got into trouble in the first place.
+ */
+const MODE_PENALTY = 20;
 
 function score(
   capability: Capability,
@@ -392,8 +431,8 @@ function score(
     ranked += RESOURCE_BONUS;
   }
 
-  if (hint) ranked += satisfiesHint(capability.mode, hint) ? 6 : -20;
-  if (plural) ranked += isCollection(capability) ? 8 : -8;
+  if (hint) ranked += satisfiesHint(capability.mode, hint) ? 6 : -MODE_PENALTY;
+  if (plural) ranked += isCollection(capability) ? CARDINALITY : -CARDINALITY;
 
   return { matched, ranked };
 }

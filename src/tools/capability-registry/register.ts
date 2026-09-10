@@ -155,7 +155,7 @@ export function addCapabilityRegistryTools(
    *
    * Only listProducts carries the summaries. They are authored prose of unbounded length —
    * tm's is 90 characters, loadtesting's is 470 — and a tool description is static context
-   * on every request, so repeating them across five tools would cost more than the round
+   * on every request, so repeating them across six tools would cost more than the round
    * trip they save. Everywhere else the names alone are what a caller needs.
    *
    * Each summary is cut to its first sentence and capped, and the whole catalog is
@@ -290,7 +290,11 @@ export function addCapabilityRegistryTools(
       "the spec's own names. Pass them straight back, no renaming. `intent` says what it does, " +
       "`mode` tells you whether it writes, `product` says which product owns it, and " +
       "`responses` describes what a successful call returns, fully expanded. Results are " +
-      "ranked and capped, and `truncated` says when more matched. Search before invoking.",
+      "ranked and capped, and `truncated` says when more matched. Results OMIT each " +
+      "capability's usage `guidance` to keep this call small — when a capability needs more " +
+      "than its `intent` and parameter names to call correctly (any write, or when you are " +
+      "unsure of the arguments), call describeCapability with its `name` for the full " +
+      "guidance, then invoke. Search before invoking.",
     {
       query: z
         .string()
@@ -353,8 +357,15 @@ export function addCapabilityRegistryTools(
           // The raw field is dropped, not merely overwritten: it holds `{"$response": …}`
           // references, and spreading the capability would leak them straight through
           // whenever the resolved value is absent.
-          const { responses: unresolved, ...rest } = capability;
+          //
+          // `guidance` is dropped here too — it is the largest field on a capability (the LT
+          // create/estimate/report guidance runs to hundreds of words each), and returning up
+          // to `limit` of them turned a one-shot question into a multi-hundred-K-token search.
+          // It stays in the index — still a search haystack for ranking (see types.ts) — and
+          // is served whole by describeCapability for the one capability about to be invoked.
+          const { responses: unresolved, guidance, ...rest } = capability;
           void unresolved;
+          void guidance;
           return {
             ...rest,
             product: owner,
@@ -387,6 +398,74 @@ export function addCapabilityRegistryTools(
             }
           : {}),
       });
+    },
+  );
+
+  tools.describeCapability = server.tool(
+    "describeCapability",
+    "Full detail for ONE capability by name: its intent, its complete usage `guidance`, every " +
+      "parameter under the spec's own names, and the shape of a successful response. " +
+      "searchCapability returns everything EXCEPT the guidance, to stay small; call this once " +
+      "for the capability you are about to invoke — always before a write, or whenever its " +
+      "`intent` and parameter names alone are not enough to build the arguments — then call " +
+      "invokeCapability. Prefer this over re-searching. `name` is the handle searchCapability " +
+      "returned; pass `product` only to disambiguate a name two products share.",
+    {
+      name: z
+        .string()
+        .describe(
+          "The capability's published name, exactly as searchCapability returned it.",
+        ),
+      product: productArg()
+        .optional()
+        .describe(
+          `Which product owns the capability (${productList}). Required only when two ` +
+            "products publish the same name.",
+        ),
+      include_responses: z
+        .enum(["success", "all", "none"])
+        .optional()
+        .describe(
+          "Which declared responses to expand: 'success' (default, the 2xx shape), 'all' " +
+            "(adds the error shapes), or 'none'.",
+        ),
+    },
+    {
+      title: "Describe Capability",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    async ({ name, product, include_responses }) => {
+      track("describeCapability");
+      const selection = (include_responses || "success") as ResponseSelection;
+      try {
+        const { product: owner, capability } = registry.byNameLookup(
+          name,
+          product,
+        );
+        const responses = resolveResponses(
+          registry.index.products[owner],
+          capability,
+          selection,
+        );
+        // Same dereferencing as searchCapability — the caller never resolves a
+        // `{"$response": …}` ref itself — but guidance is KEPT: this tool exists to serve it.
+        const { responses: unresolved, ...rest } = capability;
+        void unresolved;
+        return ok({
+          build_id: registry.buildId,
+          product: owner,
+          capability: {
+            ...rest,
+            ...(responses ? { responses } : {}),
+          },
+        });
+      } catch (error) {
+        if (error instanceof InvocationError) return failed(error.message);
+        throw error;
+      }
     },
   );
 

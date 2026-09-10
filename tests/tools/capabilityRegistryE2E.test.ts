@@ -32,11 +32,11 @@ describe("capability registry, end to end through the server factory", () => {
     vi.unstubAllGlobals();
   });
 
-  it("registers its five tools alongside the hand-written ones", async () => {
+  it("registers its six tools alongside the hand-written ones", async () => {
     const server = await buildServer();
     const tools = server.getTools();
     for (const name of ["listProducts", "listEntities", "describeEntity",
-      "searchCapability", "invokeCapability"]) {
+      "searchCapability", "describeCapability", "invokeCapability"]) {
       expect(tools[name], name).toBeDefined();
     }
     // the existing surface is untouched
@@ -138,6 +138,50 @@ describe("capability registry, end to end through the server factory", () => {
     // would multiply the payload several times over to repeat boilerplate.
     expect(JSON.stringify(all).length).toBeGreaterThan(JSON.stringify(dflt).length * 1.5);
     expect(JSON.stringify(none).length).toBeLessThan(JSON.stringify(dflt).length);
+  });
+
+  it("omits guidance from search results, keeping intent and parameters", async () => {
+    const server = await buildServer();
+    // "archive test cases" surfaces bulk_archive_test_cases_by_project, which carries
+    // guidance in the index — so a non-empty result set here is a real strip, not a vacuum.
+    const result: any = await (server.getTools().searchCapability as any).handler(
+      { query: "archive test cases in a project" }, {} as any,
+    );
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.capabilities.length).toBeGreaterThan(0);
+    // The token sink is gone: no result carries guidance.
+    for (const cap of payload.capabilities) {
+      expect(cap.guidance, cap.name).toBeUndefined();
+    }
+    // …but the fields needed to pick and call still travel.
+    expect(payload.capabilities[0].intent).toBeDefined();
+    expect(payload.capabilities[0].path).toBeDefined();
+    expect(JSON.stringify(payload)).not.toContain('"guidance"');
+  });
+
+  it("describeCapability serves the full guidance and response shape for one capability", async () => {
+    const server = await buildServer();
+    const result: any = await (server.getTools().describeCapability as any).handler(
+      { name: "bulk_archive_test_cases_by_project" }, {} as any,
+    );
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.product).toBe("tm");
+    // The guidance search dropped is served whole here.
+    expect(Array.isArray(payload.capability.guidance)).toBe(true);
+    expect(payload.capability.guidance.length).toBeGreaterThan(0);
+    expect(payload.capability.intent).toBeDefined();
+    // Same dereferenced 2xx shape as search, no refs left behind.
+    expect(Object.keys(payload.capability.responses)).toContain("200");
+    expect(JSON.stringify(payload)).not.toContain('"$response"');
+  });
+
+  it("describeCapability reports an unknown name as a clean error, not a throw", async () => {
+    const server = await buildServer();
+    const result: any = await (server.getTools().describeCapability as any).handler(
+      { name: "no_such_capability_xyz" }, {} as any,
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.content[0].text).ok).toBe(false);
   });
 
   it("invokes a real endpoint: forwards Api-Token and returns the response untouched", async () => {

@@ -175,6 +175,25 @@ describe("capability registry, end to end through the server factory", () => {
     expect(JSON.stringify(payload)).not.toContain('"$response"');
   });
 
+  it("describeCapability resolves a capability by method+path when no name is given", async () => {
+    const server = await buildServer();
+    const result: any = await (server.getTools().describeCapability as any).handler(
+      { method: "POST", path: "/api/v1/projects/{project_id}/test-cases/bulk-archive" },
+      {} as any,
+    );
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.product).toBe("tm");
+    expect(payload.capability.path).toContain("bulk-archive");
+  });
+
+  it("describeCapability requires either a name or method+path", async () => {
+    const server = await buildServer();
+    const result: any = await (server.getTools().describeCapability as any).handler(
+      {}, {} as any,
+    );
+    expect(result.isError).toBe(true);
+  });
+
   it("describeCapability reports an unknown name as a clean error, not a throw", async () => {
     const server = await buildServer();
     const result: any = await (server.getTools().describeCapability as any).handler(

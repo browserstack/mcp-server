@@ -409,12 +409,28 @@ export function addCapabilityRegistryTools(
       "for the capability you are about to invoke — always before a write, or whenever its " +
       "`intent` and parameter names alone are not enough to build the arguments — then call " +
       "invokeCapability. Prefer this over re-searching. `name` is the handle searchCapability " +
-      "returned; pass `product` only to disambiguate a name two products share.",
+      "returned; pass `product` only to disambiguate a name two products share. Only when a " +
+      "result carries no `name` (some products do not publish them) pass `method` and `path` " +
+      "instead, exactly as returned.",
     {
       name: z
         .string()
+        .optional()
         .describe(
-          "The capability's published name, exactly as searchCapability returned it.",
+          "The capability's published name, exactly as searchCapability returned it. Preferred " +
+            "over method/path.",
+        ),
+      method: z
+        .string()
+        .optional()
+        .describe(
+          "HTTP method — only for a capability returned without a `name`.",
+        ),
+      path: z
+        .string()
+        .optional()
+        .describe(
+          "Path with {placeholders} intact — only for a capability returned without a `name`.",
         ),
       product: productArg()
         .optional()
@@ -437,14 +453,19 @@ export function addCapabilityRegistryTools(
       idempotentHint: true,
       openWorldHint: false,
     },
-    async ({ name, product, include_responses }) => {
+    async ({ name, method, path, product, include_responses }) => {
       track("describeCapability");
       const selection = (include_responses || "success") as ResponseSelection;
       try {
-        const { product: owner, capability } = registry.byNameLookup(
-          name,
-          product,
-        );
+        if (!name && !(method && path)) {
+          return failed(
+            "pass `name` — or, for a capability returned without one, both `method` and " +
+              "`path`, exactly as searchCapability returned them",
+          );
+        }
+        const { product: owner, capability } = name
+          ? registry.byNameLookup(name, product)
+          : registry.byEndpointLookup(method as string, path as string, product);
         const responses = resolveResponses(
           registry.index.products[owner],
           capability,

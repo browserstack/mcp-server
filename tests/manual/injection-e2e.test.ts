@@ -19,6 +19,7 @@ import {
 import { queryAccessibilityRAG } from "../../src/tools/accessiblity-utils/accessibility-rag.js";
 import { parseAccessibilityReportFromCSV } from "../../src/tools/accessiblity-utils/report-parser.js";
 import { formatRCAData } from "../../src/tools/rca-agent-utils/format-rca.js";
+import { wrapUntrusted } from "../../src/lib/untrusted-content.js";
 
 const cfg: any = {
   "browserstack-username": "u",
@@ -108,14 +109,24 @@ describe("indirect prompt injection is contained per tool", () => {
     expect(res.content[0].text).toContain("UNTRUSTED");
   });
 
-  it("accessibility report CSV (HTML snippet)", async () => {
+  it("accessibility report CSV → wrapped once at the response layer", async () => {
     const csv =
       "Issue type,Component,Issue description,HTML snippet,How to fix this issue,Severity\n" +
       `contrast,button,low contrast,"<div>${INJECT}</div>",fix it,critical`;
     get.mockResolvedValueOnce(ok(csv));
     const res = await parseAccessibilityReportFromCSV("https://report", {});
-    show("parseAccessibilityReportFromCSV", JSON.stringify(res, null, 2));
-    expect(JSON.stringify(res)).toContain("UNTRUSTED");
+    // report-parser returns raw records (no per-row boilerplate)
+    expect(JSON.stringify(res)).not.toContain("UNTRUSTED");
+    expect(JSON.stringify(res)).toContain(INJECT);
+    // the caller (accessibility.ts) wraps the whole serialized array ONCE
+    const wrapped = wrapUntrusted(
+      "accessibility scan results",
+      JSON.stringify(res.records, null, 2),
+    );
+    show("accessibility scan results (wrapped once)", wrapped);
+    expect(wrapped).toContain("UNTRUSTED");
+    // exactly one preamble for the whole array (not one per issue row)
+    expect((wrapped.match(/is UNTRUSTED external data/g) || []).length).toBe(1);
   });
 
   it("RCA formatter", () => {

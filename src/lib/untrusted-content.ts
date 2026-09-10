@@ -9,7 +9,10 @@ import crypto from "crypto";
  * The block is delimited with a per-call random nonce so injected content cannot
  * forge the closing marker to break out, and prefixed with an instruction to
  * treat the content strictly as data. Mitigates indirect prompt injection
- * (CWE-1039 / OWASP LLM01).
+ *
+ * `source` is a short trusted label for the kind of data (e.g. "device logs").
+ * Pass a string literal only — never interpolate external/untrusted data into
+ * it, since it appears outside the quarantined block.
  */
 export function wrapUntrusted(source: string, content: string): string {
   const nonce = crypto.randomBytes(6).toString("hex");

@@ -1,5 +1,4 @@
 import { apiClient } from "../../lib/apiClient.js";
-import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import { parse } from "csv-parse/sync";
 import logger from "../../logger.js";
 
@@ -56,9 +55,7 @@ export async function parseAccessibilityReportFromCSV(
     issue_type: row["Issue type"],
     component: row["Component"],
     issue_description: row["Issue description"],
-    HTML_snippet: row["HTML snippet"]
-      ? wrapUntrusted("scanned-page HTML", String(row["HTML snippet"]))
-      : row["HTML snippet"],
+    HTML_snippet: row["HTML snippet"],
     how_to_fix: row["How to fix this issue"],
     severity: (row["Severity"] || "unknown").trim(),
   }));

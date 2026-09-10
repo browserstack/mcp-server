@@ -43,9 +43,6 @@ export async function uploadFile(
 ): Promise<CallToolResult> {
   const { project_identifier, file_path } = args;
 
-  // File upload is opt-in: it is available only when the operator has declared
-  // an allowed directory via MCP_UPLOAD_BASE_DIR. Without it, refuse rather than
-  // allow uploads from arbitrary paths.
   if (!appConfig.UPLOAD_BASE_DIR) {
     return {
       content: [

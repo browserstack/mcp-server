@@ -37,7 +37,49 @@ export const ENVELOPE_KEYS = [
 export type Mode = "read" | "write" | "destructive";
 
 /** One parameter, under the name the OpenAPI spec itself gives it. */
-export interface WireParam {
+/**
+ * The constraints a parameter may declare beyond its type.
+ *
+ * ALL OPTIONAL, and absent means unchecked. The released artifact carries none of these
+ * yet — tm's spec holds 59 `format`, 50 `default`, 23 `minimum`, 12 `maximum`, 10
+ * `minItems`, 7 `maxItems`, 4 `minLength`, 3 `pattern` and 2 `maxLength` that the export
+ * currently drops — so this ships inert and starts working the moment the export carries
+ * them. An older index must keep binding exactly as it does today.
+ */
+export interface WireConstraints {
+  /** Numbers. `multipleOf` is checked on the coerced number, not the raw string. */
+  minimum?: number;
+  maximum?: number;
+  multipleOf?: number;
+  /** Strings. `pattern` is an unanchored regex, compiled with `u` for `\p{…}` classes. */
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  format?: string;
+  /** Arrays. */
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
+  /**
+   * The value the product uses when the field is omitted.
+   *
+   * PUBLISHED, NOT INJECTED. Telling a caller the default is what stops the redundant send;
+   * filling it in here would put a value on the wire that the caller never chose, and pin
+   * a server-side default that is free to change. Omission and "explicitly the default" are
+   * different requests, and only the product knows whether that difference matters.
+   */
+  default?: unknown;
+}
+
+/** One field inside an array item or a nested object — same constraints, one level down. */
+export interface WireField extends WireConstraints {
+  name: string;
+  type: string;
+  required?: true;
+  values?: unknown[];
+}
+
+export interface WireParam extends WireConstraints {
   name: string;
   type: string;
   required?: true;
@@ -45,7 +87,7 @@ export interface WireParam {
   example?: unknown;
   description?: string;
   /** Field names/types one level inside an array item or nested object. */
-  fields?: { name: string; type: string; required?: true }[];
+  fields?: WireField[];
   /**
    * Where a body field sits in the JSON, when that differs from its name. Published
    * because the nesting is not guessable and getting it wrong fails silently — tm's folder

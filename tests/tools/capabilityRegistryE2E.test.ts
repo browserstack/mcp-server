@@ -67,9 +67,14 @@ describe("capability registry, end to end through the server factory", () => {
     );
     const payload = JSON.parse(result.content[0].text);
     expect(payload.products.map((p: any) => p.name)).toEqual(["tm"]);
-    // Provenance travels per product, because each product is its own file.
-    expect(payload.products[0].build_id).toMatch(/^[0-9a-f]{7,}_/);
-    expect(payload.products[0].version).toMatch(/^\d+\.\d+$/);
+    // NO provenance here. `build_id` and `version` exist for our logs and for cache
+    // busting, and capability resolution must never depend on them — so they say nothing
+    // a caller can act on, and they were saying it on the one call an agent makes before
+    // it knows anything. They stay on searchCapability, where a support question about
+    // which index produced a given result can actually be traced.
+    expect(payload.build_id).toBeUndefined();
+    expect(payload.products[0].build_id).toBeUndefined();
+    expect(payload.products[0].version).toBeUndefined();
   });
 
   it("names the loaded products in the schema, and nowhere else", async () => {
@@ -118,14 +123,13 @@ describe("capability registry, end to end through the server factory", () => {
     const byName = Object.fromEntries(
       listed.products[0].entities.map((e: any) => [e.entity, e]),
     );
-    // What it IS comes before what it is CALLED, because that is the order the reader
-    // needs them in.
-    expect(Object.keys(byName.test_run)).toEqual([
-      "entity",
-      "description",
-      "aliases",
-    ]);
+    // Name and meaning, and nothing else. The aliases answer "what else is this
+    // called" — the question a FAILED search raises, not the one routing asks — so they
+    // travel in searchCapability's weak-match block instead of costing ~2.5KB of
+    // speculative context on every routing call.
+    expect(Object.keys(byName.test_run)).toEqual(["entity", "description"]);
     expect(byName.version.description).toMatch(/snapshot of a test case/);
+    expect(byName.version.aliases).toBeUndefined();
 
     // describeEntity carries it too — same field, so an agent that went deep on one
     // entity is not reading a different vocabulary from the one that routed it there.
@@ -138,6 +142,33 @@ describe("capability registry, end to end through the server factory", () => {
       ).content[0].text,
     );
     expect(deep.description).toBe(byName.version.description);
+  });
+
+  it("will not search without being told which product", async () => {
+    // The point is the tool that is NOT being called. listProducts carries the routing
+    // data — each product's purpose, its entities, and what every entity means — but
+    // nothing obliged an agent to read it while a search worked without naming a
+    // product. An optional step in front of a working one is a step that does not
+    // happen, so the ordering is made structural rather than advisory.
+    const server = await buildServer();
+    const tools: any = server.getTools();
+    const shape =
+      tools.searchCapability.inputSchema?.shape ??
+      tools.searchCapability._def?.shape;
+
+    expect(shape.product.isOptional()).toBe(false);
+    // Everything else stays optional: requiring more than the routing decision would
+    // make the common case worse without settling anything.
+    for (const arg of ["entity", "mode", "limit"]) {
+      expect(shape[arg].isOptional(), arg).toBe(true);
+    }
+
+    // describeCapability and invokeCapability resolve by NAME, which is already unique
+    // per product, so neither needs it — the constraint belongs where the ambiguity is.
+    for (const tool of ["describeCapability", "invokeCapability"]) {
+      const s = tools[tool].inputSchema?.shape ?? tools[tool]._def?.shape;
+      expect(s.product.isOptional(), tool).toBe(true);
+    }
   });
 
   it("registers nothing, and does not throw, when the artifact is missing", async () => {
@@ -158,7 +189,10 @@ describe("capability registry, end to end through the server factory", () => {
     const server = await buildServer();
     const result: any = await (
       server.getTools().searchCapability as any
-    ).handler({ query: "list the test cases in a folder" }, {} as any);
+    ).handler(
+      { query: "list the test cases in a folder", product: "tm" },
+      {} as any,
+    );
     const payload = JSON.parse(result.content[0].text);
     expect(payload.build_id).toMatch(/^[0-9a-f]{7,}_/);
     expect(payload.capabilities.length).toBeGreaterThan(0);
@@ -172,7 +206,10 @@ describe("capability registry, end to end through the server factory", () => {
     const server = await buildServer();
     const shortlist: any = await (
       server.getTools().searchCapability as any
-    ).handler({ query: "create a folder in a project" }, {} as any);
+    ).handler(
+      { query: "create a folder in a project", product: "tm" },
+      {} as any,
+    );
     const picked = JSON.parse(shortlist.content[0].text).capabilities[0];
 
     const result: any = await (

@@ -176,10 +176,10 @@ export function addCapabilityRegistryTools(
 
   tools.listProducts = server.tool(
     "listProducts",
-    "List the BrowserStack products this surface can reach, with a one-line summary each " +
-      "and the entities each one models — every entity with the words it answers to and, " +
-      "where the product has written one, a line saying what it is. Start here when you " +
-      "do not know which product a task belongs to.",
+    "List the BrowserStack products this surface can reach: what each one does, the " +
+      "entities it models, and a line saying what each entity is. START HERE — " +
+      "searchCapability needs a product, and this is what tells you which one. If two " +
+      "products could both fit the task, ask the user rather than choosing for them.",
     {},
     {
       title: "List Capability Products",
@@ -190,35 +190,36 @@ export function addCapabilityRegistryTools(
     },
     async () => {
       track("listProducts");
-      const info = registry.buildInfo();
       return ok({
-        build_id: registry.buildId,
         products: registry.productNames().map((name) => ({
           name,
           summary: registry.index.products[name].summary,
-          // THE VOCABULARY, UP FRONT. Routing is this tool's whole job, and a summary
-          // alone does not do it: "add a tag to xyz test" reads as either product until
-          // you can see that `tag` exists in one and not the other. Measured across both
-          // products, 139 of 147 terms resolve to exactly one — so this settles 95% of
-          // the question before a single search, and makes the remaining 8 (run, project,
-          // report, result, folder, workspace, execution, history) visibly ambiguous
-          // instead of silently so.
+          // THE ENTITIES AND WHAT EACH ONE IS. Routing is this tool's whole job, and a
+          // product summary alone does not do it: "add a tag to xyz test" reads as
+          // either product until you can see that `tag` exists in one and not the other.
+          // The one-line description is what makes each name mean something — `version`
+          // alone does not say whether it versions a test case or a project — so an
+          // agent can choose here instead of calling describeEntity once per entity to
+          // find out, which for tm is 19 calls at ~1.4KB apiece.
           //
-          // AND WHAT EACH ENTITY IS, in one line, where the product has written it.
-          // Aliases route but do not define: knowing that `version` also answers to
-          // `history` and `revision` does not say whether it versions a test case or a
-          // project. An agent that cannot tell has one way to find out — describeEntity,
-          // once per entity, 19 calls at ~1.4KB for tm — and it pays that cost precisely
-          // when it is least oriented. ~1.6KB here answers it for all of them at once.
-          //
-          // ~3.5KB for both products, on a tool called once for routing. The same content
-          // reaches a caller reactively via searchCapability's weak-match block; this is
-          // the proactive half, for the agent that looks before it leaps.
-          entities: vocabularyOf(registry.index.products, name)[name] ?? [],
-          // Provenance for logging and cache-busting only — capability resolution must
-          // never depend on it.
-          build_id: info[name]?.build_id,
-          ...(info[name]?.version ? { version: info[name].version } : {}),
+          // NAME AND DESCRIPTION ONLY. The aliases used to travel here too, and they are
+          // the wrong half for this job: they answer "what else is this called", which
+          // matters when a search has already failed on vocabulary, not when choosing a
+          // product. They still reach the caller at exactly that moment, in
+          // searchCapability's weak-match block, where the full vocabulary is the answer
+          // rather than 2.5KB of speculative context on every routing call.
+          entities: (
+            vocabularyOf(registry.index.products, name)[name] ?? []
+          ).map(({ entity, description }) => ({
+            entity,
+            ...(description ? { description } : {}),
+          })),
+          // NO build_id OR version. They are provenance — for our logs and for cache
+          // busting — and capability resolution must never depend on them, which means
+          // no caller has anything to do with them. They rode on the one call an agent
+          // makes before it knows anything, costing context to say nothing actionable.
+          // Still on searchCapability's response, where a support question about which
+          // index answered can actually be traced to a result.
         })),
       });
     },
@@ -270,20 +271,22 @@ export function addCapabilityRegistryTools(
 
   tools.searchCapability = server.tool(
     "searchCapability",
-    "Find endpoints this surface can call, by plain language, optionally narrowed to one " +
-      "entity, product or mode. " +
-      `Currently loaded products: ${productList} — call listProducts for what each does. ` +
+    "Find endpoints this surface can call, by plain language, within ONE product. " +
+      `You must say which: ${productList}. If the task does not name it unambiguously, ` +
+      "call listProducts first — it returns what each product does, the entities each " +
+      "models, and what every entity means, which is what settles the choice. Where two " +
+      "products use the same word for different things, ask the user rather than picking. " +
       "Search matches the product's OWN words, not synonyms. When your words are not the " +
       "product's, the response says so: `weak_match: true` with a `suggested_vocabulary` " +
       "map of the product's entities and their aliases. Results are still returned, but " +
       "treat them as unconfirmed — pick the closest entity from that map and search again " +
       "using its vocabulary, or call describeEntity on it for the fuller picture. That one " +
       "extra round trip is far cheaper than invoking the wrong capability. " +
-      "Narrowing with `product` or `entity` sharpens results further. " +
+      "Narrowing further with `entity` sharpens results. " +
       "THIS IS A SHORTLIST, NOT A CONTRACT. Each result carries only what you need to " +
-      "CHOOSE: `name` (the handle), `product` (which product owns it — results can span " +
-      "products), `mode` (whether it writes), `intent` and `guidance` (what it does and " +
-      "what goes wrong), and `method`/`path` for products that publish no name yet. " +
+      "CHOOSE: `name` (the handle), `product`, `mode` (whether it writes), `intent` and " +
+      "`guidance` (what it does and what goes wrong), and `method`/`path` for products " +
+      "that publish no name yet. " +
       "It does NOT carry parameters or response shapes. Once you have picked one, call " +
       "describeCapability for its full contract, then invokeCapability. Fetching the " +
       "contract only for the one you chose is the difference between ~1k and ~8.6k tokens " +
@@ -296,11 +299,22 @@ export function addCapabilityRegistryTools(
         .string()
         .optional()
         .describe("Restrict to one entity (listProducts names them)."),
-      product: productArg()
-        .optional()
-        .describe(
-          `Restrict to one product: ${productList}. Omit to search all of them.`,
-        ),
+      // REQUIRED, and the reason is the tool that is NOT being called. listProducts
+      // carries the routing data — each product's purpose, its entities, and what every
+      // entity means — but nothing obliged an agent to read it: a search that worked
+      // without naming a product meant the routing step could always be skipped, and an
+      // optional step in front of a working one is a step that does not happen. Requiring
+      // the argument makes the ordering structural instead of advisory.
+      //
+      // It costs one listProducts call on queries that were already unambiguous — 139 of
+      // 147 vocabulary terms resolve to a single product — and buys the eight that are
+      // not (run, project, report, result, folder, workspace, execution, history), where
+      // the old behaviour was to silently pick whichever product ranked higher. A wasted
+      // round trip against a silent wrong-product answer is not a close trade.
+      product: productArg().describe(
+        `Which product to search: ${productList}. Call listProducts if the task does ` +
+          `not make it obvious, and ask the user when two products could both fit.`,
+      ),
       mode: z
         .enum(["read", "write", "destructive"])
         .optional()

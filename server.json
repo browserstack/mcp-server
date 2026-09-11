@@ -11,7 +11,7 @@
     {
       "registryType": "npm",
       "identifier": "@browserstack/mcp-server",
-      "version": "1.3.2",
+      "version": "1.3.3",
       "transport": {
         "type": "stdio"
       },

@@ -28,7 +28,10 @@ export const UploadFileSchema = z.object({
     ),
   file_path: z
     .string()
-    .describe("Full path to the file that should be uploaded"),
+    .describe(
+      "Full path to the file that should be uploaded. Must be inside the " +
+        "directory configured via the MCP_UPLOAD_BASE_DIR environment variable.",
+    ),
 });
 
 /**
@@ -40,9 +43,24 @@ export async function uploadFile(
 ): Promise<CallToolResult> {
   const { project_identifier, file_path } = args;
 
+  if (!appConfig.UPLOAD_BASE_DIR) {
+    return {
+      content: [
+        {
+          type: "text",
+          text:
+            "File upload is disabled. Set the MCP_UPLOAD_BASE_DIR environment " +
+            "variable to a directory that contains the files you want to upload, " +
+            "then restart the MCP server. Uploads are restricted to that directory.",
+        },
+      ],
+      isError: true,
+    };
+  }
+
   try {
     // Canonicalize path and enforce upload safety rules (extension, size,
-    // hidden-directory traversal, optional base-dir containment).
+    // hidden-directory traversal, base-dir containment).
     const safePath = validateUploadPath(file_path, {
       allowedExtensions: TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS,
       maxSizeBytes: MAX_ATTACHMENT_UPLOAD_BYTES,

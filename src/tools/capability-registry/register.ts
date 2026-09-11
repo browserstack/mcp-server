@@ -437,7 +437,13 @@ export function addCapabilityRegistryTools(
         },
       );
       return ok({
-        build_id: registry.buildId,
+        // NO build_id. It is provenance — for our logs and for cache busting — and
+        // resolution must never depend on it, which is exactly why no caller has anything
+        // to do with it. It was also the WHOLE registry's id, so a search scoped to one
+        // product still announced every other product's build: metadata about builds the
+        // caller did not ask about and cannot act on. The startup log already records
+        // what loaded, which is where a question about a stale index gets answered.
+        //
         // A SHORTLIST: only what choosing requires. Parameters and response shapes are 86%
         // of a full record and are needed for exactly ONE of the eight — the one the caller
         // picks — so they move to describeCapability. Measured over eight queries: 8.6k
@@ -581,7 +587,9 @@ export function addCapabilityRegistryTools(
         const { responses: unresolved, ...contract } = capability;
         void unresolved;
         return ok({
-          build_id: registry.buildId,
+          // No build_id here either, same reason. `product` stays: describeCapability
+          // resolves by NAME and its product argument is optional, so the answer has to
+          // say whose contract came back.
           product: owner,
           ...contract,
           ...(responses ? { responses } : {}),

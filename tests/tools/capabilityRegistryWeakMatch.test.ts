@@ -94,7 +94,9 @@ describe("searchCapability's vocabulary hand-off", () => {
     expect(result.capabilities.length).toBeGreaterThan(0);
     // This is what makes a generous threshold safe: a false positive costs a little context,
     // never a withheld answer.
-    expect(result.build_id).toBeTruthy();
+    // build_id is gone from every tool response — provenance for our logs, never for
+    // the caller. What must survive a weak match is the RESULTS.
+    expect(result.build_id).toBeUndefined();
   });
 
   it("says nothing extra when the search went well", async () => {

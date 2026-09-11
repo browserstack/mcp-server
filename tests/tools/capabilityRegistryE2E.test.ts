@@ -78,11 +78,10 @@ describe("capability registry, end to end through the server factory", () => {
     );
     const payload = JSON.parse(result.content[0].text);
     expect(payload.products.map((p: any) => p.name)).toEqual(["tm"]);
-    // NO provenance here. `build_id` and `version` exist for our logs and for cache
-    // busting, and capability resolution must never depend on them — so they say nothing
-    // a caller can act on, and they were saying it on the one call an agent makes before
-    // it knows anything. They stay on searchCapability, where a support question about
-    // which index produced a given result can actually be traced.
+    // NO provenance, here or on any other tool. `build_id` and `version` exist for our
+    // logs and for cache busting, and capability resolution must never depend on them —
+    // which is exactly why no caller has anything to do with them. The startup log
+    // records what loaded, and that is where a question about a stale index is answered.
     expect(payload.build_id).toBeUndefined();
     expect(payload.products[0].build_id).toBeUndefined();
     expect(payload.products[0].version).toBeUndefined();
@@ -312,7 +311,10 @@ describe("capability registry, end to end through the server factory", () => {
       {} as any,
     );
     const payload = JSON.parse(result.content[0].text);
-    expect(payload.build_id).toMatch(/^[0-9a-f]{7,}_/);
+    // No provenance on a search either: it was the WHOLE registry's build id, so a
+    // search scoped to tm still announced Load Testing's build — metadata about a
+    // product the caller did not ask about and could not act on.
+    expect(payload.build_id).toBeUndefined();
     expect(payload.capabilities.length).toBeGreaterThan(0);
     // Addressed by NAME, never by route — the shortlist publishes no path at all now
     // that every capability in every shipped product carries a name.

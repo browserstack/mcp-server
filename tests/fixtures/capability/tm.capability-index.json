@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "version": "1.5",
-  "build_id": "bd02ae3b_2026-09-10T11:51:51Z",
+  "version": "1.6",
+  "build_id": "2d3d82f8_2026-09-11T09:37:38Z",
   "tm": {
-    "summary": "BrowserStack Test Management API (v1 — the SSO/OAuth app API, session-authenticated).",
+    "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
     "capabilities": [
       {
         "name": "assign_test_run_owner",
@@ -18556,7 +18556,7 @@
             },
             "selection": {
               "type": "object",
-              "description": "the primary project's persisted folder-structured test-case selection (with select_all / per-folder flags + unique_test_case_count), in the same shape as the test-run edit/selection endpoint. `{}` when the report has no saved selection for the primary project. Used by the Edit dialog to re-check saved test cases (including folder/project-level select_all, which the flat ids cannot represent).",
+              "description": "The primary project's persisted folder-structured test-case selection (with select_all / per-folder flags + unique_test_case_count), in the same shape as the test-run edit/selection endpoint. `{}` when the report has no saved selection for the primary project. Used by the Edit dialog to re-check saved test cases (including folder/project-level select_all, which the flat ids cannot represent).",
               "example": {
                 "select_all": false,
                 "folders": {
@@ -18573,7 +18573,7 @@
             },
             "shared_selection": {
               "type": "object",
-              "description": "per-project folder-structured selection for the report's non-primary projects, keyed by project id ({ \"<project_id>\": <selection> }). Present only for cross-project Test Case Activity reports; `{}` otherwise.",
+              "description": "Per-project folder-structured selection for the report's non-primary projects, keyed by project id ({ \"<project_id>\": <selection> }). Present only for cross-project Test Case Activity reports; `{}` otherwise.",
               "example": {
                 "10209": {
                   "select_all": true,
@@ -20170,7 +20170,7 @@
           "The read detail has NO data wrapper: the plan sits under a top-level test_plan key, and test_plan.identifier is the TP-NNN / STP-NNN.",
           "Sub-plans are HIDDEN by default in the list. Without include_sub_plans=true you see only top-level plans, so a sub-plan the user named will look missing.",
           "name IS REQUIRED ON EVERY PLAN UPDATE, including one that only touches test_runs. Omit it and the call is rejected with 400 {success: false, error: 'Invalid Update Params'} however valid the rest of the body is — the server's edit branch is gated on name being present. Read the plan first and echo its current name back unchanged. Only a pure plan_status transition and a reviewers-only edit are exempt. Verified live: {test_plan: {test_runs: [198]}} 400s; adding name makes the identical call succeed.",
-          "Run ids in test_runs are the INTEGER uuid from a run read — NOT the run's id field, which is the TR-NNN string on every run endpoint (list, plan's run list, single detail alike). Identifiers are forwarded to the backing service uncoerced and fail upstream (observed 502 Upstream backing-service error). Take uuid, never id.",
+          "Run ids in test_runs are the INTEGER uuid from a run read — NOT the run's id field, which is the TR-NNN string on every run endpoint (list, plan's run list, single detail alike). Identifiers are forwarded to the backing service uncoerced and fail upstream (observed 502 Upstream service error). Take uuid, never id.",
           "Linking a run MOVES it: a run belongs to at most one plan, so linking silently unlinks it from the plan that held it, with nothing in the 200 to say so. Read the runs' current membership first and tell the user which plans will lose runs. Verified live.",
           "test_runs accepts an id array OR a bulk-selection object {select_all, de_selected_ids, search_query}. select_all means 'the newest active runs', NOT 'everything matching' — and `filters` is accepted but SILENTLY IGNORED, so a filtered select_all links the whole recent set. Narrow with search_query (name/identifier substring) or send explicit ids. Verified live.",
           "bulk-archive / bulk-retrieve go ASYNC above the bulk threshold and return {success, async: true, unique_id} — the plans are NOT changed yet. Re-read to confirm; see async-jobs.",
@@ -20309,7 +20309,6 @@
           "A plain-language diff summary is agent-side — read the field deltas and describe them; the API returns structured data, not prose."
         ]
       }
-    },
-    "version": "1.6"
+    }
   }
 }

@@ -165,6 +165,20 @@ export interface Capability {
 
 export interface EntityDoc {
   title?: string;
+  /**
+   * One line saying what this entity IS. Rides on `listProducts`, next to the aliases.
+   *
+   * Aliases route; they do not define. `version -> history, revision, version-history`
+   * tells a caller which words land here and nothing about whether that is the versioning
+   * of a test case or of a project. Without this line the only way to find out is
+   * `describeEntity`, once per entity — 19 calls at ~1.4KB for tm, against ~1.6KB to
+   * answer it for all of them at once.
+   *
+   * Capped at 140 characters by the build, and dropped rather than truncated when longer.
+   * Often absent: a product that has not authored these emits none (loadtesting has 0 of
+   * 9 today), and absence means "unwritten", never an error.
+   */
+  description?: string;
   aliases?: string[];
   id_convention?: string;
   parents?: string[];

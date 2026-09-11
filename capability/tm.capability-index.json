@@ -19455,6 +19455,7 @@
       "activity": {
         "entity": "activity",
         "title": "Activity feed (audit trail)",
+        "description": "Group-wide audit trail of who changed what, on which entity, and when.",
         "aliases": [
           "activity",
           "activities",
@@ -19500,6 +19501,7 @@
       "attachment": {
         "entity": "attachment",
         "title": "Attachments",
+        "description": "A file hanging off a parent test case or test result.",
         "aliases": [
           "attachment",
           "file",
@@ -19535,6 +19537,7 @@
       "configuration": {
         "entity": "configuration",
         "title": "Configurations",
+        "description": "An operating system, browser or device combination that a test run executes against.",
         "aliases": [
           "config",
           "configuration",
@@ -19561,6 +19564,7 @@
       "custom_field": {
         "entity": "custom_field",
         "title": "Custom fields & system fields",
+        "description": "A user-defined field on test cases, results or plans, alongside the built-in system fields.",
         "aliases": [
           "custom field",
           "custom fields",
@@ -19612,6 +19616,7 @@
       "dataset": {
         "entity": "dataset",
         "title": "Dataset",
+        "description": "A named table of variables and rows that drives data-driven execution of a test case.",
         "aliases": [
           "datasets",
           "data-driven-data",
@@ -19648,6 +19653,7 @@
       "duplicate": {
         "entity": "duplicate",
         "title": "Duplicate recommendation (AI dedupe)",
+        "description": "A machine-suggested pair of near-identical test cases, for a human to review and merge.",
         "aliases": [
           "duplicate",
           "duplicates",
@@ -19687,6 +19693,7 @@
       "exploratory_session": {
         "entity": "exploratory_session",
         "title": "Exploratory session",
+        "description": "An unscripted, charter-driven testing session and the observations recorded during it.",
         "aliases": [
           "session",
           "exploratory",
@@ -19739,6 +19746,7 @@
       "filter": {
         "entity": "filter",
         "title": "Saved filter view",
+        "description": "A saved, named set of filter conditions a user can reapply to a list view.",
         "aliases": [
           "filter",
           "filters",
@@ -19779,6 +19787,7 @@
       "folder": {
         "entity": "folder",
         "title": "Folder",
+        "description": "A container organising test cases inside a project; folders nest to form a tree.",
         "aliases": [
           "dir",
           "directory"
@@ -19819,6 +19828,7 @@
       "project": {
         "entity": "project",
         "title": "Project",
+        "description": "The top-level container that owns every folder, test case, run, plan and report.",
         "aliases": [
           "pr",
           "workspace"
@@ -19875,6 +19885,7 @@
       "report": {
         "entity": "report",
         "title": "Report",
+        "description": "A saved, optionally scheduled analytics view over a project's test data.",
         "aliases": [
           "reports",
           "scheduled-report",
@@ -19931,6 +19942,7 @@
       "result": {
         "entity": "result",
         "title": "Result",
+        "description": "The recorded outcome of one test case in one run: its status, and who set it.",
         "aliases": [
           "outcome",
           "execution-result",
@@ -19968,6 +19980,7 @@
       "shared_step": {
         "entity": "shared_step",
         "title": "Shared step",
+        "description": "A reusable block of test steps that many test cases embed by reference.",
         "aliases": [
           "shared step",
           "shared steps",
@@ -19999,6 +20012,7 @@
       "tag": {
         "entity": "tag",
         "title": "Tag",
+        "description": "A free-text label on a test case, run or plan, used to group and filter them.",
         "aliases": [
           "tags",
           "label",
@@ -20040,6 +20054,7 @@
       "test_case": {
         "entity": "test_case",
         "title": "Test case",
+        "description": "The unit of test logic: title, preconditions, steps and expected results.",
         "aliases": [
           "tc",
           "case",
@@ -20111,6 +20126,7 @@
       "test_plan": {
         "entity": "test_plan",
         "title": "Test plan (and sub-plan)",
+        "description": "A container grouping several test runs, typically for one release or milestone.",
         "aliases": [
           "tp",
           "plan",
@@ -20165,6 +20181,7 @@
       "test_run": {
         "entity": "test_run",
         "title": "Test run",
+        "description": "One execution cycle over a fixed set of test cases.",
         "aliases": [
           "tr",
           "run",
@@ -20221,6 +20238,7 @@
       "user": {
         "entity": "user",
         "title": "User",
+        "description": "A member with access to a project: who you assign a case to, or set as an owner.",
         "aliases": [
           "users",
           "member",
@@ -20257,6 +20275,7 @@
       "version": {
         "entity": "version",
         "title": "Test case version",
+        "description": "A point-in-time snapshot of a test case, for viewing or restoring an earlier revision.",
         "aliases": [
           "history",
           "histories",
@@ -20290,6 +20309,7 @@
           "A plain-language diff summary is agent-side — read the field deltas and describe them; the API returns structured data, not prose."
         ]
       }
-    }
+    },
+    "version": "1.6"
   }
 }

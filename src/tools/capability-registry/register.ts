@@ -177,8 +177,9 @@ export function addCapabilityRegistryTools(
   tools.listProducts = server.tool(
     "listProducts",
     "List the BrowserStack products this surface can reach, with a one-line summary each " +
-      "and the entities each one models. Start here when you do not know which product a " +
-      "task belongs to.",
+      "and the entities each one models — every entity with the words it answers to and, " +
+      "where the product has written one, a line saying what it is. Start here when you " +
+      "do not know which product a task belongs to.",
     {},
     {
       title: "List Capability Products",
@@ -203,7 +204,14 @@ export function addCapabilityRegistryTools(
           // report, result, folder, workspace, execution, history) visibly ambiguous
           // instead of silently so.
           //
-          // ~1.9KB for both products, on a tool called once for routing. The same content
+          // AND WHAT EACH ENTITY IS, in one line, where the product has written it.
+          // Aliases route but do not define: knowing that `version` also answers to
+          // `history` and `revision` does not say whether it versions a test case or a
+          // project. An agent that cannot tell has one way to find out — describeEntity,
+          // once per entity, 19 calls at ~1.4KB for tm — and it pays that cost precisely
+          // when it is least oriented. ~1.6KB here answers it for all of them at once.
+          //
+          // ~3.5KB for both products, on a tool called once for routing. The same content
           // reaches a caller reactively via searchCapability's weak-match block; this is
           // the proactive half, for the agent that looks before it leaps.
           entities: vocabularyOf(registry.index.products, name)[name] ?? [],

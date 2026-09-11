@@ -47,6 +47,33 @@ describe("routing between products", () => {
     expect([...(owners.get("tag") ?? [])]).toEqual([tm.name]);
   });
 
+  it("says what each entity IS, not only what it answers to", () => {
+    // Aliases route; they do not define. `version -> history, revision` tells a caller
+    // which words land there and nothing about whether it versions a test case or a
+    // project. The only other way to find out is describeEntity, once per entity — for
+    // tm that is 19 calls at ~1.4KB each, paid exactly when the agent is least oriented.
+    const vocab = vocabularyOf(BOTH);
+    const described = vocab[tm.name].filter((e) => e.description);
+    expect(described.length).toBe(vocab[tm.name].length);
+
+    for (const entry of described) {
+      // One line, capped by the build. Long enough to define, short enough that every
+      // entity of every product can travel on one listProducts call.
+      expect(entry.description!.length, entry.entity).toBeLessThanOrEqual(140);
+      // A definition, not a restatement of the name: `tag: "tag"` would pass a presence
+      // check and teach nothing.
+      expect(
+        entry.description!.toLowerCase().replace(/[^a-z]/g, ""),
+        entry.entity,
+      ).not.toBe(entry.entity.replace(/[^a-z]/g, ""));
+    }
+
+    // Absent, not empty, where a product has not authored them. loadtesting ships 9
+    // entities and 0 descriptions today; that has to read as "unwritten" rather than as
+    // a build that produced nothing.
+    expect(vocab[lt.name].every((e) => e.description === undefined)).toBe(true);
+  });
+
   it("keeps a small product visible against a much larger one", () => {
     // tm carries 173 capabilities to loadtesting's 20. On words both share, tm simply has
     // more entries near the top and used to take the whole page — so an agent reading the

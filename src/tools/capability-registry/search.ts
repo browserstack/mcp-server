@@ -541,6 +541,7 @@ function withEveryProductRepresented<T extends { product: string }>(
 /** One entity's caller-facing vocabulary: what it is called, and what else it is called. */
 export interface VocabularyEntry {
   entity: string;
+  description?: string;
   aliases?: string[];
 }
 
@@ -553,10 +554,14 @@ export interface VocabularyEntry {
  * language model, and given tm's entity list it maps bucket -> folder without effort. It
  * just cannot guess the list unprompted.
  *
- * Aliases only, and `title` dropped as a near-duplicate of `entity` ("Test run" next to
- * `test_run` buys nothing). The entity `key_facts` are richer prose but ten times the size,
- * and a caller who needs them can ask describeEntity once it knows which entity to ask
- * about — which is exactly what this hands over.
+ * Aliases and a one-line `description`; `title` stays dropped as a near-duplicate of
+ * `entity` ("Test run" next to `test_run` buys nothing). Aliases alone route but do not
+ * DEFINE — `result -> outcome, execution-result, test-result` never says whether that is
+ * the per-case verdict inside a run or a run-level rollup — so an agent holding names and
+ * aliases has exactly one way to find out, which is describeEntity once per entity. For
+ * tm that is 19 calls at ~1.4KB each, ~27KB, to answer what ~1.6KB of description answers
+ * here for every entity at once. The `key_facts` remain out: ten times the size, and the
+ * caller can ask describeEntity for the one entity it settles on.
  *
  * Its share of the response grew when search became a shortlist: 3.2KB against a 38KB full
  * search was 8%, against a 6.8KB shortlist it is nearly half. The absolute cost did not
@@ -573,8 +578,12 @@ export function vocabularyOf(
     const entries: VocabularyEntry[] = [];
     for (const [entity, doc] of Object.entries(bundle.entities || {})) {
       const aliases = ((doc as EntityDoc).aliases || []) as string[];
+      const description = (doc as EntityDoc).description;
       entries.push({
         entity,
+        // Before the aliases, because it is what the reader needs first: what the thing
+        // is, then what else it is called.
+        ...(description ? { description } : {}),
         ...(aliases.length ? { aliases } : {}),
       });
     }

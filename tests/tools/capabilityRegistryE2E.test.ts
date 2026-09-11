@@ -108,6 +108,38 @@ describe("capability registry, end to end through the server factory", () => {
     expect(listed.products[0].summary).toContain("Test Management");
   });
 
+  it("carries each entity's one-line meaning on the routing call", async () => {
+    const server = await buildServer();
+    const listed = JSON.parse(
+      (
+        await (server.getTools().listProducts as any).handler({}, {} as any)
+      ).content[0].text,
+    );
+    const byName = Object.fromEntries(
+      listed.products[0].entities.map((e: any) => [e.entity, e]),
+    );
+    // What it IS comes before what it is CALLED, because that is the order the reader
+    // needs them in.
+    expect(Object.keys(byName.test_run)).toEqual([
+      "entity",
+      "description",
+      "aliases",
+    ]);
+    expect(byName.version.description).toMatch(/snapshot of a test case/);
+
+    // describeEntity carries it too — same field, so an agent that went deep on one
+    // entity is not reading a different vocabulary from the one that routed it there.
+    const deep = JSON.parse(
+      (
+        await (server.getTools().describeEntity as any).handler(
+          { product: "tm", entity: "version" },
+          {} as any,
+        )
+      ).content[0].text,
+    );
+    expect(deep.description).toBe(byName.version.description);
+  });
+
   it("registers nothing, and does not throw, when the artifact is missing", async () => {
     process.env.CAPABILITY_REGISTRY_INDEX = "/nonexistent/index.json";
     const server = await buildServer();

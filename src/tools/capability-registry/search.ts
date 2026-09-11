@@ -495,48 +495,22 @@ const WEAK_COVERAGE = 0.25;
 /** The heaviest field, and so the yardstick a perfect match is measured against. */
 const IDENTITY_WEIGHT = 6;
 
-/** Slots a matching product is guaranteed, before the rest of the page fills by rank. */
-const PRODUCT_FLOOR = 2;
-
-/**
- * Fill the page by rank, but never let one product's SIZE shut another out entirely.
- *
- * Scores are comparable across products — rarity spans the whole corpus by design — but
- * the number of chances to score is not: tm has 173 capabilities to Load Testing's 20. On
- * a query using words both products share ("test", "config", "tag"), tm simply has more
- * entries near the top and takes the page. Measured before this: "add a tag to xyz test"
- * returned tm tm LT tm tm, and an agent reading the first row went to the wrong product.
- *
- * So each product that matched at all is guaranteed a couple of slots, and everything else
- * is still strict rank order. This does NOT reorder anything or touch scoring — the best
- * hit stays the best hit — it only refuses to let a product be invisible because it is
- * small. The cost when a query really is single-product is a row or two of another
- * product's shortlist, which since the split is a few hundred bytes.
- */
-function withEveryProductRepresented<T extends { product: string }>(
-  scored: T[],
-  limit: number,
-): T[] {
-  if (scored.length <= limit) return scored;
-  const products = new Set(scored.map((s) => s.product));
-  if (products.size < 2) return scored.slice(0, limit);
-
-  const taken = new Set<T>();
-  // Reserve first, so a product near the bottom of the ranking still gets its footing.
-  for (const product of products) {
-    for (const hit of scored
-      .filter((s) => s.product === product)
-      .slice(0, PRODUCT_FLOOR)) {
-      if (taken.size < limit) taken.add(hit);
-    }
-  }
-  for (const hit of scored) {
-    if (taken.size >= limit) break;
-    taken.add(hit);
-  }
-  // Emit in the original ranked order: the floor decides WHO appears, never in what order.
-  return scored.filter((hit) => taken.has(hit));
-}
+// THE CROSS-PRODUCT FLOOR WAS HERE, and is gone with the thing that needed it.
+//
+// It reserved two slots per matching product so a small product could not be shut out by
+// a large one — tm has 173 capabilities to Load Testing's 20, and on a word both share
+// ("test", "config", "tag") tm took the whole page. "add a tag to xyz test" returned
+// tm tm LT tm tm, and an agent reading the first row went to the wrong product.
+//
+// `product` is now REQUIRED on searchCapability, so a search never spans products and the
+// floor could never fire. The bug it fixed is fixed harder: the agent chooses the product
+// deliberately against listProducts, or asks the user, instead of inferring it from which
+// row happened to rank first. Keeping the code would mean carrying a branch nothing
+// reaches and tests asserting behaviour the surface cannot produce.
+//
+// If searching across products ever returns — a "search everywhere" mode, or a caller
+// that legitimately cannot know the product — this comes back with it. It is in the
+// history at 617b4b9, and the reasoning above is why it was right.
 
 /** One entity's caller-facing vocabulary: what it is called, and what else it is called. */
 export interface VocabularyEntry {
@@ -684,9 +658,9 @@ export function searchCapabilities(
   const perfect = weights.reduce((sum, w) => sum + IDENTITY_WEIGHT * w, 0);
   const coverage = perfect > 0 ? topMatched / perfect : 1;
   return {
-    hits: withEveryProductRepresented(scored, limit).map(
-      ({ product, capability }) => ({ product, capability }),
-    ),
+    hits: scored
+      .slice(0, limit)
+      .map(({ product, capability }) => ({ product, capability })),
     truncated: scored.length > limit,
     total_matched: scored.length,
     top_matched: topMatched,

@@ -74,28 +74,36 @@ describe("routing between products", () => {
     expect(vocab[lt.name].every((e) => e.description === undefined)).toBe(true);
   });
 
-  it("keeps a small product visible against a much larger one", () => {
-    // tm carries 173 capabilities to loadtesting's 20. On words both share, tm simply has
-    // more entries near the top and used to take the whole page — so an agent reading the
-    // first row went to the wrong product. Rank order is untouched; what changed is that
-    // being small can no longer make a product invisible.
+  it("answers within one product, so size cannot decide the answer", () => {
+    // THE CROSS-PRODUCT FLOOR IS GONE, along with the problem it patched. tm carries 173
+    // capabilities to loadtesting's 20, so on a word both share ("tag", "test", "config")
+    // tm had more entries near the top and took the page — an agent reading the first row
+    // went to the wrong product. The floor reserved two slots per product to stop that.
+    //
+    // searchCapability now REQUIRES `product`, so a search never spans products and the
+    // floor could never fire. The bug is fixed harder: the product is chosen deliberately
+    // against listProducts, or the user is asked, instead of being inferred from whichever
+    // row ranked first.
     for (const query of ["add a tag to xyz test", "show a test's config"]) {
-      const owners = searchCapabilities(BOTH, query, {}).hits.map(
-        (h) => h.product,
-      );
-      expect(new Set(owners).size, query).toBeGreaterThan(1);
-      expect(
-        owners.filter((o) => o === lt.name).length,
-        query,
-      ).toBeGreaterThanOrEqual(1);
+      for (const scope of [tm, lt]) {
+        const hits = searchCapabilities(BOTH, query, {
+          product: scope.name,
+        }).hits;
+        expect(new Set(hits.map((h) => h.product)), query).toEqual(
+          new Set(hits.length ? [scope.name] : []),
+        );
+      }
     }
   });
 
-  it("does not let the floor displace a clear winner", () => {
-    // Guaranteeing a foothold must not cost the right answer its rank.
-    const hits = searchCapabilities(BOTH, "list my load tests", {}).hits;
+  it("ranks strictly, with no reserved slots left to displace a winner", () => {
+    // Scoped to its own product, the right answer takes the page outright — there is no
+    // longer any mechanism that could hand a slot to something that did not earn it.
+    const hits = searchCapabilities(BOTH, "list my load tests", {
+      product: lt.name,
+    }).hits;
     expect(hits[0].product).toBe(lt.name);
-    expect(hits.filter((h) => h.product === lt.name).length).toBeGreaterThan(3);
+    expect(hits.every((h) => h.product === lt.name)).toBe(true);
   });
 });
 

@@ -9,6 +9,7 @@ import {
 } from "./accessiblity-utils/auth-config.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { parseAccessibilityReportFromCSV } from "./accessiblity-utils/report-parser.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
 import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { BrowserStackConfig } from "../lib/types.js";
@@ -184,7 +185,7 @@ async function fetchAccessibilityIssues(
 
   const messages = [
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
-    `Issues: ${JSON.stringify(records, null, 2)}`,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
   ];
 
   if (next_page !== null) {
@@ -370,7 +371,7 @@ function createScanSuccessResponse(
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
     `You can also download the full report from the following link: ${reportUrl}`,
     `We found ${totalIssues} issues. Below are the details of the ${pageLength} most critical issues.`,
-    `Scan results: ${JSON.stringify(records, null, 2)}`,
+    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
   ];
 
   if (cursor !== null) {

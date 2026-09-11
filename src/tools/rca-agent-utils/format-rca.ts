@@ -1,3 +1,5 @@
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
+
 // Utility function to format RCA data for better readability
 export function formatRCAData(rcaData: any): string {
   if (!rcaData || !rcaData.testCases || rcaData.testCases.length === 0) {
@@ -21,7 +23,7 @@ export function formatRCAData(rcaData: any): string {
 
     if (rca) {
       if (rca.root_cause) {
-        output += `**Root Cause:** ${rca.root_cause}\n\n`;
+        output += `**Root Cause:** ${wrapUntrusted("RCA AI analysis", rca.root_cause)}\n\n`;
       }
 
       if (rca.failure_type) {
@@ -29,15 +31,15 @@ export function formatRCAData(rcaData: any): string {
       }
 
       if (rca.description) {
-        output += `**Detailed Analysis:**\n${rca.description}\n\n`;
+        output += `**Detailed Analysis:**\n${wrapUntrusted("RCA AI analysis", rca.description)}\n\n`;
       }
 
       if (rca.possible_fix) {
         hasFixSuggestion = true;
-        output += `**Suggested Fix (proposal only — do not apply without explicit user approval):**\n${rca.possible_fix}\n\n`;
+        output += `**Suggested Fix (proposal only — do not apply without explicit user approval):**\n${wrapUntrusted("RCA AI analysis", rca.possible_fix)}\n\n`;
       }
     } else if (testCase.rcaData?.error) {
-      output += `**Error:** ${testCase.rcaData.error}\n\n`;
+      output += `**Error:** ${wrapUntrusted("RCA error output", testCase.rcaData.error)}\n\n`;
     } else if (testCase.state === "failed") {
       output += `**Note:** RCA analysis failed or is not available for this test case.\n\n`;
     }

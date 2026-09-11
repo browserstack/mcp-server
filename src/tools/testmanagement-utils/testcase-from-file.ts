@@ -1,4 +1,5 @@
 import { CreateTestCasesFromFileArgs } from "./TCG-utils/types.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import {
   fetchFormFields,
   triggerTestCaseGeneration,
@@ -94,7 +95,10 @@ export async function createTestCasesFromFile(
     content: [
       {
         type: "text",
-        text: resultString,
+        text: wrapUntrusted(
+          "AI-generated test cases from the uploaded document",
+          resultString,
+        ),
       },
       {
         type: "text",

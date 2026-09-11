@@ -1,4 +1,5 @@
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import {
   HarEntry,
   HarFile,
@@ -38,24 +39,27 @@ export async function retrieveNetworkFailures(
   );
 
   return failureEntries.length > 0
-    ? `Network Failures (${failureEntries.length} found):\n${JSON.stringify(
-        failureEntries.map((entry: any) => ({
-          startedDateTime: entry.startedDateTime,
-          request: {
-            method: entry.request?.method,
-            url: entry.request?.url,
-            queryString: entry.request?.queryString,
-          },
-          response: {
-            status: entry.response?.status,
-            statusText: entry.response?.statusText,
-            _error: entry.response?._error,
-          },
-          serverIPAddress: entry.serverIPAddress,
-          time: entry.time,
-        })),
-        null,
-        2,
+    ? `Network Failures (${failureEntries.length} found):\n${wrapUntrusted(
+        "network logs",
+        JSON.stringify(
+          failureEntries.map((entry: any) => ({
+            startedDateTime: entry.startedDateTime,
+            request: {
+              method: entry.request?.method,
+              url: entry.request?.url,
+              queryString: entry.request?.queryString,
+            },
+            response: {
+              status: entry.response?.status,
+              statusText: entry.response?.statusText,
+              _error: entry.response?._error,
+            },
+            serverIPAddress: entry.serverIPAddress,
+            time: entry.time,
+          })),
+          null,
+          2,
+        ),
       )}`
     : "No network failures found";
 }
@@ -87,7 +91,7 @@ export async function retrieveSessionFailures(
       : JSON.stringify(response.data);
   const logs = filterSessionFailures(logText);
   return logs.length > 0
-    ? `Session Failures (${logs.length} found):\n${JSON.stringify(logs, null, 2)}`
+    ? `Session Failures (${logs.length} found):\n${wrapUntrusted("session logs", JSON.stringify(logs, null, 2))}`
     : "No session failures found";
 }
 
@@ -118,7 +122,7 @@ export async function retrieveConsoleFailures(
       : JSON.stringify(response.data);
   const logs = filterConsoleFailures(logText);
   return logs.length > 0
-    ? `Console Failures (${logs.length} found):\n${JSON.stringify(logs, null, 2)}`
+    ? `Console Failures (${logs.length} found):\n${wrapUntrusted("console logs", JSON.stringify(logs, null, 2))}`
     : "No console failures found";
 }
 

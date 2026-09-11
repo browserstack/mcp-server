@@ -146,7 +146,7 @@
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/detail",
       "maxRank": 1,
-      "why": "the entity name listEntities returns, verbatim — the documented flow must not be the losing one"
+      "why": "the entity name listProducts returns, verbatim — the documented flow must not be the losing one"
     },
     {
       "group": "test_case",

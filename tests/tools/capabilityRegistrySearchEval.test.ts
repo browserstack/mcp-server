@@ -76,8 +76,9 @@ describe("search ranking", () => {
     },
   );
 
-  it("keeps the entity names listEntities hands out usable as queries", () => {
-    // `test_case` is what the documented flow gives the model. When `_` was a word
+  it("keeps the entity names listProducts hands out usable as queries", () => {
+    // `test_case` is what the documented flow gives the model (listProducts names the
+    // entities; listEntities was folded into it). When `_` was a word
     // character it tokenized as one term that no haystack could contain, so following the
     // instructions scored worse than ignoring them.
     for (const [underscored, spaced] of [

@@ -1,5 +1,5 @@
 /**
- * The tool surface: five discovery tools plus ONE invoke tool.
+ * The tool surface: four discovery tools plus ONE invoke tool.
  *
  * Discovery is deliberately two steps. `searchCapability` returns a shortlist — enough to
  * CHOOSE — and `describeCapability` returns the contract for the one chosen. Parameters and
@@ -156,30 +156,12 @@ export function addCapabilityRegistryTools(
   /** "tm, loadtesting" — for prose that has to name them. */
   const productList = productNames.join(", ") || "none loaded";
 
-  /**
-   * One line per product, for the ONE tool whose job is routing between them.
-   *
-   * Only listProducts carries the summaries. They are authored prose of unbounded length —
-   * tm's is 90 characters, loadtesting's is 470 — and a tool description is static context
-   * on every request, so repeating them across six tools would cost more than the round
-   * trip they save. Everywhere else the names alone are what a caller needs.
-   *
-   * Each summary is cut to its first sentence and capped, and the whole catalog is
-   * budgeted: past the budget the names still route, which is the part that matters.
-   */
-  const productCatalog = (() => {
-    const lines = productNames.map((name) => {
-      const summary = registry.index.products[name].summary.trim();
-      const firstSentence = summary.split(/(?<=\.)\s/)[0] ?? summary;
-      const trimmed =
-        firstSentence.length > 130
-          ? `${firstSentence.slice(0, 127).trimEnd()}…`
-          : firstSentence;
-      return `${name} — ${trimmed.replace(/\.$/, "")}`;
-    });
-    const joined = lines.join("; ");
-    return joined.length <= 500 ? joined : productList;
-  })();
+  // NO PRODUCT CATALOG IN ANY DESCRIPTION. listProducts used to restate every product's
+  // trimmed summary in its own description — duplicating, as static context on every
+  // single request, the exact thing the tool returns when called. Authored summaries are
+  // also unbounded (loadtesting's runs to 470 characters) and change with the artifact,
+  // so the prose went stale on its own. The names still travel in the `product` enum,
+  // which is where a client can actually validate them.
   const transport = deps.transport || fetchTransport();
   const tools: Record<string, RegisteredTool> = {};
 
@@ -194,9 +176,9 @@ export function addCapabilityRegistryTools(
 
   tools.listProducts = server.tool(
     "listProducts",
-    "List the BrowserStack products this surface can reach, with a one-line summary each. " +
-      "Start here when you do not know which product a task belongs to. " +
-      `This build carries ${productCatalog}.`,
+    "List the BrowserStack products this surface can reach, with a one-line summary each " +
+      "and the entities each one models. Start here when you do not know which product a " +
+      "task belongs to.",
     {},
     {
       title: "List Capability Products",
@@ -213,6 +195,18 @@ export function addCapabilityRegistryTools(
         products: registry.productNames().map((name) => ({
           name,
           summary: registry.index.products[name].summary,
+          // THE VOCABULARY, UP FRONT. Routing is this tool's whole job, and a summary
+          // alone does not do it: "add a tag to xyz test" reads as either product until
+          // you can see that `tag` exists in one and not the other. Measured across both
+          // products, 139 of 147 terms resolve to exactly one — so this settles 95% of
+          // the question before a single search, and makes the remaining 8 (run, project,
+          // report, result, folder, workspace, execution, history) visibly ambiguous
+          // instead of silently so.
+          //
+          // ~1.9KB for both products, on a tool called once for routing. The same content
+          // reaches a caller reactively via searchCapability's weak-match block; this is
+          // the proactive half, for the agent that looks before it leaps.
+          entities: vocabularyOf(registry.index.products, name)[name] ?? [],
           // Provenance for logging and cache-busting only — capability resolution must
           // never depend on it.
           build_id: info[name]?.build_id,
@@ -222,29 +216,17 @@ export function addCapabilityRegistryTools(
     },
   );
 
-  tools.listEntities = server.tool(
-    "listEntities",
-    "List the entities a product models (test case, folder, test plan, …). Use it to scope " +
-      "searchCapability, or to find the entity name describeEntity wants.",
-    {
-      product: productArg().describe(
-        `Which product to list entities for: ${productList}.`,
-      ),
-    },
-    {
-      title: "List Product Entities",
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
-    async ({ product }) => {
-      track("listEntities");
-      const bundle = registry.index.products[product];
-      if (!bundle) return failed(`unknown product '${product}'`);
-      return ok({ product, entities: Object.keys(bundle.entities).sort() });
-    },
-  );
+  // listEntities WAS HERE, and is gone. It answered `{product, entities: [names]}` — a
+  // strict subset of what listProducts now returns for every product, and with the
+  // aliases missing. Keeping it would have meant two tools for one question, and a tool
+  // definition costs context on every request whether or not it is called, which is the
+  // entire reason this surface is five generic tools instead of 173 specific ones.
+  //
+  // One consequence to watch: listProducts now carries every product's vocabulary rather
+  // than one product's on request, so it grows with the number of products — roughly 1KB
+  // each. That is the right trade while routing is the problem it solves (you cannot
+  // choose between products by looking at one of them), but past a dozen products it may
+  // need a names-only default with aliases on request.
 
   tools.describeEntity = server.tool(
     "describeEntity",
@@ -255,7 +237,7 @@ export function addCapabilityRegistryTools(
       product: productArg().describe(
         `Which product the entity belongs to: ${productList}.`,
       ),
-      entity: z.string().describe("Entity name from listEntities."),
+      entity: z.string().describe("Entity name, as listProducts returns it."),
     },
     {
       title: "Describe Entity",
@@ -305,7 +287,7 @@ export function addCapabilityRegistryTools(
       entity: z
         .string()
         .optional()
-        .describe("Restrict to one entity (see listEntities)."),
+        .describe("Restrict to one entity (listProducts names them)."),
       product: productArg()
         .optional()
         .describe(

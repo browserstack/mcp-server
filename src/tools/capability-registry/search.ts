@@ -19,7 +19,7 @@ import { Capability, EntityDoc, Mode, ProductIndex } from "./types.js";
  *
  * `_` used to be a word character, which made `test_case` a single token while every
  * haystack rendered it as "test case" — so the two could never match. That is the exact
- * string `listEntities` hands back, so a caller following the documented flow searched with
+ * string `listProducts` hands back, so a caller following the documented flow searched with
  * a term guaranteed to score zero: "list test_runs" matched 19 capabilities and put an
  * admin settings endpoint first, where "list test runs" matched 103 and put the test-runs
  * listing first.
@@ -359,7 +359,7 @@ function score(
   if (wanted.length === 0) return { matched: 1, ranked: 1 };
 
   const haystacks: [string, number][] = [
-    [identityText(capability), 6],
+    [identityText(capability), IDENTITY_WEIGHT],
     [capability.entity, 4],
     [(aliases[capability.entity] || []).join(" "), 4],
     [capability.intent || "", 2],
@@ -463,23 +463,80 @@ export interface SearchResult {
    * separates them is how little the match is worth.
    */
   top_matched: number;
+  /** `top_matched` as a fraction of a perfect match — the corpus-independent form. */
+  coverage: number;
   weak: boolean;
 }
 
 /**
- * Below this, the caller is probably not speaking the product's language.
+ * How much of a perfect match the best hit actually achieved, below which we doubt it.
  *
- * Measured on tm: vocabulary misses top out at 1.98–2.15 ("where do my things live", "make a
- * new bucket for my tests") while queries that work reach 6.5–12. The two ranges do NOT
- * separate cleanly — "list all projects" scores 1.58 and is nonetheless answered correctly
- * at rank 1, because `projects` is in 156 of 173 paths and worth almost nothing.
+ * A RATIO, because the raw score is corpus-relative and an absolute threshold therefore
+ * cannot travel. `rarity` is measured over whatever is being searched, so the same query
+ * scores differently depending on scope: "list my load tests" tops out at 1.9 against Load
+ * Testing alone and 10.1 against both products. The old absolute cut of 3 called the first
+ * of those weak and the second strong — the same query, the same right answer, opposite
+ * verdicts, with the smaller corpus penalised precisely because it is smaller.
  *
- * So this is set generously and false positives are accepted, which is sound only because
- * the vocabulary block is ADDITIVE: it arrives next to the results, never instead of them.
- * Over-triggering costs ~1.5KB against a response that is routinely 38KB; under-triggering
- * costs the caller a wrong answer with no hint that it is wrong. Those are not symmetric.
+ * Both halves of this ratio move with the corpus, so it does not:
+ *
+ *     coverage = top_matched / (identity weight x Σ rarity of the query's terms)
+ *
+ * — "what fraction of a perfect identity match did the best hit manage". Above 1 is
+ * ordinary, since a good hit matches several fields, not just the route.
+ *
+ * Measured across tm-only, LT-only and both: genuine misses land at 0.00–0.18, queries
+ * that work at 0.44–1.94. The absolute score cannot separate those (misses reach 2.9,
+ * good queries drop to 1.9); this does, with the gap in the same place in all three
+ * corpora, which is the property that was missing.
  */
-const WEAK_MATCH = 3;
+const WEAK_COVERAGE = 0.25;
+
+/** The heaviest field, and so the yardstick a perfect match is measured against. */
+const IDENTITY_WEIGHT = 6;
+
+/** Slots a matching product is guaranteed, before the rest of the page fills by rank. */
+const PRODUCT_FLOOR = 2;
+
+/**
+ * Fill the page by rank, but never let one product's SIZE shut another out entirely.
+ *
+ * Scores are comparable across products — rarity spans the whole corpus by design — but
+ * the number of chances to score is not: tm has 173 capabilities to Load Testing's 20. On
+ * a query using words both products share ("test", "config", "tag"), tm simply has more
+ * entries near the top and takes the page. Measured before this: "add a tag to xyz test"
+ * returned tm tm LT tm tm, and an agent reading the first row went to the wrong product.
+ *
+ * So each product that matched at all is guaranteed a couple of slots, and everything else
+ * is still strict rank order. This does NOT reorder anything or touch scoring — the best
+ * hit stays the best hit — it only refuses to let a product be invisible because it is
+ * small. The cost when a query really is single-product is a row or two of another
+ * product's shortlist, which since the split is a few hundred bytes.
+ */
+function withEveryProductRepresented<T extends { product: string }>(
+  scored: T[],
+  limit: number,
+): T[] {
+  if (scored.length <= limit) return scored;
+  const products = new Set(scored.map((s) => s.product));
+  if (products.size < 2) return scored.slice(0, limit);
+
+  const taken = new Set<T>();
+  // Reserve first, so a product near the bottom of the ranking still gets its footing.
+  for (const product of products) {
+    for (const hit of scored
+      .filter((s) => s.product === product)
+      .slice(0, PRODUCT_FLOOR)) {
+      if (taken.size < limit) taken.add(hit);
+    }
+  }
+  for (const hit of scored) {
+    if (taken.size >= limit) break;
+    taken.add(hit);
+  }
+  // Emit in the original ranked order: the floor decides WHO appears, never in what order.
+  return scored.filter((hit) => taken.has(hit));
+}
 
 /** One entity's caller-facing vocabulary: what it is called, and what else it is called. */
 export interface VocabularyEntry {
@@ -612,13 +669,19 @@ export function searchCapabilities(
   // different questions: the mode and cardinality constants can lift a weakly-matched
   // capability to the top of a page that is entirely wrong.
   const topMatched = scored.reduce((best, s) => Math.max(best, s.matched), 0);
+  // What a perfect identity match would have scored for THIS query in THIS corpus. Both
+  // this and `topMatched` scale with the corpus, so their ratio is comparable across
+  // products and across `product`/`entity` narrowing — which the raw score is not.
+  const perfect = weights.reduce((sum, w) => sum + IDENTITY_WEIGHT * w, 0);
+  const coverage = perfect > 0 ? topMatched / perfect : 1;
   return {
-    hits: scored
-      .slice(0, limit)
-      .map(({ product, capability }) => ({ product, capability })),
+    hits: withEveryProductRepresented(scored, limit).map(
+      ({ product, capability }) => ({ product, capability }),
+    ),
     truncated: scored.length > limit,
     total_matched: scored.length,
     top_matched: topMatched,
-    weak: wanted.length > 0 && topMatched < WEAK_MATCH,
+    coverage,
+    weak: wanted.length > 0 && perfect > 0 && coverage < WEAK_COVERAGE,
   };
 }

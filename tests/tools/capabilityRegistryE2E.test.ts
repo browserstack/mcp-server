@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const FIXTURE = fileURLToPath(
@@ -20,6 +21,12 @@ async function buildServer() {
   return new BrowserStackMcpServer(CONFIG);
 }
 
+/** The product's own authored summary, read from the fixture rather than hardcoded. */
+function registryFixtureSummary(): string {
+  const raw = JSON.parse(readFileSync(FIXTURE, "utf8"));
+  return (raw.products ? raw.products.tm : raw.tm).summary as string;
+}
+
 describe("capability registry, end to end through the server factory", () => {
   beforeEach(() => {
     process.env.CAPABILITY_REGISTRY_INDEX = FIXTURE;
@@ -34,12 +41,11 @@ describe("capability registry, end to end through the server factory", () => {
     vi.unstubAllGlobals();
   });
 
-  it("registers its six tools alongside the hand-written ones", async () => {
+  it("registers its five tools alongside the hand-written ones", async () => {
     const server = await buildServer();
     const tools = server.getTools();
     for (const name of [
       "listProducts",
-      "listEntities",
       "describeEntity",
       "searchCapability",
       "describeCapability",
@@ -66,24 +72,40 @@ describe("capability registry, end to end through the server factory", () => {
     expect(payload.products[0].version).toMatch(/^\d+\.\d+$/);
   });
 
-  it("names the loaded products in the descriptions and the schema", async () => {
+  it("names the loaded products in the schema, and nowhere else", async () => {
     const server = await buildServer();
     const tools: any = server.getTools();
 
     // The accepted values travel in the SCHEMA, so a client validates them and the model
     // sees them without spending a listProducts call.
     const shape =
-      tools.listEntities.inputSchema?.shape ?? tools.listEntities._def?.shape;
+      tools.describeEntity.inputSchema?.shape ??
+      tools.describeEntity._def?.shape;
     const entries = shape.product._def?.entries ?? shape.product._def?.values;
     expect(Object.values(entries)).toEqual(["tm"]);
 
-    // listProducts is the routing tool, so it is the one that carries the summaries.
-    expect(tools.listProducts.description).toContain("tm —");
-    expect(tools.listProducts.description).toContain("Test Management");
-    // Everywhere else, the names are enough; repeating unbounded authored prose across
-    // five descriptions would cost more static context than the round trip it saves.
-    expect(tools.searchCapability.description).toContain("loaded products: tm");
-    expect(tools.searchCapability.description).not.toContain("SSO/OAuth");
+    // NO authored SUMMARY in any description. listProducts used to restate each product's
+    // trimmed summary in its own — duplicating, as static context on every request, the
+    // exact thing the tool returns when called, in prose that goes stale with the
+    // artifact. Product NAMES are fine and still appear; it is the unbounded authored
+    // prose that does not.
+    const summary = registryFixtureSummary();
+    for (const tool of [
+      "listProducts",
+      "searchCapability",
+      "describeCapability",
+    ]) {
+      for (const phrase of ["SSO/OAuth", summary.slice(0, 40)]) {
+        expect(tools[tool].description, `${tool} / ${phrase}`).not.toContain(
+          phrase,
+        );
+      }
+    }
+    // It reaches the caller where it belongs: in the response.
+    const listed = JSON.parse(
+      (await tools.listProducts.handler({}, {} as any)).content[0].text,
+    );
+    expect(listed.products[0].summary).toContain("Test Management");
   });
 
   it("registers nothing, and does not throw, when the artifact is missing", async () => {

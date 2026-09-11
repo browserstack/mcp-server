@@ -472,7 +472,7 @@ export default function addAccessibilityTools(
     {
       title: "Start Accessibility Scan",
       readOnlyHint: false,
-      openWorldHint: false,
+      openWorldHint: true,
       destructiveHint: false,
       idempotentHint: false,
     },

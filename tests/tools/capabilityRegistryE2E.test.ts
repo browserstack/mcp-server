@@ -9,6 +9,17 @@ const FIXTURE = fileURLToPath(
 const FIXTURE_DIR = fileURLToPath(
   new URL("../fixtures/capability/", import.meta.url),
 );
+/**
+ * The SHIPPED indexes, both products.
+ *
+ * The fixture carries tm alone, which cannot exercise anything about telling two products
+ * apart: with one product loaded there is no ambiguity to detect and the gate is correct
+ * to stay silent. These tests are about the cross-product case, so they need the real
+ * pair — and they should track what actually ships.
+ */
+const SHIPPED_DIR = fileURLToPath(
+  new URL("../../capability/", import.meta.url),
+);
 
 const CONFIG = {
   "browserstack-username": "ing_Xx",
@@ -169,6 +180,76 @@ describe("capability registry, end to end through the server factory", () => {
       const s = tools[tool].inputSchema?.shape ?? tools[tool]._def?.shape;
       expect(s.product.isOptional(), tool).toBe(true);
     }
+  });
+
+  it("refuses a query only the user can settle, and says what to ask", async () => {
+    // Requiring `product` made every CALL unambiguous and did nothing about an agent
+    // making two of them. "list all projects" was answered by searching tm, then Load
+    // Testing, then merging — a question about which product the user meant, answered by
+    // guessing both. Prose asking the agent to check is a suggestion it can decline, and
+    // declining is cheaper than interrupting someone; a refusal is not.
+    delete process.env.CAPABILITY_REGISTRY_INDEX;
+    process.env.CAPABILITY_REGISTRY_INDEX_DIR = SHIPPED_DIR;
+    const server = await buildServer();
+    const search = server.getTools().searchCapability as any;
+    const run = async (args: Record<string, unknown>) => {
+      const r = await search.handler(
+        { product: "tm", product_choice: "not_asked", ...args },
+        {} as any,
+      );
+      return { blocked: r.isError === true, body: JSON.parse(r.content[0].text) };
+    };
+
+    const refused = await run({ query: "list all projects" });
+    expect(refused.blocked).toBe(true);
+    // The refusal has to be actionable: which products, and on which word.
+    expect(refused.body.error).toContain("loadtesting or tm");
+    expect(refused.body.error).toContain("'project'");
+    expect(refused.body.error).toMatch(/Ask the user/);
+    // And it must name the failure mode it exists to stop.
+    expect(refused.body.error).toMatch(/search each in turn and merge/);
+
+    // A word only one product claims settles the query, so there is nothing to ask.
+    for (const query of [
+      "list the test cases in a folder", // `folder` is shared, `test case` is not
+      "check my quota",
+      "bulk delete test cases",
+    ]) {
+      expect((await run({ query })).blocked, query).toBe(false);
+    }
+
+    // Two ways out, both explicit: the user answered, or the caller was already specific.
+    expect(
+      (await run({ query: "list all projects", product_choice: "user_confirmed" }))
+        .blocked,
+    ).toBe(false);
+    expect(
+      (await run({ query: "list all projects", entity: "project" })).blocked,
+    ).toBe(false);
+  });
+
+  it("folds plurals on both sides, or the gate misses the case it was built for", async () => {
+    delete process.env.CAPABILITY_REGISTRY_INDEX;
+    process.env.CAPABILITY_REGISTRY_INDEX_DIR = SHIPPED_DIR;
+    const server = await buildServer();
+    const search = server.getTools().searchCapability as any;
+    const blocked = async (query: string) =>
+      (
+        await search.handler(
+          { query, product: "tm", product_choice: "not_asked" },
+          {} as any,
+        )
+      ).isError === true;
+
+    // QUERY side: the entry is `project`, the user says "projects". Exact containment
+    // missed this — and it is the query that was actually reported.
+    expect(await blocked("list all projects")).toBe(true);
+    expect(await blocked("list all runs")).toBe(true);
+
+    // VOCABULARY side: tm lists BOTH `report` and `reports` as aliases. Folding only the
+    // query made `reports` look tm-exclusive, so a shared word read as settled.
+    expect(await blocked("show me the report")).toBe(true);
+    expect(await blocked("show me the reports")).toBe(true);
   });
 
   it("registers nothing, and does not throw, when the artifact is missing", async () => {

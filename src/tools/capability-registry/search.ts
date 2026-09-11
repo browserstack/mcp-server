@@ -512,6 +512,84 @@ const IDENTITY_WEIGHT = 6;
 // that legitimately cannot know the product — this comes back with it. It is in the
 // history at 617b4b9, and the reasoning above is why it was right.
 
+/** Which products a query could plausibly be about, when more than one could. */
+export interface ProductAmbiguity {
+  /** The products that claim the query's words. Empty when the query settles itself. */
+  products: string[];
+  /** The shared vocabulary that caused it — what to put in front of the user. */
+  terms: string[];
+}
+
+/**
+ * Products whose OWN vocabulary the query hits, when no word in the query settles it.
+ *
+ * Requiring `product` made every CALL unambiguous and did nothing about the agent making
+ * two of them: "list all projects" was answered by searching tm, then Load Testing, then
+ * merging — a question about which product the user meant, answered by guessing both.
+ * Tool-description prose asking the agent to check with the user is a suggestion it is
+ * free to decline, and declining is cheaper than interrupting someone.
+ *
+ * WHOLE VOCABULARY ENTRIES, never their constituent words. Splitting them makes almost
+ * everything look shared: Load Testing's "load test" and tm's "test case" both yield
+ * `test`, which flagged 135 of the 198 eval queries. Matching entries whole flags 27.
+ *
+ * A UNIQUE TERM SETTLES IT. "create a test case in a folder" contains `folder`, which
+ * both products claim, and `test case`, which only tm does — so the query has already
+ * answered the question and there is nothing to ask. Only queries whose every recognised
+ * word is shared are genuinely undecided.
+ */
+export function ambiguousProducts(
+  products: Record<string, ProductIndex>,
+  query: string | undefined,
+): ProductAmbiguity {
+  const none: ProductAmbiguity = { products: [], terms: [] };
+  if (terms(query).length === 0) return none;
+
+  /**
+   * One spelling per word, so a plural cannot masquerade as a different term.
+   *
+   * Both halves need it. On the QUERY side, the entry is `project` and the user types
+   * "list all projects" — the reported case, which exact containment missed. On the
+   * VOCABULARY side the same fold is what keeps the answer honest: tm lists both `report`
+   * and `reports` as aliases, and treating them as two entries made `reports` look
+   * tm-exclusive, so "show me the report" read as settled when both products claim it.
+   */
+  const fold = (text: string): string =>
+    terms(text)
+      .map((word) =>
+        termForms(word).reduce((a, b) => (b.length < a.length ? b : a)),
+      )
+      .join(" ");
+
+  const asked_ = ` ${fold(query || "")} `;
+
+  const owners = new Map<string, Set<string>>();
+  for (const [product, entries] of Object.entries(vocabularyOf(products))) {
+    for (const entry of entries) {
+      for (const word of [entry.entity, ...(entry.aliases ?? [])]) {
+        const key = fold(String(word));
+        if (!key) continue;
+        if (!owners.has(key)) owners.set(key, new Set());
+        owners.get(key)!.add(product);
+      }
+    }
+  }
+
+  const shared = new Map<string, Set<string>>();
+  for (const [key, claimants] of owners) {
+    if (!asked_.includes(` ${key} `)) continue;
+    // A term only one product claims decides the query outright.
+    if (claimants.size < 2) return none;
+    shared.set(key, claimants);
+  }
+  if (shared.size === 0) return none;
+
+  const claimed = new Set<string>();
+  for (const claimants of shared.values())
+    for (const product of claimants) claimed.add(product);
+  return { products: [...claimed].sort(), terms: [...shared.keys()].sort() };
+}
+
 /** One entity's caller-facing vocabulary: what it is called, and what else it is called. */
 export interface VocabularyEntry {
   entity: string;

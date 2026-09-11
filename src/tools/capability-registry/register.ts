@@ -34,10 +34,23 @@ import {
   resolveResponses,
 } from "./index-loader.js";
 import { invoke } from "./resolve.js";
-import { searchCapabilities, vocabularyOf } from "./search.js";
+import {
+  ambiguousProducts,
+  searchCapabilities,
+  vocabularyOf,
+} from "./search.js";
 import { Mode } from "./types.js";
 
 export const PERMISSION_VALUES = ["not_asked", "granted", "denied"] as const;
+
+/**
+ * The search-side twin of `user_permission`: did a human choose the product, or did you?
+ *
+ * No `denied`. A refused write is a thing the caller must not do; a refused product choice
+ * is not a state — the user either named one, in which case you search it, or has not been
+ * asked, in which case there is nothing to search yet.
+ */
+export const PRODUCT_CHOICE_VALUES = ["not_asked", "user_confirmed"] as const;
 
 export interface RegistryDeps {
   registry: CapabilityRegistry;
@@ -315,6 +328,19 @@ export function addCapabilityRegistryTools(
         `Which product to search: ${productList}. Call listProducts if the task does ` +
           `not make it obvious, and ask the user when two products could both fit.`,
       ),
+      // REQUIRED, and self-reported, exactly like `user_permission` on a write. The
+      // server cannot see whether you asked anyone; what it can do is refuse to answer a
+      // question only the user can settle, and make claiming otherwise an explicit act
+      // rather than an omission.
+      product_choice: z
+        .enum(PRODUCT_CHOICE_VALUES)
+        .describe(
+          "'user_confirmed' only when the user named the product, or the task names it " +
+            "unmistakably. 'not_asked' otherwise — then a query that could mean either " +
+            "product is refused and told what to ask, instead of being answered for the " +
+            "wrong one. Never search each product in turn and merge the results: that is " +
+            "the guess this argument exists to prevent.",
+        ),
       mode: z
         .enum(["read", "write", "destructive"])
         .optional()
@@ -328,8 +354,33 @@ export function addCapabilityRegistryTools(
       idempotentHint: true,
       openWorldHint: false,
     },
-    async ({ query, entity, product, mode, limit }) => {
+    async ({ query, entity, product, product_choice, mode, limit }) => {
       track("searchCapability");
+
+      // THE GATE. Nothing here can tell whether a human was asked — same as the write
+      // gate, which also takes the caller's word. What it can do is refuse to answer a
+      // question that is genuinely the user's, so that answering it anyway takes a
+      // deliberate claim instead of silence.
+      //
+      // Only when the query itself cannot settle the choice: every recognised word is one
+      // both products claim. 27 of the 198 eval queries, against 135 if constituent words
+      // counted. `entity` is an explicit narrowing, so a caller that named one has already
+      // been specific enough and is not asked again.
+      if (product_choice !== "user_confirmed" && !entity) {
+        const ambiguity = ambiguousProducts(registry.index.products, query);
+        if (ambiguity.products.length > 1) {
+          return failed(
+            `'${query}' could mean ${ambiguity.products.join(" or ")} — ` +
+              `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
+              `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. ` +
+              "Ask the user which product they mean, then resend with " +
+              "product_choice='user_confirmed'. Do NOT search each in turn and merge " +
+              "the results — that answers the question instead of asking it. " +
+              "listProducts describes each product and what its entities mean.",
+          );
+        }
+      }
+
       const { hits, weak, top_matched, ...rest } = searchCapabilities(
         registry.index.products,
         query,

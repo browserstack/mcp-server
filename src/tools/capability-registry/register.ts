@@ -444,15 +444,22 @@ export function addCapabilityRegistryTools(
         // tokens a search becomes ~1k, and even describing all eight results still costs
         // slightly less than today.
         //
-        // `product` is here because results span products and the caller cannot otherwise
-        // tell a Load Testing row from a Test Management one. `method`/`path` are here
-        // because Load Testing publishes no names at all — without them its rows would be
-        // unaddressable, which is worse than verbose.
-        capabilities: hits.map(({ product: owner, capability }) => ({
-          ...(capability.name ? { name: capability.name } : {}),
-          product: owner,
-          method: capability.method,
-          path: capability.path,
+        // NO ROUTE, AND NO PRODUCT. Both were justified and both justifications expired.
+        //
+        // `method`/`path` were unconditional because Load Testing published no names, so
+        // its rows would otherwise have been unaddressable. It now names all 20, as tm
+        // names all 173 — every row on this surface is reachable by name. Publishing the
+        // route anyway contradicts the premise the whole registry rests on: an agent
+        // addresses a capability by a handle that outlives the route. They remain as a
+        // fallback for a product that ships unnamed capabilities, emitted only for the
+        // rows that actually need them, which today is none.
+        //
+        // `product` was here because results could span products. They cannot: `product`
+        // is a required argument, so every row is the product the caller named.
+        capabilities: hits.map(({ capability }) => ({
+          ...(capability.name
+            ? { name: capability.name }
+            : { method: capability.method, path: capability.path }),
           mode: capability.mode,
           entity: capability.entity,
           ...(capability.intent ? { intent: capability.intent } : {}),

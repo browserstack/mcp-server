@@ -314,7 +314,10 @@ describe("capability registry, end to end through the server factory", () => {
     const payload = JSON.parse(result.content[0].text);
     expect(payload.build_id).toMatch(/^[0-9a-f]{7,}_/);
     expect(payload.capabilities.length).toBeGreaterThan(0);
-    expect(payload.capabilities[0].path.startsWith("/api/")).toBe(true);
+    // Addressed by NAME, never by route — the shortlist publishes no path at all now
+    // that every capability in every shipped product carries a name.
+    expect(payload.capabilities[0].name).toBeTruthy();
+    expect(payload.capabilities[0].path).toBeUndefined();
   });
 
   it("hands back response shapes with nothing left to dereference", async () => {

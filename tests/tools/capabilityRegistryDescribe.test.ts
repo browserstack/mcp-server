@@ -57,15 +57,28 @@ describe("searchCapability is a shortlist, describeCapability is the contract", 
     expect(top.name).toBe("create_test_run_v1");
     expect(top.mode).toBe("write");
     expect(top.intent).toBeTruthy();
-    // `product` rides on every row because results span products, and a caller cannot
-    // otherwise tell a Load Testing row from a Test Management one.
-    expect(top.product).toBe("tm");
-    // `method`/`path` stay because some products publish no names at all; without them
-    // those rows would be unaddressable, which is worse than verbose.
-    expect(top.method).toBe("POST");
-    expect(top.path).toContain("/test-runs");
     // guidance is what tells the caller which of two plausible rows is the right one.
     expect(Array.isArray(top.guidance)).toBe(true);
+
+    // NO ROUTE. A named capability is addressed by its name — that is the premise the
+    // registry rests on, and publishing the route beside the name contradicts it while
+    // costing context on every row. The fallback survives for a product that ships
+    // unnamed capabilities, and is emitted only for rows that need it: today, none.
+    expect(top.method).toBeUndefined();
+    expect(top.path).toBeUndefined();
+
+    // NO PRODUCT. It rode on every row while results could span products. `product` is
+    // now a required argument, so every row is the product the caller named.
+    expect(top.product).toBeUndefined();
+
+    // The whole row, so a field cannot creep back unnoticed.
+    expect(Object.keys(top).sort()).toEqual([
+      "entity",
+      "guidance",
+      "intent",
+      "mode",
+      "name",
+    ]);
   });
 
   it("returns the full contract for the capability picked", async () => {

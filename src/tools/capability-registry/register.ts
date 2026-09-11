@@ -584,13 +584,24 @@ export function addCapabilityRegistryTools(
         // Dropped rather than overwritten: the raw field holds `{"$response": …}` pointers,
         // and spreading the capability would leak them through whenever the resolved value
         // is absent.
-        const { responses: unresolved, ...contract } = capability;
+        const { responses: unresolved, method, path, ...contract } = capability;
         void unresolved;
         return ok({
           // No build_id here either, same reason. `product` stays: describeCapability
           // resolves by NAME and its product argument is optional, so the answer has to
           // say whose contract came back.
           product: owner,
+          // NO ROUTE, for the same reason the shortlist has none. A named capability is
+          // invoked by its name; the route is how WE reach the product, not something
+          // the caller acts on, and a contract that shows both invites the caller to
+          // hold the half that breaks when `/edit` becomes `/edit-v2`. The parameters
+          // below still carry `path_params`, so the caller knows what to supply — it
+          // just never sees the template they are substituted into.
+          //
+          // Emitted only when there is no name to use instead, which is what
+          // invokeCapability falls back to for a product that publishes none. No shipped
+          // product is in that state today.
+          ...(capability.name ? {} : { method, path }),
           ...contract,
           ...(responses ? { responses } : {}),
         });

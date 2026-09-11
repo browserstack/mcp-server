@@ -118,7 +118,9 @@ describe("searchCapability is a shortlist, describeCapability is the contract", 
     expect(shortlist).toBeLessThan(contract * 3);
   });
 
-  it("takes method and path for a capability with no name", async () => {
+  it("still ACCEPTS method and path as a handle, without echoing them back", async () => {
+    // The input fallback is for a product that publishes no capability names. It stays,
+    // because a product could ship that way tomorrow.
     const t = await tools();
     const described = await body(
       await t.describeCapability.handler(
@@ -126,8 +128,16 @@ describe("searchCapability is a shortlist, describeCapability is the contract", 
         {} as any,
       ),
     );
-    expect(described.method).toBe("GET");
+    // It resolved — the contract came back, with the parameters the caller must supply.
+    expect(described.name).toBe("get_projects_basic_v1");
     expect(described.query?.length).toBeGreaterThan(0);
+
+    // But the ROUTE is not in the answer. This capability has a name, so that name is
+    // how it is invoked; returning the route as well invites the caller to hold the half
+    // that breaks when a path changes. `path_params` still says what to supply — the
+    // caller just never sees the template they go into.
+    expect(described.method).toBeUndefined();
+    expect(described.path).toBeUndefined();
   });
 
   it("resolves by the same handles as invokeCapability, so a described name is callable", async () => {

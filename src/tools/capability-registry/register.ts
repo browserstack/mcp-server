@@ -37,6 +37,8 @@ import { invoke } from "./resolve.js";
 import {
   ambiguousProducts,
   searchCapabilities,
+  singular,
+  terms,
   vocabularyOf,
 } from "./search.js";
 import { Mode } from "./types.js";
@@ -136,10 +138,16 @@ function ok(payload: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(payload) }] };
 }
 
-function failed(message: string): CallToolResult {
+function failed(
+  message: string,
+  extra?: Record<string, unknown>,
+): CallToolResult {
   return {
     content: [
-      { type: "text", text: JSON.stringify({ ok: false, error: message }) },
+      {
+        type: "text",
+        text: JSON.stringify({ ok: false, error: message, ...extra }),
+      },
     ],
     isError: true,
   };
@@ -369,14 +377,51 @@ export function addCapabilityRegistryTools(
       if (product_choice !== "user_confirmed" && !entity) {
         const ambiguity = ambiguousProducts(registry.index.products, query);
         if (ambiguity.products.length > 1) {
+          // EVERYTHING NEEDED TO ASK, IN THE REFUSAL. Telling the agent to go and call
+          // listProducts costs a round trip and still leaves it composing a question out
+          // of nothing — so it tends to guess instead, which is the behaviour being
+          // stopped. What makes the choice answerable is what each product calls the
+          // shared word and what it means THERE: tm's project owns folders and test
+          // cases, Load Testing's does not.
+          const options = ambiguity.products.map((name) => {
+            const entities = registry.index.products[name]?.entities ?? {};
+            const senses = ambiguity.terms
+              .map((term) => {
+                const key = Object.keys(entities).find((candidate) =>
+                  [
+                    candidate,
+                    ...((entities[candidate].aliases as string[]) ?? []),
+                  ].some(
+                    (word) => terms(word).map(singular).join(" ") === term,
+                  ),
+                );
+                const doc = key ? entities[key] : undefined;
+                return doc
+                  ? { term, entity: key as string, means: doc.description }
+                  : undefined;
+              })
+              .filter(Boolean);
+            return {
+              product: name,
+              summary: registry.index.products[name]?.summary,
+              ...(senses.length ? { shared_terms: senses } : {}),
+            };
+          });
           return failed(
             `'${query}' could mean ${ambiguity.products.join(" or ")} — ` +
               `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
               `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. ` +
-              "Ask the user which product they mean, then resend with " +
-              "product_choice='user_confirmed'. Do NOT search each in turn and merge " +
-              "the results — that answers the question instead of asking it. " +
-              "listProducts describes each product and what its entities mean.",
+              "Put the choice in `clarify` to the USER in their own terms, wait for an " +
+              "answer, then resend with product_choice='user_confirmed'. Do NOT search " +
+              "each product in turn and merge the results — that answers the question " +
+              "instead of asking it.",
+            {
+              clarify: {
+                question: `Which product do you mean — ${ambiguity.products.join(" or ")}?`,
+                shared: ambiguity.terms,
+                options,
+              },
+            },
           );
         }
       }

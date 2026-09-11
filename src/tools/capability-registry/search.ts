@@ -151,6 +151,33 @@ export function termForms(term: string): string[] {
   return forms;
 }
 
+/**
+ * ONE canonical spelling of a word, so two spellings of a noun cannot look like two terms.
+ *
+ * `termForms` is deliberately generous — it offers every candidate and lets substring
+ * containment sort them out. Canonicalising needs the opposite: exactly one answer, and
+ * the right one. Taking the SHORTEST candidate is what a first cut did, and it folded
+ * `cases` to `cas`, so the vocabulary entry `test case` matched no query containing "test
+ * cases" — the phrase it exists for. The ambiguity check then fell through to `test`
+ * alone, reaching the right verdict by the wrong route.
+ *
+ * Strip `es` only after a sibilant, where English actually inserts it (`boxes`,
+ * `batches`, `statuses`). Otherwise strip the single `s`, which is right for the `-e`
+ * plurals this vocabulary is full of: case, suite, phase, template.
+ */
+export function singular(word: string): string {
+  if (word.endsWith("ss")) return word;
+  // histories -> history. Without this the alias `histories` and the entity word
+  // `history` are two unrelated terms, which is the same defect in another spelling.
+  if (word.endsWith("ies") && word.length > 4) return `${word.slice(0, -3)}y`;
+  // Only where the `e` is genuinely inserted. `s` is NOT in this set: `cases` ends in
+  // `ses` and is `case` + `s`, not `cas` + `es`, and no rule can tell it from `statuses`
+  // by suffix alone — so the commoner reading wins and `-s` is stripped below.
+  if (/(?:ch|sh|x|z)es$/.test(word)) return word.slice(0, -2);
+  if (word.endsWith("s") && word.length > 3) return word.slice(0, -1);
+  return word;
+}
+
 /** A haystack as one lowercased, space-separated string, ready for containment tests. */
 function haystack(text: string | undefined): string {
   return terms(text).join(" ");
@@ -554,12 +581,7 @@ export function ambiguousProducts(
    * and `reports` as aliases, and treating them as two entries made `reports` look
    * tm-exclusive, so "show me the report" read as settled when both products claim it.
    */
-  const fold = (text: string): string =>
-    terms(text)
-      .map((word) =>
-        termForms(word).reduce((a, b) => (b.length < a.length ? b : a)),
-      )
-      .join(" ");
+  const fold = (text: string): string => terms(text).map(singular).join(" ");
 
   const asked_ = ` ${fold(query || "")} `;
 

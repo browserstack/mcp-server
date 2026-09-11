@@ -205,9 +205,9 @@ describe("capability registry, end to end through the server factory", () => {
     // The refusal has to be actionable: which products, and on which word.
     expect(refused.body.error).toContain("loadtesting or tm");
     expect(refused.body.error).toContain("'project'");
-    expect(refused.body.error).toMatch(/Ask the user/);
+    expect(refused.body.error).toMatch(/to the USER/);
     // And it must name the failure mode it exists to stop.
-    expect(refused.body.error).toMatch(/search each in turn and merge/);
+    expect(refused.body.error).toMatch(/search each product in turn and merge/);
 
     // A word only one product claims settles the query, so there is nothing to ask.
     for (const query of [
@@ -226,6 +226,43 @@ describe("capability registry, end to end through the server factory", () => {
     expect(
       (await run({ query: "list all projects", entity: "project" })).blocked,
     ).toBe(false);
+  });
+
+  it("hands over what it takes to ask the question, not an instruction to go look", async () => {
+    // Telling the agent to call listProducts costs a round trip and still leaves it
+    // composing a question out of nothing — so it guesses instead, which is the whole
+    // behaviour being stopped. What makes the choice answerable is what each product
+    // calls the shared word and what it means THERE.
+    delete process.env.CAPABILITY_REGISTRY_INDEX;
+    process.env.CAPABILITY_REGISTRY_INDEX_DIR = SHIPPED_DIR;
+    const server = await buildServer();
+    const r: any = await (server.getTools().searchCapability as any).handler(
+      { query: "list all projects", product: "tm", product_choice: "not_asked" },
+      {} as any,
+    );
+    const { clarify } = JSON.parse(r.content[0].text);
+
+    expect(clarify.shared).toEqual(["project"]);
+    expect(clarify.question).toMatch(/Which product/);
+    expect(clarify.options.map((o: any) => o.product).sort()).toEqual([
+      "loadtesting",
+      "tm",
+    ]);
+
+    // Each option says what the product is, and which of ITS entities owns the shared
+    // word — the two things a user needs to answer without being shown a schema.
+    const tm = clarify.options.find((o: any) => o.product === "tm");
+    expect(tm.summary).toMatch(/Test Management/);
+    expect(tm.shared_terms[0]).toMatchObject({ term: "project", entity: "project" });
+    expect(tm.shared_terms[0].means).toMatch(/top-level container/);
+
+    // Load Testing ships no entity descriptions, so its sense of `project` has no
+    // `means`. Absent rather than invented: the question is still askable, just thinner
+    // on one side, and that is a data gap for that product to close.
+    const lt = clarify.options.find((o: any) => o.product === "loadtesting");
+    expect(lt.summary).toMatch(/Load and performance testing/);
+    expect(lt.shared_terms[0].entity).toBe("project");
+    expect(lt.shared_terms[0].means).toBeUndefined();
   });
 
   it("folds plurals on both sides, or the gate misses the case it was built for", async () => {

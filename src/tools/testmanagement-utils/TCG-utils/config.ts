@@ -1,5 +1,11 @@
 export const TC_DETAILS_MAX_BATCH = 10;
 
+// Wall-clock bounds for the TCG generation polling loops. Without a hard
+// deadline, a job that never emits a "termination" message keeps the loop
+// (and every caller awaiting it) alive forever.
+export const TCG_POLL_INTERVAL_MS = 10_000;
+export const TCG_POLL_MAX_WAIT_MS = 10 * 60 * 1000; // 10 minutes
+
 export const TCG_TRIGGER_URL = (baseUrl: string) =>
   `${baseUrl}/api/v1/integration/tcg/test-generation/suggest-test-cases`;
 

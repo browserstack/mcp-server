@@ -484,7 +484,6 @@ const WEAK_MATCH = 3;
 /** One entity's caller-facing vocabulary: what it is called, and what else it is called. */
 export interface VocabularyEntry {
   entity: string;
-  title?: string;
   aliases?: string[];
 }
 
@@ -497,10 +496,15 @@ export interface VocabularyEntry {
  * language model, and given tm's entity list it maps bucket -> folder without effort. It
  * just cannot guess the list unprompted.
  *
- * Aliases only, deliberately. They are the vocabulary map — 19 entities in ~1.5KB, against a
- * response that is routinely 38KB. The entity `key_facts` are richer prose but ten times the
- * size, and a caller who needs them can ask describeEntity once it knows which entity to ask
+ * Aliases only, and `title` dropped as a near-duplicate of `entity` ("Test run" next to
+ * `test_run` buys nothing). The entity `key_facts` are richer prose but ten times the size,
+ * and a caller who needs them can ask describeEntity once it knows which entity to ask
  * about — which is exactly what this hands over.
+ *
+ * Its share of the response grew when search became a shortlist: 3.2KB against a 38KB full
+ * search was 8%, against a 6.8KB shortlist it is nearly half. The absolute cost did not
+ * change and is still under a thousand tokens — far less than one wrong invoke — so this
+ * is budgeted in bytes rather than as a fraction of a baseline that now moves.
  */
 export function vocabularyOf(
   products: Record<string, ProductIndex>,
@@ -514,9 +518,6 @@ export function vocabularyOf(
       const aliases = ((doc as EntityDoc).aliases || []) as string[];
       entries.push({
         entity,
-        ...((doc as EntityDoc).title
-          ? { title: (doc as EntityDoc).title }
-          : {}),
         ...(aliases.length ? { aliases } : {}),
       });
     }

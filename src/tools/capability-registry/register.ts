@@ -1,5 +1,11 @@
 /**
- * The tool surface: four discovery tools plus ONE invoke tool.
+ * The tool surface: five discovery tools plus ONE invoke tool.
+ *
+ * Discovery is deliberately two steps. `searchCapability` returns a shortlist — enough to
+ * CHOOSE — and `describeCapability` returns the contract for the one chosen. Parameters and
+ * response shapes are 86% of a full record and are needed once, not eight times: measured
+ * over eight queries, ~8.6k tokens a search becomes ~1.1k, and even describing every result
+ * still costs less than the single fat call did.
  *
  * ONE invoke tool means one set of MCP annotations, so they describe the whole surface
  * honestly: it can write (not read-only) and it can never delete, because destructive
@@ -155,7 +161,7 @@ export function addCapabilityRegistryTools(
    *
    * Only listProducts carries the summaries. They are authored prose of unbounded length —
    * tm's is 90 characters, loadtesting's is 470 — and a tool description is static context
-   * on every request, so repeating them across five tools would cost more than the round
+   * on every request, so repeating them across six tools would cost more than the round
    * trip they save. Everywhere else the names alone are what a caller needs.
    *
    * Each summary is cut to its first sentence and capped, and the whole catalog is
@@ -284,13 +290,14 @@ export function addCapabilityRegistryTools(
       "using its vocabulary, or call describeEntity on it for the fuller picture. That one " +
       "extra round trip is far cheaper than invoking the wrong capability. " +
       "Narrowing with `product` or `entity` sharpens results further. " +
-      "Each result carries the capability's `name` — the handle you pass to " +
-      "invokeCapability — plus its `method` and `path` (use those two only when a result " +
-      "has no `name`), and its parameters grouped into path_params / query / body under " +
-      "the spec's own names. Pass them straight back, no renaming. `intent` says what it does, " +
-      "`mode` tells you whether it writes, `product` says which product owns it, and " +
-      "`responses` describes what a successful call returns, fully expanded. Results are " +
-      "ranked and capped, and `truncated` says when more matched. Search before invoking.",
+      "THIS IS A SHORTLIST, NOT A CONTRACT. Each result carries only what you need to " +
+      "CHOOSE: `name` (the handle), `product` (which product owns it — results can span " +
+      "products), `mode` (whether it writes), `intent` and `guidance` (what it does and " +
+      "what goes wrong), and `method`/`path` for products that publish no name yet. " +
+      "It does NOT carry parameters or response shapes. Once you have picked one, call " +
+      "describeCapability for its full contract, then invokeCapability. Fetching the " +
+      "contract only for the one you chose is the difference between ~1k and ~8.6k tokens " +
+      "a search. Results are ranked and capped, and `truncated` says when more matched.",
     {
       query: z
         .string()
@@ -309,14 +316,6 @@ export function addCapabilityRegistryTools(
         .optional()
         .describe("Restrict to reads or writes. Omit to let the query decide."),
       limit: z.number().optional().describe("Max results (default 8)."),
-      include_responses: z
-        .enum(["success", "all", "none"])
-        .optional()
-        .describe(
-          "Which declared responses to expand: 'success' (default, the 2xx shape), 'all' " +
-            "(adds the error shapes — several times larger, and near-identical across " +
-            "endpoints), or 'none'.",
-        ),
     },
     {
       title: "Search Capabilities",
@@ -325,9 +324,8 @@ export function addCapabilityRegistryTools(
       idempotentHint: true,
       openWorldHint: false,
     },
-    async ({ query, entity, product, mode, limit, include_responses }) => {
+    async ({ query, entity, product, mode, limit }) => {
       track("searchCapability");
-      const selection = (include_responses || "success") as ResponseSelection;
       const { hits, weak, top_matched, ...rest } = searchCapabilities(
         registry.index.products,
         query,
@@ -340,27 +338,28 @@ export function addCapabilityRegistryTools(
       );
       return ok({
         build_id: registry.buildId,
-        // Dereferenced HERE rather than in the artifact: the tables store each response and
-        // schema once and the capabilities name them, so the file stays a third of the size
-        // it would be inlined. Expanding on the way out means the caller never has to
-        // resolve a `{"$schema": "…"}` itself, and never sees one.
-        capabilities: hits.map(({ product: owner, capability }) => {
-          const responses = resolveResponses(
-            registry.index.products[owner],
-            capability,
-            selection,
-          );
-          // The raw field is dropped, not merely overwritten: it holds `{"$response": …}`
-          // references, and spreading the capability would leak them straight through
-          // whenever the resolved value is absent.
-          const { responses: unresolved, ...rest } = capability;
-          void unresolved;
-          return {
-            ...rest,
-            product: owner,
-            ...(responses ? { responses } : {}),
-          };
-        }),
+        // A SHORTLIST: only what choosing requires. Parameters and response shapes are 86%
+        // of a full record and are needed for exactly ONE of the eight — the one the caller
+        // picks — so they move to describeCapability. Measured over eight queries: 8.6k
+        // tokens a search becomes ~1k, and even describing all eight results still costs
+        // slightly less than today.
+        //
+        // `product` is here because results span products and the caller cannot otherwise
+        // tell a Load Testing row from a Test Management one. `method`/`path` are here
+        // because Load Testing publishes no names at all — without them its rows would be
+        // unaddressable, which is worse than verbose.
+        capabilities: hits.map(({ product: owner, capability }) => ({
+          ...(capability.name ? { name: capability.name } : {}),
+          product: owner,
+          method: capability.method,
+          path: capability.path,
+          mode: capability.mode,
+          entity: capability.entity,
+          ...(capability.intent ? { intent: capability.intent } : {}),
+          ...(capability.guidance?.length
+            ? { guidance: capability.guidance }
+            : {}),
+        })),
         ...rest,
         // WHEN THE MATCH IS WEAK, HAND OVER THE VOCABULARY.
         //
@@ -390,9 +389,110 @@ export function addCapabilityRegistryTools(
     },
   );
 
+  tools.describeCapability = server.tool(
+    "describeCapability",
+    "The full contract for ONE capability you picked from searchCapability: its " +
+      "parameters grouped into path_params / query / body under the spec's own names, " +
+      "what it returns, and its declared response shapes fully expanded. Call this after " +
+      "search and before invokeCapability — search deliberately omits all of it, because " +
+      "it is only needed for the one capability you actually call. " +
+      "Identify it by `name`, exactly as search returned it; only when a result carries " +
+      "no `name` (some products publish none yet) pass `method` and `path` instead. " +
+      "Every parameter lists its type, whether it is required, its allowed values where " +
+      "the set is closed, and any limits the product declares — obey those before calling " +
+      "rather than discovering them from a rejected request.",
+    {
+      name: z
+        .string()
+        .optional()
+        .describe(
+          "The capability's published name, exactly as searchCapability returned it.",
+        ),
+      method: z
+        .string()
+        .optional()
+        .describe(
+          "HTTP method — only for capabilities returned without a `name`.",
+        ),
+      path: z
+        .string()
+        .optional()
+        .describe(
+          "Path with {placeholders} intact — only for capabilities returned without a `name`.",
+        ),
+      product: productArg()
+        .optional()
+        .describe(
+          `Which product owns it (${productList}). searchCapability returns it on every ` +
+            "result; required only when two products share a name or a path.",
+        ),
+      include_responses: z
+        .enum(["success", "all", "none"])
+        .optional()
+        .describe(
+          "Which declared responses to expand: 'success' (default, the 2xx shape), 'all' " +
+            "(adds the error shapes — several times larger, and near-identical across " +
+            "endpoints), or 'none'.",
+        ),
+    },
+    {
+      title: "Describe Capability",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    async (input): Promise<CallToolResult> => {
+      track("describeCapability");
+      try {
+        // The same two handles as invokeCapability, resolved the same way, so a name that
+        // describes is a name that invokes. Divergence here would be its own bug class.
+        if (!input.name && !(input.method && input.path)) {
+          return failed(
+            "pass `name` — or, for a capability returned without one, both `method` and " +
+              "`path`, exactly as searchCapability returned them",
+          );
+        }
+        const { product: owner, capability } = input.name
+          ? registry.byNameLookup(input.name, input.product)
+          : registry.byEndpointLookup(
+              input.method as string,
+              input.path as string,
+              input.product,
+            );
+
+        const selection = (input.include_responses ||
+          "success") as ResponseSelection;
+        const responses = resolveResponses(
+          registry.index.products[owner],
+          capability,
+          selection,
+        );
+        // Dropped rather than overwritten: the raw field holds `{"$response": …}` pointers,
+        // and spreading the capability would leak them through whenever the resolved value
+        // is absent.
+        const { responses: unresolved, ...contract } = capability;
+        void unresolved;
+        return ok({
+          build_id: registry.buildId,
+          product: owner,
+          ...contract,
+          ...(responses ? { responses } : {}),
+        });
+      } catch (error) {
+        if (error instanceof InvocationError) return failed(error.message);
+        logger.error(
+          "describeCapability failed: %s",
+          error instanceof Error ? error.message : String(error),
+        );
+        return failed("that capability could not be described");
+      }
+    },
+  );
+
   tools.invokeCapability = server.tool(
     "invokeCapability",
-    "Call a capability returned by searchCapability or describeEntity. Pass `name` exactly " +
+    "Call a capability whose contract you have from describeCapability. Pass `name` exactly " +
       "as given — that is the handle. Only when a result carries no `name` (some products " +
       "do not publish them yet) pass `method` and `path` instead, exactly as returned. " +
       "Arguments go in path_params / query / body under the spec's own names. One call " +

@@ -5,7 +5,9 @@ const FIXTURE = fileURLToPath(
   new URL("../fixtures/capability/tm.capability-index.json", import.meta.url),
 );
 /** The stored layout: `capability/<product>.capability-index.json`, one file per product. */
-const FIXTURE_DIR = fileURLToPath(new URL("../fixtures/capability/", import.meta.url));
+const FIXTURE_DIR = fileURLToPath(
+  new URL("../fixtures/capability/", import.meta.url),
+);
 
 const CONFIG = {
   "browserstack-username": "ing_Xx",
@@ -32,11 +34,17 @@ describe("capability registry, end to end through the server factory", () => {
     vi.unstubAllGlobals();
   });
 
-  it("registers its five tools alongside the hand-written ones", async () => {
+  it("registers its six tools alongside the hand-written ones", async () => {
     const server = await buildServer();
     const tools = server.getTools();
-    for (const name of ["listProducts", "listEntities", "describeEntity",
-      "searchCapability", "invokeCapability"]) {
+    for (const name of [
+      "listProducts",
+      "listEntities",
+      "describeEntity",
+      "searchCapability",
+      "describeCapability",
+      "invokeCapability",
+    ]) {
       expect(tools[name], name).toBeDefined();
     }
     // the existing surface is untouched
@@ -48,7 +56,8 @@ describe("capability registry, end to end through the server factory", () => {
     process.env.CAPABILITY_REGISTRY_INDEX_DIR = FIXTURE_DIR;
     const server = await buildServer();
     const result: any = await (server.getTools().listProducts as any).handler(
-      {}, {} as any,
+      {},
+      {} as any,
     );
     const payload = JSON.parse(result.content[0].text);
     expect(payload.products.map((p: any) => p.name)).toEqual(["tm"]);
@@ -63,7 +72,8 @@ describe("capability registry, end to end through the server factory", () => {
 
     // The accepted values travel in the SCHEMA, so a client validates them and the model
     // sees them without spending a listProducts call.
-    const shape = tools.listEntities.inputSchema?.shape ?? tools.listEntities._def?.shape;
+    const shape =
+      tools.listEntities.inputSchema?.shape ?? tools.listEntities._def?.shape;
     const entries = shape.product._def?.entries ?? shape.product._def?.values;
     expect(Object.values(entries)).toEqual(["tm"]);
 
@@ -92,9 +102,9 @@ describe("capability registry, end to end through the server factory", () => {
 
   it("searches the real index through the registered tool", async () => {
     const server = await buildServer();
-    const result: any = await (server.getTools().searchCapability as any).handler(
-      { query: "list the test cases in a folder" }, {} as any,
-    );
+    const result: any = await (
+      server.getTools().searchCapability as any
+    ).handler({ query: "list the test cases in a folder" }, {} as any);
     const payload = JSON.parse(result.content[0].text);
     expect(payload.build_id).toMatch(/^[0-9a-f]{7,}_/);
     expect(payload.capabilities.length).toBeGreaterThan(0);
@@ -102,42 +112,58 @@ describe("capability registry, end to end through the server factory", () => {
   });
 
   it("hands back response shapes with nothing left to dereference", async () => {
+    // Moved from searchCapability to describeCapability when search became a shortlist:
+    // response shapes are 53% of a full record and are needed for the ONE capability the
+    // caller picks, not for all eight it was offered.
     const server = await buildServer();
-    const result: any = await (server.getTools().searchCapability as any).handler(
-      { query: "create a folder in a project" }, {} as any,
-    );
+    const shortlist: any = await (
+      server.getTools().searchCapability as any
+    ).handler({ query: "create a folder in a project" }, {} as any);
+    const picked = JSON.parse(shortlist.content[0].text).capabilities[0];
+
+    const result: any = await (
+      server.getTools().describeCapability as any
+    ).handler({ name: picked.name }, {} as any);
     const payload = JSON.parse(result.content[0].text);
-    const top = payload.capabilities[0];
 
     // Which product owns it — needed to disambiguate, and to know whose tables were read.
-    expect(top.product).toBe("tm");
+    expect(payload.product).toBe("tm");
     // The 2xx shape, expanded: no `{"$response": …}` or `{"$schema": …}` reaches the caller.
-    expect(Object.keys(top.responses)).toContain("200");
+    expect(Object.keys(payload.responses)).toContain("200");
     expect(JSON.stringify(payload)).not.toContain('"$schema"');
     expect(JSON.stringify(payload)).not.toContain('"$response"');
-    expect(top.responses["200"].schema).toBeDefined();
+    expect(payload.responses["200"].schema).toBeDefined();
   });
 
   it("returns the success shape by default and the error shapes only on request", async () => {
     const server = await buildServer();
-    const search = server.getTools().searchCapability as any;
+    const describe = server.getTools().describeCapability as any;
     const run = async (args: Record<string, unknown>) =>
-      JSON.parse((await search.handler(
-        { query: "create a folder in a project", ...args }, {} as any,
-      )).content[0].text);
+      JSON.parse(
+        (
+          await describe.handler(
+            { name: "create_root_folder_v1", ...args },
+            {} as any,
+          )
+        ).content[0].text,
+      );
 
     const dflt = await run({});
     const all = await run({ include_responses: "all" });
     const none = await run({ include_responses: "none" });
 
-    expect(Object.keys(dflt.capabilities[0].responses)).toEqual(["200"]);
-    expect(Object.keys(all.capabilities[0].responses)).toContain("404");
-    expect(none.capabilities[0].responses).toBeUndefined();
+    expect(Object.keys(dflt.responses)).toEqual(["200"]);
+    expect(Object.keys(all.responses)).toContain("404");
+    expect(none.responses).toBeUndefined();
 
     // The error shapes are near-identical across endpoints, so carrying them by default
     // would multiply the payload several times over to repeat boilerplate.
-    expect(JSON.stringify(all).length).toBeGreaterThan(JSON.stringify(dflt).length * 1.5);
-    expect(JSON.stringify(none).length).toBeLessThan(JSON.stringify(dflt).length);
+    expect(JSON.stringify(all).length).toBeGreaterThan(
+      JSON.stringify(dflt).length * 1.5,
+    );
+    expect(JSON.stringify(none).length).toBeLessThan(
+      JSON.stringify(dflt).length,
+    );
   });
 
   it("invokes a real endpoint: forwards Api-Token and returns the response untouched", async () => {
@@ -156,27 +182,35 @@ describe("capability registry, end to end through the server factory", () => {
     });
 
     const server = await buildServer();
-    const result: any = await (server.getTools().invokeCapability as any).handler(
-      { method: "GET", path: "/api/v1/projects/basic" }, {} as any,
-    );
+    const result: any = await (
+      server.getTools().invokeCapability as any
+    ).handler({ method: "GET", path: "/api/v1/projects/basic" }, {} as any);
     const payload = JSON.parse(result.content[0].text);
 
     expect(payload.ok).toBe(true);
     expect(calls[0].headers["Api-Token"]).toBe("ing_Xx:SECRET");
     expect(calls[0].headers["request-source"]).toBe("ai-chatbot");
-    expect(calls[0].url.startsWith("https://tm.example/api/v1/projects/basic")).toBe(true);
+    expect(
+      calls[0].url.startsWith("https://tm.example/api/v1/projects/basic"),
+    ).toBe(true);
     // ONE request, and the body exactly as the product sent it
     expect(calls).toHaveLength(1);
     expect(payload.http_response.status).toBe(200);
-    expect(payload.http_response.body.projects[0])
-      .toEqual({ id: 1, name: "P", description: "d", leaked: "no" });
+    expect(payload.http_response.body.projects[0]).toEqual({
+      id: 1,
+      name: "P",
+      description: "d",
+      leaked: "no",
+    });
   });
 
   it("refuses a destructive endpoint without calling the product", async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const server = await buildServer();
-    const result: any = await (server.getTools().invokeCapability as any).handler(
+    const result: any = await (
+      server.getTools().invokeCapability as any
+    ).handler(
       {
         method: "POST",
         path: "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
@@ -188,7 +222,7 @@ describe("capability registry, end to end through the server factory", () => {
     );
     expect(result.isError).toBe(true);
     expect(JSON.parse(result.content[0].text).error).toMatch(/destructive/);
-    expect(fetchSpy).not.toHaveBeenCalled();     // refused before any egress
+    expect(fetchSpy).not.toHaveBeenCalled(); // refused before any egress
   });
 
   it("refuses a write until the user has confirmed, and validates params first", async () => {
@@ -198,18 +232,32 @@ describe("capability registry, end to end through the server factory", () => {
     const invokeCapability = server.getTools().invokeCapability as any;
 
     const noConsent: any = await invokeCapability.handler(
-      { method: "POST", path: "/api/v1/projects/{project_id}/folders",
-        path_params: { project_id: 1 }, body: { name: "New" } }, {} as any,
+      {
+        method: "POST",
+        path: "/api/v1/projects/{project_id}/folders",
+        path_params: { project_id: 1 },
+        body: { name: "New" },
+      },
+      {} as any,
     );
-    expect(JSON.parse(noConsent.content[0].text).error).toMatch(/ask the user to confirm/);
+    expect(JSON.parse(noConsent.content[0].text).error).toMatch(
+      /ask the user to confirm/,
+    );
 
     // A typo must surface as a parameter error, NOT as "go ask a human" about a call that
     // was never going to run.
     const typo: any = await invokeCapability.handler(
-      { method: "POST", path: "/api/v1/projects/{project_id}/folders",
-        path_params: { project_id: 1 }, body: { nmae: "New" } }, {} as any,
+      {
+        method: "POST",
+        path: "/api/v1/projects/{project_id}/folders",
+        path_params: { project_id: 1 },
+        body: { nmae: "New" },
+      },
+      {} as any,
     );
-    expect(JSON.parse(typo.content[0].text).error).toMatch(/unknown body: nmae/);
+    expect(JSON.parse(typo.content[0].text).error).toMatch(
+      /unknown body: nmae/,
+    );
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

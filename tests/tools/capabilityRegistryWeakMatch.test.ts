@@ -104,10 +104,14 @@ describe("searchCapability's vocabulary hand-off", () => {
     expect(result.hint).toBeUndefined();
   });
 
-  it("costs a small fraction of the response it rides along with", async () => {
+  it("stays within an absolute byte budget", async () => {
+    // Budgeted in BYTES, not as a fraction. It was 8% of a 38KB search; once search became
+    // a shortlist the same 3.2KB is nearly half of a 6.8KB response — the block did not
+    // grow, the baseline collapsed. A fraction would now fail for the wrong reason, while
+    // the thing worth bounding is unchanged: under a thousand tokens, far less than the
+    // wrong invoke it prevents.
     const result = await search("make a new bucket for my tests");
-    const whole = JSON.stringify(result).length;
     const block = JSON.stringify(result.suggested_vocabulary).length;
-    expect(block).toBeLessThan(whole * 0.25);
+    expect(block).toBeLessThan(4096);
   });
 });

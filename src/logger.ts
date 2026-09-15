@@ -24,16 +24,7 @@ if (process.env.NODE_ENV === "development") {
     },
   });
 } else {
-  // Null logger (logs go to /dev/null or NUL)
-  currentLogger = pino({
-    level: "info",
-    transport: {
-      target: "pino/file",
-      options: {
-        destination: process.platform === "win32" ? "NUL" : "/dev/null",
-      },
-    },
-  });
+  currentLogger = pino({ level: "info", enabled: false });
 }
 
 // 2. Proxy logger: always delegates to the currentLogger

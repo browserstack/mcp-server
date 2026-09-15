@@ -21,7 +21,7 @@ describe("extractFailedTestIds", () => {
     const result = extractFailedTestIds(hierarchy, TestStatus.FAILED);
 
     expect(result).toEqual([
-      { test_id: "111", test_name: "zero-run failure" },
+      { test_id: "111", test_name: "zero-run failure", status: TestStatus.FAILED },
     ]);
   });
 
@@ -49,6 +49,53 @@ describe("extractFailedTestIds", () => {
     expect(extractFailedTestIds(hierarchy, TestStatus.FAILED)).toEqual([]);
   });
 
+  it("includes the session id when the listing returns one", () => {
+    const hierarchy = [
+      node(
+        {
+          status: TestStatus.FAILED,
+          observability_url: "https://observability.bs.com/x?details=555",
+          session_id: "abc123def456",
+        },
+        "failure with session",
+      ),
+    ];
+
+    expect(extractFailedTestIds(hierarchy, TestStatus.FAILED)).toEqual([
+      {
+        test_id: "555",
+        test_name: "failure with session",
+        status: TestStatus.FAILED,
+        session_id: "abc123def456",
+      },
+    ]);
+  });
+
+  it.each([
+    ["the literal string null", "null"],
+    ["a blank string", "   "],
+    ["a missing field", undefined],
+  ])("omits session_id for %s", (_label, session_id) => {
+    const hierarchy = [
+      node(
+        {
+          status: TestStatus.FAILED,
+          observability_url: "https://observability.bs.com/x?details=666",
+          session_id,
+        },
+        "no usable session",
+      ),
+    ];
+
+    expect(extractFailedTestIds(hierarchy, TestStatus.FAILED)).toEqual([
+      {
+        test_id: "666",
+        test_name: "no usable session",
+        status: TestStatus.FAILED,
+      },
+    ]);
+  });
+
   it("recurses into children and collects nested matches", () => {
     const hierarchy = [
       node({ status: TestStatus.PASSED }, "parent", [
@@ -63,7 +110,7 @@ describe("extractFailedTestIds", () => {
     ];
 
     expect(extractFailedTestIds(hierarchy, TestStatus.FAILED)).toEqual([
-      { test_id: "333", test_name: "nested failure" },
+      { test_id: "333", test_name: "nested failure", status: TestStatus.FAILED },
     ]);
   });
 
@@ -76,7 +123,68 @@ describe("extractFailedTestIds", () => {
     ];
 
     expect(extractFailedTestIds(hierarchy, TestStatus.FAILED)).toEqual([
-      { test_id: "444", test_name: "Test 444" },
+      { test_id: "444", test_name: "Test 444", status: TestStatus.FAILED },
     ]);
+  });
+
+  it("returns ALL tests (any status) with per-test status when no status is passed", () => {
+    const hierarchy = [
+      node(
+        {
+          status: TestStatus.PASSED,
+          observability_url: "https://o.bs.com/x?details=1",
+        },
+        "passed test",
+      ),
+      node(
+        {
+          status: TestStatus.FAILED,
+          observability_url: "https://o.bs.com/x?details=2",
+        },
+        "failed test",
+      ),
+      node(
+        {
+          status: TestStatus.SKIPPED,
+          observability_url: "https://o.bs.com/x?details=3",
+        },
+        "skipped test",
+      ),
+    ];
+
+    // No status arg → every real test node, each carrying its own status.
+    expect(extractFailedTestIds(hierarchy)).toEqual([
+      { test_id: "1", test_name: "passed test", status: TestStatus.PASSED },
+      { test_id: "2", test_name: "failed test", status: TestStatus.FAILED },
+      { test_id: "3", test_name: "skipped test", status: TestStatus.SKIPPED },
+    ]);
+  });
+
+  it("includeFailureDetail attaches a signature only to FAILED tests", () => {
+    const hierarchy = [
+      node(
+        {
+          status: TestStatus.PASSED,
+          observability_url: "https://o.bs.com/x?details=10",
+          failure_categories: ["ShouldBeIgnored"],
+        },
+        "passed",
+      ),
+      node(
+        {
+          status: TestStatus.FAILED,
+          observability_url: "https://o.bs.com/x?details=11",
+          failure_categories: ["ProductError"],
+        },
+        "failed",
+      ),
+    ];
+
+    const result = extractFailedTestIds(hierarchy, undefined, true);
+    expect(result).toHaveLength(2);
+    expect(result.find((r) => r.test_id === "10")?.failure).toBeUndefined();
+    expect(result.find((r) => r.test_id === "11")?.failure?.category).toBe(
+      "ProductError",
+    );
   });
 });

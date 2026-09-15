@@ -30,6 +30,17 @@ for (const key of BROWSERSTACK_LOCAL_OPTION_KEYS) {
   }
 }
 
+// Overridable via O11Y_TFA_RCA_BASE_URL to target a staging tenant.
+const DEFAULT_O11Y_TFA_RCA_BASE_URL = "https://api-automation.browserstack.com";
+
+// Overridable via BROWSERSTACK_AUTOMATION_BASE_URL to target a non-prod env.
+const DEFAULT_BROWSERSTACK_AUTOMATION_BASE_URL =
+  "https://api-automation.browserstack.com";
+
+// Overridable via BROWSERSTACK_O11Y_UI_BASE_URL to point at a staging UI.
+const DEFAULT_BROWSERSTACK_O11Y_UI_BASE_URL =
+  "https://automation.browserstack.com";
+
 /**
  * USE_OWN_LOCAL_BINARY_PROCESS:
  *   If true, the system will not start a new local binary process, but will use the user's own process.
@@ -41,6 +52,9 @@ export class Config {
     public readonly USE_OWN_LOCAL_BINARY_PROCESS: boolean,
     public readonly REMOTE_MCP: boolean,
     public readonly UPLOAD_BASE_DIR: string | undefined,
+    public readonly O11Y_TFA_RCA_BASE_URL: string,
+    public readonly BROWSERSTACK_AUTOMATION_BASE_URL: string,
+    public readonly BROWSERSTACK_O11Y_UI_BASE_URL: string,
   ) {}
 }
 
@@ -52,6 +66,18 @@ const config = new Config(
   process.env.MCP_UPLOAD_BASE_DIR && process.env.MCP_UPLOAD_BASE_DIR.length > 0
     ? process.env.MCP_UPLOAD_BASE_DIR
     : undefined,
+  process.env.O11Y_TFA_RCA_BASE_URL &&
+    process.env.O11Y_TFA_RCA_BASE_URL.length > 0
+    ? process.env.O11Y_TFA_RCA_BASE_URL
+    : DEFAULT_O11Y_TFA_RCA_BASE_URL,
+  process.env.BROWSERSTACK_AUTOMATION_BASE_URL &&
+    process.env.BROWSERSTACK_AUTOMATION_BASE_URL.length > 0
+    ? process.env.BROWSERSTACK_AUTOMATION_BASE_URL
+    : DEFAULT_BROWSERSTACK_AUTOMATION_BASE_URL,
+  process.env.BROWSERSTACK_O11Y_UI_BASE_URL &&
+    process.env.BROWSERSTACK_O11Y_UI_BASE_URL.length > 0
+    ? process.env.BROWSERSTACK_O11Y_UI_BASE_URL
+    : DEFAULT_BROWSERSTACK_O11Y_UI_BASE_URL,
 );
 
 export default config;

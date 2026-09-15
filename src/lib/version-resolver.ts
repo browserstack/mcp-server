@@ -3,14 +3,21 @@
  * Else if exact match, returns that
  * Else picks the numerically closest (or first)
  */
+const PRERELEASE_CHANNEL = /\b(beta|dev|alpha|canary|nightly|preview)\b/i;
+
 export function resolveVersion(requested: string, available: string[]): string {
   // strip duplicates & sort
   const uniq = Array.from(new Set(available));
 
   // pick min/max
   if (requested === "latest" || requested === "oldest") {
+    // Prefer stable releases: BrowserStack lists pre-release channels such as
+    // "154.0 beta" / "155.0 dev" alongside stable versions, and "latest"
+    // should never resolve to one of those while a stable version exists.
+    const stable = uniq.filter((v) => !PRERELEASE_CHANNEL.test(v));
+    const candidates = stable.length > 0 ? stable : uniq;
     // try numeric
-    const nums = uniq
+    const nums = candidates
       .map((v) => ({ v, n: parseFloat(v) }))
       .filter((x) => !isNaN(x.n))
       .sort((a, b) => a.n - b.n);
@@ -18,7 +25,7 @@ export function resolveVersion(requested: string, available: string[]): string {
       return requested === "latest" ? nums[nums.length - 1].v : nums[0].v;
     }
     // fallback lex
-    const lex = uniq.slice().sort();
+    const lex = candidates.slice().sort();
     return requested === "latest" ? lex[lex.length - 1] : lex[0];
   }
 

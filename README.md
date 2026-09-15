@@ -41,6 +41,8 @@ Click on the buttons below to install MCP in your respective IDE:
 
 <a href="http://mcp.browserstack.com/one-click-setup?client=vscode"><img src="assets/one-click-vs-code.png" alt="Install in VS Code" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="http://mcp.browserstack.com/one-click-setup?client=cursor"><img src="assets/one-click-cursor.png" alt="Install in Cursor" width="150" height="70"></a>
 
+> **Note:** The hosted Remote MCP server (`mcp.browserstack.com`) is now fully stateless over Streamable HTTP — any Streamable-HTTP client (Claude, Cursor, VS Code, ChatGPT) connects with no configuration change.
+
 #### Note : Ensure you are using Node version >= `18.0` 
 - Check your node version using `node --version`. Recommended version: `v22.15.0` (LTS)
 - To Upgrade Node :
@@ -304,7 +306,7 @@ Select the “Installed” tab. Click the “Configure MCP Servers” button at 
 
 ### 💡 List of BrowserStack MCP Tools
 
-As of now we support 44 tools.
+As of now we support 46 tools.
 
 > **Remote MCP note:** Tools marked _(not available in Remote MCP)_ rely on local file/process state and are disabled in the multi-tenant [Remote MCP Server](#-remote-mcp-server). They are available in the local (npx) setup.
 
@@ -436,18 +438,25 @@ As of now we support 44 tools.
   Get screenshots from Automate session ID abc123xyz for my desktop test run
   ```
 
+ 18. `listSessions` — List the sessions in an Automate/App Automate build. Each record carries `sessionId`, `name`, `status`, `os`, `osVersion`, `browser`, `device`, `browserUrl` (dashboard link), and `videoUrl`, with optional `limit` / `offset` paging and a client-side `status` filter. Takes either the **hashed** build ID from the dashboard URL or the observability build id returned by `getBuildId` / `listBuildId` — an observability id is resolved to the hashed id automatically via the build's sessions. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`.
+  **Prompt example**
+
+  ```text
+  List sessions for Automate hashed build ID <hashed build id>
+  ```
+
 ---
 
 ## 🔍 Observability
 
- 18. `getFailureLogs` — Retrieve error logs for Automate/App Automate sessions (optionally by Build ID for App Automate).
+ 19. `getFailureLogs` — Retrieve error logs for Automate/App Automate sessions. App Automate log endpoints are build-scoped, so a hashed build ID is required there — pass one if you have it, otherwise it is resolved from the session automatically.
   **Prompt example**
 
   ```text
-  Get the error logs from the session ID: 21a864032a7459f1e7634222249b316759d6827f, Build ID: dt7ung4wmjittzff8kksrjadjax9gzvbscoyf9qn of App Automate test session
+  Get the Appium logs for App Automate session ID <session id>
   ```
 
- 19. `fetchBuildInsights` — Fetch insights about a BrowserStack build by combining build details and quality-gate results.
+ 20. `fetchBuildInsights` — Fetch insights about a BrowserStack build by combining build details and quality-gate results. Includes `hashed_id` (the hashed build id `listSessions` takes) and `session_type`, resolved through the build's sessions when the build ran on Automate / App Automate.
   **Prompt example**
 
   ```text
@@ -458,7 +467,7 @@ As of now we support 44 tools.
 
 ## 📱 App Live
 
- 20. `runAppLiveSession` — Start a manual app testing session on a real device in the cloud.
+ 21. `runAppLiveSession` — Start a manual app testing session on a real device in the cloud.
   **Prompt example**
 
   ```text
@@ -469,7 +478,7 @@ As of now we support 44 tools.
 
 ## 💻 Live
 
- 21. `runBrowserLiveSession` — Start a Live session for website testing on desktop or mobile browsers.
+ 22. `runBrowserLiveSession` — Start a Live session for website testing on desktop or mobile browsers.
   **Prompt example**
 
   ```text
@@ -480,21 +489,21 @@ As of now we support 44 tools.
 
 ## 📲 App Automate
 
- 22. `takeAppScreenshot` — Launch the app on a specified device and capture a quick verification screenshot to confirm your app has launched.
+ 23. `takeAppScreenshot` — Launch the app on a specified device and capture a quick verification screenshot to confirm your app has launched.
   **Prompt example**
 
   ```text
   Take a screenshot of my app on Google Pixel 6 with Android 12 while testing on App Automate. App file path: /Users/xyz/app-debug.apk
   ```
 
- 23. `runAppTestsOnBrowserStack` — Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files.
+ 24. `runAppTestsOnBrowserStack` — Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files.
   **Prompt example**
 
   ```text
   Run Espresso tests from /tests/checkout.zip on Galaxy S21 and Pixel 6 with Android 12. App path is /apps/beta-release.apk under project 'Checkout Flow'
   ```
 
- 24. `setupBrowserStackAppAutomateTests` — Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing.
+ 25. `setupBrowserStackAppAutomateTests` — Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing.
   **Prompt example**
 
   ```text
@@ -505,35 +514,35 @@ As of now we support 44 tools.
 
 ## ♿ Accessibility
 
- 25. `accessibilityExpert` — Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices).
+ 26. `accessibilityExpert` — Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices).
   **Prompt example**
 
   ```text
   What WCAG guidelines apply to form field error messages on mobile web?
   ```
 
- 26. `startAccessibilityScan` — Start a web accessibility scan and retrieve a local CSV report path.
+ 27. `startAccessibilityScan` — Start a web accessibility scan and retrieve a local CSV report path.
   **Prompt example**
 
   ```text
   Run accessibility scan for "www.example.com"
   ```
 
- 27. `createAccessibilityAuthConfig` — Create an authentication configuration (form-based or basic) for accessibility scans behind a login.
+ 28. `createAccessibilityAuthConfig` — Create an authentication configuration (form-based or basic) for accessibility scans behind a login.
   **Prompt example**
 
   ```text
   Create a basic-auth accessibility config named 'site-login' for https://www.example.com with username testuser and password <password>
   ```
 
- 28. `getAccessibilityAuthConfig` — Retrieve an existing accessibility authentication configuration by ID.
+ 29. `getAccessibilityAuthConfig` — Retrieve an existing accessibility authentication configuration by ID.
   **Prompt example**
 
   ```text
   Get accessibility auth config with ID <config-id>
   ```
 
- 29. `fetchAccessibilityIssues` — Fetch accessibility issues from a completed scan, with pagination support.
+ 30. `fetchAccessibilityIssues` — Fetch accessibility issues from a completed scan, with pagination support.
   **Prompt example**
 
   ```text
@@ -544,49 +553,49 @@ As of now we support 44 tools.
 
 ## 🎨 Percy Visual Testing
 
- 30. `percyVisualTestIntegrationAgent` — Integrate Percy visual testing into a new project and demonstrate visual change detection with a step-by-step simulation.
+ 31. `percyVisualTestIntegrationAgent` — Integrate Percy visual testing into a new project and demonstrate visual change detection with a step-by-step simulation.
   **Prompt example**
 
   ```text
   Integrate Percy for this project
   ```
 
- 31. `expandPercyVisualTesting` — Set up or expand Percy visual testing coverage for existing projects (Percy Web Standalone and Percy Automate).
+ 32. `expandPercyVisualTesting` — Set up or expand Percy visual testing coverage for existing projects (Percy Web Standalone and Percy Automate).
   **Prompt example**
 
   ```text
   Expand Percy coverage for this project
   ```
 
- 32. `addPercySnapshotCommands` — Add Percy snapshot commands to the specified test files. _(not available in Remote MCP)_
+ 33. `addPercySnapshotCommands` — Add Percy snapshot commands to the specified test files. _(not available in Remote MCP)_
   **Prompt example**
 
   ```text
   Add Percy snapshot commands to my Cypress test files
   ```
 
- 33. `listTestFiles` — List all test files for a given set of directories. _(not available in Remote MCP)_
+ 34. `listTestFiles` — List all test files for a given set of directories. _(not available in Remote MCP)_
   **Prompt example**
 
   ```text
   List the test files under my ./tests directory
   ```
 
- 34. `runPercyScan` — Run a Percy visual test scan. _(not available in Remote MCP)_
+ 35. `runPercyScan` — Run a Percy visual test scan. _(not available in Remote MCP)_
   **Prompt example**
 
   ```text
   Run this Percy build
   ```
 
- 35. `fetchPercyChanges` — Retrieve and summarize visual changes detected by Percy AI between the latest and previous builds.
+ 36. `fetchPercyChanges` — Retrieve and summarize visual changes detected by Percy AI between the latest and previous builds.
   **Prompt example**
 
   ```text
   Summarize the visual changes Percy detected in my latest build
   ```
 
- 36. `managePercyBuildApproval` — Approve or reject a Percy build.
+ 37. `managePercyBuildApproval` — Approve or reject a Percy build.
   **Prompt example**
 
   ```text
@@ -597,53 +606,63 @@ As of now we support 44 tools.
 
 ## 🤖 BrowserStack AI Agents
 
- 37. `askBrowserStackAI` — Run a multi-step Test Management or Test Reporting & Analytics workflow from a single natural-language instruction. "Ask AI" plans the steps, calls the required BrowserStack capabilities and returns the result. Use for open-ended or multi-step asks. _Requires an active Test Management or Test Reporting & Analytics license._
+ 38. `askBrowserStackAI` — Run a multi-step Test Management or Test Reporting & Analytics workflow from a single natural-language instruction. "Ask AI" plans the steps, calls the required BrowserStack capabilities and returns the result. Use for open-ended or multi-step asks. _Requires an active Test Management or Test Reporting & Analytics license._
   **Prompt examples**
 ```text
   Find all payment test cases in project 'Shopping App' and add the 'regression' tag to them
-```
+  ```
+
 ```text
   Find the always-failing tests in my last build, tell me which are real product bugs versus broken automation, and suggest fixes
-```
+  ```
+
 ```text
   Which tests wasted the most CI time last week across my top two projects?
-```
- 38. `uploadProductRequirementFile` — Upload a PRD/screenshot/PDF and get a file mapping ID (used with `createTestCasesFromFile`). _(not available in Remote MCP)_
+  ```
+
+ 39. `uploadProductRequirementFile` — Upload a PRD/screenshot/PDF and get a file mapping ID (used with `createTestCasesFromFile`). _(not available in Remote MCP)_
   **Prompt example**
 ```text
   Upload PRD from /Users/xyz/Desktop/login-flow.pdf and use BrowserStack AI to generate test cases
-```
- 39. `createLCASteps` — Generate Low Code Automation (LCA) steps from a manual test case in Test Management.
+  ```
+
+ 40. `createLCASteps` — Generate Low Code Automation (LCA) steps from a manual test case in Test Management.
   **Prompt example**
 ```text
   Convert the manual test case 'Add to Cart' in the 'Shopping App' project into LCA steps
-```
- 40. `fetchSelfHealedSelectors` — Retrieve AI self-healed selectors (plus test source) to fix flaky tests caused by DOM changes.
+  ```
+
+ 41. `fetchSelfHealedSelectors` — Retrieve AI self-healed selectors (plus test source) to fix flaky tests caused by DOM changes.
   **Prompt example**
 ```text
   Fetch and fix flaky test selectors in Automate session ID session_9482 using MCP
-```
- 41. `prepareSelfHealingPlan` — Build a self-healing edit plan that bundles locator pairs with test source for your LLM to apply. Does NOT modify files itself.
+  ```
+
+ 42. `prepareSelfHealingPlan` — Build a self-healing edit plan that bundles locator pairs with test source for your LLM to apply. Does NOT modify files itself.
   **Prompt example**
 ```text
   Prepare a self-healing plan from the self-healed selectors for my build
-```
- 42. `fetchRCA` — Fetch AI Root Cause Analysis for your failed Automate/App-Automate tests (by numeric test ID). Suggests fixes only; never auto-applies.
+  ```
+
+ 43. `fetchRCA` — Fetch AI Root Cause Analysis for your failed Automate/App-Automate tests (by numeric test ID). Suggests fixes only; never auto-applies.
   **Prompt example**
 ```text
   Fetch the root cause analysis for failed test IDs 101 and 102 on BrowserStack
-```
- 43. `getBuildId` — Get the BrowserStack build ID for a given project and build name, scoped to your builds.
+  ```
+
+ 44. `getBuildId` — Get the BrowserStack build ID for a given project and build name, scoped to your builds.
   **Prompt example**
 ```text
   Get the build ID for build 'nightly-regression' in project 'Checkout Flow'
-```
- 44. `listBuildId` — Get the latest build ID for a project and build name, across all users (no user filter).
+  ```
+
+ 45. `listBuildId` — Get the latest build ID for a project and build name, across all users (no user filter).
   **Prompt example**
 ```text
   Get the latest build ID for build 'nightly-regression' in project 'Checkout Flow'
-```
- 45. `listTestIds` — List test IDs from a BrowserStack Automate build, filtered by status (passed/failed/pending/skipped).
+  ```
+
+ 46. `listTestIds` — List the tests in a BrowserStack build (Automate or App Automate) with each test's `status` and `session_id`, optionally filtered by status (passed/failed/pending/skipped). The `session_id` feeds `getFailureLogs` and `fetchAutomationScreenshots` directly.
   **Prompt example**
 ```text
   List the failed test IDs from build UUID <your-build-uuid> on BrowserStack

@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { getLatestO11YBuildInfo } from "../lib/api.js";
@@ -46,7 +47,12 @@ export async function getFailuresInLastRun(
     content: [
       {
         type: "text",
-        text: `Observability URL: ${observabilityUrl}\nOverview: ${overview}\nError Details: ${details}`,
+        text:
+          `Observability URL: ${observabilityUrl}\n` +
+          wrapUntrusted(
+            "observability failure report",
+            `Overview: ${overview}\nError Details: ${details}`,
+          ),
       },
     ],
   };

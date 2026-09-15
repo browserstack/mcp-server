@@ -5,6 +5,7 @@ import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { fetchFromBrowserStackAPI, handleMCPError } from "../lib/utils.js";
 import { trackMCP } from "../lib/instrumentation.js";
+import { resolveHashedBuildId } from "./automate-utils/resolve-hashed-build-id.js";
 
 // Tool function that fetches build insights from two APIs
 export async function fetchBuildInsightsTool(
@@ -15,10 +16,20 @@ export async function fetchBuildInsightsTool(
     const buildUrl = `https://api-automation.browserstack.com/ext/v1/builds/${args.buildId}`;
     const qualityGateUrl = `https://api-automation.browserstack.com/ext/v1/quality-gates/${args.buildId}`;
 
+    // Quality gate data is optional — a failure there should not block build insights
     const [buildData, qualityData] = await Promise.all([
       fetchFromBrowserStackAPI(buildUrl, config),
-      fetchFromBrowserStackAPI(qualityGateUrl, config),
+      fetchFromBrowserStackAPI(qualityGateUrl, config).catch((error) => {
+        logger.warn("Failed to fetch quality gate data", error);
+        return null;
+      }),
     ]);
+
+    const { hashed_id, session_type } = await resolveInsightsHashedId(
+      args.buildId,
+      buildData,
+      config,
+    );
 
     // Select useful fields for users
     const insights = {
@@ -34,10 +45,15 @@ export async function fetchBuildInsightsTool(
       unique_errors: buildData.unique_errors?.overview,
       observability_url: buildData?.observability_url,
       ci_build_url: buildData.ci_info?.build_url,
-      quality_gate_result: qualityData.quality_gate_result,
+      branch: buildData.vcs_info?.branch,
+      commit_sha: buildData.vcs_info?.sha,
+      vcs_name: buildData.vcs_info?.name,
+      quality_gate_result: qualityData?.quality_gate_result,
+      ...(hashed_id ? { hashed_id } : {}),
+      ...(session_type ? { session_type } : {}),
     };
 
-    const qualityProfiles = qualityData.quality_profiles?.map(
+    const qualityProfiles = qualityData?.quality_profiles?.map(
       (profile: any) => ({
         name: profile.name,
         result: profile.result,
@@ -64,6 +80,48 @@ export async function fetchBuildInsightsTool(
   }
 }
 
+/**
+ * The observability build payload does not carry the Automate hashed build id
+ * today. Prefer it if the API ever adds one; otherwise resolve it through any
+ * session of the build (two deterministic REST calls). Never blocks insights.
+ */
+async function resolveInsightsHashedId(
+  observabilityBuildId: string,
+  buildData: unknown,
+  config: BrowserStackConfig,
+): Promise<{ hashed_id?: string; session_type?: string }> {
+  const direct = extractHashedBuildId(buildData);
+  if (direct) {
+    return { hashed_id: direct };
+  }
+  try {
+    const resolved = await resolveHashedBuildId(observabilityBuildId, config);
+    return {
+      hashed_id: resolved.hashedBuildId,
+      session_type: resolved.sessionType,
+    };
+  } catch (error) {
+    logger.warn("Could not resolve hashed build id for build insights", error);
+    return {};
+  }
+}
+
+function extractHashedBuildId(buildData: any): string | undefined {
+  const candidates = [
+    buildData?.hashed_id,
+    buildData?.automate_hashed_id,
+    buildData?.hashedId,
+  ];
+  for (const candidate of candidates) {
+    if (
+      typeof candidate === "string" &&
+      /^[a-z0-9]{40}$/i.test(candidate.trim())
+    )
+      return candidate.trim();
+  }
+  return undefined;
+}
+
 // Registers the fetchBuildInsights tool with the MCP server
 export default function addBuildInsightsTools(
   server: McpServer,
@@ -73,7 +131,7 @@ export default function addBuildInsightsTools(
 
   tools.fetchBuildInsights = server.tool(
     "fetchBuildInsights",
-    "Fetches insights about a BrowserStack build by combining build details and quality gate results.",
+    "Fetch build details and quality gate results. Includes hashed_id and session_type for listSessions.",
     {
       buildId: z.string().describe("The build UUID of the BrowserStack build"),
     },

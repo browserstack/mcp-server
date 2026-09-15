@@ -17,7 +17,8 @@ export interface UploadValidationOptions {
  *  - File extension is in `allowedExtensions` (case-insensitive)
  *  - No path segment is a hidden dir/file (starts with `.`); blocks ~/.ssh,
  *    ~/.aws, .env, etc. even after symlink resolution
- *  - If `allowedBaseDir` is set, the canonical path must live inside it
+ *  - `allowedBaseDir` is mandatory: uploads are refused unless it is configured
+ *    (via MCP_UPLOAD_BASE_DIR), and the canonical path must live inside it
  */
 export function validateUploadPath(
   filePath: string,
@@ -71,23 +72,32 @@ export function validateUploadPath(
     );
   }
 
-  if (options.allowedBaseDir) {
-    let baseCanonical: string;
-    try {
-      baseCanonical = fs.realpathSync(path.resolve(options.allowedBaseDir));
-    } catch {
-      throw new Error(
-        `Upload rejected: configured MCP_UPLOAD_BASE_DIR does not exist (${options.allowedBaseDir}).`,
-      );
-    }
-    const baseWithSep = baseCanonical.endsWith(path.sep)
-      ? baseCanonical
-      : baseCanonical + path.sep;
-    if (canonical !== baseCanonical && !canonical.startsWith(baseWithSep)) {
-      throw new Error(
-        `Upload rejected: file must be located inside ${baseCanonical}.`,
-      );
-    }
+  // Directory containment is mandatory. Without a configured base dir there is
+  // nothing confining the (possibly absolute) path, so any readable file on the
+  // host could be streamed off it — refuse rather than fall back to "no check".
+  if (!options.allowedBaseDir) {
+    throw new Error(
+      "Upload rejected: file uploads are disabled because MCP_UPLOAD_BASE_DIR is not set. " +
+        "Set MCP_UPLOAD_BASE_DIR to a directory containing the files you want to upload, then " +
+        "restart the MCP server. Uploads are restricted to that directory.",
+    );
+  }
+
+  let baseCanonical: string;
+  try {
+    baseCanonical = fs.realpathSync(path.resolve(options.allowedBaseDir));
+  } catch {
+    throw new Error(
+      `Upload rejected: configured MCP_UPLOAD_BASE_DIR does not exist (${options.allowedBaseDir}).`,
+    );
+  }
+  const baseWithSep = baseCanonical.endsWith(path.sep)
+    ? baseCanonical
+    : baseCanonical + path.sep;
+  if (canonical !== baseCanonical && !canonical.startsWith(baseWithSep)) {
+    throw new Error(
+      `Upload rejected: file must be located inside ${baseCanonical}.`,
+    );
   }
 
   return canonical;

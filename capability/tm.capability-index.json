@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.9",
-  "build_id": "77cd522a_2026-09-16T17:32:24Z",
+  "version": "1.10",
+  "build_id": "run5merge_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
     "capabilities": [
@@ -19068,6 +19068,1230 @@
             "$response": "InternalServerError"
           }
         }
+      },
+      {
+        "name": "list_test_run_test_case_comments_v1",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/comments",
+        "mode": "read",
+        "entity": "comment",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "example": 1,
+            "description": "Numeric project id (the v1 route accepts only digits here, not PR-NNN). Resolve it from the project listing."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "pattern": "^(TR-)?[0-9]+$",
+            "example": "TR-14",
+            "description": "Test run identifier as TR-NNN (preferred), or the run's bare integer id. A pair that does not resolve to a case in this run is a 400 'TRTC not found', not a 404."
+          },
+          {
+            "name": "test_case_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "example": 4821,
+            "description": "The test case's NUMERIC id, not its TC-NNN identifier — the route only matches digits, so TC-12 never reaches the API. Take it from the `id` field of a v1 test case read or of a row in the v1 run test-case listing (the TC-NNN is that row's `identifier`)."
+          }
+        ],
+        "query": [
+          {
+            "name": "mappingId",
+            "type": "integer",
+            "minimum": 1,
+            "example": 90731,
+            "description": "Id of the test-case-in-run mapping row (one per configuration the case is mapped to). The spec marks it REQUIRED; the server accepts the call without it and resolves the pair itself, but when a case is mapped to several configurations only this picks the exact cell, and threads differ per cell. Send it when you have it. A value that does not match this run/case pair is a 400."
+          },
+          {
+            "name": "p",
+            "type": "integer",
+            "default": 1,
+            "minimum": 1,
+            "example": 1,
+            "description": "PAGE NUMBER — the parameter really is named `p`; `page=2` is ignored and you get page 1 again. Page size is fixed at 30 and cannot be changed. A page past the end does NOT error or come back empty: the server serves the LAST page again, so stop when info.next is null rather than when a page is empty. 0 or a non-number is a 400."
+          }
+        ],
+        "intent": "List the comments left on a test case inside a specific test run — use this to read the discussion or review feedback on that execution, find who said what and when, or discover a comment's id",
+        "guidance": [
+          "Needs the test-case VIEW permission (a 403 'This action is not permitted for the user' otherwise) AND a paid plan: on a free plan the call still returns HTTP 200 with {success:false, error:'This Feature is only for paid customers'} — check `success` in the body, not the status code.",
+          "Three ids in the path, two conventions: project_id and test_case_id are plain INTEGERS (a TC-NNN in the case slot never matches the route), while test_run_id takes the TR-NNN identifier or the bare integer. Get the numeric case id from the `id` field of a v1 test case read or of the v1 run test-case listing.",
+          "A run/case pair that does not resolve is a 400 with message 'TRTC not found for given testrun_id:…' — not a 404 — and an automation (Automate/Observability) run is a 400 'Can't comment on automation test'. A test case that does not exist in your group is a bare {success:false} 404.",
+          "Comments are threaded per run/case/configuration cell. If the case is mapped to more than one configuration in the run, pass mappingId to pick the cell; without it the server resolves a cell itself and you may read a different thread than the UI shows.",
+          "Newest first (by id), 30 per page, no page-size control. `info.count` is the total across pages; walk `p` until `info.next` is null — asking for a page beyond the end silently returns the last page again, so an 'empty page' loop never terminates.",
+          "Each row's `comment` is HTML with @mentions already rendered to display names; `user_id` is an OBJECT {id, full_name, email} whose `id` is the internal TM user id (null for imported comments, which show the original author's name). `edited` is true when the comment was changed after posting.",
+          "This is the only way to discover comment ids. Reading comments still works on an archived test case; posting does not.",
+          "Comments on a test case outside a run (folder-scoped) and on test plans are separate surfaces not exposed in this pass."
+        ],
+        "returns": [
+          "comments",
+          "success",
+          "info",
+          "id",
+          "user_id",
+          "group_id",
+          "project_id",
+          "parent_id",
+          "entity_id",
+          "entity_type",
+          "created_at",
+          "comment",
+          "edited",
+          "is_editable",
+          "review_status"
+        ],
+        "paginated": true,
+        "max_page_size": 30,
+        "responses": {
+          "200": {
+            "$response": "CommentsListResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "create_test_run_test_case_comment_v1",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/comments",
+        "mode": "write",
+        "entity": "comment",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "example": 1,
+            "description": "Numeric project id (the v1 route accepts only digits here, not PR-NNN). Resolve it from the project listing."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "pattern": "^(TR-)?[0-9]+$",
+            "example": "TR-14",
+            "description": "Test run identifier as TR-NNN (preferred), or the run's bare integer id. A pair that does not resolve to a case in this run is a 400 'TRTC not found', not a 404."
+          },
+          {
+            "name": "test_case_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "example": 4821,
+            "description": "The test case's NUMERIC id, not its TC-NNN identifier — the route only matches digits, so TC-12 never reaches the API. Take it from the `id` field of a v1 test case read or of a row in the v1 run test-case listing (the TC-NNN is that row's `identifier`)."
+          }
+        ],
+        "query": [
+          {
+            "name": "mappingId",
+            "type": "integer",
+            "minimum": 1,
+            "example": 90731,
+            "description": "Id of the test-case-in-run mapping row (one per configuration the case is mapped to). The spec marks it REQUIRED; the server accepts the call without it and resolves the pair itself, but when a case is mapped to several configurations only this picks the exact cell, and threads differ per cell. Send it when you have it. A value that does not match this run/case pair is a 400."
+          }
+        ],
+        "body": [
+          {
+            "name": "comment",
+            "type": "string",
+            "required": true,
+            "json_path": "/comment/comment",
+            "example": "<p>Failed on Safari 17 only — retest after the fix for TM-1234 lands.</p>",
+            "description": "Comment body as HTML (rich text), nested as {\"comment\": {\"comment\": \"...\"}}. Whitespace-only or tag-only content is a 400 'Please enter valid comment' (an <img> counts). Any other key inside the `comment` object is a 400 'Invalid JSON data'. To @mention: <span data-lexical-mention=\"true\" data-id=\"BS_USER_ID\">Name</span> with the BrowserStack user id; someone outside the group is a 403."
+          }
+        ],
+        "intent": "Post a comment on a test case within a test run — use this to leave review feedback on an execution, ask the run owner a question, record why a result was marked as it was, or @mention a colleague",
+        "guidance": [
+          "Send the body as application/json with the nested shape {\"comment\": {\"comment\": \"<p>text</p>\"}} — the field is named comment inside an object also named comment. Without a JSON content type the schema check is skipped and the call fails later with a less helpful 400.",
+          "Needs the test-case VIEW permission (not a write permission) and a paid plan. Below a paid plan the call returns HTTP 200 with {success:false, error:'This Feature is only for paid customers'} and nothing is posted — check `success` in the body.",
+          "SIDE EFFECT: the run owner is notified of every new comment, and every @mentioned user gets a mention alert, immediately and outside this API. The author never alerts themselves. Confirm wording with the user before posting on their behalf.",
+          "Cannot post on an automation run (400 'Can't comment on automation test') or on an ARCHIVED test case (bare {success:false} 400 — reading still works). A run/case pair that does not resolve is a 400 'TRTC not found for given testrun_id:…', not a 404.",
+          "If the case is mapped to several configurations in the run, pass mappingId so the comment lands on the intended cell; each cell has its own thread and the listing for a different mappingId will not show it.",
+          "@mentions must be the span markup with data-id set to the person's BrowserStack user id; a mention with no id is a 403 'Missing User Id in comment', one for a user not in this group is a 403 'User does not belong to this project', and either fails the whole post. Plain '@name' text mentions nobody.",
+          "Link markup in the HTML is normalised server-side and mention spans are rewritten, so the stored `comment` returned in the response can differ from what you sent; use the returned `id` for any follow-up.",
+          "Success is HTTP 200 (not 201) with the new comment under data.comment. Recoverable: the author can edit or delete the comment afterwards in the product (delete hides it rather than destroying it) — those operations are not part of this pass.",
+          "Only the in-run variant is published here; commenting on a test case outside a run, or on a test plan, is a separate surface not exposed in this pass."
+        ],
+        "returns": [
+          "data",
+          "success",
+          "comment",
+          "id",
+          "user_id",
+          "group_id",
+          "project_id",
+          "parent_id",
+          "entity_id",
+          "entity_type",
+          "created_at",
+          "comment",
+          "edited",
+          "is_editable",
+          "review_status"
+        ],
+        "responses": {
+          "200": {
+            "$response": "CommentResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "export_test_run_csv_v1",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/download",
+        "mode": "write",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "example": 1,
+            "description": "Numeric project id. This older route does not accept the PR-NNN form: a PR- prefixed value skips project resolution and the call fails with a 500 rather than a clear 404. Take the integer id from the projects listing."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^(TR-)?[0-9]+$",
+            "description": "Run identifier TR-NNN, or the plain integer run id. Anything else does not match the route. An identifier that resolves to no run in this project is a 404 'Test Run ID is invalid'."
+          }
+        ],
+        "body": [
+          {
+            "name": "file_type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "csv"
+            ],
+            "example": "csv",
+            "description": "Export format. Only 'csv' is accepted; any other value is a 422 'Only CSV file type is supported.' before anything is queued."
+          },
+          {
+            "name": "required",
+            "type": "object",
+            "description": "Optional column selection keyed by entity: {test_run_test_case:{fields:[..]}, test_run:{fields:[..]}, test_result:{fields:[..]}}. Omit to export EVERY supported column. `fields` may be an array or comma-separated string; 'all' expands to every supported column. Unknown column names are NOT rejected: the call still returns 200 and the export fails later on the realtime channel.",
+            "fields": [
+              {
+                "name": "test_run_test_case",
+                "type": "object",
+                "description": "{fields:[...]} — supported: id, title, priority, test_case_status, owner, folder_id, folder_path, case_type, automation_status, description, preconditions, template, steps, issues, tags, created_at, created_by, updated_at, updated_by, attachments, result_status, assignee, configurations, dataset_values, project, estimated_duration_seconds."
+              },
+              {
+                "name": "test_run",
+                "type": "object",
+                "description": "{fields:[...]} — supported: id, title, created_at, created_by, state, tags, owner, type, updated_by, updated_at, requirements."
+              },
+              {
+                "name": "test_result",
+                "type": "object",
+                "description": "{fields:[...]} — supported: attachments, defects, updated_at, updated_by, description, time_elapsed."
+              }
+            ]
+          }
+        ],
+        "intent": "Start a CSV export of a test run's cases and their latest results — use this when the user wants the run's contents as a downloadable spreadsheet file rather than data returned inline",
+        "guidance": [
+          "The response carries no file and no download link. It only confirms that a background job was queued and returns a `channel` uuid. The CSV is built asynchronously, stored, and its time-limited download link is pushed to the requesting user's web session over a realtime channel; that push carries the same uuid as `id` so the UI can match it. Nothing in this HTTP API returns the link afterwards, so tell the user the file will appear in their Test Management browser session (download notification) rather than promising to hand it back.",
+          "A 200 means 'queued', not 'exported'. Failures inside the job (bad column names, upstream errors) surface only as a failure message on that realtime channel, never as an HTTP error, so this call cannot be polled for completion.",
+          "The whole run is exported: no filter or search criteria are honoured, and the export is capped at 20,000 rows fetched 300 at a time — a larger run is silently truncated at 20,000 rows.",
+          "Column selection defaults to ALL supported columns when `required` is omitted. Each test-case step after the first becomes its own extra row under the case, so row counts in the file exceed the case count.",
+          "This is a write only in the sense that it creates a stored export artifact; it does not change the run. It carries no run-specific permission check in this service (the action is absent from the permissions map), so any user who can reach the project can trigger it; plan or product-access gates still apply as a 403.",
+          "Works for automation runs as well as manual ones (the run lookup deliberately ignores run type). Closed runs export too.",
+          "Unlike the newer run endpoints, project_id must be the plain integer; the run may be given as TR-14 or its integer id."
+        ],
+        "returns": [
+          "channel",
+          "success"
+        ],
+        "responses": {
+          "200": {
+            "$response": "DownloadReportResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "description": "Project not found, or the test run identifier resolves to no run in this project ('Test Run ID is invalid. Please enter valid Test Run ID and try again' / 'Test run not found.').",
+            "schema": {
+              "$schema": "ErrorResponse"
+            }
+          },
+          "422": {
+            "description": "file_type was not 'csv': {success:false, message:'Only CSV file type is supported.'}",
+            "schema": {
+              "$schema": "ErrorResponse"
+            }
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "get_test_run_progress_v1",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/progress",
+        "mode": "read",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "example": 1,
+            "description": "Numeric project id. This older route does not accept the PR-NNN form: a PR- prefixed value skips project resolution and the call fails with a 500 rather than a clear 404. Take the integer id from the projects listing."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^(TR-)?[0-9]+$",
+            "description": "Run identifier TR-NNN, or the plain integer run id. Anything else does not match the route. An identifier that resolves to no run in this project is a 404 'Test Run ID is invalid'."
+          }
+        ],
+        "query": [
+          {
+            "name": "configuration_id",
+            "type": "integer",
+            "minimum": 1,
+            "example": 101,
+            "description": "Narrow to ONE configuration of the run. Changes the response shape: with it you get a single `overall_progress_by_status_id` breakdown (an empty object when there is no data); without it you get a paginated `configurations` array, each row carrying its own breakdown. Configuration ids come from the run detail's `configurations` list."
+          },
+          {
+            "name": "p",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number for the configurations list, and the parameter really is named `p` (`page` is ignored). Only meaningful without configuration_id. 0, negative or non-numeric is a 400 'Invalid Params'. Page size is fixed at 30 and cannot be changed — there is no per-page parameter on this endpoint."
+          }
+        ],
+        "intent": "Get pass/fail/untested progress of a test run broken down by result status — per configuration (browser/device) across the whole run, or for one configuration — to answer 'how far along is this run on each configuration?'",
+        "guidance": [
+          "Two response shapes from one endpoint, chosen by configuration_id. Without it: {success, configurations:[{id, name, ..., overall_progress_by_status_id}], info}. With it: {success, overall_progress_by_status_id}. Read the shape you asked for.",
+          "overall_progress_by_status_id is a map keyed by result-status id (as a string), each value {count, result_status:{id, field_value, internal_name, field_name, colour}}. Status ids are project-specific — use result_status.internal_name (e.g. 'passed') to compare across projects, not the numeric key.",
+          "A configuration row without any executed results may carry no overall_progress_by_status_id key at all, and the single-configuration form returns {} when there is no breakdown. Treat a missing or empty breakdown as 'nothing recorded', not as an error.",
+          "Paging: pass `p`; the page is always 30 configurations and there is no way to ask for more per page. When `p` is omitted no paging hints are sent upstream and the default page size is decided by the backing service, so send p=1 explicitly when you intend to walk pages. `info` is the backing service's paging block, passed through unchanged.",
+          "For a run-wide total (not per configuration) use the single-run detail instead — its overall_progress already aggregates across configurations.",
+          "Any upstream failure inside the calculation is reported as a 500 {success:false, message:'Failed to calculate configuration progress: ...'}, not as a 404 or 400. An unknown run identifier is still a 404 because the run is resolved before the calculation.",
+          "No run-specific permission is checked in this service (the action is absent from the permissions map); it is also one of the endpoints reachable with a public share-link token for a run."
+        ],
+        "returns": [
+          "success",
+          "configurations",
+          "info",
+          "overall_progress_by_status_id",
+          "count",
+          "result_status"
+        ],
+        "paginated": true,
+        "max_page_size": 30,
+        "responses": {
+          "200": {
+            "$response": "TestRunConfigurationProgressResponse"
+          },
+          "400": {
+            "description": "`p` was 0, negative or non-numeric: {success:false, error:'Invalid Params'}",
+            "schema": {
+              "$schema": "ErrorResponse"
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "description": "Project not found, or the test run identifier resolves to no run in this project.",
+            "schema": {
+              "$schema": "ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Progress calculation failed (including upstream errors): {success:false, message:'Failed to calculate configuration progress: <reason>'}",
+            "schema": {
+              "$schema": "ErrorResponse"
+            }
+          }
+        }
+      },
+      {
+        "name": "generate_test_case_automation_v1",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/lcnc",
+        "mode": "write",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "Integer project id (the v1 route only matches digits; a PR-NNN identifier never reaches the API)."
+          },
+          {
+            "name": "test_case_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "Integer test case id (not TC-NNN). The case is loaded from TestHub first; an unknown id is a 404 before anything is submitted."
+          }
+        ],
+        "body": [
+          {
+            "name": "version",
+            "type": "string",
+            "values": [
+              "v1",
+              "v2"
+            ],
+            "default": "v1",
+            "description": "Payload flavour forwarded to the automation service. Anything other than 'v2' takes the v1 path and forwards `steps`; 'v2' forwards `test_case_details` + `tags` (+ preTestConfig) instead and REQUIRES test_case_details — with version=v2 and no test_case_details the request 500s."
+          },
+          {
+            "name": "test_name",
+            "type": "string",
+            "example": "Login with valid credentials",
+            "description": "Display name for the generated automation test. Forwarded verbatim; not validated here."
+          },
+          {
+            "name": "base_url",
+            "type": "string",
+            "example": "https://staging.example.com",
+            "description": "URL the generated automation starts from. Forwarded verbatim (also lifted into batch defaults on the bulk-pipeline path); not validated here."
+          },
+          {
+            "name": "credentials",
+            "type": "string",
+            "description": "Login credentials the automation may use, forwarded verbatim to the automation service. Not stored in Test Management."
+          },
+          {
+            "name": "local_enabled",
+            "type": "boolean",
+            "default": false,
+            "description": "Run against a BrowserStack Local tunnel. Defaults to false when omitted."
+          },
+          {
+            "name": "lcnc_link",
+            "type": "string",
+            "description": "Existing automation build link (the case's metadata.lcnc_build_map link) when RE-automating. Its mere presence switches the submission from mode 'new' to 'reautomate'; omit it for a first-time automation."
+          },
+          {
+            "name": "steps",
+            "type": "array",
+            "description": "v1 flow only: the test steps as plain strings. Ignored when version=v2."
+          },
+          {
+            "name": "test_case_details",
+            "type": "object",
+            "fields": [
+              {
+                "name": "name",
+                "type": "string"
+              },
+              {
+                "name": "identifier",
+                "type": "string"
+              },
+              {
+                "name": "description",
+                "type": "string"
+              },
+              {
+                "name": "preconditions",
+                "type": "string"
+              },
+              {
+                "name": "test_case_steps",
+                "type": "array"
+              }
+            ],
+            "description": "v2 flow only: {name, identifier, description, preconditions, test_case_steps[]} of the case, echoed to the automation service (it does not re-read the case). Required when version=v2 (missing → 500); ignored otherwise."
+          },
+          {
+            "name": "feedback",
+            "type": "string",
+            "description": "v2 flow only: free-text feedback on a previous generation, forwarded inside test_case_details."
+          },
+          {
+            "name": "score",
+            "type": "number",
+            "description": "v2 flow only: rating of a previous generation, forwarded inside test_case_details."
+          },
+          {
+            "name": "tags",
+            "type": "array",
+            "description": "v2 flow only: tags forwarded with the payload. Elements are strings."
+          },
+          {
+            "name": "preTestConfig",
+            "type": "object",
+            "description": "v2 flow only: pre-test configuration object (setup steps/profile) forwarded verbatim when present."
+          },
+          {
+            "name": "test_case_folder_id",
+            "type": "integer",
+            "description": "Folder id of the case. Only read on the bulk-pipeline submission path (environment flag); harmless otherwise."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "description": "Folder id of the case; when sent the folder is loaded for an ownership check and passed to the case lookup. Optional; an unknown folder fails the call."
+          }
+        ],
+        "intent": "Kick off no-code (LCNC / Low Code Automation) generation of an automated test for ONE test case — use this when the user wants a manual case automated or re-automated; it queues work in the automation service and returns immediately",
+        "guidance": [
+          "Asynchronous and non-blocking: a 200 means the request was handed to the automation service, not that a test exists. Completion arrives later via a webhook that stamps the case's automation metadata (lcnc status 'done' + build link); re-read the case to see it.",
+          "The response is a WRAPPER {status, body}: `status` is the automation service's own HTTP code and `body` is its response as a JSON-ENCODED STRING you must parse — except the 'already in progress' short-circuit, where body is a plain object. Check body.status/body.message: a 4xx inside the wrapper (still HTTP 200 outside) means nothing was queued.",
+          "One generation at a time: while the case's automation status is 'in_progress' every call returns 200 with body.message 'Test case automation already in progress.' and does nothing. The in-progress lock is only set when the upstream accepted the request, and a worker clears it after 1 hour even if no webhook came back — so a stuck case becomes resubmittable after an hour.",
+          "No field is validated in Test Management: the body is assembled from whatever you send and forwarded. Missing test_name/base_url/steps are not rejected here; the automation service decides. Only version=v2 without test_case_details fails locally (500).",
+          "Re-automation is signalled ONLY by lcnc_link being present. To generate a fresh automation for a case that already has one, omit lcnc_link.",
+          "Groups flagged for regional data restriction (GRR) are refused with 451 {success:false, error:'grr_restricted'} unless the group's region is allow-listed (currently only 'in').",
+          "There is no RBAC permission on this action beyond project access and authentication — any project member can trigger generation.",
+          "Recoverability: the only thing changed in Test Management is the case's automation metadata (status/link), which the next generation or the expiry worker overwrites; the case itself is untouched."
+        ],
+        "returns": [
+          "status",
+          "body"
+        ],
+        "responses": {
+          "200": {
+            "$response": "LcncCreateWrapperResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          },
+          "451": {
+            "description": "Group is GRR-restricted and its region is not allow-listed for automation generation.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": false
+                },
+                "message": {
+                  "type": "string",
+                  "example": "This action is restricted for GRR enabled users"
+                },
+                "error": {
+                  "type": "string",
+                  "example": "grr_restricted"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_binned_test_cases_v1",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/test-cases/bin",
+        "mode": "read",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "Integer project id (the v1 route only matches digits; a PR-NNN identifier never reaches the API)."
+          }
+        ],
+        "query": [
+          {
+            "name": "p",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number. `page` is accepted as an alias and WINS if both are sent. Only `p` is validated (non-positive / non-numeric → 400 'Invalid Params'); a bad `page` is forwarded as-is."
+          },
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 1,
+            "description": "Rows per page, forwarded unchanged to the backing service, which owns the default and the ceiling (its client docs say default 25, max 100; not enforced in this codebase — see open questions). Ask for what you need and trust metadata.page_size for what you got."
+          },
+          {
+            "name": "search",
+            "type": "string",
+            "description": "Free-text match on test case title or identifier."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "description": "Only cases that lived in this folder when they were binned."
+          },
+          {
+            "name": "moved_to_bin_by",
+            "type": "string",
+            "description": "Filter by who moved the case to the bin, as BrowserStack user id(s), comma-separated. `updated_by` is an accepted alias (moved_to_bin_by wins). These are browserstack_user_ids, NOT the internal user ids the review endpoints take."
+          },
+          {
+            "name": "owner",
+            "type": "string",
+            "description": "Filter by case owner as BrowserStack user id(s), comma-separated."
+          },
+          {
+            "name": "date_from",
+            "type": "string",
+            "example": "2026-09-01",
+            "description": "Binned on or after this ISO 8601 date."
+          },
+          {
+            "name": "date_to",
+            "type": "string",
+            "example": "2026-09-16",
+            "description": "Binned on or before this ISO 8601 date."
+          },
+          {
+            "name": "sort_by",
+            "type": "string",
+            "values": [
+              "trashed_at",
+              "updated_at",
+              "name",
+              "identifier"
+            ],
+            "default": "trashed_at",
+            "description": "Sort column; default is when the case was binned."
+          },
+          {
+            "name": "sort_order",
+            "type": "string",
+            "values": [
+              "ASC",
+              "DESC"
+            ],
+            "default": "DESC",
+            "description": "Sort direction; upper-case only."
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "description": "Filter by status as numeric status ID(s), comma-separated — despite the UI-style name this takes ids, not display values (resolve them via get_system_field_values_v1). `status_id` is an accepted alias (status wins)."
+          },
+          {
+            "name": "priority",
+            "type": "string",
+            "description": "Filter by priority as numeric priority ID(s), comma-separated, not display values. `priority_id` is an accepted alias (priority wins)."
+          },
+          {
+            "name": "type",
+            "type": "string",
+            "description": "Filter by case type as numeric category ID(s), comma-separated, not display values. `category_id` is an accepted alias (type wins)."
+          },
+          {
+            "name": "automation_state",
+            "type": "string",
+            "description": "Filter by automation state as numeric ID(s), comma-separated. `automation_state_id` is an accepted alias (automation_state wins)."
+          },
+          {
+            "name": "tags",
+            "type": "string",
+            "description": "Filter by tag name(s), comma-separated."
+          }
+        ],
+        "intent": "List the test cases sitting in a project's recycle bin (moved to bin / soft-deleted, awaiting purge) with who binned them and when — use this to find a case to restore or inspect; for just 'how many are in the bin' use count_binned_test_cases_v1 instead",
+        "guidance": [
+          "Feature-gated: when the project/user lacks the Move to Bin or New Project Settings flags the call is 403 {success:false, error:'... is not enabled for this user'} — that is a feature gap, not a permission problem. Needs the tc_view permission under RBAC.",
+          "Paging metadata is under `metadata` {total, page, page_size, total_pages}, NOT the `info` {count, next, prev} envelope other v1 listings use — there is no `next`; stop when page >= total_pages.",
+          "Rows carry the integer `id`, the TC-NNN `identifier`, `trashed_at`, `days_remaining` until automatic purge, and `folder_name`/`folder_path` of where the case was. `updated_by` and `owner` are raw BrowserStack user ids; the resolved people are in `updator_details` (who binned it) and `owner_details` {id, browserstack_user_id, full_name, email}.",
+          "priority and status come back as small objects {id, field_value, internal_name} (status also has colour), not strings.",
+          "Only the filters listed exist. Binned cases are excluded from every other test case listing and search, so this is the only way to see them.",
+          "A backing-service failure is rendered as {success:false} with that service's status and no message."
+        ],
+        "returns": [
+          "success",
+          "test_cases",
+          "metadata",
+          "id",
+          "identifier",
+          "name",
+          "priority",
+          "status",
+          "owner",
+          "owner_details",
+          "tags",
+          "issues",
+          "folder_name",
+          "folder_path",
+          "updated_by",
+          "updator_details",
+          "trashed_at",
+          "days_remaining",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "paginated": true,
+        "responses": {
+          "200": {
+            "$response": "BinnedTestCasesListResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "count_binned_test_cases_v1",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/test-cases/bin-count",
+        "mode": "read",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "Integer project id (the v1 route only matches digits; a PR-NNN identifier never reaches the API)."
+          }
+        ],
+        "intent": "Return just the number of test cases currently in a project's recycle bin — the cheap way to answer 'how many binned/deleted cases are there?' without pulling any rows into context (use list_binned_test_cases_v1 when you need the cases themselves)",
+        "guidance": [
+          "Same feature gate as the bin listing: 403 {success:false, error:'... is not enabled for this user'} when Move to Bin / New Project Settings are off for this user. Needs tc_view under RBAC.",
+          "Counts the whole bin; it takes no filters. For a filtered count, call the listing with the filter and read metadata.total.",
+          "A backing-service failure is {success:false} with that service's status and no count."
+        ],
+        "returns": [
+          "success",
+          "count"
+        ],
+        "responses": {
+          "200": {
+            "description": "Number of test cases in the bin.",
+            "schema": {
+              "type": "object",
+              "required": [
+                "success",
+                "count"
+              ],
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "count": {
+                  "type": "integer",
+                  "example": 12
+                }
+              }
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "submit_test_cases_for_review_v1",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/test-cases/bulk-review",
+        "mode": "write",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "Integer project id (the v1 route only matches digits; a PR-NNN identifier never reaches the API)."
+          }
+        ],
+        "body": [
+          {
+            "name": "ids",
+            "type": "array",
+            "json_path": "/test_case/ids",
+            "example": [
+              1201,
+              1202
+            ],
+            "description": "Integer ids of the test cases to send for review. A single case is just a one-element array. Ignored when select_all is true (the set then comes from q/folder_id). Send ONE of ids, select_all or folders; a selection that resolves to zero cases is a bare 400 {success:false} with no message."
+          },
+          {
+            "name": "select_all",
+            "type": "boolean",
+            "json_path": "/test_case/select_all",
+            "default": false,
+            "description": "Apply to every case in scope (the top-level q filter plus folder_id, or the whole project when neither is sent) minus de_selected_ids. Compared as the string 'true'. Scope is resolved by a count first, and a count above 100 flips the call to the async path."
+          },
+          {
+            "name": "de_selected_ids",
+            "type": "array",
+            "json_path": "/test_case/de_selected_ids",
+            "description": "Integer ids to exclude. With select_all it is subtracted from the resolved scope; with an explicit ids list it is subtracted from ids."
+          },
+          {
+            "name": "folders",
+            "type": "object",
+            "json_path": "/test_case/folders",
+            "fields": [
+              {
+                "name": "<folder_id>",
+                "type": "object",
+                "description": "One entry per folder id: {select_all: bool, ids: [int], de_selected_ids: [int]}. Unknown keys inside an entry are dropped."
+              }
+            ],
+            "description": "Cross-folder selection keyed by folder id, each value {select_all, ids[], de_selected_ids[]}; the union of all entries is the target. Takes precedence over ids/select_all when present. An empty map selects nothing (400), never the whole project."
+          },
+          {
+            "name": "q",
+            "type": "object",
+            "description": "SCOPE for select_all — the same filter object the test-case search takes (see bulk_archive_test_cases_by_project / search_test_cases_by_folder_v1), sent as a SIBLING of test_case, not inside it. Only read when select_all is true. An unrecognised key is SILENTLY DROPPED, which widens the scope to the whole folder/project — verify the count before sending."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "description": "Folder to scope a select_all selection to (merged into q as folder_id, overriding any q.folder_id). With explicit ids it only makes the folder be loaded for an ownership check; an unknown folder id fails the call."
+          },
+          {
+            "name": "include_subfolders_tc",
+            "type": "boolean",
+            "description": "Extend a folder-scoped select_all into subfolders of folder_id. Compared as the string 'true'."
+          },
+          {
+            "name": "reviewers",
+            "type": "array",
+            "json_path": "/test_case/reviewers",
+            "example": [
+              4821
+            ],
+            "description": "INTERNAL Test Management user ids of the reviewers (the `id` from search_project_users / get_project_users_v2_v1 — not browserstack_user_id, not email). Replaces the current reviewer set. Each id must belong to the caller's account (else 422 reviewer_not_found) and, when the project keeps an allowed-reviewer list, be on it (else 422). Omit to change status only. Elements are integers."
+          },
+          {
+            "name": "review_status",
+            "type": "string",
+            "json_path": "/test_case/review_status",
+            "values": [
+              "in_review"
+            ],
+            "example": "in_review",
+            "description": "The review state to move the selected cases into. Send 'in_review' to submit for review; it is forwarded to the backing store as a replace. Verdicts (approved/rejected/changes_requested) are NOT applied here — use apply_test_case_review_verdict_v1."
+          },
+          {
+            "name": "comment",
+            "type": "string",
+            "json_path": "/test_case/comment",
+            "description": "Note to the reviewers. It is only carried in the reviewer notification when reviewers are given — it is NOT stored as a comment on the cases."
+          },
+          {
+            "name": "reauth_token",
+            "type": "string",
+            "json_path": "/test_case/reauth_token",
+            "format": "uuid",
+            "description": "Single-use e-signature token from the Part 11 re-authentication step (the caller re-enters email + password at the reauth endpoint, which is not in this index, and gets back reauth_token). Valid 5 minutes, consumed atomically on first use — a retry needs a fresh token. Only checked when the project's Part 11 setting for this action is on."
+          }
+        ],
+        "intent": "Send one or many test cases for review — set them to 'in review' and assign the reviewers who must approve them; use it for a single case (ids with one element) or a whole selection/folder at once",
+        "guidance": [
+          "Needs the project setting review_approve ON (else 400 {errors:'Please enable review approve feature ...'}) and a Team or Pro plan (else 422 {success:false, message:'Feature not available'}). No RBAC permission entry exists for this action, so any authenticated project member with those two passes.",
+          "Part 11 e-signature: when the project setting part_11_reauth_send_for_review is 'true', the caller must first re-authenticate (email + password at the reauth endpoint, not in this index) and pass the returned reauth_token; missing/expired/reused → 401 {success:false, error_code:'reauth_required'} and the block is written to the audit log.",
+          "Selections over 100 cases run asynchronously: the response is {success:true, async:true, unique_id} with NO testCases — the change lands in the background and you re-read the cases to confirm. Under the threshold the updated cases are returned inline.",
+          "Reviewer ids are the internal Test Management user id; the same people are addressed by browserstack_user_id in the bin listing filters, so do not carry ids across. A reviewer who is not on the project's allowed-reviewer list is refused (422) for the whole call — nothing is partially applied.",
+          "Cases locked by another bulk operation are refused with 400 {success:false, message:'TestCases in progress with another operation'}; retry after it finishes.",
+          "Every other failure collapses to 400 {errors:'An error occurred during bulk review'} — including backing-service errors — so a 400 is not necessarily a bad request.",
+          "Recoverable: review state is a tracked status; a reviewer verdict or a later edit moves the case on, and each case keeps version history.",
+          "Sending reviewers notifies them (in-app alert / email) immediately."
+        ],
+        "returns": [
+          "success",
+          "testCases",
+          "async",
+          "unique_id",
+          "id",
+          "identifier",
+          "name",
+          "review_status",
+          "reviewers",
+          "review_sent_date",
+          "owner",
+          "status",
+          "priority",
+          "test_case_folder_id"
+        ],
+        "responses": {
+          "200": {
+            "$response": "TestCaseReviewOutcomeResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "ReauthRequired"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "apply_test_case_review_verdict_v1",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/test-cases/bulk-approve",
+        "mode": "write",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "Integer project id (the v1 route only matches digits; a PR-NNN identifier never reaches the API)."
+          }
+        ],
+        "body": [
+          {
+            "name": "ids",
+            "type": "array",
+            "json_path": "/test_case/ids",
+            "example": [
+              1201,
+              1202
+            ],
+            "description": "Integer ids of the test cases to give a verdict on. A single case is just a one-element array. Ignored when select_all is true (the set then comes from q/folder_id). Send ONE of ids, select_all or folders; a selection that resolves to zero cases is a bare 400 {success:false} with no message."
+          },
+          {
+            "name": "select_all",
+            "type": "boolean",
+            "json_path": "/test_case/select_all",
+            "default": false,
+            "description": "Apply to every case in scope (the top-level q filter plus folder_id, or the whole project when neither is sent) minus de_selected_ids. Compared as the string 'true'. Scope is resolved by a count first, and a count above 100 flips the call to the async path."
+          },
+          {
+            "name": "de_selected_ids",
+            "type": "array",
+            "json_path": "/test_case/de_selected_ids",
+            "description": "Integer ids to exclude. With select_all it is subtracted from the resolved scope; with an explicit ids list it is subtracted from ids."
+          },
+          {
+            "name": "folders",
+            "type": "object",
+            "json_path": "/test_case/folders",
+            "fields": [
+              {
+                "name": "<folder_id>",
+                "type": "object",
+                "description": "One entry per folder id: {select_all: bool, ids: [int], de_selected_ids: [int]}. Unknown keys inside an entry are dropped."
+              }
+            ],
+            "description": "Cross-folder selection keyed by folder id, each value {select_all, ids[], de_selected_ids[]}; the union of all entries is the target. Takes precedence over ids/select_all when present. An empty map selects nothing (400), never the whole project."
+          },
+          {
+            "name": "q",
+            "type": "object",
+            "description": "SCOPE for select_all — the same filter object the test-case search takes (see bulk_archive_test_cases_by_project / search_test_cases_by_folder_v1), sent as a SIBLING of test_case, not inside it. Only read when select_all is true. An unrecognised key is SILENTLY DROPPED, which widens the scope to the whole folder/project — verify the count before sending."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "description": "Folder to scope a select_all selection to (merged into q as folder_id, overriding any q.folder_id). With explicit ids it only makes the folder be loaded for an ownership check; an unknown folder id fails the call."
+          },
+          {
+            "name": "include_subfolders_tc",
+            "type": "boolean",
+            "description": "Extend a folder-scoped select_all into subfolders of folder_id. Compared as the string 'true'."
+          },
+          {
+            "name": "review_status",
+            "type": "string",
+            "required": true,
+            "json_path": "/test_case/review_status",
+            "values": [
+              "approved",
+              "rejected",
+              "changes_requested"
+            ],
+            "example": "approved",
+            "description": "The verdict: 'approved' passes the case, 'rejected' fails it, 'changes_requested' sends it back to the author for edits. Applied to every selected case; there is no per-case verdict in one call."
+          },
+          {
+            "name": "comment",
+            "type": "string",
+            "json_path": "/test_case/comment",
+            "description": "Review comment. Unlike the submit-for-review comment this one IS stored: one comment is created on each selected case, tagged with the verdict, and echoed back under `comment`. Strongly recommended for rejected/changes_requested."
+          },
+          {
+            "name": "notify",
+            "type": "boolean",
+            "json_path": "/test_case/notify",
+            "default": false,
+            "description": "Compared as the string 'true'. Also email the case owners the verdict (in-app personal alerts go out regardless)."
+          },
+          {
+            "name": "reauth_token",
+            "type": "string",
+            "json_path": "/test_case/reauth_token",
+            "format": "uuid",
+            "description": "Single-use e-signature token from the Part 11 re-authentication step (the caller re-enters email + password at the reauth endpoint, which is not in this index, and gets back reauth_token). Valid 5 minutes, consumed atomically on first use — a retry needs a fresh token. Only checked when the project's Part 11 setting for this action is on."
+          }
+        ],
+        "intent": "Record a reviewer's verdict on test cases that are under review — approve them, reject them, or request changes — for one case or a whole selection in a single call",
+        "guidance": [
+          "Every selected case must currently be 'in_review'. If any is not (the author edited it and it dropped back to pending, or it was already decided) the WHOLE call is refused with 422 {success:false, error_code:'invalid_review_state'} and nothing is applied — re-read the cases and resubmit only the ones still under review.",
+          "Needs project setting review_approve ON (else 400 {errors:'Please enable review approve feature ...'}) and a Team or Pro plan (else 422 'Feature not available'). No RBAC permission entry exists for this action beyond project access.",
+          "Part 11 e-signature: when project setting part_11_reauth is 'true', every verdict value requires a fresh reauth_token from the re-authentication step (not in this index); missing/expired/reused → 401 {success:false, error_code:'reauth_required'}.",
+          "Selections over 100 cases are applied asynchronously: {success:true, async:true, unique_id} with no testCases; re-read to confirm. Below that the updated cases come back inline, plus `comment` (the created comment objects) when a comment was sent.",
+          "Cases locked by another bulk operation → 400 {success:false, message:'TestCases in progress with another operation'}.",
+          "When the backing store rejects the verdict (e.g. the audit-log write fails) its status is passed through with {success:false, error_code, errors}; the verdict was not applied. Any other failure is a generic 400 {success:false, errors:'An error occurred during bulk approval'}.",
+          "Recoverable: a verdict is a tracked review status — the author can edit and resubmit, a reviewer can decide again, and every case keeps version history. Nothing is deleted.",
+          "Side effects outside the data: owners get an in-app alert for every verdict, an email too when notify is 'true', and Part 11 projects write an audit-log row."
+        ],
+        "returns": [
+          "success",
+          "testCases",
+          "comment",
+          "async",
+          "unique_id",
+          "id",
+          "identifier",
+          "name",
+          "review_status",
+          "reviewers",
+          "owner",
+          "status",
+          "priority",
+          "test_case_folder_id"
+        ],
+        "responses": {
+          "200": {
+            "$response": "TestCaseReviewOutcomeResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "ReauthRequired"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "description": "Verdict refused: a selected case is no longer under review (error_code invalid_review_state), or the account plan lacks the feature.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": false
+                },
+                "error_code": {
+                  "type": "string",
+                  "example": "invalid_review_state"
+                },
+                "error": {
+                  "type": "string",
+                  "example": "Test case in Pending state cannot be approved. It was modified and moved back to Pending — refresh to review the latest changes."
+                },
+                "errors": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "Present instead of error/errors on the plan gate ('Feature not available')."
+                }
+              }
+            }
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "validate_bdd_export_selection_v1",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/test-cases/exports/bdd/validate",
+        "mode": "read",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "Integer project id (the v1 route only matches digits; a PR-NNN identifier never reaches the API)."
+          }
+        ],
+        "body": [
+          {
+            "name": "ids",
+            "type": "array",
+            "json_path": "/test_case/ids",
+            "example": [
+              1201,
+              1202
+            ],
+            "description": "Integer ids of the cases you intend to export. Non-BDD cases among them are silently skipped by the validator. Send ONE of ids, select_all or folders."
+          },
+          {
+            "name": "select_all",
+            "type": "boolean",
+            "json_path": "/test_case/select_all",
+            "default": false,
+            "description": "Validate every BDD case in scope (q + folder_id, or the whole project) minus de_selected_ids. Compared as the string 'true'."
+          },
+          {
+            "name": "de_selected_ids",
+            "type": "array",
+            "json_path": "/test_case/de_selected_ids",
+            "description": "Integer ids to exclude from a select_all scope."
+          },
+          {
+            "name": "folders",
+            "type": "object",
+            "json_path": "/test_case/folders",
+            "fields": [
+              {
+                "name": "<folder_id>",
+                "type": "object",
+                "description": "{select_all: bool, ids: [int], de_selected_ids: [int]} for that folder."
+              }
+            ],
+            "description": "Cross-folder selection keyed by folder id; the union is validated. Takes precedence over ids/select_all. An empty map validates nothing (400 'No BDD Test Case(s) selected.')."
+          },
+          {
+            "name": "q",
+            "type": "object",
+            "description": "Filter scope for select_all — same filter object as the test-case search, sent as a sibling of test_case. Only read when select_all is true; an unknown key is silently dropped (scope widens)."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "description": "Folder to scope a select_all validation to. Ignored for explicit ids."
+          }
+        ],
+        "intent": "Check, before exporting test cases to a BDD feature file, that every selected BDD case shares the same Feature and Background text so they can be merged into one file — returns a pass/fail verdict and message, nothing is exported or changed",
+        "guidance": [
+          "Pure check despite the POST: it only reads the selected cases' steps and compares them; no export job, file or record is created. Run it before the real export when the user wants a single merged feature file.",
+          "Pass and fail share ONE body shape {success, message}: HTTP 200 + success:true on pass, HTTP 400 + success:false on any failure. Read `message` to tell the failures apart — 'No BDD Test Case(s) selected.' means the selection contained no BDD-template cases at all.",
+          "Hard cap: a selection resolving to more than 300 BDD cases is refused with 400, but with the MISLEADING message 'Validation failed. Selected test cases belong to different features or backgrounds.' — the same text as a genuine mismatch. Check the selection size yourself before trusting that message.",
+          "Only BDD-template cases are considered: text/step cases in the selection are filtered out silently and a pass says nothing about them.",
+          "Comparison is exact after trimming whitespace, on the Feature and Background of each case's FIRST step only.",
+          "No RBAC permission is attached to this action; project access and authentication suffice."
+        ],
+        "returns": [
+          "success",
+          "message"
+        ],
+        "responses": {
+          "200": {
+            "$response": "BddExportValidationResponse"
+          },
+          "400": {
+            "$response": "BddExportValidationResponse"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
       }
     ],
     "schemas": {
@@ -23797,6 +25021,227 @@
             }
           }
         }
+      },
+      "Comment": {
+        "type": "object",
+        "description": "One comment as the v1 serializer emits it — a flat object (the published spec wraps it under an extra `comment` key that the server does not send).",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Comment id; the handle for later edit/delete.",
+            "example": 3121
+          },
+          "user_id": {
+            "type": "object",
+            "description": "The AUTHOR, despite the name. `id` is the internal TM user id (not the BrowserStack user id) and is null for comments imported from another tool, whose original author name is carried in full_name.",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "nullable": true
+              },
+              "full_name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          },
+          "group_id": {
+            "type": "integer",
+            "description": "Internal TM group id of the owning workspace."
+          },
+          "project_id": {
+            "type": "integer"
+          },
+          "parent_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Always null through this path; replies are not threaded."
+          },
+          "entity_id": {
+            "type": "integer",
+            "description": "Id of the run/case mapping cell the comment is attached to — not the test case id and not the run id."
+          },
+          "entity_type": {
+            "type": "string",
+            "description": "'TRTC' for a comment on a test case inside a test run.",
+            "example": "TRTC"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "comment": {
+            "type": "string",
+            "description": "HTML body with @mentions rendered to display names and links decorated; can differ from what was posted."
+          },
+          "edited": {
+            "type": "boolean",
+            "description": "True once the comment has been changed after posting."
+          },
+          "is_editable": {
+            "type": "boolean",
+            "description": "False for system/imported comments that cannot be edited."
+          },
+          "review_status": {
+            "type": "string",
+            "description": "Present only on comments that were recorded as part of a review verdict."
+          }
+        }
+      },
+      "StatusProgressBreakdown": {
+        "type": "object",
+        "description": "Per-result-status progress of a run or one of its configurations. Keys are result-status ids as STRINGS ('1', '2', ...); each value is the count of run test cases currently in that status plus the status definition. Statuses with no cases may be absent. Empty object when nothing has been recorded.",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "description": "Number of test cases in the run (or configuration) whose latest result has this status.",
+              "example": 8
+            },
+            "result_status": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "example": 1
+                },
+                "field_value": {
+                  "type": "string",
+                  "description": "Display label, e.g. 'Passed'.",
+                  "example": "Passed"
+                },
+                "internal_name": {
+                  "type": "string",
+                  "description": "Stable machine name (passed, failed, blocked, untested, ...). Use this to compare across projects; ids differ per project.",
+                  "example": "passed"
+                },
+                "field_name": {
+                  "type": "string",
+                  "example": "Status"
+                },
+                "colour": {
+                  "type": "string",
+                  "example": "#00FF00"
+                }
+              }
+            }
+          }
+        }
+      },
+      "BinnedTestCase": {
+        "type": "object",
+        "description": "A test case as it appears in the recycle-bin listing: a slim row from the bin store plus resolved people, not the full TestCase shape.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Integer id — what restore/purge selections take."
+          },
+          "identifier": {
+            "type": "string",
+            "example": "TC-3502"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "field_value": {
+                "type": "string"
+              },
+              "internal_name": {
+                "type": "string"
+              }
+            }
+          },
+          "status": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "field_value": {
+                "type": "string"
+              },
+              "internal_name": {
+                "type": "string"
+              },
+              "colour": {
+                "type": "string"
+              }
+            }
+          },
+          "owner": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Raw BrowserStack user id of the owner; see owner_details for the person."
+          },
+          "owner_details": {
+            "type": "object",
+            "nullable": true,
+            "description": "Resolved owner {id, browserstack_user_id, full_name, email, group_id}; absent when owner is null or unknown."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "issue_id": {
+                  "type": "string"
+                },
+                "issue_type": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "folder_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "folder_path": {
+            "type": "string",
+            "nullable": true,
+            "description": "Breadcrumb of the folder the case was in when binned."
+          },
+          "updated_by": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Raw BrowserStack user id of who moved it to the bin; see updator_details."
+          },
+          "updator_details": {
+            "type": "object",
+            "nullable": true,
+            "description": "Resolved person who binned the case {id, browserstack_user_id, full_name, email, group_id}."
+          },
+          "trashed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the case was moved to the bin."
+          },
+          "days_remaining": {
+            "type": "integer",
+            "description": "Days left before automatic permanent purge."
+          }
+        }
       }
     },
     "responses": {
@@ -26191,6 +27636,229 @@
             }
           }
         }
+      },
+      "CommentsListResponse": {
+        "description": "A page of comments on one run/case cell, newest first, fixed 30 per page. info.count is the total across pages; a page past the end repeats the last page rather than returning an empty array.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "comments",
+            "success",
+            "info"
+          ],
+          "properties": {
+            "comments": {
+              "type": "array",
+              "items": {
+                "$schema": "Comment"
+              }
+            },
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "info": {
+              "$schema": "PageInfo"
+            }
+          }
+        }
+      },
+      "CommentResponse": {
+        "description": "The comment just posted, wrapped as data.comment. HTTP 200, not 201.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "data"
+          ],
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "comment": {
+                  "$schema": "Comment"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TestRunConfigurationProgressResponse": {
+        "description": "Execution progress of a test run by result status. TWO shapes: when configuration_id was sent the body is {success, overall_progress_by_status_id} and `configurations`/`info` are absent; when it was not, the body is {success, configurations:[...], info} and the top-level `overall_progress_by_status_id` is absent. `info` is the backing service's paging block passed through unchanged (its exact fields are not fixed by this service).",
+        "schema": {
+          "type": "object",
+          "required": [
+            "success"
+          ],
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "overall_progress_by_status_id": {
+              "$schema": "StatusProgressBreakdown",
+              "description": "Only in the single-configuration form. {} when no results exist for that configuration."
+            },
+            "configurations": {
+              "type": "array",
+              "description": "Only in the all-configurations form. One page of the run's configurations, each with its progress attached.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "example": 101
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "Chrome on Windows"
+                  },
+                  "overall_progress_by_status_id": {
+                    "$schema": "StatusProgressBreakdown",
+                    "description": "Omitted for a configuration with no recorded progress."
+                  }
+                }
+              }
+            },
+            "info": {
+              "type": "object",
+              "nullable": true,
+              "description": "Only in the all-configurations form. Paging metadata from the backing service, passed through as-is."
+            }
+          }
+        }
+      },
+      "BinnedTestCasesListResponse": {
+        "description": "A page of binned test cases. Paging lives under `metadata` (total/page/page_size/total_pages), not the usual `info` envelope. Field names follow the backing service's client model; confirm against a live call if a field is missing.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "test_cases": {
+              "type": "array",
+              "items": {
+                "$schema": "BinnedTestCase"
+              }
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "total": {
+                  "type": "integer"
+                },
+                "page": {
+                  "type": "integer"
+                },
+                "page_size": {
+                  "type": "integer"
+                },
+                "total_pages": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TestCaseReviewOutcomeResponse": {
+        "description": "Outcome of a bulk review submission or verdict. Under 100 cases: the updated cases inline (testCases) — verdicts with a comment also carry `comment`. Over 100: {success, async:true, unique_id} and NO testCases; the change lands in the background.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "success"
+          ],
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "testCases": {
+              "type": "array",
+              "items": {
+                "$schema": "TestCase"
+              },
+              "description": "Updated cases (serialized test case, including review_status and reviewers). Absent on the async path."
+            },
+            "comment": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Verdict only, when a comment was sent: the created comment objects {id, comment, review_status, user{id, full_name, email}, created_at ...}."
+            },
+            "async": {
+              "type": "boolean",
+              "description": "true when the selection exceeded 100 and was queued."
+            },
+            "unique_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the queued background operation (async path only)."
+            }
+          }
+        }
+      },
+      "ReauthRequired": {
+        "description": "Part 11 e-signature required: the reauth_token was missing, expired (5 min) or already used. Re-authenticate and resend with a fresh token.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": false
+            },
+            "error_code": {
+              "type": "string",
+              "example": "reauth_required"
+            }
+          }
+        }
+      },
+      "LcncCreateWrapperResponse": {
+        "description": "Wrapper around the automation service's reply. `status` is the upstream HTTP code and `body` is the upstream body as a JSON-encoded STRING to parse (except the 'already in progress' short-circuit, where body is an object {message, title} and status is 'ok'). HTTP 200 outside does not mean success inside — inspect status and body.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "status",
+            "body"
+          ],
+          "properties": {
+            "status": {
+              "type": "integer",
+              "example": 200,
+              "description": "Upstream HTTP status (an integer), or the string 'ok' on the already-in-progress short-circuit."
+            },
+            "body": {
+              "type": "string",
+              "description": "Upstream body as a JSON string; typically {status:'submitted'|'failed', message, test_id?, test_version_id?, reason?} on the bulk-pipeline path."
+            }
+          }
+        }
+      },
+      "BddExportValidationResponse": {
+        "description": "Verdict of the BDD export pre-check; the same shape is returned on pass (200, success:true) and on every failure (400, success:false) — read message.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "success",
+            "message"
+          ],
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "message": {
+              "type": "string",
+              "example": "Validation successful. All test cases belong to the same feature and background."
+            }
+          }
+        }
       }
     },
     "paging": {
@@ -27062,6 +28730,7 @@
           }
         ],
         "capabilities": [
+          "apply_test_case_review_verdict_v1",
           "bulk_archive_test_cases_by_project",
           "bulk_copy_test_cases",
           "bulk_delete_test_cases",
@@ -27069,22 +28738,27 @@
           "bulk_edit_test_cases_in_test_run",
           "bulk_move_test_cases",
           "bulk_retrieve_test_cases",
+          "count_binned_test_cases_v1",
           "create_bulk_test_cases_v1",
           "create_test_case_v1",
           "create_test_cases",
           "edit_test_case_partial_v1",
           "edit_test_case_v1",
+          "generate_test_case_automation_v1",
           "get_archived_test_cases",
           "get_system_field_values_v1",
           "get_test_case_by_integer_id_v1",
           "get_test_case_detail",
           "get_test_cases_v1",
+          "list_binned_test_cases_v1",
           "list_folder_test_cases_v1",
+          "move_test_case_v2",
           "reorder_test_cases_by_folder_v1",
           "search_project_entities_v2",
           "search_test_cases_by_folder_v1",
+          "submit_test_cases_for_review_v1",
           "update_test_case_v2",
-          "move_test_case_v2"
+          "validate_bdd_export_selection_v1"
         ],
         "key_facts": [
           "A filter is a (key, value) pair and each half fails silently: an unknown KEY is dropped (you get the whole project with success: true), and a wrong-form VALUE matches nothing (count: 0, also success: true). So resolve both — never guess either — and see pagination-and-filtering for the key table and each value's source.",
@@ -27208,21 +28882,23 @@
           "close_test_run_v1",
           "count_run_selection_v1",
           "create_test_run_v1",
+          "create_test_run_v2",
           "delete_v1_test_run",
           "edit_test_run",
+          "export_test_run_csv_v1",
           "get_closed_test_runs",
           "get_test_cases_for_v1_test_run",
           "get_test_run_by_integer_id_v1",
           "get_test_run_cases_v1",
+          "get_test_run_progress_v1",
           "get_test_run_test_cases_v2",
           "get_test_run_v2",
           "get_test_runs_form_fields_v1",
           "get_test_runs_selection",
           "get_test_runs_v1",
-          "replace_test_run_v2",
-          "update_test_run_v2",
           "list_test_runs_v2",
-          "create_test_run_v2"
+          "replace_test_run_v2",
+          "update_test_run_v2"
         ],
         "key_facts": [
           "Only test_case_ids / selection / shared_selection put cases in a run. `filters` and `dynamic_filter` are a forward-sync rule, NOT a selection: a create carrying only `filters` returns 200 with ZERO cases, and sets is_dynamic: true even though you did not ask. Verified live.",
@@ -27318,6 +28994,62 @@
           "A revision is addressed two different ways depending on the generation of the read: the older listing hands back a numeric history record id, the newer one identifies a revision only by its position label V1, V2, … with V1 the oldest revision still visible.",
           "Without an Enterprise or Team Pro plan only the last 30 days of a test case's revisions are visible; older ones are absent with no flag saying so, and position labels count only what is visible, so they renumber as old revisions age out.",
           "In the newer payload the editor arrives as updated_by, an email string that is null when the user cannot be resolved in this group, instead of the nested user object the older records carry."
+        ]
+      },
+      "comment": {
+        "entity": "comment",
+        "title": "Comment",
+        "description": "A rich-text note a team member posts on a test case, on its execution in a test run, or on a test plan, to discuss it.",
+        "aliases": [
+          "comments",
+          "note",
+          "notes",
+          "remark",
+          "feedback",
+          "discussion",
+          "thread",
+          "review comment",
+          "review feedback",
+          "mention",
+          "@mention",
+          "annotation",
+          "message"
+        ],
+        "id_convention": "Plain integer, assigned on creation and returned as `id` on the posted comment. Existing comment ids are not guessable and must be discovered through the comment listing.",
+        "parents": [
+          "test_run",
+          "test_case",
+          "test_plan"
+        ],
+        "relations": [
+          {
+            "entity": "test_case",
+            "via": "posted on"
+          },
+          {
+            "entity": "test_run",
+            "via": "scoped to the case's execution in"
+          },
+          {
+            "entity": "user",
+            "via": "authored by / mentions"
+          }
+        ],
+        "capabilities": [
+          "list_test_run_test_case_comments_v1",
+          "create_test_run_test_case_comment_v1"
+        ],
+        "key_facts": [
+          "A comment can hang off a test case in its folder, off a test case's execution inside a specific test run, or off a test plan. Only the test-run variant is published in this pass; folder-scoped test-case comments and test-plan comments exist in the product but are not exposed here.",
+          "Comments are a paid-plan feature. On a free plan every comment call comes back HTTP 200 with success:false and the message 'This Feature is only for paid customers' — the body, not the status, carries the refusal.",
+          "Reading and posting comments both need the test-case VIEW permission; no separate comment or write permission exists, so anyone who can see the case can comment on it.",
+          "Comments cannot be posted on automation test runs (Automate/Observability-backed), and not on an archived test case; reading an archived case's comments still works.",
+          "Mentioning a colleague — via the mention span markup carrying their BrowserStack user id — notifies them immediately, and the run owner is alerted on every new comment. A mention of someone outside the group fails the whole post.",
+          "The body is HTML rich text. Whitespace-only or tag-only content is refused; an inline image counts as content. Stored HTML can differ from what was sent (links normalised, mentions rewritten).",
+          "Threads are per run/case/configuration cell: a case mapped to three configurations in a run has three separate comment threads, chosen by the mapping id.",
+          "Listings come newest first, 30 per page with no page-size control; asking for a page past the end returns the last page again rather than an empty page, so stop when the next-page marker is null.",
+          "Posting a comment is recoverable: the author can edit it or delete it afterwards, and deletion hides the comment rather than destroying it. Neither edit nor delete is exposed in this pass.",
+          "On each returned comment `edited` is true once it has been changed after posting; the author object's `id` is the internal TM user id (not the BrowserStack user id) and is null for imported comments, which show the original author's name instead."
         ]
       }
     }

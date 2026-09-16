@@ -43,9 +43,12 @@ async function main() {
 
 main().catch(console.error);
 
-// Ensure logs are flushed before exit
+// Ensure logs are flushed before exit. Optional-called because an exit handler must not
+// be the thing that throws: `flush` is absent from every `vi.mock("src/logger")` in the
+// suite, so any test file that loads this module used to fail the run with
+// `default.flush is not a function` depending on how vitest scheduled workers.
 process.on("exit", () => {
-  logger.flush();
+  logger.flush?.();
 });
 
 export { setLogger } from "./logger.js";

@@ -15,6 +15,7 @@ import {
 import logger from "../logger.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
+import { NEEDS_SESSION_ID } from "./tool-handoff.js";
 
 // Local helper: returns the server-configured BrowserStack credentials, or
 // null when either is missing. Lives here because the self-heal tools need
@@ -581,7 +582,8 @@ export default function addSelfHealTools(
       "the run. Provide exactly one of `sessionId` (single Automate / " +
       "App-Automate session) or `buildUuid` (full self-healing report for a " +
       "build). Pass the returned locator pairs to `prepareSelfHealingPlan` " +
-      "to plan edits.",
+      "to plan edits." +
+      NEEDS_SESSION_ID,
     {
       sessionId: z
         .string()
@@ -671,7 +673,8 @@ export default function addSelfHealTools(
       "[...]}`, the raw report `{healing_logs: [...]}` (with " +
       "`healed_selectors` aliasing `locators`), and snake_case keys " +
       "(`session_id`, `original_locator`, `healed_locator`, " +
-      "`healing_thought`).",
+      "`healing_thought`)." +
+      NEEDS_SESSION_ID,
     {
       sessions: sessionsFieldSchema.describe(
         "Sessions to plan edits for. See tool description for accepted shapes.",

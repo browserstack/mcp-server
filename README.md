@@ -294,7 +294,7 @@ Select the “Installed” tab. Click the “Configure MCP Servers” button at 
 
 ### 💡 List of BrowserStack MCP Tools
 
-As of now we support 45 tools.
+As of now we support 46 tools.
 
 > **Remote MCP note:** Tools marked _(not available in Remote MCP)_ rely on local file/process state and are disabled in the multi-tenant [Remote MCP Server](#-remote-mcp-server). They are available in the local (npx) setup.
 
@@ -649,6 +649,13 @@ As of now we support 45 tools.
   ```text
   List the failed test IDs from build UUID <your-build-uuid> on BrowserStack
   ```
+ 46. `askBrowserStackAI` *(Alpha, limited availability)* — Hand a multi-step task to BrowserStack's agent in plain language; it decides which calls to make and returns the answer plus the steps it took. Covers Test Management and Test Reporting & Analytics. Anything that would change data pauses for your confirmation in your own client; deletes are refused outright. Requires the account to be enrolled — otherwise it returns an entitlement error and nothing runs.
+  **Prompt example**
+
+  ```text
+  Find all payment test cases in project Shopping App and add the 'regression' tag to them
+  ```
+
 
 ##  🚀 Remote MCP Server
 

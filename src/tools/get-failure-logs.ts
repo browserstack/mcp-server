@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
+import { NEEDS_SESSION_ID } from "./tool-handoff.js";
 
 import {
   retrieveNetworkFailures,
@@ -187,7 +188,8 @@ export default function registerGetFailureLogs(
 
   tools.getFailureLogs = server.tool(
     "getFailureLogs",
-    "Fetch logs, or the session video URL, for an Automate/App Automate session.",
+    "Fetch logs, or the session video URL, for an Automate/App Automate session." +
+      NEEDS_SESSION_ID,
     {
       sessionType: z
         .enum([SessionType.Automate, SessionType.AppAutomate])

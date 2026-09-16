@@ -292,6 +292,8 @@ Select the “Installed” tab. Click the “Configure MCP Servers” button at 
    }
    ```
 
+> **File & app uploads:** tools that upload a local file/app (`uploadProductRequirementFile`, `takeAppScreenshot`, `runAppTestsOnBrowserStack`, `runAppLiveSession`) require the `MCP_UPLOAD_BASE_DIR` env var set to a directory containing those files; uploads are restricted to it.
+
 ### 💡 List of BrowserStack MCP Tools
 
 As of now we support 46 tools.

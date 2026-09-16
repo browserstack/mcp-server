@@ -15,6 +15,7 @@ import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
+import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
 
 interface AuthCredentials {
   username: string;
@@ -576,7 +577,8 @@ export default function addAccessibilityTools(
 
   tools.getAccessibilityAuthConfig = server.tool(
     "getAccessibilityAuthConfig",
-    "Retrieve an existing authentication configuration by ID.",
+    "Retrieve an existing authentication configuration by ID." +
+      NEEDS_A11Y_CONFIG_ID,
     {
       configId: z.number().describe("ID of the auth configuration to retrieve"),
     },
@@ -594,7 +596,8 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues from a completed scan with pagination support. Use cursor parameter to get subsequent pages of results.",
+    "Fetch accessibility issues from a completed scan with pagination support. Use cursor parameter to get subsequent pages of results." +
+      NEEDS_A11Y_SCAN_ID,
     {
       scanId: z
         .string()

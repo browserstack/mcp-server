@@ -4,9 +4,6 @@ import path from "path";
 export interface UploadValidationOptions {
   allowedExtensions: readonly string[];
   maxSizeBytes: number;
-  // Required key (value may be undefined when MCP_UPLOAD_BASE_DIR is unset) so
-  // every call site must consciously thread the configured base dir — a missing
-  // one is a compile error, not a silent runtime always-refuse.
   allowedBaseDir: string | undefined;
 }
 

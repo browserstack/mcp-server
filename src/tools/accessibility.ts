@@ -9,11 +9,13 @@ import {
 } from "./accessiblity-utils/auth-config.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { parseAccessibilityReportFromCSV } from "./accessiblity-utils/report-parser.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
 import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
+import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
 
 interface AuthCredentials {
   username: string;
@@ -184,7 +186,7 @@ async function fetchAccessibilityIssues(
 
   const messages = [
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
-    `Issues: ${JSON.stringify(records, null, 2)}`,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
   ];
 
   if (next_page !== null) {
@@ -370,7 +372,7 @@ function createScanSuccessResponse(
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
     `You can also download the full report from the following link: ${reportUrl}`,
     `We found ${totalIssues} issues. Below are the details of the ${pageLength} most critical issues.`,
-    `Scan results: ${JSON.stringify(records, null, 2)}`,
+    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
   ];
 
   if (cursor !== null) {
@@ -472,7 +474,7 @@ export default function addAccessibilityTools(
     {
       title: "Start Accessibility Scan",
       readOnlyHint: false,
-      openWorldHint: false,
+      openWorldHint: true,
       destructiveHint: false,
       idempotentHint: false,
     },
@@ -575,7 +577,8 @@ export default function addAccessibilityTools(
 
   tools.getAccessibilityAuthConfig = server.tool(
     "getAccessibilityAuthConfig",
-    "Retrieve an existing authentication configuration by ID.",
+    "Retrieve an existing authentication configuration by ID." +
+      NEEDS_A11Y_CONFIG_ID,
     {
       configId: z.number().describe("ID of the auth configuration to retrieve"),
     },
@@ -593,7 +596,8 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues from a completed scan with pagination support. Use cursor parameter to get subsequent pages of results.",
+    "Fetch accessibility issues from a completed scan with pagination support. Use cursor parameter to get subsequent pages of results." +
+      NEEDS_A11Y_SCAN_ID,
     {
       scanId: z
         .string()

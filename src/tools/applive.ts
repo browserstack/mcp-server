@@ -103,7 +103,7 @@ export default function addAppLiveTools(
       appPath: z
         .string()
         .describe(
-          "The path to the .ipa or .apk file to install on the device. Always ask the user for the app path, do not assume it.",
+          "The path to the .ipa or .apk file to install on the device. Always ask the user for the app path, do not assume it. Must be located inside the directory set in MCP_UPLOAD_BASE_DIR.",
         ),
     },
     {

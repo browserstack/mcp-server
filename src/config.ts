@@ -55,6 +55,16 @@ export class Config {
     public readonly O11Y_TFA_RCA_BASE_URL: string,
     public readonly BROWSERSTACK_AUTOMATION_BASE_URL: string,
     public readonly BROWSERSTACK_O11Y_UI_BASE_URL: string,
+    // askBrowserStackAI's process-startup settings. Declared here rather than read from
+    // process.env inside src/tools/, per rules/tool-design.md — and so the remote wrapper,
+    // which only forwards env it knows about, has one place to look.
+    //
+    // ASK_BROWSERSTACK_DISABLED is deliberately NOT here: it is a kill switch, and reading
+    // it per call keeps it effective without a restart. Fixing it at boot would mean a pod
+    // roll to disable the tool, which is slowest exactly when you need it fastest.
+    public readonly ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY: boolean,
+    public readonly ASK_BROWSERSTACK_ATLAS_URL: string | undefined,
+    public readonly ASK_BROWSERSTACK_AUTH_TOKEN_URL: string | undefined,
   ) {}
 }
 
@@ -78,6 +88,16 @@ const config = new Config(
     process.env.BROWSERSTACK_O11Y_UI_BASE_URL.length > 0
     ? process.env.BROWSERSTACK_O11Y_UI_BASE_URL
     : DEFAULT_BROWSERSTACK_O11Y_UI_BASE_URL,
+  (process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY || "").toLowerCase() ===
+    "true",
+  process.env.ASK_BROWSERSTACK_ATLAS_URL &&
+    process.env.ASK_BROWSERSTACK_ATLAS_URL.trim().length > 0
+    ? process.env.ASK_BROWSERSTACK_ATLAS_URL
+    : undefined,
+  process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL &&
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL.trim().length > 0
+    ? process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL
+    : undefined,
 );
 
 export default config;

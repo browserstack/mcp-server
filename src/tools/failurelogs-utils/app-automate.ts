@@ -2,6 +2,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { filterLinesByKeywords, validateLogResponse } from "./utils.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 // DEVICE LOGS
 export async function retrieveDeviceLogs(
@@ -31,7 +32,7 @@ export async function retrieveDeviceLogs(
       : JSON.stringify(response.data);
   const logs = filterDeviceFailures(logText);
   return logs.length > 0
-    ? `Device Failures (${logs.length} found):\n${JSON.stringify(logs, null, 2)}`
+    ? `Device Failures (${logs.length} found):\n${wrapUntrusted("device logs", JSON.stringify(logs, null, 2))}`
     : "No device failures found";
 }
 
@@ -63,7 +64,7 @@ export async function retrieveAppiumLogs(
       : JSON.stringify(response.data);
   const logs = filterAppiumFailures(logText);
   return logs.length > 0
-    ? `Appium Failures (${logs.length} found):\n${JSON.stringify(logs, null, 2)}`
+    ? `Appium Failures (${logs.length} found):\n${wrapUntrusted("Appium logs", JSON.stringify(logs, null, 2))}`
     : "No Appium failures found";
 }
 
@@ -95,7 +96,7 @@ export async function retrieveCrashLogs(
       : JSON.stringify(response.data);
   const logs = filterCrashFailures(logText);
   return logs.length > 0
-    ? `Crash Failures (${logs.length} found):\n${JSON.stringify(logs, null, 2)}`
+    ? `Crash Failures (${logs.length} found):\n${wrapUntrusted("crash logs", JSON.stringify(logs, null, 2))}`
     : "No crash failures found";
 }
 

@@ -72,14 +72,10 @@ export function validateUploadPath(
     );
   }
 
-  // Directory containment is mandatory. Without a configured base dir there is
-  // nothing confining the (possibly absolute) path, so any readable file on the
-  // host could be streamed off it — refuse rather than fall back to "no check".
   if (!options.allowedBaseDir) {
     throw new Error(
-      "Upload rejected: file uploads are disabled because MCP_UPLOAD_BASE_DIR is not set. " +
-        "Set MCP_UPLOAD_BASE_DIR to a directory containing the files you want to upload, then " +
-        "restart the MCP server. Uploads are restricted to that directory.",
+      "Upload rejected: MCP_UPLOAD_BASE_DIR is not set. Set it to the directory " +
+        "containing the files to upload, then restart the MCP server.",
     );
   }
 

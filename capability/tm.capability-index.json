@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.6",
-  "build_id": "2d3d82f8_2026-09-11T09:37:38Z",
+  "version": "1.7",
+  "build_id": "9f27faa3_2026-09-16T15:59:08Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
     "capabilities": [
@@ -62,6 +62,102 @@
           },
           "500": {
             "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "assign_test_run_test_cases_v2",
+        "method": "POST",
+        "path": "/api/v2/projects/{project_id}/test-runs/{test_run_id}/assign",
+        "mode": "write",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "PR-1",
+            "pattern": "^PR-\\d+$",
+            "description": "Project identifier in PR-NNN form. The v2 routes constrain this segment to PR-\\d+, so a bare integer project id does not match the route at all and never reaches the API."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^TR-\\d+$",
+            "description": "Run identifier in TR-NNN form. The v2 routes constrain this segment to TR-\\d+ — unlike the v1 run endpoints, a bare integer is NOT accepted here and returns a routing 404."
+          }
+        ],
+        "body": [
+          {
+            "name": "assign_to",
+            "type": "array",
+            "required": true,
+            "description": "One entry per case (or execution) to reassign. Top level — NOT wrapped in a test_run object, unlike the update calls on this run.",
+            "fields": [
+              {
+                "name": "test_case_id",
+                "type": "string"
+              },
+              {
+                "name": "assignee",
+                "type": "string"
+              },
+              {
+                "name": "configuration_id",
+                "type": "integer"
+              },
+              {
+                "name": "execution_id",
+                "type": "integer"
+              }
+            ]
+          }
+        ],
+        "intent": "Hand specific test cases inside a run to the people who should execute them (or clear their assignee)",
+        "guidance": [
+          "Queued, not applied: the 200 {success: true} only means the job was accepted. Re-read the run's test cases to confirm the assignees actually changed.",
+          "`assignee` is an email (or TM user id) resolved inside the run's group. An address that does not resolve is skipped silently — that case keeps its old assignee and nothing is reported.",
+          "Send `assignee: null` on an entry to unassign that case.",
+          "Each entry must carry `test_case_id` (TC-NNN) or `execution_id`; an entry with neither is dropped. Add `configuration_id` to target one configuration row when the case is mapped to several — omit it and every row for that case is reassigned.",
+          "The body is not validated before the 200: a missing or empty `assign_to` still answers 200 {success: true} and changes nothing.",
+          "Assignment is reversible — assign again (or to null) to undo."
+        ],
+        "returns": [
+          "success"
+        ],
+        "responses": {
+          "200": {
+            "description": "Assignment job queued. Body is {success: true}; the assignments are applied asynchronously.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "description": "The job could not be enqueued; nothing was assigned.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                }
+              }
+            }
           }
         }
       },
@@ -1462,6 +1558,243 @@
         }
       },
       {
+        "name": "bulk_set_test_result_status_v2",
+        "method": "PATCH",
+        "path": "/api/v2/projects/{project_id}/test-runs/{test_run_id}/results",
+        "mode": "write",
+        "entity": "result",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "PR-123",
+            "pattern": "^PR-\\d+$",
+            "description": "Project identifier in PR- form. A bare integer does not match the route and 404s."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^TR-\\d+$",
+            "description": "Test run identifier in TR- form. A bare integer does not match the route and 404s."
+          }
+        ],
+        "body": [
+          {
+            "name": "status",
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "example": "Untested",
+            "description": "The single status every targeted case is moved to, by NAME as configured for the project. Matched case-insensitively against the configured internal name or display value. \"Reset\" is not a special mode — it is just naming an untested-style status."
+          },
+          {
+            "name": "test_case_ids",
+            "type": "array",
+            "description": "Test case identifiers to target, e.g. [\"TC-101\",\"TC-102\"]. OMITTING this (or sending an empty array) targets EVERY test case in the run. Identifiers not in the run are skipped silently."
+          }
+        ],
+        "intent": "Move many test cases in a test run to one status in a single call — the bulk 'mark these passed' or 'reset the run to untested' action, which replaces each case's current outcome instead of adding a new one",
+        "guidance": [
+          "NO UNDO. Each targeted case's current outcome is superseded in place by the status you name; the status that was there is not kept as a separate history entry and cannot be restored. Recovering means knowing the old status per case and setting it back by hand.",
+          "Omitting `test_case_ids` (or sending []) applies the status to EVERY case in the run. There is no cap, no dry run and no confirmation step on the server — send an explicit list unless you really mean the whole run.",
+          "`status` must be a name already configured for the project; an unconfigured name is rejected 400 before anything is queued. Resolve the project's configured result statuses first.",
+          "Fire-and-forget: HTTP 200 {success: true} only means the job was queued. Identifiers that are not in the run are skipped with no error, and any failure inside the worker never reaches the caller — read results back to confirm.",
+          "No unrecognised keys are allowed in the body — `status` and `test_case_ids` only.",
+          "This only moves status. It records no description, defects, step results or attachments, and it deletes nothing — to log a real execution with detail, use create_test_results_for_test_run_v2.",
+          "Requires the execute permission on the run; a caller without it gets 403 before anything is queued."
+        ],
+        "returns": [
+          "success"
+        ],
+        "responses": {
+          "200": {
+            "$response": "V2BulkResultStatusAcceptedResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "description": "The job could not be queued; nothing was applied.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": false
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "bulk_update_test_run_test_cases_v2",
+        "method": "PATCH",
+        "path": "/api/v2/projects/{project_id}/test-runs/{test_run_id}/test-cases",
+        "mode": "write",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "PR-1",
+            "pattern": "^PR-\\d+$",
+            "description": "Project identifier in PR-NNN form. The v2 routes constrain this segment to PR-\\d+, so a bare integer project id does not match the route at all and never reaches the API."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^TR-\\d+$",
+            "description": "Run identifier in TR-NNN form. The v2 routes constrain this segment to TR-\\d+ — unlike the v1 run endpoints, a bare integer is NOT accepted here and returns a routing 404."
+          }
+        ],
+        "body": [
+          {
+            "name": "add_test_cases",
+            "type": "array",
+            "json_path": "/test_run/add_test_cases",
+            "fields": [
+              {
+                "name": "test_case_ids",
+                "type": "array",
+                "description": "Non-empty list of TC-NNN strings. Must be strings — integers are rejected."
+              },
+              {
+                "name": "source_project_id",
+                "type": "integer",
+                "description": "Numeric id of the origin project for shared (cross-project) cases. Mutually exclusive with source_project."
+              },
+              {
+                "name": "source_project",
+                "type": "string",
+                "description": "Origin project identifier (PR-NNN) for shared cases — the readable alternative to source_project_id."
+              },
+              {
+                "name": "configuration_ids",
+                "type": "array",
+                "description": "Integer configuration ids this entry applies to. Omit (or send []) to target the null-configuration mapping. Duplicates are a 400."
+              }
+            ],
+            "minItems": 1,
+            "description": "Case+configuration entries to add to the run. Send this OR remove_test_cases, never both."
+          },
+          {
+            "name": "remove_test_cases",
+            "type": "array",
+            "json_path": "/test_run/remove_test_cases",
+            "fields": [
+              {
+                "name": "test_case_ids",
+                "type": "array",
+                "description": "Non-empty list of TC-NNN strings. Must be strings — integers are rejected."
+              },
+              {
+                "name": "source_project_id",
+                "type": "integer",
+                "description": "Numeric id of the origin project for shared (cross-project) cases. Mutually exclusive with source_project."
+              },
+              {
+                "name": "source_project",
+                "type": "string",
+                "description": "Origin project identifier (PR-NNN) for shared cases — the readable alternative to source_project_id."
+              },
+              {
+                "name": "configuration_ids",
+                "type": "array",
+                "description": "Integer configuration ids this entry applies to. Omit (or send []) to target the null-configuration mapping. Duplicates are a 400."
+              }
+            ],
+            "minItems": 1,
+            "description": "Case+configuration entries to take out of the run. Send this OR add_test_cases, never both. Removal deletes the recorded results for those mappings unless preserve_existing_results is true."
+          },
+          {
+            "name": "preserve_existing_results",
+            "type": "boolean",
+            "default": false,
+            "json_path": "/test_run/preserve_existing_results",
+            "description": "Keep the results already recorded against the cases being removed. Defaults to FALSE, i.e. the results are deleted with the mapping. Must be a real boolean (or \"true\"/\"false\"); anything else is a 400."
+          }
+        ],
+        "intent": "Change which test cases a run covers — bulk-add cases to it, or bulk-remove them, optionally per configuration",
+        "guidance": [
+          "Everything goes inside a `test_run` object, and exactly one of add_test_cases / remove_test_cases may be present and non-empty — both, or neither, is a 400.",
+          "Always asynchronous. A 202 {success, async, unique_id} means only that the job was queued; nothing has changed yet. There is no status endpoint for unique_id over HTTP (completion is announced on a websocket channel), so confirm by re-reading the run's test cases.",
+          "Removing a case DISCARDS its recorded results unless you send preserve_existing_results: true. Runs keep no version history, so those results cannot be restored — ask before removing cases from a run that has been executed.",
+          "At most 300 distinct test_case_ids per request, counted across all entries; a duplicate id within or across entries is a 400. Split larger changes into batches.",
+          "Only the shape is validated before the 202 — an id that does not exist, or is not shared with this project, fails inside the worker and is not reported back on this response.",
+          "Cross-project (shared) cases need source_project or source_project_id on the entry; supplying both is a 400.",
+          "This is the only way to REMOVE cases through the run-update surface: the POST and PATCH on /update only ever union cases in."
+        ],
+        "returns": [
+          "success",
+          "async",
+          "unique_id"
+        ],
+        "responses": {
+          "202": {
+            "description": "Bulk change accepted and queued. Body is {success: true, async: true, unique_id} — the run is unchanged at this point.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "async": {
+                  "type": "boolean"
+                },
+                "unique_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Synchronous validation failure. Body is {success: false, error, message}, where error is one of operation_required, only_one_operation_allowed, invalid_preserve_flag, invalid_entry_shape, invalid_test_case_id, invalid_configuration_ids, duplicate_test_case_id, max_test_cases_per_request_exceeded, validation_failed.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
         "name": "clone_exploratory_session_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/exploratory-sessions/{session_id}/clone",
@@ -1652,6 +1985,165 @@
           },
           "401": {
             "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "clone_test_run_v2",
+        "method": "POST",
+        "path": "/api/v2/projects/{project_id}/test-runs/{test_run_id}/clone",
+        "mode": "write",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "PR-1",
+            "pattern": "^PR-\\d+$",
+            "description": "Project identifier in PR-NNN form. The v2 routes constrain this segment to PR-\\d+, so a bare integer project id does not match the route at all and never reaches the API."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^TR-\\d+$",
+            "description": "Run identifier in TR-NNN form. The v2 routes constrain this segment to TR-\\d+ — unlike the v1 run endpoints, a bare integer is NOT accepted here and returns a routing 404."
+          }
+        ],
+        "body": [
+          {
+            "name": "test_case_selection",
+            "type": "string",
+            "values": [
+              "all",
+              "by_results"
+            ],
+            "default": "all",
+            "description": "Which cases of the source run the copy gets: every case, or only those whose latest result matches `statuses`. Any other value is a 400."
+          },
+          {
+            "name": "statuses",
+            "type": "array",
+            "fields": [
+              {
+                "name": "status_name",
+                "type": "string"
+              }
+            ],
+            "example": [
+              "failed",
+              "blocked"
+            ],
+            "description": "Result status NAMES (case-insensitive) — not ids. Required and non-empty when test_case_selection is \"by_results\"; an unknown name is a 400 naming it. Defaults plus any custom status configured for the group are accepted."
+          },
+          {
+            "name": "copy_tc_assignee",
+            "type": "boolean",
+            "default": true,
+            "description": "Carry per-case assignees over. Defaults to TRUE here (the v1 clone defaults it to false)."
+          },
+          {
+            "name": "copy_tags",
+            "type": "boolean",
+            "default": true,
+            "description": "Carry the source run's tags over. Defaults to TRUE here (the v1 clone defaults it to false)."
+          },
+          {
+            "name": "copy_issues",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "example": "Sprint 24 - Regression Re-Run",
+            "description": "Name for the new run. Omitted or blank gives \"<source run name> - Copy\"."
+          }
+        ],
+        "intent": "Copy an existing run into a brand-new run — the usual way to re-execute just the failed or blocked cases from the last cycle",
+        "guidance": [
+          "Body is flat — these fields sit at the top level, not inside a `test_run` object like the update calls.",
+          "Identity is synchronous, data is not: the response carries the new run as soon as it exists, but its case mappings are filled in by a background worker. Reading the new run's test cases immediately can legitimately return zero rows — retry before concluding the clone was empty.",
+          "A 202 (instead of 200) means the run was cloned and one bookkeeping leg is still settling: do NOT retry, or you get a second clone.",
+          "Test plan / sub-plan links are NOT carried over; link the copy afterwards if you need it under a plan.",
+          "A dynamic source run passes its is_dynamic flag on, but the filter is not re-evaluated, so the copy starts from the source's case list.",
+          "Cloning an automation run is blocked by the write-permission gate (403) — this path is for manual runs.",
+          "The copy is a new run, so nothing about the source changes; discard it by deleting the copy."
+        ],
+        "returns": [
+          "id",
+          "uuid",
+          "identifier",
+          "name",
+          "description",
+          "owner",
+          "assignee",
+          "run_state",
+          "active_state",
+          "is_automation",
+          "is_dynamic",
+          "tags",
+          "configurations",
+          "test_plans",
+          "test_cases_count",
+          "overall_progress",
+          "overall_progress_by_status_id",
+          "project_id",
+          "created_at",
+          "updated_at",
+          "links"
+        ],
+        "responses": {
+          "200": {
+            "$response": "TestRunResponse"
+          },
+          "202": {
+            "description": "Run cloned, background bookkeeping still in progress. Body is {success: true, build_pending: true, message, test_run}. Treat as success; retrying would create a duplicate run.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "build_pending": {
+                  "type": "boolean"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "test_run": {
+                  "$schema": "TestRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Clone options failed validation — unknown test_case_selection, missing statuses for \"by_results\", or an unknown status name. Body is {success: false, message}.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
           },
           "404": {
             "$response": "NotFound"
@@ -3547,6 +4039,150 @@
         }
       },
       {
+        "name": "create_template_v2",
+        "method": "POST",
+        "path": "/api/v2/templates",
+        "mode": "write",
+        "entity": "template",
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "description": "Template name. Must be unique within the workspace for the entity type; a duplicate is rejected upstream with a 400 carrying the reason.",
+            "minLength": 1,
+            "example": "Regression Template"
+          },
+          {
+            "name": "entity",
+            "type": "string",
+            "description": "What the template applies to. Only test-case templates are supported today; leave this out and it defaults to TestCase.",
+            "values": [
+              "TestCase"
+            ],
+            "default": "TestCase"
+          },
+          {
+            "name": "description_fields",
+            "type": "array",
+            "description": "Ordered fields placed in the template's description section. Resolve real field ids first — an invented id is rejected upstream. Omitting this creates a template with an empty description section.",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "required": true,
+                "description": "The system field id when is_system is true, otherwise the custom field id."
+              },
+              {
+                "name": "is_system",
+                "type": "boolean",
+                "description": "True for a built-in field, false or absent for a custom field."
+              },
+              {
+                "name": "is_mandatory",
+                "type": "boolean",
+                "description": "Whether a test case using this template must fill the field."
+              }
+            ]
+          },
+          {
+            "name": "properties_fields",
+            "type": "array",
+            "description": "Ordered fields placed in the template's properties section. Unlike an update, a create does NOT auto-add the Review & Approve system fields — the template gets exactly the ids you send.",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "required": true,
+                "description": "The system field id when is_system is true, otherwise the custom field id."
+              },
+              {
+                "name": "is_system",
+                "type": "boolean"
+              },
+              {
+                "name": "is_mandatory",
+                "type": "boolean"
+              }
+            ]
+          },
+          {
+            "name": "linked_projects",
+            "type": "object",
+            "description": "Projects the template is linked to at creation. Omit it and the server defaults every flag to false with no projects, so the template exists but is offered in no project until it is linked.",
+            "fields": [
+              {
+                "name": "link_to_future_projects",
+                "type": "boolean",
+                "description": "Automatically link projects created later.",
+                "default": false
+              },
+              {
+                "name": "linked_to_all_projects",
+                "type": "boolean",
+                "description": "Link every existing project.",
+                "default": false
+              },
+              {
+                "name": "link_projects",
+                "type": "array",
+                "description": "Integer project ids to link. These are the numeric project ids, not the PR- identifiers."
+              },
+              {
+                "name": "unlink_projects",
+                "type": "array",
+                "description": "Integer project ids to unlink. Meaningless on a create."
+              }
+            ]
+          }
+        ],
+        "intent": "Create a new test-case template — define which description and property fields a test case gets and, optionally, which projects it applies to.",
+        "guidance": [
+          "Paid plans only. On a free plan the gate answers with HTTP 200 and a body of success:false / 'This Feature is only for paid customers'. Check the success flag, not the status code, before reporting the template as created.",
+          "Field ids cannot be guessed. Resolve the workspace's system fields and custom-field definitions first and mark is_system true for built-in fields.",
+          "Nothing is validated locally — name, field ids and project ids all go straight upstream, so a malformed body surfaces as a 400 with a single message rather than a per-field error list.",
+          "A create does not auto-inject the Review & Approve system fields, but a later update of properties_fields will. The two calls therefore do not behave the same way on the same field list.",
+          "The 201 body carries the full template including its fields — read it rather than re-fetching, and keep the returned id."
+        ],
+        "returns": [
+          "success",
+          "template",
+          "id",
+          "name",
+          "entity",
+          "enabled",
+          "step_type",
+          "is_default",
+          "is_system",
+          "future_projects_applicable",
+          "field_count",
+          "linked_to_all_projects",
+          "project_count",
+          "created_at",
+          "updated_at",
+          "description_fields",
+          "properties_fields",
+          "step_fields"
+        ],
+        "responses": {
+          "201": {
+            "$response": "TemplateDetailResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
         "name": "create_test_case_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-cases",
@@ -4037,6 +4673,259 @@
           },
           "422": {
             "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "create_test_results_for_test_run_v2",
+        "method": "POST",
+        "path": "/api/v2/projects/{project_id}/test-runs/{test_run_id}/results",
+        "mode": "write",
+        "entity": "result",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "PR-123",
+            "pattern": "^PR-\\d+$",
+            "description": "Project identifier in PR- form. A bare integer does not match the route and 404s."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^TR-\\d+$",
+            "description": "Test run identifier in TR- form. A bare integer does not match the route and 404s."
+          }
+        ],
+        "body": [
+          {
+            "name": "results",
+            "type": "array",
+            "minItems": 1,
+            "description": "Bulk form: one entry per test case. Mutually exclusive with the single form below — send `results` OR `test_result`, never both. Each entry needs `test_result` plus `test_case_id` or `execution_id`. No other keys are allowed on an entry.",
+            "fields": [
+              {
+                "name": "test_case_id",
+                "type": "string",
+                "description": "Test case identifier, e.g. TC-101. Required unless execution_id is given."
+              },
+              {
+                "name": "execution_id",
+                "type": "string",
+                "description": "Automation execution id, as an alternative target to test_case_id."
+              },
+              {
+                "name": "configuration_id",
+                "type": "integer"
+              },
+              {
+                "name": "test_result",
+                "type": "object",
+                "description": "The outcome itself: status (name), description, issues, step_results. Same shape as the single-result `test_result` below."
+              },
+              {
+                "name": "attachments",
+                "type": "array",
+                "maxItems": 10,
+                "description": "Multipart file part filenames for this entry. Ignored on a plain JSON request."
+              }
+            ]
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "description": "Result status by NAME as configured for the project (\"Passed\", \"Failed\", \"Untested\"). v1's numeric status_id is NOT accepted here. Required unless step_results is sent instead.",
+            "json_path": "/test_result/status"
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "description": "Notes on the outcome. Rich text is accepted. Silently truncated at 16 KB rather than rejected.",
+            "json_path": "/test_result/description"
+          },
+          {
+            "name": "issues",
+            "type": "array",
+            "description": "Linked defects as plain KEY STRINGS (e.g. [\"JIRA-12\"]) — unlike v1, which takes objects. Pair with issue_tracker to type them.",
+            "json_path": "/test_result/issues"
+          },
+          {
+            "name": "issue_tracker",
+            "type": "object",
+            "description": "Types the linked issues, e.g. {\"name\": \"jira\"}. Only read from inside test_result.",
+            "fields": [
+              {
+                "name": "name",
+                "type": "string"
+              },
+              {
+                "name": "host",
+                "type": "string"
+              }
+            ],
+            "json_path": "/test_result/issue_tracker"
+          },
+          {
+            "name": "elapsed_time",
+            "type": "integer",
+            "description": "Execution time in seconds. Stored as time_elapsed.",
+            "json_path": "/test_result/elapsed_time"
+          },
+          {
+            "name": "custom_fields",
+            "type": "object",
+            "description": "Result custom fields keyed by field name; resolved against the project's TestResult custom fields.",
+            "json_path": "/test_result/custom_fields"
+          },
+          {
+            "name": "step_results",
+            "type": "array",
+            "minItems": 1,
+            "description": "Per-step outcomes. Send these INSTEAD of a top-level status; each entry needs `status` plus `step_id` or `step_index`. The parent case status is rolled up from the steps.",
+            "fields": [
+              {
+                "name": "step_id",
+                "type": "number"
+              },
+              {
+                "name": "step_index",
+                "type": "number"
+              },
+              {
+                "name": "status",
+                "type": "string"
+              },
+              {
+                "name": "description",
+                "type": "string"
+              },
+              {
+                "name": "issues",
+                "type": "array"
+              },
+              {
+                "name": "created_at",
+                "type": "string"
+              },
+              {
+                "name": "updated_at",
+                "type": "string"
+              }
+            ],
+            "json_path": "/test_result/step_results"
+          },
+          {
+            "name": "test_case_id",
+            "type": "string",
+            "example": "TC-101",
+            "description": "Single form: which case in the run this result is for. TOP level — not inside test_result. One of test_case_id, execution_id or shared_test_case_ids is required."
+          },
+          {
+            "name": "execution_id",
+            "type": "string",
+            "description": "Single form: target an automation execution instead of a case identifier. Top level."
+          },
+          {
+            "name": "shared_test_case_ids",
+            "type": "object",
+            "description": "Single form: target a case shared from another project, as {project identifier: [test case identifiers]}. Must resolve to EXACTLY ONE case — zero or several gives 400 \"Test Case ID is invalid\"."
+          },
+          {
+            "name": "configuration_id",
+            "type": "integer",
+            "description": "Which configuration this result is for. TOP level. Omitting it logs against the default configuration."
+          },
+          {
+            "name": "attachments",
+            "type": "array",
+            "maxItems": 10,
+            "description": "Filenames of multipart file parts to attach to this result. Only binds on a multipart/form-data request whose JSON body rides in a `payload` part; on a plain JSON request it is accepted and silently does nothing. Each entry is a bare filename string of 1-255 characters."
+          },
+          {
+            "name": "validate_tc",
+            "type": "string",
+            "values": [
+              "true",
+              "false"
+            ],
+            "description": "Bulk only. \"true\" pre-checks every test_case_id exists in the project and 400s listing the invalid ones. Rejected outright when the request carries 300 or more unique test case ids."
+          }
+        ],
+        "intent": "Record the outcome of running test cases in a test run — pass/fail/blocked with notes, per-step results, linked defects and attachments — for one case or for many in a single call",
+        "guidance": [
+          "Two shapes on one endpoint: `results: [...]` for many cases, or `test_result` plus one target (`test_case_id`, `execution_id` or `shared_test_case_ids`) for one. Sending both, neither, or any unrecognised top-level key is rejected 400 as invalid params.",
+          "Status is a NAME configured for the project, not an id. An unconfigured name fails that entry with INVALID_STATUS_VALUE.",
+          "Each submission ADDS a result to the case's history in this run; it never replaces the previous one. To move many cases to one status instead, use bulk_set_test_result_status_v2.",
+          "The bulk form is queued, not applied inline: 200 means accepted. Read `results[]` — every entry is ACCEPTED or FAILED. A mix of good and bad entries still returns HTTP 200 but with `success: false` and `status: \"PARTIAL\"`; only an all-bad request returns 400. Treating 200 as 'all logged' will misreport.",
+          "A project can restrict which review statuses may be executed. Blocked cases come back with a REVIEW_STATUS_GATE error and are never logged, whatever the status you sent.",
+          "Attachments require a multipart/form-data request: JSON body in a `payload` part, each file in its own part, and every name in `attachments` must match a part's filename or the request is rejected. Limits are 10 files per result, 100 per request, 50 MB per file, and filenames must be unique across the request.",
+          "Attachments cannot be combined with step_results on the same bulk entry — that request is rejected 400.",
+          "Success is HTTP 200 here, not the 201 the v1 create returns.",
+          "Requires the execute permission on the run; a caller without it gets 403 before anything is written."
+        ],
+        "returns": [
+          "success",
+          "test-result",
+          "test-run-step-results",
+          "overall-result-status",
+          "results",
+          "status",
+          "message",
+          "attachments",
+          "attachment_errors",
+          "dropped_attachments"
+        ],
+        "responses": {
+          "200": {
+            "$response": "V2TestRunResultSubmitResponse"
+          },
+          "400": {
+            "description": "Invalid params, unconfigured status for every entry, every case blocked by the review-status gate, or a multipart/attachment rejection. Bulk bodies carry per-case `results` entries with an `error.code` such as INVALID_STATUS_VALUE or REVIEW_STATUS_GATE.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "V2BulkResultOutcome"
+                  }
+                },
+                "dropped_attachments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "description": "Rich-text description referenced an attachment that could not be resolved.",
+            "schema": {
+              "type": "string",
+              "example": "attachment in rich text editor is invalid"
+            }
           },
           "500": {
             "$response": "InternalServerError"
@@ -4790,6 +5679,53 @@
           },
           "422": {
             "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "delete_template_v2",
+        "method": "DELETE",
+        "path": "/api/v2/templates/{id}",
+        "mode": "destructive",
+        "entity": "template",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "Template id — a plain integer with no prefix, discovered from the template list.",
+            "pattern": "^[0-9]+$"
+          }
+        ],
+        "intent": "Permanently delete a template together with its field and project links — there is no bin and no undo; disable it instead if you might want it back.",
+        "guidance": [
+          "This removes the template record itself, along with its field mappings and its project mappings. Test Management exposes no restore for a deleted template.",
+          "If the goal is only to stop people picking the template for new test cases, DISABLE it instead — disabling is reversible and keeps the fields and project links intact.",
+          "System templates and the workspace default template cannot be deleted; the attempt comes back as a 400 with the reason.",
+          "Paid plans only. On a free plan the response is HTTP 200 with success:false and the paid-feature message, and nothing is deleted — check the flag, not the status code.",
+          "Success returns only success:true, with no record of what was removed. Read the template first if you need its name or field list for the record."
+        ],
+        "returns": [
+          "success"
+        ],
+        "responses": {
+          "200": {
+            "$response": "TemplateWriteAckResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
           },
           "500": {
             "$response": "InternalServerError"
@@ -8285,6 +9221,66 @@
         }
       },
       {
+        "name": "get_template_v2",
+        "method": "GET",
+        "path": "/api/v2/templates/{id}",
+        "mode": "read",
+        "entity": "template",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "Template id — a plain integer with no prefix. Discover it from the template list; a non-numeric value does not reach this endpoint at all.",
+            "pattern": "^[0-9]+$"
+          }
+        ],
+        "intent": "Get one template in full, including every description, property and step field it carries — read this before editing a template so you can resend the complete field set.",
+        "guidance": [
+          "This is the only read that returns the field layout; the list returns metadata and counts only.",
+          "The Review & Approve property fields (reviewers, review status) are filtered out of this response on this surface even when the template stores them. Do not conclude from a read that they are absent.",
+          "A field update replaces the whole section, so treat this response as the baseline: drop what you want gone, keep everything else, then send the full array back.",
+          "An unknown or out-of-workspace id comes back as a 404 saying the template was not found, not as an empty success."
+        ],
+        "returns": [
+          "success",
+          "template",
+          "id",
+          "name",
+          "entity",
+          "enabled",
+          "step_type",
+          "is_default",
+          "is_system",
+          "future_projects_applicable",
+          "field_count",
+          "linked_to_all_projects",
+          "project_count",
+          "created_at",
+          "updated_at",
+          "description_fields",
+          "properties_fields",
+          "step_fields"
+        ],
+        "responses": {
+          "200": {
+            "$response": "TemplateDetailResponse"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
         "name": "get_test_case_attachments_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/attachments",
@@ -9289,6 +10285,115 @@
         }
       },
       {
+        "name": "get_test_results_for_test_case_v2",
+        "method": "GET",
+        "path": "/api/v2/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/results",
+        "mode": "read",
+        "entity": "result",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "PR-123",
+            "pattern": "^PR-\\d+$",
+            "description": "Project identifier in PR- form. A bare integer does not match the route and 404s."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^TR-\\d+$",
+            "description": "Test run identifier in TR- form. A bare integer does not match the route and 404s."
+          },
+          {
+            "name": "test_case_id",
+            "type": "string",
+            "required": true,
+            "example": "TC-101",
+            "description": "Test case IDENTIFIER (TC- form), resolved by lookup — not the numeric internal id the v1 route takes. An identifier that does not resolve in this project returns 404 \"Test case not found\"."
+          }
+        ],
+        "query": [
+          {
+            "name": "p",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number. Note the name is `p`, not `page`; anything else is ignored and page 1 comes back."
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "values": [
+              30,
+              300
+            ],
+            "default": 30,
+            "description": "Results per page. ONLY 30 or 300 are accepted — any other value is rejected 400 \"Invalid page_size\"."
+          },
+          {
+            "name": "count",
+            "type": "integer",
+            "values": [
+              30,
+              300
+            ],
+            "description": "Alias for page_size, and it WINS when both are sent. Same 30-or-300 restriction."
+          }
+        ],
+        "intent": "Read what was recorded for one test case in one test run — every execution logged against it, with status, notes, linked defects, custom fields and configuration",
+        "guidance": [
+          "Returns the case's result history in this run, one entry per recorded execution — not just the latest outcome. Take the newest entry if you only want the current status.",
+          "Both ids are identifiers: TR- for the run, TC- for the case. Passing internal numeric ids does not match the route (run) or does not resolve (case).",
+          "Page size is a closed set: 30 or 300, nothing in between. The page parameter is `p`.",
+          "Results are listed under `test_results` with an underscore here — the v1 list uses `test-results` with a hyphen, so a client written against v1 reads an empty list and reports no results."
+        ],
+        "returns": [
+          "success",
+          "test_results",
+          "info",
+          "id",
+          "created_at",
+          "updated_at",
+          "created_by",
+          "description",
+          "test_case_id",
+          "test_run_id",
+          "result_status",
+          "issues",
+          "custom_fields",
+          "step_result",
+          "configuration_id",
+          "execution_id",
+          "dataset",
+          "urls"
+        ],
+        "max_page_size": 300,
+        "paginated": true,
+        "responses": {
+          "200": {
+            "$response": "V2TestResultListResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
         "name": "get_test_run_by_integer_id_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}",
@@ -9360,6 +10465,310 @@
           },
           "401": {
             "description": "Unauthorized."
+          }
+        }
+      },
+      {
+        "name": "get_test_run_test_cases_v2",
+        "method": "GET",
+        "path": "/api/v2/projects/{project_id}/test-runs/{test_run_id}/test-cases",
+        "mode": "read",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "PR-1",
+            "pattern": "^PR-\\d+$",
+            "description": "Project identifier in PR-NNN form. The v2 routes constrain this segment to PR-\\d+, so a bare integer project id does not match the route at all and never reaches the API."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^TR-\\d+$",
+            "description": "Run identifier in TR-NNN form. The v2 routes constrain this segment to TR-\\d+ — unlike the v1 run endpoints, a bare integer is NOT accepted here and returns a routing 404."
+          }
+        ],
+        "query": [
+          {
+            "name": "p",
+            "type": "integer",
+            "default": 1,
+            "minimum": 1,
+            "description": "PAGE NUMBER, and the parameter really is named `p`. `page=2` is not read: you silently get page 1 again."
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "default": 30,
+            "minimum": 1,
+            "maximum": 300,
+            "description": "Rows per page. Defaults to 30 when omitted. Above 300 the request errors ('Page limit exceeds the maximum limit of 300'); with fetch_steps=true the ceiling drops to 30."
+          },
+          {
+            "name": "count",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300,
+            "description": "Alias for page_size and read first when both are sent. Same ceilings."
+          },
+          {
+            "name": "fetch_steps",
+            "type": "boolean",
+            "default": false,
+            "description": "Include each case's steps. Pass the literal string 'true'. Doing so lowers the maximum page size from 300 to 30."
+          },
+          {
+            "name": "minify",
+            "type": "boolean",
+            "default": false,
+            "description": "Compact row shape. Pass the literal string 'true'."
+          },
+          {
+            "name": "is_shared",
+            "type": "boolean",
+            "description": "Restrict to cases shared in from another project."
+          },
+          {
+            "name": "source_project_id",
+            "type": "integer",
+            "description": "Numeric id of the origin project, to narrow shared cases to one source project."
+          },
+          {
+            "name": "include_subfolders",
+            "type": "boolean",
+            "default": false,
+            "description": "Make folder_id include all descendant folders."
+          },
+          {
+            "name": "match",
+            "type": "object",
+            "description": "Per-field operator, e.g. match[tags]=all&match[assignee]=none. Multi-value fields (tags) take all|any|none|only; single-value fields take only any|none — anything else is a 400. match[global]=all (default) ANDs the fields, match[global]=any ORs them. `only` needs a group entitlement, else 403."
+          },
+          {
+            "name": "latest_status",
+            "type": "string",
+            "description": "Comma-separated latest execution statuses (untested, passed, failed, retest, blocked, skipped, in_progress, plus any custom group status). Unknown values are a 400 listing what is valid."
+          },
+          {
+            "name": "assignee",
+            "type": "string",
+            "description": "Comma-separated assignee emails. Use match[assignee]=none for unassigned cases. An email that does not resolve in the group is a 400, never a silently ignored filter."
+          },
+          {
+            "name": "priority",
+            "type": "string",
+            "description": "Priority label, resolved to an id inside the group."
+          },
+          {
+            "name": "tags",
+            "type": "string",
+            "description": "Comma-separated tags. Combine with match[tags]=all|any|none|only."
+          },
+          {
+            "name": "folder_id",
+            "type": "string",
+            "description": "Folder id. Pair with include_subfolders=true to include descendants."
+          },
+          {
+            "name": "configuration",
+            "type": "string",
+            "description": "Configuration label, resolved to an id inside the group."
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "description": "Substring match on the test case name."
+          },
+          {
+            "name": "identifier",
+            "type": "string",
+            "description": "Exact test case identifier, e.g. TC-42."
+          },
+          {
+            "name": "query",
+            "type": "string",
+            "description": "Free-text search across name and identifier."
+          },
+          {
+            "name": "test_case_status",
+            "type": "string",
+            "description": "Test case status label, resolved to an id inside the group."
+          },
+          {
+            "name": "test_case_owner",
+            "type": "string",
+            "description": "Comma-separated test case owner emails."
+          },
+          {
+            "name": "case_type",
+            "type": "string",
+            "description": "Category / type label, resolved to an id inside the group."
+          },
+          {
+            "name": "automation_status",
+            "type": "string",
+            "description": "Automation status label, resolved to an id inside the group."
+          },
+          {
+            "name": "created_by",
+            "type": "string",
+            "description": "Comma-separated creator emails."
+          },
+          {
+            "name": "updated_by",
+            "type": "string",
+            "description": "Comma-separated last-updater emails."
+          },
+          {
+            "name": "template",
+            "type": "string",
+            "description": "Template label, resolved to an id inside the group."
+          },
+          {
+            "name": "created_between",
+            "type": "string",
+            "description": "Two comma-separated dates (start,end) bounding creation time."
+          },
+          {
+            "name": "updated_between",
+            "type": "string",
+            "description": "Two comma-separated dates (start,end) bounding last-update time."
+          }
+        ],
+        "intent": "List the test cases inside a run with their latest result, assignee and configuration — the read to answer \"what is still untested / failing in this run?\"",
+        "guidance": [
+          "Page with `p` (NOT `page`) and `page_size` (or `count`). The default page is 30 rows and the hard ceiling is 300; asking for more errors instead of clamping.",
+          "fetch_steps=true drops the ceiling to 30 rows per page, so a run of any size takes many more calls with steps on.",
+          "Deep paging is capped by rows, not pages: once p x page_size passes roughly 30,000 the call returns 429 'request_limit_exceeded'. Filter the run down rather than walking a huge run to the end.",
+          "Filters fail closed — an unknown status, an unresolvable email or an invalid match mode returns 400 listing the valid values, so a filtered read never quietly degrades into the whole run.",
+          "Rows are per case-and-configuration mapping: a case mapped to three configurations comes back as three rows, each with its own configuration_id and latest_status. configuration_id is null for cases with no configuration.",
+          "Use latest_result_id from a row when you need to fetch or amend that case's recorded result."
+        ],
+        "returns": [
+          "success",
+          "info",
+          "test_cases",
+          "identifier",
+          "name",
+          "latest_status",
+          "latest_result_id",
+          "assignee",
+          "priority",
+          "status",
+          "case_type",
+          "configuration_id",
+          "folder_path",
+          "dataset",
+          "project_id",
+          "source_project_id"
+        ],
+        "max_page_size": 300,
+        "paginated": true,
+        "responses": {
+          "200": {
+            "$response": "TestRunTestCasesV2Response"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "get_test_run_v2",
+        "method": "GET",
+        "path": "/api/v2/projects/{project_id}/test-runs/{test_run_id}",
+        "mode": "read",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "PR-1",
+            "pattern": "^PR-\\d+$",
+            "description": "Project identifier in PR-NNN form. The v2 routes constrain this segment to PR-\\d+, so a bare integer project id does not match the route at all and never reaches the API."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^TR-\\d+$",
+            "description": "Run identifier in TR-NNN form. The v2 routes constrain this segment to TR-\\d+ — unlike the v1 run endpoints, a bare integer is NOT accepted here and returns a routing 404."
+          }
+        ],
+        "query": [
+          {
+            "name": "minify",
+            "type": "boolean",
+            "default": false,
+            "description": "Return the compact run payload (drops the heavier analytics/detail fields). Pass the literal string 'true'."
+          }
+        ],
+        "intent": "Look up one test run — its state, owner, tags, configurations, linked plan and per-status progress counts",
+        "guidance": [
+          "Both ids are prefixed strings here (PR-1 / TR-14). The v2 route only matches PR-\\d+ and TR-\\d+, so the integer ids the v1 run capabilities take give a 404 on this path.",
+          "The run's `id` field comes back as the TR-NNN string; the integer lives in `uuid`. Take `uuid` whenever you need a numeric run id downstream.",
+          "This returns the run header only — progress is aggregated counts. To see which cases are in the run, or their latest results, read the run's test cases instead.",
+          "403 means the caller lacks view permission for this run type (automation runs are gated separately from manual ones)."
+        ],
+        "returns": [
+          "id",
+          "uuid",
+          "identifier",
+          "name",
+          "description",
+          "owner",
+          "assignee",
+          "run_state",
+          "active_state",
+          "is_automation",
+          "is_dynamic",
+          "tags",
+          "configurations",
+          "test_plans",
+          "test_cases_count",
+          "overall_progress",
+          "overall_progress_by_status_id",
+          "project_id",
+          "created_at",
+          "updated_at",
+          "links"
+        ],
+        "responses": {
+          "200": {
+            "$response": "TestRunResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
           }
         }
       },
@@ -10552,6 +11961,78 @@
         }
       },
       {
+        "name": "list_templates_v2",
+        "method": "GET",
+        "path": "/api/v2/templates",
+        "mode": "read",
+        "entity": "template",
+        "query": [
+          {
+            "name": "name",
+            "type": "string",
+            "description": "Narrow the list to templates whose name contains this value. It is a substring filter, not an exact lookup, so it can return several templates or none."
+          },
+          {
+            "name": "p",
+            "type": "integer",
+            "description": "Page number. This is the page parameter for this endpoint — `page` is ignored. A value that is not a positive integer is rejected with a 400 before the search runs.",
+            "minimum": 1,
+            "default": 1
+          },
+          {
+            "name": "count",
+            "type": "integer",
+            "description": "Page size. This is the size parameter for this endpoint — `per_page` is ignored. Above 300 the request is REJECTED with a 400, it is not clamped. A non-numeric value silently falls back to 30.",
+            "maximum": 300,
+            "default": 30
+          }
+        ],
+        "intent": "List the workspace's test-case templates — start here to find a template's id before creating a test case from it or before editing the template itself.",
+        "guidance": [
+          "Asking for more than 300 per page fails the whole call with a 400 rather than returning a clamped page; page through at 300 or below instead.",
+          "List items carry only template metadata and counts — no field detail. Read a single template when you need its description or property fields.",
+          "Only test-case templates are returned. The entity type is fixed server-side and cannot be widened from the request, so result/plan/exploratory-session templates are not reachable here.",
+          "project_count and the field counts can come back null: on some workspaces the expensive per-project count is skipped server-side. Treat a null count as 'not computed', not as zero."
+        ],
+        "returns": [
+          "success",
+          "templates",
+          "info",
+          "id",
+          "name",
+          "entity",
+          "enabled",
+          "step_type",
+          "is_default",
+          "is_system",
+          "future_projects_applicable",
+          "field_count",
+          "linked_to_all_projects",
+          "project_count",
+          "created_at",
+          "updated_at"
+        ],
+        "max_page_size": 300,
+        "paginated": true,
+        "responses": {
+          "200": {
+            "$response": "TemplateListResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
         "name": "list_test_case_tags_v1",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-case/tags-v2",
@@ -10594,7 +12075,7 @@
         "method": "GET",
         "path": "/api/v1/admin-v2/settings/templates",
         "mode": "read",
-        "entity": "",
+        "entity": "template",
         "query": [
           {
             "name": "entity_type",
@@ -11181,6 +12662,285 @@
           },
           "404": {
             "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "replace_test_run_v2",
+        "method": "POST",
+        "path": "/api/v2/projects/{project_id}/test-runs/{test_run_id}/update",
+        "mode": "write",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "PR-1",
+            "pattern": "^PR-\\d+$",
+            "description": "Project identifier in PR-NNN form. The v2 routes constrain this segment to PR-\\d+, so a bare integer project id does not match the route at all and never reaches the API."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^TR-\\d+$",
+            "description": "Run identifier in TR-NNN form. The v2 routes constrain this segment to TR-\\d+ — unlike the v1 run endpoints, a bare integer is NOT accepted here and returns a routing 404."
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "example": "Regression - Sprint 24",
+            "json_path": "/test_run/name",
+            "description": "Run name. Only applied when non-empty; sending an empty string leaves the existing name."
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "json_path": "/test_run/description",
+            "description": "HTML is escaped and sanitised server-side, so the stored value can differ from what you sent."
+          },
+          {
+            "name": "assignee",
+            "type": "string",
+            "example": "qa@acme.com",
+            "json_path": "/test_run/assignee",
+            "description": "Run owner, given as an email (or a TM user id). An address that does not resolve to a user in this group fails the whole request with 400 'invalid data' — it is not skipped."
+          },
+          {
+            "name": "run_state",
+            "type": "string",
+            "values": [
+              "new_run",
+              "in_progress",
+              "under_review",
+              "rejected",
+              "done",
+              "closed"
+            ],
+            "example": "in_progress",
+            "json_path": "/test_run/run_state"
+          },
+          {
+            "name": "tags",
+            "type": "array",
+            "fields": [
+              {
+                "name": "tag",
+                "type": "string"
+              }
+            ],
+            "json_path": "/test_run/tags",
+            "description": "Plain tag strings; the list you send replaces the run's tags."
+          },
+          {
+            "name": "configurations",
+            "type": "array",
+            "fields": [
+              {
+                "name": "configuration_id",
+                "type": "integer"
+              }
+            ],
+            "json_path": "/test_run/configurations",
+            "description": "Configuration IDs (integers) the run executes against — not the configuration objects returned on read. Duplicates are collapsed."
+          },
+          {
+            "name": "issues",
+            "type": "array",
+            "fields": [
+              {
+                "name": "issue_id",
+                "type": "string"
+              },
+              {
+                "name": "issue_type",
+                "type": "string"
+              }
+            ],
+            "json_path": "/test_run/issues",
+            "description": "Linked defects. Each entry is an object; a bare string entry is coerced to {issue_id: ...} but loses the tracker type."
+          },
+          {
+            "name": "test_plan_id",
+            "type": "string",
+            "pattern": "^$|^TP-\\d+$",
+            "example": "TP-1",
+            "json_path": "/test_run/test_plan_id",
+            "description": "Parent test plan to link. Send null or \"\" to unlink the current plan. Mutually exclusive with sub_test_plan_id."
+          },
+          {
+            "name": "sub_test_plan_id",
+            "type": "string",
+            "pattern": "^$|^STP-\\d+$",
+            "example": "STP-1",
+            "json_path": "/test_run/sub_test_plan_id",
+            "description": "Sub test plan to link. Send null or \"\" to unlink. Mutually exclusive with test_plan_id."
+          },
+          {
+            "name": "test_cases",
+            "type": "array",
+            "fields": [
+              {
+                "name": "test_case_id",
+                "type": "string"
+              }
+            ],
+            "example": [
+              "TC-1",
+              "TC-2"
+            ],
+            "json_path": "/test_run/test_cases",
+            "description": "Test case identifiers to ADD to the run. The write is a union: cases already in the run stay, and nothing listed elsewhere is removed."
+          },
+          {
+            "name": "include_all",
+            "type": "boolean",
+            "default": false,
+            "json_path": "/test_run/include_all",
+            "description": "Select every test case in the project. Overrides folder_ids and filter_test_cases when true."
+          },
+          {
+            "name": "folder_ids",
+            "type": "array",
+            "fields": [
+              {
+                "name": "folder_id",
+                "type": "integer"
+              }
+            ],
+            "json_path": "/test_run/folder_ids",
+            "description": "Folder IDs whose cases are added to the run."
+          },
+          {
+            "name": "include_sub_folders",
+            "type": "boolean",
+            "default": false,
+            "json_path": "/test_run/include_sub_folders"
+          },
+          {
+            "name": "filter_test_cases",
+            "type": "object",
+            "fields": [
+              {
+                "name": "is_dynamic",
+                "type": "boolean"
+              },
+              {
+                "name": "priority",
+                "type": "array"
+              },
+              {
+                "name": "status",
+                "type": "array"
+              },
+              {
+                "name": "case_type",
+                "type": "array"
+              },
+              {
+                "name": "owner",
+                "type": "array"
+              },
+              {
+                "name": "tags",
+                "type": "array"
+              },
+              {
+                "name": "custom_fields",
+                "type": "object"
+              }
+            ],
+            "json_path": "/test_run/filter_test_cases",
+            "description": "Filter criteria used to resolve cases, and the only place is_dynamic is read. is_dynamic:true needs at least one other key here or the call 400s; is_dynamic:false turns a dynamic run static. Omitting is_dynamic leaves the run's current dynamic flag alone."
+          },
+          {
+            "name": "configuration_map",
+            "type": "array",
+            "fields": [
+              {
+                "name": "test_case_id",
+                "type": "string"
+              },
+              {
+                "name": "configuration_ids",
+                "type": "array"
+              }
+            ],
+            "json_path": "/test_run/configuration_map",
+            "description": "Per-case configuration assignment overlay: each entry is {test_case_id: \"TC-1\" or [\"TC-1\",\"TC-2\"], configuration_ids: [101,102]}. Unresolvable case or configuration IDs return 422. It is an overlay, not the case list — cases you list elsewhere are still included, with a null-configuration row."
+          },
+          {
+            "name": "filter_scope",
+            "type": "string",
+            "values": [
+              "global",
+              "within_folders"
+            ],
+            "json_path": "/test_run/filter_scope",
+            "description": "Accepted by the parameter filter but NOT honoured on either update path — the selection is always built in global mode here. Only create reads it."
+          }
+        ],
+        "intent": "Rewrite a test run from a complete payload — every metadata field you leave out is reset, so the run ends up as whatever this one body says (use the PATCH on this same path to change one field)",
+        "guidance": [
+          "Two different operations share this path. This POST rebuilds the whole run payload; the PATCH applies only the keys you send. If you are renaming a run, closing it, or linking a plan, pick the PATCH.",
+          "Omission is destructive here: no run_state resets the run to new_run, no test_plan_id/sub_test_plan_id unlinks the plan it was under, and no issues clears its linked defects. Read the run first and re-send its current values for anything you do not mean to change.",
+          "An invalid run_state is not rejected on this path — it is silently coerced to new_run. The PATCH on the same path returns 400 instead.",
+          "shared_test_cases and filter_scope are accepted by the parameter filter and then ignored on this path. Cross-project cases only land through the PATCH.",
+          "Case membership is union-only: test_cases / folder_ids / include_all ADD cases, and nothing here removes one. Use the bulk test-cases call to remove.",
+          "The body must be wrapped in a `test_run` object; without it the request 400s before any field is read.",
+          "400 'invalid data' also covers an assignee email that cannot be resolved in this group — the run is left untouched in that case.",
+          "There is no undo: test runs keep no version history, so a field this call clears cannot be restored."
+        ],
+        "returns": [
+          "success",
+          "testrun",
+          "id",
+          "uuid",
+          "identifier",
+          "name",
+          "description",
+          "owner",
+          "assignee",
+          "run_state",
+          "active_state",
+          "is_automation",
+          "is_dynamic",
+          "tags",
+          "configurations",
+          "test_plans",
+          "test_cases_count",
+          "overall_progress",
+          "overall_progress_by_status_id",
+          "project_id",
+          "created_at",
+          "updated_at",
+          "links"
+        ],
+        "responses": {
+          "200": {
+            "$response": "TestRunWriteResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
           },
           "500": {
             "$response": "InternalServerError"
@@ -13473,6 +15233,116 @@
         }
       },
       {
+        "name": "update_template_v2",
+        "method": "PATCH",
+        "path": "/api/v2/templates/{id}",
+        "mode": "write",
+        "entity": "template",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "Template id — a plain integer with no prefix, discovered from the template list.",
+            "pattern": "^[0-9]+$"
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "description": "New template name. Only applied when the key is present; omit it to leave the name alone.",
+            "minLength": 1
+          },
+          {
+            "name": "enabled",
+            "type": "boolean",
+            "description": "true re-activates the template, false disables it. Read as truthiness: send a real JSON boolean, because the STRING \"false\" is truthy and ENABLES the template. Disabling is reversible and is the alternative to deleting."
+          },
+          {
+            "name": "is_default",
+            "type": "boolean",
+            "description": "Make this the workspace default template for its entity type. Setting a new default displaces the current one; the system default template cannot be disabled or deleted."
+          },
+          {
+            "name": "description_fields",
+            "type": "array",
+            "description": "REPLACES the description section wholesale — it is not merged. Anything you leave out is removed from the template. Read the template first and resend every field you want to keep.",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "required": true,
+                "description": "The system field id when is_system is true, otherwise the custom field id."
+              },
+              {
+                "name": "is_system",
+                "type": "boolean"
+              },
+              {
+                "name": "is_mandatory",
+                "type": "boolean"
+              }
+            ]
+          },
+          {
+            "name": "properties_fields",
+            "type": "array",
+            "description": "REPLACES the properties section wholesale. Sending this key also silently re-adds the Review & Approve system fields (reviewers, review status), so the stored set is a superset of what you sent and those two cannot be removed by omission.",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "required": true,
+                "description": "The system field id when is_system is true, otherwise the custom field id."
+              },
+              {
+                "name": "is_system",
+                "type": "boolean"
+              },
+              {
+                "name": "is_mandatory",
+                "type": "boolean"
+              }
+            ]
+          }
+        ],
+        "intent": "Rename a template, enable or disable it, make it the workspace default, or replace its description and property field layout.",
+        "guidance": [
+          "Sparse update: only the keys actually present in the body are touched, everything else keeps its current value. Sending an empty body is accepted and changes nothing.",
+          "Field arrays REPLACE, they do not merge. Templates have no version history in this product, so the previous layout cannot be restored — read the template, edit the returned arrays, and send them back whole.",
+          "Editing the field layout changes the fields shown on every test case using this template, in every linked project. Establish how many projects are affected before writing.",
+          "Sending properties_fields re-injects the Review & Approve system fields, and reads filter those same fields out, so a read-modify-write round-trip neither loses them nor can remove them. Do not report them as deleted.",
+          "enabled is evaluated for truthiness, so the string \"false\" enables rather than disables. Use a JSON boolean.",
+          "Paid plans only. On a free plan the response is HTTP 200 with success:false and the paid-feature message, and nothing is changed — check the flag, not the status code.",
+          "Success returns only success:true with no template body. Re-read the template to confirm the new layout.",
+          "Project links are not changed here; linking and unlinking projects is a separate operation on the template."
+        ],
+        "returns": [
+          "success"
+        ],
+        "responses": {
+          "200": {
+            "$response": "TemplateWriteAckResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
         "name": "update_test_plan_v1",
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/update",
@@ -13589,6 +15459,307 @@
             "schema": {
               "type": "object"
             }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "update_test_run_v2",
+        "method": "PATCH",
+        "path": "/api/v2/projects/{project_id}/test-runs/{test_run_id}/update",
+        "mode": "write",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "PR-1",
+            "pattern": "^PR-\\d+$",
+            "description": "Project identifier in PR-NNN form. The v2 routes constrain this segment to PR-\\d+, so a bare integer project id does not match the route at all and never reaches the API."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^TR-\\d+$",
+            "description": "Run identifier in TR-NNN form. The v2 routes constrain this segment to TR-\\d+ — unlike the v1 run endpoints, a bare integer is NOT accepted here and returns a routing 404."
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "example": "Regression - Sprint 24",
+            "json_path": "/test_run/name",
+            "description": "Run name. Only applied when non-empty; sending an empty string leaves the existing name."
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "json_path": "/test_run/description",
+            "description": "HTML is escaped and sanitised server-side, so the stored value can differ from what you sent."
+          },
+          {
+            "name": "assignee",
+            "type": "string",
+            "example": "qa@acme.com",
+            "json_path": "/test_run/assignee",
+            "description": "Run owner, given as an email (or a TM user id). An address that does not resolve to a user in this group fails the whole request with 400 'invalid data' — it is not skipped."
+          },
+          {
+            "name": "run_state",
+            "type": "string",
+            "values": [
+              "new_run",
+              "in_progress",
+              "under_review",
+              "rejected",
+              "done",
+              "closed"
+            ],
+            "example": "in_progress",
+            "json_path": "/test_run/run_state"
+          },
+          {
+            "name": "tags",
+            "type": "array",
+            "fields": [
+              {
+                "name": "tag",
+                "type": "string"
+              }
+            ],
+            "json_path": "/test_run/tags",
+            "description": "Plain tag strings; the list you send replaces the run's tags."
+          },
+          {
+            "name": "configurations",
+            "type": "array",
+            "fields": [
+              {
+                "name": "configuration_id",
+                "type": "integer"
+              }
+            ],
+            "json_path": "/test_run/configurations",
+            "description": "Configuration IDs (integers) the run executes against — not the configuration objects returned on read. Duplicates are collapsed."
+          },
+          {
+            "name": "issues",
+            "type": "array",
+            "fields": [
+              {
+                "name": "issue_id",
+                "type": "string"
+              },
+              {
+                "name": "issue_type",
+                "type": "string"
+              }
+            ],
+            "json_path": "/test_run/issues",
+            "description": "Linked defects. Each entry is an object; a bare string entry is coerced to {issue_id: ...} but loses the tracker type."
+          },
+          {
+            "name": "test_plan_id",
+            "type": "string",
+            "pattern": "^$|^TP-\\d+$",
+            "example": "TP-1",
+            "json_path": "/test_run/test_plan_id",
+            "description": "Parent test plan to link. Send null or \"\" to unlink the current plan. Mutually exclusive with sub_test_plan_id."
+          },
+          {
+            "name": "sub_test_plan_id",
+            "type": "string",
+            "pattern": "^$|^STP-\\d+$",
+            "example": "STP-1",
+            "json_path": "/test_run/sub_test_plan_id",
+            "description": "Sub test plan to link. Send null or \"\" to unlink. Mutually exclusive with test_plan_id."
+          },
+          {
+            "name": "test_cases",
+            "type": "array",
+            "fields": [
+              {
+                "name": "test_case_id",
+                "type": "string"
+              }
+            ],
+            "example": [
+              "TC-1",
+              "TC-2"
+            ],
+            "json_path": "/test_run/test_cases",
+            "description": "Test case identifiers to ADD to the run. The write is a union: cases already in the run stay, and nothing listed elsewhere is removed."
+          },
+          {
+            "name": "include_all",
+            "type": "boolean",
+            "default": false,
+            "json_path": "/test_run/include_all",
+            "description": "Select every test case in the project. Overrides folder_ids and filter_test_cases when true."
+          },
+          {
+            "name": "folder_ids",
+            "type": "array",
+            "fields": [
+              {
+                "name": "folder_id",
+                "type": "integer"
+              }
+            ],
+            "json_path": "/test_run/folder_ids",
+            "description": "Folder IDs whose cases are added to the run."
+          },
+          {
+            "name": "include_sub_folders",
+            "type": "boolean",
+            "default": false,
+            "json_path": "/test_run/include_sub_folders"
+          },
+          {
+            "name": "filter_test_cases",
+            "type": "object",
+            "fields": [
+              {
+                "name": "is_dynamic",
+                "type": "boolean"
+              },
+              {
+                "name": "priority",
+                "type": "array"
+              },
+              {
+                "name": "status",
+                "type": "array"
+              },
+              {
+                "name": "case_type",
+                "type": "array"
+              },
+              {
+                "name": "owner",
+                "type": "array"
+              },
+              {
+                "name": "tags",
+                "type": "array"
+              },
+              {
+                "name": "custom_fields",
+                "type": "object"
+              }
+            ],
+            "json_path": "/test_run/filter_test_cases",
+            "description": "Filter criteria used to resolve cases, and the only place is_dynamic is read. is_dynamic:true needs at least one other key here or the call 400s; is_dynamic:false turns a dynamic run static. Omitting is_dynamic leaves the run's current dynamic flag alone."
+          },
+          {
+            "name": "configuration_map",
+            "type": "array",
+            "fields": [
+              {
+                "name": "test_case_id",
+                "type": "string"
+              },
+              {
+                "name": "configuration_ids",
+                "type": "array"
+              }
+            ],
+            "json_path": "/test_run/configuration_map",
+            "description": "Per-case configuration assignment overlay: each entry is {test_case_id: \"TC-1\" or [\"TC-1\",\"TC-2\"], configuration_ids: [101,102]}. Unresolvable case or configuration IDs return 422. It is an overlay, not the case list — cases you list elsewhere are still included, with a null-configuration row."
+          },
+          {
+            "name": "filter_scope",
+            "type": "string",
+            "values": [
+              "global",
+              "within_folders"
+            ],
+            "json_path": "/test_run/filter_scope",
+            "description": "Accepted by the parameter filter but NOT honoured on either update path — the selection is always built in global mode here. Only create reads it."
+          },
+          {
+            "name": "shared_test_cases",
+            "type": "array",
+            "fields": [
+              {
+                "name": "project_id",
+                "type": "integer"
+              },
+              {
+                "name": "test_case_ids",
+                "type": "array"
+              }
+            ],
+            "json_path": "/test_run/shared_test_cases",
+            "description": "Cases shared in from other projects, as [{project_id, test_case_ids: [...]}]. Only this PATCH resolves them; the POST on the same path accepts the key and silently ignores it."
+          },
+          {
+            "name": "is_automation",
+            "type": "boolean",
+            "json_path": "/test_run/is_automation",
+            "description": "Only honoured on this PATCH path (and only for the literal values true/false); the POST on the same path ignores it."
+          }
+        ],
+        "intent": "Change just the fields you name on a test run — rename it, move its state on, link or unlink a test plan, attach configurations or a dynamic filter — leaving everything you omit untouched",
+        "guidance": [
+          "Two different operations share this path. This PATCH applies only the keys present in `test_run`; the POST rebuilds the whole payload and resets what you omit. This is the safe default for a targeted edit.",
+          "Unlinking is explicit: send test_plan_id (or sub_test_plan_id) as null or \"\" to detach the plan. Omitting the key keeps the current link.",
+          "run_state is validated here: an unknown value returns 400 echoing it. Both 'new_run' and 'new' are accepted. Omit the key to leave the state alone.",
+          "is_dynamic lives inside filter_test_cases and nowhere else. true needs at least one other criterion in the same object or the call 400s; false flips a dynamic run back to static; omitting it leaves the flag as it is.",
+          "Composition keys interact: sending only configurations re-reads the run's existing case selection so the case list survives, and sending selection keys without configurations re-reads the existing configuration list. Send neither and the run's composition is left completely untouched.",
+          "Cases are unioned in, never out — this cannot remove a case from the run. Removal is the bulk test-cases call, and that one drops the removed cases' results.",
+          "The body must be wrapped in a `test_run` object; without it the request 400s before any field is read.",
+          "There is no undo: test runs keep no version history, so an overwritten name, description or tag list cannot be restored."
+        ],
+        "returns": [
+          "success",
+          "testrun",
+          "id",
+          "uuid",
+          "identifier",
+          "name",
+          "description",
+          "owner",
+          "assignee",
+          "run_state",
+          "active_state",
+          "is_automation",
+          "is_dynamic",
+          "tags",
+          "configurations",
+          "test_plans",
+          "test_cases_count",
+          "overall_progress",
+          "overall_progress_by_status_id",
+          "project_id",
+          "created_at",
+          "updated_at",
+          "links"
+        ],
+        "responses": {
+          "200": {
+            "$response": "TestRunWriteResponse"
           },
           "400": {
             "$response": "BadRequest"
@@ -17458,6 +19629,391 @@
             "example": "300 KB"
           }
         }
+      },
+      "TestRunTestCaseV2": {
+        "type": "object",
+        "description": "One test case AS MAPPED INTO A TEST RUN — a case-plus-configuration row, not the project-level test case record. A case mapped to several configurations appears once per configuration.",
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "example": "TC-42"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "description": "Resolved label, not the id."
+          },
+          "status": {
+            "type": "string",
+            "description": "Test case status label."
+          },
+          "case_type": {
+            "type": "string"
+          },
+          "latest_status": {
+            "type": "string",
+            "description": "Latest execution status for THIS run row, e.g. untested / passed / failed."
+          },
+          "latest_result_id": {
+            "type": "integer",
+            "description": "Id of the latest result recorded against this row; use it to read or amend that result."
+          },
+          "assignee": {
+            "type": "string",
+            "description": "Assignee of this row within the run."
+          },
+          "folder_path": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "configuration_id": {
+            "type": "integer",
+            "description": "Configuration this row is for; null when the case is mapped without a configuration."
+          },
+          "dataset": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "variable": {
+                  "type": "string"
+                },
+                "row": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "project_id": {
+            "type": "string",
+            "example": "PR-1",
+            "description": "Project of the run being read."
+          },
+          "source_project_id": {
+            "type": "string",
+            "example": "PR-7",
+            "description": "Project the case itself lives in; equals project_id unless the case is shared in from elsewhere."
+          }
+        }
+      },
+      "V2BulkResultOutcome": {
+        "type": "object",
+        "description": "Per-test-case outcome of a bulk result submission. Reports whether the entry was accepted for async processing, not whether it was applied.",
+        "properties": {
+          "test_case_id": {
+            "type": "string",
+            "example": "TC-101"
+          },
+          "status": {
+            "type": "string",
+            "values": [
+              "ACCEPTED",
+              "FAILED"
+            ],
+            "description": "ACCEPTED means queued, not applied."
+          },
+          "message": {
+            "type": "string",
+            "example": "Will be processed."
+          },
+          "error": {
+            "type": "object",
+            "description": "Present only when status is FAILED.",
+            "properties": {
+              "code": {
+                "type": "string",
+                "values": [
+                  "INVALID_STATUS_VALUE",
+                  "REVIEW_STATUS_GATE"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "V2TestResultListItem": {
+        "type": "object",
+        "description": "One recorded result for a test case in a test run, as the v2 read returns it.",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_by": {
+            "type": "string",
+            "description": "Email of the user who recorded the result; null when the user is not in the caller's group.",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "test_case_id": {
+            "type": "string",
+            "description": "Echoed back as the TC- identifier that was requested, not a numeric id.",
+            "example": "TC-101"
+          },
+          "test_run_id": {
+            "type": "string",
+            "example": "TR-14"
+          },
+          "result_status": {
+            "$schema": "ResultStatus"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "custom_fields": {
+            "type": "object"
+          },
+          "step_result": {
+            "type": "object",
+            "description": "Present only for step-level results; null otherwise.",
+            "nullable": true,
+            "properties": {
+              "step": {
+                "type": "string"
+              },
+              "result": {
+                "type": "string"
+              },
+              "result_status": {
+                "type": "object"
+              }
+            }
+          },
+          "configuration_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "execution_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataset": {
+            "type": "array",
+            "description": "Dataset row this execution used, as {variable, row} pairs. Empty for non-data-driven runs.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "variable": {
+                  "type": "string"
+                },
+                "row": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "urls": {
+            "type": "object",
+            "description": "Web URLs for this result."
+          }
+        }
+      },
+      "V2TestRunResultDetail": {
+        "type": "object",
+        "description": "The single result written by a v2 result submission.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Id of the created result. Carry this forward for a follow-up update; it is the id domain the server expects back."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "example": "Passed"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "test_run_test_case_step_details": {
+            "type": "object",
+            "description": "Present only when the submission carried step_results.",
+            "nullable": true
+          },
+          "urls": {
+            "type": "object"
+          }
+        }
+      },
+      "Template": {
+        "type": "object",
+        "description": "A test-case template as returned in list responses: metadata and counts, without the field layout.",
+        "required": [
+          "id",
+          "name",
+          "entity",
+          "enabled",
+          "is_default",
+          "is_system",
+          "future_projects_applicable",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Template id — a plain integer."
+          },
+          "name": {
+            "type": "string"
+          },
+          "entity": {
+            "type": "string",
+            "description": "What the template applies to. Always TestCase on this surface.",
+            "example": "TestCase"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "True when the template is active. False means disabled — still stored, with its fields and project links, and re-enablable."
+          },
+          "step_type": {
+            "type": "string",
+            "nullable": true,
+            "description": "Step style identifier for test-case templates; null for templates that do not define one."
+          },
+          "is_default": {
+            "type": "boolean",
+            "description": "True for the workspace default template for this entity type. The default cannot be disabled or deleted."
+          },
+          "is_system": {
+            "type": "boolean",
+            "description": "True for a built-in template. System templates cannot be deleted."
+          },
+          "future_projects_applicable": {
+            "type": "boolean",
+            "description": "True when projects created later are linked to this template automatically."
+          },
+          "field_count": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Number of fields in the template. Null when the count was not computed for this response."
+          },
+          "linked_to_all_projects": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "project_count": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Number of linked projects. Null when the workspace-wide count was skipped server-side — treat null as 'not computed', not zero."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TemplateFieldMapping": {
+        "type": "object",
+        "description": "One field placed on a template, as returned by a template read. Note these are mapping records, not the ids sent when writing a template.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Id of the mapping row, NOT the field id. When resending a field on an update, use custom_field_id or system_field_id, not this."
+          },
+          "field_category": {
+            "type": "string",
+            "description": "Which section the field sits in.",
+            "values": [
+              "description",
+              "properties",
+              "step_properties"
+            ]
+          },
+          "custom_field_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Set for a custom field; null for a system field."
+          },
+          "system_field_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Set for a built-in field; null for a custom field."
+          },
+          "order": {
+            "type": "integer",
+            "description": "Position within its section."
+          },
+          "is_mandatory": {
+            "type": "boolean"
+          },
+          "field_data": {
+            "type": "object",
+            "description": "The underlying field definition — the system field when custom_field_id is null, otherwise the custom field. For custom fields the field type is returned as a name, with the raw numeric type alongside it."
+          }
+        }
+      },
+      "TemplateWithFields": {
+        "type": "object",
+        "description": "A test-case template together with its full field layout, as returned by a single-template read or a create.",
+        "allOf": [
+          {
+            "$schema": "Template"
+          }
+        ],
+        "properties": {
+          "description_fields": {
+            "type": "array",
+            "description": "Fields in the description section, ordered.",
+            "items": {
+              "$schema": "TemplateFieldMapping"
+            }
+          },
+          "properties_fields": {
+            "type": "array",
+            "description": "Fields in the properties section, ordered. The Review & Approve fields (reviewers, review status) are filtered out of this surface even when stored on the template.",
+            "items": {
+              "$schema": "TemplateFieldMapping"
+            }
+          },
+          "step_fields": {
+            "type": "array",
+            "description": "Step-level custom fields, ordered. Always an empty array for workspaces without step custom fields enabled; the key is always present.",
+            "items": {
+              "$schema": "TemplateFieldMapping"
+            }
+          }
+        }
       }
     },
     "responses": {
@@ -19287,6 +21843,180 @@
             }
           }
         }
+      },
+      "TestRunTestCasesV2Response": {
+        "description": "Paginated test cases of a test run. `info` carries the paging counts and reflects any filters applied.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "info": {
+              "$schema": "PageInfo"
+            },
+            "test_cases": {
+              "type": "array",
+              "items": {
+                "$schema": "TestRunTestCaseV2"
+              }
+            }
+          }
+        }
+      },
+      "V2TestRunResultSubmitResponse": {
+        "description": "Result submission accepted. The single form returns the written result under `test-result` (or `test-run-step-results` + `overall-result-status` for a step submission). The bulk form returns only `success: true` when everything was accepted, or `success: false` with `status: \"PARTIAL\"` and per-case `results` when some entries were rejected — still HTTP 200.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "description": "false on a PARTIAL bulk response even though the status is 200."
+            },
+            "status": {
+              "type": "string",
+              "example": "PARTIAL",
+              "description": "Present only when some bulk entries were rejected."
+            },
+            "message": {
+              "type": "string"
+            },
+            "test-result": {
+              "$schema": "V2TestRunResultDetail"
+            },
+            "test-run-step-results": {
+              "type": "array",
+              "items": {
+                "$schema": "V2TestRunResultDetail"
+              }
+            },
+            "overall-result-status": {
+              "type": "string",
+              "description": "Status rolled up from the submitted step results."
+            },
+            "results": {
+              "type": "array",
+              "items": {
+                "$schema": "V2BulkResultOutcome"
+              }
+            },
+            "attachments": {
+              "type": "array",
+              "description": "Attachments bound on a multipart submission.",
+              "items": {
+                "$schema": "Attachment"
+              }
+            },
+            "attachment_errors": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "dropped_attachments": {
+              "type": "array",
+              "description": "Files that were uploaded but belonged to an entry that got rejected.",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "V2BulkResultStatusAcceptedResponse": {
+        "description": "The bulk status change was queued. It says nothing about which cases were changed or whether the work succeeded.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            }
+          }
+        }
+      },
+      "V2TestResultListResponse": {
+        "description": "Recorded results for one test case in one test run, newest executions included as separate entries. Note the key is `test_results` with an underscore, unlike the v1 list's `test-results`.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "success",
+            "test_results",
+            "info"
+          ],
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "test_results": {
+              "type": "array",
+              "items": {
+                "$schema": "V2TestResultListItem"
+              }
+            },
+            "info": {
+              "$schema": "PageInfo"
+            }
+          }
+        }
+      },
+      "TemplateListResponse": {
+        "description": "A page of test-case templates with pagination metadata.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "success",
+            "templates"
+          ],
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "templates": {
+              "type": "array",
+              "items": {
+                "$schema": "Template"
+              }
+            },
+            "info": {
+              "$schema": "PageInfo"
+            }
+          }
+        }
+      },
+      "TemplateDetailResponse": {
+        "description": "A single test-case template with its full field layout.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "success",
+            "template"
+          ],
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "template": {
+              "$schema": "TemplateWithFields"
+            }
+          }
+        }
+      },
+      "TemplateWriteAckResponse": {
+        "description": "Bare acknowledgement of a template write. Carries no template body, so re-read the template to confirm the result.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "success"
+          ],
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "description": "True on success. A free-plan refusal also arrives with HTTP 200 but sets this false and adds a message, so check this flag rather than the status code."
+            }
+          }
+        }
       }
     },
     "paging": {
@@ -19965,16 +22695,24 @@
         ],
         "capabilities": [
           "bulk_delete_test_results_v1",
+          "bulk_set_test_result_status_v2",
           "create_step_result_v1",
           "create_test_result_for_test_case",
+          "create_test_results_for_test_run_v2",
           "delete_test_result_v1",
           "get_test_results_for_test_case",
+          "get_test_results_for_test_case_v2",
           "update_latest_test_result_for_test_case"
         ],
         "key_facts": [
           "Bodies are wrapped in test_result; set status by NAME (status) or id (status_id) — use a real configured status (see statuses-and-states).",
           "bulk-delete SUCCEEDS PARTIALLY and still returns 200. Authorisation is per id (author OR project admin); ids the caller may not delete come back in `skipped` — and BOTH lists are nested under a top-level `result` key, with `skipped` holding OBJECTS ({id, reason}) not bare ids, so read result.deleted_ids / result.skipped. Not as an error. ALWAYS compare deleted_ids against what you asked for and report the skipped ids — treating 200 as 'all deleted' will misreport.",
-          "bulk-delete needs a non-empty result_ids array (400 otherwise) of at most 300 ids (422 beyond) — batch bigger sets yourself."
+          "bulk-delete needs a non-empty result_ids array (400 otherwise) of at most 300 ids (422 beyond) — batch bigger sets yourself.",
+          "On the v2 surface a result's status is given by NAME (a status configured for the project, matched case-insensitively); the numeric status_id the v1 surface takes is not accepted there.",
+          "Logging a result APPENDS to a test case's result history in that run, so the previous outcome stays readable. A bulk status set REPLACES the case's current outcome in place instead — the overwritten status is not recoverable.",
+          "Bulk result writes are queued, not applied inline: a success response means accepted for processing. Per-case outcomes come back as ACCEPTED/FAILED, a partly-valid batch still answers 200 with success:false and status PARTIAL, and a bulk status set reports nothing per case at all — read the results back to confirm.",
+          "A project can restrict which review statuses are allowed to log an execution result; cases outside that set are rejected with a REVIEW_STATUS_GATE error rather than being logged.",
+          "Result attachments only attach on a multipart upload that carries the files alongside the JSON body; naming filenames in a plain JSON request is accepted and does nothing. Limits are 10 files per result, 100 per request and 50 MB per file, and a result description over 16 KB is truncated, not rejected."
         ]
       },
       "shared_step": {
@@ -20049,6 +22787,55 @@
           "That body MUST carry custom_fields (send {} when not changing any) — omitting it returns 500 'undefined method each for nil', even though the server's validator lists it as optional.",
           "tags/merge is admin-gated (tags_management flag) — may be unavailable for a group; degrade gracefully and say so.",
           "TAG-OBJECT WRITES ARE NOT EXPOSED. Renaming or deleting a tag project-wide is deliberately out of this profile: the endpoints exist but sit behind the tags_management flag that most groups do not have, and tagging is always driven through the ENTITY. If asked to rename or delete a tag, say it is not available here and point to the Test Management UI."
+        ]
+      },
+      "template": {
+        "entity": "template",
+        "title": "Test case template",
+        "description": "A reusable field layout for test cases: which description and property fields appear, in what order, shared by every linked project.",
+        "aliases": [
+          "templates",
+          "test case template",
+          "case template",
+          "field template",
+          "test case layout",
+          "custom template"
+        ],
+        "id_convention": "integer, with no prefix. Discover ids through the template list call rather than guessing them.",
+        "parents": [],
+        "relations": [
+          {
+            "entity": "test_case",
+            "via": "shapes the fields of"
+          },
+          {
+            "entity": "project",
+            "via": "linked to"
+          },
+          {
+            "entity": "custom_field",
+            "via": "arranges"
+          }
+        ],
+        "capabilities": [
+          "create_template_v2",
+          "delete_template_v2",
+          "get_template_v2",
+          "list_templates_v2",
+          "list_test_case_templates_v2",
+          "update_template_v2"
+        ],
+        "key_facts": [
+          "Templates belong to the workspace, not to a project — one template can be linked to many projects and keeps the same id everywhere. Do not look for them inside a project.",
+          "Templates exist for test cases, test results, test plans and exploratory sessions, but only test-case templates can be created or edited here; the older listing can enumerate the other three types and returns test-case templates unless asked for another kind.",
+          "Template ids are plain integers with no prefix (not PR- or TR- style). Discover an id from the template list rather than guessing it.",
+          "Templates have no version history and no recycle bin: an edit overwrites the previous field layout and a deletion cannot be undone from Test Management.",
+          "Disabling a template is the reversible alternative to deleting it — a disabled template stops being offered for new test cases but keeps its fields and project links and can be re-enabled.",
+          "Changing a template's field layout changes the fields shown on every test case using it, across every linked project. Say how many projects are affected before writing.",
+          "Creating, editing and deleting templates are paid-plan features; on a free plan the call reports failure in the body while still answering 200, and reading templates stays available.",
+          "The Review & Approve system fields (reviewers and review status) are hidden from reads on this surface and re-added automatically whenever the property fields are rewritten, so they can be neither seen nor removed here.",
+          "A template only affects a project once it is linked to it; creating a template links it to nothing unless linkage is requested.",
+          "Failures arrive as a single human-readable message next to a false success flag rather than as a structured error code."
         ]
       },
       "test_case": {
@@ -20212,8 +22999,11 @@
         ],
         "capabilities": [
           "assign_test_run_owner",
+          "assign_test_run_test_cases_v2",
           "bulk_assign_test_cases_to_test_run",
+          "bulk_update_test_run_test_cases_v2",
           "clone_test_run",
+          "clone_test_run_v2",
           "close_test_run_v1",
           "count_run_selection_v1",
           "create_test_run_v1",
@@ -20223,16 +23013,25 @@
           "get_test_cases_for_v1_test_run",
           "get_test_run_by_integer_id_v1",
           "get_test_run_cases_v1",
+          "get_test_run_test_cases_v2",
+          "get_test_run_v2",
           "get_test_runs_form_fields_v1",
           "get_test_runs_selection",
-          "get_test_runs_v1"
+          "get_test_runs_v1",
+          "replace_test_run_v2",
+          "update_test_run_v2"
         ],
         "key_facts": [
           "Only test_case_ids / selection / shared_selection put cases in a run. `filters` and `dynamic_filter` are a forward-sync rule, NOT a selection: a create carrying only `filters` returns 200 with ZERO cases, and sets is_dynamic: true even though you did not ask. Verified live.",
           "Dynamic runs match on nine fields only: priority, status, category, owner, automation_status, automation_state, folder, tags, issues. created_at/updated_at are stored and echoed on read but NEVER matched, so a 'last 7 days' dynamic run drops the date window and over-collects forever. Create runs static unless the user explicitly asks for sync.",
           "test_run.run_state is MANDATORY on create and edit (new_run | in_progress | under_review | rejected | done | closed). It is validated before the selection, so a bare 400 'invalid data' means a bad test_run field — NOT a bad selection shape.",
           "A run's `id` FIELD is the TR-NNN STRING, not the integer — on the project list, a plan's linked-run list and the single-run detail alike. The integer lives in `uuid` ({id: 'TR-90', uuid: 198}). Paths tolerate either form, which hides this; bodies and UI paths do not. Carrying `id` into a test plan's test_runs array sends a string that reaches the backing service uncoerced and 502s there. Take `uuid` whenever a run id leaves a read.",
-          "Full lifecycle is exposed: create, edit, assign, bulk-assign cases, bulk-edit results, clone, close, delete."
+          "Full lifecycle is exposed: create, edit, assign, bulk-assign cases, bulk-edit results, clone, close, delete.",
+          "A test run keeps NO version history and has no restore: unlike a test case, an edited name, cleared tag list or removed case cannot be recovered. Confirm before overwriting or removing.",
+          "Removing a case from a run deletes the results recorded against it unless the caller explicitly asks to preserve them — the default is to discard.",
+          "Changing which cases a run covers is always queued: the call returns an acceptance immediately and the run still shows the old case list for a moment. Re-read the run's cases to confirm, and do not retry on the acceptance.",
+          "Every way of editing a run only ever ADDS cases to it. Taking cases out is a separate operation, and only that one can shrink a run.",
+          "The newer API generation identifies a run and its project only by their prefixed ids (TR-14, PR-1) and rejects the plain integers the older generation still tolerates."
         ]
       },
       "user": {

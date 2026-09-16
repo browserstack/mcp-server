@@ -682,7 +682,7 @@ export default function addSelfHealTools(
     },
     {
       title: "Prepare Self-Healing Plan",
-      readOnlyHint: true,
+      readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,
       idempotentHint: true,

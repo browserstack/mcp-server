@@ -18,11 +18,13 @@ import {
 } from "./failurelogs-utils/app-automate.js";
 
 import { resolveAppAutomateBuildId } from "./failurelogs-utils/resolve-app-build-id.js";
+import { retrieveSessionVideo } from "./failurelogs-utils/video.js";
 
 import {
   AppAutomateLogType,
   AutomateLogType,
   SessionType,
+  SessionVideoLogType,
 } from "../lib/constants.js";
 
 type LogType = AutomateLogType | AppAutomateLogType;
@@ -46,14 +48,6 @@ export async function getFailureLogs(
     throw new Error("Session ID is required");
   }
 
-  let buildId = args.buildId;
-  if (args.sessionType === SessionType.AppAutomate && !buildId) {
-    buildId = await resolveAppAutomateBuildId(args.sessionId, config);
-    if (!buildId) {
-      throw new Error("Build ID is required for app-automate sessions");
-    }
-  }
-
   // Validate log types and collect errors
   validLogTypes = args.logTypes.filter((logType) => {
     const isAutomate = Object.values(AutomateLogType).includes(
@@ -66,8 +60,10 @@ export async function getFailureLogs(
     if (!isAutomate && !isAppAutomate) {
       errors.push(
         `Invalid log type '${logType}'. Valid log types are: ${[
-          ...Object.values(AutomateLogType),
-          ...Object.values(AppAutomateLogType),
+          ...new Set([
+            ...Object.values(AutomateLogType),
+            ...Object.values(AppAutomateLogType),
+          ]),
         ].join(", ")}`,
       );
       return false;
@@ -101,11 +97,37 @@ export async function getFailureLogs(
       isError: true,
     };
   }
+
+  let buildId = args.buildId;
+  const needsBuildId = validLogTypes.some(
+    (logType) => logType !== SessionVideoLogType,
+  );
+  if (
+    args.sessionType === SessionType.AppAutomate &&
+    needsBuildId &&
+    !buildId
+  ) {
+    buildId = await resolveAppAutomateBuildId(args.sessionId, config);
+    if (!buildId) {
+      throw new Error("Build ID is required for app-automate sessions");
+    }
+  }
+
   let response;
   // eslint-disable-next-line no-useless-catch
   try {
     for (const logType of validLogTypes) {
       switch (logType) {
+        case SessionVideoLogType: {
+          response = await retrieveSessionVideo(
+            args.sessionId,
+            args.sessionType,
+            config,
+          );
+          results.push({ type: "text", text: response });
+          break;
+        }
+
         case AutomateLogType.NetworkLogs: {
           response = await retrieveNetworkFailures(args.sessionId, config);
           results.push({ type: "text", text: response });
@@ -166,8 +188,7 @@ export default function registerGetFailureLogs(
 
   tools.getFailureLogs = server.tool(
     "getFailureLogs",
-    "Fetch various types of logs from a BrowserStack session. Supports both automate and app-automate sessions." +
-      NEEDS_SESSION_ID,
+    "Fetch logs, or the session video URL, for an Automate/App Automate session.",
     {
       sessionType: z
         .enum([SessionType.Automate, SessionType.AppAutomate])
@@ -194,6 +215,7 @@ export default function registerGetFailureLogs(
             AppAutomateLogType.DeviceLogs,
             AppAutomateLogType.AppiumLogs,
             AppAutomateLogType.CrashLogs,
+            SessionVideoLogType,
           ]),
         )
         .describe("The types of logs to fetch."),

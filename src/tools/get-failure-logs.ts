@@ -188,7 +188,8 @@ export default function registerGetFailureLogs(
 
   tools.getFailureLogs = server.tool(
     "getFailureLogs",
-    "Fetch logs, or the session video URL, for an Automate/App Automate session.",
+    "Fetch logs, or the session video URL, for an Automate/App Automate session." +
+      NEEDS_SESSION_ID,
     {
       sessionType: z
         .enum([SessionType.Automate, SessionType.AppAutomate])

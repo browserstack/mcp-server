@@ -1,5 +1,6 @@
 export const IMPORTANT_SETUP_WARNING =
-  "IMPORTANT: DO NOT SKIP ANY STEP. All the setup steps described below MUST be executed regardless of any existing configuration or setup. This ensures proper BrowserStack SDK setup.";
+  "IMPORTANT: DO NOT SKIP ANY STEP. All the setup steps described below MUST be executed regardless of any existing configuration or setup. This ensures proper BrowserStack SDK setup. " +
+  "If you cannot run commands or edit files in the user's project (e.g. a chat-only client), present every step below to the user in full — including each shell command, the package.json changes, and the complete browserstack.yml contents — instead of summarizing them.";
 
 export const SETUP_PERCY_DESCRIPTION =
   "Set up or expand Percy visual testing configuration with comprehensive coverage for existing projects that might have Percy integrated. This supports both Percy Web Standalone and Percy Automate. Example prompts: Expand percy coverage for this project {project_name}";

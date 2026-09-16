@@ -292,6 +292,33 @@ Select the “Installed” tab. Click the “Configure MCP Servers” button at 
    }
    ```
 
+### 📁 Enabling File & App Uploads (`MCP_UPLOAD_BASE_DIR`)
+
+Tools that read a local file or app binary and upload it to BrowserStack are **disabled by default** and refuse to run until you set the `MCP_UPLOAD_BASE_DIR` environment variable. It must point to a directory containing the files you want to upload; uploads are then restricted to (and canonicalized within) that directory, so a caller cannot exfiltrate arbitrary files from the host.
+
+Tools that require it:
+
+- `uploadProductRequirementFile` (Test Management PRD upload)
+- `takeAppScreenshot` (App Automate app upload)
+- `runAppTestsOnBrowserStack` (App Automate app + test-suite upload)
+- `runAppLiveSession` (App Live app upload)
+
+Add it to the server `env` block alongside your credentials, for example:
+
+```json
+{
+  "command": "npx",
+  "args": ["-y", "@browserstack/mcp-server@latest"],
+  "env": {
+    "BROWSERSTACK_USERNAME": "<username>",
+    "BROWSERSTACK_ACCESS_KEY": "<access_key>",
+    "MCP_UPLOAD_BASE_DIR": "/absolute/path/to/your/uploads"
+  }
+}
+```
+
+If it is not set, the tools above return: _"Upload rejected: MCP_UPLOAD_BASE_DIR is not set…"_ — set the variable and restart the MCP server.
+
 ### 💡 List of BrowserStack MCP Tools
 
 As of now we support 45 tools.

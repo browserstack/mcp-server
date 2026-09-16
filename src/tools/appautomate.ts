@@ -333,7 +333,7 @@ export default function addAppAutomationTools(
       appPath: z
         .string()
         .describe(
-          "The path to the .apk or .ipa file. Required for app installation.",
+          "The path to the .apk or .ipa file. Required for app installation. Must be located inside the directory set in MCP_UPLOAD_BASE_DIR.",
         ),
     },
     {

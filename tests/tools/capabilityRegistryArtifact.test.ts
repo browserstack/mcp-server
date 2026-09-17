@@ -112,8 +112,14 @@ describe("the released artifact", () => {
     }
     // The response schemas carry example values, some of which are URLs. Those are fine;
     // a REAL host is not, so every absolute URL in the file has to be a placeholder.
-    for (const url of blob.match(/https?:\/\/[^"\s]+/g) || []) {
-      expect(url).toMatch(/^https?:\/\/example\.com\//);
+    //
+    // example.com AND ITS SUBDOMAINS, with or without a path. The old form demanded a bare
+    // host and a trailing slash, which failed `https://staging.example.com` — a perfectly
+    // good placeholder, since RFC 2606 reserves the whole domain and nobody can resolve a
+    // subdomain of it either. What the rule is for is that no absolute URL in the artifact
+    // names a host somebody could actually reach; that is unchanged.
+    for (const url of blob.match(/https?:\/\/[^"\s\\]+/g) || []) {
+      expect(url, url).toMatch(/^https?:\/\/([a-z0-9-]+\.)*example\.com(\/|$)/);
     }
   });
 

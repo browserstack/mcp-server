@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "1.14",
-  "build_id": "run5merge_2026-09-16T18:02:57Z",
+  "build_id": "0d09c21a_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
     "capabilities": [
@@ -20259,7 +20259,7 @@
           {
             "name": "jira_create_allowed_hosts",
             "type": "string",
-            "description": "Allow-list of Jira site URLs that may create or update requirements, as a JSON-ENCODED ARRAY STRING (e.g. \"[\\\"https://acme.atlassian.net\\\"]\"). Omitting the key means all hosts are allowed; the string \"[]\" means none."
+            "description": "Allow-list of Jira site URLs that may create or update requirements, as a JSON-ENCODED ARRAY STRING (e.g. \"[\\\"https://example.com/jira\\\"]\"). Omitting the key means all hosts are allowed; the string \"[]\" means none."
           },
           {
             "name": "time_tracking_enabled",
@@ -22937,7 +22937,7 @@
             ],
             "example": {
               "name": "jira",
-              "host": "https://acme.atlassian.net"
+              "host": "https://example.com/jira"
             },
             "json_path": "/test_plan/issue_tracker",
             "description": "Resolves the keys in `issues` against a connected tracker, adding ticket metadata. Needs BOTH name ('jira') and host; a host that matches no JIRA site connected to the caller's account fails the call with 'Invalid issue tracker'. Omit it and issues are stored as bare jira references."
@@ -23181,7 +23181,7 @@
             ],
             "example": {
               "name": "jira",
-              "host": "https://acme.atlassian.net"
+              "host": "https://example.com/jira"
             },
             "json_path": "/sub_test_plan/issue_tracker",
             "description": "Resolves the keys in `issues` against a connected tracker. Needs BOTH name ('jira') and host; a host matching no JIRA site connected to the caller's account fails the call with 'Invalid issue tracker'."
@@ -23428,7 +23428,7 @@
             ],
             "example": {
               "name": "jira",
-              "host": "https://acme.atlassian.net"
+              "host": "https://example.com/jira"
             },
             "json_path": "/test_plan/issue_tracker",
             "description": "Resolves the keys in `issues` against a connected tracker. Needs BOTH name ('jira') and host; a host matching no JIRA site connected to the caller's account fails the call with 'Invalid issue tracker'."

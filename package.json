@@ -16,7 +16,8 @@
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "eval:index": "tsx scripts/eval-index.mts"
+    "eval:index": "tsx scripts/eval-index.mts",
+    "seed:live": "tsx scripts/seed-live.mts"
   },
   "bin": {
     "browserstack-mcp-server": "dist/index.js"

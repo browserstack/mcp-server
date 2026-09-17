@@ -7,3 +7,4 @@ tests.md
 .npmrc
 .vscode/
 .env
+tests/live/.id-pool.json

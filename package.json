@@ -17,7 +17,8 @@
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "eval:index": "tsx scripts/eval-index.mts",
-    "seed:live": "tsx scripts/seed-live.mts"
+    "seed:live": "tsx scripts/seed-live.mts",
+    "plan:tests": "tsx scripts/plan-capability-tests.mts"
   },
   "bin": {
     "browserstack-mcp-server": "dist/index.js"

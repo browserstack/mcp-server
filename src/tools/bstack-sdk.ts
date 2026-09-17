@@ -26,13 +26,19 @@ export function registerRunBrowserStackTestsTool(
     async (args) => {
       try {
         trackMCP(
-          "runTestsOnBrowserStack",
+          "setupBrowserStackAutomateTests",
           server.server.getClientVersion()!,
+          undefined,
           config,
         );
         return await runTestsOnBrowserStackHandler(args, config);
       } catch (error) {
-        return handleMCPError("runTestsOnBrowserStack", server, config, error);
+        return handleMCPError(
+          "setupBrowserStackAutomateTests",
+          server,
+          config,
+          error,
+        );
       }
     },
   );

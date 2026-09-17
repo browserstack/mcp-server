@@ -69,14 +69,15 @@ export function registerPercyTools(
     async (args) => {
       try {
         trackMCP(
-          "VisualTestIntegrationAgent",
+          "percyVisualTestIntegrationAgent",
           server.server.getClientVersion()!,
+          undefined,
           config,
         );
         return simulatePercyChangeHandler(args, config);
       } catch (error) {
         return handleMCPError(
-          "VisualTestIntegrationAgent",
+          "percyVisualTestIntegrationAgent",
           server,
           config,
           error,
@@ -99,13 +100,19 @@ export function registerPercyTools(
     async (args) => {
       try {
         trackMCP(
-          "setupPercyVisualTesting",
+          "expandPercyVisualTesting",
           server.server.getClientVersion()!,
+          undefined,
           config,
         );
         return setUpPercyHandler(args, config);
       } catch (error) {
-        return handleMCPError("setupPercyVisualTesting", server, config, error);
+        return handleMCPError(
+          "expandPercyVisualTesting",
+          server,
+          config,
+          error,
+        );
       }
     },
   );
@@ -126,6 +133,7 @@ export function registerPercyTools(
         trackMCP(
           "addPercySnapshotCommands",
           server.server.getClientVersion()!,
+          undefined,
           config,
         );
         return await updateTestsWithPercyCommands(args);
@@ -153,7 +161,12 @@ export function registerPercyTools(
     },
     async () => {
       try {
-        trackMCP("listTestFiles", server.server.getClientVersion()!, config);
+        trackMCP(
+          "listTestFiles",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
         return addListTestFiles();
       } catch (error) {
         return handleMCPError("listTestFiles", server, config, error);
@@ -174,7 +187,12 @@ export function registerPercyTools(
     },
     async (args) => {
       try {
-        trackMCP("runPercyScan", server.server.getClientVersion()!, config);
+        trackMCP(
+          "runPercyScan",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
         return runPercyScan(args);
       } catch (error) {
         return handleMCPError("runPercyScan", server, config, error);
@@ -198,6 +216,7 @@ export function registerPercyTools(
         trackMCP(
           "fetchPercyChanges",
           server.server.getClientVersion()!,
+          undefined,
           config,
         );
         return await fetchPercyChanges(args, config);
@@ -223,6 +242,7 @@ export function registerPercyTools(
         trackMCP(
           "managePercyBuildApproval",
           server.server.getClientVersion()!,
+          undefined,
           config,
         );
         return await approveOrDeclinePercyBuild(args, config);

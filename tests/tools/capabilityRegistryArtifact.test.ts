@@ -20,8 +20,8 @@ const registry = CapabilityRegistry.fromFile(RELEASED);
 describe("the released artifact", () => {
   it("loads the product from its own top-level key", () => {
     expect(registry.productNames()).toEqual(["tm"]);
-    expect(registry.index.products.tm.capabilities).toHaveLength(173);
-    expect(Object.keys(registry.index.products.tm.entities)).toHaveLength(19);
+    expect(registry.index.products.tm.capabilities).toHaveLength(200);
+    expect(Object.keys(registry.index.products.tm.entities)).toHaveLength(23);
   });
 
   it("carries provenance in the released format, and nothing depends on it", () => {
@@ -132,8 +132,8 @@ describe("the released artifact", () => {
   it("publishes the page ceiling under the name the artifact uses", () => {
     // `max_page_size`, not `max_items` — the latter was only ever in our type.
     const paged = registry.index.products.tm.capabilities.filter((c) => c.paginated);
-    expect(paged).toHaveLength(44);
-    expect(paged.filter((c) => c.max_page_size !== undefined)).toHaveLength(14);
+    expect(paged).toHaveLength(50);
+    expect(paged.filter((c) => c.max_page_size !== undefined)).toHaveLength(19);
   });
 
   it("refuses every destructive endpoint before binding", () => {
@@ -154,16 +154,16 @@ describe("the released artifact", () => {
   it("marks the endpoints whose response the product never declared", () => {
     const discovered = registry.index.products.tm.capabilities
       .filter((capability) => capability.shape === "discovered");
-    expect(discovered.length).toBe(31);
+    expect(discovered.length).toBe(34);
   });
 
   it("carries the response and schema tables, stored once and referenced", () => {
     const tm = registry.index.products.tm;
-    expect(Object.keys(tm.responses || {})).toHaveLength(53);
-    expect(Object.keys(tm.schemas || {})).toHaveLength(75);
+    expect(Object.keys(tm.responses || {})).toHaveLength(64);
+    expect(Object.keys(tm.schemas || {})).toHaveLength(83);
     // Every capability declares its responses; the payload stays small because the bodies
     // live in the tables and the capability only names them.
-    expect(tm.capabilities.filter((c) => c.responses)).toHaveLength(173);
+    expect(tm.capabilities.filter((c) => c.responses)).toHaveLength(200);
   });
 
   it("resolves a capability's responses through every hop", () => {

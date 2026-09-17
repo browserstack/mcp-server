@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "version": "1.6",
-  "build_id": "2d3d82f8_2026-09-11T09:37:38Z",
+  "version": "1.9",
+  "build_id": "1d50e727_2026-09-16T17:42:03Z",
   "tm": {
-    "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
+    "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming a project and changing who can see it are exposed; deleting a project is not. Destructive capabilities exist and always need explicit human approval.",
     "capabilities": [
       {
         "name": "assign_test_run_owner",
@@ -10594,7 +10594,7 @@
         "method": "GET",
         "path": "/api/v1/admin-v2/settings/templates",
         "mode": "read",
-        "entity": "",
+        "entity": "template",
         "query": [
           {
             "name": "entity_type",
@@ -13798,6 +13798,3099 @@
         "responses": {
           "200": {
             "$response": "ReportSummaryResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "edit_project_v1",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/edit",
+        "mode": "write",
+        "entity": "project",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 11046,
+            "description": "Integer project id (the numeric `id`, not the PR-NNN identifier). Discover it through the projects list. A project the caller cannot see returns 404, not 403."
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "json_path": "/project/name",
+            "example": "Checkout Regression",
+            "description": "New project name. Leading/trailing spaces are trimmed. Must be unique within the account and must not contain | ; > < ` + ? % \" / or backslash; violations return 400 with the reason in `error`. Omit to keep the current name."
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "json_path": "/project/description",
+            "example": "Owns all checkout-flow test cases",
+            "description": "New description. HTML is escaped on the way in and anything past 16 KB is silently truncated. Send an empty string to clear it; omit to keep the current one."
+          },
+          {
+            "name": "access_type",
+            "type": "string",
+            "json_path": "/project/access_type",
+            "values": [
+              "private",
+              "restricted",
+              "org_wide"
+            ],
+            "example": "org_wide",
+            "description": "Project visibility: `private` (owner only), `restricted` (owner plus named users), `org_wide` (everyone in the account). Other values return 400 'Invalid access type'. Honoured only on accounts with project-level access control; elsewhere silently ignored and the response still says success. Server may adjust it: private with named users becomes restricted, restricted with none becomes private."
+          },
+          {
+            "name": "users",
+            "type": "array",
+            "json_path": "/project/users",
+            "fields": [
+              {
+                "name": "user",
+                "type": "string",
+                "required": true,
+                "description": "Email address of a user in the same account."
+              },
+              {
+                "name": "role",
+                "type": "string",
+                "required": true,
+                "description": "Product role name to grant on this project (account-configured, e.g. Product Admin, Tester, Viewer)."
+              }
+            ],
+            "example": [
+              {
+                "user": "qa.lead@example.com",
+                "role": "Tester"
+              }
+            ],
+            "description": "Per-user access grants. Processed only when `access_type` is also sent, otherwise ignored. Each entry is added or has its role changed; users not listed keep their existing access, so this does not replace the list. Entries whose email is not in the account or whose role is not recognised are skipped silently, not rejected."
+          }
+        ],
+        "intent": "Rename a project, or change its description or visibility.",
+        "guidance": [
+          "There is no undo. The previous name and description are overwritten; the change is logged in the project's activity feed and version history, so the old value can be looked up and re-entered by hand, but nothing restores it.",
+          "Send at least one of name, description or access_type inside the `project` object; an empty `project` object is rejected 400 before anything is looked up.",
+          "Only account owners/admins or the project owner may edit; anyone else gets 403 with the reason in `error`. A project the caller cannot see comes back 404, not 403.",
+          "Visibility is silently ignored on accounts without project-level access control: the call returns 200 and the unchanged value. Read `access_type` back from the response to confirm the change took.",
+          "The `users` list is only read alongside `access_type`. To change one user's role without touching visibility, resend the current access_type with the users entry.",
+          "Name conflicts and blocked characters are enforced by the backend and surface as 400 with a human-readable `error`; validation runs after the permission check, so a 403 means permissions, not the name."
+        ],
+        "returns": [
+          "id",
+          "thProjectId",
+          "identifier",
+          "name",
+          "description",
+          "access_type",
+          "user_role",
+          "permissions",
+          "created_at",
+          "import_id",
+          "test_cases_count",
+          "test_runs_count",
+          "test_plans_count",
+          "links",
+          "normalisedName",
+          "starred",
+          "jira_mapped",
+          "projectVisibilityBanner"
+        ],
+        "responses": {
+          "200": {
+            "description": "Project edited. Envelope is data.success and data.project, same as the single-project read; project also carries access_type, normalisedName and projectVisibilityBanner, and the counts are carried over from before the edit rather than recomputed.",
+            "schema": {
+              "$schema": "V1ProjectDetail"
+            }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "list_users",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/users",
+        "mode": "read",
+        "entity": "user",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 11046,
+            "description": "Integer project id. It gates access only; the returned list is not filtered to this project's members."
+          }
+        ],
+        "intent": "List the account's active users, for assigning a case or run.",
+        "guidance": [
+          "Returns all active users of the caller's account, alphabetical by full name, in one unpaginated response. Appearing here does not mean the user has access to the project.",
+          "No role field. For project membership with roles use search_project_users; for a paged, name-filterable list of account users use get_project_users_v2_v1.",
+          "Assign owners and assignees with `id` (the TM user id), not `browserstack_user_id`.",
+          "`myself` is the caller, reduced to id, full_name and reports_and_notification_enabled; look the caller up in `users` for the full record.",
+          "Deactivated users and users with no name are omitted, so a colleague missing from the list may simply not have completed onboarding."
+        ],
+        "returns": [
+          "success",
+          "users",
+          "myself",
+          "id",
+          "browserstack_user_id",
+          "full_name",
+          "email",
+          "group_id",
+          "onboarded",
+          "reports_and_notification_enabled"
+        ],
+        "responses": {
+          "200": {
+            "$response": "UsersListResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "create_folder_v2",
+        "method": "POST",
+        "path": "/api/v2/projects/{project_id}/folders",
+        "mode": "write",
+        "entity": "folder",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "pattern": "^PR-\\d+$",
+            "example": "PR-1234",
+            "description": "The project's PR-NNN identifier string as shown in the UI and returned by the projects list. This is NOT the numeric project id that v1 capabilities take; a numeric id does not match this path and returns 404."
+          }
+        ],
+        "query": [
+          {
+            "name": "auto_rename",
+            "type": "boolean",
+            "description": "Only the literal value true has any effect. When true, a name that clashes with a sibling (case-insensitive, trimmed) is created as '<name> (1)' with the name lowercased, instead of failing with 400. Check the returned name."
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "json_path": "/folder/name",
+            "example": "Checkout",
+            "description": "Folder name. Trimmed; must not be empty after trimming and must be unique among siblings ignoring case, otherwise 400 'Folder with same name exists in this location' (unless auto_rename)."
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "json_path": "/folder/description",
+            "example": "Payment and cart flows",
+            "description": "Free-text notes shown on the folder. Use this key, not `notes` (the internal-API key): `notes` and any other unknown key inside `folder` are rejected with 400 'Invalid JSON data'. HTML is sanitised on save."
+          },
+          {
+            "name": "parent_id",
+            "type": "integer",
+            "json_path": "/folder/parent_id",
+            "example": 12,
+            "description": "Integer id of the existing folder to nest under. Omit it to create a root folder (null cannot be sent through this transport). An id not in this project returns 404. 0 is not an alias for root."
+          },
+          {
+            "name": "attachments",
+            "type": "array",
+            "json_path": "/folder/attachments",
+            "description": "Array of integer ids of already-uploaded attachment blobs to attach to the folder. Any invalid id fails the whole create with 422."
+          }
+        ],
+        "intent": "Create a folder, or a sub folder under a parent.",
+        "guidance": [
+          "Resolve the project's PR- identifier first via the projects list; the numeric project id used by v1 capabilities is not accepted here.",
+          "Send the description as `description`. The `notes` key used by the internal API, and any other unknown key inside `folder`, is rejected with 400 'Invalid JSON data' — the body is schema-validated with unknown keys forbidden.",
+          "Sibling names must be unique ignoring case and surrounding whitespace; a clash returns 400. auto_rename=true creates '<name> (1)' with the name lowercased instead, so read the returned name rather than assuming the one you sent.",
+          "parent_id 0 is not root: omit the field for a root folder. An unknown parent_id returns 404.",
+          "The response carries the new folder's integer id — carry it forward as parent_id for sub folders, as folder_id when creating test cases, or as the move destination."
+        ],
+        "returns": [
+          "id",
+          "name",
+          "description",
+          "parent_id",
+          "cases_count",
+          "sub_folders_count",
+          "links",
+          "urls"
+        ],
+        "responses": {
+          "200": {
+            "$response": "FolderV2WriteResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "rename_folder_v2",
+        "method": "PATCH",
+        "path": "/api/v2/projects/{project_id}/folders/{folder_id}",
+        "mode": "write",
+        "entity": "folder",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "pattern": "^PR-\\d+$",
+            "example": "PR-1234",
+            "description": "The project's PR-NNN identifier string as shown in the UI and returned by the projects list. This is NOT the numeric project id that v1 capabilities take; a numeric id does not match this path and returns 404."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "example": 54,
+            "description": "Integer id of the folder to update, as returned by the folder list or create. Never an FL- string. 0 is rejected."
+          }
+        ],
+        "query": [
+          {
+            "name": "auto_rename",
+            "type": "boolean",
+            "description": "Only the literal value true has any effect. When true, a new name that clashes with a sibling (case-insensitive, trimmed) is saved as '<name> (1)' with the name lowercased, instead of failing with 400. Check the returned name."
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "json_path": "/folder/name",
+            "example": "Checkout v2",
+            "description": "New folder name. Optional server-side despite the spec marking it required — a description-only update is valid. Must be unique among siblings ignoring case, otherwise 400 (unless auto_rename)."
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "json_path": "/folder/description",
+            "example": "Updated notes",
+            "description": "New notes for the folder; replaces the existing text. HTML is sanitised on save, so tags may come back stripped or escaped."
+          }
+        ],
+        "intent": "Rename a folder or change its description.",
+        "guidance": [
+          "There is no undo and folders keep no version history: read the folder first and keep the old name and description if you may need to put them back.",
+          "The body must contain a `folder` object (400 otherwise), but neither field inside it is required — a description-only change is fine even though the spec marks name required.",
+          "Unknown keys inside `folder` are silently dropped rather than rejected, so a misspelt key returns 200 with nothing changed. Compare the returned folder to what you sent.",
+          "A new name matching a sibling's (case-insensitive, trimmed) returns 400 'Folder with same name exists in this location'. auto_rename=true makes the server lowercase the name and append ' (1)' instead — that is a different result from the rename you asked for.",
+          "Renaming does not move the folder; use the move capability to change its parent."
+        ],
+        "returns": [
+          "id",
+          "name",
+          "description",
+          "parent_id",
+          "cases_count",
+          "sub_folders_count",
+          "links",
+          "urls"
+        ],
+        "responses": {
+          "200": {
+            "$response": "FolderV2WriteResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "move_folder_v2",
+        "method": "POST",
+        "path": "/api/v2/projects/{project_id}/folders/{folder_id}/move",
+        "mode": "write",
+        "entity": "folder",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "pattern": "^PR-\\d+$",
+            "example": "PR-1234",
+            "description": "The project's PR-NNN identifier string as shown in the UI and returned by the projects list. This is NOT the numeric project id that v1 capabilities take; a numeric id does not match this path and returns 404."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "example": 54,
+            "description": "Integer id of the folder to move; everything nested inside it moves with it. Never an FL- string."
+          }
+        ],
+        "query": [
+          {
+            "name": "auto_rename",
+            "type": "boolean",
+            "default": true,
+            "description": "Defaults to true: if a folder with the same name (case-insensitive, trimmed) already exists under the destination, the moved folder is silently renamed to '<name> (1)' with the name lowercased. Send false to get a 400 on a clash instead."
+          }
+        ],
+        "body": [
+          {
+            "name": "parent_id",
+            "type": "integer",
+            "example": 12,
+            "description": "Integer id of the new parent folder in the SAME project. To move the folder to the project root, omit this field entirely: the server treats a missing key as root, and null cannot be sent through this transport. 0 is not root and is refused with 422. Must differ from folder_id."
+          }
+        ],
+        "intent": "Move a folder and its contents under a different parent.",
+        "guidance": [
+          "Only moves within the same project are possible here; a destination in another project is refused with 422. Cross-project moves exist only in the internal API.",
+          "To move to root, omit parent_id; the server treats the missing key as root. A body that accidentally lost the key therefore also returns 200 and re-parents the folder to root, so double-check before sending without it. 0 is refused (422) rather than treated as root.",
+          "Name clashes at the destination are resolved by renaming the moved folder to '<name> (1)', lowercased, unless auto_rename=false is sent. Read the returned name either way.",
+          "Every pre-flight failure — same source and destination, unknown destination, unknown source folder, other-project destination — is a 422 whose text sits under `error`, not `message`. Only a failure inside the storage update comes back as 400.",
+          "Reversible by moving the folder back to its previous parent_id, so read the folder before moving; a name changed by auto-rename is not restored by moving back.",
+          "Completes synchronously and returns the moved folder; there is no async job id to poll, unlike the internal cross-project move."
+        ],
+        "returns": [
+          "id",
+          "name",
+          "description",
+          "parent_id",
+          "cases_count",
+          "sub_folders_count",
+          "links",
+          "urls"
+        ],
+        "responses": {
+          "200": {
+            "$response": "FolderV2WriteResponse"
+          },
+          "400": {
+            "description": "The storage update was refused (e.g. an invalid destination such as the folder's own subtree).",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "description": "A pre-flight validation failed: cross-project destination, destination equal to source, destination not in this project, or source folder not found. The reason is under `error`.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "create_test_case_v2",
+        "method": "POST",
+        "path": "/api/v2/projects/{project_id}/folders/{folder_id}/test-cases",
+        "mode": "write",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "pattern": "^PR-\\d+$",
+            "example": "PR-12",
+            "description": "The project's PR-NNN identifier, as v2 addresses projects. This is NOT the integer project id that every v1 capability takes; read it as `identifier` from the projects list."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "example": 105,
+            "description": "Integer id of the folder the case is created in. This is authoritative: a different folder id in the body is ignored. Discover it from the folder listing."
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "example": "Login with valid credentials",
+            "description": "Title of the test case. The only always-required field; comes back as `title` in the response.",
+            "json_path": "/test_case/name"
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "example": "Verifies the happy-path login flow.",
+            "description": "Rich-text body. Send plain text or HTML, not a JSON document.",
+            "json_path": "/test_case/description"
+          },
+          {
+            "name": "preconditions",
+            "type": "string",
+            "example": "User account exists and is verified.",
+            "json_path": "/test_case/preconditions"
+          },
+          {
+            "name": "template",
+            "type": "string",
+            "values": [
+              "test_case_steps",
+              "test_case_bdd"
+            ],
+            "default": "test_case_steps",
+            "example": "test_case_steps",
+            "description": "Step style. `test_case_steps` takes `test_case_steps` rows; `test_case_bdd` takes Gherkin in `feature` / `background` / `scenario` and refuses step rows (422). Mixing the two is refused with 422.",
+            "json_path": "/test_case/template"
+          },
+          {
+            "name": "template_id",
+            "type": "integer",
+            "example": 42,
+            "description": "Id of a test-case template from list_templates_v2. Omit or send null for the project's default template. An unknown id, or one from another workspace, is refused with 400 rather than falling back to the default. Choose one whose step_type matches `template`.",
+            "json_path": "/test_case/template_id"
+          },
+          {
+            "name": "test_case_steps",
+            "type": "array",
+            "description": "Ordered step rows for a `test_case_steps` case. `order` is assigned by array position, so any `order` you send is overwritten. Not allowed for `test_case_bdd` (422). A differently named key such as `steps` is dropped and the case is created with NO steps, so verify against `steps` in the response.",
+            "fields": [
+              {
+                "name": "step",
+                "type": "string",
+                "description": "Action the tester performs."
+              },
+              {
+                "name": "result",
+                "type": "string",
+                "description": "Expected result of this step."
+              },
+              {
+                "name": "test_data",
+                "type": "string"
+              },
+              {
+                "name": "shared_step_id",
+                "type": "integer",
+                "description": "Reuse a shared step instead of inline text."
+              },
+              {
+                "name": "shared_step_detail_id",
+                "type": "integer"
+              }
+            ],
+            "json_path": "/test_case/test_case_steps"
+          },
+          {
+            "name": "feature",
+            "type": "string",
+            "description": "Gherkin Feature text. REQUIRED when template is `test_case_bdd` (422 if blank); refused with 422 on a non-BDD case.",
+            "json_path": "/test_case/feature"
+          },
+          {
+            "name": "background",
+            "type": "string",
+            "description": "Gherkin Background text; optional, BDD cases only (422 otherwise).",
+            "json_path": "/test_case/background"
+          },
+          {
+            "name": "scenario",
+            "type": "string",
+            "description": "Gherkin Scenario text. REQUIRED when template is `test_case_bdd` (422 if blank); refused with 422 on a non-BDD case.",
+            "json_path": "/test_case/scenario"
+          },
+          {
+            "name": "owner",
+            "type": "string",
+            "example": "jane@acme.com",
+            "description": "Owner as a workspace user's email (a user id is also accepted). An owner that cannot be resolved silently falls back to the caller — check `owner` in the response.",
+            "json_path": "/test_case/owner"
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "example": "Active",
+            "description": "Matched against the project's configured status display values (defaults: Active, Draft, In Review, Rejected, Outdated; a numeric option id also matches). Unknown value → 400 'Invalid default field value'. Omit for the project default. Resolve the live set with get_system_field_values_v1.",
+            "json_path": "/test_case/status"
+          },
+          {
+            "name": "priority",
+            "type": "string",
+            "example": "High",
+            "description": "Matched against the project's configured priority display values (defaults: Low, Medium, High, Critical; a numeric option id also matches). Unknown value → 400. Omit for the project default.",
+            "json_path": "/test_case/priority"
+          },
+          {
+            "name": "case_type",
+            "type": "string",
+            "example": "Functional",
+            "description": "Matched against the project's configured type display values (defaults include Functional, Regression, Smoke & Sanity, Acceptance, Security, Performance, Usability, Accessibility, Compatibility, Destructive, Automated, Manual, Other). Unknown value → 400. Omit for the project default.",
+            "json_path": "/test_case/case_type"
+          },
+          {
+            "name": "automation_status",
+            "type": "string",
+            "default": "not_automated",
+            "example": "not_automated",
+            "description": "Built-in values: not_automated, automated, automation_not_required, cannot_be_automated, obsolete (matched case-insensitively by internal name or display label). Workspaces that manage their own automation statuses accept their custom labels too. Unknown value → 400.",
+            "json_path": "/test_case/automation_status"
+          },
+          {
+            "name": "tags",
+            "type": "array",
+            "example": [
+              "login",
+              "smoke"
+            ],
+            "description": "Free-text tag names; created if new.",
+            "json_path": "/test_case/tags"
+          },
+          {
+            "name": "issues",
+            "type": "array",
+            "example": [
+              "TES-204"
+            ],
+            "description": "Linked issues. Either bare issue keys (treated as Jira) or objects {issue_id, issue_type}. Linking is processed asynchronously after the create returns.",
+            "fields": [
+              {
+                "name": "issue_id",
+                "type": "string",
+                "description": "Issue key, e.g. TES-204."
+              },
+              {
+                "name": "issue_type",
+                "type": "string",
+                "description": "Tracker name, e.g. jira."
+              }
+            ],
+            "json_path": "/test_case/issues"
+          },
+          {
+            "name": "custom_fields",
+            "type": "object",
+            "example": {
+              "Component": "Checkout",
+              "Regression candidate": true
+            },
+            "description": "Map of custom-field DISPLAY NAME → value. Dropdown: option label; multi-dropdown: array of labels; user: email; boolean: true/false; date, int, url, text as typed. A name that is not a custom field on this project is SILENTLY SKIPPED (200, value absent); a reserved system-field name (e.g. 'Automation Status') is refused; a value failing its type check fails the whole call with 400.",
+            "json_path": "/test_case/custom_fields"
+          },
+          {
+            "name": "identifier",
+            "type": "string",
+            "example": "LOGIN-001",
+            "description": "Custom identifier for the case. Honoured ONLY when the workspace uses project-level custom ids; otherwise ignored. A duplicate is refused with 400 'Test Case ID already exists'.",
+            "json_path": "/test_case/identifier"
+          },
+          {
+            "name": "review_status",
+            "type": "string",
+            "description": "Review assignment state. Reviewer write: gated on a Team Pro plan and the project's Review & Approve setting when the reviewer API is enabled for the workspace. Omit unless the user asked to put the case in review. Known states include pending and in_review; the accepted set is not enforced here, so an unknown value is refused by the server.",
+            "json_path": "/test_case/review_status"
+          },
+          {
+            "name": "reviewers",
+            "type": "array",
+            "example": [
+              "jane@acme.com"
+            ],
+            "description": "Reviewer emails. Requires Team Pro plan and Review & Approve enabled on the project (422/400 otherwise). The owner cannot be a reviewer (422). A non-array value is silently ignored.",
+            "json_path": "/test_case/reviewers"
+          },
+          {
+            "name": "send_for_review",
+            "type": "boolean",
+            "description": "Moves the new case into review and emails reviewers. Same plan/project gates as `reviewers`. Ambiguous strings like 'yes'/'no' are refused with 422.",
+            "json_path": "/test_case/send_for_review"
+          },
+          {
+            "name": "created_at",
+            "type": "string",
+            "format": "date-time",
+            "description": "Backdated creation timestamp for migrations. Honoured only when the workspace has the external-API timestamp feature enabled; otherwise dropped silently.",
+            "json_path": "/test_case/created_at"
+          },
+          {
+            "name": "updated_at",
+            "type": "string",
+            "format": "date-time",
+            "description": "Backdated update timestamp for migrations. Same feature gate as `created_at`; must not be earlier than `created_at` (400).",
+            "json_path": "/test_case/updated_at"
+          }
+        ],
+        "intent": "Create a test case in a folder.",
+        "guidance": [
+          "Resolve the project's PR-NNN identifier and the destination folder's integer id first; the folder in the path is authoritative and a folder id in the body is ignored.",
+          "Decide the step style before writing: a Gherkin case needs template=test_case_bdd plus feature and scenario and must carry no test_case_steps; a classic case must carry no feature/background/scenario. Either mix is refused with 422, and a template_id whose step_type disagrees is the usual cause.",
+          "status, priority and case_type take the project's DISPLAY values (e.g. 'Active', 'High', 'Functional'), which a workspace can rename or extend — resolve them with get_system_field_values_v1 rather than guessing; unknown values are refused with 400.",
+          "custom_fields is keyed by display name and an unknown name is dropped without error, so confirm each field exists on the project (get_project_id_custom_fields_v2_v1) and verify the response's custom_fields before reporting them saved.",
+          "The response echoes the case with `title` (not name), `steps` as [{step, result}] and `owner` as an email, and carries NO integer id — carry data.test_case.identifier forward for later reads, updates and moves.",
+          "Recoverable: the new case can be deleted or archived afterwards, so this is an ordinary write."
+        ],
+        "returns": [
+          "identifier",
+          "title",
+          "description",
+          "preconditions",
+          "template",
+          "folder_id",
+          "status",
+          "priority",
+          "case_type",
+          "automation_status",
+          "owner",
+          "tags",
+          "issues",
+          "steps",
+          "feature",
+          "background",
+          "scenario",
+          "custom_fields",
+          "attachments",
+          "is_shared",
+          "review_status",
+          "reviewers",
+          "created_at",
+          "created_by",
+          "last_updated_at",
+          "updated_by",
+          "urls"
+        ],
+        "responses": {
+          "200": {
+            "$response": "V2TestCaseResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          },
+          "502": {
+            "description": "error_code=review_approve_unknown — the project's Review & Approve setting could not be read, so nothing was written. Retry.",
+            "schema": {
+              "$schema": "ErrorResponse"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_test_case_v2",
+        "method": "GET",
+        "path": "/api/v2/projects/{project_id}/test-cases/{test_case_id}",
+        "mode": "read",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "pattern": "^PR-\\d+$",
+            "example": "PR-12",
+            "description": "The project's PR-NNN identifier, as v2 addresses projects. This is NOT the integer project id that every v1 capability takes; read it as `identifier` from the projects list."
+          },
+          {
+            "name": "test_case_id",
+            "type": "string",
+            "required": true,
+            "example": "TC-1024",
+            "description": "The case's TC-NNN identifier, or its customer-defined identifier when the workspace uses project-level custom ids; matched exactly within the project. A bare integer id is NOT accepted here (404) — use get_test_case_by_integer_id_v1 for integer ids."
+          }
+        ],
+        "intent": "Get one test case in full by its TC-NNN identifier.",
+        "guidance": [
+          "Returns `title` rather than name, `steps` as [{step, result}], custom_fields as [{name, value|values}] and owner as an email; there is no integer id in the body.",
+          "feature/background/scenario are present only for a Gherkin (test_case_bdd) case and `steps` is then empty; reviewers/review_status appear only when the project has Review & Approve enabled.",
+          "A 404 means the identifier does not resolve in THIS project; a case moved to another project keeps its identifier but must be read there."
+        ],
+        "returns": [
+          "identifier",
+          "title",
+          "description",
+          "preconditions",
+          "template",
+          "folder_id",
+          "status",
+          "priority",
+          "case_type",
+          "automation_status",
+          "owner",
+          "tags",
+          "issues",
+          "steps",
+          "feature",
+          "background",
+          "scenario",
+          "custom_fields",
+          "attachments",
+          "is_shared",
+          "review_status",
+          "reviewers",
+          "created_at",
+          "created_by",
+          "last_updated_at",
+          "updated_by",
+          "urls"
+        ],
+        "responses": {
+          "200": {
+            "$response": "V2TestCaseResponse"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          },
+          "502": {
+            "description": "Upstream read failed with an unknown status; retry.",
+            "schema": {
+              "$schema": "ErrorResponse"
+            }
+          }
+        }
+      },
+      {
+        "name": "update_test_case_v2",
+        "method": "PATCH",
+        "path": "/api/v2/projects/{project_id}/test-cases/{test_case_id}",
+        "mode": "write",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "pattern": "^PR-\\d+$",
+            "example": "PR-12",
+            "description": "The project's PR-NNN identifier, as v2 addresses projects. This is NOT the integer project id that every v1 capability takes; read it as `identifier` from the projects list."
+          },
+          {
+            "name": "test_case_id",
+            "type": "string",
+            "required": true,
+            "example": "TC-1024",
+            "description": "The case's TC-NNN identifier, or its customer-defined identifier when the workspace uses project-level custom ids; matched exactly within the project. A bare integer id is NOT accepted here (404)."
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "example": "Login with valid credentials",
+            "description": "New title. May be omitted (partial update) but not blank — an empty or whitespace-only name is refused with 422.",
+            "json_path": "/test_case/name"
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "description": "Rich-text body. Send plain text or HTML, not a JSON document.",
+            "json_path": "/test_case/description"
+          },
+          {
+            "name": "preconditions",
+            "type": "string",
+            "json_path": "/test_case/preconditions"
+          },
+          {
+            "name": "template_id",
+            "type": "integer",
+            "example": 42,
+            "description": "Switch the case to another test-case template from list_templates_v2. Omit or send null to keep the current one. Unknown or cross-workspace id → 400.",
+            "json_path": "/test_case/template_id"
+          },
+          {
+            "name": "test_case_steps",
+            "type": "array",
+            "description": "REPLACES the whole step list, re-numbered by array position — to change one step, resend every step. Omit to leave steps untouched. Refused with 422 on a Gherkin (test_case_bdd) case.",
+            "fields": [
+              {
+                "name": "step",
+                "type": "string",
+                "description": "Action the tester performs."
+              },
+              {
+                "name": "result",
+                "type": "string",
+                "description": "Expected result of this step."
+              },
+              {
+                "name": "test_data",
+                "type": "string"
+              },
+              {
+                "name": "shared_step_id",
+                "type": "integer",
+                "description": "Reuse a shared step instead of inline text."
+              },
+              {
+                "name": "shared_step_detail_id",
+                "type": "integer"
+              }
+            ],
+            "json_path": "/test_case/test_case_steps"
+          },
+          {
+            "name": "feature",
+            "type": "string",
+            "description": "Gherkin Feature text; BDD cases only (422 on a classic case). Cannot be cleared to blank (400) — omit to keep the current text.",
+            "json_path": "/test_case/feature"
+          },
+          {
+            "name": "background",
+            "type": "string",
+            "description": "Gherkin Background text; BDD cases only (422 on a classic case). Omit to keep the current text.",
+            "json_path": "/test_case/background"
+          },
+          {
+            "name": "scenario",
+            "type": "string",
+            "description": "Gherkin Scenario text; BDD cases only (422 on a classic case). Cannot be cleared to blank (400) — omit to keep the current text.",
+            "json_path": "/test_case/scenario"
+          },
+          {
+            "name": "owner",
+            "type": "string",
+            "example": "jane@acme.com",
+            "description": "New owner as a workspace user's email (a user id is also accepted). An owner that cannot be resolved is written as unassigned WITHOUT an error — verify `owner` in the response.",
+            "json_path": "/test_case/owner"
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "example": "Active",
+            "description": "Matched against the project's configured status display values (defaults: Active, Draft, In Review, Rejected, Outdated; a numeric option id also matches). Unknown value → 400. Omit to keep the current status.",
+            "json_path": "/test_case/status"
+          },
+          {
+            "name": "priority",
+            "type": "string",
+            "example": "High",
+            "description": "Matched against the project's configured priority display values (defaults: Low, Medium, High, Critical). Unknown value → 400. Omit to keep the current priority.",
+            "json_path": "/test_case/priority"
+          },
+          {
+            "name": "case_type",
+            "type": "string",
+            "example": "Functional",
+            "description": "Matched against the project's configured type display values (defaults include Functional, Regression, Smoke & Sanity, Acceptance, Security, Performance, Usability, Accessibility, Compatibility, Destructive, Automated, Manual, Other). Unknown value → 400.",
+            "json_path": "/test_case/case_type"
+          },
+          {
+            "name": "automation_status",
+            "type": "string",
+            "example": "automated",
+            "description": "Built-in values: not_automated, automated, automation_not_required, cannot_be_automated, obsolete (case-insensitive, internal name or display label). Workspaces that manage their own automation statuses accept their custom labels too. Unknown value → 400.",
+            "json_path": "/test_case/automation_status"
+          },
+          {
+            "name": "tags",
+            "type": "array",
+            "example": [
+              "login",
+              "smoke"
+            ],
+            "description": "Replaces the tag set with these names.",
+            "json_path": "/test_case/tags"
+          },
+          {
+            "name": "issues",
+            "type": "array",
+            "example": [
+              "TES-204"
+            ],
+            "description": "Linked issues as bare keys (Jira) or {issue_id, issue_type} objects.",
+            "fields": [
+              {
+                "name": "issue_id",
+                "type": "string"
+              },
+              {
+                "name": "issue_type",
+                "type": "string",
+                "description": "Tracker name, e.g. jira."
+              }
+            ],
+            "json_path": "/test_case/issues"
+          },
+          {
+            "name": "custom_fields",
+            "type": "object",
+            "example": {
+              "Component": "Checkout"
+            },
+            "description": "Map of custom-field DISPLAY NAME → value; only named fields change. Dropdown: option label (null clears); multi-dropdown: array of labels; user: email; boolean: true/false. An unknown name is SILENTLY SKIPPED; a reserved system-field name is refused; a value failing its type check fails the whole call with 400.",
+            "json_path": "/test_case/custom_fields"
+          },
+          {
+            "name": "identifier",
+            "type": "string",
+            "description": "Change the custom identifier. Honoured ONLY when the workspace uses project-level custom ids; otherwise ignored. A duplicate is refused with 400.",
+            "json_path": "/test_case/identifier"
+          },
+          {
+            "name": "review_status",
+            "type": "string",
+            "description": "Review assignment state. OMIT on a metadata-only edit — re-sending `pending` on an approved case invalidates the approval. Gated on Team Pro plan and the project's Review & Approve setting when the reviewer API is enabled. Known states include pending and in_review; the accepted set is not enforced here, so an unknown value is refused by the server.",
+            "json_path": "/test_case/review_status"
+          },
+          {
+            "name": "reviewers",
+            "type": "array",
+            "example": [
+              "jane@acme.com"
+            ],
+            "description": "Reviewer emails; replaces the whole set (`[]` unassigns everyone; to add/remove without replacing send an object {value: [emails], operation: add|remove} instead). Reviewers you revoke are emailed. Requires Team Pro plan and Review & Approve on the project; the owner cannot be a reviewer (422).",
+            "json_path": "/test_case/reviewers"
+          },
+          {
+            "name": "send_for_review",
+            "type": "boolean",
+            "description": "Moves the case into review and emails its reviewers; independent of `reviewers`. Same plan/project gates. Ambiguous strings like 'yes'/'no' are refused with 422.",
+            "json_path": "/test_case/send_for_review"
+          },
+          {
+            "name": "created_at",
+            "type": "string",
+            "format": "date-time",
+            "description": "Backdated creation timestamp; honoured only when the workspace has the external-API timestamp feature enabled, otherwise dropped silently.",
+            "json_path": "/test_case/created_at"
+          },
+          {
+            "name": "updated_at",
+            "type": "string",
+            "format": "date-time",
+            "description": "Backdated update timestamp; same feature gate as `created_at`; must not be earlier than `created_at` (400).",
+            "json_path": "/test_case/updated_at"
+          }
+        ],
+        "intent": "Edit a test case's fields, steps or review state.",
+        "guidance": [
+          "Recoverable: every update writes a new version that can be listed and restored (restore_history_v1), so this is an ordinary write — say so when asking for confirmation, and read the case first so you can describe exactly what changes.",
+          "Partial by default — only keys you send change — EXCEPT test_case_steps, which replaces the entire step list re-numbered by position. To edit one step, read the case, modify that entry and resend every step.",
+          "The case's EXISTING template decides the step style: a Gherkin case takes feature/background/scenario and refuses test_case_steps (422); a classic case refuses feature/background/scenario (422). Feature and scenario cannot be blanked (400).",
+          "status, priority and case_type take the project's display values; an unknown value is refused with 400, and an unresolvable owner is written as unassigned without error — verify the response.",
+          "Reviewer fields (review_status, reviewers, send_for_review) are a separate gated write applied AFTER the case update commits: a 502 with error_code=reviewer_write_failed means the case WAS updated but reviewers were not — retry with only the reviewer field, do not resend the edit.",
+          "The response carries `title`, `steps` as [{step, result}] and `owner` as an email, with no integer id."
+        ],
+        "returns": [
+          "identifier",
+          "title",
+          "description",
+          "preconditions",
+          "template",
+          "folder_id",
+          "status",
+          "priority",
+          "case_type",
+          "automation_status",
+          "owner",
+          "tags",
+          "issues",
+          "steps",
+          "feature",
+          "background",
+          "scenario",
+          "custom_fields",
+          "attachments",
+          "is_shared",
+          "review_status",
+          "reviewers",
+          "created_at",
+          "created_by",
+          "last_updated_at",
+          "updated_by",
+          "urls"
+        ],
+        "responses": {
+          "200": {
+            "$response": "V2TestCaseResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          },
+          "502": {
+            "description": "Either error_code=reviewer_write_failed with test_case_updated=true (the edit committed, only the reviewer change failed — retry with the reviewer field alone), or error_code=review_approve_unknown (nothing written; retry).",
+            "schema": {
+              "$schema": "ErrorResponse"
+            }
+          }
+        }
+      },
+      {
+        "name": "move_test_case_v2",
+        "method": "POST",
+        "path": "/api/v2/projects/{project_id}/test-cases/{test_case_id}/move",
+        "mode": "write",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "pattern": "^PR-\\d+$",
+            "example": "PR-12",
+            "description": "The project's PR-NNN identifier, as v2 addresses projects. This is NOT the integer project id that every v1 capability takes; read it as `identifier` from the projects list."
+          },
+          {
+            "name": "test_case_id",
+            "type": "string",
+            "required": true,
+            "example": "TC-1024",
+            "description": "The case's TC-NNN identifier, or its customer-defined identifier when the workspace uses project-level custom ids; matched exactly within the project. A bare integer id is NOT accepted here (404)."
+          }
+        ],
+        "body": [
+          {
+            "name": "destination_folder_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "example": 5,
+            "description": "Integer id of the folder to move the case into, in the SAME project (top level of the body, not inside test_case). Digit strings are accepted; missing, zero, negative or non-numeric is refused with 400. Find folder ids in the folder listing."
+          }
+        ],
+        "intent": "Move one test case to another folder.",
+        "guidance": [
+          "Within-project only: the destination must be a folder of the project in the path. Moving a case to another project is not supported here.",
+          "Reversible by moving the case back to its previous folder, so this is an ordinary write; read the case first and quote its current folder_id in the confirmation so the user can undo.",
+          "Resolve the folder's integer id from the folder tree before calling; the case's TC-NNN identifier stays the same after the move.",
+          "For several cases at once use bulk_move_test_cases rather than looping this call."
+        ],
+        "returns": [
+          "identifier",
+          "title",
+          "folder_id",
+          "template",
+          "status",
+          "priority",
+          "case_type",
+          "owner",
+          "tags",
+          "steps",
+          "custom_fields",
+          "urls",
+          "message"
+        ],
+        "responses": {
+          "200": {
+            "description": "Case moved; the full serialized case (now carrying the new folder_id) plus a top-level confirmation message.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "test_case": {
+                      "$schema": "V2TestCaseDetail"
+                    }
+                  }
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Test case moved successfully"
+                }
+              }
+            }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "list_templates_v2",
+        "method": "GET",
+        "path": "/api/v2/templates",
+        "mode": "read",
+        "entity": "template",
+        "query": [
+          {
+            "name": "name",
+            "type": "string",
+            "example": "Steps",
+            "description": "Contains-match on the template name. Omit for all templates."
+          },
+          {
+            "name": "p",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number (1-based; 0 is treated as 1)."
+          },
+          {
+            "name": "count",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300,
+            "default": 30,
+            "description": "Templates per page. A value above 300 is REFUSED with 400, not clamped; a non-numeric value falls back to 30."
+          }
+        ],
+        "intent": "List test-case templates - the source for template_id.",
+        "guidance": [
+          "Pick the template BEFORE creating a case: its `id` goes in template_id and its `step_type` (test_case_steps or test_case_bdd) decides whether the case takes step rows or Gherkin feature/background/scenario.",
+          "Disabled templates are still listed with enabled: false — offer only enabled ones. `is_default` marks the template applied when a create names none.",
+          "Only test-case templates exist, so there is no entity filter; `entity` is always TestCase.",
+          "project_count and field_count may be null when the workspace has counting switched off — treat null as unknown, not zero."
+        ],
+        "returns": [
+          "id",
+          "name",
+          "entity",
+          "enabled",
+          "step_type",
+          "is_default",
+          "is_system",
+          "future_projects_applicable",
+          "field_count",
+          "linked_to_all_projects",
+          "project_count",
+          "created_at",
+          "updated_at",
+          "info"
+        ],
+        "paginated": true,
+        "max_page_size": 300,
+        "responses": {
+          "200": {
+            "$response": "TemplateListResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "link_entities_to_jira_issue",
+        "method": "POST",
+        "path": "/api/v1/integration/jira-app/jira-ticket/link-entities",
+        "mode": "write",
+        "entity": "issue",
+        "body": [
+          {
+            "name": "issue_id",
+            "type": "string",
+            "required": true,
+            "example": "TES-121",
+            "description": "The external tracker's own ticket key, e.g. the Jira key TES-121. It is not a Test Management id and is not minted here — take it from the tracker. A missing value is refused with 400 'Missing issue_id'; a key that does not exist in the tracker is NOT validated and the link is stored anyway."
+          },
+          {
+            "name": "project_id",
+            "type": "string",
+            "required": true,
+            "example": "10001",
+            "description": "Integer id of the Test Management project that owns the entities being linked, sent as a string. A missing value is refused with 400 'Missing project_id'. This endpoint does not check it is numeric, so a non-numeric value fails deeper as a 500 rather than a clean 400."
+          },
+          {
+            "name": "entity_type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "test-case",
+              "test-run"
+            ],
+            "example": "test-case",
+            "description": "What is being linked. Matched case-insensitively. Anything outside the list is refused with 400 'Unsupported entity_type'. This also decides which other body field is required: 'test-case' requires `selection`, 'test-run' requires `entity_ids`."
+          },
+          {
+            "name": "entity_ids",
+            "type": "array",
+            "example": [
+              27912,
+              27399,
+              27398
+            ],
+            "description": "Integer ids of the test runs to link. Required ONLY when entity_type is 'test-run' (400 'Missing entity_ids for testrun' otherwise). For 'test-case' this field is read but never used — cases are resolved from `selection`, so ids sent here are silently discarded."
+          },
+          {
+            "name": "selection",
+            "type": "object",
+            "example": {
+              "select_all": false,
+              "unique_test_case_count": 12,
+              "folders": {}
+            },
+            "description": "Which test cases to link, in the same folder/filter selection shape the selection preview returns. Required ONLY when entity_type is 'test-case' (400 'Missing selection for testcase' otherwise). Ignored for 'test-run'.",
+            "fields": [
+              {
+                "name": "select_all",
+                "type": "boolean",
+                "description": "Select every case matching the selection rather than an explicit list."
+              },
+              {
+                "name": "unique_test_case_count",
+                "type": "integer",
+                "description": "Caller-supplied count of cases this selection resolves to. The server trusts it: it is the only input to the >200 async decision and is never recomputed against the selection."
+              },
+              {
+                "name": "folders",
+                "type": "object",
+                "description": "Folder-keyed selection map, taken verbatim from the selection preview."
+              }
+            ]
+          },
+          {
+            "name": "shared_selection",
+            "type": "object",
+            "description": "Additional selection covering test cases shared in from other projects. Only read on the synchronous test-case path; the queued path above 200 cases drops it, so shared cases are not linked in an async batch."
+          },
+          {
+            "name": "build_ids",
+            "type": "array",
+            "description": "Build ids matching `entity_ids` one-for-one, for accounts on build-based run ingestion. Omit the field entirely to let the server resolve runs the legacy way. If you do send it, it must hold exactly one positive integer per entry in `entity_ids` with no duplicates, or the call is refused with 400."
+          }
+        ],
+        "intent": "Link test cases or runs to a tracker ticket.",
+        "guidance": [
+          "Which body field carries the entities depends on what you are linking: cases are selected by a selection object, runs by an explicit list of ids. Sending ids alongside a case selection links nothing extra.",
+          "Above 200 entities the work is queued to a background worker and the response comes back immediately with async true and no per-entity outcome. Nothing has been linked yet at that point, and a worker failure is never reported back — re-read the ticket's linked test cases to confirm.",
+          "The 200 threshold for a case selection is read from the count you supplied, not from the selection itself. Understate it and the call takes the synchronous path, which resolves at most 200 cases and links only those — reporting success for the whole selection.",
+          "Build the case selection from the selection preview for the same ticket and project rather than assembling it by hand; the preview returns exactly the object this field expects.",
+          "The ticket key is not verified against the tracker. A typo produces a link to a ticket that does not exist, with a 200 and a success message.",
+          "Linking is additive and idempotent per entity; relinking an already-linked entity does not duplicate it.",
+          "Every failure on the argument-validation path comes back as 400 with a plain message, including cases that are really 'not found'."
+        ],
+        "returns": [
+          "success",
+          "message",
+          "async"
+        ],
+        "responses": {
+          "200": {
+            "description": "`{\"success\": true, \"message\": \"<entity_type>s linked successfully\", \"async\": false}` when the entities were linked in-request, or the same shape with `\"async\": true` and a 'queued for linking' message when the batch exceeded 200 entities and was handed to a worker. No entity ids or per-entity results are returned in either case.\n",
+            "schema": {
+              "type": "object"
+            }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "test_case_results_v1",
+        "method": "GET",
+        "path": "/api/v1/integrations/{issue_type}/test-case/results/{test_case_id}",
+        "mode": "read",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "issue_type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "jira-app",
+              "azure",
+              "asana",
+              "linear",
+              "clickup",
+              "confluence",
+              "figma",
+              "devrev",
+              "gitlab",
+              "github",
+              "custom",
+              "trello"
+            ],
+            "example": "jira-app",
+            "description": "Which external tracker the caller is acting from. Only these values are routable — anything else does not match the route at all and comes back as a 404 rather than a validation error. Use 'jira-app' for Jira; the server normalises it to 'jira' internally."
+          },
+          {
+            "name": "test_case_id",
+            "type": "integer",
+            "required": true,
+            "description": "Integer id of the test case whose details and execution results are wanted. Must belong to the caller's own group."
+          }
+        ],
+        "query": [
+          {
+            "name": "p",
+            "type": "integer",
+            "example": 1,
+            "description": "Page of execution results. Sending it also switches the read to include every result rather than the server default set, so send p=1 explicitly when you want the full result history — omitting it quietly narrows what comes back."
+          },
+          {
+            "name": "per_page",
+            "type": "integer",
+            "example": 10,
+            "description": "Results per page. Only read when `p` is also sent; on its own it has no effect."
+          }
+        ],
+        "intent": "Get a test case's linked tracker tickets.",
+        "guidance": [
+          "Everything is nested one level under a `data` wrapper, with the case itself under `test_case` inside it; reading the top level finds nothing.",
+          "The linked tickets are on the `issues` field of the returned case, each carrying the tracker's own ticket key. That is the list to read before unlinking, because unlinking does not let you choose between several linked tickets.",
+          "Ownership is checked against the caller's own group, so a case id from another account comes back as a body saying access was denied while the transport status is still 200 — check the success flag rather than the status.",
+          "During a platform downtime window this returns a success body with a null case instead of failing; treat a null case as 'unknown', not as 'no such case'."
+        ],
+        "returns": [
+          "id",
+          "identifier",
+          "name",
+          "description",
+          "preconditions",
+          "expected_result",
+          "project_id",
+          "test_case_folder_id",
+          "issues",
+          "status",
+          "priority",
+          "case_type",
+          "automation_state",
+          "tags",
+          "custom_fields",
+          "steps",
+          "test_case_steps",
+          "template",
+          "assignee",
+          "creator_details",
+          "created_at",
+          "updator_details",
+          "updated_at",
+          "links",
+          "test_run_results",
+          "test_run_results_count",
+          "test_run_results_issues_count",
+          "metadata"
+        ],
+        "responses": {
+          "200": {
+            "description": "`{\"data\": {\"success\": true, \"test_case\": <TestCase>}}`. The case object also carries `test_run_results`, the page of execution results, and `issues`, the tracker tickets it is linked to. Also returned with `test_case` null during a downtime window.\n",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "test_case": {
+                      "$schema": "TestCase"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "linked_test_cases_selection_v1",
+        "method": "GET",
+        "path": "/api/v1/integrations/{issue_type}/test-cases/selection",
+        "mode": "read",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "issue_type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "jira-app",
+              "azure",
+              "asana",
+              "linear",
+              "clickup",
+              "confluence",
+              "figma",
+              "devrev",
+              "gitlab",
+              "github",
+              "custom",
+              "trello"
+            ],
+            "example": "jira-app",
+            "description": "Which external tracker the caller is acting from. Only these values are routable — anything else does not match the route at all and comes back as a 404 rather than a validation error. Use 'jira-app' for Jira; the server normalises it to 'jira' internally."
+          }
+        ],
+        "query": [
+          {
+            "name": "issue_id",
+            "type": "string",
+            "required": true,
+            "example": "TES-121",
+            "description": "The external tracker's ticket key whose current test-case selection is wanted. Not validated here: a blank or unknown key returns an empty selection rather than an error."
+          },
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "description": "Integer id of the Test Management project the selection is scoped to. This endpoint does not check it is present or numeric, so a missing or non-numeric value fails deeper as a 5xx instead of a clean 400 — always send a real project id."
+          }
+        ],
+        "intent": "Preview the test cases a tracker ticket would link.",
+        "guidance": [
+          "This is the step before linking, not the list of what is already linked. The selection object it returns is the exact object the link call expects, folder structure and all — pass it straight through rather than rebuilding it.",
+          "The count the link call uses to decide between the immediate and the queued path is the one you carry from this selection. Change the selection by hand and that count stops matching what it resolves to.",
+          "Unlike its Jira-specific twin, this route validates neither the ticket key nor the project id, so a missing argument surfaces as a server error rather than a 400.",
+          "During a platform downtime window this returns an empty test-case list rather than a selection object."
+        ],
+        "returns": [
+          "success",
+          "selection"
+        ],
+        "responses": {
+          "200": {
+            "description": "`{\"success\": true, \"selection\": {...}}`. The selection object is passed through from the backing service and is folder-shaped (a `folders` map plus selection counts); it is the same object the link call takes as its case selection. During downtime an empty test-case collection is returned in its place instead.\n",
+            "schema": {
+              "type": "object"
+            }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "unlink_test_case_v1",
+        "method": "POST",
+        "path": "/api/v1/integrations/{issue_type}/unlink-test-case",
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "issue_type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "jira-app",
+              "azure",
+              "asana",
+              "linear",
+              "clickup",
+              "confluence",
+              "figma",
+              "devrev",
+              "gitlab",
+              "github",
+              "custom",
+              "trello"
+            ],
+            "example": "jira-app",
+            "description": "Which external tracker the link belongs to. Only these values are routable — anything else does not match the route at all and comes back as a 404 rather than a validation error. Use 'jira-app' for Jira; the server normalises it to 'jira' internally. The link is matched on this tracker type, so the wrong value finds nothing to unlink."
+          }
+        ],
+        "body": [
+          {
+            "name": "test_case_id",
+            "type": "integer",
+            "required": true,
+            "description": "Integer id of the test case to unlink. This, the caller's group and the tracker type are the whole match key — the case must belong to the caller's own group or the call is refused."
+          },
+          {
+            "name": "issue_id",
+            "type": "string",
+            "example": "TES-121",
+            "description": "The tracker ticket key the case should be unlinked from. Accepted and echoed through, but NOT used to select which link is removed: the server matches on the case, the group and the tracker type only. Send it for the refreshed list that comes back, and see the guidance if the case has more than one linked ticket."
+          },
+          {
+            "name": "p",
+            "type": "integer",
+            "example": 1,
+            "description": "Page of the refreshed linked-test-case list returned on success. Pages are fixed at 10 per page. Must be a plain scalar — an array or hash value is ignored and the first page is returned."
+          }
+        ],
+        "intent": "Unlink a test case from a tracker ticket.",
+        "guidance": [
+          "A failure does not change the transport status: the refusal arrives as a 200 carrying a success flag set to false and a 404 inside the body. Always read the success flag — checking the status alone reports every miss as a win.",
+          "Which link is removed is decided by the test case, the caller's group and the tracker type, not by the ticket you name. If the case is linked to several tickets in the same tracker, the first matching link is removed and it may not be the one you meant — read the case's linked tickets first and expect to verify afterwards.",
+          "On success the refreshed list of test cases still linked to the ticket is returned, so no follow-up read is needed to confirm.",
+          "Nothing is deleted: the case, the run and the ticket all survive and the same link can be created again.",
+          "Nothing is written back to the external tracker — the ticket itself is not modified.",
+          "During a platform downtime window an empty list with a success flag is returned and nothing is unlinked."
+        ],
+        "returns": [
+          "success",
+          "test_cases",
+          "info",
+          "recent_folder",
+          "recent_project"
+        ],
+        "responses": {
+          "200": {
+            "description": "On success, the refreshed list of test cases still linked to the ticket: `{\"success\": true, \"test_cases\": [...], \"info\": {...}, \"recent_folder\": ..., \"recent_project\": ...}`, 10 per page. ALSO returned, with this same 200 status, as `{\"success\": false, \"status\": 404}` when no matching link was found, and as `{\"success\": false, \"error\": \"Invalid Access\", \"status\": 401}` when the test case is not in the caller's group — the numbers in these bodies are not the transport status.\n",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "test_cases": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "LinkedIssueTestCase"
+                  }
+                },
+                "info": {
+                  "$schema": "PageInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "unlink_test_run_v1",
+        "method": "POST",
+        "path": "/api/v1/integrations/{issue_type}/unlink-test-run",
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "issue_type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "jira-app",
+              "azure",
+              "asana",
+              "linear",
+              "clickup",
+              "confluence",
+              "figma",
+              "devrev",
+              "gitlab",
+              "github",
+              "custom",
+              "trello"
+            ],
+            "example": "jira-app",
+            "description": "Which external tracker the link belongs to. Only these values are routable — anything else does not match the route at all and comes back as a 404 rather than a validation error. Use 'jira-app' for Jira; the server normalises it to 'jira' internally. The link is matched on this tracker type, so the wrong value finds nothing to unlink."
+          }
+        ],
+        "body": [
+          {
+            "name": "test_run_id",
+            "type": "integer",
+            "required": true,
+            "description": "Integer id of the test run to unlink. Must belong to the caller's own group, and the run is looked up inside `project_id`, which therefore becomes mandatory as soon as this is sent."
+          },
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "description": "Integer id of the project that owns the run. Required whenever `test_run_id` is sent; omitting it is refused with a body saying the project id was not provided."
+          },
+          {
+            "name": "issue_id",
+            "type": "string",
+            "example": "TES-121",
+            "description": "The tracker ticket key the run should be unlinked from. Accepted and echoed through, but NOT used to select which link is removed: the server matches on the run, the group and the tracker type only. Send it for the refreshed list that comes back."
+          },
+          {
+            "name": "build_id",
+            "type": "integer",
+            "description": "Build id for the run, for accounts on build-based run ingestion. Omit the field entirely and the server resolves the run itself — that is the normal call. Sending a value that is not a positive integer is refused with 400."
+          },
+          {
+            "name": "p",
+            "type": "integer",
+            "example": 1,
+            "description": "Page of the refreshed linked-test-run list returned on success. Pages are fixed at 10 per page."
+          }
+        ],
+        "intent": "Unlink a test run from a tracker ticket.",
+        "guidance": [
+          "A failure does not change the transport status: the refusal arrives as a 200 carrying a success flag set to false and a 404 inside the body. The same is true when the project id is missing or the run belongs to another group. Always read the success flag.",
+          "Which link is removed is decided by the test run, the caller's group and the tracker type, not by the ticket you name. If the run is linked to several tickets in the same tracker, the first matching link is removed — verify afterwards.",
+          "The run is resolved inside a project, so the project id must accompany the run id even though the ticket is the subject of the call.",
+          "On success the refreshed list of test runs still linked to the ticket is returned.",
+          "Nothing is deleted: the run and the ticket both survive and the same link can be created again. Nothing is written back to the external tracker.",
+          "During a platform downtime window this refuses with a success flag set to false and a 404 in the body, on a 200 — indistinguishable from 'no such link' without checking platform status."
+        ],
+        "returns": [
+          "success",
+          "test_runs",
+          "info"
+        ],
+        "responses": {
+          "200": {
+            "description": "On success, the refreshed list of test runs still linked to the ticket: `{\"success\": true, \"test_runs\": [...], \"info\": {...}}`, 10 per page. ALSO returned, with this same 200 status, as `{\"success\": false, \"status\": 404}` when no matching link was found or during downtime, and as `{\"success\": false, \"error\": ..., \"status\": 400|401|404}` for a missing project id, a run outside the caller's group, or a run that does not exist — the numbers in these bodies are not the transport status.\n",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "test_runs": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "TestRun"
+                  }
+                },
+                "info": {
+                  "$schema": "PageInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "list_configuration_groups",
+        "method": "GET",
+        "path": "/api/v1/configurations/groups",
+        "mode": "read",
+        "entity": "configuration",
+        "query": [
+          {
+            "name": "p",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "example": 1,
+            "description": "Page number. Page 0 is treated as page 1."
+          },
+          {
+            "name": "per_page",
+            "type": "integer",
+            "minimum": 1,
+            "default": 30,
+            "example": 30,
+            "description": "Rows per page, ceiling 30. Anything above 30 — and 0, a negative, or a non-numeric value — is silently replaced with 30 rather than refused, so a big page never arrives and you must walk pages. Above 300 the call is refused outright with a page-size error instead."
+          }
+        ],
+        "intent": "List the account's configuration groups and their ids.",
+        "guidance": [
+          "A group carries only the dimension's name — the selectable values live under it as its options and are fetched separately using the group id returned here, so this is step one of two whenever you need a concrete value.",
+          "Nothing here is project-scoped: the same groups come back whichever project the user is working in, and they cannot be filtered to one project. Do not offer this as a way to see what a particular project can run against.",
+          "Page number travels as `p`; a `page` parameter is not read on this call and is ignored, which silently pins you to page 1.",
+          "There is no name search or sort on this listing — walk the pages and match names yourself."
+        ],
+        "returns": [
+          "id",
+          "name",
+          "is_system",
+          "group_id",
+          "record_status",
+          "created_at",
+          "updated_at"
+        ],
+        "paginated": true,
+        "max_page_size": 30,
+        "responses": {
+          "200": {
+            "$response": "ConfigurationGroupListResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "global_search_v1",
+        "method": "GET",
+        "path": "/api/v1/global/search",
+        "mode": "read",
+        "entity": "project",
+        "query": [
+          {
+            "name": "entity",
+            "type": "string",
+            "required": true,
+            "example": "test_case,test_run,project",
+            "description": "Comma-separated list of the entity types to search. Allowed tokens: test_case, test_run, test_plan, project, shared_step, report. They are snake_case and SINGULAR — the hyphenated plurals used by the project-scoped search (test-cases, test-runs) are rejected here with a 400 naming the invalid token. Omitting this is a 400, not a search of everything."
+          },
+          {
+            "name": "q[query]",
+            "type": "string",
+            "required": true,
+            "example": "login",
+            "description": "The text to search for. Required — a blank or missing value is a 400. %, _ and \\ are literal characters here and are not escaped or treated as wildcards."
+          },
+          {
+            "name": "q[project_ids]",
+            "type": "string",
+            "example": "101,102",
+            "description": "Comma-separated NUMERIC project ids to restrict the search to. These are integer ids, not PR-NNN identifiers. Omit to search every project the caller can see."
+          },
+          {
+            "name": "q[owner]",
+            "type": "string",
+            "example": "14,15",
+            "description": "Comma-separated Test Management user ids; the server converts them to the underlying user ids. Applied to test cases, runs and plans, and to reports. Deliberately NOT applied to project or shared_step hits, whose stored user is a creator rather than an owner, so an owner filter does not narrow those two at all."
+          },
+          {
+            "name": "q[tags]",
+            "type": "string",
+            "example": "regression,smoke",
+            "description": "Comma-separated tag ids applied to every entity type being searched. A per-entity tag filter overrides it for that entity."
+          },
+          {
+            "name": "q[issue_ids]",
+            "type": "string",
+            "example": "JIRA-1,JIRA-2",
+            "description": "Comma-separated linked-issue ids. Applied to test cases only at the shared level; use the per-entity form for runs."
+          },
+          {
+            "name": "q[created_at]",
+            "type": "string",
+            "example": "7_day",
+            "description": "Relative token `<n>_<unit>` with a SINGULAR unit (day, hour, week, month, year) — e.g. 7_day, 24_hour; a `_gte` suffix inverts it (7_day_gte = older than). Also accepts `all_time` (resolved as one year) or an absolute \"YYYY-MM-DD YYYY-MM-DD\" range. A plural unit such as 7_days raises server-side rather than returning a 400."
+          },
+          {
+            "name": "q[updated_at]",
+            "type": "string",
+            "example": "1_month",
+            "description": "Same form as q[created_at]."
+          },
+          {
+            "name": "q[created_between]",
+            "type": "array",
+            "example": [
+              "2026-04-05T00:00:00.000Z",
+              "2026-05-05T23:59:59.999Z"
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "fields": [
+              {
+                "name": "0",
+                "type": "string"
+              },
+              {
+                "name": "1",
+                "type": "string"
+              }
+            ],
+            "description": "Absolute creation range as a positional 2-element array: index 0 is the start, index 1 the end, ISO 8601. Takes precedence over q[created_at] when both are sent."
+          },
+          {
+            "name": "q[updated_between]",
+            "type": "array",
+            "example": [
+              "2026-04-05T00:00:00.000Z",
+              "2026-05-05T23:59:59.999Z"
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "fields": [
+              {
+                "name": "0",
+                "type": "string"
+              },
+              {
+                "name": "1",
+                "type": "string"
+              }
+            ],
+            "description": "Absolute last-updated range, same positional 2-element form as q[created_between]. Takes precedence over q[updated_at]."
+          },
+          {
+            "name": "q[test_case][tags]",
+            "type": "string",
+            "example": "12,13",
+            "description": "Comma-separated tag ids, test cases only. Overrides the shared q[tags] for this entity."
+          },
+          {
+            "name": "q[test_case][priority_id]",
+            "type": "string",
+            "example": "1268,1270",
+            "description": "Comma-separated priority option ids. Ids, not labels — resolve them from the project's system field values first."
+          },
+          {
+            "name": "q[test_case][status_id]",
+            "type": "string",
+            "example": "1,2",
+            "description": "Comma-separated status option ids."
+          },
+          {
+            "name": "q[test_case][automation_state_id]",
+            "type": "string",
+            "example": "1,2",
+            "description": "Comma-separated automation-state option ids."
+          },
+          {
+            "name": "q[test_case][category_id]",
+            "type": "string",
+            "example": "1,2",
+            "description": "Comma-separated case-type (category) option ids."
+          },
+          {
+            "name": "q[test_case][issue_ids]",
+            "type": "string",
+            "example": "JIRA-1,JIRA-2",
+            "description": "Comma-separated linked-issue ids, test cases only."
+          },
+          {
+            "name": "q[test_run][tags]",
+            "type": "string",
+            "example": "sprint-1",
+            "description": "Comma-separated tag ids, test runs only."
+          },
+          {
+            "name": "q[test_run][issue_ids]",
+            "type": "string",
+            "example": "JIRA-3",
+            "description": "Comma-separated linked-issue ids, test runs only."
+          },
+          {
+            "name": "q[test_plan][tags]",
+            "type": "string",
+            "example": "12,13",
+            "description": "Comma-separated tag ids, test plans only."
+          },
+          {
+            "name": "q[project][tags]",
+            "type": "string",
+            "example": "12,13",
+            "description": "Comma-separated tag ids, project hits only. Projects and shared steps accept tags and the date ranges only — no owner, priority or status filter reaches them."
+          },
+          {
+            "name": "q[shared_step][tags]",
+            "type": "string",
+            "example": "12,13",
+            "description": "Comma-separated tag ids, shared-step hits only."
+          },
+          {
+            "name": "q[match][tags]",
+            "type": "string",
+            "example": "all",
+            "description": "How to combine the tag values supplied elsewhere — an OPERATOR, never the values themselves: all (has every tag), any, none. A value placed here instead of beside it sets a meaningless operator and applies NO filter, silently widening the result. The operator is broadcast to every entity being searched."
+          },
+          {
+            "name": "combine",
+            "type": "string",
+            "values": [
+              "true",
+              "false"
+            ],
+            "default": "false",
+            "description": "true merges all entity types into one list sorted newest-first with an entity_type on each row. Case-insensitive. It forces page 1 and caps the merged list at 5 rows while info.count still reports the real total, so it is a preview, not a way to read results."
+          },
+          {
+            "name": "typeahead",
+            "type": "string",
+            "values": [
+              "true",
+              "false"
+            ],
+            "default": "false",
+            "description": "true takes a fast path returning only entity_type, id, identifier, name, project_id and owner per hit, with no folder path, status or description enrichment. It also DROPS reports from the search entirely even when they are listed in `entity`. Case-insensitive."
+          },
+          {
+            "name": "filter_details",
+            "type": "string",
+            "values": [
+              "true",
+              "false"
+            ],
+            "default": "false",
+            "description": "Exactly the lowercase string `true` adds a filter_details block resolving the filter ids you sent back to names. Any other spelling, including True, is ignored. If resolution fails the block is simply absent — the search itself still succeeds."
+          },
+          {
+            "name": "p",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "example": 1,
+            "description": "Page number, applied to every entity type at once. A value below 1 becomes 1. `page` is accepted as an alias. Ignored when combine is true."
+          },
+          {
+            "name": "per_page",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 30,
+            "example": 30,
+            "description": "Rows per entity type per page, ceiling 30. A larger value is silently reduced to 30 rather than refused. `count` is accepted as an alias."
+          }
+        ],
+        "intent": "Search every entity type across the account at once.",
+        "guidance": [
+          "Account-wide by default. There is no project path segment; narrow it with the numeric project-ids filter when the user did name a project, otherwise every project the caller can see is searched.",
+          "Entity tokens here are snake_case and singular (test_case, test_run, test_plan, project, shared_step, report). This is a different vocabulary from the project-scoped searches, which take hyphenated plurals — passing those gets a 400 that names the invalid token.",
+          "Both the entity list and the query text are mandatory and each missing one comes back as HTTP 400 whose body is a bare `error` message with no `success` key, so do not look for success: false to detect the failure.",
+          "Pagination is per entity type, not overall: page 2 advances every type together, so a type with 3 hits contributes nothing to page 2 while another is still producing rows. Read each type's own info block to know when that type is exhausted.",
+          "Combining results is a preview only — it pins you to page 1 and returns at most 5 rows across all types while still reporting the true total in the count, so a count of 200 beside 5 rows is expected and not a bug. Leave it off and read the per-type results when you actually need the matches.",
+          "Priority, status, automation-state and case-type filters take option ids, not the labels a user says. Resolve them first; a wrong-form value matches nothing and still returns a successful empty result.",
+          "Projects and shared steps only honour tags and the date ranges. An owner filter does not narrow them at all, so a query scoped by owner still returns every matching project."
+        ],
+        "returns": [
+          "test_case",
+          "test_run",
+          "test_plan",
+          "project",
+          "shared_step",
+          "report",
+          "project_details",
+          "data",
+          "info",
+          "test_case_folders",
+          "filter_details"
+        ],
+        "paginated": true,
+        "max_page_size": 30,
+        "responses": {
+          "200": {
+            "$response": "GlobalSearchResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "initiate_export",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/{entity_type}/exports/{file_type}",
+        "mode": "write",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric project id, not the PR-NNN identifier."
+          },
+          {
+            "name": "entity_type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "test-cases"
+            ],
+            "example": "test-cases",
+            "description": "Only test cases can be exported through this capability. Dashboard analytics has its own export capability; asking for it here is accepted, records an export and returns an id, then the background job fails."
+          },
+          {
+            "name": "file_type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "csv",
+              "bdd"
+            ],
+            "example": "csv",
+            "description": "csv produces a spreadsheet of every field, custom field and step. bdd produces Gherkin .feature output and silently restricts the export to BDD-template cases only."
+          }
+        ],
+        "body": [
+          {
+            "name": "ids",
+            "type": "array",
+            "example": [
+              101,
+              102,
+              103
+            ],
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer"
+              }
+            ],
+            "json_path": "/test_case/ids",
+            "description": "The exact test cases to export, by NUMERIC id. A TC-NNN identifier or a customer-defined id is not matched here. Ignored when select_all is true or when a folder selection map is sent. Omit the whole test_case object at your peril: with no selection form at all the export job is started against an empty id set."
+          },
+          {
+            "name": "select_all",
+            "type": "boolean",
+            "example": true,
+            "json_path": "/test_case/select_all",
+            "description": "true exports everything matching the q filters within folder_id instead of an explicit id list, minus de_selected_ids. Sent as false (or omitted) the explicit id list is used instead."
+          },
+          {
+            "name": "de_selected_ids",
+            "type": "array",
+            "example": [
+              104
+            ],
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer"
+              }
+            ],
+            "json_path": "/test_case/de_selected_ids",
+            "description": "Numeric ids to exclude from a select_all export. Has no effect unless select_all is true."
+          },
+          {
+            "name": "folders",
+            "type": "object",
+            "example": {
+              "125382": {
+                "select_all": true
+              },
+              "125385": {
+                "ids": [
+                  9001
+                ]
+              }
+            },
+            "json_path": "/test_case/folders",
+            "description": "Cross-folder selection: an object KEYED BY FOLDER ID, each value carrying that folder's own select_all / ids / de_selected_ids choice; the server resolves it to a union of case ids. Present, it WINS over both select_all and ids at the top level. An empty map resolves to no cases, never to the whole project.",
+            "fields": [
+              {
+                "name": "select_all",
+                "type": "boolean"
+              },
+              {
+                "name": "ids",
+                "type": "array"
+              },
+              {
+                "name": "de_selected_ids",
+                "type": "array"
+              }
+            ]
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "example": 29529465,
+            "description": "Folder to scope a select_all export to. Only the folder itself unless subfolders are opted into."
+          },
+          {
+            "name": "include_subfolders_tc",
+            "type": "boolean",
+            "example": true,
+            "description": "true also pulls cases from the folder's descendants. Off by default, so a folder export silently returns only the cases sitting directly in that folder."
+          },
+          {
+            "name": "q",
+            "type": "object",
+            "example": {
+              "priority": "1268",
+              "tags": "12,13"
+            },
+            "fields": [
+              {
+                "name": "priority",
+                "type": "string"
+              },
+              {
+                "name": "status",
+                "type": "string"
+              },
+              {
+                "name": "tags",
+                "type": "string"
+              },
+              {
+                "name": "owner",
+                "type": "string"
+              },
+              {
+                "name": "custom_fields",
+                "type": "object"
+              }
+            ],
+            "description": "Filters selecting which cases a select_all export covers. Same vocabulary and same id-based values as the project test-case search, so resolve option ids first. An unrecognised key is dropped rather than refused, which widens the export instead of erroring."
+          },
+          {
+            "name": "merge_into_single_file",
+            "type": "boolean",
+            "example": true,
+            "json_path": "/metadata/merge_into_single_file",
+            "description": "BDD exports only: merge every selected case into one .feature file instead of one file per case. The merge needs a single shared feature and background across the selection."
+          },
+          {
+            "name": "common_feature",
+            "type": "string",
+            "json_path": "/metadata/common_feature",
+            "description": "BDD merge only: the Feature block to write at the top of the merged file. Omit it and the first exported case's own feature is used."
+          },
+          {
+            "name": "common_background",
+            "type": "string",
+            "json_path": "/metadata/common_background",
+            "description": "BDD merge only: the Background block for the merged file. Omit it and the first exported case's background is used."
+          }
+        ],
+        "intent": "Start a background export of test cases to CSV or Gherkin.",
+        "guidance": [
+          "THE FILE NEVER COMES BACK THROUGH HERE. This only queues the job and hands you an export id. Downloading the finished file is deliberately not part of this catalogue — a file download cannot be served over this transport — and there is no status or polling capability either. So after a successful call, tell the user plainly that the export is being prepared and that they must collect it from the exports list in the Test Management UI. Do not promise to fetch, attach or summarise the file.",
+          "A 200 with an export id means the job was accepted, not that it succeeded. The work runs afterwards and can still fail, in which case the id stays valid and no file ever appears — which the caller cannot observe from here.",
+          "Selection has three forms and the server picks one in a fixed order: a folder-keyed selection map beats everything; otherwise select_all exports everything matching the filters within the folder minus the de-selected ids; otherwise only the listed ids. Send exactly one form — the losing ones are silently ignored, not merged.",
+          "Explicit ids are matched on the numeric primary key only. Feeding TC-NNN identifiers there exports nothing and still returns a successful export id.",
+          "Choosing BDD restricts the selection to BDD-template cases behind your back, so exporting a folder of step-template cases as BDD produces an empty file with no error. Validate a BDD selection for a shared feature and background before merging into one file.",
+          "This creates an export record against the caller's account each time it is invoked; repeating it produces a new id and a new job rather than reusing the previous one."
+        ],
+        "returns": [
+          "export_id"
+        ],
+        "responses": {
+          "200": {
+            "$response": "DashboardExportInitiatedResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "get_exploratory_session_form_fields",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/exploratory-sessions/form-fields",
+        "mode": "read",
+        "entity": "exploratory_session",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "query": [
+          {
+            "name": "values",
+            "type": "boolean",
+            "default": false,
+            "description": "Set to true to get each field's configured choices alongside its definition. Left off, the reply is a compact list of the field definitions with the choice lists omitted, which is enough to learn the field names but not the values they accept.",
+            "example": true
+          }
+        ],
+        "intent": "List the form fields for authoring an exploratory session.",
+        "guidance": [
+          "Ask for the choices when you intend to write a session; without them you get field names and types only, and you will be guessing at what a dropdown accepts.",
+          "Only the fields your team added are listed. The built-in session details such as name, charter and status are not returned here, so an empty list means nothing extra was configured, not that the session has no fields.",
+          "Configuration is per project, so fetch it again for each project - a field set up in one project need not exist in another.",
+          "Each field carries both an internal name and the display name your team sees; when a person names a field in plain words, match it against the display name.",
+          "A field describing a dependent choice points at the field it hangs off, so resolve the parent's value first when one is present."
+        ],
+        "returns": [
+          "success",
+          "custom_fields",
+          "default_fields",
+          "id",
+          "field_name",
+          "field_user_name",
+          "field_type",
+          "entity_type",
+          "is_required",
+          "optional",
+          "option_values",
+          "field_values",
+          "default_value",
+          "placeholder",
+          "is_bulk_editable",
+          "is_filterable",
+          "parent_custom_field_id",
+          "links"
+        ],
+        "responses": {
+          "200": {
+            "$response": "ExploratorySessionFormFieldsResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "folder_attachments_v1",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/folder/{folder_id}/attachments",
+        "mode": "read",
+        "entity": "attachment",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "intent": "List the files attached to a folder itself.",
+        "guidance": [
+          "This is the folder's own shelf of files. Files attached to the test cases in the folder are a separate list and none of them appear here.",
+          "It does not look inside subfolders, so walk the folder tree and ask for each folder you care about.",
+          "Each entry carries links to the stored file; read the file from there, as there is no separate download step.",
+          "A folder with nothing attached comes back as an ordinary success with an empty list, so an empty list is an answer and not a failure.",
+          "Alongside the exact byte count each entry also carries a ready-formatted size for display; use the byte count when you need to compare or add sizes up."
+        ],
+        "returns": [
+          "success",
+          "attachments",
+          "id",
+          "name",
+          "content_type",
+          "byte_size",
+          "size",
+          "key",
+          "checksum",
+          "url",
+          "download_url",
+          "product_id"
+        ],
+        "responses": {
+          "200": {
+            "$response": "FolderAttachmentsResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "list_tags_v3",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/tags/v3",
+        "mode": "read",
+        "entity": "tag",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "query": [
+          {
+            "name": "entity_type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "test_case",
+              "test_run",
+              "test_plan",
+              "test_recording",
+              "shared_step"
+            ],
+            "description": "Which kind of record's labels to list. There is no option meaning 'all kinds'. Leaving it out or sending anything outside the listed set is refused outright rather than answered with an empty list.",
+            "example": "test_case"
+          },
+          {
+            "name": "p",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number, counting from 1. Anything that is not a positive whole number is refused before the labels are read.",
+            "example": 1
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "description": "Accepted as an alternative spelling of the page number, and used only when the page number was not supplied under the shorter name. Prefer the shorter name, which every other listing here uses."
+          },
+          {
+            "name": "per_page",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 30,
+            "description": "How many labels to return per page. The default is small, so ask for the largest page you need. A value above 100, zero, a negative number or anything non-numeric is refused rather than quietly clamped.",
+            "example": 100
+          },
+          {
+            "name": "search",
+            "type": "string",
+            "description": "Narrows the list to labels matching this text. Surrounding spaces are trimmed and an all-blank value counts as no filter at all. 'query' and 'q' are accepted as equivalents; whichever of the three is non-blank first is the one used."
+          }
+        ],
+        "intent": "List or search a project's labels, with their ids.",
+        "guidance": [
+          "This is the only label listing that reaches records other than test cases, and the only one that hands back the id a rename or a merge needs. The test-case-only listings return names and usage counts, so start here whenever an id is required downstream.",
+          "Name the kind of record explicitly every time. There is no way to ask for every kind at once, and a misspelling is refused rather than silently widened.",
+          "Labels are scoped to a project and to a kind of record, so the same word can exist as separate labels for test cases and for test runs, each with its own id.",
+          "Ask for a large page in one go rather than walking small pages; the ceiling is 100 per page."
+        ],
+        "returns": [
+          "tags",
+          "info",
+          "id",
+          "name"
+        ],
+        "shape": "discovered",
+        "paginated": true,
+        "max_page_size": 100,
+        "responses": {
+          "200": {
+            "description": "A page of labels for the requested kind of record. Each entry carries the label's id and its name; a companion block reports the total and the current page.",
+            "schema": {
+              "type": "object"
+            }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "update_tag_v1",
+        "method": "PATCH",
+        "path": "/api/v1/projects/{project_id}/tags/{id}",
+        "mode": "write",
+        "entity": "tag",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The label's own id, which only the listing that returns ids gives you. The label's name will not work in its place, so look the id up first.",
+            "example": 1
+          }
+        ],
+        "body": [
+          {
+            "name": "new_name",
+            "type": "string",
+            "required": true,
+            "description": "The label's new wording. Surrounding spaces are trimmed, and a blank or spaces-only value is refused. This is the only thing a rename changes - nothing else about the label can be edited here.",
+            "example": "smoke-critical"
+          }
+        ],
+        "intent": "Rename a label across a project.",
+        "guidance": [
+          "The new wording replaces the old one everywhere the label is already applied, in one step, with no per-record confirmation.",
+          "There is no undo and no saved history for labels, so the only way back is to rename it a second time - note the old wording before you start, because nothing else records it.",
+          "In production only account owners and admins may do this; anyone else is refused, so check who is asking before promising it.",
+          "This changes wording only. Folding two labels into one is a different operation, and renaming one to match another does not combine them.",
+          "Look up the id first: this addresses a single label by id, and a project can hold same-named labels for different kinds of record, each needing its own rename."
+        ],
+        "returns": [
+          "id",
+          "name"
+        ],
+        "shape": "discovered",
+        "responses": {
+          "200": {
+            "description": "The renamed label, carrying its id and its new name.",
+            "schema": {
+              "type": "object"
+            }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "verify_test_case_tags_v1",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/test-case/tags/verify_tag",
+        "mode": "read",
+        "entity": "tag",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "body": [
+          {
+            "name": "tags",
+            "type": "array",
+            "required": true,
+            "description": "The label wordings to check, as a list of plain strings. Omit the whole list and the request is refused. An empty list is accepted and simply reports nothing new.",
+            "example": [
+              "smoke",
+              "regression"
+            ]
+          }
+        ],
+        "intent": "Check which label names a project already uses.",
+        "guidance": [
+          "Nothing is saved by this check, despite how it reads. A label only comes into being when it is actually applied to a test case, so follow this with the step that puts the label on the case.",
+          "Two lists come back: one holds the wordings not yet used on the project's test cases, the other holds the ones already in use. Neither is an error - being already in use is usually the answer you wanted.",
+          "The accompanying message says to verify the labels whenever any wording is already in use. It reads like a failure and is not one; go by the two lists.",
+          "Comparison is exact, so a difference in capitalisation or spacing counts as a brand new label and will leave you with two near-identical ones if you apply it.",
+          "Only labels on test cases are considered. A wording already used on test runs or plans still comes back as new here.",
+          "Every outcome, including the one where no wording is new, is returned as an ordinary success - read the flag and the lists rather than the status."
+        ],
+        "returns": [
+          "success",
+          "tags",
+          "error_tags",
+          "error"
+        ],
+        "responses": {
+          "200": {
+            "description": "The verdict on the submitted wordings. 'tags' holds those not yet used on the project's test cases, 'error_tags' those already in use, and 'error' carries an advisory message whenever any wording was already in use.",
+            "schema": {
+              "type": "object",
+              "required": [
+                "success"
+              ],
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "description": "False only when none of the submitted wordings were new."
+                },
+                "tags": {
+                  "type": "array",
+                  "description": "Wordings not yet used on this project's test cases.",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "error_tags": {
+                  "type": "array",
+                  "description": "Wordings already in use on this project's test cases. Present only when at least one was.",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "error": {
+                  "type": "string",
+                  "description": "Advisory message shown when some or all wordings were already in use. Not a transport failure."
+                }
+              }
+            }
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "get_test_case_comments_v1",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/comments",
+        "mode": "read",
+        "entity": "comment",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric id of the project. Not the PR-NNN identifier shown in the UI."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric id of the folder the test case sits in. The comment thread is resolved from the test case id itself, so this segment only has to be a real folder id in the project."
+          },
+          {
+            "name": "test_case_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric id of the test case whose comments these are. Not the TC-NNN identifier."
+          }
+        ],
+        "query": [
+          {
+            "name": "p",
+            "type": "integer",
+            "default": 1,
+            "minimum": 1,
+            "description": "Page number, starting at 1. Each page holds at most 30 comments and the size cannot be raised; the response reports the total and the next page number."
+          }
+        ],
+        "intent": "Read the comments on a test case.",
+        "guidance": [
+          "The newest comment is first on page 1, so a 'what was said last' question is answered without paging; page on only when the reported total exceeds what you already hold.",
+          "Comments deleted by their author are gone from every page and from the total, so a thread can be shorter than a screenshot or an email suggests.",
+          "Bodies are rich text (HTML). A mention of a colleague arrives as markup whose visible text is that person's display name, so strip tags before showing the text plainly.",
+          "An archived test case still returns its comments, even though nothing new can be added to it."
+        ],
+        "returns": [
+          "comments",
+          "id",
+          "comment",
+          "user_id",
+          "entity_id",
+          "entity_type",
+          "created_at",
+          "edited",
+          "is_editable",
+          "success",
+          "info"
+        ],
+        "paginated": true,
+        "max_page_size": 30,
+        "responses": {
+          "200": {
+            "$response": "CommentListResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "add_test_case_comment_v1",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases/{test_case_id}/comments",
+        "mode": "write",
+        "entity": "comment",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric id of the project. Not the PR-NNN identifier shown in the UI."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric id of the folder the test case sits in. The comment thread is resolved from the test case id itself, so this segment only has to be a real folder id in the project."
+          },
+          {
+            "name": "test_case_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric id of the test case whose comments these are. Not the TC-NNN identifier."
+          }
+        ],
+        "body": [
+          {
+            "name": "comment",
+            "type": "string",
+            "required": true,
+            "json_path": "/comment/comment",
+            "example": "Checked against the latest build - step 3 still fails on Safari.",
+            "description": "The comment text, as rich text (HTML); plain text is accepted and kept as sent. Content that is only whitespace or empty tags is rejected as invalid, though an image on its own counts as content. To mention a colleague, include a span carrying data-lexical-mention=\"true\" and data-id set to their BrowserStack user id; mentioning someone outside the account is refused."
+          }
+        ],
+        "intent": "Post a comment on a test case.",
+        "guidance": [
+          "The comment is attributed to the calling user and the case owner is notified the moment it lands; anyone mentioned in the text is notified separately. Those messages leave the product and cannot be recalled, so confirm the wording before sending.",
+          "The author can edit or delete their own comment afterwards - each is a separate operation - which is what makes this recoverable; an edit replaces the earlier text and keeps no previous version, and a delete leaves no self-serve way back.",
+          "Only the author can change a comment, so posting on someone's behalf leaves them unable to correct it.",
+          "Commenting on an archived test case is refused; restore the case first.",
+          "This is a paid-plan feature. On a plan without it the call still succeeds at the transport level and reports in the payload that the feature is unavailable, so check the success flag rather than assuming the comment landed.",
+          "Comments are flat: every one is posted against the case itself, and there is no way to reply beneath an existing comment."
+        ],
+        "returns": [
+          "success",
+          "comment",
+          "id",
+          "user_id",
+          "entity_id",
+          "entity_type",
+          "created_at",
+          "edited",
+          "is_editable"
+        ],
+        "responses": {
+          "200": {
+            "$response": "CommentCreateResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "get_shared_components_v1",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/shared-components",
+        "mode": "read",
+        "entity": "shared_field",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric id of the project whose shared fields are listed."
+          }
+        ],
+        "query": [
+          {
+            "name": "p",
+            "type": "integer",
+            "default": 1,
+            "minimum": 1,
+            "description": "Page number, starting at 1. The page size is fixed by the service and cannot be raised from here; read the returned page details to see the total and whether another page exists."
+          },
+          {
+            "name": "q[query]",
+            "type": "string",
+            "description": "Text matched against the shared field's title only - its step content is not searched. Send it in this bracketed form; a bare q value is ignored and the unfiltered list comes back looking like a successful search."
+          },
+          {
+            "name": "q[tags]",
+            "type": "string",
+            "example": "smoke,regression",
+            "description": "Comma-separated tag names. Only shared fields carrying at least one of them are listed."
+          },
+          {
+            "name": "q[empty][system_fields][]",
+            "type": "array",
+            "values": [
+              "tags"
+            ],
+            "example": [
+              "tags"
+            ],
+            "fields": [
+              {
+                "name": "system_field",
+                "type": "string"
+              }
+            ],
+            "description": "Lists shared fields that have nothing set for a system field. Only tags is understood; any other name is dropped without an error, which silently widens the result. Combines with a tag filter as an either/or rather than narrowing it."
+          },
+          {
+            "name": "field_type",
+            "type": "string",
+            "values": [
+              "step",
+              "background",
+              "precondition"
+            ],
+            "description": "Restrict the listing to one kind of shared field. Omit to list every kind."
+          },
+          {
+            "name": "folder_id",
+            "type": "string",
+            "example": "null",
+            "description": "Collection to list from: the collection's numeric id, or the literal four-character text null to list the Unassigned root where uncollected fields sit. That is the word null as a value, not an absent one. Omit the parameter entirely to list the project's shared fields regardless of collection."
+          },
+          {
+            "name": "include_sub_collections",
+            "type": "boolean",
+            "default": false,
+            "description": "Set true to include the chosen collection's sub-collections as well as the collection itself. Only the exact value true turns it on, it does nothing without a collection, and it never applies to the Unassigned root, which has no children."
+          },
+          {
+            "name": "sort_by",
+            "type": "string",
+            "description": "Sort order for the listing, passed straight through to the service that stores shared fields. Omit it for the default order; an unrecognised value is not reported as an error here."
+          },
+          {
+            "name": "pre_fetch",
+            "type": "boolean",
+            "default": false,
+            "description": "When true the response also carries the steps of the first shared field on the page, saving a follow-up call. Honoured only on page 1 and only when the page has at least one row."
+          }
+        ],
+        "intent": "List or search a project's shared fields.",
+        "guidance": [
+          "Shared fields and shared steps are different objects with separate listings and separate id sets; an id taken from one will not resolve in the other, so confirm which the user means before acting.",
+          "The listing carries each field's title, type and usage count but not its step content - fetch a single shared field when the actual steps are needed.",
+          "The usage count is what tells you how wide the blast radius of an edit would be; read it before suggesting a change to a field.",
+          "Filtering by collection is the only way to reproduce what the user sees in a collection view - an unfiltered list spans the whole project and will look like the filter was ignored."
+        ],
+        "returns": [
+          "data",
+          "id",
+          "title",
+          "field_type",
+          "step_count",
+          "test_case_count",
+          "tags",
+          "created_by",
+          "updated_by",
+          "info",
+          "pre_fetched_shared_step",
+          "success"
+        ],
+        "paginated": true,
+        "responses": {
+          "200": {
+            "$response": "SharedComponentsGetResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "get_lcnc_user_test_config_v1",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/lcnc/user-test-config",
+        "mode": "read",
+        "entity": "project",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric id of the project the setup is read for."
+          }
+        ],
+        "intent": "Get the caller's saved low-code test setup for a project.",
+        "guidance": [
+          "The setup itself belongs to BrowserStack's low-code automation product and is handed back exactly as that product produced it. Test Management does not define, validate or reshape those fields, so they are not guaranteed here and may change without a change in Test Management - read them each time rather than relying on a remembered shape.",
+          "The status reported inside the payload is the one the other product returned, echoed as the transport status as well, so its failure surfaces as that same code here with the detail in the payload.",
+          "The setup is per person: it is the calling user's own default, so two people on the same project can correctly get different answers, and it is not a project-wide setting you can read on someone else's behalf."
+        ],
+        "returns": [
+          "status",
+          "body"
+        ],
+        "shape": "discovered",
+        "responses": {
+          "200": {
+            "description": "The low-code automation service's own response, passed through unchanged. `status` echoes that service's status code and `body` is its parsed payload, whose fields are owned by that service and are not guaranteed by Test Management.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "integer",
+                  "description": "Status code echoed from the upstream service."
+                },
+                "body": {
+                  "type": "object",
+                  "description": "Upstream payload, passed through unchanged. Field set may vary; see the `discovered` shape."
+                }
+              }
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -17458,6 +20551,618 @@
             "example": "300 KB"
           }
         }
+      },
+      "FolderV2": {
+        "type": "object",
+        "description": "Folder as returned by the public (v2) folder write endpoints. Leaner than the internal Folder shape: no project_id, group_id, is_automation or total_cases_count.",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string",
+            "description": "Final saved name — may differ from what was sent when auto-rename resolved a clash (lowercased, ' (1)' appended)."
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Sanitised HTML notes; null when never set."
+          },
+          "parent_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Integer id of the parent folder; null for a root folder."
+          },
+          "cases_count": {
+            "type": "integer",
+            "description": "Test cases directly in this folder (not descendants)."
+          },
+          "sub_folders_count": {
+            "type": "integer",
+            "description": "Immediate child folders."
+          },
+          "attachments": {
+            "type": "array",
+            "description": "Present only when the folder has attachments."
+          },
+          "links": {
+            "type": "object",
+            "properties": {
+              "sub_folders": {
+                "type": "string",
+                "description": "API path that lists this folder's sub folders."
+              }
+            }
+          },
+          "urls": {
+            "type": "object",
+            "properties": {
+              "self": {
+                "type": "string",
+                "description": "Web UI URL that opens this folder."
+              }
+            }
+          }
+        }
+      },
+      "V2TestCaseDetail": {
+        "type": "object",
+        "description": "A test case as the v2 public API serializes it (create, get, update and move). Differs from the internal `TestCase` shape: `title` instead of name, `steps` [{step, result}] instead of test_case_steps, owner/created_by/updated_by as emails, custom fields by display name, and NO integer id — `identifier` is the handle.",
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "description": "TC-NNN, or the customer-defined identifier when the workspace uses its own ids. Use this in later calls.",
+            "example": "TC-1024"
+          },
+          "title": {
+            "type": "string",
+            "description": "The case name (sent as `name` on write)."
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "preconditions": {
+            "type": "string",
+            "nullable": true
+          },
+          "template": {
+            "type": "string",
+            "description": "Step style: test_case_steps or test_case_bdd. The template id itself is not returned.",
+            "example": "test_case_steps"
+          },
+          "folder_id": {
+            "type": "integer"
+          },
+          "folder_path": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Folder ids from root to the case's folder. Only present on list responses, not on single-case responses."
+          },
+          "status": {
+            "type": "string",
+            "nullable": true,
+            "description": "Display value, e.g. Active."
+          },
+          "priority": {
+            "type": "string",
+            "nullable": true,
+            "description": "Display value, e.g. High."
+          },
+          "case_type": {
+            "type": "string",
+            "nullable": true,
+            "description": "Display value, e.g. Functional."
+          },
+          "automation_status": {
+            "type": "string",
+            "description": "Internal name, e.g. not_automated."
+          },
+          "owner": {
+            "type": "string",
+            "nullable": true,
+            "description": "Owner's email; falls back to the imported owner label for migrated cases."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "jira_id": {
+                  "type": "string",
+                  "description": "Issue key, whatever the tracker."
+                },
+                "issue_type": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "steps": {
+            "type": "array",
+            "description": "Ordered steps for a classic case; always [] for a Gherkin case.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "feature": {
+            "type": "string",
+            "nullable": true,
+            "description": "Gherkin cases only; absent on classic cases."
+          },
+          "background": {
+            "type": "string",
+            "nullable": true,
+            "description": "Gherkin cases only; absent on classic cases."
+          },
+          "scenario": {
+            "type": "string",
+            "nullable": true,
+            "description": "Gherkin cases only; absent on classic cases."
+          },
+          "custom_fields": {
+            "type": "array",
+            "description": "One entry per set custom field, keyed by display name. Multi-dropdowns carry `values` (array) instead of `value`.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Scalar value; dropdown option label, user email, boolean, etc."
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "string",
+                  "description": "Human-readable, e.g. 1.2 MB."
+                },
+                "content_type": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "is_shared": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "review_status": {
+            "type": "string",
+            "nullable": true,
+            "description": "Only when the project has Review & Approve enabled."
+          },
+          "reviewers": {
+            "type": "array",
+            "description": "Only when the project has Review & Approve enabled; shape depends on the workspace's reviewer-API flags (emails with review_status, or user objects).",
+            "items": {
+              "type": "object"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_by": {
+            "type": "string",
+            "nullable": true,
+            "description": "Creator's email."
+          },
+          "last_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Note the name: last_updated_at, not updated_at."
+          },
+          "updated_by": {
+            "type": "string",
+            "nullable": true,
+            "description": "Last editor's email."
+          },
+          "urls": {
+            "type": "object",
+            "properties": {
+              "self": {
+                "type": "string",
+                "description": "Deep link to the case in the Test Management UI."
+              }
+            }
+          }
+        }
+      },
+      "TemplateSummary": {
+        "type": "object",
+        "description": "One test-case template as the public templates list returns it (metadata only; field mappings are not included).",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The value to send as template_id when creating or updating a case.",
+            "example": 42
+          },
+          "name": {
+            "type": "string",
+            "example": "Test Case Steps"
+          },
+          "entity": {
+            "type": "string",
+            "description": "Always TestCase today.",
+            "example": "TestCase"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "false for a disabled template, which is still listed but should not be offered for new cases."
+          },
+          "step_type": {
+            "type": "string",
+            "nullable": true,
+            "description": "test_case_steps (classic step rows) or test_case_bdd (Gherkin). Decides which step fields a case on this template accepts.",
+            "example": "test_case_steps"
+          },
+          "is_default": {
+            "type": "boolean",
+            "description": "The template applied when a create names none."
+          },
+          "is_system": {
+            "type": "boolean",
+            "description": "Shipped with the workspace; cannot be deleted."
+          },
+          "future_projects_applicable": {
+            "type": "boolean",
+            "description": "New projects are linked to this template automatically."
+          },
+          "field_count": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Number of custom fields on the template; null when counts are skipped for the workspace."
+          },
+          "linked_to_all_projects": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "project_count": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Projects linked to the template; null when counts are skipped for the workspace."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LinkedIssueTestCase": {
+        "type": "object",
+        "description": "A test case as returned in a tracker ticket's linked-case list. Leaner than the full test case read, and carries issue-panel-only fields.",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "project_id": {
+            "type": "integer"
+          },
+          "identifier": {
+            "type": "string",
+            "description": "The case's TC-NNN identifier, or the third-party identifier when the case was imported."
+          },
+          "name": {
+            "type": "string"
+          },
+          "folder_id": {
+            "type": "integer"
+          },
+          "owner": {
+            "type": "object",
+            "description": "The resolved owner user, or null when the owner id cannot be resolved in the caller's group."
+          },
+          "project": {
+            "type": "object",
+            "description": "Summary of the owning project, supplied so the panel can render across projects."
+          },
+          "template": {
+            "type": "string"
+          },
+          "template_step_type": {
+            "type": "string"
+          },
+          "template_is_system": {
+            "type": "boolean"
+          },
+          "datasets_linked": {
+            "type": "boolean"
+          },
+          "custom_fields": {
+            "type": "array"
+          },
+          "status": {
+            "type": "object"
+          },
+          "case_type": {
+            "type": "object"
+          },
+          "automation_state": {
+            "type": "object"
+          },
+          "priority": {
+            "type": "string",
+            "description": "Flattened to the priority's internal name or display value, unlike the object form used elsewhere."
+          },
+          "tags": {
+            "type": "array"
+          },
+          "issues": {
+            "type": "array",
+            "description": "The tracker tickets this case is linked to."
+          },
+          "reviewers": {
+            "type": "array"
+          },
+          "review_status": {
+            "type": "string"
+          },
+          "dropdown": {
+            "type": "object",
+            "description": "The project's default field option sets, repeated per case so the panel can label status and priority ids."
+          },
+          "self_ui_link": {
+            "type": "string",
+            "description": "Web app path for this case — a link for a human, not an API path."
+          },
+          "configuration": {
+            "type": "object"
+          },
+          "last_test_info": {
+            "type": "object",
+            "description": "Present only when the case has been executed at least once. Absent — not null — for a never-run case.",
+            "properties": {
+              "last_run_result": {
+                "type": "string"
+              },
+              "last_run_result_status": {
+                "type": "object"
+              },
+              "last_run_name": {
+                "type": "string"
+              },
+              "last_run_id": {
+                "type": "string",
+                "description": "The run's TR-NNN identifier, not its integer id, despite the name."
+              },
+              "last_run_link": {
+                "type": "string"
+              },
+              "last_run_status": {
+                "type": "string",
+                "description": "'closed' or 'active'."
+              }
+            }
+          }
+        }
+      },
+      "ConfigurationGroup": {
+        "type": "object",
+        "description": "An account-level configuration dimension (for example Operating System, Browser or Device) whose selectable values are held as its options.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Integer id of the group; use it to read or change the group's options."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name of the dimension."
+          },
+          "is_system": {
+            "type": "boolean",
+            "description": "True for groups the product ships rather than ones the account created."
+          },
+          "group_id": {
+            "type": "integer",
+            "description": "The owning account (BrowserStack group). Identical on every row of a single response."
+          },
+          "record_status": {
+            "type": "string",
+            "description": "Lifecycle state of the record, e.g. active."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GlobalSearchEntityResults": {
+        "type": "object",
+        "description": "One entity type's slice of an account-wide search result. Present only for the types that were asked for.",
+        "properties": {
+          "data": {
+            "type": "array",
+            "description": "The matching records for this entity type. Row shape follows the entity, and carries a display_meta block enriched with owner, project and folder names except on the typeahead fast path.",
+            "items": {
+              "type": "object"
+            }
+          },
+          "info": {
+            "$schema": "PageInfo"
+          },
+          "folders": {
+            "type": "object",
+            "description": "Folder-hierarchy lookup for the test-case results only, keyed by folder id."
+          }
+        }
+      },
+      "Comment": {
+        "type": "object",
+        "description": "One comment as Test Management returns it.",
+        "required": [
+          "id",
+          "comment",
+          "user_id",
+          "entity_id",
+          "entity_type",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Id of the comment."
+          },
+          "comment": {
+            "type": "string",
+            "description": "Comment body as HTML. Mentions are rendered so the visible text is the mentioned person's full name."
+          },
+          "user_id": {
+            "type": "object",
+            "description": "The author. For a comment brought in by an import, id is null and the name and email are those recorded by the import, not a Test Management user.",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "nullable": true
+              },
+              "full_name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              }
+            }
+          },
+          "group_id": {
+            "type": "integer",
+            "description": "Account the comment belongs to."
+          },
+          "project_id": {
+            "type": "integer"
+          },
+          "parent_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Always null on comments posted through this path - replies are not supported."
+          },
+          "entity_id": {
+            "type": "integer",
+            "description": "Id of the item commented on."
+          },
+          "entity_type": {
+            "type": "string",
+            "description": "Kind of item commented on, for example TestCase."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "edited": {
+            "type": "boolean",
+            "description": "True when the comment has been changed since it was posted."
+          },
+          "is_editable": {
+            "type": "boolean",
+            "description": "Whether this comment may be edited at all; comments created by the product itself are not."
+          },
+          "review_status": {
+            "type": "string",
+            "description": "Present only on comments left as part of a review."
+          }
+        }
+      },
+      "SharedComponent": {
+        "type": "object",
+        "description": "A shared field (called a shared component by the API) as it appears in a project listing.",
+        "required": [
+          "id",
+          "title",
+          "field_type"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "field_type": {
+            "type": "string",
+            "description": "step, background or precondition."
+          },
+          "step_count": {
+            "type": "integer",
+            "description": "Number of steps inside this shared field."
+          },
+          "test_case_count": {
+            "type": "integer",
+            "description": "Number of test cases embedding it - the blast radius of any change."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_by": {
+            "type": "object",
+            "description": "Null when the author's user record can no longer be resolved.",
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "full_name": {
+                "type": "string"
+              }
+            }
+          },
+          "updated_by": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "full_name": {
+                "type": "string"
+              }
+            }
+          }
+        }
       }
     },
     "responses": {
@@ -18081,7 +21786,7 @@
         }
       },
       "DashboardExportInitiatedResponse": {
-        "description": "Dashboard export successfully initiated",
+        "description": "An export job was accepted and queued. The export_id identifies that job; the finished file is not returned by this call.",
         "schema": {
           "type": "object",
           "required": [
@@ -19287,6 +22992,407 @@
             }
           }
         }
+      },
+      "UsersListResponse": {
+        "description": "All active users in the caller's account plus a reduced record for the caller.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "users": {
+              "type": "array",
+              "description": "Every active user in the account, ordered by full_name; not filtered to the project.",
+              "items": {
+                "$schema": "User"
+              }
+            },
+            "myself": {
+              "$schema": "MyselfUser"
+            }
+          }
+        }
+      },
+      "FolderV2WriteResponse": {
+        "description": "Public (v2) envelope returned after creating, renaming or moving a folder: the affected folder in its public shape.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "folder": {
+              "$schema": "FolderV2"
+            }
+          }
+        }
+      },
+      "V2TestCaseResponse": {
+        "description": "v2 public-API single-case envelope: {data: {success, test_case}}. Note the case is under `data`, uses `title` (not name) and has no integer id.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "test_case": {
+                  "$schema": "V2TestCaseDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TemplateListResponse": {
+        "description": "Paginated list of the workspace's test-case templates: {success, templates: [TemplateSummary], info}.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "templates": {
+              "type": "array",
+              "items": {
+                "$schema": "TemplateSummary"
+              }
+            },
+            "info": {
+              "type": "object",
+              "description": "Pagination metadata passed through from the backend.",
+              "properties": {
+                "page": {
+                  "type": "integer",
+                  "example": 1
+                },
+                "per_page": {
+                  "type": "integer",
+                  "example": 30
+                },
+                "count": {
+                  "type": "integer",
+                  "description": "Total templates matching the filter.",
+                  "example": 42
+                },
+                "next": {
+                  "type": "integer",
+                  "nullable": true,
+                  "description": "Next page number, or null on the last page."
+                },
+                "prev": {
+                  "type": "integer",
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "ConfigurationGroupListResponse": {
+        "description": "Successfully retrieved the account's configuration groups",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "configuration_groups": {
+              "type": "array",
+              "items": {
+                "$schema": "ConfigurationGroup"
+              }
+            },
+            "info": {
+              "$schema": "PageInfo"
+            }
+          }
+        }
+      },
+      "GlobalSearchResponse": {
+        "description": "Account-wide search results. By default one group per requested entity type; when results are combined, a single sorted data list plus one info block instead.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "test_case": {
+              "$schema": "GlobalSearchEntityResults"
+            },
+            "test_run": {
+              "$schema": "GlobalSearchEntityResults"
+            },
+            "test_plan": {
+              "$schema": "GlobalSearchEntityResults"
+            },
+            "project": {
+              "$schema": "GlobalSearchEntityResults"
+            },
+            "shared_step": {
+              "$schema": "GlobalSearchEntityResults"
+            },
+            "report": {
+              "type": "object",
+              "description": "Report matches. Absent on the typeahead fast path even when reports were requested.",
+              "properties": {
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "scheduled_report_count": {
+                  "type": "integer"
+                },
+                "total_report_count": {
+                  "type": "integer"
+                }
+              }
+            },
+            "project_details": {
+              "type": "array",
+              "description": "Id-to-name lookup for every project referenced by the hits, so a row's project can be named without another call.",
+              "items": {
+                "type": "object"
+              }
+            },
+            "data": {
+              "type": "array",
+              "description": "Only when results are combined: all types merged, newest first, each row carrying an entity_type. Capped at 5 rows.",
+              "items": {
+                "type": "object"
+              }
+            },
+            "info": {
+              "$schema": "PageInfo"
+            },
+            "test_case_folders": {
+              "type": "object",
+              "description": "Only when results are combined: the folder lookup for any test-case rows in the merged list."
+            },
+            "filter_details": {
+              "type": "object",
+              "description": "Only when explicitly requested: the filters that were applied, with ids resolved to names. Absent if resolution failed."
+            }
+          }
+        }
+      },
+      "ExploratorySessionFormFieldsResponse": {
+        "description": "The extra fields configured for exploratory sessions in this project. The list of built-in fields is always empty on this path.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "success",
+            "custom_fields",
+            "default_fields"
+          ],
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "default_fields": {
+              "type": "array",
+              "description": "Always empty on this path - built-in session details are not described here.",
+              "items": {
+                "type": "object"
+              }
+            },
+            "custom_fields": {
+              "type": "array",
+              "description": "One entry per configured field.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "The field's identifier, used when referring to this field elsewhere."
+                  },
+                  "field_name": {
+                    "type": "string",
+                    "description": "The field's internal name."
+                  },
+                  "field_user_name": {
+                    "type": "string",
+                    "description": "The name your team sees in the product; match a person's plain-words request against this."
+                  },
+                  "field_type": {
+                    "type": "string",
+                    "description": "The kind of input, for example a single-line string, a dropdown, a date or a user picker."
+                  },
+                  "entity_type": {
+                    "type": "string",
+                    "description": "The record kind this field belongs to."
+                  },
+                  "is_required": {
+                    "type": "boolean",
+                    "description": "True when a session cannot be saved without this field."
+                  },
+                  "optional": {
+                    "type": "boolean",
+                    "description": "The inverse of is_required; both are returned."
+                  },
+                  "option_values": {
+                    "type": "array",
+                    "description": "The choices a dropdown offers. Returned only when the request asked for the choices.",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "field_values": {
+                    "type": "array",
+                    "description": "Current values recorded for the field. Returned only when the request asked for the choices.",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "default_value": {
+                    "type": "string",
+                    "description": "Pre-filled value, if the field has one. For a yes/no field this comes back as a true or false rather than as a number.",
+                    "nullable": true
+                  },
+                  "placeholder": {
+                    "type": "string",
+                    "description": "Hint text shown in the empty field."
+                  },
+                  "is_bulk_editable": {
+                    "type": "boolean",
+                    "description": "True when the field can be set on many records at once."
+                  },
+                  "is_filterable": {
+                    "type": "boolean",
+                    "description": "True when the field can be used to narrow a list."
+                  },
+                  "parent_custom_field_id": {
+                    "type": "integer",
+                    "description": "Present only for a dependent field; names the field whose value decides this one's choices."
+                  },
+                  "links": {
+                    "type": "object",
+                    "description": "Where the field's own choices can be read from."
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "FolderAttachmentsResponse": {
+        "description": "The files attached to the folder itself.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "success",
+            "attachments"
+          ],
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "attachments": {
+              "type": "array",
+              "description": "One entry per file on the folder, empty when the folder has none. Alongside the fields below each entry also carries 'size', a ready-formatted version of byte_size for display.",
+              "items": {
+                "$schema": "Attachment"
+              }
+            }
+          }
+        }
+      },
+      "CommentListResponse": {
+        "description": "A page of comments on an item, newest first, with page details.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "comments",
+            "success",
+            "info"
+          ],
+          "properties": {
+            "comments": {
+              "type": "array",
+              "items": {
+                "$schema": "Comment"
+              }
+            },
+            "success": {
+              "type": "boolean"
+            },
+            "info": {
+              "$schema": "PageInfo"
+            }
+          }
+        }
+      },
+      "CommentCreateResponse": {
+        "description": "The comment just posted, wrapped in a data envelope.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "data"
+          ],
+          "properties": {
+            "data": {
+              "type": "object",
+              "required": [
+                "success",
+                "comment"
+              ],
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "comment": {
+                  "$schema": "Comment"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SharedComponentsGetResponse": {
+        "description": "A page of a project's shared fields with page details, optionally carrying the first field's steps.",
+        "schema": {
+          "type": "object",
+          "required": [
+            "data",
+            "info",
+            "success"
+          ],
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "$schema": "SharedComponent"
+              }
+            },
+            "info": {
+              "$schema": "PageInfo"
+            },
+            "pre_fetched_shared_step": {
+              "type": "object",
+              "nullable": true,
+              "description": "Only present when the pre-fetch option was used on page 1; null otherwise.",
+              "properties": {
+                "shared_step_details": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "SharedStepDetail"
+                  }
+                },
+                "page_info": {
+                  "$schema": "PageInfo"
+                }
+              }
+            },
+            "success": {
+              "type": "boolean"
+            }
+          }
+        }
       }
     },
     "paging": {
@@ -19524,6 +23630,7 @@
         ],
         "capabilities": [
           "delete_test_case_attachment",
+          "folder_attachments_v1",
           "get_test_case_attachments_v1",
           "upload_a_i_attachments",
           "upload_generic_attachments",
@@ -19558,7 +23665,12 @@
         ],
         "capabilities": [
           "create_configuration_v1",
-          "get_configurations_v1"
+          "get_configurations_v1",
+          "list_configuration_groups"
+        ],
+        "key_facts": [
+          "A configuration group is an account-wide dimension — Operating System, Browser, Device or a custom one — shared by every project; the values selectable inside a group are its options, and a project's configurations are combinations drawn from those options.",
+          "Groups and their options are identified by plain integers that must be discovered from a listing; option labels are not accepted in their place."
         ]
       },
       "custom_field": {
@@ -19730,6 +23842,7 @@
           "delete_exploratory_session",
           "delete_exploratory_session_log",
           "get_exploratory_session",
+          "get_exploratory_session_form_fields",
           "list_exploratory_session_defects",
           "list_exploratory_session_logs",
           "list_exploratory_sessions",
@@ -19808,6 +23921,7 @@
         ],
         "capabilities": [
           "copy_folder",
+          "create_folder_v2",
           "create_root_folder_v1",
           "create_sub_folder_v1",
           "delete_folder_and_contents",
@@ -19816,13 +23930,17 @@
           "get_root_folders_v1",
           "list_folder_contents",
           "move_folder_v1",
+          "move_folder_v2",
           "rename_folder_v1",
+          "rename_folder_v2",
           "reorder_folders",
           "undo_remove_folder"
         ],
         "key_facts": [
           "Folder ids are plain INTEGERS (e.g. 54) — never FL-… strings. Nesting is via parent_id (integer, null = root).",
-          "mv cross-project and copy run ASYNC ({ success, async, unique_id }) — confirm by re-reading the destination (see async-jobs)."
+          "mv cross-project and copy run ASYNC ({ success, async, unique_id }) — confirm by re-reading the destination (see async-jobs).",
+          "In the public (v2) API a project is addressed by its PR-NNN identifier string, while folder ids stay plain integers.",
+          "Folders keep no version history: a rename or description change cannot be undone, and a move is reversed only by moving the folder back."
         ]
       },
       "project": {
@@ -19863,6 +23981,7 @@
         ],
         "capabilities": [
           "create_project_v1",
+          "edit_project_v1",
           "export_dashboard_analytics",
           "get_active_test_runs_info_v1",
           "get_automation_stats_v1",
@@ -19870,6 +23989,7 @@
           "get_closed_test_runs_split_v1",
           "get_entity_filter_details_v1",
           "get_issues_count_info_v1",
+          "get_lcnc_user_test_config_v1",
           "get_project_by_integer_id_v1",
           "get_project_settings",
           "get_project_users_v2_v1",
@@ -19877,9 +23997,15 @@
           "get_projects_minify_v1",
           "get_test_case_count_trend_v1",
           "get_test_case_type_split_v1",
+          "global_search_v1",
           "list_projects_v1",
           "search_project_entities",
           "update_project_settings"
+        ],
+        "key_facts": [
+          "Edits to a project's name, description or visibility are logged in the activity feed and a version history, but there is no restore: a prior value has to be re-entered by hand.",
+          "Searching the whole account returns at most 30 rows per entity type per page, and the combined single-list view returns only the top 5 overall while still reporting the true total — so a large count sitting beside five rows is by design, not a truncation bug.",
+          "Account-wide search matches on test cases, test runs, test plans, projects, shared steps and reports. Folders, results, datasets and attachments are not searchable this way."
         ]
       },
       "report": {
@@ -20039,16 +24165,19 @@
         "capabilities": [
           "bulk_edit_test_cases_v2",
           "get_test_case_tags",
+          "list_tags_v3",
           "list_test_case_tags_v1",
           "merge_tags_v1",
           "search_group_tags",
-          "search_test_case_tags"
+          "search_test_case_tags",
+          "update_tag_v1",
+          "verify_test_case_tags_v1"
         ],
         "key_facts": [
           "Tags are referenced by NAME in filters and on cases; the merge endpoint takes integer source_id/target_id, so resolve ids via the tag reads first.",
           "That body MUST carry custom_fields (send {} when not changing any) — omitting it returns 500 'undefined method each for nil', even though the server's validator lists it as optional.",
           "tags/merge is admin-gated (tags_management flag) — may be unavailable for a group; degrade gracefully and say so.",
-          "TAG-OBJECT WRITES ARE NOT EXPOSED. Renaming or deleting a tag project-wide is deliberately out of this profile: the endpoints exist but sit behind the tags_management flag that most groups do not have, and tagging is always driven through the ENTITY. If asked to rename or delete a tag, say it is not available here and point to the Test Management UI."
+          "Renaming a tag across the project is available, but only to account owners and admins; anyone else is refused with a permission error rather than the feature being absent. Deleting a tag outright is not available through these capabilities — point the user to the Test Management UI for that. Tagging itself is always driven through the entity being tagged, not by editing tag objects."
         ]
       },
       "test_case": {
@@ -20101,6 +24230,7 @@
           "bulk_retrieve_test_cases",
           "create_bulk_test_cases_v1",
           "create_test_case_v1",
+          "create_test_case_v2",
           "create_test_cases",
           "edit_test_case_partial_v1",
           "edit_test_case_v1",
@@ -20108,11 +24238,15 @@
           "get_system_field_values_v1",
           "get_test_case_by_integer_id_v1",
           "get_test_case_detail",
+          "get_test_case_v2",
           "get_test_cases_v1",
+          "initiate_export",
           "list_folder_test_cases_v1",
+          "move_test_case_v2",
           "reorder_test_cases_by_folder_v1",
           "search_project_entities_v2",
-          "search_test_cases_by_folder_v1"
+          "search_test_cases_by_folder_v1",
+          "update_test_case_v2"
         ],
         "key_facts": [
           "A filter is a (key, value) pair and each half fails silently: an unknown KEY is dropped (you get the whole project with success: true), and a wrong-form VALUE matches nothing (count: 0, also success: true). So resolve both — never guess either — and see pagination-and-filtering for the key table and each value's source.",
@@ -20120,7 +24254,10 @@
           "required.fields ADDS joined columns; it does NOT slim a row, so naming fields never buys more rows per page. required.fields=[\"count\"] ALONE is the only value that changes the response.",
           "The compact response has a DIFFERENT envelope: no `success` key ({test_cases, info, filter_details} only — absence of success is NOT failure), info.page_size echoes the server ceiling not your per_page, and filter_details is {} so confirm filter intent before the call.",
           "READING ROWS to show a user: leave per_page at its default and walk p until info.next is null. p advances by per_page and not by what came back, so paging over an incomplete read never recovers the gap.",
-          "Paths take INTEGER ids (project + folder + case). The case's TC-NNN comes back as data.test_case.identifier on any read; folder ids are plain integers."
+          "Paths take INTEGER ids (project + folder + case). The case's TC-NNN comes back as data.test_case.identifier on any read; folder ids are plain integers.",
+          "The v2 public API addresses a project by its PR-NNN identifier and a case by its TC-NNN identifier (or the customer-defined identifier when the workspace uses its own ids); folders stay plain integers. Every v1 capability takes integer ids for all three, and a bare integer is not accepted where v2 wants an identifier — do not mix the two styles in one call.",
+          "Every edit writes a new version. Earlier versions can be listed and one can be restored, so editing and moving a case are recoverable; deleting is not covered by version history.",
+          "Exporting cases to CSV or Gherkin runs as a background job: the request only reserves the export and hands back its id. The finished file is collected from the product's own exports list — nothing in this catalogue returns the file's contents, and there is no way to check the job's outcome from here."
         ]
       },
       "test_plan": {
@@ -20265,6 +24402,7 @@
         ],
         "capabilities": [
           "get_group_users_v2_v1",
+          "list_users",
           "search_project_users"
         ],
         "key_facts": [
@@ -20307,6 +24445,174 @@
           "Each record carries source (create/update), modified_fields, a modified map (per-field old/new), user and created_at.",
           "diff (compare two versions) and restore require a PAID plan; listing + single-version reads work otherwise. Degrade gracefully.",
           "A plain-language diff summary is agent-side — read the field deltas and describe them; the API returns structured data, not prose."
+        ]
+      },
+      "template": {
+        "entity": "template",
+        "title": "Test case template",
+        "description": "A field layout, in step or Gherkin style, that a test case is authored on.",
+        "aliases": [
+          "test case template",
+          "BDD template",
+          "Gherkin template",
+          "field layout"
+        ],
+        "id_convention": "Plain integer, unique across the workspace (not per project). Always discover it through the templates list — a test-case read exposes only the step style (template), never the template id.",
+        "parents": [],
+        "relations": [
+          {
+            "entity": "test_case",
+            "via": "authored on"
+          },
+          {
+            "entity": "custom_field",
+            "via": "composed of"
+          },
+          {
+            "entity": "project",
+            "via": "linked to"
+          }
+        ],
+        "capabilities": [
+          "list_templates_v2",
+          "list_test_case_templates_v2"
+        ],
+        "key_facts": [
+          "Only test-case templates exist today; there are no templates for runs, plans or results, so every template's entity reads TestCase.",
+          "A template's step style is fixed at creation: classic step rows or Gherkin (feature, background, scenario). A case authored on a Gherkin template cannot take step rows and vice versa, so choose the template before writing steps.",
+          "Templates belong to the workspace but apply only in the projects they are linked to. Naming a template that is unknown to, or not visible from, the caller's workspace is refused outright rather than falling back to the default.",
+          "Exactly one template is the default; a case created without naming a template lands on it. System templates ship with the workspace and cannot be deleted.",
+          "Disabled templates still appear in the listing (enabled false) but should not be offered for new cases.",
+          "Creating, editing, cloning, linking and deleting templates are paid-plan operations and are not exposed through these capabilities; only listing is."
+        ]
+      },
+      "issue": {
+        "entity": "issue",
+        "title": "Linked issue",
+        "description": "A ticket in an external tracker such as Jira that test cases and runs are linked to.",
+        "aliases": [
+          "requirement",
+          "ticket",
+          "jira issue",
+          "bug",
+          "work item"
+        ],
+        "id_convention": "The external tracker's own ticket key, as a string — for Jira an uppercase project key, a hyphen and digits, e.g. PROJ-123; other trackers use their own form. It is never a Test Management integer id and cannot be minted here: take it from the tracker itself, or read it from the linked-ticket list carried on a test case or test run. Test Management does not validate that the key exists, so a wrong key links silently.",
+        "parents": [],
+        "relations": [
+          {
+            "entity": "test_case",
+            "via": "linked to"
+          },
+          {
+            "entity": "test_run",
+            "via": "linked to"
+          },
+          {
+            "entity": "project",
+            "via": "scoped by"
+          }
+        ],
+        "capabilities": [
+          "link_entities_to_jira_issue",
+          "test_case_results_v1",
+          "linked_test_cases_selection_v1",
+          "unlink_test_case_v1",
+          "unlink_test_run_v1"
+        ],
+        "key_facts": [
+          "A linked issue is not stored by Test Management — only the link is. Unlinking removes the association and leaves the test case, the test run and the tracker ticket untouched, so every unlink here is reversible by linking again.",
+          "Linking and unlinking never write anything back into the external tracker; the ticket is not commented on, transitioned or modified.",
+          "One ticket can carry many test cases and many test runs, and one test case can be linked to several tickets, including tickets in different trackers.",
+          "The tracker a link belongs to is part of its identity: the same ticket key recorded under two different trackers is two independent links.",
+          "Unlinking identifies the link by the test case or test run plus the tracker, not by the ticket, so a case linked to several tickets in one tracker cannot be unlinked from a chosen one.",
+          "Test Management also has a separate Requirements feature of its own; a linked issue always lives in an external tracker and is a different thing, even though customers call both 'requirements'.",
+          "Ticket keys are never checked against the tracker, so a mistyped key produces a link to a ticket that does not exist and reports success."
+        ]
+      },
+      "comment": {
+        "entity": "comment",
+        "title": "Comment",
+        "description": "A note left on a test case carrying review feedback, a question or a decision.",
+        "aliases": [
+          "note",
+          "remark",
+          "feedback",
+          "mention"
+        ],
+        "id_convention": "Plain integer, assigned when the comment is posted. The posting call returns the new id; ids of existing comments are only discoverable by listing the comments on the item they were left on.",
+        "parents": [
+          "test_case"
+        ],
+        "relations": [
+          {
+            "entity": "test_case",
+            "via": "posted on"
+          },
+          {
+            "entity": "user",
+            "via": "written by"
+          },
+          {
+            "entity": "project",
+            "via": "belongs to"
+          }
+        ],
+        "capabilities": [
+          "get_test_case_comments_v1",
+          "add_test_case_comment_v1"
+        ],
+        "key_facts": [
+          "Mentioning a colleague in a comment notifies them straight away, and the owner of the item commented on is notified of every new comment. Both are real messages that leave the product and cannot be recalled.",
+          "A person can only be mentioned if they belong to the same account; naming anyone else is refused rather than quietly ignored.",
+          "Only the person who wrote a comment can edit or delete it. Editing replaces the earlier text and keeps no previous version, and a deleted comment disappears from every listing with no self-serve way to restore it.",
+          "Comments are stored as rich text, so formatting, links and images survive, and a mention is stored as markup that displays as the person's name.",
+          "New comments cannot be added to an archived test case, although the comments already on it stay readable.",
+          "Comments are flat - each one sits on the item itself, and there is no way to reply beneath another comment.",
+          "Commenting is a paid-plan feature; on a plan without it the answer reports the feature as unavailable instead of failing."
+        ]
+      },
+      "shared_field": {
+        "entity": "shared_field",
+        "title": "Shared field",
+        "description": "A reusable block of test content that many test cases embed, kept in collections.",
+        "aliases": [
+          "shared component",
+          "shared field",
+          "reusable field",
+          "collection"
+        ],
+        "id_convention": "Plain integer, not guessable; discover ids by listing a project's shared fields. A shared step id comes from a different set and will not resolve as a shared field.",
+        "parents": [
+          "project"
+        ],
+        "relations": [
+          {
+            "entity": "project",
+            "via": "belongs to"
+          },
+          {
+            "entity": "test_case",
+            "via": "embedded by"
+          },
+          {
+            "entity": "folder",
+            "via": "organised into collections"
+          },
+          {
+            "entity": "tag",
+            "via": "labelled with"
+          }
+        ],
+        "capabilities": [
+          "get_shared_components_v1"
+        ],
+        "key_facts": [
+          "A shared field is not a shared step. They are separate objects with separate listings and separate ids, and they are easy to confuse because both are reusable content - establish which one the user means before acting on an id.",
+          "The API calls this object a shared component while the product calls it a shared field; they are the same thing under two names.",
+          "Every shared field has a type - step, background or precondition - and the type decides where a test case can embed it.",
+          "Shared fields are organised into collections, which nest. A field placed in no collection sits in the Unassigned root.",
+          "A shared field is embedded by many test cases at once, so editing or deleting one changes every case that uses it; the usage count on the field is the measure of that blast radius."
         ]
       }
     }

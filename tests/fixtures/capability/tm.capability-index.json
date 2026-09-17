@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.11",
+  "version": "1.12",
   "build_id": "run5merge_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -29,7 +29,8 @@
           {
             "name": "owner",
             "type": "integer",
-            "description": "The ID of the user to assign as the owner of the test run."
+            "description": "The ID of the user to assign as the owner of the test run.",
+            "json_path": "/test_run/owner"
           }
         ],
         "intent": "Assign a owner to the test run",
@@ -63,7 +64,10 @@
           "500": {
             "$response": "InternalServerError"
           }
-        }
+        },
+        "guidance": [
+          "The body nests: send {\"test_run\": {\"owner\": <user id>}}. The handler reads it with params.require(:test_run), so a flat `owner` is rejected with a 400 naming the missing `test_run` key."
+        ]
       },
       {
         "name": "assign_test_run_test_cases_v2",
@@ -2076,7 +2080,8 @@
           "Test plan / sub-plan links are NOT carried over; link the copy afterwards if you need it under a plan.",
           "A dynamic source run passes its is_dynamic flag on, but the filter is not re-evaluated, so the copy starts from the source's case list.",
           "Cloning an automation run is blocked by the write-permission gate (403) — this path is for manual runs.",
-          "The copy is a new run, so nothing about the source changes; discard it by deleting the copy."
+          "The copy is a new run, so nothing about the source changes; discard it by deleting the copy.",
+          "The clone comes back at the top level as `test_run`, not under `data`. A 202 means the copy is still populating."
         ],
         "returns": [
           "id",
@@ -2103,7 +2108,7 @@
         ],
         "responses": {
           "200": {
-            "$response": "TestRunResponse"
+            "$response": "TestRunV2Response"
           },
           "202": {
             "description": "Run cloned, background bookkeeping still in progress. Body is {success: true, build_pending: true, message, test_run}. Treat as success; retrying would create a duplicate run.",
@@ -10728,7 +10733,8 @@
           "Both ids are prefixed strings here (PR-1 / TR-14). The v2 route only matches PR-\\d+ and TR-\\d+, so the integer ids the v1 run capabilities take give a 404 on this path.",
           "The run's `id` field comes back as the TR-NNN string; the integer lives in `uuid`. Take `uuid` whenever you need a numeric run id downstream.",
           "This returns the run header only — progress is aggregated counts. To see which cases are in the run, or their latest results, read the run's test cases instead.",
-          "403 means the caller lacks view permission for this run type (automation runs are gated separately from manual ones)."
+          "403 means the caller lacks view permission for this run type (automation runs are gated separately from manual ones).",
+          "The run is at the top level of the response as `test_run`; there is no `data` envelope here. The v1 run endpoints wrap their payload in `data` — these v2 ones do not."
         ],
         "returns": [
           "id",
@@ -10755,7 +10761,7 @@
         ],
         "responses": {
           "200": {
-            "$response": "TestRunResponse"
+            "$response": "TestRunV2Response"
           },
           "400": {
             "$response": "BadRequest"
@@ -12898,7 +12904,8 @@
           "Case membership is union-only: test_cases / folder_ids / include_all ADD cases, and nothing here removes one. Use the bulk test-cases call to remove.",
           "The body must be wrapped in a `test_run` object; without it the request 400s before any field is read.",
           "400 'invalid data' also covers an assignee email that cannot be resolved in this group — the run is left untouched in that case.",
-          "There is no undo: test runs keep no version history, so a field this call clears cannot be restored."
+          "There is no undo: test runs keep no version history, so a field this call clears cannot be restored.",
+          "The updated run comes back at the top level as `testrun` — one word, no underscore, and no `data` envelope."
         ],
         "returns": [
           "success",
@@ -12927,7 +12934,7 @@
         ],
         "responses": {
           "200": {
-            "$response": "TestRunWriteResponse"
+            "$response": "TestRunWriteV2Response"
           },
           "400": {
             "$response": "BadRequest"
@@ -15732,7 +15739,8 @@
           "Composition keys interact: sending only configurations re-reads the run's existing case selection so the case list survives, and sending selection keys without configurations re-reads the existing configuration list. Send neither and the run's composition is left completely untouched.",
           "Cases are unioned in, never out — this cannot remove a case from the run. Removal is the bulk test-cases call, and that one drops the removed cases' results.",
           "The body must be wrapped in a `test_run` object; without it the request 400s before any field is read.",
-          "There is no undo: test runs keep no version history, so an overwritten name, description or tag list cannot be restored."
+          "There is no undo: test runs keep no version history, so an overwritten name, description or tag list cannot be restored.",
+          "The updated run comes back at the top level as `testrun` — one word, no underscore, and no `data` envelope. This differs from the read endpoints, which use `test_run`."
         ],
         "returns": [
           "success",
@@ -15761,7 +15769,7 @@
         ],
         "responses": {
           "200": {
-            "$response": "TestRunWriteResponse"
+            "$response": "TestRunWriteV2Response"
           },
           "400": {
             "$response": "BadRequest"
@@ -16958,7 +16966,8 @@
           "A bare 400 'invalid data' is about the run's own fields — it is raised while converting the run header, before any case selection is built — most often an owner or reviewer inside filter_test_cases that resolves to no user in this group. It is never a complaint about the shape of your selection.",
           "Populating the run is asynchronous. A 200 means the run exists, not that its cases are attached yet; re-read the run's test cases to confirm. A 202 with build_pending:true means the run was created but is not readable back yet — poll for it, never retry the create, which would make a second run.",
           "include_sub_folders is only meaningful next to a non-empty folder_ids; on its own it is a hard 400.",
-          "A run created here keeps no version history. If the wrong cases land in it, adding is easy but removing is a separate operation, and the run's own metadata cannot be rolled back — only overwritten or the run deleted."
+          "A run created here keeps no version history. If the wrong cases land in it, adding is easy but removing is a separate operation, and the run's own metadata cannot be rolled back — only overwritten or the run deleted.",
+          "The new run comes back at the top level as `test_run`, not under `data` — unlike the v1 create, which wraps its payload in `data`."
         ],
         "returns": [
           "success",
@@ -16986,7 +16995,7 @@
         ],
         "responses": {
           "200": {
-            "$response": "TestRunResponse"
+            "$response": "TestRunV2Response"
           },
           "202": {
             "description": "The run was created but is not yet readable back — its build is still being provisioned and case population is in progress. Poll for the run rather than retrying the create.",
@@ -27858,6 +27867,36 @@
             "message": {
               "type": "string",
               "example": "Validation successful. All test cases belong to the same feature and background."
+            }
+          }
+        }
+      },
+      "TestRunV2Response": {
+        "description": "The test run, at the top level of the body. The v2 run endpoints do NOT use the `data` envelope the v1 run endpoints use.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "test_run": {
+              "$schema": "TestRun"
+            }
+          }
+        }
+      },
+      "TestRunWriteV2Response": {
+        "description": "The updated test run under `testrun` (no underscore between test and run) at the top level. No `data` envelope.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "testrun": {
+              "$schema": "TestRun"
             }
           }
         }

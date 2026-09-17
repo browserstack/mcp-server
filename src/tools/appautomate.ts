@@ -435,8 +435,20 @@ export default function addAppAutomationTools(
     },
     async (args) => {
       try {
+        trackMCP(
+          "setupBrowserStackAppAutomateTests",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
         return await setupAppAutomateHandler(args, config);
       } catch (error) {
+        trackMCP(
+          "setupBrowserStackAppAutomateTests",
+          server.server.getClientVersion()!,
+          error,
+          config,
+        );
         const error_message =
           error instanceof Error ? error.message : "Unknown error";
         return {

@@ -161,7 +161,12 @@ export function registerPercyTools(
     },
     async () => {
       try {
-        trackMCP("listTestFiles", server.server.getClientVersion()!, config);
+        trackMCP(
+          "listTestFiles",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
         return addListTestFiles();
       } catch (error) {
         return handleMCPError("listTestFiles", server, config, error);
@@ -182,7 +187,12 @@ export function registerPercyTools(
     },
     async (args) => {
       try {
-        trackMCP("runPercyScan", server.server.getClientVersion()!, config);
+        trackMCP(
+          "runPercyScan",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
         return runPercyScan(args);
       } catch (error) {
         return handleMCPError("runPercyScan", server, config, error);

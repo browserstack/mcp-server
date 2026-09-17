@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.10",
+  "version": "1.11",
   "build_id": "run5merge_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -3788,13 +3788,15 @@
             "type": "string",
             "required": true,
             "example": "Root Folder A",
-            "description": "Name of the root folder"
+            "description": "Name of the root folder",
+            "json_path": "/folder/name"
           },
           {
             "name": "notes",
             "type": "string",
             "example": "This folder contains all regression test cases",
-            "description": "Optional notes or description for the folder"
+            "description": "Optional notes or description for the folder",
+            "json_path": "/folder/notes"
           }
         ],
         "intent": "Create a root-level folder for test cases in a project",
@@ -29052,6 +29054,7 @@
           "On each returned comment `edited` is true once it has been changed after posting; the author object's `id` is the internal TM user id (not the BrowserStack user id) and is null for imported comments, which show the original author's name instead."
         ]
       }
-    }
+    },
+    "version": "1.11"
   }
 }

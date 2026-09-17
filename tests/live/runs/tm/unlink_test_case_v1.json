@@ -1,0 +1,95 @@
+{
+  "capability": "unlink_test_case_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-17T10:51:30Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Baseline check that TC-54457 (int 1972036) in __scratch__ folder 764138 has no linked issues yet, per task intel that no test case is currently linked to any issue.",
+      "source": "pool",
+      "capability": "list_folder_test_cases_v1",
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764138}},
+      "status": 200,
+      "produced": {"test_case_id": 1972036, "issues": []}
+    },
+    {
+      "step": 2,
+      "why": "Re-confirm the exact empty selection shape linked_test_cases_selection_v1 returns for the documented example ticket TES-121, to build a real selection object for the link call.",
+      "source": "invoked",
+      "capability": "linked_test_cases_selection_v1",
+      "arguments": {"path_params": {"issue_type": "jira-app"}, "query": {"issue_id": "TES-121", "project_id": 379335744}},
+      "status": 200,
+      "produced": {"success": true, "selection": {"unique_test_case_count": 0, "select_all": false, "folders": {}}}
+    },
+    {
+      "step": 3,
+      "why": "Discover a corroborating, concretely-documented shape for a folder-keyed test-case selection (the same 'selection' concept described narratively by link_entities_to_jira_issue), to reduce guessing on the folders map's inner shape.",
+      "source": "invoked",
+      "capability": "describeCapability(get_test_runs_selection)",
+      "arguments": {},
+      "status": null,
+      "produced": {"folders_value_shape": {"test_case_select_all": "boolean", "selected_test_cases": "array of int", "deselected_test_cases": "array of int"}, "note": "This shape is verified against Api::V1::TestRunsController#selection, a DIFFERENT endpoint (run selection, not the jira test-case selection). Used as an informed hypothesis for the jira-link folders shape, not as ground truth for this capability family. See attempts-equivalent note in notes field."}
+    },
+    {
+      "step": 4,
+      "why": "Establish the prerequisite: link test case TC-54457 (int 1972036, folder 764138) to Jira ticket TES-121 in project 379335744 using a selection object built from real scratch-pool ids and the hypothesized folders shape from step 3.",
+      "source": "invoked",
+      "capability": "link_entities_to_jira_issue",
+      "arguments": {
+        "body": {
+          "issue_id": "TES-121",
+          "project_id": "379335744",
+          "entity_type": "test-case",
+          "selection": {
+            "select_all": false,
+            "unique_test_case_count": 1,
+            "folders": {
+              "764138": {"test_case_select_all": false, "selected_test_cases": [1972036], "deselected_test_cases": []}
+            }
+          }
+        }
+      },
+      "status": 200,
+      "produced": {"success": true, "message": "test-cases linked successfully", "async": false}
+    },
+    {
+      "step": 5,
+      "why": "Verify the prerequisite link actually persisted before attempting the unlink.",
+      "source": "invoked",
+      "capability": "list_folder_test_cases_v1",
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764138}},
+      "status": 200,
+      "produced": {"test_case_id": 1972036, "issues": [{"id": 848918, "issue_id": "TES-121", "issue_type": "jira", "jira_id": "TES-121"}]}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": {"issue_type": "jira-app"},
+        "body": {"test_case_id": 1972036, "issue_id": "TES-121"}
+      },
+      "status": 200,
+      "error": null,
+      "changed": "Nothing — succeeded on the first (and only) attempt. Called exactly per the declared contract: path issue_type=jira-app, body test_case_id (int) + issue_id (string, echoed only). Did not send `p`."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {"issue_type": "jira-app"},
+      "body": {"test_case_id": 1972036, "issue_id": "TES-121"}
+    },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "info", "recent_folder", "recent_project"],
+    "item_shape": "test_cases came back as an empty array (the ticket TES-121 had exactly one linked case, which this call removed), so no item shape was observed on this response. The item shape is fully declared in the contract (leaner tracker-panel test-case shape) and was not contradicted by anything seen; info followed the declared pagination shape {page:1, page_size:10, count:0, prev:null, next:null}; recent_folder and recent_project were both null."
+  },
+  "contract": {
+    "required": ["issue_type (path, enum)", "test_case_id (body, integer)"],
+    "json_path": "path: /{issue_type}; body: test_case_id, issue_id (optional, echoed), p (optional, page)",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Prerequisite link WAS successfully created and verified: TC-54457 (int 1972036) had issues:[] at baseline, then issues:[{issue_id:'TES-121', issue_type:'jira', ...}] after link_entities_to_jira_issue, confirmed via a direct list_folder_test_cases_v1 read (not via the link call's own response). The selection object's `folders` inner shape ({test_case_select_all, selected_test_cases, deselected_test_cases}) was NOT directly observed from the jira-selection preview (which only ever returned an empty {} for TES-121) — it was carried over as a hypothesis from a different, concretely-documented endpoint (get_test_runs_selection / Api::V1::TestRunsController#selection) that describes the same 'folder-keyed selection' concept. It worked on the first try, which is evidence (not proof) that the two features share one selection-object implementation. The unlink itself succeeded on the first attempt with a 200 body carrying success:true, matching the declared contract exactly — no analogous 'documented-default-that-actually-fails' trap (like unlink_test_run_v1's build_id) was encountered here: no optional body field needed to be added. The unlink was verified independently by re-reading the case's issues[] via list_folder_test_cases_v1, which came back empty, confirming the link was actually removed, not just reported removed. Ticket key TES-121 is the contract's own documented example and no real Jira ticket exists in this account; every result above involving TES-121 (the successful link, the successful unlink, and their acknowledgement bodies) is PROVISIONAL in the sense that no real external tracker validated the key — consistent with the contract's own statement that this handler never validates it. Separately (not part of this capability's probe, but encountered during setup): the read capability test_case_results_v1, which would have been a cleaner single-case verification path, returned HTTP 500 for both the target case (1972036) and the known-good readonly case (1971631) with and without pagination params — it appears to be currently broken independent of input, so list_folder_test_cases_v1 was used for all verification instead."
+}

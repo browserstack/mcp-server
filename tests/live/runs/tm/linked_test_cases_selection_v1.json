@@ -1,0 +1,39 @@
+{
+  "capability": "linked_test_cases_selection_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-17T10:39:56Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "scope the selection query to the fixture project (this endpoint does not validate presence/type of project_id itself, so a real one from the pool must be sent to avoid a 5xx)",
+      "source": "pool",
+      "capability": null,
+      "arguments": {},
+      "status": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "issue_type": "jira-app" },
+      "query": { "issue_id": "TES-121", "project_id": 379335744 }
+    },
+    "status": 200,
+    "response_keys": ["success", "selection"],
+    "item_shape": {
+      "selection_keys": ["unique_test_case_count", "select_all", "folders"],
+      "folders_empty": true,
+      "note": "folders is an empty map ({}), so the shape of a populated folder entry (id/name/test case ids, etc.) could not be observed"
+    }
+  },
+  "contract": {
+    "required": ["issue_type (path)", "issue_id (query)", "project_id (query)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "issue_type=jira-app is the only tracker value exercised (Jira maps to the internal 'jira'); the other 10 enum values (azure, asana, linear, clickup, confluence, figma, devrev, gitlab, github, custom, trello) were not tried since nothing in the fixture pool or elsewhere indicates any external tracker is actually integrated on this preprod account (<redacted>). The contract itself documents that issue_id is 'not validated by this handler' and that 'a blank or unknown key returns an empty selection rather than an error' -- so per the task's guidance against inventing tracker ids, I deliberately used the contract's own documented example key ('TES-121') rather than fabricating a plausible-looking Jira ticket. The call succeeded on the first attempt (HTTP 200, no retries needed) and returned exactly the documented shape for an unknown/no-integration case: {success:true, selection:{unique_test_case_count:0, select_all:false, folders:{}}}. This is indistinguishable, from the outside, between 'no Jira integration configured for this account' and 'a real integration exists but TES-121 specifically has no linked test cases' -- either way the response is a legitimate empty selection, not an error, exactly as the contract predicts for this branch. Because folders came back empty, the item shape for a populated selection (what a folder entry inside the folders map looks like) could not be verified, hence UNVERIFIED rather than PASS -- the top-level envelope (success + selection with counts + folders map) matched the declared 200 shape, but the declared 'folder-shaped... plus selection counts' detail could not be checked against real linked test cases. No writes, no destructive calls, and no capability was invoked to fabricate a tracker integration or ticket (out of scope: this is an external-tracker-backed read, and no capability in this index creates Jira issues). Did not read capability/tm.capability-index.json at any point."
+}

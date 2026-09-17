@@ -1,0 +1,62 @@
+{
+  "capability": "global_search_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-17T10:45:11Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "scope fixture-targeted queries to the fixture project",
+      "source": "pool",
+      "capability": null,
+      "arguments": {},
+      "status": null,
+      "produced": { "project_id": 379335744 }
+    },
+    {
+      "step": 2,
+      "why": "the pool only gives opaque identifiers for the readonly fixture cases (TC-54455, TC-54456); to build a query TEXT that could actually match them, their titles were needed. Not invoked directly in this run -- read from a sibling probe's already-written artifact (tests/live/runs/tm/test_case_results_v1.json), whose own setup step had invoked list_folder_test_cases_v1 and recorded the titles.",
+      "source": "pool",
+      "capability": null,
+      "arguments": {},
+      "status": null,
+      "produced": { "TC-54455": "probe case A", "TC-54456": "probe case B" }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "query": {
+        "entity": "test_case,test_run,test_plan,project,shared_step,report",
+        "q[query]": "test",
+        "per_page": 3
+      }
+    },
+    "status": 200,
+    "response_keys": ["test_plan", "test_case", "test_run", "project", "shared_step", "report", "project_details"],
+    "item_shape": {
+      "test_case_item_keys": ["id","identifier","name","project_id","owner","assignee","creator_details","created_at","updated_at","case_type","priority","status","automation_state","is_shared","description","custom_fields","estimate","expected_result","links","preconditions","steps","tags","template","test_case_folder_id","test_case_steps","issues","metadata","test_case_dataset","display_meta","user_id"],
+      "test_case_extra": "carries a top-level `folders` map (folder-hierarchy lookup) alongside data/info, exactly as declared for this entity only",
+      "test_plan_item_keys": ["id","identifier","name","project_id","owner","assignee","description","active_state","plan_status","tags","test_plan_progress","test_runs_count","total_test_runs_count","start_date","end_date","created_at","updated_at","links","display_meta"],
+      "project_item_keys": ["id","name","identifier","description","project_id","group_id","score","updated_at","created_at","display_meta","owner","user_id"],
+      "report_item_keys": ["id","report_type","title","identifier","created_at","updated_at","frequency","report_timeframe","project_id","project_ids","included_projects","report_creation_mode","grain","slack_notification","owner"],
+      "report_object_keys": ["data","scheduled_report_count","total_report_count","info"],
+      "test_run_data": "empty array, count 0 (real -- no matching test runs for 'test' in this account/query)",
+      "shared_step_data": "empty array, count 0 (real)",
+      "per_type_info_keys": ["page","page_size","count","prev","next"]
+    }
+  },
+  "contract": {
+    "required": ["entity", "q[query]"],
+    "json_path": null,
+    "declared_missing": [
+      "400 body: `success` key (contract's own 400 schema declares {success:false, error:{code,message,details}}; actual body has no `success` key at all)",
+      "400 body: `error.code` / `error.message` / `error.details` (declared as an object with these sub-fields; actual `error` is a bare string, e.g. \"No entities provided for search\")"
+    ],
+    "undeclared_returned": [
+      "report.info (page/page_size/count/prev/next) -- the 200 schema's `report` object only declares data/scheduled_report_count/total_report_count, never `info`, but every report response returned one"
+    ]
+  },
+  "notes": "OVERALL: the capability is genuinely invokable and returns real, richly-shaped data for account-wide queries (confirmed across test_case, test_plan, project and report with thousands of real rows). Verdict is DRIFT on the strength of three confirmed, reproducible contract violations (below), not on the fixture-emptiness issue, which is a separate and likely benign timing artifact.\n\n1) FIXTURE ROWS COULD NOT BE OBTAINED, AND WHY THIS IS LIKELY BENIGN: every query aimed at the fixture pool came back 200 with zero rows, across many variants -- q[query] values tried: '__mcp-capability-fixture__', 'mcp-capability-fixture', 'fixture', 'mcp', '__mcp', 'fixture__', 'capability', 'capability fixture', 'probe', 'probe case', both scoped with q[project_ids]=379335744 (project/test_case/test_run/test_plan/shared_step) and account-wide/unscoped for the project name itself. All 200s, all empty (info.count 0). This is NOT a query-shape problem: the exact same search mechanics matched real content immediately for older objects -- e.g. q[query]='test' returned the project literally named 'test' (id 77360) and 1482 real test plans, and a project-id-scoped sanity check (project 77360, q='test') round-tripped correctly. The fixture's own pool file records `seeded_at: 2026-09-17T10:38:10.689Z`; this probe ran at 2026-09-17T10:45:11Z -- i.e. the fixture project, its two cases ('probe case A' / 'probe case B', confirmed present and retrievable via list_folder_test_cases_v1 in a sibling run), its plan (TP-1596) and its run (TR-9058) were all only ~7 minutes old at probe time. Every other real hit obtained in this run was >=6 days old (created 2026-09-09 through 2026-09-16). The most parsimonious explanation is a search-index/reindex lag of at least several minutes for newly created TM entities -- global_search_v1 is very plausibly reading from an eventually-consistent search index rather than the primary datastore, and the contract nowhere documents (or disclaims) that lag. This is worth flagging to the product team as a documentation gap, but it is not treated as the basis for the DRIFT verdict here because it cannot be distinguished from now, with certainty, from 'the fixture will appear within the hour' -- re-running this same probe later in the day would settle it. Per the task's own instructions this makes the item-shape check UNVERIFIED *for the fixture specifically*, which is why the `probe` block above uses a real, non-fixture account-wide query instead (per_page:3, six entity types) to get genuine rows and check the declared shape -- that succeeded and is what the DRIFT findings below are drawn from.\n\n2) ENTITY TOKEN VALIDATION (matches docs exactly, confirmed): entity='test-cases' (hyphenated plural) -> HTTP 400, body {\"error\":\"Invalid entities provided for search: test-cases\"}. entity='test_case' (snake_case singular) works. Exactly as documented.\n\n3) MISSING/BLANK REQUIRED PARAMS (matches the capability's own prose guidance, but CONTRADICTS its own machine-readable 400 schema -- this is the clearest drift): omitting `entity` entirely -> HTTP 400, body {\"error\":\"No entities provided for search\"}. Blank q[query]='' -> HTTP 400, body {\"error\":\"No search string provided\"}. Both bodies are a bare TOP-LEVEL STRING under `error`, with no `success` key at all -- exactly what the capability's own `guidance` array promises ('a bare error message with no success key'). But describeCapability's `responses.400.schema` for this same capability declares a completely different, richer shape: {success: false, error: {code: string, message: string, details?: object}}. The real error is a string, not an object; there is no `code`, no `message` sub-field, and no `success` key anywhere. The prose guidance is right; the structured schema block that describeCapability hands to an agent is wrong and would mislead any caller that tried to branch on `response.success` or read `response.error.message`.\n\n4) combine=true (matches docs exactly on the cap/count split, one extra undocumented wrinkle): entity='test_case,test_plan,project', q[query]='test', combine='true', per_page=30 -> HTTP 200, top-level `data` array capped at exactly 5 rows (all happened to be entity_type 'test_plan', since combine sorts newest-first and the 5 most-recently-updated matches across all three types were plans), while `info.count` correctly reported the true combined total (21805 = 20108 test_case + 1482 test_plan + 215 project). This is exactly the documented preview behaviour. One undocumented detail: `info.page_size` came back as 90 (looks like 30 x 3 requested entity types) rather than 5, 30, or anything the docs describe for combine mode -- harmless but unexplained. Also, `test_case_folders` was returned non-empty even though none of the 5 capped rows were test_case rows; the doc's description ('the folder lookup for any test-case rows in the merged list') implies it should be empty here, so it's populated from the full underlying per-type match set rather than strictly the 5 visible rows -- a minor documentation imprecision, not tested further.\n\n5) REPORT ENTITY IGNORES `per_page` (confirmed DRIFT, reproduced twice): sent per_page=3 in the six-entity call (probe.arguments above) and separately an isolated per_page=5 call for entity='report' alone (q[query]='test') as a cheap confirmation. In both cases every other entity type (test_case, test_plan, project) honoured per_page exactly (info.page_size and data.length matched the requested value precisely). `report` did not: it always came back with info.page_size=30 and ~30 rows regardless of the per_page/count value sent. The docs state per_page/count applies 'per entity type per page' with a ceiling of 30 -- nothing carves report out as an exception, so an agent that asked for a small page of reports (e.g. to keep a response small, or because it only wants the top match) will silently get up to 30 rows back instead.\n\n6) undeclared `report.info`: every report response included a full pagination info block (page/page_size/count/prev/next) even though the 200 schema's `report` object only lists data/scheduled_report_count/total_report_count. Given finding 5, this info block is actively misleading too -- report.info.page_size reads 30 even when a smaller per_page was requested and (partially) honoured by every other entity in the same call.\n\nNo writes were made; this is a pure read capability (mode: read) and no destructive/write capability was invoked. Did not read capability/tm.capability-index.json at any point -- all contract claims above come from describeCapability's own output for global_search_v1."
+}

@@ -1,0 +1,147 @@
+{
+  "capability": "create_template_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-17T10:40:23Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Find the ids of the workspace's existing system templates (e.g. the default 'Test Case Steps' template) so their field layout could be read and reused, since create_template_v2 400s when description_fields/properties_fields are empty and the contract gives no list of which system field ids are mandatory.",
+      "source": "invoked",
+      "capability": "list_templates_v2",
+      "arguments": { "query": { "p": 1, "count": 300 } },
+      "status": 200,
+      "produced": { "templates": [ { "id": 1164, "name": "Test Case Steps", "is_system": true, "is_default": true, "field_count": 45 }, { "id": 1664, "name": "Test Case BDD", "is_system": true, "is_default": false, "field_count": 47 } ] }
+    },
+    {
+      "step": 2,
+      "why": "Read the full field layout (description_fields, properties_fields, step_fields with real system_field_id/custom_field_id values) of the workspace's default system template (1164), since get_template_v2 is documented as 'the only read that returns the field layout' and this is the only way to obtain real, non-invented field ids.",
+      "source": "invoked",
+      "capability": "get_template_v2",
+      "arguments": { "path_params": { "id": 1164 } },
+      "status": 200,
+      "produced": {
+        "description_fields_system_ids": [1, 2, 3, 4, 8, 9],
+        "properties_fields_system_ids": [10, 11, 12, 13, 14, 15, 16],
+        "properties_fields_custom_ids": [103473, 103560, 103927, 104647, 104648, 104655, 104758, 104759, 104761, 104762, 104763, 104764, 104765, 104766, 104783, 104785, 104786, 104787, 104788, 104789, 105898, 105899, 105900, 105901, 105902, 105911, 105914, 105915, 105920, 105921],
+        "step_fields": [],
+        "note": "No field in this response carries a 'non-removable' or 'mandatory-for-create' marker — is_mandatory is false on every entry, including on Title/Attachments/Owner/Requirements whose underlying field_data.optional is false. There is no attribute anywhere in this response that distinguishes a 'non-removable system field' from any other."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "name": "__mcp-capability-fixture__ probe template 2026-09-17T10:40:23Z",
+        "entity": "TestCase",
+        "linked_projects": { "link_projects": [379335744] }
+      },
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"Fields not present.\"}",
+      "changed": "Contract's guidance states omitting description_fields/properties_fields 'creates a template with an empty description section', so attempt 1 omitted both entirely and used the v1 integer project id (379335744) in linked_projects.link_projects, per the field description that explicitly calls for 'the numeric project ids, not the PR- identifiers'. Rejected with a vague 'Fields not present.' message."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "template": {
+          "name": "__mcp-capability-fixture__ probe template 2026-09-17T10:40:23Z",
+          "entity": "TestCase",
+          "linked_projects": { "link_projects": [379335744] }
+        }
+      },
+      "status": null,
+      "error": "invokeCapability rejected client-side before any HTTP call: \"unknown body: template. accepted: description_fields, entity, linked_projects, name, properties_fields\"",
+      "changed": "Hypothesized the 'Fields not present.' message meant the whole body needed to be nested under a 'template' wrapper key (templates often nest payloads this way per the task brief). The MCP tool's own body-key allowlist rejected this before it reached the API, confirming the contract's flat top-level shape (name/entity/description_fields/properties_fields/linked_projects, no wrapper) is correct and the wrapper hypothesis was wrong."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "name": "__mcp-capability-fixture__ probe template 2026-09-17T10:40:23Z",
+        "entity": "TestCase",
+        "description_fields": [],
+        "properties_fields": [],
+        "linked_projects": { "link_projects": [379335744] }
+      },
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"Error creating template from {\\\"name\\\":\\\"__mcp-capability-fixture__ probe template 2026-09-17T10:40:23Z\\\",\\\"entity\\\":\\\"TestCase\\\",\\\"description_fields\\\":[],\\\"properties_fields\\\":[],\\\"linked_projects\\\":{\\\"link_projects\\\":[379335744]}} templateFieldValidationError: Non-removable System fields not present in template. Non-removable System fields not present in template.\"}",
+      "changed": "Reverted to the flat body shape (attempt 1's shape was already correct on that front) but made description_fields/properties_fields explicit empty arrays instead of omitting them, to isolate whether 'Fields not present.' meant omission itself was the problem versus needing actual content. The server now names the real cause: certain 'Non-removable System fields' must be present in description_fields/properties_fields. Attempt budget (3) reached here in the first probing pass."
+    },
+    {
+      "n": 4,
+      "arguments": {
+        "name": "__mcp-capability-fixture__ probe template 2026-09-17T10:40:23Z",
+        "entity": "TestCase",
+        "description_fields": [
+          { "id": 1, "is_system": true, "is_mandatory": false },
+          { "id": 2, "is_system": true, "is_mandatory": false },
+          { "id": 3, "is_system": true, "is_mandatory": false },
+          { "id": 4, "is_system": true, "is_mandatory": false },
+          { "id": 8, "is_system": true, "is_mandatory": false },
+          { "id": 9, "is_system": true, "is_mandatory": false }
+        ],
+        "properties_fields": [
+          { "id": 10, "is_system": true, "is_mandatory": false },
+          { "id": 11, "is_system": true, "is_mandatory": false },
+          { "id": 12, "is_system": true, "is_mandatory": false },
+          { "id": 13, "is_system": true, "is_mandatory": false },
+          { "id": 14, "is_system": true, "is_mandatory": false },
+          { "id": 15, "is_system": true, "is_mandatory": false },
+          { "id": 16, "is_system": true, "is_mandatory": false }
+        ],
+        "linked_projects": { "link_projects": [379335744] }
+      },
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"Error creating template from {...same body...} templateFieldValidationError: Non-removable System fields not present in template. Non-removable System fields not present in template.\"}",
+      "changed": "Per corrected scope, invoked list_templates_v2 then get_template_v2 (recorded in setup[]) to read the real system field ids off the workspace's default system template (1164, 'Test Case Steps'). Sent every system field it carries — all 6 description-section system fields (ids 1,2,3,4,8,9) and all 7 properties-section system fields (ids 10,11,12,13,14,15,16), each with is_system:true, is_mandatory:false as read (no explicit 'non-removable' marker existed to copy, so all system fields were sent as the closest fallback). Identical error persisted — none of these ids alone satisfy 'Non-removable System fields'."
+    },
+    {
+      "n": 5,
+      "arguments": {
+        "name": "__mcp-capability-fixture__ probe template 2026-09-17T10:40:23Z",
+        "entity": "TestCase",
+        "description_fields": [
+          { "id": 1, "is_system": true, "is_mandatory": false },
+          { "id": 2, "is_system": true, "is_mandatory": false },
+          { "id": 3, "is_system": true, "is_mandatory": false },
+          { "id": 4, "is_system": true, "is_mandatory": false },
+          { "id": 8, "is_system": true, "is_mandatory": false },
+          { "id": 9, "is_system": true, "is_mandatory": false }
+        ],
+        "linked_projects": { "link_projects": [379335744] }
+      },
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"Fields not present.\"}",
+      "changed": "Diagnostic: kept description_fields populated with the same 6 real system ids, but omitted properties_fields entirely (rather than sending it as an array) to see whether the validation error changes based on the key being absent vs. present-but-insufficient. It reverted to the earlier vague 'Fields not present.' message, showing that message fires when a fields key is missing outright, while the more specific templateFieldValidationError only fires once both keys are present as arrays — regardless of their contents."
+    },
+    {
+      "n": 6,
+      "arguments": {
+        "name": "__mcp-capability-fixture__ probe template 2026-09-17T10:40:23Z",
+        "entity": "TestCase",
+        "description_fields": "[same 6 system ids as attempt 4]",
+        "properties_fields": "[all 7 system ids + all 30 custom field ids read from template 1164, i.e. an EXACT mirror of every field on the real, working default system template]",
+        "linked_projects": { "link_projects": [379335744] }
+      },
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"Error creating template from {...full body with all 37 properties_fields entries...} templateFieldValidationError: Non-removable System fields not present in template. Non-removable System fields not present in template.\"}",
+      "changed": "Final attempt of the fresh 3-attempt budget: sent the COMPLETE field census of template 1164 exactly as returned by get_template_v2 — all 6 description system fields plus all 37 properties fields (7 system + 30 custom), i.e. a byte-for-byte reconstruction of a template the system itself considers valid and complete. Identical 'Non-removable System fields not present in template' error. This rules out 'missing some field id' as the cause: the fields the create endpoint calls 'non-removable' are not among any of the ids get_template_v2 exposes for this template at all — they are either hidden entirely from this read surface (consistent with the separate documented behavior that Review & Approve fields are filtered out of reads) or identified by something other than the id/is_system pair the create contract accepts."
+    }
+  ],
+  "probe": {
+    "arguments": {},
+    "status": null,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["name"],
+    "json_path": "none — flat top-level body: name, entity, description_fields, properties_fields, linked_projects. Confirmed by attempt 2: wrapping the payload under a \"template\" key is explicitly rejected (\"unknown body: template\").",
+    "declared_missing": [
+      "Which system field id(s) are 'non-removable' and therefore mandatory in description_fields/properties_fields on create. The contract documents description_fields/properties_fields as fully optional ('Omitting this creates a template with an empty description section') and gives no list of mandatory system fields. Live preprod requires certain 'Non-removable System fields' or it 400s with templateFieldValidationError — and per attempt 6, these are not even among the full set of field ids exposed by get_template_v2 for an existing, valid template of the same entity type, so the documented read surface cannot resolve them either."
+    ],
+    "undeclared_returned": []
+  },
+  "notes": "No template was created in any of the 6 attempts — all were rejected before the API returned a 201, so there is no created template id to clean up, and the pre-existing system templates (1164, 1664) were only read via get_template_v2/list_templates_v2, never modified. Field-id discovery used capability='list_templates_v2' (query {p:1,count:300}) to find template ids 1164 ('Test Case Steps', default, field_count 45) and 1664 ('Test Case BDD', field_count 47), then capability='get_template_v2' (path_params {id:1164}) to read its real description_fields/properties_fields. Sent ids: description_fields=[1,2,3,4,8,9] (all is_system:true), properties_fields tried both as system-only [10,11,12,13,14,15,16] (attempt 4) and as the full system+custom mirror of all 37 entries on template 1164 (attempt 6) — both is_system:true/false set per whether the source entry carried system_field_id or custom_field_id. Neither satisfied the validator. Core finding, now with stronger evidence than the first pass: create_template_v2's contract claims description_fields/properties_fields are optional, but live preprod 400s with templateFieldValidationError ('Non-removable System fields not present in template') whenever these arrays are present without whatever fields it considers non-removable — and that requirement cannot be resolved via the documented read surface (get_template_v2), since reproducing the exact field census of a real, valid, system-default template of the same entity type still fails identically. This is consistent with the separately-documented note that update_template_v2 auto-injects 'Review & Approve' fields that get_template_v2's read explicitly filters out even when a template stores them — i.e. the non-removable fields the create validator wants are plausibly these same filtered-out fields, which no read capability in this contract surface exposes an id for. Verdict stays BLOCKED: the capability is not invocable to a successful 201 using only ids obtainable from the documented capability surface, and this second pass strengthens rather than weakens that conclusion."
+}

@@ -1,0 +1,36 @@
+{
+  "capability": "list_templates_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-17T10:40:11Z",
+  "verdict": "PASS",
+  "setup": [],
+  "attempts": [],
+  "probe": {
+    "arguments": { "query": { "p": 1, "count": 300 } },
+    "status": 200,
+    "response_keys": ["success", "templates", "info"],
+    "item_shape": {
+      "id": "integer",
+      "name": "string",
+      "entity": "string",
+      "enabled": "boolean",
+      "step_type": "string",
+      "is_default": "boolean",
+      "is_system": "boolean",
+      "future_projects_applicable": "boolean",
+      "field_count": "integer",
+      "linked_to_all_projects": "boolean",
+      "project_count": "integer",
+      "created_at": "string (date-time)",
+      "updated_at": "string (date-time)"
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Contract declares only query params (name, p, count) and no path_params/body — this endpoint is NOT project-scoped despite living at a v2-shaped path; neither the v1 integer project id (379335744) nor the v2 identifier (PR-2005) from the fixture pool applies here, so no setup calls were needed and the pool went unused. Invocation succeeded on the first attempt with query={p:1,count:300}. Response returned exactly 2 templates (both is_system:true — 'Test Case Steps' and 'Test Case BDD'), which is enough to verify the declared item shape (non-empty collection). Every declared item property (id, name, entity, enabled, step_type, is_default, is_system, future_projects_applicable, field_count, linked_to_all_projects, project_count, created_at, updated_at) was present on both rows, and no undeclared keys were returned. Top-level 'success'+'templates'+'info' and the info pagination object (page, page_size, count, prev, next) all matched the declared 200 schema exactly. Contrary to guidance's caveat that field_count/project_count 'can come back null', both were non-null integers here (field_count 45/47, project_count 1830) — not a contradiction, just an observation that this workspace computes them. No writes were made; per the read-only instruction, no template was created."
+}

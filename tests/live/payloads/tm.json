@@ -1,0 +1,108 @@
+{
+  "_comment": "Replayable payloads rolled up from tests/live/runs/tm/*.json by the capability-live-probe orchestrator. Only capabilities whose probe returned HTTP 200 appear in \"payloads\". Replaying these depends on the live fixture existing - run `npm run seed:live` first. Some arguments reference scratch objects created during the probe run (see each run file's setup[] for how they were made).",
+  "product": "tm",
+  "env": "preprod",
+  "account": "<redacted>",
+  "index_version": "1.14",
+  "index_build_id": "run5merge_2026-09-16T18:02:57Z",
+  "rolled_up_at": "2026-09-17T10:53:52Z",
+  "payloads": {
+    "edit_project_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "project_id": 379335744,
+        "body": {
+          "description": "probe edit_project_v1 2026-09-17T10:47:41Z"
+        }
+      }
+    },
+    "get_lcnc_user_test_config_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "global_search_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "query": {
+          "entity": "test_case,test_run,test_plan,project,shared_step,report",
+          "q[query]": "test",
+          "per_page": 3
+        }
+      }
+    },
+    "link_entities_to_jira_issue": {
+      "verdict": "PASS",
+      "arguments": {
+        "body": {
+          "issue_id": "TES-121",
+          "project_id": "379335744",
+          "entity_type": "test-run",
+          "entity_ids": [
+            17574995
+          ]
+        }
+      }
+    },
+    "linked_test_cases_selection_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "issue_type": "jira-app"
+        },
+        "query": {
+          "issue_id": "TES-121",
+          "project_id": 379335744
+        }
+      }
+    },
+    "list_templates_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "query": {
+          "p": 1,
+          "count": 300
+        }
+      }
+    },
+    "unlink_test_case_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "issue_type": "jira-app"
+        },
+        "body": {
+          "test_case_id": 1972036,
+          "issue_id": "TES-121"
+        }
+      }
+    },
+    "unlink_test_run_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "issue_type": "jira-app"
+        },
+        "body": {
+          "test_run_id": 17574995,
+          "project_id": 379335744,
+          "issue_id": "TES-121",
+          "build_id": 17574995
+        }
+      }
+    }
+  },
+  "not_replayable": {
+    "create_template_v2": {
+      "verdict": "BLOCKED",
+      "reason": "no successful invocation - see runs/tm/create_template_v2.json and findings/create_template_v2.md"
+    },
+    "test_case_results_v1": {
+      "verdict": "BLOCKED",
+      "reason": "no successful invocation - see runs/tm/test_case_results_v1.json and findings/test_case_results_v1.md"
+    }
+  }
+}

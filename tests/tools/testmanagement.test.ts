@@ -31,6 +31,7 @@ import { createLCASteps } from '../../src/tools/testmanagement-utils/create-lca-
 import axios from 'axios';
 import { beforeAll, beforeEach, it, expect, describe, Mocked} from 'vitest';
 import { vi, Mock } from 'vitest';
+import { trackMCP } from '../../src/lib/instrumentation';
 import { signedUrlMap } from '../../src/lib/inmemory-store';
 import { uploadFile } from '../../src/tools/testmanagement-utils/upload-file';
 
@@ -598,6 +599,10 @@ describe("createTestCasesFromFileTool", () => {
     const res = await createTestCasesFromFileTool(args as any, mockContext, mockConfig, mockServer);
     expect(res.isError).toBe(true);
     expect(res.content?.[0]?.text).toContain("Re-Upload the file");
+    // Both telemetry calls must carry config, otherwise the event is sent unauthenticated and dropped.
+    expect(trackMCP).toHaveBeenCalledTimes(2);
+    expect(trackMCP).toHaveBeenNthCalledWith(1, "createTestCasesFromFile", "test-version", undefined, mockConfig);
+    expect(trackMCP).toHaveBeenNthCalledWith(2, "createTestCasesFromFile", "test-version", expect.any(Error), mockConfig);
   });
   it("creates test cases from a file successfully", async () => {
     signedUrlMap.set(testDocumentId, { fileId: mockFileId, downloadUrl: mockDownloadUrl });
@@ -631,6 +636,8 @@ describe("createTestCasesFromFileTool", () => {
     const res = await createTestCasesFromFileTool(args as any, mockContext, mockConfig, mockServer);
     expect(res.isError ?? false).toBe(false);
     expect(res.content?.[0]?.text).toContain("test cases created");
+    expect(trackMCP).toHaveBeenCalledTimes(1);
+    expect(trackMCP).toHaveBeenCalledWith("createTestCasesFromFile", "test-version", undefined, mockConfig);
   });
 });
 

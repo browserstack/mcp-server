@@ -15,7 +15,8 @@
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "eval:index": "tsx scripts/eval-index.mts"
   },
   "bin": {
     "browserstack-mcp-server": "dist/index.js"

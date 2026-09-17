@@ -137,13 +137,15 @@ describe("the released artifact", () => {
     const capabilities = registry.index.products.tm.capabilities;
     const guided = capabilities.filter((c) => c.guidance?.length);
     expect(guided.length).toBeGreaterThan(0);
-    expect(guided.length).toBeLessThan(capabilities.length);
+    // Every capability carries guidance as of v1.13; the sparse state this test was written
+    // against was the export dropping the field, not a deliberate gap. Asserting coverage is
+    // total is the stronger guard now — it fails the moment an unguided entry is added back.
+    expect(guided.length).toBe(capabilities.length);
 
-    // The answer here carries no guidance, and still wins on its own merits.
+    // The right answer still wins on identity, not on how much guidance it carries.
     const hits = searchCapabilities(registry.index.products, "create a folder in a project");
     expect(hits.hits[0].capability.mode).toBe("write");
     expect(hits.hits[0].capability.entity).toBe("folder");
-    expect(hits.hits[0].capability.guidance ?? []).toHaveLength(0);
   });
 
   it("publishes the page ceiling under the name the artifact uses", () => {

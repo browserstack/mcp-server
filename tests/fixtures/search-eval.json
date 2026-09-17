@@ -1,5 +1,5 @@
 {
-  "note": "Query -> the endpoint that should answer it. `maxRank` is the worst position the expected endpoint may occupy in the top 8, pinned at what the scorer does today; tighten it when the ranker improves, never loosen one without saying why. `miss` records a query the scorer does not serve at all, with the reason, and `defect` names the mechanism responsible so the misses can be counted by cause rather than one at a time. `group` is the entity or query style the case exercises, for per-area reporting. Authored against the tm index; queries are what a caller would actually type, including paraphrases that avoid the product's own words.",
+  "note": "Query -> the endpoint that should answer it. `maxRank` is the worst position the expected endpoint may occupy in the top 8, pinned at what the scorer does today; tighten it when the ranker improves, never loosen one without saying why. `miss` records a query the scorer does not serve at all, with the reason, and `defect` names the mechanism responsible so the misses can be counted by cause rather than one at a time. `group` is the entity or query style the case exercises, for per-area reporting. Authored against the tm index; queries are what a caller would actually type, including paraphrases that avoid the product's own words. v2 supersedes v1 for the operations both expose: where a v2 endpoint performs the same operation, the case expects the v2 path. Two folder cases were loosened (1->2, 1->3) because the dedicated v1 mkdir endpoint was replaced as the expected answer by the general v2 create-folder endpoint, which serves root and sub folders through one parent_id argument and so ranks slightly lower on a query that stresses the word subfolder.",
   "baseline": {
     "measured_on": "tm.capability-index.json build f6a3eca0_2026-09-09T14:21:54Z",
     "cases": 198,
@@ -26,16 +26,16 @@
       "group": "folder",
       "q": "create a new folder",
       "method": "POST",
-      "path": "/api/v1/projects/{project_id}/folders",
-      "maxRank": 3,
+      "path": "/api/v2/projects/{project_id}/folders",
+      "maxRank": 1,
       "why": "regressed 2 -> 3 when the phrase bonus landed: 'new folder' is not a phrase in any haystack, while the competing mkdir endpoint gains from 'create'. Accepted — the phrase bonus is a net gain across the set."
     },
     {
       "group": "folder",
       "q": "create a subfolder inside an existing folder",
       "method": "POST",
-      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/mkdir",
-      "maxRank": 1
+      "path": "/api/v2/projects/{project_id}/folders",
+      "maxRank": 2
     },
     {
       "group": "folder",
@@ -48,7 +48,7 @@
       "group": "folder",
       "q": "move a folder under a different parent",
       "method": "POST",
-      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/mv",
+      "path": "/api/v2/projects/{project_id}/folders/{folder_id}/move",
       "maxRank": 1
     },
     {
@@ -159,7 +159,7 @@
       "group": "test_case",
       "q": "create a test case in a folder",
       "method": "POST",
-      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
+      "path": "/api/v2/projects/{project_id}/folders/{folder_id}/test-cases",
       "maxRank": 1
     },
     {
@@ -1255,14 +1255,14 @@
       "group": "template",
       "q": "list the test case templates",
       "method": "GET",
-      "path": "/api/v1/admin-v2/settings/templates",
+      "path": "/api/v2/templates",
       "maxRank": 1
     },
     {
       "group": "template",
       "q": "where do I get a template_id",
       "method": "GET",
-      "path": "/api/v1/admin-v2/settings/templates",
+      "path": "/api/v2/templates",
       "maxRank": 1
     },
     {
@@ -1349,8 +1349,8 @@
       "group": "paraphrase",
       "q": "nest one folder inside another",
       "method": "POST",
-      "path": "/api/v1/projects/{project_id}/folder/{folder_id}/mkdir",
-      "maxRank": 2
+      "path": "/api/v2/projects/{project_id}/folders",
+      "maxRank": 3
     },
     {
       "group": "paraphrase",

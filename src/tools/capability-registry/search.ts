@@ -516,8 +516,24 @@ export interface SearchResult {
  * that work at 0.44–1.94. The absolute score cannot separate those (misses reach 2.9,
  * good queries drop to 1.9); this does, with the gap in the same place in all three
  * corpora, which is the property that was missing.
+ *
+ * RECALIBRATED AT v1.14, and the reason matters more than the number. The ratio is
+ * corpus-relative and still is — "make a new bucket for my tests" scores 0.259 against tm
+ * alone and 0.258 against both products, which is the property this was built for. What
+ * moved is neither corpus size nor query: it is how much TEXT each capability carries.
+ * v1.13 gave all 242 entries guidance and tripled the length of `intent`, so the numerator
+ * — the best hit's term score — roughly doubled, while the denominator depends only on the
+ * rarity of the query's own terms and did not. Both bands shifted up together: genuine
+ * misses now land at 0.00–0.46 and working queries at 0.24–4.16.
+ *
+ * At the old 0.25 the hand-off had silently stopped firing — "bucket", which is nobody's
+ * word for a folder, came in at 0.259 and read as a confident answer. Re-measured over 173
+ * served eval cases against five queries the product has no words for, 0.50 catches 5 of 5
+ * while flagging 3 of 173 served queries (1.7%), which is the same trade the original cut
+ * made. Expect to move it again the next time the artifact's text volume changes; the
+ * threshold tracks prose per capability, not the number of capabilities.
  */
-const WEAK_COVERAGE = 0.25;
+const WEAK_COVERAGE = 0.5;
 
 /** The heaviest field, and so the yardstick a perfect match is measured against. */
 const IDENTITY_WEIGHT = 6;

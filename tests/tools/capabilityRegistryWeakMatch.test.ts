@@ -110,10 +110,19 @@ describe("searchCapability's vocabulary hand-off", () => {
     // Budgeted in BYTES, not as a fraction. It was 8% of a 38KB search; once search became
     // a shortlist the same 3.2KB is nearly half of a 6.8KB response — the block did not
     // grow, the baseline collapsed. A fraction would now fail for the wrong reason, while
-    // the thing worth bounding is unchanged: under a thousand tokens, far less than the
-    // wrong invoke it prevents.
+    // the thing worth bounding is unchanged: far less than the wrong invoke it prevents.
+    //
+    // RAISED 4096 -> 6144 at v1.14, and this one is growth rather than regression. tm went
+    // 19 -> 23 entities and 77 -> 184 aliases, so the block is 5.5KB: 2.6KB of aliases,
+    // 1.9KB of descriptions. Trimming was the alternative and is the wrong trade here —
+    // this payload exists precisely because the caller's word was not the product's, and
+    // the aliases ARE the answer to that. Dropping the 11th alias of `custom_field` to
+    // save 200 bytes risks dropping the one word that would have worked.
+    //
+    // The bound still matters, because this grows with the entity count and nothing else
+    // caps it. If it reaches 8KB, cap aliases per entity rather than raising this again.
     const result = await search("make a new bucket for my tests");
     const block = JSON.stringify(result.suggested_vocabulary).length;
-    expect(block).toBeLessThan(4096);
+    expect(block).toBeLessThan(6144);
   });
 });

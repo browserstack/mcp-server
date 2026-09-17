@@ -147,6 +147,7 @@ export default function addBuildInsightsTools(
         trackMCP(
           "fetchBuildInsights",
           server.server.getClientVersion()!,
+          undefined,
           config,
         );
         return await fetchBuildInsightsTool(args, config);

@@ -6,6 +6,8 @@ import {
   FORM_FIELDS_URL,
   BULK_CREATE_URL,
   TC_DETAILS_MAX_BATCH,
+  TCG_POLL_INTERVAL_MS,
+  TCG_POLL_MAX_WAIT_MS,
 } from "./config.js";
 import {
   DefaultFieldMaps,
@@ -192,10 +194,21 @@ export async function pollTestCaseDetails(
   let done = false;
   const tmBaseUrl = await getTMBaseURL(config);
   const TCG_POLL_URL_VALUE = TCG_POLL_URL(tmBaseUrl);
+  const deadline = Date.now() + TCG_POLL_MAX_WAIT_MS;
 
   while (!done) {
+    // Bail out if the backend never sends a "termination" message, so a stuck
+    // job cannot keep this loop (and its callers) alive forever.
+    if (Date.now() > deadline) {
+      throw new Error(
+        `TCG test-case detail polling timed out after ${TCG_POLL_MAX_WAIT_MS}ms (trace ${traceRequestId})`,
+      );
+    }
+
     // add a bit of jitter to avoid synchronized polling storms
-    await new Promise((r) => setTimeout(r, 10000 + Math.random() * 5000));
+    await new Promise((r) =>
+      setTimeout(r, TCG_POLL_INTERVAL_MS + Math.random() * 5000),
+    );
 
     const poll = await apiClient.post({
       url: `${TCG_POLL_URL_VALUE}?x-bstack-traceRequestId=${encodeURIComponent(traceRequestId)}`,
@@ -247,7 +260,27 @@ export async function pollScenariosTestDetails(
 
   // Promisify interval-style polling using a wrapper
   await new Promise<void>((resolve, reject) => {
-    const intervalId = setInterval(async () => {
+    const timers: {
+      interval?: ReturnType<typeof setInterval>;
+      timeout?: ReturnType<typeof setTimeout>;
+    } = {};
+    const stop = () => {
+      if (timers.interval) clearInterval(timers.interval);
+      if (timers.timeout) clearTimeout(timers.timeout);
+    };
+
+    // Hard wall-clock deadline: if the backend never sends a "termination"
+    // message, reject instead of letting the interval fire forever.
+    timers.timeout = setTimeout(() => {
+      stop();
+      reject(
+        new Error(
+          `TCG scenario polling timed out after ${TCG_POLL_MAX_WAIT_MS}ms (trace ${traceId})`,
+        ),
+      );
+    }, TCG_POLL_MAX_WAIT_MS);
+
+    timers.interval = setInterval(async () => {
       try {
         const poll = await apiClient.post({
           url: `${TCG_POLL_URL_VALUE}?x-bstack-traceRequestId=${encodeURIComponent(traceId)}`,
@@ -258,7 +291,7 @@ export async function pollScenariosTestDetails(
         });
 
         if (poll.status !== 200) {
-          clearInterval(intervalId);
+          stop();
           reject(new Error(`Polling error: ${poll.statusText || poll.status}`));
           return;
         }
@@ -324,15 +357,15 @@ export async function pollScenariosTestDetails(
           }
 
           if (msg.type === "termination") {
-            clearInterval(intervalId);
+            stop();
             resolve();
           }
         }
       } catch (err) {
-        clearInterval(intervalId);
+        stop();
         reject(err);
       }
-    }, 10000); // 10 second interval
+    }, TCG_POLL_INTERVAL_MS);
   });
 
   // once all detail fetches are triggered, wait for them to complete

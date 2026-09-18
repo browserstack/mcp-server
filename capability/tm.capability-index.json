@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.24",
+  "version": "1.25",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -24527,7 +24527,7 @@
           "Inline attachments are always included. Images embedded in a description through the rich-text editor come back alongside real file attachments and carry an extra `data_id`, so this count can exceed what the item's attachment panel shows.",
           "Prefer this over the v1 test-case attachments read whenever you hold a TC-/TP- identifier, need a test result's or plan's files, or want paging and file-type / uploader filtering. The v1 read handles test cases only, needs the integer project, folder and case ids, and returns every row in one unpaginated response.",
           "`info` carries page, page_size, count, prev and next - use `count` to decide whether another page is worth fetching instead of paging until you get an empty array.",
-          "Nothing published here can attach a file to a case, so this collection may be permanently empty for a caller working only through this surface. An empty result is not evidence the entity has no attachments."
+          "Attachments on a test case are created outside this surface, so this list reflects work done elsewhere. An empty result is not evidence the entity has no attachments."
         ],
         "returns": [
           "success",
@@ -26555,7 +26555,8 @@
           "Each entry carries links to the stored file; read the file from there, as there is no separate download step.",
           "A folder with nothing attached comes back as an ordinary success with an empty list, so an empty list is an answer and not a failure.",
           "Alongside the exact byte count each entry also carries a ready-formatted size for display; use the byte count when you need to compare or add sizes up.",
-          "Nothing published here can attach a file to a case, so this collection may be permanently empty for a caller working only through this surface. An empty result is not evidence the entity has no attachments."
+          "Attachments on a test case are created outside this surface, so this list reflects work done elsewhere. An empty result is not evidence the entity has no attachments.",
+          "This lists attachments held on the FOLDER itself, which is a different collection from the attachments on the cases inside it — attaching a file to a case never makes a row appear here."
         ],
         "returns": [
           "success",
@@ -40508,7 +40509,7 @@
           "Removing an attachment purges the stored file, not just the link. There is no recycle bin for attachments and no undo.",
           "The view and download URLs handed back on upload are pre-signed and expire after about 30 minutes — fetch the file promptly or re-read the attachment to get a fresh one.",
           "The older per-test-case attachment reads return metadata only (id, filename, type, size) with no URL; the newer entity-attachment listing is the one that hands back a readable URL per file.",
-          "Uploading a file and attaching it are two steps, and only the upload is offered here — the calls that bind an uploaded file to a test case are either non-functional or not published, so a file uploaded through this surface cannot be linked to anything.",
+          "A file cannot be attached to a test case through this surface at all. The call that does it works, but it takes the file itself as a form upload, which this transport cannot send — the same reason the upload capabilities here accept no file and quietly do nothing. Attaching is done in the product, not here.",
           "An empty attachment list is not evidence that nothing is attached; it is the expected result whenever the attaching was done elsewhere."
         ]
       },

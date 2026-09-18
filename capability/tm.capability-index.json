@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.27",
+  "version": "1.28",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -25394,6 +25394,7 @@
         ],
         "intent": "List the test cases sitting in a project's recycle bin (moved to bin / soft-deleted, awaiting purge) with who binned them and when — use this to find a case to restore or inspect; for just 'how many are in the bin' use count_binned_test_cases_v1 instead",
         "guidance": [
+          "Rows here are the WIDE v1 case shape, not the trimmed v2 one: `priority` and `status` arrive as objects carrying `field_value`, `colour`, `field_name` and `value_category` rather than as plain strings. Code written against a v2 case listing will read them as objects and compare wrongly.",
           "Feature-gated: when the project/user lacks the Move to Bin or New Project Settings flags the call is 403 {success:false, error:'... is not enabled for this user'} — that is a feature gap, not a permission problem. Needs the tc_view permission under RBAC.",
           "Paging metadata is under `metadata` {total, page, page_size, total_pages}, NOT the `info` {count, next, prev} envelope other v1 listings use — there is no `next`; stop when page >= total_pages.",
           "Rows carry the integer `id`, the TC-NNN `identifier`, `trashed_at`, `days_remaining` until automatic purge, and `folder_name`/`folder_path` of where the case was. `updated_by` and `owner` are raw BrowserStack user ids; the resolved people are in `updator_details` (who binned it) and `owner_details` {id, browserstack_user_id, full_name, email}.",
@@ -28346,6 +28347,7 @@
         ],
         "intent": "Unlink a test case from a tracker ticket.",
         "guidance": [
+          "On the failure path the body is just `success` and `status`, with no collection — identical to the test-run unlink, which shares this render. A caller reading the documented success shape finds nothing and cannot tell 'no such link' from 'wrong call' without checking `success` first.",
           "A failure does not change the transport status: the refusal arrives as a 200 carrying a success flag set to false and a 404 inside the body. Always read the success flag — checking the status alone reports every miss as a win.",
           "Which link is removed is decided by the test case, the caller's group and the tracker type, not by the ticket you name. If the case is linked to several tickets in the same tracker, the first matching link is removed and it may not be the one you meant — read the case's linked tickets first and expect to verify afterwards.",
           "On success the refreshed list of test cases still linked to the ticket is returned, so no follow-up read is needed to confirm.",
@@ -28387,6 +28389,10 @@
                   "type": "object",
                   "nullable": true,
                   "description": "The project this person most recently linked a case from. Paired with recent_folder and carrying the same caveats: screen state, null when there is no history, and returned only alongside the first page."
+                },
+                "status": {
+                  "type": "integer",
+                  "description": "The real outcome code, carried in the body because the HTTP status stays 200. Its PRESENCE means the unlink did not happen — a successful unlink omits it. 404 means no matching link was found, which is also what a run or case that was already unlinked returns."
                 }
               }
             }
@@ -33873,34 +33879,45 @@
           },
           "priority": {
             "type": "object",
-            "nullable": true,
+            "description": "The priority as a WHOLE OBJECT on this listing, not the flat string the v2 case shapes return. Carries `field_value` (the name a person sees), `colour`, `field_name` and `value_category`. Compare on `field_value`; the rest is presentation.",
             "properties": {
-              "id": {
-                "type": "integer"
-              },
               "field_value": {
-                "type": "string"
+                "type": "string",
+                "description": "The displayed name — the one to compare against."
               },
-              "internal_name": {
-                "type": "string"
+              "colour": {
+                "type": "string",
+                "description": "Presentation only."
+              },
+              "field_name": {
+                "type": "string",
+                "description": "Internal field name behind the value."
+              },
+              "value_category": {
+                "type": "string",
+                "description": "Grouping the value belongs to."
               }
             }
           },
           "status": {
             "type": "object",
-            "nullable": true,
+            "description": "The status as a WHOLE OBJECT on this listing, not the flat string the v2 case shapes return. Carries `field_value` (the name a person sees), `colour`, `field_name` and `value_category`. Compare on `field_value`; the rest is presentation.",
             "properties": {
-              "id": {
-                "type": "integer"
-              },
               "field_value": {
-                "type": "string"
-              },
-              "internal_name": {
-                "type": "string"
+                "type": "string",
+                "description": "The displayed name — the one to compare against."
               },
               "colour": {
-                "type": "string"
+                "type": "string",
+                "description": "Presentation only."
+              },
+              "field_name": {
+                "type": "string",
+                "description": "Internal field name behind the value."
+              },
+              "value_category": {
+                "type": "string",
+                "description": "Grouping the value belongs to."
               }
             }
           },
@@ -33964,6 +33981,34 @@
           "days_remaining": {
             "type": "integer",
             "description": "Days left before automatic permanent purge."
+          },
+          "template": {
+            "type": "string",
+            "description": "The template the case was authored on, carried through from the case record."
+          },
+          "created_by": {
+            "type": "integer",
+            "description": "Id of the user who created the case. `creator_details` carries the same person resolved."
+          },
+          "creator_details": {
+            "type": "object",
+            "description": "The creating user resolved, or null when that user can no longer be found. Distinct from whoever binned the case.",
+            "properties": {
+              "browserstack_user_id": {
+                "type": "integer",
+                "description": "The account-level user id, not the id used for owner or assignee here."
+              },
+              "email": {
+                "type": "string"
+              },
+              "full_name": {
+                "type": "string"
+              },
+              "group_id": {
+                "type": "integer",
+                "description": "Workspace the user belongs to."
+              }
+            }
           }
         }
       },

@@ -482,72 +482,47 @@ async function main() {
     );
   }
 
-  // AN ATTACHMENT, for folder_attachments_v1 and list_entity_attachments_v2.
+  // AN ATTACHMENT, for list_entity_attachments_v2.
   //
-  // Two steps and only the first is unusual. `upload_test_case_attachments_v1` is NOT a
-  // multipart upload despite its name — its own guidance says so: the body is JSON and
-  // `attachments` is a list of integer BLOB IDS. The multipart happens earlier, at the
-  // generic upload, which is why that one step goes out of band.
+  // Through the v2 route, which is MULTIPART and takes the file itself. That is the whole
+  // reason this lives in the seeder and not in a capability: a byte stream cannot cross the
+  // registry boundary, which is why tm's four upload capabilities are published, searchable
+  // and inert. The v2 endpoint is not published and should not be — publishing it would add
+  // a fifth inert entry, not close a gap.
+  //
+  // The v1 path was tried first and is dead: upload a blob, then attach it by id, and the
+  // attach raises 500 on a well-formed request. So attaching a file to a case is not
+  // possible through this surface by ANY route. The seeder can do it only because it is a
+  // fixture builder talking to the product directly.
+  //
+  // Field name is `file`. `attachments[]`, `attachment`, `files[]` and sending no file at
+  // all all produce the SAME 422 — the error cannot distinguish a wrong field name from a
+  // missing one.
   if (!pool.gaps.attachment) {
-    // The field name is `attachments`, and getting it wrong is NOT an error: the handler
-    // takes the empty path and answers 200 with `generic_attachment: []`, which is exactly
-    // what a successful upload of nothing looks like. The index says so in its own
-    // guidance, and this seeder reproduced it on the first attempt by sending `file`.
+    const target = (
+      await call("list_folder_test_cases_v1", {
+        path_params: { project_id: pool.project.id, folder_id: pool.readonly.folder },
+      })
+    ).body?.test_cases?.find((r: any) => r.identifier === pool.readonly.cases?.[0]);
     const form = new FormData();
     form.append(
-      "attachments[]",
-      new Blob(["probe attachment\n"], { type: "text/plain" }),
+      "file",
+      new Blob([`probe attachment ${new Date().toISOString()}\n`], { type: "text/plain" }),
       "probe.txt",
     );
-    // No Content-Type: fetch sets the multipart boundary itself, and overriding it breaks
-    // the upload in a way that looks like a server rejection.
-    const blob = await raw(
+    const attached = await raw(
       "POST",
-      `/api/v1/projects/${pool.project.id}/generic/attachments`,
+      `/api/v2/projects/${pool.project.identifier}/test-cases/${pool.readonly.cases?.[0]}/attachments`,
       form,
     );
-    const uploaded =
-      (blob.body as any)?.generic_attachment ??
-      (blob.body as any)?.attachments ??
-      (blob.body as any)?.data ??
-      [];
-    const blobId = Array.isArray(uploaded)
-      ? uploaded[0]?.id
-      : ((blob.body as any)?.id ?? uploaded?.id);
-    // The v1 attachment route takes the INTEGER case id: bind() rejects TC-NNN with
-    // "'test_case_id' must be a number". The v2 reads publish only the identifier, so the
-    // folder listing is again what maps one to the other.
-    const listed = await call("list_folder_test_cases_v1", {
-      path_params: { project_id: pool.project.id, folder_id: pool.readonly.folder },
-    });
-    const target = (listed.body?.test_cases ?? []).find(
-      (r: any) => r.identifier === pool.readonly.cases?.[0],
+    const id = (attached.body as any)?.attachment?.id;
+    pool.gaps.attachment = ok(attached.status) && id ? id : null;
+    console.log(
+      pool.gaps.attachment
+        ? `  attachment   CREATED  ${id} on ${pool.readonly.cases?.[0]}`
+        : `  attachment   FAILED   v2 attach ${attached.status}`,
     );
-    if (ok(blob.status) && blobId && target?.id) {
-      const attached = await write(
-        "upload_test_case_attachments_v1",
-        {
-          path_params: {
-            project_id: pool.project.id,
-            folder_id: pool.readonly.folder,
-            test_case_id: target.id,
-          },
-          body: { attachments: [blobId] },
-        },
-        "attach one seeded blob so the attachment listings have an item shape",
-      );
-      pool.gaps.attachment = ok(attached.status) ? blobId : null;
-      console.log(
-        ok(attached.status)
-          ? `  attachment   CREATED  blob ${blobId}`
-          : `  attachment   FAILED   attach ${attached.status} ${attached.error ?? ""}`,
-      );
-    } else {
-      // An empty array here is the documented no-op, not a transport failure.
-      console.log(
-        `  attachment   SKIPPED  upload ${blob.status}, blob ${blobId ?? "none returned (empty upload?)"}`,
-      );
-    }
+    void target;
   } else {
     console.log(`  attachment   FOUND    ${pool.gaps.attachment}`);
   }

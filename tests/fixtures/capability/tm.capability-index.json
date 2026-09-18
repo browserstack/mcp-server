@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.29",
+  "version": "1.30",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -23887,7 +23887,8 @@
           "An id that exists nowhere is 404 'Custom field not found', while an id that is not a positive integer is 400 — the two are distinguishable, so do not treat a 400 as 'no such field'.",
           "The `project` query parameter documented in the spec is not read by this route. Filtering a field's option values by project is done on the dataset listing, not here.",
           "Needs the field-view permission when role-based access is on; 403 otherwise.",
-          "Same stored definition as the admin-settings single-field read, but a different body: that one returns the field with its datasets and options inline, this one returns metadata plus dataset references."
+          "Same stored definition as the admin-settings single-field read, but a different body: that one returns the field with its datasets and options inline, this one returns metadata plus dataset references.",
+          "Built by the same serializer as the create and update replies, which omits any field without a value — so several keys are absent rather than null, and `is_bulk_editable` and `is_filterable` are omitted when FALSE as well as when unset, which makes those two indistinguishable from unset in the response."
         ],
         "returns": [
           "success",
@@ -23908,7 +23909,8 @@
           "link_to_future_projects",
           "dataset_ids",
           "datasets_url",
-          "dataset_urls"
+          "dataset_urls",
+          "linked_projects_count"
         ],
         "responses": {
           "200": {
@@ -37688,6 +37690,30 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "system_name": {
+                  "type": "string",
+                  "description": "The stable internal name for a system-provided field. Included only when it has a value — the serializer omits it otherwise, so absence is not the same as a false or empty value."
+                },
+                "is_bulk_editable": {
+                  "type": "boolean",
+                  "description": "Whether the field can be set through a bulk edit. Included only when TRUE. The serializer tests presence, and `false` does not pass that test, so an absent key means false OR unset and the two cannot be told apart here."
+                },
+                "is_filterable": {
+                  "type": "boolean",
+                  "description": "Whether the field can be used as a filter. Included only when TRUE. The serializer tests presence, and `false` does not pass that test, so an absent key means false OR unset and the two cannot be told apart here."
+                },
+                "placeholder": {
+                  "type": "string",
+                  "description": "Placeholder text. The same value also appears as `place_holder_text`; this spelling is the one the field service uses. Included only when it has a value — the serializer omits it otherwise, so absence is not the same as a false or empty value."
+                },
+                "group_id": {
+                  "type": "integer",
+                  "description": "Workspace the definition belongs to. Included only when it has a value — the serializer omits it otherwise, so absence is not the same as a false or empty value."
+                },
+                "linked_projects_count": {
+                  "type": "integer",
+                  "description": "How many projects the field is linked to. Included only when it has a value — the serializer omits it otherwise, so absence is not the same as a false or empty value."
                 }
               }
             }

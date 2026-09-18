@@ -298,9 +298,36 @@ export function bind(
     // misspelled filter would return a larger result set that looks like a correct answer.
     const unknown = Object.keys(supplied).filter((name) => !byName.has(name));
     if (unknown.length > 0) {
+      // A CALLER WHO SENT THE WRAPPER WE BUILD DESERVES TO BE TOLD SO.
+      //
+      // Most of these endpoints want a nested body — Rails `params.require(:test_case)` —
+      // and the fields declare that as `json_path: /test_case/name`, so this layer
+      // assembles the wrapper itself and the caller sends the fields flat. A caller who
+      // wraps it by hand therefore sends a key that is never a declared param, and the
+      // bare message reads as "that field does not exist" when the truth is the opposite:
+      // it exists, and building it is our job.
+      //
+      // Worth special-casing because the guidance itself has been telling callers to wrap:
+      // 25 tm capabilities carried a line describing the WIRE format to a caller who never
+      // writes the wire. Those lines are being corrected, but an agent working from an
+      // older artifact, or reasoning from the Rails convention, lands here either way.
+      const wrappers = new Set(
+        params
+          .map((param) => (param as { json_path?: string }).json_path)
+          .filter((path): path is string => Boolean(path))
+          .map((path) => path.replace(/^\//, "").split("/")[0])
+          .filter((segment) => segment && !byName.has(segment)),
+      );
+      const sentAWrapper = unknown.filter((name) => wrappers.has(name));
       throw new InvocationError(
         `unknown ${group}: ${unknown.sort().join(", ")}. accepted: ` +
-          `${[...byName.keys()].sort().join(", ") || "none"}`,
+          `${[...byName.keys()].sort().join(", ") || "none"}` +
+          (sentAWrapper.length > 0
+            ? `. ${sentAWrapper.sort().join(" and ")} ` +
+              `${sentAWrapper.length > 1 ? "are wrappers" : "is a wrapper"} this ` +
+              `surface builds for you from each field's json_path — send the fields ` +
+              `directly instead of nesting them`
+            : ""),
       );
     }
 

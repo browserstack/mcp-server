@@ -92,3 +92,45 @@ describe("the transport never silently drops a response body", () => {
     expect(res.error).toBeTruthy();
   });
 });
+
+describe("a caller who hand-builds the wrapper is told what happened", () => {
+  // The registry assembles the Rails-style body wrapper itself from each field's
+  // json_path, so a caller sends fields flat. When one nests them by hand — which the
+  // published guidance was telling 25 tm capabilities' callers to do — the key is never a
+  // declared param, and the bare "unknown body" message reads as "no such field" when the
+  // truth is the reverse: the field exists and building it is this layer's job.
+  const capability = {
+    name: "update_thing",
+    method: "PATCH",
+    path: "/api/v2/things/{id}",
+    mode: "write",
+    entity: "thing",
+    intent: "x",
+    path_params: [{ name: "id", type: "string", required: true }],
+    body: [
+      { name: "name", type: "string", json_path: "/thing/name" },
+      { name: "priority", type: "string", json_path: "/thing/priority" },
+    ],
+  } as any;
+
+  it("names the wrapper and says to send the fields directly", async () => {
+    const { bind } = await import("../../src/tools/capability-registry/bind.js");
+    expect(() =>
+      bind(capability, { path_params: { id: "1" }, body: { thing: { name: "x" } } }),
+    ).toThrow(/wrapper this surface builds for you|builds for you from each field/);
+  });
+
+  it("still reports an ordinary typo as an ordinary unknown field", async () => {
+    const { bind } = await import("../../src/tools/capability-registry/bind.js");
+    // `nmae` is not a wrapper — the hint must not fire and mislead.
+    expect(() =>
+      bind(capability, { path_params: { id: "1" }, body: { nmae: "x" } }),
+    ).toThrow(/unknown body: nmae\. accepted: name, priority$/);
+  });
+
+  it("accepts the flat body it asked for", async () => {
+    const { bind } = await import("../../src/tools/capability-registry/bind.js");
+    const bound = bind(capability, { path_params: { id: "1" }, body: { name: "x" } });
+    expect(bound.body).toEqual({ thing: { name: "x" } });
+  });
+});

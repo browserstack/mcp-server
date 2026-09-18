@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.15",
+  "version": "1.16",
   "build_id": "b26a4d5e_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -2671,7 +2671,8 @@
           "Cloning an automation run is blocked by the write-permission gate (403) — this path is for manual runs.",
           "The copy is a new run, so nothing about the source changes; discard it by deleting the copy.",
           "The clone comes back at the top level as `test_run`, not under `data`. A 202 means the copy is still populating.",
-          "This payload is narrower than the v1 run reads. `owner`, `is_automation`, `is_dynamic`, `test_cases_count`, `overall_progress_by_status_id`, `environment`, `closed_at` and `closed_by` are v1-only — if you need any of them, read the run through v1 instead of assuming a missing key means an unset value."
+          "This payload is narrower than the v1 run reads. `owner`, `is_automation`, `is_dynamic`, `test_cases_count`, `overall_progress_by_status_id`, `environment`, `closed_at` and `closed_by` are v1-only — if you need any of them, read the run through v1 instead of assuming a missing key means an unset value.",
+          "`urls.self` is a link to the run in the web UI, merged in by a shared helper rather than built by the run serializer — it is a browser link for a human, not an API path, so do not call it."
         ],
         "returns": [
           "identifier",
@@ -2690,7 +2691,8 @@
           "project_id",
           "created_at",
           "updated_at",
-          "links"
+          "links",
+          "urls"
         ],
         "responses": {
           "200": {
@@ -14415,7 +14417,8 @@
           "This returns the run header only — progress is aggregated counts. To see which cases are in the run, or their latest results, read the run's test cases instead.",
           "403 means the caller lacks view permission for this run type (automation runs are gated separately from manual ones).",
           "The run is at the top level of the response as `test_run`; there is no `data` envelope here. The v1 run endpoints wrap their payload in `data` — these v2 ones do not.",
-          "This payload is narrower than the v1 run reads. `owner`, `is_automation`, `is_dynamic`, `test_cases_count`, `overall_progress_by_status_id`, `environment`, `closed_at` and `closed_by` are v1-only — if you need any of them, read the run through v1 instead of assuming a missing key means an unset value."
+          "This payload is narrower than the v1 run reads. `owner`, `is_automation`, `is_dynamic`, `test_cases_count`, `overall_progress_by_status_id`, `environment`, `closed_at` and `closed_by` are v1-only — if you need any of them, read the run through v1 instead of assuming a missing key means an unset value.",
+          "`urls.self` is a link to the run in the web UI, merged in by a shared helper rather than built by the run serializer — it is a browser link for a human, not an API path, so do not call it."
         ],
         "returns": [
           "identifier",
@@ -14435,7 +14438,8 @@
           "created_at",
           "updated_at",
           "links",
-          "test_cases"
+          "test_cases",
+          "urls"
         ],
         "responses": {
           "200": {
@@ -22679,7 +22683,8 @@
           "include_sub_folders is only meaningful next to a non-empty folder_ids; on its own it is a hard 400.",
           "A run created here keeps no version history. If the wrong cases land in it, adding is easy but removing is a separate operation, and the run's own metadata cannot be rolled back — only overwritten or the run deleted.",
           "The new run comes back at the top level as `test_run`, not under `data` — unlike the v1 create, which wraps its payload in `data`.",
-          "This payload is narrower than the v1 run reads. `owner`, `is_automation`, `is_dynamic`, `test_cases_count`, `overall_progress_by_status_id`, `environment`, `closed_at` and `closed_by` are v1-only — if you need any of them, read the run through v1 instead of assuming a missing key means an unset value."
+          "This payload is narrower than the v1 run reads. `owner`, `is_automation`, `is_dynamic`, `test_cases_count`, `overall_progress_by_status_id`, `environment`, `closed_at` and `closed_by` are v1-only — if you need any of them, read the run through v1 instead of assuming a missing key means an unset value.",
+          "`urls.self` is a link to the run in the web UI, merged in by a shared helper rather than built by the run serializer — it is a browser link for a human, not an API path, so do not call it."
         ],
         "returns": [
           "identifier",
@@ -22698,7 +22703,8 @@
           "project_id",
           "created_at",
           "updated_at",
-          "links"
+          "links",
+          "urls"
         ],
         "responses": {
           "200": {

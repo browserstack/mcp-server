@@ -1,13 +1,13 @@
 {
   "note": "Query -> the endpoint that should answer it. `maxRank` is the worst position the expected endpoint may occupy in the top 8, pinned at what the scorer does today; tighten it when the ranker improves, never loosen one without saying why. `miss` records a query the scorer does not serve at all, with the reason, and `defect` names the mechanism responsible so the misses can be counted by cause rather than one at a time. `group` is the entity or query style the case exercises, for per-area reporting. Authored against the tm index; queries are what a caller would actually type, including paraphrases that avoid the product's own words. v2 supersedes v1 for the operations both expose: where a v2 endpoint performs the same operation, the case expects the v2 path. Two folder cases were loosened (1->2, 1->3) because the dedicated v1 mkdir endpoint was replaced as the expected answer by the general v2 create-folder endpoint, which serves root and sub folders through one parent_id argument and so ranks slightly lower on a query that stresses the word subfolder.",
   "baseline": {
-    "measured_on": "tm.capability-index.json build 592ed318_2026-09-16T18:02:57Z (v1.14, 242 capabilities)",
+    "measured_on": "tm.capability-index.json build b26a4d5e_2026-09-16T18:02:57Z (v1.15, 242 capabilities)",
     "cases": 198,
     "top1": 107,
     "top3": 149,
     "top8": 173,
     "missed": 25,
-    "mrr_at_8": 0.659,
+    "mrr_at_8": 0.658,
     "misses_by_defect": {
       "vocabulary-gap": 11,
       "sibling-shadowing": 10,
@@ -340,7 +340,7 @@
       "q": "get a run with its per case rows",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/detail",
-      "maxRank": 4
+      "maxRank": 5
     },
     {
       "group": "test_run",

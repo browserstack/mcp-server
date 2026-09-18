@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.14",
-  "build_id": "592ed318_2026-09-16T18:02:57Z",
+  "version": "1.15",
+  "build_id": "b26a4d5e_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
     "capabilities": [
@@ -2662,6 +2662,7 @@
         ],
         "intent": "Copy an existing run into a brand-new run — the usual way to re-execute just the failed or blocked cases from the last cycle",
         "guidance": [
+          "The run comes back keyed by its TR-NNN string in `identifier`. There is NO `id` and NO `uuid` field on this v2 payload — the integer run id is not exposed here at all, so anything downstream that needs it has to come from a v1 read. Carry `identifier` forward; the other v2 run routes take the TR-NNN form.",
           "Body is flat — these fields sit at the top level, not inside a `test_run` object like the update calls.",
           "Identity is synchronous, data is not: the response carries the new run as soon as it exists, but its case mappings are filled in by a background worker. Reading the new run's test cases immediately can legitimately return zero rows — retry before concluding the clone was empty.",
           "A 202 (instead of 200) means the run was cloned and one bookkeeping leg is still settling: do NOT retry, or you get a second clone.",
@@ -2669,26 +2670,23 @@
           "A dynamic source run passes its is_dynamic flag on, but the filter is not re-evaluated, so the copy starts from the source's case list.",
           "Cloning an automation run is blocked by the write-permission gate (403) — this path is for manual runs.",
           "The copy is a new run, so nothing about the source changes; discard it by deleting the copy.",
-          "The clone comes back at the top level as `test_run`, not under `data`. A 202 means the copy is still populating."
+          "The clone comes back at the top level as `test_run`, not under `data`. A 202 means the copy is still populating.",
+          "This payload is narrower than the v1 run reads. `owner`, `is_automation`, `is_dynamic`, `test_cases_count`, `overall_progress_by_status_id`, `environment`, `closed_at` and `closed_by` are v1-only — if you need any of them, read the run through v1 instead of assuming a missing key means an unset value."
         ],
         "returns": [
-          "id",
-          "uuid",
           "identifier",
           "name",
           "description",
-          "owner",
           "assignee",
           "run_state",
           "active_state",
-          "is_automation",
-          "is_dynamic",
           "tags",
           "configurations",
-          "test_plans",
-          "test_cases_count",
+          "filter_test_cases",
+          "test_plan",
           "overall_progress",
-          "overall_progress_by_status_id",
+          "issues",
+          "issue_tracker",
           "project_id",
           "created_at",
           "updated_at",
@@ -14412,34 +14410,32 @@
         ],
         "intent": "Look up one test run — its state, owner, tags, configurations, linked plan and per-status progress counts",
         "guidance": [
+          "The run comes back keyed by its TR-NNN string in `identifier`. There is NO `id` and NO `uuid` field on this v2 payload — the integer run id is not exposed here at all, so anything downstream that needs it has to come from a v1 read. Carry `identifier` forward; the other v2 run routes take the TR-NNN form.",
           "Both ids are prefixed strings here (PR-1 / TR-14). The v2 route only matches PR-\\d+ and TR-\\d+, so the integer ids the v1 run capabilities take give a 404 on this path.",
-          "The run's `id` field comes back as the TR-NNN string; the integer lives in `uuid`. Take `uuid` whenever you need a numeric run id downstream.",
           "This returns the run header only — progress is aggregated counts. To see which cases are in the run, or their latest results, read the run's test cases instead.",
           "403 means the caller lacks view permission for this run type (automation runs are gated separately from manual ones).",
-          "The run is at the top level of the response as `test_run`; there is no `data` envelope here. The v1 run endpoints wrap their payload in `data` — these v2 ones do not."
+          "The run is at the top level of the response as `test_run`; there is no `data` envelope here. The v1 run endpoints wrap their payload in `data` — these v2 ones do not.",
+          "This payload is narrower than the v1 run reads. `owner`, `is_automation`, `is_dynamic`, `test_cases_count`, `overall_progress_by_status_id`, `environment`, `closed_at` and `closed_by` are v1-only — if you need any of them, read the run through v1 instead of assuming a missing key means an unset value."
         ],
         "returns": [
-          "id",
-          "uuid",
           "identifier",
           "name",
           "description",
-          "owner",
           "assignee",
           "run_state",
           "active_state",
-          "is_automation",
-          "is_dynamic",
           "tags",
           "configurations",
-          "test_plans",
-          "test_cases_count",
+          "filter_test_cases",
+          "test_plan",
           "overall_progress",
-          "overall_progress_by_status_id",
+          "issues",
+          "issue_tracker",
           "project_id",
           "created_at",
           "updated_at",
-          "links"
+          "links",
+          "test_cases"
         ],
         "responses": {
           "200": {
@@ -22673,6 +22669,7 @@
         ],
         "intent": "Create a test run in a project and load it with the test cases to be executed — the starting point for recording results, and what you make before assigning testers or linking the run to a plan",
         "guidance": [
+          "The run comes back keyed by its TR-NNN string in `identifier`. There is NO `id` and NO `uuid` field on this v2 payload — the integer run id is not exposed here at all, so anything downstream that needs it has to come from a v1 read. Carry `identifier` forward; the other v2 run routes take the TR-NNN form.",
           "Every field goes inside a `test_run` object. A flat body is rejected before a single field is read.",
           "Only test_cases, shared_test_cases, folder_ids or include_all actually put cases in the run. filter_test_cases is a forward-sync rule, NOT a selection: a create carrying only filter_test_cases returns 200 with an EMPTY run and silently marks it dynamic even though you did not ask. If the user named cases, list them.",
           "Create runs STATIC unless the user explicitly asked for one that keeps picking up new cases. A dynamic run matches on nine fields only — priority, status, category, owner, automation_status, automation_state, folder, tags, issues — so a 'cases created in the last 7 days' filter is stored, echoed back on read, and never matched, and the run over-collects forever.",
@@ -22681,11 +22678,10 @@
           "Populating the run is asynchronous. A 200 means the run exists, not that its cases are attached yet; re-read the run's test cases to confirm. A 202 with build_pending:true means the run was created but is not readable back yet — poll for it, never retry the create, which would make a second run.",
           "include_sub_folders is only meaningful next to a non-empty folder_ids; on its own it is a hard 400.",
           "A run created here keeps no version history. If the wrong cases land in it, adding is easy but removing is a separate operation, and the run's own metadata cannot be rolled back — only overwritten or the run deleted.",
-          "The new run comes back at the top level as `test_run`, not under `data` — unlike the v1 create, which wraps its payload in `data`."
+          "The new run comes back at the top level as `test_run`, not under `data` — unlike the v1 create, which wraps its payload in `data`.",
+          "This payload is narrower than the v1 run reads. `owner`, `is_automation`, `is_dynamic`, `test_cases_count`, `overall_progress_by_status_id`, `environment`, `closed_at` and `closed_by` are v1-only — if you need any of them, read the run through v1 instead of assuming a missing key means an unset value."
         ],
         "returns": [
-          "success",
-          "test_run",
           "identifier",
           "name",
           "description",
@@ -22696,16 +22692,13 @@
           "configurations",
           "filter_test_cases",
           "test_plan",
+          "overall_progress",
           "issues",
           "issue_tracker",
-          "overall_progress",
           "project_id",
           "created_at",
           "updated_at",
-          "links",
-          "urls",
-          "build_pending",
-          "message"
+          "links"
         ],
         "responses": {
           "200": {

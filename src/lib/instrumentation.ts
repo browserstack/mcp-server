@@ -12,6 +12,7 @@ interface MCPEventPayload {
     mcp_version: string;
     tool_name: string;
     mcp_client: string;
+    node_version: string;
     success?: boolean;
     error_message?: string;
     error_type?: string;
@@ -44,6 +45,7 @@ export function trackMCP(
       mcp_version: packageJson.version,
       tool_name: toolName,
       mcp_client: mcpClient,
+      node_version: process.versions.node,
       success: isSuccess,
       is_remote: globalConfig.REMOTE_MCP,
     },

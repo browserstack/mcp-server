@@ -160,7 +160,13 @@ function declaredFields(capability: Capability): Set<string> {
  * field-level diff is a hundred-line list on every run. Suppressed by name rather than
  * left to dilute the signal, because a report nobody reads catches nothing.
  */
-const ENVELOPE_ONLY = new Set(["global_search_v1", "get_test_case_histories_v2"]);
+// global_search_v1 WAS here and has been removed. It looked envelope-only; the static
+// contract check found seven top-level entity buckets — test_case, test_run, test_plan,
+// project, report, shared_step, project_details — named in `returns` and absent from the
+// resolved schema. A caller reading the contract cannot learn a global search returns a
+// test_case bucket at all. That is under-described, not deliberately terse, and
+// suppressing it here would hide the same gap on every future run.
+const ENVELOPE_ONLY = new Set(["get_test_case_histories_v2"]);
 
 const transport = fetchTransport();
 const headers = authHeaders({ username, accessKey }, index.auth);

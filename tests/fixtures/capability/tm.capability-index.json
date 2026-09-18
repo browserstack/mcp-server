@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.28",
+  "version": "1.29",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -23708,7 +23708,7 @@
               "PR-12345",
               "PR-67890"
             ],
-            "description": "Projects that should offer this field, as PR-NNN identifiers — never numeric project ids. Every identifier is resolved first and one unknown entry fails the whole call with 400 'Not all project identifiers could be found'. The list echoed back in the response is truncated to the first 30.",
+            "description": "Projects to link the field to, each as its PR-NNN identifier STRING. An integer is rejected by the request schema as a type error; an integer sent as a string gets 'Not all project identifiers could be found', which reads like the project is missing when the real problem is the form of the id. Neither message names the expected form.",
             "fields": [
               {
                 "name": "identifier",
@@ -23716,7 +23716,10 @@
                 "description": "A project identifier such as PR-12345.",
                 "pattern": "^PR-\\d+$"
               }
-            ]
+            ],
+            "items": {
+              "type": "string"
+            }
           },
           {
             "name": "link_to_future_projects",
@@ -23799,7 +23802,8 @@
           "Choose the type carefully — it can never be edited. Changing a field's type in practice means deleting it and creating it again, which destroys every value already stored on test cases.",
           "nested_dropdown needs levels with at least two entries (name + level_type each) and the parent_custom_field_id key present even when null. To append one more tier to an existing nested field, send parent_custom_field_id plus field_name and nothing else.",
           "Same stored fields as the admin-settings create capability, different contract: this route is TestCase-only, takes PR-NNN project identifiers rather than numeric ids, and answers with a serialized custom_field object instead of the raw upstream record.",
-          "Needs the field-write permission; 403 otherwise. The new field can be removed again, but any values captured on test cases in the meantime go with it."
+          "Needs the field-write permission; 403 otherwise. The new field can be removed again, but any values captured on test cases in the meantime go with it.",
+          "The reply is built by one shared serializer that omits any field without a value, so several keys are simply absent rather than null — and two booleans, `is_bulk_editable` and `is_filterable`, are omitted when FALSE as well as when unset, so you cannot tell those apart from the response."
         ],
         "returns": [
           "success",
@@ -23814,7 +23818,13 @@
           "options",
           "applies_to_all_projects",
           "assigned_projects",
-          "link_to_future_projects"
+          "link_to_future_projects",
+          "system_name",
+          "is_bulk_editable",
+          "is_filterable",
+          "placeholder",
+          "group_id",
+          "linked_projects_count"
         ],
         "responses": {
           "200": {
@@ -23988,7 +23998,7 @@
               "PR-12345",
               "PR-67890"
             ],
-            "description": "The COMPLETE set of projects the field should apply to, as PR-NNN identifiers. It is diffed against the current links: anything currently linked and missing here is unlinked, which destroys the values stored in those projects. Use linked_projects / unlinked_projects for an incremental change.",
+            "description": "Projects to link the field to, each as its PR-NNN identifier STRING. An integer is rejected by the request schema as a type error; an integer sent as a string gets 'Not all project identifiers could be found', which reads like the project is missing when the real problem is the form of the id. Neither message names the expected form.",
             "fields": [
               {
                 "name": "identifier",
@@ -23996,7 +24006,10 @@
                 "description": "A project identifier such as PR-12345.",
                 "pattern": "^PR-\\d+$"
               }
-            ]
+            ],
+            "items": {
+              "type": "string"
+            }
           },
           {
             "name": "linked_projects",
@@ -24079,7 +24092,8 @@
           "applies_to_all_projects means something different here than at create time: it only toggles the future-projects flag and never links existing projects.",
           "The two halves are not atomic. Field attributes are written first, the dataset second, so a failure on the dataset call leaves the rename or required-flag change already applied. Re-read the field before retrying.",
           "The response replays options, assigned_projects, applies_to_all_projects and link_to_future_projects from your request rather than from storage — only the field attributes in it are read back. Confirm project links and option values by reading the field's datasets.",
-          "Needs the field-write permission; 403 otherwise. Unknown id is 404, a non-integer id is 400."
+          "Needs the field-write permission; 403 otherwise. Unknown id is 404, a non-integer id is 400.",
+          "The reply is built by one shared serializer that omits any field without a value, so several keys are simply absent rather than null — and two booleans, `is_bulk_editable` and `is_filterable`, are omitted when FALSE as well as when unset, so you cannot tell those apart from the response."
         ],
         "returns": [
           "success",
@@ -24094,7 +24108,13 @@
           "options",
           "applies_to_all_projects",
           "assigned_projects",
-          "link_to_future_projects"
+          "link_to_future_projects",
+          "system_name",
+          "is_bulk_editable",
+          "is_filterable",
+          "placeholder",
+          "group_id",
+          "linked_projects_count"
         ],
         "responses": {
           "200": {
@@ -33896,6 +33916,10 @@
               "value_category": {
                 "type": "string",
                 "description": "Grouping the value belongs to."
+              },
+              "internal_name": {
+                "type": "string",
+                "description": "The stable machine name for the value. Compare on this rather than `field_value` when you need a value that survives renaming — `field_value` is what a person sees and can be edited."
               }
             }
           },
@@ -33918,6 +33942,10 @@
               "value_category": {
                 "type": "string",
                 "description": "Grouping the value belongs to."
+              },
+              "internal_name": {
+                "type": "string",
+                "description": "The stable machine name for the value. Compare on this rather than `field_value` when you need a value that survives renaming — `field_value` is what a person sees and can be edited."
               }
             }
           },
@@ -37523,7 +37551,7 @@
                 },
                 "options": {
                   "type": "array",
-                  "description": "Echo of the options sent in the request, NOT the stored option list. Absent when the request sent none, even if the field has options stored.",
+                  "description": "Present only when the field actually has options — a free-text type returns no key at all rather than an empty list.",
                   "items": {
                     "type": "object",
                     "properties": {
@@ -37542,7 +37570,7 @@
                 },
                 "assigned_projects": {
                   "type": "array",
-                  "description": "Project identifiers echoed back from the request, truncated to the first 30. Absent when the request sent none.",
+                  "description": "Present only when the field is linked to specific projects. A field that applies to all projects, or one created without any, returns no key rather than an empty list.",
                   "items": {
                     "type": "string",
                     "example": "PR-12345"
@@ -37551,6 +37579,30 @@
                 "link_to_future_projects": {
                   "type": "boolean",
                   "description": "Echo of the request flag, defaulting to false."
+                },
+                "system_name": {
+                  "type": "string",
+                  "description": "The stable internal name for a system-provided field. Included only when it has a value — the serializer omits it otherwise, so absence is not the same as a false or empty value."
+                },
+                "is_bulk_editable": {
+                  "type": "boolean",
+                  "description": "Whether the field can be set through a bulk edit. Included only when TRUE. The serializer tests presence, and `false` does not pass that test, so an absent key means false OR unset and the two cannot be told apart here."
+                },
+                "is_filterable": {
+                  "type": "boolean",
+                  "description": "Whether the field can be used as a filter. Included only when TRUE. The serializer tests presence, and `false` does not pass that test, so an absent key means false OR unset and the two cannot be told apart here."
+                },
+                "placeholder": {
+                  "type": "string",
+                  "description": "Placeholder text. The same value also appears as `place_holder_text`; this spelling is the one the field service uses. Included only when it has a value — the serializer omits it otherwise, so absence is not the same as a false or empty value."
+                },
+                "group_id": {
+                  "type": "integer",
+                  "description": "Workspace the definition belongs to. Included only when it has a value — the serializer omits it otherwise, so absence is not the same as a false or empty value."
+                },
+                "linked_projects_count": {
+                  "type": "integer",
+                  "description": "How many projects the field is linked to. Included only when it has a value — the serializer omits it otherwise, so absence is not the same as a false or empty value."
                 }
               }
             }

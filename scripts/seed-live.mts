@@ -425,9 +425,21 @@ async function main() {
     console.log(`  binned case  FOUND    ${pool.gaps.binned_case}`);
   }
 
-  // A SHARED STEP, for get_shared_components_v1. Whether "components" and "steps" are the
-  // same thing is exactly what the probe will establish — if the read comes back empty
-  // after this, they are different and that is the finding.
+  // A SHARED STEP — and NOT for get_shared_components_v1, which is the mistake this
+  // comment exists to stop someone repeating.
+  //
+  // A shared component is not a shared step. Separate upstream collections, separate
+  // controllers, separate id spaces, and the index has filed them apart since before this
+  // seeder existed: the step capabilities are `entity: shared_step`, get_shared_components_v1
+  // is `entity: shared_field`. Seeding a step and reading components returns [] — correctly.
+  //
+  // get_shared_components_v1 cannot be seeded from here AT ALL: `shared_field` publishes one
+  // read and no write anywhere in the index, so nothing on this surface can create its
+  // subject. It stays UNVERIFIED until a shared component exists, which today means the
+  // product UI. That is a coverage gap in the published surface, not a fixture problem.
+  //
+  // The step itself is still seeded: it gives get_shared_steps_v1 and its siblings a row,
+  // which is worth having on its own terms.
   const steps = await call("get_shared_steps_v1", {
     path_params: { project_id: pool.project.id },
   });

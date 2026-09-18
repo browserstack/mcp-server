@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.26",
+  "version": "1.27",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -26080,7 +26080,8 @@
           "Sibling names must be unique ignoring case and surrounding whitespace; a clash returns 400. auto_rename=true creates '<name> (1)' with the name lowercased instead, so read the returned name rather than assuming the one you sent.",
           "parent_id 0 is not root: omit the field for a root folder. An unknown parent_id returns 404.",
           "The response carries the new folder's integer id — carry it forward as parent_id for sub folders, as folder_id when creating test cases, or as the move destination.",
-          "cases_count and sub_folders_count come back null on creation rather than 0, even though a folder is empty the moment it is made. Read them as 0; every other folder capability reports the same brand-new folder as 0, and the rename and move capabilities return real integers."
+          "cases_count and sub_folders_count come back null on creation rather than 0, even though a folder is empty the moment it is made. Read them as 0; every other folder capability reports the same brand-new folder as 0, and the rename and move capabilities return real integers.",
+          "A folder whose name already exists in the same parent is refused with a 400 and `{success: false, message: ...}` naming the collision — the only body on that path, and the reason a repeated create with a fixed name fails after the first. Vary the name or read the parent's children first."
         ],
         "returns": [
           "id",
@@ -28469,6 +28470,7 @@
         ],
         "intent": "Unlink a test run from a tracker ticket.",
         "guidance": [
+          "On the failure path the whole body is just `success` and `status` — there is no `test_runs` array. A caller reading the documented success shape finds nothing and cannot tell 'no such link' from 'wrong call' without checking `success` first.",
           "A failure does not change the transport status: the refusal arrives as a 200 carrying a success flag set to false and a 404 inside the body. The same is true when the project id is missing or the run belongs to another group. Always read the success flag.",
           "Which link is removed is decided by the test run, the caller's group and the tracker type, not by the ticket you name. If the run is linked to several tickets in the same tracker, the first matching link is removed — verify afterwards.",
           "The run is resolved inside a project, so the project id must accompany the run id even though the ticket is the subject of the call.",
@@ -28499,6 +28501,10 @@
                 },
                 "info": {
                   "$schema": "PageInfo"
+                },
+                "status": {
+                  "type": "integer",
+                  "description": "The real outcome code, carried in the body because the HTTP status stays 200. Its PRESENCE means the unlink did not happen — a successful unlink omits it entirely. 404 means no matching link was found, which is also what you get for a run that was already unlinked."
                 }
               }
             }

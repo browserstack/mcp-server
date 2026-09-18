@@ -33999,7 +33999,7 @@
           },
           "record_status": {
             "type": "string",
-            "description": "Lifecycle state of the record, e.g. active."
+            "description": "Lifecycle state of the group. OMITTED when unset upstream rather than returned null — the client drops nil attributes, so its absence is not evidence the group has no state."
           },
           "created_at": {
             "type": "string",
@@ -34007,7 +34007,8 @@
           },
           "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "When the group was last changed. OMITTED when the group has never been changed since creation, rather than echoing created_at — absence means unmodified, not unknown."
           }
         }
       },

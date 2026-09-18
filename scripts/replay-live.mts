@@ -303,7 +303,12 @@ const entries = Object.entries(
 );
 
 for (const [name, entry] of entries) {
-  if (!ALL && entry.verdict !== "DRIFT") continue;
+  // EVERY saved payload, not just the ones a probe once called DRIFT. That filter read a
+  // verdict recorded at probe time, which goes stale the moment anything is fixed — it hid
+  // list_binned_test_cases_v1 for three passes as "not invoked" when the truth was that
+  // nothing had selected it. Verification is not triage: replaying a payload that passed
+  // last week is how you learn it stopped.
+  if (ALL === false && !entry.arguments) continue;
   const capability = byName.get(name) as Capability | undefined;
   if (!capability) {
     rows.push({ name, mode: "?", status: "skipped", undeclared: [], absent: [], note: "not in the current index" });
@@ -372,7 +377,13 @@ for (const [name, entry] of entries) {
 // ---- report ----
 
 const ran = rows.filter((r) => typeof r.status === "number");
-const clean = ran.filter((r) => r.status === 200 && r.undeclared.length === 0 && r.absent.length === 0);
+// ANY 2xx, not just 200. bulk_update_test_run_test_cases_v2 answers 202 — the bulk change
+// is accepted and applied asynchronously — and a check pinned to 200 filed that success
+// under "non-200" where the reconcile read it as never invoked.
+const clean = ran.filter(
+  (r) => typeof r.status === "number" && r.status >= 200 && r.status < 300 &&
+    r.undeclared.length === 0 && r.absent.length === 0,
+);
 const overReturn = ran.filter((r) => r.undeclared.length > 0);
 const conditional = ran.filter((r) => r.undeclared.length === 0 && r.absent.length > 0);
 
@@ -391,7 +402,9 @@ console.log(`\nDECLARES A FIELD THE RESPONSE OMITS: ${conditional.length}`);
 console.log(`   (expected where the field is conditional — check the guidance says so)`);
 for (const r of conditional) console.log(`   ${r.name}\n      absent: ${r.absent.join(", ")}`);
 
-const odd = rows.filter((r) => r.status !== 200 && typeof r.status === "number");
+const odd = rows.filter(
+  (r) => typeof r.status === "number" && !(r.status >= 200 && r.status < 300),
+);
 if (odd.length) {
   console.log(`\nNON-200: ${odd.length}`);
   for (const r of odd) console.log(`   ${r.name}  status ${r.status}`);

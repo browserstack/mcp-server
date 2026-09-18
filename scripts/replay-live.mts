@@ -60,6 +60,7 @@ const byName = new Map(index.capabilities.map((c) => [c.name!, c]));
 const saved = JSON.parse(
   readFileSync(`${ROOT}tests/live/payloads/tm.json`, "utf8"),
 );
+const pool = JSON.parse(readFileSync(`${ROOT}tests/live/.id-pool.json`, "utf8"));
 
 /**
  * Is this object a MAP KEYED BY DATA rather than a record with fields?
@@ -215,7 +216,7 @@ function declaredFields(capability: Capability): Set<string> {
 // resolved schema. A caller reading the contract cannot learn a global search returns a
 // test_case bucket at all. That is under-described, not deliberately terse, and
 // suppressing it here would hide the same gap on every future run.
-const ENVELOPE_ONLY = new Set(["get_test_case_histories_v2"]);
+const ENVELOPE_ONLY = new Set<string>([]);
 
 /**
  * Put flat arguments back into the groups bind() expects.
@@ -245,6 +246,43 @@ function regroup(capability: Capability, args: any): any {
     delete out[key];
   }
   return out;
+}
+
+/**
+ * Fill a REQUIRED path param the saved payload does not carry, from the fixture pool.
+ *
+ * Two payloads recorded a body and no path params at all — update_test_run_v2 and
+ * bulk_update_test_run_test_cases_v2 — so they could not be replayed and sat as permanent
+ * "not invoked" rows. Rewriting the saved payloads was the wrong fix: they are evidence of
+ * what the probes actually sent, and editing them destroys that. The pool is the canonical
+ * fixture, so a payload that names no run should replay against the fixture run.
+ *
+ * Only REQUIRED params, only when absent, and only from the pool — a payload that names a
+ * DIFFERENT run keeps its own value, because that choice may have been the point.
+ */
+function fillFromPool(capability: Capability, args: any): any {
+  const required = (capability.path_params ?? []).filter((p) => p.required);
+  if (required.length === 0) return args;
+  const supplied = { ...(args.path_params ?? {}) };
+  const numeric = (p: { name: string; type?: string }) => p.type === "integer";
+  const POOL: Record<string, unknown> = {
+    project_id: pool.project.id,
+    folder_id: pool.readonly.folder,
+    test_case_id: pool.readonly.cases?.[0],
+    test_plan_id: pool.readonly.plan,
+    test_run_id: pool.readonly.run,
+  };
+  let filled = false;
+  for (const param of required) {
+    if (supplied[param.name] !== undefined) continue;
+    let value = POOL[param.name];
+    if (value === undefined) continue;
+    // v1 routes take the integer project id, v2 the PR-NNN form; the pool carries both.
+    if (param.name === "project_id" && !numeric(param)) value = pool.project.identifier;
+    supplied[param.name] = value;
+    filled = true;
+  }
+  return filled ? { ...args, path_params: supplied } : args;
 }
 
 const transport = fetchTransport();
@@ -282,7 +320,7 @@ for (const [name, entry] of entries) {
 
   let bound;
   try {
-    bound = bind(capability, regroup(capability, entry.arguments || {}));
+    bound = bind(capability, fillFromPool(capability, regroup(capability, entry.arguments || {})));
   } catch (error) {
     // A payload that no longer binds is a finding in its own right: either the contract
     // moved under it, or the saved arguments were never valid.

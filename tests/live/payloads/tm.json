@@ -110,10 +110,11 @@
           "project_id": "PR-2005"
         },
         "body": {
-          "name": "__mcp-probe-folder-2026-09-18T04-31-22Z",
+          "name": "__mcp-probe-folder-{{unique}}",
           "parent_id": 764138
         }
-      }
+      },
+      "replay_note": "name carries a {{unique}} placeholder: a fixed folder name makes every replay after the first a 400 'Folder with same name exists', and the failure body's `message` then reads as an undeclared success field"
     },
     "create_report_v2": {
       "verdict": "DRIFT",

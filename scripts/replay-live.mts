@@ -230,8 +230,18 @@ for (const [name, entry] of entries) {
     undeclared: [...present]
       .filter((k) => !declaredPaths.has(k) && !declaredLeaves.has(leaf(k)))
       .sort(),
+    // A CHILD IS NOT ABSENT WHEN ITS PARENT IS. `test_run.issues` comes back as an empty
+    // array on a run with no linked tickets, so `test_run.issues.id` cannot appear — and
+    // reporting the child says the contract is wrong when the fixture simply had nothing
+    // there. It buried the real signal: clone_test_run_v2 showed 21 "absent" fields, all
+    // of them children of two empty collections. Only the SHALLOWEST missing path on a
+    // branch is reported, which is the one a reader can act on.
     absent: [...declaredPaths]
       .filter((k) => !present.has(k) && !declaredLeaves.has(leaf(k)))
+      .filter((k) => {
+        const parent = k.slice(0, k.lastIndexOf("."));
+        return !parent || present.has(parent);
+      })
       .sort(),
   });
 }

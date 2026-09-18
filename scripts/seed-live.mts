@@ -278,11 +278,17 @@ async function main() {
 
   // 3. READ-ONLY TEST CASES. `create_test_case_v1` publishes no body at all — its spec
   //    declares no requestBody — so the bulk endpoint is the only usable create.
-  const cases = await call("get_test_cases_v1", {
-    path_params: { project_id: pid },
-    query: { all_folders: true },
+  // SCOPED TO __readonly__, NOT all_folders. Listing every folder picked up whatever was
+  // newest in the project — which, once this seeder started creating a throwaway case per
+  // run to populate the recycle bin, meant `readonly.cases` was routinely a DELETED case
+  // from a previous run sitting in __scratch__. Everything downstream inherited it: the
+  // attachment seed attached a blob to a deleted case, got a 200, and the listing
+  // correctly showed nothing. The pool's own guarantee — that these two cases live in
+  // __readonly__ and are never written to — was quietly untrue.
+  const cases = await call("list_folder_test_cases_v1", {
+    path_params: { project_id: pid, folder_id: pool.readonly.folder },
   });
-  const have: any[] = cases.body?.test_cases ?? [];
+  const have: any[] = cases.body?.test_cases ?? cases.body?.data?.test_cases ?? [];
   if (have.length >= 2) {
     pool.readonly.cases = have.slice(0, 2).map((c: any) => c.identifier);
     console.log(`  cases        FOUND    ${pool.readonly.cases.join(", ")}`);
@@ -376,6 +382,12 @@ async function main() {
   // empty collection proves nothing about the declared item shape. Seeding one row each
   // turns "nothing established" into a real verdict.
 
+  // STATUS 0 IS NOT SUCCESS. `call` returns 0 for a bind-time refusal and for a transport
+  // failure, and `status < 300` quietly counts both as a win — which is how this seeder
+  // reported "attachment CREATED" for a call that never left the process, having been
+  // refused for sending TC-NNN where an integer was required.
+  const ok = (status: number) => status >= 200 && status < 300;
+
   pool.gaps = pool.gaps ?? {};
 
   // A BINNED CASE, for list_binned_test_cases_v1 and count_binned_test_cases_v1.
@@ -401,7 +413,7 @@ async function main() {
       const rows = listed.body?.test_cases ?? listed.body?.data?.test_cases ?? [];
       id = rows.find((r: any) => r.identifier === ident)?.id;
     }
-    if (made.status < 300 && id) {
+    if (ok(made.status) && id) {
       const gone = await raw(
         "POST",
         `/api/v1/projects/${pool.project.id}/test-cases/bulk-delete`,
@@ -410,9 +422,9 @@ async function main() {
         { test_case: { ids: [id], folder_id: pool.scratch.folder } },
         "application/json",
       );
-      pool.gaps.binned_case = gone.status < 300 ? id : null;
+      pool.gaps.binned_case = ok(gone.status) ? id : null;
       console.log(
-        gone.status < 300
+        ok(gone.status)
           ? `  binned case  CREATED  ${id} (deleted into the bin)`
           : `  binned case  FAILED   delete returned ${gone.status}`,
       );
@@ -460,11 +472,11 @@ async function main() {
       "seed one shared step so get_shared_components_v1 has an item shape to verify",
     );
     pool.gaps.shared_step =
-      made.status < 300
+      ok(made.status)
         ? (made.body?.data?.id ?? made.body?.shared_step?.id ?? made.body?.id)
         : null;
     console.log(
-      made.status < 300
+      ok(made.status)
         ? `  shared step  CREATED  ${pool.gaps.shared_step}`
         : `  shared step  SKIPPED  ${made.status}`,
     );
@@ -502,24 +514,33 @@ async function main() {
     const blobId = Array.isArray(uploaded)
       ? uploaded[0]?.id
       : ((blob.body as any)?.id ?? uploaded?.id);
-    if (blob.status < 300 && blobId && pool.readonly.cases?.[0]) {
+    // The v1 attachment route takes the INTEGER case id: bind() rejects TC-NNN with
+    // "'test_case_id' must be a number". The v2 reads publish only the identifier, so the
+    // folder listing is again what maps one to the other.
+    const listed = await call("list_folder_test_cases_v1", {
+      path_params: { project_id: pool.project.id, folder_id: pool.readonly.folder },
+    });
+    const target = (listed.body?.test_cases ?? []).find(
+      (r: any) => r.identifier === pool.readonly.cases?.[0],
+    );
+    if (ok(blob.status) && blobId && target?.id) {
       const attached = await write(
         "upload_test_case_attachments_v1",
         {
           path_params: {
             project_id: pool.project.id,
             folder_id: pool.readonly.folder,
-            test_case_id: pool.readonly.cases[0],
+            test_case_id: target.id,
           },
           body: { attachments: [blobId] },
         },
         "attach one seeded blob so the attachment listings have an item shape",
       );
-      pool.gaps.attachment = attached.status < 300 ? blobId : null;
+      pool.gaps.attachment = ok(attached.status) ? blobId : null;
       console.log(
-        attached.status < 300
+        ok(attached.status)
           ? `  attachment   CREATED  blob ${blobId}`
-          : `  attachment   FAILED   attach returned ${attached.status}`,
+          : `  attachment   FAILED   attach ${attached.status} ${attached.error ?? ""}`,
       );
     } else {
       // An empty array here is the documented no-op, not a transport failure.

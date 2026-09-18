@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.19",
+  "version": "1.20",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -22006,7 +22006,7 @@
           "Changing anything here can move the case out of an approved review state, and reviewer removals send email immediately.",
           "Sharing cannot be changed here. `is_shared` is checked before the write — sending it on a project without test-case sharing enabled returns 400 — and is then discarded, so the value never takes effect. Use the bulk edit to change sharing.",
           "Four fields are entitlement-gated and are dropped without error when the workspace lacks the entitlement: `created_at` and `updated_at` need external-API timestamps, and `identifier` applies only to project-level-id workspaces. Read the case back if you need to confirm one landed.",
-          "Parts of the echoed case are conditional, so test for the key rather than for an empty value: `feature`, `background` and `scenario` come back only on a Gherkin case (where `steps` is then an empty array), `attachments` is left out altogether rather than returned empty when the case carries no files, and `reviewers` and `review_status` appear only when the project has Review & Approve enabled on a Team-Pro plan. `issues`, `steps` and `custom_fields` are always present, empty when nothing is set, so only those three are safe to iterate unguarded."
+          "Parts of the echoed case are conditional, so test for the key rather than for an empty value: `feature`, `background` and `scenario` come back only on a Gherkin case (where `steps` is then an empty array), and `reviewers` and `review_status` appear only when the project has Review & Approve enabled on a Team-Pro plan. `issues`, `steps`, `custom_fields` and `attachments` come back as empty arrays when nothing is set — note that `attachments` is empty here, not missing, unlike the create response, and that editing a case never adds one: files are attached through the attachment upload capability."
         ],
         "returns": [
           "success",
@@ -23109,7 +23109,7 @@
         ],
         "responses": {
           "200": {
-            "$response": "TestPlanV2Response"
+            "$response": "TestPlanV2DetailResponse"
           },
           "401": {
             "$response": "Unauthorized"
@@ -24659,9 +24659,9 @@
           "Page with `p`, never `page`, and do NOT send per_page: its value is discarded and its mere presence cuts the page from 30 rows to 10. 30 is the hard ceiling here; there is no way to ask for more, so a large issue's results must be walked page by page.",
           "Row shape changes with compact. With compact=false you get test_run and test_case objects, and `test_run_id` is then overwritten with the run's TR-NNN identifier string. Without it there are no test_run/test_case objects and test_run_id / test_case_id come from the result mapping as integers — so the same field name carries a different type depending on one query flag. Never assume test_run_id is numeric.",
           "Read the outcome from result_status.field_value, which is display case ('Passed'/'Failed'/'Blocked'). The flat `status` beside it is the lowercase internal token and is null on almost every row — it is the more obvious field name and the wrong one to reason over.",
-          "Several declared fields are structurally empty on this endpoint because the account-wide search does not load them: attachments is ALWAYS null (never an array — guard before iterating), and started_at, finished_at, time_elapsed and created_by_imported are always null. The per-case and single-result reads do populate them.",
+          "Several declared fields are structurally empty on this endpoint because the account-wide search does not load them: attachments is ALWAYS null (never an array - guard before iterating), updated_by is ALWAYS null, and started_at, finished_at, time_elapsed and created_by_imported are always null. The per-case and single-result reads do populate them.",
           "Rows carry no custom fields and no step results, and `links.self` appears only for rows that came back with a project_id. To read a result's custom fields, follow up with the project-scoped single-result reads using the row's project_id and id.",
-          "Rows here are NOT the same shape as the project-scoped result reads — different serializer, not a subset. This one carries author, updated_by, backtrace, attachments and links and a full result_status object; the v2 per-case read carries created_by, custom_fields, dataset, step_result, urls and a result_status cut down to field_value alone. Do not write one parser for both.",
+          "Rows here are NOT the same shape as the project-scoped result reads — a different shape entirely, not a subset. This one carries author, backtrace, links and a full result_status object, plus updated_by and attachments keys that are always null here; the v2 per-case read carries created_by, custom_fields, dataset, step_result, urls and a result_status cut down to field_value alone. Do not write one parser for both.",
           "issue_id and issue_type are always forwarded even when absent, so calling with no filters at all is a legal account-wide dump of recent results — expensive and rarely what you want."
         ],
         "returns": [
@@ -32317,13 +32317,16 @@
               "type": "object",
               "properties": {
                 "variable": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Name of the dataset variable (the dataset's column) this value came from. Only ever present on a data-driven row — see the array description; there are no entries at all otherwise."
                 },
                 "row": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The value bound to that variable for this row. Same condition as `variable`."
                 }
               }
-            }
+            },
+            "description": "The dataset values bound to this run row, one entry per dataset variable. CONDITIONAL CONTENT — the key is there, but the array is EMPTY for every row that is not dataset-driven, which is most rows: entries exist only when the case was mapped into the run against a dataset. So `variable` and `row` below are only ever seen on data-driven rows. Asking for the compact/minified row shape drops the key altogether instead of returning it empty."
           },
           "project_id": {
             "type": "string",
@@ -32333,12 +32336,12 @@
           "source_project_id": {
             "type": "string",
             "example": "PR-7",
-            "description": "Project the case itself lives in; equals project_id unless the case is shared in from elsewhere. On the rows embedded in a single-run read this always reports the current project, because the cross-project identifier map is not passed on that path; the standalone case listing resolves it properly."
+            "description": "The project the case originates from, for a case shared in from elsewhere. On the older run backend the rows embedded in a single-run read report the current project rather than the true origin, because the origin is only resolved when the caller is the standalone case listing; the newer backend resolves it per row on both. Treat it as authoritative only when it differs from the project you asked about."
           },
           "source_project_name": {
             "type": "string",
             "nullable": true,
-            "description": "Display name of the project the case lives in. Always present as a key; null when the case is not shared in."
+            "description": "Display name of the project the case lives in. CONDITIONAL — only the older run backend returns this key at all; on the newer run backend it is never returned, neither in the run's case listing nor in the rows embedded in a single-run read. Where it is returned it is null unless the case is shared in from another project. `source_project_id` is always present, so use that to identify the origin project and treat this as a display-only extra."
           },
           "is_shared": {
             "type": "boolean",
@@ -32371,7 +32374,7 @@
           },
           "steps": {
             "type": "array",
-            "description": "The case's steps. CONDITIONAL — present only when the request asked for steps, which also lowers the maximum page size to 30.",
+            "description": "The case's steps. CONDITIONAL — returned only when the run's case listing was explicitly asked to include steps (which also lowers the maximum page size to 30), and then only for cases that actually have steps. The rows embedded in a single-run read NEVER carry it: that read has no way to ask for steps. On the newer run backend, asking for the compact/minified row shape also suppresses them.",
             "items": {
               "type": "object"
             }
@@ -32578,7 +32581,7 @@
       },
       "V2TestRunResultDetail": {
         "type": "object",
-        "description": "The single result written by a v2 result submission.",
+        "description": "The case-level result written by a v2 result submission, returned under `test-result`. This is the no-step shape: a submission that carried step_results is answered with per-step entries instead and has no `test-result` at all, so nothing here ever describes a step.",
         "properties": {
           "id": {
             "type": "integer",
@@ -32599,7 +32602,7 @@
           "status": {
             "type": "string",
             "example": "Passed",
-            "description": "Display-case status name, echoing what was sent. On a step submission this is the step's own status instead."
+            "description": "Display-case status name, echoing the name that was sent."
           },
           "issues": {
             "type": "array",
@@ -32608,11 +32611,6 @@
               "type": "string",
               "example": "JIRA-12"
             }
-          },
-          "test_run_test_case_step_details": {
-            "type": "object",
-            "description": "Present only when the submission carried step_results.",
-            "nullable": true
           },
           "urls": {
             "type": "object",
@@ -32861,13 +32859,6 @@
             "type": "integer",
             "description": "Integer id of the folder the case now sits in."
           },
-          "folder_path": {
-            "type": "array",
-            "items": {
-              "type": "integer"
-            },
-            "description": "Ancestor folder ids, root first. Only present on the reads that resolve the folder tree; absent from write responses."
-          },
           "priority": {
             "type": "string",
             "description": "The project's display value, e.g. 'Medium'. Null when unset."
@@ -32909,15 +32900,17 @@
           },
           "issues": {
             "type": "array",
-            "description": "Linked defects. Each entry comes back as {jira_id, issue_type} — note the key is jira_id on read even though a write sends plain issue-id strings.",
+            "description": "Issues and documents linked to the case, one entry per link. Always present, as [] when nothing is linked, so the array itself is safe to iterate; the entries only exist for a case that has links.",
             "items": {
               "type": "object",
               "properties": {
                 "jira_id": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The issue's key or id in ITS OWN tracker. The name is historical, not a restriction: a GitHub issue number, an Azure work-item id or a Linear key comes back under this key just the same."
                 },
                 "issue_type": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Which tracker the link points at. 'jira' unless another tracker was named when the link was made — azure, asana, linear, clickup, devrev, gitlab, github, trello, zoho, or a custom tracker; document links report confluence, figma, google-drive, onedrive or sharepoint. Links created by sending bare issue ids with no tracker named are recorded as 'jira'."
                 }
               }
             }
@@ -32972,21 +32965,25 @@
           },
           "attachments": {
             "type": "array",
-            "description": "Present only when the case has attachments. Size is a human-readable string, not bytes.",
+            "description": "Files attached to the case. Comes back as [] when the case carries no files. Every entry carries name, size, content_type and url together — these four never appear separately, so an entry either has all of them or there is no entry. Nothing is ever attached BY these calls: files reach a case through the attachment upload capability, and this array only echoes what is already attached.",
             "items": {
               "type": "object",
               "properties": {
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "File name as uploaded."
                 },
                 "size": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Human-readable size, e.g. '1.2 MB' — not a byte count."
                 },
                 "content_type": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "MIME type recorded when the file was uploaded, e.g. image/png."
                 },
                 "url": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Link to the stored file."
                 }
               }
             }
@@ -33110,7 +33107,7 @@
       },
       "TestPlanV2": {
         "type": "object",
-        "description": "A test plan or sub-plan as the v2 plan surface serializes it. There is no numeric id field - `identifier` (TP-NNN / STP-NNN) is the only id, and project_id is the PR-NNN identifier rather than the numeric project id. The numeric plan and project ids are recoverable only by reading them out of the web-app link under urls.self.",
+        "description": "A test plan or sub-plan as the v2 plan surface serializes it. There is no numeric id field - `identifier` (TP-NNN / STP-NNN) is the only id, and project_id is the PR-NNN identifier rather than the numeric project id. The numeric plan and project ids are recoverable only by reading them out of the web-app link under urls.self. This is the shape every write and every listing returns; only the single-plan read adds the embedded run preview and the relative API links.",
         "properties": {
           "identifier": {
             "type": "string",
@@ -33155,22 +33152,6 @@
               }
             }
           },
-          "test_runs": {
-            "type": "array",
-            "description": "Present ONLY on the single-plan read, and only when the run fetch succeeded: a preview of at most the first 30 runs, each with identifier and name alone.",
-            "items": {
-              "type": "object",
-              "properties": {
-                "identifier": {
-                  "type": "string",
-                  "example": "TR-164"
-                },
-                "name": {
-                  "type": "string"
-                }
-              }
-            }
-          },
           "sub_plans_count": {
             "type": "integer",
             "nullable": true,
@@ -33200,22 +33181,6 @@
             "type": "string",
             "description": "PR-NNN identifier of the owning project, not a number.",
             "example": "PR-2"
-          },
-          "links": {
-            "type": "object",
-            "description": "Relative API paths for this plan. Present only on the single-plan read, and only when the run preview was fetched successfully - they appear and disappear together with test_runs.",
-            "properties": {
-              "self": {
-                "type": "string",
-                "description": "Path to read this plan.",
-                "example": "/api/v2/projects/PR-2/test-plans/TP-12"
-              },
-              "test_runs": {
-                "type": "string",
-                "description": "Path to page through the runs in this plan.",
-                "example": "/api/v2/projects/PR-2/test-plans/TP-12/test-runs"
-              }
-            }
           },
           "urls": {
             "type": "object",
@@ -33520,21 +33485,7 @@
           "updated_by": {
             "type": "object",
             "nullable": true,
-            "description": "Who last changed the result; null when the updating user is not resolvable. Carries these four keys only.",
-            "properties": {
-              "id": {
-                "type": "integer"
-              },
-              "browserstack_user_id": {
-                "type": "integer"
-              },
-              "full_name": {
-                "type": "string"
-              },
-              "email": {
-                "type": "string"
-              }
-            }
+            "description": "Who last changed the result. ALWAYS NULL on this endpoint: the account-wide result search does not load the updating user's id, so no user is ever resolved and the object is never populated here - the key is always present and always null. The project-scoped single-result reads return the real object."
           },
           "status": {
             "type": "string",
@@ -33604,14 +33555,11 @@
           "attachments": {
             "type": "array",
             "nullable": true,
-            "description": "ALWAYS NULL on this endpoint — the account-wide search does not load attachments, so this is never an array here and iterating it without a guard throws. The project-scoped result reads return real entries, each with a human-readable `size` string derived from byte_size.",
-            "items": {
-              "$schema": "Attachment"
-            }
+            "description": "ALWAYS NULL on this endpoint - the account-wide result search does not load attachments, so this is never an array here and iterating it without a guard throws. No attachment object is ever produced on this path, so there are no entry fields to read; use the project-scoped result reads, which return real entries."
           },
           "issues": {
             "type": "array",
-            "description": "Linked tracker issues. This endpoint loads only the issue key and its link time, plus a duplicate `jira_id` mirroring issue_id whatever the tracker actually is. There is no issue_type here, so a row cannot tell you which tracker the link belongs to — the project-scoped reads do carry it.",
+            "description": "Linked tracker issues. Always an array - empty on a result with no linked defects, so the entry fields below appear only on rows that actually carry a link. This endpoint loads only the issue key and its link time, plus a duplicate `jira_id` mirroring issue_id whatever the tracker actually is. There is no issue_type here, so a row cannot tell you which tracker the link belongs to - the project-scoped reads do carry it.",
             "items": {
               "type": "object",
               "properties": {
@@ -33621,7 +33569,7 @@
                 },
                 "jira_id": {
                   "type": "string",
-                  "description": "Copy of issue_id, named jira_id for every tracker."
+                  "description": "Copy of issue_id, named jira_id for every tracker. Written for every entry, so it is present whenever the row has a linked issue at all."
                 },
                 "created_at": {
                   "type": "string",
@@ -34209,13 +34157,6 @@
           "folder_id": {
             "type": "integer"
           },
-          "folder_path": {
-            "type": "array",
-            "items": {
-              "type": "integer"
-            },
-            "description": "Folder ids from root to the case's folder. Only present on list responses, not on single-case responses."
-          },
           "status": {
             "type": "string",
             "nullable": true,
@@ -34253,14 +34194,15 @@
               "properties": {
                 "jira_id": {
                   "type": "string",
-                  "description": "Issue key, whatever the tracker."
+                  "description": "The issue's key or id in ITS OWN tracker. The name is historical, not a restriction: a GitHub issue number, an Azure work-item id or a Linear key comes back under this key just the same."
                 },
                 "issue_type": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Which tracker the link points at. 'jira' unless another tracker was named when the link was made — azure, asana, linear, clickup, devrev, gitlab, github, trello, zoho, or a custom tracker; document links report confluence, figma, google-drive, onedrive or sharepoint. Links created by sending bare issue ids with no tracker named are recorded as 'jira'."
                 }
               }
             },
-            "description": "Linked defects. Always present, as [] when nothing is linked."
+            "description": "Issues and documents linked to the case, one entry per link. Always present, as [] when nothing is linked, so the array itself is safe to iterate; the entries only exist for a case that has links."
           },
           "steps": {
             "type": "array",
@@ -34319,21 +34261,24 @@
               "type": "object",
               "properties": {
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "File name as uploaded."
                 },
                 "size": {
                   "type": "string",
-                  "description": "Human-readable, e.g. 1.2 MB."
+                  "description": "Human-readable size, e.g. '1.2 MB' — not a byte count."
                 },
                 "content_type": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "MIME type recorded when the file was uploaded, e.g. image/png."
                 },
                 "url": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Link to the stored file."
                 }
               }
             },
-            "description": "Present only when the case carries attachments. The key is omitted entirely rather than returned as an empty array — a just-created case has no `attachments` key at all."
+            "description": "Files attached to the case. On a create the key is omitted ENTIRELY rather than returned as an empty array — a case created a moment ago has nothing attached — while a read of a case with no files returns []. Test for the key before iterating. Every entry carries name, size, content_type and url together — these four never appear separately, so an entry either has all of them or there is no entry. Nothing is ever attached BY these calls: files reach a case through the attachment upload capability, and this array only echoes what is already attached."
           },
           "is_shared": {
             "type": "boolean",
@@ -34471,6 +34416,598 @@
             "type": "string",
             "example": "PR-7",
             "description": "Project the case itself lives in; equals project_id unless the case is shared in from elsewhere."
+          }
+        }
+      },
+      "TestRunV2Response": {
+        "description": "The test run at the top level under `test_run`, with no `data` envelope — the v1 run reads wrap theirs in `data`, these do not. The run object is the NARROW v2 projection: it carries `identifier` (TR-NNN) and no integer id, and omits the v1-only fields (`owner`, `is_automation`, `is_dynamic`, `test_cases_count`, `overall_progress_by_status_id`, `environment`). Do not read it against the wide run shape the v1 responses use.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "test_run": {
+              "type": "object",
+              "description": "The narrow v2 run projection. It is NOT the v1 run shape: there is no integer id, no uuid, no type, no owner, no environment, no test_cases_count, no is_automation, no observability_url, no metadata, no assignee_imported, no self_ui_link, no top-level is_dynamic, no test_plans array and no overall_progress_by_status_id. The run's identity here is the TR-NNN string in identifier.",
+              "properties": {
+                "identifier": {
+                  "type": "string",
+                  "example": "TR-9062",
+                  "description": "The run's identity on v2. Unconditional."
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Stored HTML, unescaped and with rich-text links re-inserted before it is returned, so the echo can differ from what was sent."
+                },
+                "assignee": {
+                  "type": "string",
+                  "nullable": true,
+                  "example": "qa@acme.com",
+                  "description": "The run owner's email address as a plain string, or null when the owner cannot be resolved. Not a user object."
+                },
+                "run_state": {
+                  "type": "string",
+                  "enum": [
+                    "new_run",
+                    "in_progress",
+                    "under_review",
+                    "rejected",
+                    "done",
+                    "closed"
+                  ],
+                  "description": "The stored value 'new' is rewritten to 'new_run' on the way out."
+                },
+                "active_state": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "closed"
+                  ],
+                  "description": "Derived: 'closed' when run_state is closed, otherwise 'active'."
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "configurations": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  },
+                  "description": "Configuration ids only — an array of integers, not of objects. Comes back empty on the older run backend regardless of what the run actually has — the read there fails silently and falls back to an empty list. A non-empty value is reliable; an empty one is not evidence the run has no configurations. Read the run's cases if you need to know for certain."
+                },
+                "filter_test_cases": {
+                  "type": "object",
+                  "description": "Unconditional. The only place is_dynamic is exposed on v2.",
+                  "properties": {
+                    "is_dynamic": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "overall_progress": {
+                  "type": "object",
+                  "description": "CONDITIONAL — omitted when the run has no case-status summary at all. Sparse: keyed by the capitalised status display name and carrying only the statuses actually present, e.g. {\"Untested\": 5}. Not a fixed seven-key lowercase object. On a write reply this value is echoed rather than re-read and can disagree with storage.",
+                  "additionalProperties": {
+                    "type": "integer"
+                  }
+                },
+                "test_plan": {
+                  "type": "object",
+                  "description": "CONDITIONAL — present only when the run is linked to a plan. Singular; there is no test_plans array on v2.",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "example": "TP-1616",
+                      "description": "The linked plan's TP-NNN identifier, NOT a numeric id — the serializer overwrites this key with the identifier string. Carry it as-is; converting it to a number will not resolve."
+                    },
+                    "identifier": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "issues": {
+                  "type": "array",
+                  "description": "The run's linked defects. CONDITIONAL — present but EMPTY when the run has nothing linked; the key is absent entirely when the run payload carries no issues association at all. An absent key therefore means 'not reported', not 'no defects'. Per-entry fields have their own conditions below.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "description": "The link record's own id, not the ticket's. To address the ticket use `issue_id`."
+                      },
+                      "issue_id": {
+                        "type": "string",
+                        "description": "The ticket's id in the tracker, e.g. XYZ-1 — this is what identifies the defect and what you send back to keep the link. Dropped from the entry only when the stored link carries no ticket id."
+                      },
+                      "jira_id": {
+                        "type": "string",
+                        "description": "Duplicate of `issue_id` — the same value under a tracker-specific name, and present whenever `issue_id` is, whatever the tracker actually is. Prefer `issue_id`."
+                      },
+                      "issue_type": {
+                        "type": "string",
+                        "description": "Which tracker the link came from, e.g. 'jira'. CONDITIONAL — omitted for links whose tracker was never recorded, most often ones created by sending a bare ticket id instead of an object: that form keeps the id and loses the type. `issue_tracker` is derived from the first entry that has one, so it goes missing for the same runs."
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                },
+                "issue_tracker": {
+                  "type": "object",
+                  "description": "CONDITIONAL — derived from the first linked issue that names a tracker; absent when none does.",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "project_id": {
+                  "type": "string",
+                  "example": "PR-2005",
+                  "description": "The project's PR-NNN identifier, not an integer id."
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updated_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "CONDITIONAL — omitted when the upstream reply carries no timestamp. On a write reply this value is echoed rather than re-read and has been observed not matching the stored run."
+                },
+                "links": {
+                  "type": "object",
+                  "description": "Relative API paths. There is no detail link on v2.",
+                  "properties": {
+                    "self": {
+                      "type": "string"
+                    },
+                    "test_cases": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "urls": {
+                  "type": "object",
+                  "description": "Merged in by a shared helper. self is an absolute web-UI link built from the frontend base address, not an API path.",
+                  "properties": {
+                    "self": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "test_cases": {
+                  "type": "array",
+                  "description": "The run's test cases, present only on the single-run read; absent on create and clone. The rows use the same element schema as the standalone case listing, deliberately, so a correction to one cannot drift from the other — but a few values differ by caller and say so on the field: steps are never included here, for instance.",
+                  "items": {
+                    "$schema": "TestRunTestCaseV2"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TestRunWriteV2Response": {
+        "description": "The updated run under `testrun` (no underscore) at the top level, alongside `success`. No `data` envelope. The run object is the narrow v2 projection built by the v2 run serializer and is deliberately NOT the shared v1 TestRun shape — the previous `$schema: TestRun` reference was the source of 15 fields this endpoint never returns. Five of the properties below are conditional and marked as such. Consumed by replace_test_run_v2 and update_test_run_v2 only.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "testrun": {
+              "type": "object",
+              "description": "The narrow v2 run projection. It is NOT the v1 run shape: there is no integer id, no uuid, no type, no owner, no environment, no test_cases_count, no is_automation, no observability_url, no metadata, no assignee_imported, no self_ui_link, no top-level is_dynamic, no test_plans array and no overall_progress_by_status_id. The run's identity here is the TR-NNN string in identifier.",
+              "properties": {
+                "identifier": {
+                  "type": "string",
+                  "example": "TR-9062",
+                  "description": "The run's identity on v2. Unconditional."
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Stored HTML, unescaped and with rich-text links re-inserted before it is returned, so the echo can differ from what was sent."
+                },
+                "assignee": {
+                  "type": "string",
+                  "nullable": true,
+                  "example": "qa@acme.com",
+                  "description": "The run owner's email address as a plain string, or null when the owner cannot be resolved. Not a user object."
+                },
+                "run_state": {
+                  "type": "string",
+                  "enum": [
+                    "new_run",
+                    "in_progress",
+                    "under_review",
+                    "rejected",
+                    "done",
+                    "closed"
+                  ],
+                  "description": "The stored value 'new' is rewritten to 'new_run' on the way out."
+                },
+                "active_state": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "closed"
+                  ],
+                  "description": "Derived: 'closed' when run_state is closed, otherwise 'active'."
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "configurations": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  },
+                  "description": "Configuration ids only — an array of integers, not of objects. Comes back empty on the older run backend regardless of what the run actually has — the read there fails silently and falls back to an empty list. A non-empty value is reliable; an empty one is not evidence the run has no configurations. Read the run's cases if you need to know for certain."
+                },
+                "filter_test_cases": {
+                  "type": "object",
+                  "description": "Unconditional. The only place is_dynamic is exposed on v2.",
+                  "properties": {
+                    "is_dynamic": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "overall_progress": {
+                  "type": "object",
+                  "description": "CONDITIONAL — omitted when the run has no case-status summary at all. Sparse: keyed by the capitalised status display name and carrying only the statuses actually present, e.g. {\"Untested\": 5}. Not a fixed seven-key lowercase object. On a write reply this value is echoed rather than re-read and can disagree with storage.",
+                  "additionalProperties": {
+                    "type": "integer"
+                  }
+                },
+                "test_plan": {
+                  "type": "object",
+                  "description": "CONDITIONAL — present only when the run is linked to a plan. Singular; there is no test_plans array on v2.",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "example": "TP-1616",
+                      "description": "The linked plan's TP-NNN identifier, NOT a numeric id — the serializer overwrites this key with the identifier string. Carry it as-is; converting it to a number will not resolve."
+                    },
+                    "identifier": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "issues": {
+                  "type": "array",
+                  "description": "The run's linked defects. CONDITIONAL, and usually absent on a write reply: this value is echoed from the update result rather than re-read, and on the newer run backend the write reply carries no linked-defect list at all. Never infer from its absence that the write dropped the links — read the run back to confirm what is linked.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "description": "The link record's own id, not the ticket's. To address the ticket use `issue_id`."
+                      },
+                      "issue_id": {
+                        "type": "string",
+                        "description": "The ticket's id in the tracker, e.g. XYZ-1 — this is what identifies the defect and what you send back to keep the link. Dropped from the entry only when the stored link carries no ticket id."
+                      },
+                      "jira_id": {
+                        "type": "string",
+                        "description": "Duplicate of `issue_id` — the same value under a tracker-specific name, and present whenever `issue_id` is, whatever the tracker actually is. Prefer `issue_id`."
+                      },
+                      "issue_type": {
+                        "type": "string",
+                        "description": "Which tracker the link came from, e.g. 'jira'. CONDITIONAL — omitted for links whose tracker was never recorded, most often ones created by sending a bare ticket id instead of an object: that form keeps the id and loses the type. `issue_tracker` is derived from the first entry that has one, so it goes missing for the same runs."
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                },
+                "issue_tracker": {
+                  "type": "object",
+                  "description": "CONDITIONAL — derived from the first linked issue that names a tracker; absent when none does.",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "project_id": {
+                  "type": "string",
+                  "example": "PR-2005",
+                  "description": "The project's PR-NNN identifier, not an integer id."
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updated_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "CONDITIONAL — omitted when the upstream reply carries no timestamp. On a write reply this value is echoed rather than re-read and has been observed not matching the stored run."
+                },
+                "links": {
+                  "type": "object",
+                  "description": "Relative API paths. There is no detail link on v2.",
+                  "properties": {
+                    "self": {
+                      "type": "string"
+                    },
+                    "test_cases": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "urls": {
+                  "type": "object",
+                  "description": "Merged in by a shared helper. self is an absolute web-UI link built from the frontend base address, not an API path.",
+                  "properties": {
+                    "self": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TestPlanV2Detail": {
+        "type": "object",
+        "description": "A test plan or sub-plan as the single-plan read returns it: everything the plan shape carries, plus an embedded preview of the plan's runs and the relative API links that go with it. Only the single-plan read produces these two; a create, an update or a listing never does.",
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "description": "TP-NNN, or STP-NNN for a sub-plan. The id every v2 plan path takes.",
+            "example": "TP-12345"
+          },
+          "name": {
+            "type": "string",
+            "example": "Release 2.0 plan"
+          },
+          "description": {
+            "type": "string",
+            "description": "Rich text, sanitised on write; links are rewritten on read, so it can differ from what was sent."
+          },
+          "active_state": {
+            "type": "string",
+            "description": "Derived: 'completed' once the plan is completed, otherwise 'active'. Does not distinguish new from started.",
+            "enum": [
+              "active",
+              "completed"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "description": "Linked tracker issues, each with issue_id / issue_type and any resolved metadata."
+          },
+          "test_runs_count": {
+            "type": "object",
+            "description": "This plan's own runs, split by state. Sub-plan runs are not rolled up.",
+            "properties": {
+              "active": {
+                "type": "integer"
+              },
+              "closed": {
+                "type": "integer"
+              }
+            }
+          },
+          "test_runs": {
+            "type": "array",
+            "description": "A preview of at most the first 30 runs in this plan, each with identifier and name alone. Absent - not empty - when the run fetch failed; check test_runs_count before concluding the plan has no runs. Only the single-plan read carries it.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "identifier": {
+                  "type": "string",
+                  "example": "TR-164"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "sub_plans_count": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Number of child plans this plan holds. Returned on sub-plans as well, where it reads 0 - it is not suppressed or nulled for children. Not rolled up from grandchildren."
+          },
+          "parent_plan_id": {
+            "type": "string",
+            "description": "The parent's TP-NNN identifier, not its numeric id. Set only when this plan is a sub-plan; on a top-level plan the key is absent from the payload entirely and is never returned as null.",
+            "example": "TP-10000"
+          },
+          "start_date": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-01-01T00:00:00Z"
+          },
+          "end_date": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "PR-NNN identifier of the owning project, not a number.",
+            "example": "PR-2"
+          },
+          "links": {
+            "type": "object",
+            "description": "Relative API paths for this plan. Present only when the run preview was fetched successfully - these appear and disappear together with test_runs. Only the single-plan read carries them.",
+            "properties": {
+              "self": {
+                "type": "string",
+                "description": "Path to read this plan.",
+                "example": "/api/v2/projects/PR-2/test-plans/TP-12"
+              },
+              "test_runs": {
+                "type": "string",
+                "description": "Path to page through the runs in this plan.",
+                "example": "/api/v2/projects/PR-2/test-plans/TP-12/test-runs"
+              }
+            }
+          },
+          "urls": {
+            "type": "object",
+            "description": "Absolute links for this plan. self is always present; sub_test_plans only on a top-level plan.",
+            "properties": {
+              "self": {
+                "type": "string",
+                "description": "Web-app deep link for a human, built from the numeric project and plan ids - the only place those numeric ids appear in this payload."
+              },
+              "sub_test_plans": {
+                "type": "string",
+                "description": "Address of this plan's children listing. Added only when the plan has no parent, so a sub-plan never carries it. Unlike self this is an API address, not a web-app page."
+              }
+            }
+          }
+        }
+      },
+      "V2TestRunStepResultDetail": {
+        "type": "object",
+        "description": "One per-step result written by a v2 result submission that carried step_results, returned as an entry of `test-run-step-results`. One entry per step result written, in the order the steps were sent.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Id of the result row written for this step. Carry it forward for a follow-up update; it is the id domain the server expects back."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "This step's own notes, not the case-level description."
+          },
+          "status": {
+            "type": "string",
+            "example": "passed",
+            "description": "This step's own status, as the LOWERCASE internal token ('passed'/'failed'/'blocked') - not the display-case name a case-level result echoes back. The display-case form of the same status is inside test_run_test_case_step_details as field_value, and the status rolled up for the case as a whole is the response's overall-result-status."
+          },
+          "issues": {
+            "type": "array",
+            "description": "Issues linked to this step result, as plain KEY STRINGS, deduplicated - the same shape they are sent in, not objects.",
+            "items": {
+              "type": "string",
+              "example": "JIRA-12"
+            }
+          },
+          "urls": {
+            "type": "object",
+            "description": "Web link for this submission.",
+            "properties": {
+              "self": {
+                "type": "string",
+                "description": "Deep link to the case's ROW IN THE RUN - its final path segment is the run row's id, not the id of the step result just written."
+              }
+            }
+          },
+          "test_run_test_case_step_details": {
+            "type": "object",
+            "description": "The step this result belongs to and how it was answered. Present on every entry here - each entry IS a step result - and never on the case-level `test-result`, which only exists when no step results were submitted. Alongside the step result's own ids and timestamps it carries the status twice (`status` as the lowercase internal token, `field_value` as the display-case name) with its `colour`, and the step itself: `step` (the instruction), `result` (the expected result) and `order` (its position in the case).",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "Id of the step-result record."
+              },
+              "step_mapping_id": {
+                "type": "integer",
+                "description": "Id of the step within the case that this result answers."
+              },
+              "status": {
+                "type": "string",
+                "example": "passed",
+                "description": "Lowercase internal token for this step's status."
+              },
+              "field_value": {
+                "type": "string",
+                "example": "Passed",
+                "description": "Display-case name of the same status."
+              },
+              "status_id": {
+                "type": "integer",
+                "description": "Id of the configured status value."
+              },
+              "colour": {
+                "type": "string",
+                "nullable": true,
+                "description": "Colour configured for that status."
+              },
+              "step": {
+                "type": "string",
+                "nullable": true,
+                "description": "The step instruction, as rich text."
+              },
+              "result": {
+                "type": "string",
+                "nullable": true,
+                "description": "The expected result for the step, as rich text."
+              },
+              "order": {
+                "type": "integer",
+                "nullable": true,
+                "description": "Position of the step in the case."
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
           }
         }
       }
@@ -36418,7 +36955,7 @@
               "type": "array",
               "description": "Single form, step submissions only — one entry per step result written. Mutually exclusive with test-result.",
               "items": {
-                "$schema": "V2TestRunResultDetail"
+                "$schema": "V2TestRunStepResultDetail"
               }
             },
             "overall-result-status": {
@@ -39494,6 +40031,21 @@
             },
             "folder": {
               "$schema": "FolderV2"
+            }
+          }
+        }
+      },
+      "TestPlanV2DetailResponse": {
+        "description": "A single test plan (or sub-plan read through the plan route). No data wrapper - the plan sits at the top level under `test_plan`, and on this route alone it can carry the embedded run preview and the relative API links.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "test_plan": {
+              "$schema": "TestPlanV2Detail"
             }
           }
         }

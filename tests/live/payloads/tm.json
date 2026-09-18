@@ -126,7 +126,7 @@
           "report_type": "Test Run Summary",
           "report_timeframe": "last_one_week",
           "report_creation_mode": "custom_report",
-          "title": "__mcp-probe-report-2026-09-18T04:32:18Z",
+          "title": "__mcp-probe-report-{{unique}}",
           "frequency": "once",
           "mail_to": {
             "users": [],
@@ -134,7 +134,8 @@
           },
           "report_filters": {}
         }
-      }
+      },
+      "replay_note": "title carries {{unique}}: a fixed report title collides on replay and 400s, and the error body's fields then read as undeclared successes"
     },
     "create_sub_test_plan_v2": {
       "verdict": "DRIFT",

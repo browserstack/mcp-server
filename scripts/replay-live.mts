@@ -347,9 +347,22 @@ for (const [name, entry] of entries) {
   // list whose entries legitimately sit at any depth, so it compares by LEAF. Matching
   // either one path-wise or both leaf-wise produces a confident wrong answer, and this
   // script has now shipped both mistakes.
-  const declaredPaths = declaredFields(capability);
+  // ONLY DIFF A SUCCESS BODY AGAINST THE SUCCESS SCHEMA.
+  //
+  // A non-2xx carries an ERROR shape, and comparing it with the 2xx schema reports the
+  // error's own fields as undeclared successes. That is how create_folder_v2 was reported
+  // as returning an undeclared `message` — it was a duplicate-name 400 — and it caught
+  // create_report_v2 the same way with `details` and `error` off a 400 body. Twice is a
+  // pattern: the fix belongs here rather than in each payload.
+  const succeeded =
+    typeof response.status === "number" &&
+    response.status >= 200 &&
+    response.status < 300;
+  const declaredPaths = succeeded ? declaredFields(capability) : new Set<string>();
   const declaredLeaves = new Set(capability.returns || []);
-  const present = pathsOf(response.body, "", new Set(), openObjectPaths(capability));
+  const present = succeeded
+    ? pathsOf(response.body, "", new Set(), openObjectPaths(capability))
+    : new Set<string>();
   const leaf = (path: string) => path.slice(path.lastIndexOf(".") + 1);
   rows.push({
     name,

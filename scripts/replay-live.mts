@@ -80,19 +80,28 @@ function looksKeyedByData(record: Record<string, unknown>): boolean {
   return scalar && keys.length > 1 && keys.every((k) => /^[A-Z][a-z]+$/.test(k));
 }
 
-/** Every key at every depth, so a flat `returns` can be compared with a nested body. */
-function keysAtAnyDepth(value: unknown, out = new Set<string>()): Set<string> {
+/**
+ * Every field as a DOTTED PATH, not a bare leaf name.
+ *
+ * Comparing leaf names attributes a nested entity's field to its parent. `get_test_run_v2`
+ * resolves `test_plan.id` and `issues[].id`, both real fields on nested objects — and a
+ * leaf-name matcher reported the run itself as declaring `id`, which sent a false "he
+ * shipped a third half-fix" to the person who had just fixed the first two. Any response
+ * carrying any nested entity hits this, so it is a class, not an instance.
+ */
+function pathsOf(value: unknown, prefix = "", out = new Set<string>()): Set<string> {
   if (Array.isArray(value)) {
     // One element is enough to learn an array's item shape; the rest repeat it.
-    if (value.length > 0) keysAtAnyDepth(value[0], out);
+    if (value.length > 0) pathsOf(value[0], prefix, out);
     return out;
   }
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
     if (looksKeyedByData(record)) return out;
     for (const [k, v] of Object.entries(record)) {
-      out.add(k);
-      keysAtAnyDepth(v, out);
+      const path = prefix ? `${prefix}.${k}` : k;
+      out.add(path);
+      pathsOf(v, path, out);
     }
   }
   return out;
@@ -109,39 +118,49 @@ function keysAtAnyDepth(value: unknown, out = new Set<string>()): Set<string> {
  * promised, so it is what the response is checked against.
  */
 function declaredFields(capability: Capability): Set<string> {
+  // `returns` is flat and pathless, so it can only ever be matched at the top level.
   const out = new Set<string>(capability.returns || []);
-  const seen = new Set<string>();
-  const walk = (node: unknown): void => {
+  const walk = (node: unknown, prefix: string, seen: Set<string>): void => {
     if (!node || typeof node !== "object") return;
     const obj = node as Record<string, any>;
-    if (typeof obj.$schema === "string") {
-      if (seen.has(obj.$schema)) return;
-      seen.add(obj.$schema);
-      return walk((index.schemas || {})[obj.$schema]);
-    }
-    if (typeof obj.$response === "string") {
-      if (seen.has(obj.$response)) return;
-      seen.add(obj.$response);
-      return walk((index.responses || {})[obj.$response]);
+    for (const ref of ["$schema", "$response"] as const) {
+      if (typeof obj[ref] === "string") {
+        // Recursion guard is per BRANCH, not global: the same schema legitimately appears
+        // at two different paths, and a global guard would silently drop the second.
+        if (seen.has(obj[ref])) return;
+        const table = ref === "$schema" ? index.schemas : index.responses;
+        return walk((table || {})[obj[ref]], prefix, new Set([...seen, obj[ref]]));
+      }
     }
     if (obj.properties && typeof obj.properties === "object") {
       for (const [name, sub] of Object.entries(obj.properties)) {
-        out.add(name);
-        walk(sub);
+        const path = prefix ? `${prefix}.${name}` : name;
+        out.add(path);
+        walk(sub, path, seen);
       }
     }
-    if (obj.items) walk(obj.items);
-    if (obj.schema) walk(obj.schema);
+    if (obj.items) walk(obj.items, prefix, seen);
+    if (obj.schema) walk(obj.schema, prefix, seen);
     for (const key of ["allOf", "anyOf", "oneOf"]) {
-      if (Array.isArray(obj[key])) obj[key].forEach(walk);
+      if (Array.isArray(obj[key])) obj[key].forEach((x: unknown) => walk(x, prefix, seen));
     }
   };
   const ok = Object.entries(capability.responses || {}).find(([code]) =>
     code.startsWith("2"),
   );
-  if (ok) walk(ok[1]);
+  if (ok) walk(ok[1], "", new Set());
   return out;
 }
+
+/**
+ * Capabilities whose schema describes the ENVELOPE by design.
+ *
+ * Both return mixed entity payloads — global search spans every entity type, a history row
+ * carries whatever changed — so the schema deliberately stops at the wrapper and a
+ * field-level diff is a hundred-line list on every run. Suppressed by name rather than
+ * left to dilute the signal, because a report nobody reads catches nothing.
+ */
+const ENVELOPE_ONLY = new Set(["global_search_v1", "get_test_case_histories_v2"]);
 
 const transport = fetchTransport();
 const headers = authHeaders({ username, accessKey }, index.auth);
@@ -167,6 +186,10 @@ for (const [name, entry] of entries) {
     rows.push({ name, mode: "?", status: "skipped", undeclared: [], absent: [], note: "not in the current index" });
     continue;
   }
+  if (ENVELOPE_ONLY.has(name)) {
+    rows.push({ name, mode: capability.mode, status: "skipped", undeclared: [], absent: [], note: "schema describes the envelope by design — a field diff is noise" });
+    continue;
+  }
   if (capability.mode !== "read" && !WRITES) {
     rows.push({ name, mode: capability.mode, status: "skipped", undeclared: [], absent: [], note: "write — rerun with --writes" });
     continue;
@@ -190,14 +213,26 @@ for (const [name, entry] of entries) {
     bound.body,
   );
 
-  const declared = declaredFields(capability);
-  const present = keysAtAnyDepth(response.body);
+  // TWO DECLARATION SOURCES, MATCHED DIFFERENTLY, because they are different things.
+  // The resolved schema is a tree and compares by PATH — that is what stops a nested
+  // entity's `id` being read as the parent's. `returns` is a flat, pathless convenience
+  // list whose entries legitimately sit at any depth, so it compares by LEAF. Matching
+  // either one path-wise or both leaf-wise produces a confident wrong answer, and this
+  // script has now shipped both mistakes.
+  const declaredPaths = declaredFields(capability);
+  const declaredLeaves = new Set(capability.returns || []);
+  const present = pathsOf(response.body);
+  const leaf = (path: string) => path.slice(path.lastIndexOf(".") + 1);
   rows.push({
     name,
     mode: capability.mode,
     status: response.status,
-    undeclared: [...present].filter((k) => !declared.has(k)).sort(),
-    absent: [...declared].filter((k) => !present.has(k)).sort(),
+    undeclared: [...present]
+      .filter((k) => !declaredPaths.has(k) && !declaredLeaves.has(leaf(k)))
+      .sort(),
+    absent: [...declaredPaths]
+      .filter((k) => !present.has(k) && !declaredLeaves.has(leaf(k)))
+      .sort(),
   });
 }
 

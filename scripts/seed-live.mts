@@ -30,6 +30,7 @@ import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { BrowserStackMcpServer } from "../src/server-factory.js";
+import { fetchTransport, authHeaders } from "../src/tools/capability-registry/egress.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const POOL = `${ROOT}tests/live/.id-pool.json`;
@@ -121,6 +122,61 @@ async function call(
 /** A write, with the consent the server demands. Seeding is by definition a write. */
 const write = (name: string, args: Record<string, unknown>, summary: string) =>
   call(name, { ...args, user_permission: "granted", change_summary: summary });
+
+/**
+ * A request that does NOT go through invokeCapability.
+ *
+ * Two of the gaps cannot be seeded through the registry, for opposite reasons. Populating
+ * the recycle bin needs `bulk_delete_test_cases`, which is `mode: destructive` and is
+ * refused before binding — correctly, and the seeder should not be the thing that erodes
+ * that gate. Creating an attachment blob needs a genuine multipart upload, which the
+ * registry does not do at all.
+ *
+ * So the seeder talks to the product directly for exactly those two steps. It is a fixture
+ * builder, not a caller, and the destructive gate exists to protect callers from an agent's
+ * judgement — not to stop a script deliberately deleting a case it just made for the
+ * purpose. Everything else in this file still goes through the registry, because the
+ * registry path is also what the probes exercise.
+ */
+async function raw(
+  method: string,
+  path: string,
+  body?: unknown,
+  contentType?: string,
+) {
+  const username =
+    process.env.TM_LIVE_USERNAME || process.env.BROWSERSTACK_USERNAME || "";
+  const accessKey =
+    process.env.TM_LIVE_ACCESS_KEY || process.env.BROWSERSTACK_ACCESS_KEY || "";
+  const base =
+    process.env.CAPABILITY_REGISTRY_BASE_URL_TM ||
+    "https://test-management-preprod.bsstag.com";
+  const headers: Record<string, string> = {
+    ...authHeaders({ username, accessKey }),
+    ...(contentType ? { "Content-Type": contentType } : {}),
+  };
+
+  // MULTIPART CANNOT GO THROUGH fetchTransport, which JSON.stringifies every body — a
+  // FormData serialises to "{}" and the server takes its empty-upload path, answering 200
+  // with `generic_attachment: []`. That is the documented no-op the index warns about, and
+  // it looks exactly like success. So the one multipart step uses fetch directly, and
+  // Content-Type is left unset on purpose: fetch writes the multipart boundary itself and
+  // overriding it breaks the parse in a way that reads as a server rejection.
+  if (body instanceof FormData) {
+    delete headers["Content-Type"];
+    const response = await fetch(`${base}${path}`, { method, headers, body });
+    const text = await response.text().catch(() => "");
+    let parsed: unknown = text;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      /* keep the text: a non-JSON body here is itself the diagnosis */
+    }
+    return { status: response.status, body: parsed };
+  }
+
+  return fetchTransport()(method, `${base}${path}`, headers, {}, body);
+}
 
 function die(step: string, detail: unknown, status?: number): never {
   console.error(
@@ -312,6 +368,155 @@ async function main() {
     pool.readonly.run =
       made.body?.test_run?.identifier ?? made.body?.identifier;
     console.log(`  run          CREATED  ${pool.readonly.run}`);
+  }
+
+  // ---- the three gaps that left four capabilities UNVERIFIED -------------------------
+  //
+  // Each is a capability the probes could reach but could not JUDGE: a clean 200 with an
+  // empty collection proves nothing about the declared item shape. Seeding one row each
+  // turns "nothing established" into a real verdict.
+
+  pool.gaps = pool.gaps ?? {};
+
+  // A BINNED CASE, for list_binned_test_cases_v1 and count_binned_test_cases_v1.
+  // Make one to delete rather than deleting anything that already exists.
+  if (!pool.gaps.binned_case) {
+    const made = await write(
+      "create_test_case_v2",
+      {
+        path_params: { project_id: pref, folder_id: pool.scratch.folder },
+        body: { name: `__probe-bin-${Date.now()}` },
+      },
+      "seed a throwaway case, to be deleted so the recycle bin is non-empty",
+    );
+    // v2 creates answer with the TC-NNN identifier and no integer id; bulk-delete takes
+    // `ids` as INTEGERS. The folder listing is what maps one to the other.
+    const ident =
+      made.body?.data?.test_case?.identifier ?? made.body?.test_case?.identifier;
+    let id: number | undefined;
+    if (ident) {
+      const listed = await call("list_folder_test_cases_v1", {
+        path_params: { project_id: pool.project.id, folder_id: pool.scratch.folder },
+      });
+      const rows = listed.body?.test_cases ?? listed.body?.data?.test_cases ?? [];
+      id = rows.find((r: any) => r.identifier === ident)?.id;
+    }
+    if (made.status < 300 && id) {
+      const gone = await raw(
+        "POST",
+        `/api/v1/projects/${pool.project.id}/test-cases/bulk-delete`,
+        // raw() bypasses the registry, so the Rails `test_case` wrapper that json_path
+        // normally adds for us has to be written by hand here.
+        { test_case: { ids: [id], folder_id: pool.scratch.folder } },
+        "application/json",
+      );
+      pool.gaps.binned_case = gone.status < 300 ? id : null;
+      console.log(
+        gone.status < 300
+          ? `  binned case  CREATED  ${id} (deleted into the bin)`
+          : `  binned case  FAILED   delete returned ${gone.status}`,
+      );
+    } else {
+      console.log(
+        `  binned case  SKIPPED  create ${made.status}, identifier ${ident ?? "none"}, id ${id ?? "unresolved"}`,
+      );
+    }
+  } else {
+    console.log(`  binned case  FOUND    ${pool.gaps.binned_case}`);
+  }
+
+  // A SHARED STEP, for get_shared_components_v1. Whether "components" and "steps" are the
+  // same thing is exactly what the probe will establish — if the read comes back empty
+  // after this, they are different and that is the finding.
+  const steps = await call("get_shared_steps_v1", {
+    path_params: { project_id: pool.project.id },
+  });
+  const existingStep = (steps.body?.shared_steps ?? steps.body?.data ?? [])[0];
+  if (existingStep) {
+    pool.gaps.shared_step = existingStep.id ?? existingStep.identifier;
+    console.log(`  shared step  FOUND    ${pool.gaps.shared_step}`);
+  } else {
+    const made = await write(
+      "create_shared_step_v1",
+      {
+        path_params: { project_id: pool.project.id },
+        body: {
+          title: "__probe-shared-step",
+          shared_step_details: [{ order: 1, step: "probe step", result: "probe result" }],
+        },
+      },
+      "seed one shared step so get_shared_components_v1 has an item shape to verify",
+    );
+    pool.gaps.shared_step =
+      made.status < 300
+        ? (made.body?.data?.id ?? made.body?.shared_step?.id ?? made.body?.id)
+        : null;
+    console.log(
+      made.status < 300
+        ? `  shared step  CREATED  ${pool.gaps.shared_step}`
+        : `  shared step  SKIPPED  ${made.status}`,
+    );
+  }
+
+  // AN ATTACHMENT, for folder_attachments_v1 and list_entity_attachments_v2.
+  //
+  // Two steps and only the first is unusual. `upload_test_case_attachments_v1` is NOT a
+  // multipart upload despite its name — its own guidance says so: the body is JSON and
+  // `attachments` is a list of integer BLOB IDS. The multipart happens earlier, at the
+  // generic upload, which is why that one step goes out of band.
+  if (!pool.gaps.attachment) {
+    // The field name is `attachments`, and getting it wrong is NOT an error: the handler
+    // takes the empty path and answers 200 with `generic_attachment: []`, which is exactly
+    // what a successful upload of nothing looks like. The index says so in its own
+    // guidance, and this seeder reproduced it on the first attempt by sending `file`.
+    const form = new FormData();
+    form.append(
+      "attachments[]",
+      new Blob(["probe attachment\n"], { type: "text/plain" }),
+      "probe.txt",
+    );
+    // No Content-Type: fetch sets the multipart boundary itself, and overriding it breaks
+    // the upload in a way that looks like a server rejection.
+    const blob = await raw(
+      "POST",
+      `/api/v1/projects/${pool.project.id}/generic/attachments`,
+      form,
+    );
+    const uploaded =
+      (blob.body as any)?.generic_attachment ??
+      (blob.body as any)?.attachments ??
+      (blob.body as any)?.data ??
+      [];
+    const blobId = Array.isArray(uploaded)
+      ? uploaded[0]?.id
+      : ((blob.body as any)?.id ?? uploaded?.id);
+    if (blob.status < 300 && blobId && pool.readonly.cases?.[0]) {
+      const attached = await write(
+        "upload_test_case_attachments_v1",
+        {
+          path_params: {
+            project_id: pool.project.id,
+            folder_id: pool.readonly.folder,
+            test_case_id: pool.readonly.cases[0],
+          },
+          body: { attachments: [blobId] },
+        },
+        "attach one seeded blob so the attachment listings have an item shape",
+      );
+      pool.gaps.attachment = attached.status < 300 ? blobId : null;
+      console.log(
+        attached.status < 300
+          ? `  attachment   CREATED  blob ${blobId}`
+          : `  attachment   FAILED   attach returned ${attached.status}`,
+      );
+    } else {
+      // An empty array here is the documented no-op, not a transport failure.
+      console.log(
+        `  attachment   SKIPPED  upload ${blob.status}, blob ${blobId ?? "none returned (empty upload?)"}`,
+      );
+    }
+  } else {
+    console.log(`  attachment   FOUND    ${pool.gaps.attachment}`);
   }
 
   mkdirSync(`${ROOT}tests/live`, { recursive: true });

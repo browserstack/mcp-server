@@ -7,6 +7,24 @@ Source traces: tests/live/runs/tm/<capability>.json.
 TestRunV2Response is omitted — already adjudicated (response right, spec stale, fixed in v1.15),
 though see the note at the end: `urls` is still undeclared after that fix.
 
+## READ THIS BEFORE COMPARING THE TWO LISTS
+
+`declared` and `observed` below are NOT directly set-comparable, and I nearly drew a wrong
+conclusion from them myself.
+
+`returns` is a flat list of field names at ANY nesting depth. `observed` is the response's
+TOP-LEVEL keys only. So a capability whose response is an envelope — `{success, folder:{…}}`
+— shows every inner field as "declared but not observed" and the envelope keys as
+"observed but not declared", when nothing is actually wrong.
+
+`create_folder_v2` is the clearest trap: a naive set difference makes it look like eight
+fields are missing and two are undeclared, when the real shape is simply
+`{success, folder:{...}}` with `returns` describing the inner object.
+
+The authoritative per-capability diff is the **declared, absent** and **returned, never
+declared** lines, which the probes computed with the nesting in view. Use those. The two
+raw lists are context, not arithmetic.
+
 ## ALREADY CORRECTED ON OUR SIDE — skip these five
 
 We fixed these in mcp-server bbb6056 and mirrored them into the harness branch

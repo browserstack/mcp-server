@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.23",
+  "version": "1.24",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -7466,6 +7466,7 @@
           }
         },
         "guidance": [
+          "LIKELY BROKEN, and dangerous to retry. It matches the attachment by comparing a stored integer id against the id from the path, which arrives as text, so the match fails and the next line dereferences nothing — a bare 500. Because the purge is queued before the response, treat a 500 here as an UNKNOWN outcome rather than a failure, and re-read the case before assuming nothing was removed.",
           "The response is wrapped in `data`: read data.attachments for the removed record and data.success. This action wraps; the attachment list and upload on the same path do not. Reading a top-level `attachments` finds nothing.",
           "Irreversible. The link is removed AND the underlying stored file is scheduled for purge, so the file itself goes, not just the association. There is no undo and no recycle bin for attachments.",
           "`attachment_id` must be an id from this case's own attachment listing. The handler looks it up inside the case's in-memory attachment list and does not return a clean 404 when it is absent, so verify the id with a list read first rather than probing.",
@@ -12549,6 +12550,7 @@
           }
         },
         "guidance": [
+          "DOES NOT WORK. Returns a bare 500 on any request. The handler calls a collection method on a value that is a plain array on this path, so it raises before serialising. Read a case's attachments through the entity-attachments listing instead.",
           "Metadata only: id, filename, content_type, byte_size. There is NO url and no download endpoint on this v1 surface — if you need to read the file, use the v2 attachment listing, which returns a readable URL per file.",
           "`attachments` and `success` are at the top level; there is no `data` envelope here, even though the sibling delete on the same path wraps its payload in one.",
           "Not paginated and not filterable — every attachment on the case comes back in one array.",
@@ -21612,6 +21614,7 @@
           }
         },
         "guidance": [
+          "DOES NOT WORK. A well-formed request returns a bare 500. The handler calls an attach method that the object it holds does not have, so the call raises before anything is stored. There is no request that makes it succeed — do not retry with a different body.",
           "Despite the name and the published spec this is NOT a multipart file upload. The body is JSON and `attachments` is a list of INTEGER blob ids returned by a prior generic attachment upload. No file bytes cross this boundary.",
           "Send the list flat. The `test_case` wrapper is added for you from the field's json_path, and sending your own `test_case` object is rejected before the call as an unknown body key.",
           "Each blob must belong to the caller's group or to this project, and must not already be attached to anything. Reusing a blob that is attached elsewhere fails the WHOLE call with 422 'the attachment has been referenced elsewhere' — upload a fresh copy for each attachment point.",
@@ -24523,7 +24526,8 @@
           "Rows are deliberately thin: id, name, size in bytes, created_at and url. Despite what the reference spec shows, this listing carries no content_type, byte_size, checksum or download_url. Read the file straight from `url` - there is no separate download capability for these attachments.",
           "Inline attachments are always included. Images embedded in a description through the rich-text editor come back alongside real file attachments and carry an extra `data_id`, so this count can exceed what the item's attachment panel shows.",
           "Prefer this over the v1 test-case attachments read whenever you hold a TC-/TP- identifier, need a test result's or plan's files, or want paging and file-type / uploader filtering. The v1 read handles test cases only, needs the integer project, folder and case ids, and returns every row in one unpaginated response.",
-          "`info` carries page, page_size, count, prev and next - use `count` to decide whether another page is worth fetching instead of paging until you get an empty array."
+          "`info` carries page, page_size, count, prev and next - use `count` to decide whether another page is worth fetching instead of paging until you get an empty array.",
+          "Nothing published here can attach a file to a case, so this collection may be permanently empty for a caller working only through this surface. An empty result is not evidence the entity has no attachments."
         ],
         "returns": [
           "success",
@@ -26550,7 +26554,8 @@
           "It does not look inside subfolders, so walk the folder tree and ask for each folder you care about.",
           "Each entry carries links to the stored file; read the file from there, as there is no separate download step.",
           "A folder with nothing attached comes back as an ordinary success with an empty list, so an empty list is an answer and not a failure.",
-          "Alongside the exact byte count each entry also carries a ready-formatted size for display; use the byte count when you need to compare or add sizes up."
+          "Alongside the exact byte count each entry also carries a ready-formatted size for display; use the byte count when you need to compare or add sizes up.",
+          "Nothing published here can attach a file to a case, so this collection may be permanently empty for a caller working only through this surface. An empty result is not evidence the entity has no attachments."
         ],
         "returns": [
           "success",
@@ -40502,7 +40507,9 @@
           "Putting a NEW file into the product cannot be done through this interface at all — an agent can link an already-uploaded file, remove one, and read attachment metadata, but the upload itself has to happen in the product UI.",
           "Removing an attachment purges the stored file, not just the link. There is no recycle bin for attachments and no undo.",
           "The view and download URLs handed back on upload are pre-signed and expire after about 30 minutes — fetch the file promptly or re-read the attachment to get a fresh one.",
-          "The older per-test-case attachment reads return metadata only (id, filename, type, size) with no URL; the newer entity-attachment listing is the one that hands back a readable URL per file."
+          "The older per-test-case attachment reads return metadata only (id, filename, type, size) with no URL; the newer entity-attachment listing is the one that hands back a readable URL per file.",
+          "Uploading a file and attaching it are two steps, and only the upload is offered here — the calls that bind an uploaded file to a test case are either non-functional or not published, so a file uploaded through this surface cannot be linked to anything.",
+          "An empty attachment list is not evidence that nothing is attached; it is the expected result whenever the attaching was done elsewhere."
         ]
       },
       "configuration": {

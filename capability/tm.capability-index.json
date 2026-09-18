@@ -32804,6 +32804,10 @@
               "updated_at": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "field_name": {
+                "type": "string",
+                "description": "The field's name as shown to authors. Carried on both system and custom field definitions; it is the value to match on when resolving a field a user named in words."
               }
             }
           }

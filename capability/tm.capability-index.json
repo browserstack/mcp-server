@@ -32333,7 +32333,7 @@
           "source_project_id": {
             "type": "string",
             "example": "PR-7",
-            "description": "Project the case itself lives in; equals project_id unless the case is shared in from elsewhere."
+            "description": "Project the case itself lives in; equals project_id unless the case is shared in from elsewhere. On the rows embedded in a single-run read this always reports the current project, because the cross-project identifier map is not passed on that path; the standalone case listing resolves it properly."
           },
           "source_project_name": {
             "type": "string",
@@ -32385,6 +32385,14 @@
                 "description": "Intended as an absolute link to this case within the run in the web app; currently malformed, see above."
               }
             }
+          },
+          "planned_execution_date": {
+            "type": "string",
+            "description": "Scheduled execution date. Present only on the newer run backend; absent on the older one."
+          },
+          "step_count": {
+            "type": "integer",
+            "description": "Number of steps on the case. Present only on the newer run backend; absent on the older one."
           }
         }
       },
@@ -32727,7 +32735,7 @@
           },
           "field_data": {
             "type": "object",
-            "description": "The underlying field definition - the built-in field when custom_field_id is null, otherwise the custom field. It is passed through from the field store rather than reshaped, so it carries more than is listed here and the exact set can change without notice; the keys below are what has actually been observed, and the two type keys are the only ones this surface writes itself. It is asymmetric: a custom field carries substantially more than a built-in one.",
+            "description": "The underlying field definition, passed through from the field service unchanged apart from two additions (`field_type_raw`, and `parent_custom_field_id` on nested dropdowns). The exact key set therefore varies by field kind — system fields and custom fields carry different subsets, and step fields carry more than the others. The keys listed here are those observed on a live response; treat them as likely-present rather than guaranteed, and do not assume a missing key means an unset value.",
             "properties": {
               "field_type": {
                 "type": "string",
@@ -37394,9 +37402,9 @@
                 },
                 "test_cases": {
                   "type": "array",
-                  "description": "The run's test cases, present only on the single-run read; absent on create and clone.",
+                  "description": "The run's test cases, present only on the single-run read; absent on create and clone. Each row is built by the same serializer as the standalone case listing, so the two carry an identical shape — they share one element schema deliberately, so a correction to one cannot drift from the other.",
                   "items": {
-                    "type": "object"
+                    "$schema": "TestRunTestCaseV2"
                   }
                 }
               }

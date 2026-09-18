@@ -89,10 +89,16 @@ function looksKeyedByData(record: Record<string, unknown>): boolean {
  * shipped a third half-fix" to the person who had just fixed the first two. Any response
  * carrying any nested entity hits this, so it is a class, not an instance.
  */
-function pathsOf(value: unknown, prefix = "", out = new Set<string>()): Set<string> {
+function pathsOf(
+  value: unknown,
+  prefix = "",
+  out = new Set<string>(),
+  open: Set<string> = new Set(),
+): Set<string> {
+  if (prefix && open.has(prefix)) return out;
   if (Array.isArray(value)) {
     // One element is enough to learn an array's item shape; the rest repeat it.
-    if (value.length > 0) pathsOf(value[0], prefix, out);
+    if (value.length > 0) pathsOf(value[0], prefix, out, open);
     return out;
   }
   if (value && typeof value === "object") {
@@ -101,7 +107,7 @@ function pathsOf(value: unknown, prefix = "", out = new Set<string>()): Set<stri
     for (const [k, v] of Object.entries(record)) {
       const path = prefix ? `${prefix}.${k}` : k;
       out.add(path);
-      pathsOf(v, path, out);
+      pathsOf(v, path, out, open);
     }
   }
   return out;
@@ -117,6 +123,49 @@ function pathsOf(value: unknown, prefix = "", out = new Set<string>()): Set<stri
  * declares them perfectly well under `info`. The schema is the thing a caller is actually
  * promised, so it is what the response is checked against.
  */
+/**
+ * Paths the schema explicitly declares as an object with NO properties.
+ *
+ * That is the contract saying "the keys here are data, not fields" — `overall_progress` is
+ * {Passed: 3, Untested: 5}, keyed by status display name, and the product can add a status
+ * tomorrow. Descending into one reports `Untested` as an undeclared field, which is what my
+ * shape heuristic caught for multi-key maps and missed for single-key ones.
+ *
+ * Keyed on the CONTRACT, not on the data — teststack-73's suggestion, and the better rule:
+ * guessing from key shape means enumerating status names the product owns. The distinction
+ * that matters is `{type: "object"}` with no properties, which is a deliberate open map,
+ * versus a path the schema never mentions at all, which is an under-declaration and exactly
+ * the finding this script exists to report. Only the first is suppressed.
+ */
+function openObjectPaths(capability: Capability): Set<string> {
+  const out = new Set<string>();
+  const walk = (node: unknown, prefix: string, seen: Set<string>): void => {
+    if (!node || typeof node !== "object") return;
+    const obj = node as Record<string, any>;
+    for (const ref of ["$schema", "$response"] as const) {
+      if (typeof obj[ref] === "string") {
+        if (seen.has(obj[ref])) return;
+        const table = ref === "$schema" ? index.schemas : index.responses;
+        return walk((table || {})[obj[ref]], prefix, new Set([...seen, obj[ref]]));
+      }
+    }
+    if (obj.type === "object" && !obj.properties && !obj.allOf && !obj.anyOf && prefix) {
+      out.add(prefix);
+      return;
+    }
+    if (obj.properties && typeof obj.properties === "object") {
+      for (const [name, sub] of Object.entries(obj.properties)) {
+        walk(sub, prefix ? `${prefix}.${name}` : name, seen);
+      }
+    }
+    if (obj.items) walk(obj.items, prefix, seen);
+    if (obj.schema) walk(obj.schema, prefix, seen);
+  };
+  const ok = Object.entries(capability.responses || {}).find(([c]) => c.startsWith("2"));
+  if (ok) walk(ok[1], "", new Set());
+  return out;
+}
+
 function declaredFields(capability: Capability): Set<string> {
   // `returns` is flat and pathless, so it can only ever be matched at the top level.
   const out = new Set<string>(capability.returns || []);
@@ -168,6 +217,36 @@ function declaredFields(capability: Capability): Set<string> {
 // suppressing it here would hide the same gap on every future run.
 const ENVELOPE_ONLY = new Set(["get_test_case_histories_v2"]);
 
+/**
+ * Put flat arguments back into the groups bind() expects.
+ *
+ * The probe subagents recorded `probe.arguments` in two shapes — some grouped as
+ * {path_params, query, body}, some flat with the path params as top-level keys beside
+ * `body`. Five payloads were unreplayable for that reason alone, which looked like stale
+ * fixture ids and was really a recording inconsistency: update_test_run_v2 carried a body
+ * and no path params at all, edit_project_v1 had project_id as a sibling of `body`.
+ *
+ * Fixing it here rather than rewriting the saved payloads keeps them as the probes left
+ * them — they are evidence of what was actually sent — while still letting the replay
+ * judge the contract. A key that matches no declared parameter is left where it is, so a
+ * genuinely unknown field still fails loudly instead of being quietly dropped.
+ */
+function regroup(capability: Capability, args: any): any {
+  const GROUPS = ["path_params", "query", "body"] as const;
+  const stray = Object.keys(args).filter((k) => !GROUPS.includes(k as any));
+  if (stray.length === 0) return args;
+  const out: any = { ...args };
+  const declared = (group: "path_params" | "query" | "body") =>
+    new Set((((capability as any)[group] as any[]) || []).map((p) => p.name));
+  for (const key of stray) {
+    const home = GROUPS.find((g) => declared(g).has(key));
+    if (!home) continue;
+    out[home] = { ...(out[home] || {}), [key]: args[key] };
+    delete out[key];
+  }
+  return out;
+}
+
 const transport = fetchTransport();
 const headers = authHeaders({ username, accessKey }, index.auth);
 
@@ -203,7 +282,7 @@ for (const [name, entry] of entries) {
 
   let bound;
   try {
-    bound = bind(capability, entry.arguments || {});
+    bound = bind(capability, regroup(capability, entry.arguments || {}));
   } catch (error) {
     // A payload that no longer binds is a finding in its own right: either the contract
     // moved under it, or the saved arguments were never valid.
@@ -227,7 +306,7 @@ for (const [name, entry] of entries) {
   // script has now shipped both mistakes.
   const declaredPaths = declaredFields(capability);
   const declaredLeaves = new Set(capability.returns || []);
-  const present = pathsOf(response.body);
+  const present = pathsOf(response.body, "", new Set(), openObjectPaths(capability));
   const leaf = (path: string) => path.slice(path.lastIndexOf(".") + 1);
   rows.push({
     name,

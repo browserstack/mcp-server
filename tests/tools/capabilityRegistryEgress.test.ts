@@ -185,3 +185,40 @@ describe("a description written beside a $ref survives resolution", () => {
     expect(out.schema.properties.info.description).toBe("NULL when the search failed.");
   });
 });
+
+describe("a parameter the spec leaves untyped is passed through, not stringified", () => {
+  // create_report_v2 declares `mail_to` and `report_filters` with NO type, and the API
+  // wants objects for both. The string fallthrough turned a correct payload into the
+  // literal "[object Object]" and the server refused it with a message blaming the caller
+  // for a string they never wrote. An untyped parameter means the spec declines to say
+  // what shape it is, which is a reason to leave it alone rather than guess.
+  const capability = {
+    name: "make_thing",
+    method: "POST",
+    path: "/api/v2/things",
+    mode: "write",
+    entity: "thing",
+    intent: "x",
+    body: [
+      { name: "opaque" }, // no type at all
+      { name: "label", type: "string" },
+    ],
+  } as any;
+
+  it("keeps an object intact", async () => {
+    const { bind } = await import("../../src/tools/capability-registry/bind.js");
+    const bound = bind(capability, {
+      body: { opaque: { users: [], external_mails: [] }, label: "x" },
+    });
+    expect(bound.body).toEqual({
+      opaque: { users: [], external_mails: [] },
+      label: "x",
+    });
+  });
+
+  it("still stringifies a declared string", async () => {
+    const { bind } = await import("../../src/tools/capability-registry/bind.js");
+    const bound = bind(capability, { body: { label: 42 } });
+    expect(bound.body).toEqual({ label: "42" });
+  });
+});

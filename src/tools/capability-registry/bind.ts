@@ -237,6 +237,23 @@ function coerceType(
     if (["false", "0", "no"].includes(text)) return false;
     throw new InvocationError(`'${label}' must be true or false`);
   }
+  // NO DECLARED TYPE: pass the value through as given.
+  //
+  // The fallthrough below is String(value), which is right for a declared string and
+  // silently destructive for anything the spec left untyped. create_report_v2 declares
+  // `mail_to` and `report_filters` with no type and the API wants objects for both, so a
+  // correct payload was serialised to the literal "[object Object]" and refused:
+  //
+  //   The property '#/mail_to' of type string did not match the following type: object
+  //
+  // The caller sent the right thing, this layer broke it, and the server's message blames
+  // the caller for a string it never wrote. An untyped parameter means the spec declines to
+  // say what shape it is — which is a reason to leave it alone, not to guess "string".
+  const untyped = !expected;
+  if (untyped && (typeof value === "object" || typeof value === "boolean")) {
+    return value;
+  }
+
   const text = String(value);
   if (param.values && param.values.length > 0) {
     const allowed = param.values.map((v) => String(v));

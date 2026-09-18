@@ -285,6 +285,34 @@ function fillFromPool(capability: Capability, args: any): any {
   return filled ? { ...args, path_params: supplied } : args;
 }
 
+/**
+ * Substitute {{unique}} in a saved payload.
+ *
+ * A payload that CREATES something has to be idempotent or it tests a different code path
+ * on every run after the first. Two were not: create_folder_v2 and create_report_v2 carried
+ * a fixed name and title, so every replay after the first hit a duplicate and returned a
+ * 400 — which the checker then diffed against the success schema and reported as undeclared
+ * success fields. Both were sent to the product team as drifts; one was withdrawn after
+ * capturing the body, the other would have been.
+ *
+ * The placeholder makes the intent explicit in the payload itself rather than leaving the
+ * next reader to rediscover why a create-shaped payload is unreplayable.
+ */
+function unique(args: any): any {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") return v.replaceAll("{{unique}}", stamp);
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") {
+      return Object.fromEntries(
+        Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, walk(x)]),
+      );
+    }
+    return v;
+  };
+  return walk(args);
+}
+
 const transport = fetchTransport();
 const headers = authHeaders({ username, accessKey }, index.auth);
 
@@ -325,7 +353,10 @@ for (const [name, entry] of entries) {
 
   let bound;
   try {
-    bound = bind(capability, fillFromPool(capability, regroup(capability, entry.arguments || {})));
+    bound = bind(
+      capability,
+      fillFromPool(capability, regroup(capability, unique(entry.arguments || {}))),
+    );
   } catch (error) {
     // A payload that no longer binds is a finding in its own right: either the contract
     // moved under it, or the saved arguments were never valid.

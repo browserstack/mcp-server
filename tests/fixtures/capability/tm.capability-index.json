@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.21",
+  "version": "1.22",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -33006,7 +33006,8 @@
                   "type": "string",
                   "description": "Which tracker the link points at. 'jira' unless another tracker was named when the link was made — azure, asana, linear, clickup, devrev, gitlab, github, trello, zoho, or a custom tracker; document links report confluence, figma, google-drive, onedrive or sharepoint. Links created by sending bare issue ids with no tracker named are recorded as 'jira'."
                 }
-              }
+              },
+              "description": "Only two keys exist on this shape and both are always present when the array is non-empty — nothing is dropped for being nil, so an absent value comes back as null rather than a missing key. There is NO `issue_id` here: the ticket id is published as `jira_id`, whose name is historical and which holds the id in whatever tracker the link uses. `issue_type` names that tracker and is null when the link was made by sending a bare ticket id. This is a narrower shape than the one a test RUN returns for the same links."
             }
           },
           "steps": {
@@ -33670,7 +33671,8 @@
                   "format": "date-time",
                   "description": "When the issue was linked to this result."
                 }
-              }
+              },
+              "description": "`jira_id` is written as a copy of `issue_id` on every entry, so the two always agree and always appear together — the name is historical and holds the id in whatever tracker the link uses. This shape carries no tracker name; read the run or case surfaces if you need to know which tracker an id belongs to."
             }
           },
           "configuration": {
@@ -34343,7 +34345,8 @@
                   "type": "string",
                   "description": "Which tracker the link points at. 'jira' unless another tracker was named when the link was made — azure, asana, linear, clickup, devrev, gitlab, github, trello, zoho, or a custom tracker; document links report confluence, figma, google-drive, onedrive or sharepoint. Links created by sending bare issue ids with no tracker named are recorded as 'jira'."
                 }
-              }
+              },
+              "description": "Only two keys exist on this shape and both are always present when the array is non-empty — nothing is dropped for being nil, so an absent value comes back as null rather than a missing key. There is NO `issue_id` here: the ticket id is published as `jira_id`, whose name is historical and which holds the id in whatever tracker the link uses. `issue_type` names that tracker and is null when the link was made by sending a bare ticket id. This is a narrower shape than the one a test RUN returns for the same links."
             },
             "description": "Issues and documents linked to the case, one entry per link. Always present, as [] when nothing is linked, so the array itself is safe to iterate; the entries only exist for a case that has links."
           },
@@ -38042,7 +38045,8 @@
                         "type": "string",
                         "format": "date-time"
                       }
-                    }
+                    },
+                    "description": "Each entry is built by dropping any key whose value is nil, so a field is ABSENT rather than null. `issue_type` is the one that commonly goes: a link created by sending a bare ticket id rather than an object never stores a tracker type, and that same nil is what removes the run's `issue_tracker` object. `id` is the LINK RECORD's own id, not the ticket's — use `issue_id` to address the ticket. `jira_id` duplicates `issue_id` under a tracker-specific name kept for history; it holds the id in whatever tracker the link uses, not only Jira."
                   }
                 },
                 "issue_tracker": {
@@ -38226,7 +38230,8 @@
                         "type": "string",
                         "format": "date-time"
                       }
-                    }
+                    },
+                    "description": "Each entry is built by dropping any key whose value is nil, so a field is ABSENT rather than null. `issue_type` is the one that commonly goes: a link created by sending a bare ticket id rather than an object never stores a tracker type, and that same nil is what removes the run's `issue_tracker` object. `id` is the LINK RECORD's own id, not the ticket's — use `issue_id` to address the ticket. `jira_id` duplicates `issue_id` under a tracker-specific name kept for history; it holds the id in whatever tracker the link uses, not only Jira."
                   }
                 },
                 "issue_tracker": {

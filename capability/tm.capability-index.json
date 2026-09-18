@@ -37307,7 +37307,7 @@
                     "id": {
                       "type": "string",
                       "example": "TP-1616",
-                      "description": "Overwritten with the plan's TP-NNN identifier before the object is returned."
+                      "description": "The linked plan's TP-NNN identifier, NOT a numeric id — the serializer overwrites this key with the identifier string. Carry it as-is; converting it to a number will not resolve."
                     },
                     "identifier": {
                       "type": "string"
@@ -37324,14 +37324,15 @@
                     "type": "object",
                     "properties": {
                       "id": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "The link record's own id, not the ticket's. To address the ticket use `issue_id`."
                       },
                       "issue_id": {
                         "type": "string"
                       },
                       "jira_id": {
                         "type": "string",
-                        "description": "Mirrors issue_id, for parity with the v1 shape."
+                        "description": "Duplicate of `issue_id` — the same value under a tracker-specific name. Prefer `issue_id`."
                       },
                       "issue_type": {
                         "type": "string"
@@ -37490,7 +37491,7 @@
                     "id": {
                       "type": "string",
                       "example": "TP-1616",
-                      "description": "Overwritten with the plan's TP-NNN identifier before the object is returned."
+                      "description": "The linked plan's TP-NNN identifier, NOT a numeric id — the serializer overwrites this key with the identifier string. Carry it as-is; converting it to a number will not resolve."
                     },
                     "identifier": {
                       "type": "string"
@@ -37507,14 +37508,15 @@
                     "type": "object",
                     "properties": {
                       "id": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "The link record's own id, not the ticket's. To address the ticket use `issue_id`."
                       },
                       "issue_id": {
                         "type": "string"
                       },
                       "jira_id": {
                         "type": "string",
-                        "description": "Mirrors issue_id, for parity with the v1 shape."
+                        "description": "Duplicate of `issue_id` — the same value under a tracker-specific name. Prefer `issue_id`."
                       },
                       "issue_type": {
                         "type": "string"

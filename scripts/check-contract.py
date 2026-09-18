@@ -42,8 +42,12 @@ def resolve(tm, node, seen=None, path=''):
         out += resolve(tm, a, seen, path)
     return out
 
-# Envelope keys are structural, not payload fields; `returns` never lists them.
-ENVELOPE = {'success', 'data', 'info', 'message', 'error', 'errors', 'async', 'unique_id'}
+# Nothing is suppressed. `success`, `data`, `info` and friends were filtered here as
+# "structural", which was a convenience and not a principle: if a schema fails to declare
+# `success`, a caller trips over it exactly like any other field. The suppression also hid
+# part of a disagreement with an independent implementation and made it look like a
+# resolver difference rather than a definitional one.
+ENVELOPE = frozenset()
 
 def main(path, quiet=False):
     d, tm = load(path)

@@ -51,11 +51,22 @@ ENVELOPE = frozenset()
 
 def main(path, quiet=False):
     d, tm = load(path)
-    rows = []
+    rows, no2xx, empty = [], [], []
     for c in tm['capabilities']:
         ret = c.get('returns') or []
         r = (c.get('responses') or {})
         node = r.get('200') or r.get('201') or r.get('202')
+        # Two classes this check was blind to until a live probe found them. A capability
+        # can declare only a 400 or a 404 — one had an accurate response envelope sitting
+        # orphaned in the index that nothing referenced — or declare a 200 whose schema is
+        # the empty literal {"type": "object"}. Both describe nothing and neither has a
+        # `returns` entry to disagree with, so skipping them hid the worst cases.
+        if not any(k in r for k in ('200', '201', '202', '204')):
+            no2xx.append(c['name'])
+            continue
+        if isinstance(node, dict) and node.get('schema') == {'type': 'object'}:
+            empty.append(c['name'])
+            continue
         if not ret or not node:
             continue
         pairs = resolve(tm, node)
@@ -75,7 +86,13 @@ def main(path, quiet=False):
             print(f"  {name}  ({len(missing)})")
             print(f"      unbacked : {', '.join(missing[:12])}{' …' if len(missing) > 12 else ''}")
             print(f"      declared : {', '.join(decl[:12])}{' …' if len(decl) > 12 else ''}")
-    return 1 if rows else 0
+    if no2xx:
+        print(f"\nno 2xx response declared at all: {len(no2xx)}")
+        for n in no2xx: print(f"    {n}")
+    if empty:
+        print(f"\n2xx schema is the empty literal {{'type': 'object'}}: {len(empty)}")
+        for n in empty: print(f"    {n}")
+    return 1 if (rows or no2xx or empty) else 0
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1], '--quiet' in sys.argv))

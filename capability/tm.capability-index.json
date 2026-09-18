@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.20",
+  "version": "1.21",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -26641,6 +26641,9 @@
           "links"
         ],
         "responses": {
+          "200": {
+            "$response": "ExploratorySessionFormFieldsResponse"
+          },
           "404": {
             "description": "Returned for a project that cannot be read, and - currently - for every request that asks for the configured choices. The body carries only a false success flag: no error object, no code, no message.",
             "schema": {
@@ -27265,6 +27268,9 @@
         "paginated": true,
         "max_page_size": 30,
         "responses": {
+          "200": {
+            "$response": "GlobalSearchResponse"
+          },
           "400": {
             "description": "Missing entity list, missing query text, or an unrecognised entity token. The body is a single bare error string - there is no success flag and no nested error object.",
             "schema": {
@@ -27581,9 +27587,30 @@
         ],
         "responses": {
           "200": {
-            "description": "`{\"success\": true, \"message\": \"<entity_type>s linked successfully\", \"async\": false}` when the entities were linked in-request, or the same shape with `\"async\": true` and a 'queued for linking' message when the batch exceeded 200 entities and was handed to a worker. No entity ids or per-entity results are returned in either case.\n",
+            "description": "The linking was accepted. Nothing about WHICH entities were linked comes back - no ids, no per-entity results, no failure list - so the only way to know what the ticket now holds is to read its linked entities back.\n",
             "schema": {
-              "type": "object"
+              "type": "object",
+              "required": [
+                "success",
+                "message",
+                "async"
+              ],
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "description": "True on this response. It reports that the request was accepted, not that every entity was linked - when `async` is true nothing has been linked yet. A refusal comes back as a 4xx or 5xx with success false and the reason in `message`.",
+                  "example": true
+                },
+                "message": {
+                  "type": "string",
+                  "description": "Human-readable outcome: '<entity type>s linked successfully' when the work was done in-request, '<entity type>s successfully queued for linking' when it was handed to a background worker. The entity type is echoed from your request verbatim, so it is your own wording plus an 's' - do not parse it, read `async` instead.",
+                  "example": "test-runs linked successfully"
+                },
+                "async": {
+                  "type": "boolean",
+                  "description": "False means the entities were linked before this response was sent, and reading the ticket's linked entities now will show them. True means NOTHING has been linked yet: the batch was over 200 entities and was handed to a background worker, and this response carries no job id and no way to poll it. Treat true as 'accepted, not done' - an empty read straight afterwards is expected and is NOT a failure. Do not resend the same request on the strength of an empty read: there is no de-duplication and the resend simply queues the same linking work again. Wait and re-read instead. Note also that for a test-case batch the 200-entity threshold is measured from the count YOU supplied inside the selection, not from a count the server recomputes, so a wrong count there decides this flag."
+                }
+              }
             }
           },
           "400": {
@@ -27657,9 +27684,24 @@
         ],
         "responses": {
           "200": {
-            "description": "`{\"success\": true, \"selection\": {...}}`. The selection object is passed through from the backing service and is folder-shaped (a `folders` map plus selection counts); it is the same object the link call takes as its case selection. During downtime an empty test-case collection is returned in its place instead.\n",
+            "description": "The ticket's linked test cases expressed as a reusable selection - hand this object straight back as the case selection when linking. While the service is unavailable an empty test-case collection is returned in its place: `{success: true, test_cases: []}`, with no `selection` key at all, so check for `selection` before using it.\n",
             "schema": {
-              "type": "object"
+              "type": "object",
+              "required": [
+                "success",
+                "selection"
+              ],
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "description": "True on this response. A fixed acknowledgement, not a report on the selection - an empty selection still comes back as true.",
+                  "example": true
+                },
+                "selection": {
+                  "$schema": "SelectionData",
+                  "description": "The selection as passed through from the linking service. `folders` is an empty map and `unique_test_case_count` is 0 when the ticket has no linked cases in this project."
+                }
+              }
             }
           },
           "400": {
@@ -27809,9 +27851,37 @@
         "max_page_size": 100,
         "responses": {
           "200": {
-            "description": "A page of labels for the requested kind of record. Each entry carries the label's id and its name; a companion block reports the total and the current page.",
+            "description": "A page of labels for the requested kind of record. The body is passed through from the labels service unchanged, so it carries NO success flag - the absence of `success` here is not an error signal. A failure is a 4xx or 5xx with a plain `error` string instead.\n",
             "schema": {
-              "type": "object"
+              "type": "object",
+              "required": [
+                "tags",
+                "info"
+              ],
+              "properties": {
+                "tags": {
+                  "type": "array",
+                  "description": "The labels in use on the requested kind of record in this project, one entry per label, narrowed by the search text when one was given. An empty list means the project has no labels of that kind yet - it is not an error.",
+                  "items": {
+                    "type": "object",
+                    "description": "A label. `id` is the handle to use wherever a call takes label ids; `name` is what people see. The entry is passed through from the labels service and may carry extra bookkeeping keys such as a usage count and timestamps - read id and name, and treat anything else as informational.",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "description": "The label's id - the value to pass wherever a call takes label ids."
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "The label's text, as people see it."
+                      }
+                    }
+                  }
+                },
+                "info": {
+                  "$schema": "PageInfo",
+                  "description": "Pagination for the label list. Page size is capped at 100 and defaults to 30."
+                }
+              }
             }
           },
           "400": {
@@ -28274,7 +28344,7 @@
         ],
         "responses": {
           "200": {
-            "description": "On success, the refreshed list of test cases still linked to the ticket: `{\"success\": true, \"test_cases\": [...], \"info\": {...}, \"recent_folder\": ..., \"recent_project\": ...}`, 10 per page. ALSO returned, with this same 200 status, as `{\"success\": false, \"status\": 404}` when no matching link was found, and as `{\"success\": false, \"error\": \"Invalid Access\", \"status\": 401}` when the test case is not in the caller's group — the numbers in these bodies are not the transport status.\n",
+            "description": "On success, the refreshed list of test cases still linked to the ticket: `{\"success\": true, \"test_cases\": [...], \"info\": {...}, \"recent_folder\": ..., \"recent_project\": ...}`, 10 per page. ALSO returned, with this same 200 status, as `{\"success\": false, \"status\": 404}` when no matching link was found, and as `{\"success\": false, \"error\": \"Invalid Access\", \"status\": 401}` when the test case is not in the caller's group — the numbers in these bodies are not the transport status.\nrecent_folder and recent_project are screen state carried alongside the result rather than part of it - see their own descriptions. During service downtime the whole body degrades to `{success: true, test_cases: []}`, with no info and no recent_* keys.\n",
             "schema": {
               "type": "object",
               "properties": {
@@ -28289,6 +28359,16 @@
                 },
                 "info": {
                   "$schema": "PageInfo"
+                },
+                "recent_folder": {
+                  "type": "object",
+                  "nullable": true,
+                  "description": "The folder this person most recently linked a case from, so a linking panel can reopen where they left off. A convenience for whoever is driving the screen, not part of the unlink result - nothing about it reflects the case you just unlinked, and it is unchanged by the unlink. Null when there is no such history. Returned only alongside the first page of the refreshed list; asking for a later page omits it."
+                },
+                "recent_project": {
+                  "type": "object",
+                  "nullable": true,
+                  "description": "The project this person most recently linked a case from. Paired with recent_folder and carrying the same caveats: screen state, null when there is no history, and returned only alongside the first page."
                 }
               }
             }
@@ -30789,6 +30869,20 @@
                   },
                   "links": {
                     "type": "object"
+                  },
+                  "import_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "Set when the project was brought in from another tool by an import, and carries that import's id; null for a project created directly in the product. Use it only to tell imported projects apart - it is not a handle you can pass to any call here."
+                  },
+                  "normalisedName": {
+                    "type": "string",
+                    "description": "The project's name percent-encoded for use inside a web address (spaces become +). A display and link convenience; it is never accepted as an input anywhere, so address the project by `identifier` or `id`."
+                  },
+                  "projectVisibilityBanner": {
+                    "type": "object",
+                    "nullable": true,
+                    "description": "Whether the product should show this project's visibility notice, and what set it. Passed through from the project record, so the keys inside are not fixed by this API; when populated it reports a visibility flag and a source. Expect null on a project that has no notice set - notably right after an edit, where a read of the same project moments later can return an object instead. Treat null and an object saying 'not visible' as the same thing, and do not branch on this field being present."
                   }
                 }
               }
@@ -33914,14 +34008,63 @@
         }
       },
       "FolderV2": {
+        "type": "object",
+        "description": "A folder in its public (v2) shape. One shape for all three folder writes - create, rename and move all return exactly this object under `folder`.",
         "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The folder's numeric id. This is the value every later folder call takes in its path - the project is addressed by its PR-NNN identifier, but the folder is addressed by this number."
+          },
+          "name": {
+            "type": "string",
+            "description": "The folder's name. On create and rename this is the value you sent, unless the project already had a folder of that name under the same parent and auto-renaming was allowed, in which case the server-chosen name comes back here."
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "The folder's free-text notes. Null when the folder has none - which is every newly created folder, since create does not accept notes."
+          },
+          "parent_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The folder this one now sits under. Null for a folder at the top of the project. After a move this is the destination you asked for, so it is the field to check to confirm the move landed."
+          },
           "cases_count": {
             "type": "integer",
+            "nullable": true,
             "description": "Test cases directly in this folder (not descendants). The create capability returns null here instead of 0 for the brand-new folder; treat that as 0. Rename and move return the real count."
           },
           "sub_folders_count": {
             "type": "integer",
+            "nullable": true,
             "description": "Immediate child folders. The create capability returns null here instead of 0 for the brand-new folder; treat that as 0. Rename and move return the real count."
+          },
+          "attachments": {
+            "type": "array",
+            "description": "The folder's attached files. Omitted entirely - not empty - when the folder has none, which is the usual case. Only the rename capability can add them; create and move never introduce attachments, they only carry through what the folder already had.",
+            "items": {
+              "type": "object"
+            }
+          },
+          "links": {
+            "type": "object",
+            "description": "Ready-made API links for this folder. Always present on a folder write.",
+            "properties": {
+              "sub_folders": {
+                "type": "string",
+                "description": "Link for listing this folder's immediate child folders. Built with the project's PR-NNN identifier and this folder's numeric id."
+              }
+            }
+          },
+          "urls": {
+            "type": "object",
+            "description": "Links for a person, not for an API client. Always present on a folder write.",
+            "properties": {
+              "self": {
+                "type": "string",
+                "description": "Absolute web-app address at which someone can open this folder. Note it is built from the project's NUMERIC id, whereas the API links above use the PR-NNN identifier - do not read a project identifier out of this string."
+              }
+            }
           }
         }
       },
@@ -34328,11 +34471,11 @@
       },
       "GlobalSearchEntityResults": {
         "type": "object",
-        "description": "One entity type's slice of an account-wide search result. Present only for the types that were asked for.",
+        "description": "One entity type's slice of an account-wide search result. Present only for the types that were asked for. Used for the entity types whose rows are handed back as the search index stored them rather than re-serialized: each row carries the record's id, name or title, the project it lives in, and a relevance score, plus the `display_meta` block described on `data` below. Because the rows are passed through, treat any key beyond id, name and project as informational.",
         "properties": {
           "data": {
             "type": "array",
-            "description": "The matching records for this entity type. Row shape follows the entity, and carries a display_meta block enriched with owner, project and folder names except on the typeahead fast path.",
+            "description": "The matching records for this entity type, best match first. Every row carries a `display_meta` block enriched with the owner's name and the project's name so the hit can be labelled without another call - except on the typeahead fast path, where only owner and project are filled in and the rest of display_meta is skipped. Rows whose project has since been deleted or archived are dropped before you see them, so this list can be shorter than `info.count` implies.",
             "items": {
               "type": "object"
             }
@@ -36061,7 +36204,7 @@
                   },
                   "place_holder_text": {
                     "type": "string",
-                    "description": "Placeholder text for the field",
+                    "description": "Hint text shown in the empty field. Omitted entirely when the field has no hint text. This is the key to read: it is filled from the field's hint under either of the two names the stored record may use.",
                     "example": "Select priority level"
                   },
                   "system_name": {
@@ -36084,6 +36227,10 @@
                   "group_id": {
                     "type": "string",
                     "description": "Group ID this field belongs to"
+                  },
+                  "placeholder": {
+                    "type": "string",
+                    "description": "The same hint text as place_holder_text, under a second name. Present only when the stored field carries its hint under this name - which is the common case, so both keys usually appear with identical values, but neither is guaranteed. Read place_holder_text and ignore this one; it exists for older clients."
                   }
                 }
               }
@@ -39949,33 +40096,79 @@
         }
       },
       "GlobalSearchResponse": {
-        "description": "Account-wide search results. By default one group per requested entity type; when results are combined, the per-entity groups are replaced entirely by a single sorted data list plus one info block.",
+        "description": "Account-wide search results. There is one top-level bucket per entity type you asked for - `test_case`, `test_run`, `test_plan`, `project`, `shared_step`, `report` - and a bucket appears ONLY if you named that type in the request; a type you did not ask for has no bucket at all, while a type that simply had no matches comes back as a present bucket with an empty `data` and a zero count. Alongside the buckets sits `project_details`, a lookup for naming the project each hit belongs to. When results are combined, the per-entity buckets are replaced entirely by a single sorted `data` list plus one `info` block.",
         "schema": {
           "type": "object",
           "properties": {
             "test_case": {
-              "$schema": "GlobalSearchEntityResults"
-            },
-            "test_run": {
-              "$schema": "GlobalSearchEntityResults"
-            },
-            "test_plan": {
-              "$schema": "GlobalSearchEntityResults"
-            },
-            "project": {
-              "$schema": "GlobalSearchEntityResults"
-            },
-            "shared_step": {
-              "$schema": "GlobalSearchEntityResults"
-            },
-            "report": {
               "type": "object",
-              "description": "Report matches. Absent on the typeahead fast path even when reports were requested. Unlike the other entity types, this bucket ignores the requested page size and always pages at 30.",
+              "description": "Test-case matches. The only bucket that also carries a folder lookup.",
               "properties": {
                 "data": {
                   "type": "array",
+                  "description": "Matching test cases, in the same serialized shape the project-scoped case search returns, plus two search-only extras per row: `display_meta` (what the query matched - title, description, steps, preconditions, folder path - with the owner and project resolved to names) and `user_id` (the case's creator). On the typeahead fast path the rows are lean stubs - id, identifier, name, project, owner - and none of the serialized detail is filled in.",
+                  "items": {
+                    "$schema": "TestCase"
+                  }
+                },
+                "info": {
+                  "$schema": "PageInfo"
+                },
+                "folders": {
+                  "type": "object",
+                  "description": "Folder-hierarchy lookup for these test-case hits, keyed by folder id, so each row's folder can be shown as a path without another call. Test cases are the only entity type that gets this."
+                }
+              }
+            },
+            "test_run": {
+              "type": "object",
+              "description": "Test-run matches.",
+              "properties": {
+                "data": {
+                  "type": "array",
+                  "description": "Matching test runs, in the same serialized shape the project-scoped run search and the run listings return, plus a search-only `user_id` (the run's creator). Lean stubs on the typeahead fast path.",
+                  "items": {
+                    "$schema": "TestRun"
+                  }
+                },
+                "info": {
+                  "$schema": "PageInfo"
+                }
+              }
+            },
+            "test_plan": {
+              "type": "object",
+              "description": "Test-plan matches.",
+              "properties": {
+                "data": {
+                  "type": "array",
+                  "description": "Matching test plans, in the same serialized shape a project's plan listing returns - numeric `id` AND `identifier` (TP-NNN, or STP-NNN for a sub-plan), name, description, plan_status and the derived active_state, owner and assignee, tags, start and end dates, the {active, closed} run counts both direct and including sub-plans, parent_plan_id and sub_plans_count. This is the numeric-id plan shape, NOT the identifier-only shape the v2 plan surface returns. Each row also carries a search-only `display_meta` (with the parent plan resolved) and `user_id` (the plan's creator). Lean stubs on the typeahead fast path.",
                   "items": {
                     "type": "object"
+                  }
+                },
+                "info": {
+                  "$schema": "PageInfo"
+                }
+              }
+            },
+            "project": {
+              "$schema": "GlobalSearchEntityResults",
+              "description": "Project matches. Rows are search-index records, not the project read shape: expect the project's id, name, identifier, description, the owning group, created and updated times and a relevance score - and NOT the counts, links or access fields a project read returns. An owner filter does not narrow this bucket."
+            },
+            "shared_step": {
+              "$schema": "GlobalSearchEntityResults",
+              "description": "Shared-step matches. Rows are search-index records carrying the step's id, title and owning project - leaner than a shared-step read, and with no step bodies. An owner filter does not narrow this bucket."
+            },
+            "report": {
+              "type": "object",
+              "description": "Report matches. Absent on the typeahead fast path even when reports were requested. Unlike the other entity types, this bucket ignores the requested page size and always pages at 30, and it is not a search-index bucket - it is a direct lookup over the account's saved and scheduled reports, matched on report type, title and, when no owner filter is set, owner name.",
+              "properties": {
+                "data": {
+                  "type": "array",
+                  "description": "Matching reports, in the same serialized shape a project's saved-report listing returns.",
+                  "items": {
+                    "$schema": "Report"
                   }
                 },
                 "scheduled_report_count": {
@@ -39994,7 +40187,7 @@
             },
             "project_details": {
               "type": "array",
-              "description": "Id-to-name lookup for every project referenced by the hits, so a row's project can be named without another call. Always present on an uncombined search; on a combined one it is included only when non-empty.",
+              "description": "One entry per project referenced by any hit in any bucket, so a row's project can be named without another call - match a row's project id against these. Entries are project records as stored, with id and name being the parts to rely on; this is a lookup, not the project read shape. Always present on an uncombined search, as an empty list when nothing matched; on a combined one it is included only when non-empty.",
               "items": {
                 "type": "object"
               }

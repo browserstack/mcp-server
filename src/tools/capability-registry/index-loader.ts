@@ -421,7 +421,45 @@ function resolveNode(
     // Leave the reference visible when it cannot be followed, or when following it would
     // revisit a name already on this path.
     if (!target || seen.has(key)) return node;
-    return resolveNode(product, target, new Set([...seen, key]));
+    const resolved = resolveNode(product, target, new Set([...seen, key]));
+
+    // KEYS WRITTEN BESIDE THE REF SURVIVE IT, AND WIN.
+    //
+    // This used to return the target and drop every sibling, which silently ate 16 nodes
+    // in the shipped tm index: 14 authored descriptions and two `nullable: true` flags.
+    // The losses are exactly the caveats hardest to rediscover — "only when no step
+    // results were submitted", "Present only on root-folder creation", and a `nullable`
+    // marking the one field that comes back NULL when a search fails, which is the
+    // absent-versus-explicitly-null distinction a caller cannot otherwise make.
+    //
+    // It also cost real work downstream. A live probe reported one of those caveats as a
+    // missing conditional and it had been written all along — this resolver removed it
+    // between the author and the caller. Worse, the product team began splitting shared
+    // schemas so a caveat would have somewhere to live that survived, trading a lost
+    // sentence for two descriptions of one serializer that then drift apart.
+    //
+    // SIBLINGS WIN over the resolved target, not the reverse. A description written at the
+    // reference site is about THAT usage — "only when no step results were submitted" is
+    // true of one consumer of TestResult, not of TestResult everywhere — which is the
+    // whole reason it was written beside the ref instead of on the schema.
+    const siblings: Record<string, unknown> = {};
+    for (const [field, value] of Object.entries(
+      node as Record<string, unknown>,
+    )) {
+      if (field !== "$schema" && field !== "$response") siblings[field] = value;
+    }
+    if (Object.keys(siblings).length === 0) return resolved;
+    if (
+      typeof resolved !== "object" ||
+      resolved === null ||
+      Array.isArray(resolved)
+    ) {
+      return resolved;
+    }
+    return {
+      ...(resolved as Record<string, unknown>),
+      ...(resolveNode(product, siblings, seen) as Record<string, unknown>),
+    };
   }
 
   const out: Record<string, unknown> = {};

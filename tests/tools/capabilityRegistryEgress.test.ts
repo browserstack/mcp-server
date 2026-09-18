@@ -134,3 +134,54 @@ describe("a caller who hand-builds the wrapper is told what happened", () => {
     expect(bound.body).toEqual({ thing: { name: "x" } });
   });
 });
+
+describe("a description written beside a $ref survives resolution", () => {
+  // The resolver replaced a ref node with its target, dropping every sibling key — 16 in
+  // the shipped tm index, including two `nullable` flags and caveats like "only when no
+  // step results were submitted". A live probe then reported one of those as a MISSING
+  // conditional when it had been authored all along and this code removed it in transit.
+  const product: any = {
+    summary: "x",
+    entities: {},
+    capabilities: [],
+    schemas: {
+      PageInfo: { type: "object", properties: { count: { type: "integer" } } },
+    },
+    responses: {
+      Search: {
+        schema: {
+          type: "object",
+          properties: {
+            info: {
+              $schema: "PageInfo",
+              nullable: true,
+              description: "NULL when the search failed.",
+            },
+          },
+        },
+      },
+    },
+  };
+
+  it("keeps the sibling description and nullable flag", async () => {
+    const { resolveDeep } = await import(
+      "../../src/tools/capability-registry/index-loader.js"
+    );
+    const out: any = resolveDeep(product, product.responses.Search);
+    const info = out.schema.properties.info;
+    expect(info.description).toBe("NULL when the search failed.");
+    expect(info.nullable).toBe(true);
+    // and the target still came through
+    expect(info.properties.count.type).toBe("integer");
+  });
+
+  it("lets the sibling win, because it describes THAT usage", async () => {
+    const { resolveDeep } = await import(
+      "../../src/tools/capability-registry/index-loader.js"
+    );
+    const local = JSON.parse(JSON.stringify(product));
+    local.schemas.PageInfo.description = "generic paging";
+    const out: any = resolveDeep(local, local.responses.Search);
+    expect(out.schema.properties.info.description).toBe("NULL when the search failed.");
+  });
+});

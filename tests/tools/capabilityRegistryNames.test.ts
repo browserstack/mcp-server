@@ -197,10 +197,14 @@ describe("invokeCapability", () => {
   async function toolsWithFetch(calls: string[]) {
     vi.stubGlobal("fetch", async (url: string) => {
       calls.push(String(url));
+      // `text` as well as `json`, because the transport reads the body as text and parses
+      // it itself — that is what lets it keep a non-JSON error instead of nulling it.
+      const payload = { projects: [], info: { count: 0 } };
       return {
         status: 200,
         headers: { get: () => "application/json" },
-        json: async () => ({ projects: [], info: { count: 0 } }),
+        json: async () => payload,
+        text: async () => JSON.stringify(payload),
       };
     });
     const { BrowserStackMcpServer } =

@@ -392,6 +392,12 @@ describe("capability registry, end to end through the server factory", () => {
           projects: [{ id: 1, name: "P", description: "d", leaked: "no" }],
           info: { count: 1 },
         }),
+        // The transport reads text and parses it itself, so a faithful double needs both.
+        text: async () =>
+          JSON.stringify({
+            projects: [{ id: 1, name: "P", description: "d", leaked: "no" }],
+            info: { count: 1 },
+          }),
       };
     });
 

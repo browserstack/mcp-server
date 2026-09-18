@@ -37,6 +37,8 @@ describe("base URL resolution", () => {
         status: 200,
         headers: { get: () => "application/json" },
         json: async () => ({ projects: [{ id: 1, name: "P" }], info: { count: 1 } }),
+        text: async () =>
+          JSON.stringify({ projects: [{ id: 1, name: "P" }], info: { count: 1 } }),
       };
     });
 
@@ -59,6 +61,7 @@ describe("base URL resolution", () => {
         status: 200,
         headers: { get: () => "application/json" },
         json: async () => ({ projects: [], info: { count: 0 } }),
+        text: async () => JSON.stringify({ projects: [], info: { count: 0 } }),
       };
     });
 

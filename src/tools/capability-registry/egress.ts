@@ -133,6 +133,61 @@ export function authHeaders(
   );
 }
 
+/** Longest response text kept when it is not JSON. Enough for an error, not a whole page. */
+const TEXT_BODY_LIMIT = 2000;
+
+/**
+ * Read the response, and NEVER silently discard it.
+ *
+ * This used to parse the body only when the content-type said JSON and return `null`
+ * otherwise, which meant an error could arrive as `{status: 500, body: null}` — a status
+ * code and nothing else. That is worse than it sounds: an unhandled exception in a Rails
+ * app renders `text/html`, so the one case where you most need the message is exactly the
+ * case where the content-type is not JSON. It also made two very different situations
+ * indistinguishable — "the product sent no message" and "we threw the message away" — and
+ * a live probe of `test_case_results_v1` had to leave that ambiguity open in its findings
+ * because nothing downstream could tell which had happened.
+ *
+ * So: JSON is parsed as before. Anything textual is kept as a truncated string. Malformed
+ * JSON keeps its raw text rather than becoming `null`, because a body that fails to parse
+ * is itself the diagnosis. Binary is described rather than decoded — dumping PDF bytes
+ * into an agent's context helps nobody, but knowing a PDF arrived does.
+ */
+async function readBody(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type") || "";
+
+  // Anything that is not plausibly text: report what came back without decoding it.
+  const textual =
+    !contentType ||
+    /^text\//i.test(contentType) ||
+    /\b(json|xml|yaml|csv|javascript|x-www-form-urlencoded)\b/i.test(
+      contentType,
+    );
+  if (!textual) {
+    const size = response.headers.get("content-length");
+    return `<non-text response: ${contentType}${size ? `, ${size} bytes` : ""}>`;
+  }
+
+  const raw = await response.text().catch(() => "");
+  if (!raw.trim()) return null;
+
+  if (contentType.includes("json")) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      // Declared JSON that is not JSON. The text is the evidence; keep it.
+      return truncate(raw);
+    }
+  }
+  return truncate(raw);
+}
+
+function truncate(text: string): string {
+  return text.length <= TEXT_BODY_LIMIT
+    ? text
+    : `${text.slice(0, TEXT_BODY_LIMIT)}… [truncated, ${text.length} chars total]`;
+}
+
 /** A fetch-based transport. Redirects are NOT followed. */
 export function fetchTransport(timeoutMs = 45_000): Transport {
   return async (method, url, headers, query, body) => {
@@ -156,12 +211,10 @@ export function fetchTransport(timeoutMs = 45_000): Transport {
         redirect: "manual",
         signal: controller.signal,
       });
-      let parsed: unknown = null;
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("json")) {
-        parsed = await response.json().catch(() => null);
-      }
-      return { status: response.status, body: parsed };
+      return {
+        status: response.status,
+        body: await readBody(response),
+      };
     } catch {
       // Upstream detail stays out of the reply; the resolver treats status 0 as a failed call.
       return {

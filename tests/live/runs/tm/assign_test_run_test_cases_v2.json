@@ -1,0 +1,140 @@
+{
+  "capability": "assign_test_run_test_cases_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T06:45:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Before-state read of TR-9062's four rows (case identifiers, latest_result_id, assignee) prior to any write, per the hand-off left by create_test_run_v2's probe.",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 500,
+      "produced": { "body": null, "note": "First two attempts at this same call both returned status 500 with a null body." }
+    },
+    {
+      "step": 2,
+      "why": "Control call on a different capability/run pair, in the same time window, to check whether the 500s are this capability's fault or an environment-wide preprod blip before treating them as a finding.",
+      "source": "invoked",
+      "capability": "get_test_run_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" } },
+      "status": 500,
+      "produced": { "body": null }
+    },
+    {
+      "step": 3,
+      "why": "Second control call, on a third distinct capability, to confirm the outage is preprod-wide and not scoped to test-run reads.",
+      "source": "invoked",
+      "capability": "get_test_runs_v1",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 500,
+      "produced": { "body": null }
+    },
+    {
+      "step": 4,
+      "why": "Retried the before-state read unchanged after the environment-wide 500 burst subsided (per standing preprod-intermittency guidance); this is the before-state actually used.",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "count": 4,
+        "rows": [
+          { "identifier": "TC-54458", "latest_result_id": 2150387254, "latest_status": "untested", "assignee": null, "configuration_id": null, "execution_id_returned": "ab5c1e3c40fc614f2020a9ba4dd1a8e4c075bba8fe0336a4f30646030b6f6d43" },
+          { "identifier": "TC-54457", "latest_result_id": 2150387252, "latest_status": "untested", "assignee": null, "configuration_id": null, "execution_id_returned": "babec1472edc70663caba4b3c736236b195787812c65b2f0f89ccf480b315c9d" },
+          { "identifier": "TC-54456", "latest_result_id": 2150387251, "latest_status": "untested", "assignee": null, "configuration_id": null, "execution_id_returned": "7bce8287edd93ac2c497a195e06beb55747d0d5ee10955ca071537ee68788843" },
+          { "identifier": "TC-54455", "latest_result_id": 2150387253, "latest_status": "untested", "assignee": null, "configuration_id": null, "execution_id_returned": "999dab9963d9dae5a3a64f826c262f15c2c251b5f881d95d180b56033537ca29" }
+        ],
+        "note": "get_test_run_test_cases_v2 returns a per-row `execution_id` field (a long hex string) that is NOT in that capability's own declared `returns` list - undeclared there, flagged for that capability's own probe, but directly relevant here since it turned out to be the value this capability's execution_id field actually wants (see attempts 2/3)."
+      }
+    },
+    {
+      "step": 5,
+      "why": "Verify against storage after write attempt 1 (test_case_id form, 200 success) to see whether the assignment actually applied.",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": { "count": 4, "assignee_on_TC-54457": null, "assignee_on_TC-54458": null, "note": "Immediately after the 200, both targeted rows still show assignee: null." }
+    },
+    {
+      "step": 6,
+      "why": "Second verification read, ~15s after step 5, in case the assignment guidance's 'queued, not applied' async note meant the change needed more time to land.",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": { "count": 4, "assignee_on_TC-54457": null, "assignee_on_TC-54458": null, "note": "Still null on both targeted rows after the wait; all 4 rows unchanged from the before-state in step 4." }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+        "body": {
+          "assign_to": [
+            { "test_case_id": "TC-54457", "assignee": "ing@bsstag.com" },
+            { "test_case_id": "TC-54458", "assignee": "ing@bsstag.com" }
+          ]
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "Built exactly as declared (flat body, top-level assign_to, test_case_id + assignee-as-email). Got 200 {success: true}, but verification (setup steps 5 and 6, 15s apart) showed neither targeted row's assignee actually changed - a silent no-op, not just async lag. Next attempt tries the declared alternate targeting field, execution_id, instead of test_case_id."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+        "body": {
+          "assign_to": [
+            { "execution_id": 2150387252, "assignee": "ing@bsstag.com" },
+            { "execution_id": 2150387254, "assignee": "ing@bsstag.com" }
+          ]
+        }
+      },
+      "status": 400,
+      "error": "{\"error\":\"Invalid JSON data\",\"details\":[\"The property '#/assign_to/0/execution_id' of type integer did not match the following type: string\",\"The property '#/assign_to/1/execution_id' of type integer did not match the following type: string\"]}",
+      "changed": "Used latest_result_id (2150387252 / 2150387254 - the row id per the brief and per get_test_run_test_cases_v2's own guidance) as the integer execution_id the contract declares. Server rejects it, demanding a STRING - so the contract's own declared type (integer) for execution_id is wrong, and latest_result_id is not what this field wants either. Next attempt tries the one string this run actually has for these rows: the hex `execution_id` value returned by get_test_run_test_cases_v2 (setup step 4)."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+        "body": {
+          "assign_to": [
+            { "execution_id": "babec1472edc70663caba4b3c736236b195787812c65b2f0f89ccf480b315c9d", "assignee": "ing@bsstag.com" },
+            { "execution_id": "ab5c1e3c40fc614f2020a9ba4dd1a8e4c075bba8fe0336a4f30646030b6f6d43", "assignee": "ing@bsstag.com" }
+          ]
+        }
+      },
+      "status": null,
+      "error": "{\"ok\":false,\"error\":\"'assign_to.execution_id' must be a number\"}",
+      "changed": "Never reached the server - invokeCapability's OWN client-side type validation rejected the string before making the HTTP call, because the contract declares execution_id as integer. So the one value type the server accepts for execution_id (string) is unreachable through this tool while the contract declares integer. This is the third and last attempt allowed; no working execution_id path was found."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+      "body": {
+        "assign_to": [
+          { "test_case_id": "TC-54457", "assignee": "ing@bsstag.com" },
+          { "test_case_id": "TC-54458", "assignee": "ing@bsstag.com" }
+        ]
+      }
+    },
+    "status": 200,
+    "response_keys": ["success"],
+    "item_shape": { "success": "boolean (true)" }
+  },
+  "contract": {
+    "required": ["project_id (path)", "test_run_id (path)", "assign_to (body)"],
+    "json_path": "none declared - assign_to is top-level/flat, explicitly NOT wrapped in a test_run object per this capability's own guidance (unlike the update calls on this run). Confirmed: attempt 1 sent it flat and was accepted syntactically (200).",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "VERDICT DRIFT for two independent reasons, both behavioral rather than a missing/undeclared response field (the 200 body {success:true} matches the declared schema exactly - no structural drift there): (1) A 200 {success:true} that assigned nothing. test_case_id targeting (the only body shape that is both declared and actually reachable through invokeCapability) is accepted with 200 on attempt 1, but re-reading get_test_run_test_cases_v2 immediately after, and again ~15s later, showed BOTH targeted rows (TC-54457/2150387252, TC-54458/2150387254) still assignee:null - no change at all, and the two untouched rows (TC-54455/2150387253, TC-54456/2150387251) were also unchanged, so nothing over-assigned either, but the intended write plainly never applied. The task brief explicitly flags a 200-that-assigns-nothing as DRIFT, which is the primary basis for this verdict. (2) execution_id is unusable through this interface as declared. The contract declares execution_id as an integer, and the task brief points at latest_result_id as 'the row id' for this run's rows - so attempt 2 sent latest_result_id (2150387252/2150387254) as execution_id. The server 400'd, saying execution_id must be a STRING, not integer - i.e. the contract's own declared type is wrong AND latest_result_id-as-integer is not what execution_id wants. The only string this run's rows carry under any 'execution_id'-shaped value is the long hex `execution_id` field returned per-row by get_test_run_test_cases_v2 (itself undeclared in that capability's own returns list - flagged there, but load-bearing here). Sending that hex string as execution_id (attempt 3) never reached the server at all: invokeCapability's OWN client-side validation rejected it ('assign_to.execution_id must be a number') because the contract declares the field as integer. Net effect: as currently declared, execution_id-based targeting is dead end-to-end through invokeCapability - the type the server wants (string) is blocked client-side, and the type the client allows (integer, including latest_result_id) is rejected server-side. ANSWER TO 'which id addresses a row for THIS capability': neither cleanly. test_case_id (TC-NNN string) is the only field that is both declared and gets through the client, but its 200 is a no-op (see reason 1) - so effectively there is currently NO way to make this capability actually assign a row through invokeCapability, given its present contract. latest_result_id specifically is NOT what execution_id wants (confirmed by the 400 in attempt 2); the hex per-row execution_id value from get_test_run_test_cases_v2 is what the server wants there, but the client's own type gate blocks it. ASSIGNEE FORM: contract declares assignee as a string; guidance says 'an email (or TM user id) resolved inside the run's group.' Sent as the email string ing@bsstag.com (TM user id 2522, browserstack_user_id 6013) - the same account already recorded as created_by on these fixture rows, so it should resolve cleanly within PR-2005's group; assignee resolution failure is therefore an unlikely explanation for the no-op. Because no write ever actually took effect, the ACCEPTED-and-RETURNED shape of a populated assignee on a row could not be observed here either way (row-level assignee stayed null throughout, consistent with the task brief's separate note that row-level assignee already reads back null in general, distinct from the run-level assignee which returns as a plain email string). EXACT STATE LEFT FOR THE FIVE FOLLOWING WRITE PROBES (bulk_update_test_run_test_cases_v2, clone_test_run_v2, export_test_run_csv_v1, replace_test_run_v2, update_test_run_v2): run TR-9062 (PR-2005) still has exactly its original 4 rows, ALL untouched - TC-54458/2150387254, TC-54457/2150387252, TC-54456/2150387251, TC-54455/2150387253 - all latest_status:untested, all assignee:null, no configuration_id, identical to the pre-probe state recorded in setup step 4. Nothing was actually changed by this probe (all 3 attempts either no-op'd or errored before/at the server), so the run is left exactly as found. ENVIRONMENT: the first two before-state read attempts, plus two control calls to two other capabilities (get_test_run_v2, get_test_runs_v1) in the same window, all returned status 500 with a null body - consistent with the documented preprod bursts of null-body 500s, confirmed environment-wide (not scoped to this capability or to test-run reads specifically) via the two control calls, then resolved on retry with no code change. Recorded as setup steps 1-4, not as a capability finding."
+}

@@ -1,12 +1,245 @@
 {
-  "_comment": "Replayable payloads rolled up from tests/live/runs/tm/*.json by the capability-live-probe orchestrator. Only capabilities whose probe returned HTTP 200 appear in \"payloads\". Replaying these depends on the live fixture existing - run `npm run seed:live` first. Some arguments reference scratch objects created during the probe run (see each run file's setup[] for how they were made).",
+  "_comment": "Replayable payloads rolled up from tests/live/runs/tm/*.json by the capability-live-probe orchestrator. Phase 2 COMPLETE: all 69 capabilities probed across 7 batches. Only capabilities whose probe returned a 2xx appear in \"payloads\". Replaying depends on the live fixture - run `npm run seed:live` first, and note that many arguments reference objects created during probe runs (see each run file's setup[]). WARNING: a 2xx from a tm write does NOT reliably mean the write took effect - see findings/test-run-writes-untrustworthy-systemic.md. A replay checker must verify against storage, not against the response.",
   "product": "tm",
   "env": "preprod",
-  "account": "<redacted>",
   "index_version": "1.14",
   "index_build_id": "run5merge_2026-09-16T18:02:57Z",
-  "rolled_up_at": "2026-09-17T10:53:52Z",
+  "phase": "phase 2 complete - 69/69 capabilities probed",
+  "batches": [
+    "rows 1-30 probed 2026-09-17",
+    "rows 31-60 probed 2026-09-18",
+    "rows 61-90 probed 2026-09-18",
+    "rows 91-120 probed 2026-09-18",
+    "rows 121-150 probed 2026-09-18",
+    "rows 151-180 probed 2026-09-18",
+    "rows 181-207 probed 2026-09-18"
+  ],
+  "rolled_up_at": "2026-09-18T07:53:48Z",
   "payloads": {
+    "add_test_case_comment_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764828,
+          "test_case_id": 1975349
+        },
+        "body": {
+          "comment": "__mcp-probe-comment-2026-09-18T07:36:35Z"
+        }
+      }
+    },
+    "assign_test_run_test_cases_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_run_id": "TR-9062"
+        },
+        "body": {
+          "assign_to": [
+            {
+              "test_case_id": "TC-54457",
+              "assignee": "ing@bsstag.com"
+            },
+            {
+              "test_case_id": "TC-54458",
+              "assignee": "ing@bsstag.com"
+            }
+          ]
+        }
+      }
+    },
+    "bulk_set_test_result_status_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_run_id": "TR-9062"
+        },
+        "body": {
+          "status": "passed",
+          "test_case_ids": [
+            "TC-54457"
+          ]
+        }
+      }
+    },
+    "bulk_update_test_run_test_cases_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_run_id": "TR-9062"
+        },
+        "body": {
+          "add_test_cases": [
+            {
+              "test_case_ids": [
+                "TC-54457"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "clone_test_run_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_run_id": "TR-9062"
+        },
+        "body": {
+          "name": "__mcp-probe-clone-2026-09-18T07-05-00Z"
+        }
+      }
+    },
+    "count_binned_test_cases_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "create_folder_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005"
+        },
+        "body": {
+          "name": "__mcp-probe-folder-2026-09-18T04-31-22Z",
+          "parent_id": 764138
+        }
+      }
+    },
+    "create_report_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005"
+        },
+        "body": {
+          "report_type": "Test Run Summary",
+          "report_timeframe": "last_one_week",
+          "report_creation_mode": "custom_report",
+          "title": "__mcp-probe-report-2026-09-18T04:32:18Z",
+          "frequency": "once",
+          "mail_to": {
+            "users": [],
+            "external_mails": []
+          },
+          "report_filters": {}
+        }
+      }
+    },
+    "create_sub_test_plan_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_plan_id": "TP-1616"
+        },
+        "body": {
+          "name": "__mcp-probe-subplan-2026-09-18T05:09:18Z",
+          "description": "Disposable probe sub-plan created by create_sub_test_plan_v2 live probe."
+        }
+      }
+    },
+    "create_test_case_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "folder_id": 764138
+        },
+        "body": {
+          "name": "__mcp-probe-case-2026-09-18T00:00:00Z",
+          "test_case_steps": [
+            {
+              "step": "Open the login page",
+              "result": "Login page is displayed"
+            }
+          ],
+          "priority": "Medium",
+          "tags": [
+            "mcp-probe"
+          ]
+        }
+      }
+    },
+    "create_test_plan_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005"
+        },
+        "body": {
+          "name": "__mcp-probe-plan-2026-09-18T00-00-00Z",
+          "description": "Disposable probe plan created by create_test_plan_v2 live probe. Safe to delete.",
+          "start_date": "2026-09-18",
+          "end_date": "2026-10-18",
+          "tags": [
+            "mcp-probe",
+            "disposable"
+          ]
+        }
+      }
+    },
+    "create_test_results_for_test_run_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_run_id": "TR-9062"
+        },
+        "body": {
+          "test_case_id": "TC-54458",
+          "status": "Passed",
+          "description": "Probe write from capability-registry live-probe suite: recording a passed outcome on TC-54458 in TR-9062 to verify the result entity end-to-end (create_test_results_for_test_run_v2)."
+        }
+      }
+    },
+    "create_test_run_test_case_comment_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9062",
+          "test_case_id": 1975349
+        },
+        "query": {
+          "mappingId": 2150387254
+        },
+        "body": {
+          "comment": "__mcp-probe-trtc-comment-2026-09-18T07:40:04Z"
+        }
+      }
+    },
+    "create_test_run_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005"
+        },
+        "body": {
+          "name": "__mcp-probe-run-2026-09-18T06-35-00Z",
+          "assignee": "ing@bsstag.com",
+          "run_state": "new_run",
+          "tags": [
+            "mcp-probe"
+          ],
+          "test_cases": [
+            "TC-54457",
+            "TC-54458",
+            "TC-54455",
+            "TC-54456"
+          ]
+        }
+      }
+    },
     "edit_project_v1": {
       "verdict": "DRIFT",
       "arguments": {
@@ -14,6 +247,44 @@
         "body": {
           "description": "probe edit_project_v1 2026-09-17T10:47:41Z"
         }
+      }
+    },
+    "export_test_run_csv_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9062"
+        },
+        "body": {
+          "file_type": "csv"
+        }
+      }
+    },
+    "folder_attachments_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764093
+        }
+      }
+    },
+    "get_custom_field_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "id": 105920
+        }
+      }
+    },
+    "get_exploratory_session_form_fields": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {}
       }
     },
     "get_lcnc_user_test_config_v1": {
@@ -24,6 +295,128 @@
         }
       }
     },
+    "get_report_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "report_id": "SC-489"
+        }
+      }
+    },
+    "get_shared_components_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "pre_fetch": true
+        }
+      }
+    },
+    "get_template_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "id": 1164
+        }
+      }
+    },
+    "get_test_case_comments_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764828,
+          "test_case_id": 1975349
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "get_test_case_histories_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_case_id": "TC-54458"
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "get_test_case_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_case_id": "TC-54458"
+        }
+      }
+    },
+    "get_test_plan_test_runs_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_plan_id": "TP-1616"
+        }
+      }
+    },
+    "get_test_plan_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_plan_id": "TP-1616"
+        }
+      }
+    },
+    "get_test_results_for_test_case_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "project_id": "PR-2005",
+        "test_run_id": "TR-9062",
+        "test_case_id": "TC-54458"
+      }
+    },
+    "get_test_run_progress_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9062"
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "get_test_run_test_cases_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_run_id": "TR-9062"
+        },
+        "query": {
+          "page_size": 30
+        }
+      }
+    },
+    "get_test_run_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_run_id": "TR-9062"
+        },
+        "query": {}
+      }
+    },
     "global_search_v1": {
       "verdict": "DRIFT",
       "arguments": {
@@ -31,6 +424,22 @@
           "entity": "test_case,test_run,test_plan,project,shared_step,report",
           "q[query]": "test",
           "per_page": 3
+        }
+      }
+    },
+    "initiate_export": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "entity_type": "test-cases",
+          "file_type": "csv"
+        },
+        "body": {
+          "ids": [
+            1971631,
+            1971632
+          ]
         }
       }
     },
@@ -59,6 +468,69 @@
         }
       }
     },
+    "list_binned_test_cases_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "list_configuration_groups": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "query": {
+          "p": 1,
+          "per_page": 30
+        }
+      }
+    },
+    "list_custom_fields_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "query": {
+          "p": 1,
+          "count": 300
+        }
+      }
+    },
+    "list_entity_attachments_v2": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "entity_type": "test-cases",
+          "entity_id": "TC-54455"
+        },
+        "query": {
+          "per_page": 300
+        }
+      }
+    },
+    "list_reports_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005"
+        },
+        "query": {
+          "page_size": 300
+        }
+      }
+    },
+    "list_tags_v3": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "entity_type": "test_case",
+          "per_page": 100,
+          "p": 1
+        }
+      }
+    },
     "list_templates_v2": {
       "verdict": "PASS",
       "arguments": {
@@ -66,6 +538,109 @@
           "p": 1,
           "count": 300
         }
+      }
+    },
+    "list_test_plans_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005"
+        },
+        "query": {
+          "p": 1,
+          "count": 300
+        }
+      }
+    },
+    "list_test_run_test_case_comments_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9062",
+          "test_case_id": 1971631
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "list_test_runs_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005"
+        },
+        "query": {
+          "page_size": 300,
+          "include_closed": "true"
+        }
+      }
+    },
+    "list_users": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "move_folder_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "folder_id": 764827
+        },
+        "body": {
+          "parent_id": 764828
+        }
+      }
+    },
+    "move_test_case_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_case_id": "TC-54458"
+        },
+        "body": {
+          "destination_folder_id": 764828
+        }
+      }
+    },
+    "rename_folder_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "folder_id": 764827
+        },
+        "body": {
+          "name": "__mcp-probe-folder-renamed-2026-09-18T05-00-00Z"
+        }
+      }
+    },
+    "replace_test_run_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_run_id": "TR-9062"
+        },
+        "body": {
+          "description": "replace-probe-partial-description",
+          "tags": [
+            "replace-probe-tag"
+          ]
+        }
+      }
+    },
+    "search_test_results_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "compact": "false",
+        "p": 1
       }
     },
     "unlink_test_case_v1": {
@@ -93,16 +668,119 @@
           "build_id": 17574995
         }
       }
+    },
+    "update_tag_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "id": 541004
+        },
+        "body": {
+          "new_name": "__mcp-probe-tag-20260918a-renamed"
+        }
+      }
+    },
+    "update_test_case_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_case_id": "TC-54458"
+        },
+        "body": {
+          "name": "__mcp-probe-case-2026-09-18T00:00:00Z (probe-update)",
+          "description": "mcp-probe temporary description",
+          "priority": "High",
+          "tags": [
+            "mcp-probe",
+            "probe-update"
+          ],
+          "test_case_steps": [
+            {
+              "step": "Open the login page",
+              "result": "Login page is displayed - updated"
+            }
+          ],
+          "old_id": "mcp-probe-old-id-test",
+          "expectation": "mcp-probe expectation test",
+          "created_at": "2020-01-01T00:00:00.000Z",
+          "identifier": "TC-54458"
+        }
+      }
+    },
+    "update_test_plan_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005",
+          "test_plan_id": "TP-1616"
+        },
+        "body": {
+          "name": "__mcp-probe-plan-2026-09-18T00-00-00Z-updated",
+          "description": "Disposable probe plan created by create_test_plan_v2 live probe. Safe to delete. [updated by update_test_plan_v2 probe]",
+          "tags": [
+            "disposable",
+            "mcp-probe",
+            "update-probe"
+          ]
+        }
+      }
+    },
+    "update_test_run_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "body": {
+          "description": "update-probe-second-description",
+          "run_state": "under_review"
+        }
+      }
     }
   },
   "not_replayable": {
+    "apply_test_case_review_verdict_v1": {
+      "verdict": "UNVERIFIED",
+      "reason": "no successful invocation on record - see runs/tm/apply_test_case_review_verdict_v1.json"
+    },
+    "create_custom_field_v2": {
+      "verdict": "UNVERIFIED",
+      "reason": "no successful invocation on record - see runs/tm/create_custom_field_v2.json"
+    },
     "create_template_v2": {
       "verdict": "BLOCKED",
-      "reason": "no successful invocation - see runs/tm/create_template_v2.json and findings/create_template_v2.md"
+      "reason": "no successful invocation on record - see runs/tm/create_template_v2.json"
+    },
+    "delete_template_v2": {
+      "verdict": "REFUSED",
+      "reason": "no successful invocation on record - see runs/tm/delete_template_v2.json"
+    },
+    "generate_test_case_automation_v1": {
+      "verdict": "BLOCKED",
+      "reason": "no successful invocation on record - see runs/tm/generate_test_case_automation_v1.json"
+    },
+    "submit_test_cases_for_review_v1": {
+      "verdict": "UNVERIFIED",
+      "reason": "no successful invocation on record - see runs/tm/submit_test_cases_for_review_v1.json"
     },
     "test_case_results_v1": {
       "verdict": "BLOCKED",
-      "reason": "no successful invocation - see runs/tm/test_case_results_v1.json and findings/test_case_results_v1.md"
+      "reason": "no successful invocation on record - see runs/tm/test_case_results_v1.json"
+    },
+    "update_custom_field_v2": {
+      "verdict": "UNVERIFIED",
+      "reason": "no successful invocation on record - see runs/tm/update_custom_field_v2.json"
+    },
+    "update_template_v2": {
+      "verdict": "UNVERIFIED",
+      "reason": "no successful invocation on record - see runs/tm/update_template_v2.json"
+    },
+    "validate_bdd_export_selection_v1": {
+      "verdict": "UNVERIFIED",
+      "reason": "no successful invocation on record - see runs/tm/validate_bdd_export_selection_v1.json"
+    },
+    "verify_test_case_tags_v1": {
+      "verdict": "BLOCKED",
+      "reason": "no successful invocation on record - see runs/tm/verify_test_case_tags_v1.json"
     }
   }
 }

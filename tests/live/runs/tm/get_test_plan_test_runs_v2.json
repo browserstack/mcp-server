@@ -1,0 +1,82 @@
+{
+  "capability": "get_test_plan_test_runs_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T05:10:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Check whether the older readonly fixture plan TP-1596 already has runs attached, so the item shape could be verified with zero writes.",
+      "source": "pool",
+      "capability": "get_test_plan_test_runs_v2",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1596"}},
+      "status": 200,
+      "produced": {"test_runs": [], "info": {"page": 1, "page_size": 30, "count": 0, "prev": null, "next": null}},
+      "notes": "First 2 attempts returned {\"status\":0,\"body\":null,\"error\":\"the product could not be reached\"} — preprod environment flakiness, not a real error. 3rd attempt (unchanged arguments) succeeded with HTTP 200 and an empty test_runs array. TP-1596 has no runs — this route alone could not verify item shape."
+    },
+    {
+      "step": 2,
+      "why": "TP-1596 was empty, so attach a run to the probe's own subject plan TP-1616 to get a real, non-empty collection. update_test_plan_v2's own guidance says linking/unlinking a run is NOT done from the plan on v2 ('a test_runs list in this body is SILENTLY DISCARDED') — it must be set from the run side via test_plan_id on update_test_run_v2. Chose TR-9061 (the __scratch__ run) per instructions, not TR-9058 (readonly fixture run).",
+      "source": "invoked",
+      "capability": "update_test_run_v2",
+      "arguments": {
+        "path_params": {"project_id": "PR-2005", "test_run_id": "TR-9061"},
+        "body": {"test_plan_id": "TP-1616"},
+        "user_permission": "granted",
+        "change_summary": "Link scratch test run TR-9061 to test plan TP-1616 (probe subject for get_test_plan_test_runs_v2) so the plan has a non-empty run collection to verify the item shape against. Does not modify TR-9058 (readonly) or TP-1596 (readonly)."
+      },
+      "status": 200,
+      "produced": {"testrun": {"identifier": "TR-9061", "test_plan": {"id": "TP-1616", "identifier": "TP-1616"}}},
+      "notes": "Mode is 'write' (ordinary), not 'destructive' — ran without refusal once user_permission was granted. Body had to be sent FLAT ({\"test_plan_id\": \"TP-1616\"}), not wrapped in a `test_run` object as the contract's own guidance/json_path (/test_run/test_plan_id) suggests: a wrapped body was rejected client-side with 'unknown body: test_run. accepted: assignee, configuration_map, configurations, description, filter_scope, filter_test_cases, folder_ids, include_all, include_sub_folders, is_automation, issues, name, run_state, shared_test_cases, sub_test_plan_id, tags, test_cases, test_plan_id'. Response confirmed TR-9061.test_plan now points at TP-1616."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1616"}},
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt, after the setup attach in step 2 above"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1616"}},
+    "status": 200,
+    "response_keys": ["success", "test_runs", "info"],
+    "item_shape": {
+      "identifier": "TR-9061",
+      "name": "MCP capability probe fixture run (link_entities_to_jira_issue)",
+      "description": "",
+      "run_state": "new_run",
+      "active_state": "active",
+      "assignee": null,
+      "tags": [],
+      "configurations": [],
+      "overall_progress": {"Untested": 1},
+      "filter_test_cases": {"is_dynamic": 0},
+      "project_id": "PR-2005",
+      "created_at": "2026-09-17T10:43:25.885Z",
+      "updated_at": "2026-09-18T05:06:07.000Z",
+      "links": {"self": "/api/v2/projects/PR-2005/test-runs/TR-9061", "test_cases": "/api/v2/projects/PR-2005/test-runs/TR-9061/test-cases"},
+      "urls": {"self": "https://test-management-preprod.bsstag.com/projects/379335744/test-runs/TR-9061"}
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "test_plan_id (path)", "info.page", "info.page_size", "info.count", "info.prev", "info.next"],
+    "json_path": "N/A — GET with only path_params (project_id, test_plan_id) and query (p); no request body",
+    "declared_missing": [
+      "test_runs[].test_plan — contract declares every row carries a `test_plan` object ('its id field holds the TP-NNN identifier'); the actual row for TR-9061 under TP-1616 has NO test_plan key at all, even though the run genuinely is linked to TP-1616 (confirmed via the setup attach response, which did show test_plan on the run's own update-response shape)."
+    ],
+    "undeclared_returned": [
+      "test_runs[].urls — an object {self: <UI URL>} that is not mentioned anywhere in the declared response schema or in the capability's 'returns' field list."
+    ],
+    "type_mismatches": [
+      "test_runs[].filter_test_cases.is_dynamic is returned as the integer 0, not a boolean. The sibling update_test_run_v2 response for the same run (from the setup attach call) returned this same logical flag as boolean false ({\"filter_test_cases\":{\"is_dynamic\":false}}). Two capabilities that describe the same underlying field disagree on its wire type — this route serializes it as 0/1 rather than true/false."
+    ],
+    "unverified": [
+      "test_runs[].configurations element type (declared: array of integer) — the only row available has an EMPTY configurations array, so the integer-vs-object element shape could not be checked against a real element."
+    ]
+  },
+  "notes": "TP-1596 (readonly fixture plan) was checked FIRST and had zero runs attached (after 2 status-0 'product could not be reached' retries — preprod flakiness, not a real error — the 3rd retry, unchanged, returned 200 with an empty test_runs array and info.count 0). Since that proved nothing about item shape, TR-9061 (the __scratch__ run, uuid 17574995) was attached to TP-1616 using update_test_run_v2 (PATCH-style partial update, mode 'write', body sent FLAT with test_plan_id: 'TP-1616' — a test_run-wrapped body was rejected client-side). TP-1596 was never touched. Re-fetching TP-1616's runs then returned exactly 1 row (TR-9061, info.count: 1), which is the real row this probe verifies. Main drift: the contract's declared test_plan field is completely absent from the row even though it is legitimately attached to a plan (proven independently via the update response) — either the plan-scoped listing serializer omits this field as redundant with the URL path, or the 'one shared serializer' claim in the contract description (shared with the project-wide run listing) does not hold for this route. A genuinely undeclared urls field (UI deep link) is returned that the contract never mentions. filter_test_cases.is_dynamic is serialized as an integer (0) here versus boolean (false) on the sibling update_test_run_v2 response for the same run — a cross-capability type inconsistency worth flagging even though this route's own schema does not explicitly type that nested field. All other declared fields (identifier, name, description, run_state, active_state, assignee, tags, configurations [structurally], overall_progress, project_id, created_at, updated_at, links, plus the top-level success/test_runs/info envelope and info's five pagination fields) matched the contract. Pagination (`p`, fixed page_size 30) was not stress-tested since only 1 run exists in the plan. Final state: TP-1616 now has exactly 1 test run attached (TR-9061); TR-9058 and TP-1596 were left untouched throughout."
+}

@@ -1,0 +1,59 @@
+{
+  "capability": "search_test_results_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T07:34:10Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "project_id": "379335744", "p": 1 },
+      "status": null,
+      "error": "unknown query: project_id. accepted: compact, include_relations, issue_id, issue_type, p, per_page, priority, q",
+      "changed": "The contract already says this route takes no project scope and that a project_id can't narrow it, but I tried it anyway to see how it's rejected. It's not silently dropped and it's not a live-API 4xx — the MCP tool's own param allow-list refuses it before any HTTP call is made ('unknown query: project_id'). Dropped project_id and, since no project filter exists on this endpoint at all, issued an unfiltered account-wide call instead (per guidance: 'calling with no filters at all is a legal account-wide dump of recent results')."
+    }
+  ],
+  "probe": {
+    "arguments": { "compact": "false", "p": 1 },
+    "status": 200,
+    "response_keys": ["success", "test_results", "info"],
+    "item_shape": {
+      "id": "integer, e.g. 9990205279",
+      "author": "object {id, browserstack_user_id, full_name, email, group_id, onboarded} — reports_and_notification_enabled never present across 30 rows",
+      "updated_by": "same shape as author when present; null in all 30 sampled rows",
+      "status": "declared type string (not nullable) — actually null in 29/30 rows; the 1 non-null row returned the lowercase internal token 'blocked', not the display-case name 'Blocked'",
+      "result_status": "object {id, field_value ('Failed'/'Passed'/'Blocked', display-case), internal_name ('failed'/'passed'/'blocked', lowercase), field_name:'status', colour, value_category, valueDetails} — entity_type (declared, required) never returned; value_category and valueDetails returned but never declared",
+      "description": "string|null, rich text, e.g. 'TRAP-5440 repro'",
+      "error_description/backtrace/failure_type/log_type/expanded/time_elapsed/created_by_imported": "all null in every sampled row, consistent with nullable string",
+      "started_at/finished_at": "null in every sampled row",
+      "created_at/updated_at": "ISO8601 date-time, present",
+      "attachments": "declared type array (not nullable) — actually null in all 30 sampled rows, never an array",
+      "issues": "array of {issue_id, jira_id (duplicate of issue_id), created_at} — issue_type is declared ('each entry carries issue_id and issue_type') but never present on any observed row; created_at is present but undeclared",
+      "configuration": "object, always {} (empty) across all 30 rows — matches declared nullable object, but never seen populated",
+      "test_case": "object present (compact=false) with ~30 fields (id, identifier, name, type, folder_id, project_id, owner, automation_status, automation_id, review_status, template, etc.) — contract declares no nested schema for this at all, so nothing to compare field-by-field, only noting real shape for the record",
+      "test_run": "object present (compact=false); id field is overwritten with the TR-NNN string identifier exactly as guidance describes, plus ~20 other run fields (name, run_state, owner, project_id, is_automation, etc.)",
+      "test_case_id": "integer, e.g. 1970143",
+      "test_run_id": "string 'TR-9060' (overwritten from int by the test_run relation, exactly as guidance describes) — confirmed non-numeric under compact=false",
+      "test_run_results_mapping_id": "integer, present on every row",
+      "project_id": "integer, present on every row in this account-wide dump (spans many different projects, e.g. 379335189, 379329553, 379335215, 379335211)",
+      "links": "object {self: '/api/v1/projects/<project_id>/test-results/<id>'}, present on every row since every row carried a project_id, exactly as guidance describes"
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": "test_results[*]",
+    "declared_missing": [
+      "test_results[].result_status.entity_type",
+      "test_results[].author.reports_and_notification_enabled",
+      "test_results[].updated_by.reports_and_notification_enabled",
+      "test_results[].issues[].issue_type"
+    ],
+    "undeclared_returned": [
+      "test_results[].result_status.value_category",
+      "test_results[].result_status.valueDetails",
+      "test_results[].issues[].created_at"
+    ]
+  },
+  "notes": "REAL, POPULATED DATA FOUND — first result row shape verified for this suite. No query params on this capability are formally required (issue_id/issue_type/priority/compact/include_relations/p/per_page/q are all optional); the contract itself says omitting all filters is a legal, if expensive, account-wide dump. Since the contract also says a project_id can't narrow this endpoint at all (confirmed by attempt #1 — the MCP layer's own allow-list rejects an unknown 'project_id' query key before any HTTP call), I did not need to try the fixture project or the older named projects (Default Project 59544, Demo KB 83363, Test LFI 72632, JD RCA Flaky Samples PR-2002) individually — a single unfiltered call at p=1, compact=false already searches every project in the account's group in one shot. It returned info.count=227467 total results and 30 real rows spanning projects 379335189, 379329553, 379335215, 379335211 (all in the __mcp-capability-fixture__ project family but NOT the fixture project used by this suite's own fixture pool, and NOT the __readonly__/__scratch__ sub-buckets named in this task — these are sibling projects created by other test runs in the same shared account, with genuinely executed cases: statuses 'failed', 'passed', 'blocked' all observed with real timestamps from 2026-09-17). This satisfies the task's ask for a populated row to verify item shape against — UNVERIFIED is no longer warranted for the `result` entity's item shape after this probe. Outcome vocabulary: this capability exposes TWO representations of the same concept and they disagree with each other AND with the sibling write capability. (1) result_status.field_value is display-case ('Failed', 'Passed', 'Blocked') and matches the vocabulary create_test_results_for_test_run_v2 documents for its own `status` body field (\"Passed\", \"Failed\", \"Untested\" — display-case names configured per project). (2) result_status.internal_name is lowercase ('failed', 'passed', 'blocked'). (3) the row's own top-level `status` field is declared as a plain string ('Status name', example 'passed') but was null in 29 of 30 rows and, in the one row where it was populated, held the LOWERCASE internal_name token ('blocked') rather than the display-case name search's own result_status.field_value carries for the identical row, or that the write endpoint expects back. So within one response object, `status` and `result_status.field_value` can disagree in casing for the same outcome — a same-entity vocabulary disagreement, and `status` additionally violates its own declared (non-nullable) string type by being null nearly all the time. Pre-created/untested result rows: NOT observed. All 30 sampled rows (real executions across four different projects/runs) carried a genuine result_status of failed/passed/blocked with real created_at/updated_at timestamps; none showed 'untested' or a null result_status. This is consistent with the endpoint being backed by the actual TestResult execution table — a run/case mapping that has never been executed has no TestResult row to be found by this search, so 'a result' here appears to mean a genuine logged execution, not the always-present latest_result_id placeholder every test-run row carries. attachments (declared non-nullable array) was null on every row rather than an array — could not observe a populated attachments array in this sample. Severity: overall LOW-to-MODERATE — the endpoint works, is genuinely populated, and most declared fields matched; the drift is in nested sub-object field lists (result_status, author, issues) and in status/attachments failing to honor their declared (non-nullable) types, plus the status-casing disagreement noted above."
+}

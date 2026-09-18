@@ -1,0 +1,136 @@
+{
+  "capability": "get_test_results_for_test_case_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T07:50:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm the fixture project's newest untried pairing (TC-54458 x TR-9062) before settling on empty-result findings",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "project_id": "PR-2005", "test_run_id": "TR-9062", "test_case_id": "TC-54458" },
+      "status": 200,
+      "produced": { "test_results": [] }
+    },
+    {
+      "why": "Look for a non-fixture project on this account (1831 total) with genuinely-recorded manual executions, to verify the item shape against real data",
+      "step": 2,
+      "source": "invoked",
+      "capability": "list_projects_v1",
+      "arguments": { "sort_by": "identifier-asc", "p": 1 },
+      "status": 200,
+      "produced": { "candidates": ["PR-1 (Default Project, 93 runs)", "PR-67 (BrowserStack Samples, 5 runs)", "PR-73 (Demo KB, 184 runs)"] }
+    },
+    {
+      "step": 3,
+      "why": "List_test_runs_v2 500'd twice on PR-73 and PR-1 in the same window that list_projects_v1 succeeded (control), and get_test_runs_v1 (v1, integer project id) consistently 400'd regardless of arguments -- both are separate capabilities' problems, not this one's; fell back to search_project_entities (entity=test-runs) which worked",
+      "source": "invoked",
+      "capability": "search_project_entities",
+      "arguments": { "project_id": 83363, "entity": "test-runs", "p": 1, "per_page": 30 },
+      "status": 200,
+      "produced": { "note": "all rows are automation build runs with test_cases_count:0 -- no manual case-to-run mappings exist to check for recorded results" }
+    },
+    {
+      "step": 4,
+      "why": "Repeat the same run search on PR-67 (BrowserStack Samples) and PR-1 (Default Project) -- same outcome, all rows automation builds with test_cases_count:0",
+      "source": "invoked",
+      "capability": "search_project_entities",
+      "arguments": { "project_id": "80599 and 59544", "entity": "test-runs" },
+      "status": 200,
+      "produced": { "note": "no manually-executed case found in any project reachable in this exploration" }
+    },
+    {
+      "step": 5,
+      "why": "Confirm get_closed_test_runs works for PR-73 as an independent capability check while diagnosing list_test_runs_v2/get_test_runs_v1 failures",
+      "source": "invoked",
+      "capability": "get_closed_test_runs",
+      "arguments": { "project_id": 83363, "p": 1 },
+      "status": 200,
+      "produced": { "count": { "active": 205, "closed": 0 } }
+    },
+    {
+      "step": 6,
+      "why": "Sibling probe recorded the fixture pool's first and only real test result, on TC-54458 x TR-9062, giving this capability something non-empty to check the item schema against; recorded here for provenance since I did not make this write myself",
+      "source": "invoked",
+      "capability": "create_test_results_for_test_run_v2",
+      "arguments": { "project_id": "PR-2005", "test_run_id": "TR-9062", "test_case_id": "TC-54458", "result_status": "Passed" },
+      "status": 200,
+      "produced": { "id": 2150387456, "test_case_id": "TC-54458", "test_run_id": "TR-9062", "test_case_int_id": 1975349, "note": "distinct from the pre-created placeholder result id 2150387254 this mapping already carried before the write" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "project_id": "PR-2005", "test_run_id": "17575382", "test_case_id": "TC-54455" },
+      "status": null,
+      "error": "'test_run_id' must match ^TR-\\d+$ (client-side schema rejection, request never reached the server)",
+      "changed": "switched test_run_id to the TR-9062 identifier form, which the route requires and which succeeded"
+    },
+    {
+      "n": 2,
+      "arguments": { "project_id": "PR-2005", "test_run_id": "TR-9062", "test_case_id": "TC-54455", "page_size": 50 },
+      "status": 400,
+      "error": "Invalid page_size. Allowed values are 30 or 300.",
+      "changed": "used page_size 300 instead, which matches the declared closed set and succeeded"
+    },
+    {
+      "n": 3,
+      "arguments": { "project_id": "PR-2005", "test_run_id": "TR-9062", "test_case_id": "TC-54458" },
+      "status": 200,
+      "error": null,
+      "changed": "re-probe after the sibling create call recorded a real result (id 2150387456, Passed) on this exact pairing -- this is the item-shape verification attempt; no argument change was needed, only the underlying data changed"
+    }
+  ],
+  "probe": {
+    "arguments": { "project_id": "PR-2005", "test_run_id": "TR-9062", "test_case_id": "TC-54458" },
+    "status": 200,
+    "response_keys": ["success", "test_results", "info"],
+    "item_shape": {
+      "returned_item": {
+        "id": 2150387456,
+        "created_at": "2026-09-18T07:44:42.000Z",
+        "updated_at": "2026-09-18T07:44:47.508Z",
+        "created_by": "ing@bsstag.com",
+        "description": "Probe write from capability-registry live-probe suite: recording a passed outcome on TC-54458 in TR-9062 to verify the result entity end-to-end (create_test_results_for_test_run_v2).",
+        "test_case_id": "TC-54458",
+        "test_run_id": "TR-9062",
+        "result_status": { "field_value": "Passed" },
+        "issues": [],
+        "custom_fields": [],
+        "step_result": null,
+        "configuration_id": null,
+        "urls": { "self": "https://test-management-preprod.bsstag.com/projects/379335744/test-runs/TR-9062/1975349/2150387456" },
+        "execution_id": "ab5c1e3c40fc614f2020a9ba4dd1a8e4c075bba8fe0336a4f30646030b6f6d43",
+        "dataset": []
+      },
+      "field_by_field": {
+        "id": "matches -- integer, present",
+        "created_at": "matches -- date-time string, present",
+        "updated_at": "matches -- date-time string, present",
+        "created_by": "matches -- string (email), present, nullable per schema and non-null here",
+        "description": "matches -- string, present, nullable per schema and non-null here",
+        "test_case_id": "matches -- echoed as TC-54458 identifier, not a numeric id, exactly per guidance",
+        "test_run_id": "matches -- echoed as TR-9062 identifier",
+        "result_status": "DRIFT -- schema requires siblings id, internal_name, field_name, colour alongside field_value; only field_value came back. id/internal_name/field_name/colour are all declared_missing.",
+        "issues": "matches on type (array); empty, so item shape inside issues remains unexercised (this Passed result has none)",
+        "custom_fields": "DRIFT -- schema declares type object, response is an array ([]). Type mismatch, not just an empty-value quibble.",
+        "step_result": "matches -- null, consistent with 'present only for step-level results; null otherwise' (this is a case-level result)",
+        "configuration_id": "matches -- null, consistent with 'nullable, configuration_id null for cases with no configuration' (this run's case has no configuration)",
+        "execution_id": "type matches (string, nullable, non-null here) -- see notes for the drift/benign judgment on why a manual case-targeted submission carries a non-null execution_id",
+        "dataset": "matches -- empty array, consistent with 'empty for non-data-driven runs'",
+        "urls": "schema declares urls as a bare {type: object} with no sub-keys; response carries urls.self, an undeclared nested key. Matches the systemic 'urls/links declared as bare object' pattern noted across other capabilities; counted as undeclared_returned here rather than ignored."
+      },
+      "unexercised_by_this_single_passed_result": ["issues[] item shape (no issues linked)", "step_result populated shape (only exercised when null)", "configuration_id populated shape (only exercised when null)", "dataset populated shape (only exercised when empty, non-data-driven)", "result_status for any status other than Passed"]
+    }
+  },
+  "contract": {
+    "required": ["success", "test_results", "info"],
+    "json_path": "$.test_results[]",
+    "declared_missing": ["test_results[].result_status.id", "test_results[].result_status.internal_name", "test_results[].result_status.field_name", "test_results[].result_status.colour"],
+    "undeclared_returned": ["test_results[].urls.self"],
+    "type_mismatches": ["test_results[].custom_fields declared type object, returned as array ([])"]
+  },
+  "notes": "PRE-CREATED RESULT ROWS ARE NOT RETURNED AS RESULTS. TR-9062's five rows all carry a non-null latest_result_id (2150387252/2150387283 for TC-54457, 2150387254 for TC-54458, 2150387253 for TC-54455, 2150387251 for TC-54456) with latest_status:'untested' on all of them -- and this v2 read still returned test_results:[] for every one of TC-54455, TC-54456, TC-54457 and TC-54458 against TR-9062. So the pre-created result-id assigned at case-to-run mapping time is NOT surfaced by this endpoint as a recorded execution; it returns only genuinely-logged executions, and none exist anywhere in the fixture pool. This settles the sibling's open question: 'a result' for this capability means an actual recorded execution, not the mapping-time placeholder row -- callers should not expect a hit here just because latest_result_id is non-null.\n\nResult count per case/run pair checked (all 0): TC-54458 x TR-9062 = 0 (this run's new pairing); TC-54457 x TR-9062 = 0; TC-54455 x TR-9062 = 0 (checked twice, once with page_size=300, both 0); TC-54456 x TR-9062 = 0; TC-54455 x TR-9058 (__readonly__) = 0. Combined with batch-5's prior 6 combinations (TC-54455/TC-54456/TC-54457 x TR-9058/TR-9061, all 0), every case x run pairing tried in the fixture pool across both probes returns 0.\n\nDiligence beyond the fixture: this account has 1831 projects; I checked list_projects_v1 for older/bigger candidates and used search_project_entities (entity=test-runs) against Default Project (PR-1, id 59544), BrowserStack Samples (PR-67, id 80599) and Demo KB (PR-73, id 83363, 386 cases / 184 runs -- the largest candidate). Every run row returned in all three was an automation build run with test_cases_count:0 -- i.e. these runs have zero case-to-run mappings, so there was nothing to execute or record in the first place. I could not find any project on this account, reachable via the tools available to me, with a genuinely-recorded manual test result. The item shape (result_status object, issues, custom_fields, step_result, dataset, urls sub-objects) therefore remains UNVERIFIED against real data -- an empty collection proves nothing about it, per standing guidance. Verdict is UNVERIFIED rather than PASS for that reason, even though the envelope-level contract (success/test_results/info, and info's page/page_size/count/prev/next) matched exactly on every call, page_size validation matched the declared 30-or-300 closed set exactly (50 -> 400 'Invalid page_size. Allowed values are 30 or 300.'; 300 -> accepted), and the TR-\\d+/TC- id-form requirements matched declared guidance exactly.\n\nId forms confirmed: project_id takes PR-NNN (PR-2005), test_run_id takes TR-NNN (TR-9062/TR-9058), test_case_id takes the TC-NNN identifier (TC-54455/56/57/58) -- not the numeric internal id (1971631 etc. were never sent to this route, per the 'do NOT invent ids' instruction and because the described contract explicitly requires the TC- identifier form).\n\nUnrelated capability issues surfaced incidentally during diligence (NOT part of this capability's verdict, reported for visibility only): list_test_runs_v2 returned {status:500,'Internal Server Error'} on PR-73 (twice) and PR-1 (once) while a list_projects_v1 control call succeeded in the same window -- so this looks specific to list_test_runs_v2, not a general preprod outage; and get_test_runs_v1 (v1, integer project_id) returned 400 'The API request is invalid or improperly formed' on every attempt against PR-73's numeric id 83363, seemingly unrelated to the project id itself. Neither was retried further since they are out of scope for this probe; whoever probes those capabilities should reproduce with a control call as I did here.\n\nMay be resumed after a sibling result-creating probe runs (create_test_results_for_test_run_v2 / bulk_set_test_result_status_v2) so the item shape can finally be checked against a real result -- at that point re-invoke this capability against TC-54458 x TR-9062 (or whichever pair the sibling wrote to) and this verdict should move from UNVERIFIED toward PASS or DRIFT.\n\n=== UPDATE 2026-09-18T07:50Z -- re-probed against the sibling's real result, verdict revised UNVERIFIED -> DRIFT ===\nThe sibling create_test_results_for_test_run_v2 probe recorded result id 2150387456 (status Passed) on TC-54458 x TR-9062. Re-invoking get_test_results_for_test_case_v2 with the same arguments as before now returns exactly one row (info.count:1) instead of the empty array -- confirming independently, via this capability's own read path, that the write landed and that this capability surfaces genuinely-recorded executions correctly once one exists (closing the loop on the pre-created-rows question: real executions DO show up here, only the untested placeholder rows do not).\n\nChecked every declared per-result field against the real row, both directions:\n- id, created_at, updated_at, created_by, description, test_case_id, test_run_id: all present, all matching declared type/semantics. test_case_id/test_run_id are echoed as the TC-/TR- identifiers exactly as guidance promises, not numeric ids.\n- issues: present as an empty array (type matches; no issues linked to this Passed result, so the array's own item shape is unexercised).\n- step_result: null, consistent with 'present only for step-level results; null otherwise' -- this is a case-level result, so unexercised in its populated form.\n- configuration_id: null, consistent with 'nullable... null for cases with no configuration' -- this run's case-to-run mapping has no configuration, so unexercised in its populated form.\n- dataset: empty array, consistent with 'empty for non-data-driven runs' -- unexercised in its populated form.\n- result_status: DRIFT. The schema requires id, field_value, internal_name, field_name and colour together (all listed in the item schema's own 'required' array for result_status). The response contains ONLY {\"field_value\":\"Passed\"}. id, internal_name, field_name and colour are all declared_missing -- confirmed independently, matching what the create probe observed through its own read-back.\n- custom_fields: DRIFT. Schema declares type object; response is custom_fields:[] -- an empty ARRAY, not an object (not even {}). This is a type mismatch on the wire shape, independent of whether the value happens to be empty -- confirmed independently, matching the create probe's observation.\n- urls: response carries urls.self (a full https link to the result). The schema declares urls only as a bare {type:object, description:'Web URLs for this result.'} with no sub-keys named. This matches the standing systemic pattern ('urls / links are repeatedly declared as bare {type: object} while returning real sub-keys' seen across other capabilities in this suite) -- counted as undeclared_returned (test_results[].urls.self) per the 'any undeclared field returned means DRIFT, even if severity is low' rule, though this specific shape of drift is already known to be systemic rather than unique to this capability.\n- execution_id: present and NON-NULL (a 64-char hex string) despite this being a plain test_case_id-targeted manual submission through create_test_results_for_test_run_v2, not an automation/execution-id-targeted one. Judgment: this is NOT drift against get_test_results_for_test_case_v2's OWN declared contract -- this capability's schema for execution_id is simply {type:string, nullable:true} with no claim tying its nullness to how the result was submitted, so a non-null value here does not contradict anything THIS capability promises. It is, however, a genuine oddity in the write path (create_test_results_for_test_run_v2 apparently assigns/echoes an execution_id even for a case-targeted, non-automation submission) -- that oddity belongs to the write capability's own contract review, not to this read capability's verdict. Flagging it here as benign-for-this-contract but worth the sibling write-probe's own attention.\n\nSample-size caveat (explicit, per instructions): this verdict rests on exactly ONE result -- Passed, no issues, no custom field values, no configuration, no dataset row, case-level (no step_result). The following remain UNEXERCISED and therefore still not verified one way or the other: issues[] item shape when issues exist, step_result's populated shape, configuration_id's populated shape, dataset's populated shape, and result_status behavior for any status other than Passed (e.g. Failed, Blocked, Retest). Only the two DRIFT findings above (result_status's missing required siblings, and custom_fields's type mismatch) are settled with confidence, since those fields were present but wrong; everything listed as 'matches' for a currently-null/empty field is confirmed only in that null/empty state.\n\nFINAL VERDICT: DRIFT. Two independent, reproducible mismatches against the declared contract (result_status missing 4 required sibling fields; custom_fields wrong type) plus one systemic undeclared urls.self, on the one real result this suite has ever created against this endpoint."
+}

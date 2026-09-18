@@ -1,0 +1,102 @@
+{
+  "capability": "list_test_runs_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Check whether plan TP-1596 actually has linked runs, to explain why the probe response omits test_runs[].test_plan for TR-9058 (co-located in the __readonly__ folder, not necessarily plan-linked)",
+      "source": "invoked",
+      "capability": "get_test_plan_test_runs_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_plan_id": "TP-1596" } },
+      "status": 200,
+      "produced": { "test_runs": [], "info": { "page": 1, "page_size": 30, "count": 0, "prev": null, "next": null } }
+    },
+    {
+      "step": 2,
+      "why": "Cross-check filter_test_cases.is_dynamic's JSON type and test_plan-field presence for the SAME run TR-9061 via the plan-scoped listing, to compare against list_test_runs_v2's own serialization",
+      "source": "invoked",
+      "capability": "get_test_plan_test_runs_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_plan_id": "TP-1616" } },
+      "status": 200,
+      "produced": {
+        "test_runs[0].filter_test_cases": { "is_dynamic": 0 },
+        "test_runs[0].test_plan": "absent (field not present at all)",
+        "test_runs[0].overall_progress": { "Untested": 1 },
+        "test_runs[0].updated_at": "2026-09-18T05:06:07.000Z"
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": "379335744" }, "query": { "page_size": 300, "include_closed": "true" } },
+      "status": null,
+      "error": "'project_id' must match ^PR-\\d+$",
+      "changed": "Rejected client-side before any HTTP call was made (bare integer id does not match the v2 route's PR-\\d+ pattern, exactly as the contract warns). Switched to the PR-2005 identifier form."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "page_size": 300, "include_closed": "true" } },
+      "status": 200,
+      "error": null,
+      "changed": "Succeeded on first real HTTP attempt with PR-2005 + page_size=300 + include_closed=true."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "page_size": 300, "include_closed": "true" } },
+    "status": 200,
+    "response_keys": ["success", "test_runs", "info"],
+    "item_shape": {
+      "TR-9061": {
+        "active_state": "active",
+        "run_state": "new_run",
+        "created_at": "2026-09-17T10:43:25.885Z",
+        "updated_at": "2026-09-17T10:43:25.885Z",
+        "description": "",
+        "identifier": "TR-9061",
+        "name": "MCP capability probe fixture run (link_entities_to_jira_issue)",
+        "assignee": null,
+        "project_id": "PR-2005",
+        "tags": [],
+        "configurations": [],
+        "filter_test_cases": { "is_dynamic": false },
+        "test_plan": { "id": "TP-1616", "identifier": "TP-1616", "name": "__mcp-probe-plan-2026-09-18T00-00-00Z" },
+        "links": { "self": "/api/v2/projects/PR-2005/test-runs/TR-9061", "test_cases": "/api/v2/projects/PR-2005/test-runs/TR-9061/test-cases" },
+        "urls": { "self": "https://test-management-preprod.bsstag.com/projects/379335744/test-runs/TR-9061" }
+      },
+      "TR-9058": {
+        "active_state": "active",
+        "run_state": "new_run",
+        "created_at": "2026-09-17T08:17:46.028Z",
+        "updated_at": "2026-09-17T08:17:46.028Z",
+        "description": "",
+        "identifier": "TR-9058",
+        "name": "probe run",
+        "assignee": "ing@bsstag.com",
+        "project_id": "PR-2005",
+        "tags": [],
+        "configurations": [],
+        "filter_test_cases": { "is_dynamic": false },
+        "test_plan": "ABSENT (not plan-linked; confirmed via setup step 1)",
+        "links": { "self": "/api/v2/projects/PR-2005/test-runs/TR-9058", "test_cases": "/api/v2/projects/PR-2005/test-runs/TR-9058/test-cases" },
+        "urls": { "self": "https://test-management-preprod.bsstag.com/projects/379335744/test-runs/TR-9058" }
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": "test_runs[]",
+    "declared_missing": ["issues", "issue_tracker", "overall_progress"],
+    "undeclared_returned": [
+      "urls (top-level: appears only in the flat 'returns' array, absent from the nested per-item schema's properties entirely, yet returned with a real 'self' sub-key on both runs)",
+      "links.self",
+      "links.test_cases (links is declared as a bare {type: object} with no enumerated properties, but returns these two real keys)",
+      "test_plan.identifier",
+      "test_plan.name (test_plan is declared as a bare {type: object} whose prose only mentions an 'id' sub-field; identifier and name arrive undeclared)"
+    ]
+  },
+  "notes": "2 real rows came back for PR-2005 with page_size=300+include_closed=true (TR-9058, TR-9061) - not empty, so item shape is verifiable. filter_test_cases.is_dynamic is returned as BOOLEAN false by list_test_runs_v2 for both runs. Cross-checked run TR-9061 via get_test_plan_test_runs_v2(TP-1616): the SAME run's is_dynamic comes back as INTEGER 0 there. Combined with the sibling probe's finding that update_test_run_v2 also returns boolean false for TR-9061, that's now a 3-way split on one field's JSON type across three endpoints for the identical run: list_test_runs_v2=bool, update_test_run_v2=bool, get_test_plan_test_runs_v2=int. Projection comparison vs get_test_plan_test_runs_v2: that capability declares test_runs[].test_plan but it NEVER arrives (confirmed again here - TR-9061 via TP-1616 scope has no test_plan key at all), and returns an undeclared urls key too - same urls gap as here. But list_test_runs_v2 actually DOES emit test_plan (with id/identifier/name) for TR-9061, since this project-wide listing carries whatever plan link exists on the run itself, unlike the plan-scoped listing which apparently strips it. TR-9058 has no test_plan field in this response either, and that was verified (setup step 1) to be correct, not a gap: TP-1596 has zero linked runs, so TR-9058 is only folder-adjacent to that plan, not plan-linked - list_test_runs_v2 correctly reflects that by omitting the key rather than emitting a stale/null test_plan. issues and issue_tracker are declared in the flat 'returns' array but never appeared in either row, and overall_progress (declared in the nested schema) was also absent for both runs - consistent with the documented 'omitted when nothing executed' behavior (both are new_run with no executed cases), so treat that particular declared_missing entry as expected-but-still-technically-absent rather than a functional defect. Also worth noting: TR-9061's updated_at differed between my two calls (10:43:25Z in the probe vs 05:06:07Z moments later via TP-1616), and the TP-1616-scoped call showed overall_progress:{Untested:1} that wasn't present in the direct probe - the run's state changed between calls (likely a case was added by concurrent fixture activity), so that particular overall_progress difference is a timing artifact, not an endpoint-shape drift."
+}

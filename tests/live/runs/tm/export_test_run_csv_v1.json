@@ -1,0 +1,106 @@
+{
+  "capability": "export_test_run_csv_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T06:53:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Capture before-state of the subject run's header (state, updated_at, progress) prior to invoking the export, to detect any mutation.",
+      "source": "invoked",
+      "capability": "get_test_run_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" } },
+      "status": 200,
+      "produced": {
+        "run_state": "new_run",
+        "active_state": "active",
+        "updated_at": "2026-09-18T06:27:38.743Z",
+        "overall_progress": { "Untested": 5 },
+        "test_cases_count": 5
+      }
+    },
+    {
+      "step": 2,
+      "why": "Capture before-state of the subject run's 5 test-case rows (latest_status, assignee, latest_result_id) prior to invoking the export.",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "count": 5,
+        "rows": [
+          { "identifier": "TC-54458", "latest_status": "untested", "latest_result_id": 2150387254, "assignee": null },
+          { "identifier": "TC-54457", "latest_status": "untested", "latest_result_id": 2150387252, "assignee": null },
+          { "identifier": "TC-54457", "latest_status": "untested", "latest_result_id": 2150387283, "assignee": null },
+          { "identifier": "TC-54456", "latest_status": "untested", "latest_result_id": 2150387251, "assignee": null },
+          { "identifier": "TC-54455", "latest_status": "untested", "latest_result_id": 2150387253, "assignee": null }
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "why": "Re-read the run header immediately after the export call to check for mutation (state, updated_at, progress).",
+      "source": "invoked",
+      "capability": "get_test_run_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" } },
+      "status": 200,
+      "produced": {
+        "run_state": "new_run",
+        "active_state": "active",
+        "updated_at": "2026-09-18T06:27:38.743Z",
+        "overall_progress": { "Untested": 5 },
+        "test_cases_count": 5
+      }
+    },
+    {
+      "step": 4,
+      "why": "Re-read the run's test-case rows after the export call to independently confirm no row/result/assignee changed (per the standing lesson: never trust a 2xx alone).",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "count": 5,
+        "rows": [
+          { "identifier": "TC-54458", "latest_status": "untested", "latest_result_id": 2150387254, "assignee": null },
+          { "identifier": "TC-54457", "latest_status": "untested", "latest_result_id": 2150387252, "assignee": null },
+          { "identifier": "TC-54457", "latest_status": "untested", "latest_result_id": 2150387283, "assignee": null },
+          { "identifier": "TC-54456", "latest_status": "untested", "latest_result_id": 2150387251, "assignee": null },
+          { "identifier": "TC-54455", "latest_status": "untested", "latest_result_id": 2150387253, "assignee": null }
+        ]
+      }
+    },
+    {
+      "step": 5,
+      "why": "Search the capability index for any status/download/artifact-fetch capability that could redeem the returned `channel` uuid into the actual CSV, before concluding the effect is unverifiable through this surface.",
+      "source": "invoked",
+      "capability": "searchCapability",
+      "arguments": { "query": "export status download channel realtime artifact", "product": "tm" },
+      "status": 200,
+      "produced": {
+        "finding": "No status/poll/download capability exists for export_test_run_csv_v1's channel. Sibling export capabilities in the same index (download_report, export_dashboard_analytics, initiate_export) carry identical guidance: the channel/export_id is a correlation token only, the file is pushed over a websocket to the browser session, and 'the generic export status/download endpoints therefore report pending forever and 404 on download for this export type... neither is exposed as a capability here.'"
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_run_id": "TR-9062" },
+      "body": { "file_type": "csv" }
+    },
+    "status": 200,
+    "response_keys": ["channel", "success"],
+    "item_shape": {
+      "channel": "string (uuid), e.g. \"0cb604df-caeb-4edd-8f6a-9d8c2505abcd\"",
+      "success": "boolean, true"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id", "file_type"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "REQUEST SHAPE BUILT EXACTLY AS DECLARED, FIRST TRY, NO 4xx: project_id sent as the plain integer 379335744 (per contract note that this v1 route's PR- form 500s), test_run_id sent as 'TR-9062' (contract's own pattern ^(TR-)?[0-9]+$ and guidance explicitly say TR-NNN or the integer both work here, unlike the two-different-forms tension flagged for a sibling route). body={file_type:'csv'} exactly as declared (only accepted value). Result: HTTP 200 on the single invocation, no retries needed, no drift on the request side.\n\nCORRECTION TO THE PROBE BRIEF'S PREMISE -- read this before trusting the 'stale server discards CSV' framing: describeCapability's own declared 200 schema for export_test_run_csv_v1 is `{channel: string, success: boolean}` -- there is NO CSV in this endpoint's HTTP response at all, by design, regardless of server build. The contract's own guidance states plainly: 'The response carries no file and no download link. It only confirms that a background job was queued... The CSV is built asynchronously, stored, and its time-limited download link is pushed to the requesting user's web session over a realtime channel.' So the 'stale dist/index.js built 15 Sep, three days before the cd055b1 non-JSON-body fix' concern does not apply to this capability: there was never a non-JSON body for that fix to discard here. This is unlike the other CSV-shaped capabilities in the suite -- export_test_run_csv_v1 is architecturally job-queue-and-websocket-push, not synchronous-body-returns-CSV.\n\nLITERAL BODY RECEIVED: a JSON object, `{\"channel\":\"0cb604df-caeb-4edd-8f6a-9d8c2505abcd\",\"success\":true}` -- not null, not empty, not a placeholder, not CSV text. It matches the declared 200 schema exactly: both required fields (`channel`, `success`) present, correct types, no extra undeclared fields. This is a clean, unambiguous PASS on the request-and-declared-response half of the contract.\n\nMODE IS 'write' BUT THE RUN WAS NOT MUTATED: re-read TR-9062 with get_test_run_v2 and get_test_run_test_cases_v2 before and after the export call (setup steps 1-2 vs 3-4). Every field compared byte-for-byte identical: run_state ('new_run'), active_state ('active'), updated_at ('2026-09-18T06:27:38.743Z', unchanged -- the run row itself was not touched), overall_progress ({Untested:5}), and all 5 test-case rows (same latest_status='untested', same latest_result_id values, same assignee=null for every row, including both TC-54457 duplicates). This confirms the contract's own claim: 'This is a write only in the sense that it creates a stored export artifact; it does not change the run.' The capability is effectively a read of the run's current state that fans out into a separate export-artifact record and a websocket push -- it does not touch test_run, test_run_test_case, or test_result rows. Calling it 'write' mode is defensible only because it creates a new stored artifact (the export job/file), not because it mutates the run.\n\nSYNC OR ASYNC: async. The 200 means 'queued', not 'exported' -- per the contract's own guidance, failures inside the background job (bad column names, upstream errors) surface only on the realtime channel and never as an HTTP error, so this call cannot be polled for completion through this API.\n\nARTIFACT-FETCH PATH: NONE EXISTS in this capability index. Verified by an additional searchCapability sweep (setup step 5) for export/download/status/channel capabilities on product tm. Three sibling export capabilities (download_report, export_dashboard_analytics, initiate_export) all carry the identical documented limitation: the finished file is pushed via a websocket/realtime channel keyed by the returned uuid, there is no polling or download capability exposed anywhere in the index, and the generic export-status/download machinery (where it exists in the backing service) 'report[s] pending forever and 404[s] on download for this export type' when reached through channel-based exports like this one. So exactly like the initiate_export sibling flagged in the brief, the actual effect of this call -- whether a correct, complete CSV was actually produced, with the right columns and the full 5 rows (10, counting the duplicate-step row for TC-54458's 1-step case) -- is UNVERIFIABLE through this MCP surface. That unverifiability is a genuine, deliberate architecture limitation (confirmed independently across four sibling capabilities' guidance), not a defect in this specific contract and not a probing failure.\n\nVERDICT RATIONALE: everything actually observable through this API -- required params, declared body enum (file_type='csv' only), the v1 route's project_id-as-integer requirement, the TR-NNN-or-integer run-id flexibility, the 200 status, and the exact declared response shape -- matched the contract with zero drift. But the capability's actual purpose (producing a usable CSV export) cannot be confirmed at all through any capability in this index, so the probe is marked UNVERIFIED rather than PASS: I can attest the request/response contract holds, but I cannot attest that invoking it actually produces a correct file, because nothing lets me see it. This is NOT a DRIFT (no declared behavior was contradicted) and NOT a stale-build artifact (no non-JSON body was ever expected here) -- it is a documented capability-index gap shared with three siblings.\n\nORDERING: TR-9062 was left with 5 rows, all untested, all unassigned, both TC-54457 duplicates intact, exactly as received -- confirmed by the after-read. Safe for replace_test_run_v2 and update_test_run_v2 to proceed on it next.\n\nRETRY POLICY: per the 'invoke once unless you have a stated reason' instruction, and since the single call succeeded cleanly matching the contract, the export was NOT repeated."
+}

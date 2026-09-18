@@ -1,0 +1,67 @@
+{
+  "capability": "folder_attachments_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T03:56:25Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "probe __readonly__ folder first, per the fixture pool's own read-probe convention",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764093 } },
+      "status": 200,
+      "produced": { "attachments": [] }
+    },
+    {
+      "step": 2,
+      "why": "probe __scratch__ folder in case something was left there by an earlier write probe",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138 } },
+      "status": 200,
+      "produced": { "attachments": [] }
+    },
+    {
+      "step": 3,
+      "why": "both fixture folders came back empty; check whether the fixture project has any OTHER (older) folders that might already carry attachments",
+      "source": "invoked",
+      "capability": "get_root_folders_v1",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1, "per_page": 100 } },
+      "status": 200,
+      "produced": {
+        "folders": [
+          { "id": 764093, "name": "__readonly__" },
+          { "id": 764138, "name": "__scratch__" }
+        ],
+        "info": { "page": 1, "page_size": 100, "count": 2, "prev": null, "next": null }
+      }
+    },
+    {
+      "step": 4,
+      "why": "the fixture project has only the two known folders (both checked, both empty) — searched for a documented capability that could create a real attachment in __scratch__ so the item shape becomes checkable",
+      "source": "invoked",
+      "capability": "searchCapability",
+      "arguments": { "query": "upload or attach a file to a folder / test case", "product": "tm", "entity": "attachment" },
+      "status": 200,
+      "produced": {
+        "finding": "No capability attaches a file to a FOLDER at all (only test-cases, test-results and test-plans have an attach path: upload_test_case_attachments_v1, list_entity_attachments_v2). Even for those, the file-content half of the two-step flow (upload_generic_attachments / upload_a_i_attachments) is explicitly documented as 'NOT INVOCABLE through this interface' because it reads a multipart file upload that cannot be expressed as a JSON MCP argument. With no files it silently returns 200 {generic_attachment: []} rather than erroring. So no attachment of any kind (folder or otherwise) can be created through this MCP surface."
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764093 } },
+    "status": 200,
+    "response_keys": ["success", "attachments"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id", "folder_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "describeCapability declares a real committed shape, not a thin passthrough: 200 -> {success: boolean, attachments: [{id, name, content_type, key, product_id, byte_size, checksum, url, download_url}]} (each entry also gets a ready-formatted 'size' string per the guidance text, though it is not listed in the schema properties). Params are both path integers: project_id and folder_id, no query/body, no json_path nesting — this is a plain GET. Used the v1 integer project id (379335744) directly per the pool's guidance that v1 endpoints take the integer form; it worked first try against both fixture folders, so the PR-2005 v2 form was never needed. Invoked against __readonly__ (764093) and __scratch__ (764138): both returned HTTP 200 {success:true, attachments:[]} exactly as declared for an empty case. Per the task's own instruction, an empty collection proves nothing about the declared item shape (id/name/content_type/key/product_id/byte_size/checksum/url/download_url), so this cannot be scored PASS. Escalated per the task's fallback order: (1) checked both fixture folders directly (both empty); (2) used get_root_folders_v1 to see whether the __mcp-capability-fixture__ project (PR-2005 / 379335744) has any other, older folders that might already carry attachments -- it does not; the project contains exactly __readonly__ and __scratch__, nothing else, so there is no pre-existing account data anywhere in this project to inspect; (3) looked for a documented upload/attachment-create capability that could write a real attachment into __scratch__ -- none exists for folders, and the only capabilities that back test-case/result/plan attachments (upload_generic_attachments, upload_a_i_attachments) are explicitly documented as not invocable through this MCP interface (multipart file bytes cannot be expressed as JSON arguments), so even a test-case-shaped workaround was unavailable. No write was attempted since there was nothing invocable to write with, and no user_permission was requested. Global search was deliberately not used to look for attachments elsewhere on the account, per the task's instruction about the 6-day indexing lag. Verdict: UNVERIFIED -- the capability responds exactly as declared for the wrapper ({success, attachments}) but the declared item shape inside `attachments` could not be checked against any real row, and no path exists (documented or invocable) to manufacture one."
+}

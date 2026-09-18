@@ -1,0 +1,65 @@
+{
+  "capability": "get_shared_components_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T04:31:41Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Discover pre-existing projects with real usage (test case/run/plan counts) to look for account data that might actually have shared fields, since the fresh fixture project is asserted to be empty and shared components are account/project-level shared state that earlier batches also found sparse.",
+      "source": "invoked",
+      "capability": "list_projects_v1",
+      "arguments": { "query": { "sort_by": "identifier-desc" } },
+      "status": 200,
+      "produced": { "top_project": "__mcp-capability-fixture__ (PR-2005, id 379335744)", "count": 1831 }
+    },
+    {
+      "step": 2,
+      "why": "Also list oldest projects (ascending identifier) to find the account's original/demo projects, which are more likely to carry legacy shared-field data than recently auto-generated fixture projects.",
+      "source": "invoked",
+      "capability": "list_projects_v1",
+      "arguments": { "query": { "sort_by": "identifier-asc" } },
+      "status": 200,
+      "produced": { "candidates": ["Default Project (PR-1, id 59544, 11 tc/93 runs)", "Demo KB (PR-73, id 83363, 386 tc/184 runs)", "Test LFI (PR-35, id 72632, 306 tc)", "test sfailure category analyser (PR-82, id 86808, 37 tc)", "JD RCA Flaky Samples (PR-2002, id 379335189, 24 tc/31 runs/43 plans)"] }
+    },
+    {
+      "step": 3,
+      "why": "Probe get_shared_components_v1 itself against 5 pre-existing, non-fixture projects of varying size (11 to 386 test cases) to see if any of them holds shared fields, since an empty collection on the fresh fixture project proves nothing about the declared item shape.",
+      "source": "invoked",
+      "capability": "get_shared_components_v1",
+      "arguments": { "project_ids_tried": [83363, 59544, 72632, 86808, 379335189], "query": { "pre_fetch": true } },
+      "status": 200,
+      "produced": { "result": "every project returned data: [] and info.count: 0 - no shared fields found in any of the 5 pre-existing projects checked" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "pre_fetch": true } },
+      "status": 200,
+      "error": null,
+      "changed": "none - first attempt against the fixture project (v1 integer id, per pool) succeeded immediately with an empty collection"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "pre_fetch": true } },
+      "status": null,
+      "error": "'project_id' must be a number",
+      "changed": "tried the v2 identifier form (PR-2005) instead of the integer, per the task's instruction to test both forms on a v1 path; the MCP layer rejected it client-side before it reached the API, confirming this v1 route only accepts the integer project id and never the PR-NNN identifier"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "query": { "pre_fetch": true } },
+    "status": 200,
+    "response_keys": ["data", "info", "pre_fetched_shared_step", "success"],
+    "item_shape": "UNVERIFIED - data was an empty array on the fixture project and on all 5 additional pre-existing projects checked (Default Project, Demo KB, Test LFI, test sfailure category analyser, JD RCA Flaky Samples), so no shared-field row was ever returned to check id/title/field_type/step_count/test_case_count/tags/created_by/updated_by against"
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": "no body - GET request; path_params.project_id, plus query: p, q[query], q[tags], q[empty][system_fields][], field_type, folder_id, include_sub_collections, sort_by, pre_fetch",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Contract: get_shared_components_v1 lists a project's 'shared fields' (called 'shared components' by the API), one of two distinct component kinds in this product - shared fields (step/background/precondition, entity shared_field) are separate from shared steps, with separate id sets; this endpoint only covers the former, and does not group multiple component kinds together in one response. Required path param is the integer project_id; the v2 identifier (PR-NNN) is explicitly rejected by the schema ('project_id must be a number'), confirming the task's expectation that this v1 route needs the integer form. No unscoped variant exists - project_id is a required path segment, not an optional filter. Declared 200 shape is {data[], info{page,page_size,count,prev,next}, pre_fetched_shared_step, success}, with each data row nominally {id, title, field_type, step_count, test_case_count, tags, created_by, updated_by}. Top-level shape matched exactly on every call: no declared_missing and no undeclared_returned at the envelope level (pre_fetched_shared_step correctly came back null since pre_fetch only populates it when the page has at least one row, per the contract's own caveat). However every one of 6 projects probed - the fixture project __mcp-capability-fixture__ (PR-2005) plus 5 pre-existing account projects spanning 0 to 386 test cases (Default Project PR-1, Demo KB PR-73, Test LFI PR-35, test sfailure category analyser PR-82, JD RCA Flaky Samples PR-2002) - returned zero shared fields (data: [], info.count: 0). Per the standing caution, an empty collection proves nothing about the declared item-row shape, so this is UNVERIFIED rather than PASS: the envelope/pagination shape is confirmed correct, but the actual field-row schema (id, title, field_type, step_count, test_case_count, tags, created_by, updated_by, including the created_by/updated_by nullable-object nesting) was never exercised against a real row in this preprod account. Global search was not used to try to locate a project with shared fields, per the instruction that search has a 6+ day indexing lag and is not reliable evidence here."
+}

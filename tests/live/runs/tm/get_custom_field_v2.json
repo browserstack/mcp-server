@@ -1,0 +1,65 @@
+{
+  "capability": "get_custom_field_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Resolve a real custom field id per the task's mandatory route 1 (list_custom_fields_v2) instead of inventing one.",
+      "source": "invoked",
+      "capability": "list_custom_fields_v2",
+      "arguments": { "query": { "p": 1, "count": 300 } },
+      "status": 200,
+      "produced": {
+        "count": 30,
+        "note": "Full workspace fits on one page (info.count=30, next=null). Picked id 105920 (field_type=dropdown, field_name='Severity_jzcdfp3_customFields-fyu78i') and id 105914 (field_type=multi_dropdown, field_name='multi_dropdown_field_uw5mub') to cover the richer nested types the task asked for.",
+        "aside_observation": "list_custom_fields_v2 declares its 'id' as a string example 'cf-123' with field_type enum [text, textarea, dropdown, multiselect, number, date, boolean, url] and no system_name/is_bulk_editable/is_filterable/placeholder/group_id fields, but the actual rows returned plain integer ids and field_type values like 'string', 'multi_dropdown', 'url', 'date' plus those extra fields. Not this probe's target capability, so not scored here, but noted as it is where the id used below came from."
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "id": 105920 } },
+    "status": 200,
+    "response_keys": ["success", "custom_field"],
+    "item_shape": {
+      "custom_field_keys_present": [
+        "id", "field_type", "field_name", "entity_type", "is_required", "default_value",
+        "place_holder_text", "applies_to_all_projects", "link_to_future_projects",
+        "system_name", "is_bulk_editable", "is_filterable", "placeholder", "group_id",
+        "dataset_ids", "datasets_url", "dataset_urls"
+      ],
+      "values": {
+        "id": 105920,
+        "field_type": "dropdown",
+        "field_name": "Severity_jzcdfp3_customFields-fyu78i",
+        "entity_type": "TestCase",
+        "is_required": false,
+        "default_value": null,
+        "place_holder_text": "ad",
+        "applies_to_all_projects": false,
+        "link_to_future_projects": false,
+        "dataset_ids": [31201],
+        "datasets_url": "https://test-management-preprod.bsstag.com/api/v2/custom-fields/105920/datasets",
+        "dataset_urls": ["https://test-management-preprod.bsstag.com/api/v2/custom-fields/105920/datasets/31201"]
+      },
+      "second_field_probed_for_shape_variation": {
+        "id": 105914,
+        "field_type": "multi_dropdown",
+        "field_name": "multi_dropdown_field_uw5mub",
+        "dataset_ids": [31195],
+        "same_keys_as_above": true,
+        "note": "Identical envelope shape to the dropdown field above; no additional nested structure appeared for multi_dropdown at this read (options/levels are not part of this response per the contract's own guidance -- they live behind dataset_urls, which this capability does not follow)."
+      }
+    }
+  },
+  "contract": {
+    "required": ["id (path_param, positive integer)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["system_name", "is_bulk_editable", "is_filterable", "placeholder", "group_id"]
+  },
+  "notes": "Probed two fields: id 105920 (field_type=dropdown, field_name='Severity_jzcdfp3_customFields-fyu78i') and id 105914 (field_type=multi_dropdown, field_name='multi_dropdown_field_uw5mub'). Both ids came from list_custom_fields_v2 (setup step 1, source=invoked), not the fixture pool -- this capability's id space is account/workspace-level, so no pool id was given for it. Both calls succeeded on the first attempt with no retries needed. All fields the contract declares (success, custom_field.id/field_type/field_name/entity_type/is_required/default_value/place_holder_text/applies_to_all_projects/link_to_future_projects/dataset_ids/datasets_url/dataset_urls) were present and correctly typed in both responses -- so declared_missing is empty and this is not BLOCKED. applies_to_all_projects and link_to_future_projects both came back false as the contract's guidance predicted (documented as hardcoded placeholders, not real project scope). No option values were present in either response, matching the contract's guidance that this read returns only dataset_ids/dataset_urls, not inline options -- consistent, not a gap, since the contract explicitly disclaims option values here. However, both responses carried five undeclared fields not mentioned anywhere in the declared 200 schema or its 'returns' list: system_name, is_bulk_editable, is_filterable, placeholder (a near-duplicate of the declared place_holder_text, same value 'ad'/'Sample Placeholder...'), and group_id. This is a real declared-vs-actual gap (undeclared_returned), so the verdict is DRIFT rather than a clean PASS -- the contract under-describes what the API actually hands back, even though nothing it does promise is missing or wrong."
+}

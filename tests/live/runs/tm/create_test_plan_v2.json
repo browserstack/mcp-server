@@ -1,0 +1,110 @@
+{
+  "capability": "create_test_plan_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T05:00:22Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm the pre-existing baseline in PR-2005 before creating anything, per the sibling list_test_plans_v2 probe's finding that PR-2005 has exactly one pre-existing plan (TP-1596).",
+      "source": "invoked",
+      "capability": "list_test_plans_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "p": 1, "count": 300 } },
+      "status": 200,
+      "produced": { "count": 1, "identifiers": ["TP-1596"] }
+    },
+    {
+      "step": 2,
+      "why": "Re-read the plan listing after create_test_plan_v2 succeeded, to verify the new plan exists in storage (not just echoed) and the count moved 1 -> 2.",
+      "source": "invoked",
+      "capability": "list_test_plans_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "p": 1, "count": 300 } },
+      "status": 200,
+      "produced": {
+        "count": 2,
+        "identifiers": ["TP-1616", "TP-1596"],
+        "new_plan_row": {
+          "identifier": "TP-1616",
+          "name": "__mcp-probe-plan-2026-09-18T00-00-00Z",
+          "active_state": "active",
+          "tags": ["disposable", "mcp-probe"],
+          "start_date": "2026-09-18T00:00:00.000Z",
+          "end_date": "2026-10-18T00:00:00.000Z",
+          "test_runs_count": { "active": 0, "closed": 0 },
+          "sub_plans_count": 0,
+          "urls": {
+            "self": "https://test-management-preprod.bsstag.com/projects/379335744/test-plans/48283",
+            "sub_test_plans": "https://test-management-preprod.bsstag.com/api/v2/projects/PR-2005/test-plans/TP-1616/sub-test-plans"
+          }
+        }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "body": {
+          "test_plan": {
+            "name": "__mcp-probe-plan-2026-09-18T00-00-00Z",
+            "description": "Disposable probe plan created by create_test_plan_v2 live probe. Safe to delete.",
+            "start_date": "2026-09-18",
+            "end_date": "2026-10-18",
+            "tags": ["mcp-probe", "disposable"]
+          }
+        }
+      },
+      "status": null,
+      "error": "unknown body: test_plan. accepted: created_at, description, end_date, issue_tracker, issues, name, start_date, tags, updated_at",
+      "changed": "Removed the test_plan wrapper and sent name/description/start_date/end_date/tags flat at the top level of body, as the accepted-body error listed them."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "body": {
+          "name": "__mcp-probe-plan-2026-09-18T00-00-00Z",
+          "description": "Disposable probe plan created by create_test_plan_v2 live probe. Safe to delete.",
+          "start_date": "2026-09-18",
+          "end_date": "2026-10-18",
+          "tags": ["mcp-probe", "disposable"]
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005" },
+      "body": {
+        "name": "__mcp-probe-plan-2026-09-18T00-00-00Z",
+        "description": "Disposable probe plan created by create_test_plan_v2 live probe. Safe to delete.",
+        "start_date": "2026-09-18",
+        "end_date": "2026-10-18",
+        "tags": ["mcp-probe", "disposable"]
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_plan"],
+    "item_shape": {
+      "test_plan": [
+        "active_state", "description", "identifier", "test_runs_count", "tags",
+        "name", "issues", "project_id", "sub_plans_count", "start_date",
+        "end_date", "created_at", "urls"
+      ]
+    }
+  },
+  "contract": {
+    "required": ["name"],
+    "json_path": "/test_plan/name (and sibling /test_plan/* paths for the other body fields, plus top-level /created_at, /updated_at) — but this is NOT the call shape: nesting the body under a `test_plan` key, as the guidance explicitly instructs, is rejected client-side with 'unknown body: test_plan'. The accepted call shape is flat, top-level fields.",
+    "declared_missing": [
+      "parent_plan_id — listed unconditionally in the top-level `returns` array, but absent from the actual response entirely (not even present as null). The nested schema description says it is 'present only when this plan is a sub-plan', which is consistent with omission here since this is a top-level plan — so this is a documentation-precision issue (the top-level returns list should mark it conditional) rather than a hard contract violation."
+    ],
+    "undeclared_returned": []
+  },
+  "notes": "GUIDANCE CONTRADICTS REALITY (primary finding, DRIFT): the contract's own guidance says 'Wrap the fields in a `test_plan` object. An unwrapped flat body also works, but a body wrapped under any other key (`plan`, `sub_test_plan`) is read as empty and fails with 400.' In reality the WRAPPED form (`{\"test_plan\": {...}}`) is the one that is rejected — client-side, before reaching the backend — with 'unknown body: test_plan. accepted: created_at, description, end_date, issue_tracker, issues, name, start_date, tags, updated_at'. Only the flat, unwrapped body succeeds. This is exactly backwards from what the guidance states, and matches this suite's known 'json_path is not call shape' trap. An agent that followed the contract's explicit instruction on its first attempt would fail.\n\nSecond finding: the contract states 'take `identifier` (TP-NNN) from it — the numeric id the v1 plan capabilities need is not in this payload.' This is misleading: the numeric plan id IS recoverable from the response, embedded in `test_plan.urls.self` (e.g. '.../test-plans/48283'), just not as its own field. Likewise the numeric project id (379335744) is embedded in the same URL. Not a structural drift (urls was declared), but the prose claim that the numeric id 'is not in this payload' is not quite true.\n\nCREATED PLAN (for the sibling probes get_test_plan_v2, get_test_plan_test_runs_v2, create_sub_test_plan_v2, update_test_plan_v2):\n- identifier: TP-1616 (project PR-2005)\n- numeric plan id (parsed from urls.self, undeclared as an explicit field): 48283\n- numeric project id (same URL): 379335744\n- WORKING call shape: invokeCapability(name='create_test_plan_v2', path_params={project_id:'PR-2005'}, body={name, description, start_date, end_date, tags} -- FLAT, no test_plan wrapper)\n- active_state: 'active' (plan is created in the 'new' state per contract guidance, but active_state does not distinguish new from started -- it only ever reads 'active' or 'completed')\n- start_date: '2026-09-18T00:00:00.000Z', end_date: '2026-10-18T00:00:00.000Z' (sent as plain YYYY-MM-DD, stored as midnight UTC datetime, as declared)\n- tags: sent ['mcp-probe','disposable'], returned ['disposable','mcp-probe'] (silently reordered -- not itself a contract violation since order is unspecified, but worth a sibling knowing tag order is not preserved)\n- issues: [] (none sent)\n- test_runs_count: {active:0, closed:0} -- NO test runs are attached. create_test_plan_v2's body schema has NO test_runs / test_run_ids field at all (only name, description, start_date, end_date, tags, issues, issue_tracker, created_at, updated_at are accepted -- confirmed by the attempt-1 error's exhaustive 'accepted:' list). So attaching a run at create time is NOT supported by this route -- confirmed, not just undocumented. The create_test_plan_v2 sibling for run-attachment testing (get_test_plan_test_runs_v2) will need to attach TR-9061 (uuid 17574995, in __scratch__) itself via whatever update/link capability supports it -- update_test_plan_v2 is the most likely candidate to check first, since it is also in this hand-off chain.\n- sub_plans_count: 0 (no sub-plans yet -- create_sub_test_plan_v2 sibling can create one against TP-1616)\n- parent_plan_id: absent (top-level plan, consistent with docs)\n- owner/assignee: NOT settable and NOT returned on this route at all -- contract states 'Owner is always the calling user -- there is no owner field on this route, unlike the v1 create.' Confirmed: no owner-shaped field anywhere in the response. A sibling fetch (get_test_plan_v2) should check whether an owner field appears there despite being absent here.\n- description: sent as plain text (no HTML/links), returned byte-for-byte identical -- the contract's claim of server-side HTML sanitisation/link-rewriting was NOT exercised (no HTML was sent), so that specific behavior remains unverified.\n- Verified in storage (not just echo): re-read via list_test_plans_v2 on PR-2005 showed the plan count go from 1 (TP-1596 only) to 2 (TP-1616 + TP-1596), with TP-1616's row matching the create response exactly (see setup[] steps 1-2). This satisfies the anti-echo-check requirement.\n- Plan status is 'new' per creation semantics (contract: 'The plan is always created in the new state'), but this is not independently observable from active_state ('active') -- update_test_plan_v2 sibling should note this when testing plan_status transitions.\n- No 500s encountered; no preprod status-0 unreachability encountered (both attempts against the real backend succeeded/failed cleanly on the first try each)."
+}

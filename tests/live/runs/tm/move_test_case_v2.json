@@ -1,0 +1,126 @@
+{
+  "capability": "move_test_case_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T05:59:11Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Baseline: confirm scratch folder 764138 contents before the move",
+      "source": "invoked",
+      "capability": "list_folder_test_cases_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "count": 2, "identifiers": ["TC-54458", "TC-54457"], "ids": [1975349, 1972036] }
+    },
+    {
+      "step": 2,
+      "why": "Baseline: confirm destination child folder 764828 is empty before the move",
+      "source": "invoked",
+      "capability": "list_folder_test_cases_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764828 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "count": 0 }
+    },
+    {
+      "step": 3,
+      "why": "Baseline: read the subject case in full (v2 shape) before the move, to capture identifier/urls.self/timestamps for later diffing",
+      "source": "invoked",
+      "capability": "get_test_case_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" } },
+      "status": 200,
+      "produced": {
+        "identifier": "TC-54458",
+        "folder_id": 764138,
+        "last_updated_at": "2026-09-18T05:51:55.000Z",
+        "urls.self": "https://test-management-preprod.bsstag.com/projects/379335744/folder/764138/test-cases/1975349"
+      }
+    },
+    {
+      "step": 4,
+      "why": "Verification: re-list source folder 764138 after the move — subject case must be gone",
+      "source": "invoked",
+      "capability": "list_folder_test_cases_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "count": 1, "identifiers": ["TC-54457"], "note": "TC-54458/1975349 no longer present" }
+    },
+    {
+      "step": 5,
+      "why": "Verification: re-list destination folder 764828 after the move — subject case must now be present",
+      "source": "invoked",
+      "capability": "list_folder_test_cases_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764828 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "count": 1, "identifiers": ["TC-54458"], "ids": [1975349] }
+    },
+    {
+      "step": 6,
+      "why": "Verification: re-read the subject case (v2 shape) after the move to check folder_id, urls.self and every other field for drift",
+      "source": "invoked",
+      "capability": "get_test_case_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" } },
+      "status": 200,
+      "produced": {
+        "identifier": "TC-54458",
+        "folder_id": 764828,
+        "last_updated_at": "2026-09-18T05:59:11.000Z",
+        "urls.self": "https://test-management-preprod.bsstag.com/projects/379335744/folder/764828/test-cases/1975349"
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" },
+        "body": { "destination_folder_id": 764828 }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — built exactly as declared (flat top-level destination_folder_id, no json_path, no wrapper object) and it worked first try"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" },
+      "body": { "destination_folder_id": 764828 }
+    },
+    "status": 200,
+    "response_keys": ["data", "data.success", "data.test_case", "message"],
+    "item_shape": {
+      "data.success": "boolean (true)",
+      "data.test_case.identifier": "string (TC-54458, unchanged)",
+      "data.test_case.title": "string (unchanged)",
+      "data.test_case.folder_id": "integer (764828, now the destination)",
+      "data.test_case.priority": "string (Medium)",
+      "data.test_case.status": "string (Active)",
+      "data.test_case.case_type": "string (Other)",
+      "data.test_case.automation_status": "string (not_automated)",
+      "data.test_case.owner": "string email (unchanged)",
+      "data.test_case.tags": "array of string (unchanged, [\"mcp-probe\"])",
+      "data.test_case.template": "string (test_case_steps)",
+      "data.test_case.description": "null",
+      "data.test_case.preconditions": "null",
+      "data.test_case.steps": "array of {step,result} (unchanged, 1 entry)",
+      "data.test_case.custom_fields": "array (empty, unchanged)",
+      "data.test_case.issues": "array (empty, unchanged)",
+      "data.test_case.is_shared": "boolean (present, NOT in the flat `returns` list)",
+      "data.test_case.attachments": "array (present, empty; NOT in the flat `returns` list)",
+      "data.test_case.created_at": "string date-time (unchanged)",
+      "data.test_case.last_updated_at": "string date-time (bumped: 05:51:55 -> 05:59:11)",
+      "data.test_case.created_by": "string email (unchanged)",
+      "data.test_case.updated_by": "string email (unchanged)",
+      "data.test_case.urls.self": "string URL — folder segment updated from /folder/764138/ to /folder/764828/",
+      "message": "string (\"Test case moved successfully\")"
+    }
+  },
+  "contract": {
+    "required": ["destination_folder_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "CONTROL CASE HELD UP LIVE: this was one of the five hand-resolved naming collisions, specifically checked to declare `destination_folder_id` flat at the top level of the body with no json_path and no wrapper object. Built exactly that way on attempt 1 and it worked — a real positive result, not a hollow PASS (the response is the full v2 test_case object, not just {status,body}). Final folder for TC-54458 (int 1975349) is 764828 (the disposable child of __scratch__/764138), confirmed via list_folder_test_cases_v1 on BOTH folders (764138 dropped from count 2 to 1, losing 1975349; 764828 rose from count 0 to 1, gaining it) and via get_test_case_v2 (folder_id 764138 -> 764828). This is a genuine move, not a 200-that-didn't-move-anything. Every declared field in the nested 200 schema was checked against the actual response: nothing declared was missing (folder_path, feature/background/scenario, reviewers/review_status were all absent, but the contract itself documents each of those as conditional/write-response-absent, so their absence here is expected, not drift) and nothing undeclared appeared beyond the nested schema. HOWEVER: the FLAT `returns` array (used for the top-line contract summary) omits `is_shared` and `attachments`, both of which are declared in the nested 200 schema AND both of which were actually returned — a flat/nested disagreement, consistent with the standing finding that the flat returns array is unreliable; not counted as declared_missing/undeclared_returned since the nested schema (the trustworthy one) already covers both fields. Only three things changed on the case as a result of the move: folder_id (764138->764828), urls.self (folder segment updated to embed the new folder id, confirming the numeric id is recoverable only by parsing this URL), and last_updated_at (bumped to the write timestamp). identifier, title, steps, tags, owner, custom_fields, created_at, created_by and updated_by were all byte-for-byte unchanged, matching the contract's explicit guidance that 'nothing but the folder changes'. No folder-count fields (cases_count/sub_folders_count) are exposed by this capability at all — it returns a test_case object, not a folder object, so that data point from the folder-mutation siblings does not apply here. No 500s, no environment flakiness (status 0) encountered on any of the 7 calls made (1 move + 6 setup/verification reads) — preprod was responsive throughout. TC-54458 is left resident in folder 764828 for the sibling update_test_case_v2 probe to find."
+}

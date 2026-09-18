@@ -1,0 +1,92 @@
+{
+  "capability": "list_binned_test_cases_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T05:03:57Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Search for a capability that moves a test case to the recycle bin, and check its mode, before deciding whether the bin can be legitimately populated for this probe.",
+      "source": "invoked",
+      "capability": "searchCapability",
+      "arguments": { "queries": ["bin/archive/soft-delete a test case", "move test case to bin", "restore binned test case / unbin"] },
+      "status": 200,
+      "produced": { "result": "the only capability that can put a case in the Bin is bulk_delete_test_cases (mode: destructive) - its own guidance says the deleted cases land in the Bin only when the workspace's move-to-bin feature is enabled, otherwise the delete is permanent; no dedicated bin/archive/soft-delete write capability exists separately from it. No restore/unbin capability exists either - bulk_retrieve_test_cases un-archives cases from the separate 'archive' feature (get_archived_test_cases), which is a different collection from the recycle Bin this capability lists." }
+    },
+    {
+      "step": 2,
+      "why": "Confirm bulk_delete_test_cases's mode via describeCapability before attempting anything, since mode decides whether populating the bin is even attemptable.",
+      "source": "invoked",
+      "capability": "describeCapability",
+      "arguments": { "name": "bulk_delete_test_cases" },
+      "status": 200,
+      "produced": { "mode": "destructive" }
+    },
+    {
+      "step": 3,
+      "why": "Per instructions, attempt invoking the bin-populating capability anyway to observe the refusal itself (not to work around it) - used a non-existent placeholder id (999999999) in the scratch folder (764138) so nothing real could be affected even if the gate somehow let it through.",
+      "source": "invoked",
+      "capability": "bulk_delete_test_cases",
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "test_case": { "ids": [999999999] }, "folder_id": 764138 }, "user_permission": "granted" },
+      "status": null,
+      "produced": { "result": "refused before reaching the capability registry's own invoke gate - the harness's own permission classifier denied it outright with reason 'Irreversible Deletion (general)'. Did not retry or attempt any workaround, per instructions." }
+    },
+    {
+      "step": 4,
+      "why": "Check whether the bin already has pre-existing rows on the fixture project before concluding it is empty.",
+      "source": "invoked",
+      "capability": "count_binned_test_cases_v1",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": { "count": 0 }
+    },
+    {
+      "step": 5,
+      "why": "Fixture project's bin was empty. Per instructions, checked whether an older, pre-existing project (of the account's 1831) has pre-existing binned rows instead - listed the oldest projects by identifier-asc to find candidates with real historical activity.",
+      "source": "invoked",
+      "capability": "list_projects_v1",
+      "arguments": { "query": { "sort_by": "identifier-asc", "p": 1 } },
+      "status": 200,
+      "produced": { "candidates": ["Default Project (PR-1, id 59544, 11 tc/93 runs)", "Test LFI (PR-35, id 72632, 306 tc)", "Demo KB (PR-73, id 83363, 386 tc/184 runs)", "test sfailure category analyser (PR-82, id 86808, 37 tc)", "BrowserStack Samples (PR-67, id 80599, 6 tc/5 runs)"] }
+    },
+    {
+      "step": 6,
+      "why": "Checked bin counts on 4 additional pre-existing, non-fixture projects of varying size/age (in addition to the fixture project already checked in step 4) to see if any of the account's 1831 projects already had binned cases, before settling for an empty-bin conclusion.",
+      "source": "invoked",
+      "capability": "count_binned_test_cases_v1",
+      "arguments": { "project_ids_tried": [83363, 72632, 86808, 59544, 80599] },
+      "status": 200,
+      "produced": { "result": "every one of the 4 additional projects also returned count: 0 - no pre-existing binned test cases found anywhere checked (5 projects total including the fixture)" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": "PR-2005" } },
+      "status": null,
+      "error": "'project_id' must be a number",
+      "changed": "tried the v2 identifier form (PR-2005) first, per the task's instruction to test both forms on a v1 path; the MCP layer rejected it client-side before it reached the API, confirming this v1 route only accepts the integer project id and never the PR-NNN identifier"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "error": null,
+      "changed": "switched to the integer project id (379335744) per the pool - succeeded immediately with an empty bin"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 } },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "metadata"],
+    "item_shape": "UNVERIFIED - test_cases was an empty array on the fixture project and on all 4 additional pre-existing projects checked (Default Project, Test LFI, Demo KB, test sfailure category analyser, BrowserStack Samples), so no binned-case row was ever returned to check id/identifier/name/priority/status/owner/owner_details/tags/issues/folder_name/folder_path/updated_by/updator_details/trashed_at/days_remaining against."
+  },
+  "contract": {
+    "required": ["project_id (path, integer)"],
+    "json_path": "no body - GET request; path_params.project_id, plus query: p (or page alias), limit, search, folder_id, moved_to_bin_by (or updated_by alias), owner, date_from, date_to, sort_by, sort_order, status (or status_id alias), priority (or priority_id alias), type (or category_id alias), automation_state (or automation_state_id alias), tags",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "BIN CONTENT / HAND-OFF FOR count_binned_test_cases_v1 SIBLING PROBE: the bin is confirmed EMPTY (0 cases, no ids) on the fixture project __mcp-capability-fixture__ (id 379335744) and on 4 additional pre-existing account projects checked for diligence (Default Project id 59544, Test LFI id 72632, Demo KB id 83363, test sfailure category analyser id 86808, BrowserStack Samples id 80599) - 5 projects total, all count:0. This probe did NOT bin any case - no case was added to any project's bin. Whether a bin-populating write capability exists: NO dedicated write-mode capability moves a case to the Bin. The only capability search turned up is bulk_delete_test_cases, whose own guidance says deleted cases land in the Bin only when the workspace has the move-to-bin feature enabled (otherwise the delete is permanent) - but its declared mode is 'destructive', so per instructions it was not used to try to populate the bin. An actual invocation attempt (step 3, using a non-existent placeholder id in the scratch folder so nothing real could be touched) was refused outright before even reaching the capability registry's own destructive-mode gate - this session's own harness permission classifier denied it with reason 'Irreversible Deletion (general)'. No workaround was attempted. Whether a restore/unbin capability exists: NO. bulk_retrieve_test_cases only restores cases from the separate 'archive' feature (get_archived_test_cases) - a different collection from the recycle Bin that list_binned_test_cases_v1 and count_binned_test_cases_v1 cover. No restore/unbin capability for the Bin specifically was found anywhere in the tm index searches performed. CONTRACT vs ACTUAL: the envelope shape matched exactly on the one successful call - {success, test_cases, metadata{total, page, page_size, total_pages}} - with no undeclared top-level keys and no missing declared envelope keys; total_pages correctly came back 0 (not 1) when total is 0. One drift-adjacent observation: describeCapability's own guidance says the backing service's client docs default page size to 25 (not enforced in this codebase, so 'trust metadata.page_size for what you got') - the actual observed default (no `limit` sent) was metadata.page_size: 30, not 25. Per the standing caution, an empty collection proves nothing about the declared item-row shape (id, identifier, name, priority{id,field_value,internal_name}, status{id,field_value,internal_name,colour}, owner, owner_details, tags, issues, folder_name, folder_path, updated_by, updator_details{id,browserstack_user_id,full_name,email,group_id}, trashed_at, days_remaining) - none of that was ever exercised against a real bin row in this preprod account, so this is UNVERIFIED rather than PASS. Global search was not used to try to locate a project with binned cases, per the instruction that search has a 6+ day indexing lag and is not reliable evidence here. Verdict is UNVERIFIED (not BLOCKED) because the read call itself worked correctly end to end (rejected the v2 identifier as expected, succeeded on the integer id, returned a well-formed empty page) - the only unverifiable part is the declared shape of a populated row, and that emptiness cannot be resolved without a destructive-mode capability this session correctly declined to use."
+}

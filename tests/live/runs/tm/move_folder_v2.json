@@ -1,0 +1,76 @@
+{
+  "capability": "move_folder_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T04:40:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Re-read the destination folder (764828) after the move to confirm 764827 is now listed as its immediate subfolder.",
+      "source": "invoked",
+      "capability": "list_folder_contents",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764828 } },
+      "status": 200,
+      "produced": {
+        "self.id": 764828,
+        "self.sub_folders_count": 1,
+        "folders": [
+          { "id": 764827, "name": "__mcp-probe-folder-2026-09-18T04-31-22Z", "parent_id": 764828 }
+        ]
+      }
+    },
+    {
+      "step": 2,
+      "why": "Re-read the old parent folder (764138, __scratch__) to confirm 764827 is no longer one of its immediate children.",
+      "source": "invoked",
+      "capability": "list_folder_contents",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138 } },
+      "status": 200,
+      "produced": {
+        "self.id": 764138,
+        "self.sub_folders_count": 1,
+        "folders": [
+          { "id": 764828, "name": "__mcp-probe-movetarget-2026-09-18T04-31-51Z", "parent_id": 764138 }
+        ]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "folder_id": 764827 },
+        "body": { "parent_id": 764828 }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - first attempt succeeded; flat body with declared param name parent_id, PR- string project id, per known-working call shape for this route family"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005", "folder_id": 764827 },
+      "body": { "parent_id": 764828 }
+    },
+    "status": 200,
+    "response_keys": ["success", "folder"],
+    "item_shape": {
+      "id": 764827,
+      "name": "__mcp-probe-folder-2026-09-18T04-31-22Z",
+      "description": null,
+      "parent_id": 764828,
+      "cases_count": 0,
+      "sub_folders_count": 0,
+      "links": { "sub_folders": "/api/v2/projects/PR-2005/folders/764827/sub-folders" },
+      "urls": { "self": "https://test-management-preprod.bsstag.com/projects/379335744/folder/764827/test-cases" }
+    }
+  },
+  "contract": {
+    "required": ["project_id", "folder_id"],
+    "json_path": "none declared - the body param `parent_id` carries no json_path in this capability's contract (unlike the sibling create_folder_v2, whose fields declare json_path values like /folder/name). It is already flat: send {\"parent_id\": <int>} directly, no nesting.",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Move verified end to end. Invoke returned 200 on the first attempt with body {parent_id: 764828} (flat, no json_path/nesting needed for this capability - contract declares parent_id with no json_path at all). Response folder.parent_id=764828 matched the request. Re-read confirmed it structurally: list_folder_contents on folder 764828 shows 764827 in its `folders` (immediate children) array with parent_id=764828; list_folder_contents on the old parent 764138 (__scratch__) shows only 764828 as a child, NOT 764827 - so 764827 is verifiably no longer a direct child of __scratch__. Folder 764827's FINAL PARENT IS 764828 (__mcp-probe-movetarget-2026-09-18T04-31-51Z) - this is where the rename_folder_v2 probe should look for it next, not under 764138. Declared-vs-actual check: every field the 200 contract promises (id, name, description, parent_id, cases_count, sub_folders_count, links.sub_folders, urls.self) was present and correctly typed; cases_count and sub_folders_count were both 0 (matching their declared non-nullable integer type, not null - contrasting with the sibling create_folder_v2 finding where those same fields came back null on a fresh folder). `attachments` was correctly absent (contract says it's present only when the folder has attachments; this folder has none). No undeclared fields were returned. auto_rename was not exercised since no name clash occurred at the destination (destination had no existing child named __mcp-probe-folder-2026-09-18T04-31-22Z) - that branch of the contract (rename to '<name> (1)' lowercased) remains unverified by this probe. This is a genuine (non-hollow) conformance PASS: the contract commits to a real shape (not a thin {status,body} passthrough), and both the response and the live re-read matched it exactly."
+}

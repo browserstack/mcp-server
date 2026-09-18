@@ -1,0 +1,142 @@
+{
+  "capability": "create_test_run_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T06:36:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Baseline read of PR-2005's runs before create, to verify the new run's presence by diff afterward.",
+      "source": "pool",
+      "capability": "list_test_runs_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "p": 1, "page_size": 30 } },
+      "status": 200,
+      "produced": { "count": 2, "identifiers": ["TR-9061", "TR-9058"] }
+    },
+    {
+      "step": 2,
+      "why": "Confirm scratch case TC-54457 exists and is readable before attaching it to a new run; also recover its numeric id from the urls field.",
+      "source": "pool",
+      "capability": "get_test_case_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54457" } },
+      "status": 200,
+      "produced": { "identifier": "TC-54457", "numeric_id_from_urls": 1972036, "folder_id": 764138 }
+    },
+    {
+      "step": 3,
+      "why": "Confirm scratch case TC-54458 exists and is readable before attaching it to a new run; also recover its numeric id from the urls field.",
+      "source": "pool",
+      "capability": "get_test_case_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" } },
+      "status": 200,
+      "produced": { "identifier": "TC-54458", "numeric_id_from_urls": 1975349, "folder_id": 764828 }
+    },
+    {
+      "step": 4,
+      "why": "Verify against storage (not the create echo): re-read PR-2005's run listing and confirm the new run TR-9062 is present.",
+      "source": "invoked",
+      "capability": "list_test_runs_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "p": 1, "page_size": 30 } },
+      "status": 200,
+      "produced": { "count": 3, "new_run_present": true, "identifiers": ["TR-9062", "TR-9061", "TR-9058"] }
+    },
+    {
+      "step": 5,
+      "why": "Verify the four test cases actually attached to TR-9062 (population is documented as asynchronous) and capture the row/mapping ids and numeric case ids the sibling probes will need.",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "p": 1, "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "count": 4,
+        "rows": [
+          { "identifier": "TC-54458", "numeric_case_id": 1975349, "latest_result_id": 2150387254, "latest_status": "untested", "configuration_id": null, "assignee": null },
+          { "identifier": "TC-54457", "numeric_case_id": 1972036, "latest_result_id": 2150387252, "latest_status": "untested", "configuration_id": null, "assignee": null },
+          { "identifier": "TC-54456", "numeric_case_id": 1971632, "latest_result_id": 2150387251, "latest_status": "untested", "configuration_id": null, "assignee": null, "note": "__readonly__ pool case attached; only its run-owned test-run-test-case row is written, the underlying case TC-54456 is never modified" },
+          { "identifier": "TC-54455", "numeric_case_id": 1971631, "latest_result_id": 2150387253, "latest_status": "untested", "configuration_id": null, "assignee": null, "note": "__readonly__ pool case attached; only its run-owned test-run-test-case row is written, the underlying case TC-54455 is never modified" }
+        ]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "body": { "test_run": { "name": "__mcp-probe-run-2026-09-18T06-35-00Z", "test_cases": [{ "test_case_id": "TC-54457" }, { "test_case_id": "TC-54458" }] } }
+      },
+      "status": null,
+      "error": "unknown body: test_run. accepted: assignee, configuration_map, configurations, description, filter_scope, filter_test_cases, folder_ids, include_all, include_sub_folders, is_automation, issues, name, run_state, shared_test_cases, sub_test_plan_id, tags, test_case_assignee, test_cases, test_plan_id",
+      "changed": "Tested the guidance's literal claim ('every field goes inside a test_run object') as declared first. Rejected client-side before any HTTP call, confirming the standing lesson: invokeCapability wants body fields flat under their declared names, and json_path (/test_run/...) is applied internally, not by the caller. Next attempt sends the same fields flat."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "body": {
+          "name": "__mcp-probe-run-2026-09-18T06-35-00Z",
+          "assignee": "ing@bsstag.com",
+          "run_state": "new_run",
+          "tags": ["mcp-probe"],
+          "test_cases": [{ "test_case_id": "TC-54457" }, { "test_case_id": "TC-54458" }, { "test_case_id": "TC-54455" }, { "test_case_id": "TC-54456" }]
+        }
+      },
+      "status": 400,
+      "error": "{\"error\":\"Invalid JSON data\",\"details\":[\"The property '#/test_run/test_cases/0' of type object did not match the following type: string\",\"The property '#/test_run/test_cases/1' of type object did not match the following type: string\",\"The property '#/test_run/test_cases/2' of type object did not match the following type: string\",\"The property '#/test_run/test_cases/3' of type object did not match the following type: string\"]}",
+      "changed": "The declared param shape for test_cases (an array of {test_case_id} objects, mirrored from create_test_run's own contract fields) is itself wrong: the upstream JSON-schema validator (internally re-wrapped under /test_run/test_cases/N, confirming the flat body IS re-nested server-side via json_path) requires each element to be a bare string, not an object. Next attempt sends test_cases as a flat array of TC-NNN strings."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "body": {
+          "name": "__mcp-probe-run-2026-09-18T06-35-00Z",
+          "assignee": "ing@bsstag.com",
+          "run_state": "new_run",
+          "tags": ["mcp-probe"],
+          "test_cases": ["TC-54457", "TC-54458", "TC-54455", "TC-54456"]
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005" },
+      "body": {
+        "name": "__mcp-probe-run-2026-09-18T06-35-00Z",
+        "assignee": "ing@bsstag.com",
+        "run_state": "new_run",
+        "tags": ["mcp-probe"],
+        "test_cases": ["TC-54457", "TC-54458", "TC-54455", "TC-54456"]
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_run"],
+    "item_shape": {
+      "test_run_keys_returned": ["active_state", "run_state", "created_at", "updated_at", "description", "identifier", "name", "assignee", "project_id", "tags", "configurations", "filter_test_cases", "links", "urls"],
+      "assignee_type_returned": "string (email) - declared nested schema says object {id, browserstack_user_id, full_name, group_id, onboarded}",
+      "links_returned": { "self": "/api/v2/projects/PR-2005/test-runs/TR-9062", "test_cases": "/api/v2/projects/PR-2005/test-runs/TR-9062/test-cases" },
+      "urls_returned": { "self": "https://test-management-preprod.bsstag.com/projects/379335744/test-runs/TR-9062" },
+      "filter_test_cases_returned": { "is_dynamic": false }
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": "/test_run/<field> for every body field (server re-nests a flat body internally; confirmed by attempt 2's error paths #/test_run/test_cases/N)",
+    "declared_missing": [
+      "id", "uuid", "type", "owner", "environment", "overall_progress", "overall_progress_by_status_id",
+      "test_cases_count", "is_automation", "observability_url", "metadata", "assignee_imported",
+      "is_dynamic (top-level)", "test_plans", "self_ui_link", "links.detail"
+    ],
+    "undeclared_returned": [
+      "filter_test_cases (present in the flat 'returns' array but not in the nested 200 schema)",
+      "urls (whole object; nested schema never declares it, though the flat 'returns' array does; only 'self' sub-key observed)",
+      "links.test_cases (links object is declared with only 'self' and 'detail' sub-keys)"
+    ]
+  },
+  "notes": "HAND-OFF FOR THE SIBLING CHAIN: Run identifier TR-9062, project PR-2005 (v1 int 379335744). No numeric/uuid id is exposed anywhere in the create response, the list response, or the run-test-cases response for this run - identifier (TR-9062) is the only id this v2 surface returns for a run, confirming list_test_runs_v2's own guidance that its serializer emits no id/uuid. If a numeric run id is ever needed downstream, it will have to come from get_test_runs_v1 (v1 listing), not from anything in this v2 chain. EXACT ARGUMENTS THAT WORKED (attempt 3): path_params {project_id: 'PR-2005'}, body flat (NOT wrapped in test_run) = {name, assignee, run_state, tags, test_cases: ['TC-54457','TC-54458','TC-54455','TC-54456']} - test_cases must be bare TC-NNN strings, NOT {test_case_id: ...} objects as the contract's own field list implies (this contradicts the capability's own declared param shape - a drift in the REQUEST contract, not just the response). CASES ATTACHED (verified via get_test_run_test_cases_v2, all 4 present, all untested, no configuration): TC-54457 (numeric 1972036, from __scratch__ folder 764138) and TC-54458 (numeric 1975349, from __scratch__ child folder 764828) are the writable scratch cases. TC-54455 (numeric 1971631) and TC-54456 (numeric 1971632) from the __readonly__ pool were ALSO attached to broaden the row count for assign_test_run_test_cases_v2 and bulk_update_test_run_test_cases_v2 - attaching them created run-owned test-run-test-case records (row/mapping ids = latest_result_id: TC-54455->2150387253, TC-54456->2150387251, TC-54457->2150387252, TC-54458->2150387254); downstream status/assignee writes on these rows modify only those records, never the underlying __readonly__ cases TC-54455/TC-54456 themselves - do not write to those cases directly. Numeric case ids were only recoverable from each row's 'urls.self' field (pattern .../test-runs//<numeric_case_id>/<latest_result_id>), same pattern previously seen for plans and cases. run_state='new_run' (explicit, matches default), active_state='active' (only value observed, taken from the response, not invented), assignee='ing@bsstag.com' (resolved successfully, stored and echoed back as a STRING - not the object shape the nested response schema declares), tags=['mcp-probe'] (round-tripped intact), configurations=[] (none requested, none returned), no test_plan_id/sub_test_plan_id sent so no plan linkage - the response's filter_test_cases:{is_dynamic:false} appeared even though no filter/plan fields were sent, meaning this key is unconditionally present on every v2 run, not just dynamic ones. RESPONSE IS READ FROM STORAGE, NOT AN ECHO: create's response test_run has fewer fields than what was sent (e.g. no test_cases field at all, confirming population is a separate, asynchronous step) and the identical object shape reappeared verbatim on the later list_test_runs_v2 read (steps 4), so this is genuinely persisted state, not a client-side echo. STANDING LESSON CONFIRMATIONS: (1) json_path/wrapper - this capability's own guidance says 'every field goes inside a test_run object', but invokeCapability rejects a literally-nested body client-side ('unknown body: test_run...'); the correct call is flat, and the server re-applies /test_run/<field> internally (attempt 2's validator errors surfaced as #/test_run/test_cases/N, proving the re-nesting happens server-side after the client sends flat). (2) The declared request shape for test_cases (array of {test_case_id} objects) is wrong - the real API wants an array of bare TC-NNN strings; sending objects is a 400 'Invalid JSON data'. (3) Response drift is severe: 15 declared nested-schema fields are absent (id, uuid, type, owner, environment, overall_progress, overall_progress_by_status_id, test_cases_count, is_automation, observability_url, metadata, assignee_imported, is_dynamic, test_plans, self_ui_link, links.detail), while filter_test_cases and urls (plus links.test_cases) are returned undeclared by the nested schema - the flat 'returns' array partially covers filter_test_cases/urls but not the nested nested-schema fields that are missing, reconfirming the standing lesson that the flat returns array disagrees with both the nested schema and reality in both directions. (4) assignee is declared as a nested object {id, browserstack_user_id, full_name, group_id, onboarded} in the response schema but is actually returned as a plain email string - a type-shape mismatch. All three attempts and both post-create verification reads are recorded above; verdict is DRIFT given the large declared/actual disagreement on the response shape and the wrong declared request shape for test_cases, even though the run was successfully created and verified to exist with all 4 cases attached."
+}

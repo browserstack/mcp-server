@@ -1,0 +1,147 @@
+{
+  "capability": "get_test_run_progress_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T06:45:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Resolve TR-9062's numeric run id, since this is a v1 route and the task warned no numeric id is exposed on the v2 surface. Also picked up TR-9061 and TR-9058's numeric ids as controls.",
+      "source": "invoked",
+      "capability": "get_test_runs_v1",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "p": 1
+        }
+      },
+      "status": 200,
+      "produced": {
+        "TR-9062": {
+          "uuid": 17575382,
+          "test_cases_count": 4,
+          "overall_progress_by_status_id": {
+            "318615": {
+              "count": 4,
+              "result_status": {
+                "internal_name": "untested",
+                "field_value": "Untested"
+              }
+            }
+          },
+          "configurations": []
+        },
+        "TR-9061": {
+          "uuid": 17574995,
+          "test_cases_count": 1,
+          "overall_progress_by_status_id": {
+            "318615": {
+              "count": 1,
+              "result_status": {
+                "internal_name": "untested",
+                "field_value": "Untested"
+              }
+            }
+          },
+          "configurations": []
+        },
+        "TR-9058": {
+          "uuid": 17574904,
+          "test_cases_count": 2,
+          "overall_progress_by_status_id": {
+            "318615": {
+              "count": 2,
+              "result_status": {
+                "internal_name": "untested",
+                "field_value": "Untested"
+              }
+            }
+          },
+          "configurations": []
+        }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9062"
+        },
+        "query": {
+          "p": 1
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "none \u2014 first attempt, using the TR-NNN form directly on this v1 route, succeeded immediately (contrary to the task's warning that v1 routes usually reject TR-NNN)"
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9061"
+        },
+        "query": {
+          "p": 1
+        }
+      },
+      "status": 500,
+      "error": "body was literally null, no envelope at all",
+      "changed": "immediately retried the same TR-9061 call, and separately re-issued TR-9062 and a numeric-id call, all unchanged, to check whether this was the preprod flake"
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9062"
+        },
+        "query": {
+          "p": 1
+        }
+      },
+      "status": 500,
+      "error": "body was literally null \u2014 same shape as attempt 2, and an unrelated capability (get_test_runs_v1) hit the identical null-body 500 in the same window before recovering on its own retry, confirming this was preprod intermittency rather than a route-specific bug",
+      "changed": "waited and retried unchanged; the next call to get_test_runs_v1 came back 200 and yielded the numeric ids, and the very next retry of get_test_run_progress_v1 (both TR-9062 and its numeric uuid) came back 200 consistently from then on"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {
+        "project_id": 379335744,
+        "test_run_id": "TR-9062"
+      },
+      "query": {
+        "p": 1
+      }
+    },
+    "status": 200,
+    "response_keys": [
+      "success",
+      "configurations",
+      "info"
+    ],
+    "item_shape": {
+      "success": "true",
+      "configurations": "empty array \u2014 TR-9062 has zero configurations attached (confirmed via get_test_runs_v1: configurations: [] on the run itself), so there is no per-configuration row to inspect for id/name/overall_progress_by_status_id",
+      "info": "{page:1, page_size:30, count:0, prev:null, next:null} \u2014 matches the get_test_runs_v1-style paging block; the contract for THIS capability only describes info generically as 'passed through as-is' with no fixed field list, so this is not a contract mismatch, just an observation",
+      "overall_progress_by_status_id (top-level)": "ABSENT, as expected \u2014 this key only appears in the single-configuration form (configuration_id passed), which was not exercised here"
+    }
+  },
+  "contract": {
+    "required": [
+      "success"
+    ],
+    "json_path": "(none declared \u2014 flat top-level object)",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "[ORCHESTRATOR RE-CLASSIFICATION 2026-09-18] Verdict changed from PASS to UNVERIFIED by the main session. The probing subagent's evidence is accepted in full and unaltered; only the verdict label is corrected.\nRationale: the declared 200 carries a `configurations` array whose item shape is declared (id, name, overall_progress_by_status_id, and a nested result_status object), and that array was EMPTY on all three runs probed - so the declared item shape was never exercised. An empty collection proves nothing about item shape, which is UNVERIFIED by this suite's standing rule and by consistent precedent: list_binned_test_cases_v1 (batch 4), folder_attachments_v1 and list_entity_attachments_v2 (batch 2), and list_reports_v2 before a sibling created a row for it (batch 3) were all UNVERIFIED on exactly this basis.\nThe contrast with count_binned_test_cases_v1, which earned a PASS on an empty bin in batch 4, is deliberate and worth stating: that capability declares a SCALAR result with no per-row shape, so emptiness left nothing unchecked. This one declares an array of structured items, so emptiness leaves the interesting part unchecked.\nThe emptiness here is also structural rather than incidental, which strengthens the case: the subagent established that NO run in the fixture pool has any configuration attached, and that even TR-9061 - which does carry real recorded progress - still returns configurations: []. So the empty array is driven by 'zero configurations on the run', not by 'nothing executed', and no amount of executing cases in this pool would populate it. Verifying this capability properly needs a run with at least one configuration attached.\nWhat IS verified and not in doubt: the envelope {success, configurations, info} matched the contract exactly with nothing missing and nothing undeclared, on three independent runs; the contract's claim that the route accepts either the TR-NNN identifier or the plain integer run id is TRUE (both forms returned byte-identical responses on all three runs); and the numeric run id is obtainable via get_test_runs_v1 (TR-9062 -> 17575382), which resolves the open question about whether v1 run capabilities are reachable from v2-created runs.\n\n--- original subagent note, verbatim ---\nNumeric-id resolution: resolved via get_test_runs_v1 (uuid=17575382 for TR-9062), recorded in setup[]. But this turned out to be unnecessary for the probe itself \u2014 the TR-NNN form worked on the FIRST attempt (200, identical response), and re-running with the numeric uuid afterward returned byte-identical output. So, unlike the task's framing, this specific v1 route's own contract text is accurate ('Run identifier TR-NNN, or the plain integer run id') and both forms are genuinely interchangeable here; there is no id-resolution blocker for this capability. Verified this on all three fixture runs (TR-9062/17575382, TR-9061/17574995, TR-9058/17574904) \u2014 every TR-NNN vs numeric pair produced the same response.\n\nWhat could be checked: the top-level response shape for the no-configuration_id mode exactly matches the declared contract \u2014 only success/configurations/info returned, nothing undeclared, nothing declared missing. This was cross-checked on TR-9062 (subject, fresh, 4 untested cases), TR-9061 (batch-1 leftover, 1 untested case, real progress recorded per get_test_runs_v1), and TR-9058 (readonly fixture, 2 untested cases) \u2014 all three returned the identical shape: configurations: [] and info with count:0.\n\nWhat could NOT be checked (UNVERIFIED): (1) The per-configuration array item shape ({id, name, overall_progress_by_status_id} per the contract) \u2014 none of the three fixture runs in this pool have ANY configuration attached (all show configurations: [] on the run object itself, per get_test_runs_v1), so the configurations array here is always empty regardless of whether the run has real progress. This means the richer breakdown this capability exists to provide is structurally unreachable for every run in this fixture pool. (2) The single-configuration shape (query with configuration_id set) \u2014 untestable without a real configuration id, and none exists on any fixture run; did not invent one. (3) overall_progress_by_status_id's per-status map, with its nested result_status object (id/field_value/internal_name/field_name/colour) \u2014 never observed populated, since no configuration rows exist to carry it.\n\nComparison with an older run: TR-9061 is known (per get_test_runs_v1 in this same session) to carry real recorded progress (overall_progress_by_status_id: {318615: {count:1, internal_name:'untested'}}), i.e. it is NOT purely zero/unexecuted. Yet this capability still returns configurations: [] for it \u2014 identical to the fresh, all-untested TR-9062. This confirms the empty array is driven entirely by the run having no configurations, not by whether anything has executed; it is not a fresh-run artifact and not evidence this capability zeroes out progress incorrectly \u2014 it simply cannot surface per-configuration data when there are no configurations to enumerate. The contract's own guidance already anticipates this ('a configuration row without any executed results may carry no breakdown key... treat missing/empty as nothing recorded, not an error'), though it does not explicitly call out the case of zero configurations entirely, which is what's actually happening across this whole fixture pool.\n\nFlat-vs-nested disagreement: the capability's flat `returns` array includes 'count' and 'result_status' as top-level-sounding entries, but neither appears at the top level of the actual response \u2014 both are nested (count inside each overall_progress_by_status_id entry, result_status inside the same entry). Trusted the nested schema per standing guidance; not counted as drift.\n\nError envelope / 404 check: TR-999999 (nonexistent) correctly returned 404 (not silently 200 or a confusing shape), matching the contract's documented behavior that an unknown run identifier is a 404 because the run is resolved before calculation. However the body was {success:false, message:'Test Run ID is invalid. Please enter valid Test Run ID and try again'} \u2014 NOT the declared 404 schema of {success:false, error:{code, message, details}}. This is another (now well-established) instance of the systemic error-envelope mismatch, on a status/shape that had not yet been explicitly confirmed for this capability.\n\nPreprod intermittency: three calls in a row returned status 500 with a completely null body (no envelope at all) \u2014 including one call to a different, already-trusted capability (get_test_runs_v1) \u2014 before recovering on unchanged retry. Treated as environment flakiness per standing guidance, not a capability defect, since (a) it was reproduced across two different capabilities in the same narrow window, (b) the body was null rather than the documented 500 shape ({success:false, message:'Failed to calculate configuration progress: ...'}), and (c) it fully resolved on retry with no argument changes and stayed stable afterward (5+ consecutive 200s).\n\nNo writes were made. TR-9058 and TR-9061 were read only via get_test_runs_v1 and get_test_run_progress_v1, never mutated."
+}

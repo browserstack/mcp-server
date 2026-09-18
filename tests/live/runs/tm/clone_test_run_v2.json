@@ -1,0 +1,118 @@
+{
+  "capability": "clone_test_run_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T07:05:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Read source run header before cloning (baseline for run_state/tags/assignee/configurations/plan-linkage comparison)",
+      "source": "invoked",
+      "capability": "get_test_run_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" } },
+      "status": 200,
+      "produced": {
+        "run_state": "new_run",
+        "assignee": "ing@bsstag.com",
+        "tags": ["mcp-probe"],
+        "configurations": [],
+        "no_test_plan_field": true,
+        "overall_progress": { "Untested": 5 }
+      }
+    },
+    {
+      "step": 2,
+      "why": "Read source run's 5 rows before cloning, to confirm the documented duplicate (TC-54457 x2) is present and record all latest_result_id values for a post-clone diff on the source",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 300 } },
+      "status": 200,
+      "produced": {
+        "count": 5,
+        "rows": [
+          { "identifier": "TC-54458", "latest_result_id": 2150387254 },
+          { "identifier": "TC-54457", "latest_result_id": 2150387252 },
+          { "identifier": "TC-54457", "latest_result_id": 2150387283, "note": "the accidental duplicate mapping" },
+          { "identifier": "TC-54456", "latest_result_id": 2150387251 },
+          { "identifier": "TC-54455", "latest_result_id": 2150387253 }
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "why": "Read project run listing before cloning to get the true baseline count (do not trust the clone response alone to prove a run was actually created)",
+      "source": "invoked",
+      "capability": "list_test_runs_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "p": 1, "page_size": 300, "include_closed": "true" } },
+      "status": 200,
+      "produced": { "count": 3, "identifiers": ["TR-9062", "TR-9061", "TR-9058"] }
+    },
+    {
+      "step": 4,
+      "why": "Re-read the project run listing after cloning, to verify in storage (not just from the clone's own response) that a run was actually added",
+      "source": "invoked",
+      "capability": "list_test_runs_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "p": 1, "page_size": 300, "include_closed": "true" } },
+      "status": 200,
+      "produced": { "count": 4, "identifiers": ["TR-9063", "TR-9062", "TR-9061", "TR-9058"] }
+    },
+    {
+      "step": 5,
+      "why": "Read the clone's own rows in storage to establish its true row count and whether the duplicate mapping carried over",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9063" }, "query": { "page_size": 300 } },
+      "status": 200,
+      "produced": {
+        "count": 4,
+        "rows": [
+          { "identifier": "TC-54458", "latest_result_id": 2150387391 },
+          { "identifier": "TC-54457", "latest_result_id": 2150387393, "note": "single row — duplicate NOT carried over" },
+          { "identifier": "TC-54456", "latest_result_id": 2150387394 },
+          { "identifier": "TC-54455", "latest_result_id": 2150387395 }
+        ]
+      }
+    },
+    {
+      "step": 6,
+      "why": "Re-read the source run's rows after cloning, to verify cloning left the source untouched (identifier count, latest_result_id set, tags, assignee all unchanged)",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 300 } },
+      "status": 200,
+      "produced": {
+        "count": 5,
+        "latest_result_ids_unchanged": [2150387254, 2150387252, 2150387283, 2150387251, 2150387253],
+        "matches_pre_clone_baseline": true
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+      "body": { "name": "__mcp-probe-clone-2026-09-18T07-05-00Z" }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_run"],
+    "item_shape": {
+      "test_run_keys": [
+        "active_state", "run_state", "created_at", "updated_at", "description",
+        "identifier", "name", "assignee", "project_id", "tags", "configurations",
+        "filter_test_cases", "links", "urls"
+      ]
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id"],
+    "json_path": "flat body (test_case_selection, statuses, copy_tc_assignee, copy_tags, copy_issues, name at top level) — matches the declared shape, and this is what was sent (name only, all other fields left at their declared defaults: test_case_selection=all, copy_tc_assignee=true, copy_tags=true, copy_issues=false)",
+    "declared_missing": [
+      "id", "uuid", "owner", "is_automation", "is_dynamic", "test_plans",
+      "test_cases_count", "overall_progress", "overall_progress_by_status_id",
+      "links.detail"
+    ],
+    "undeclared_returned": ["filter_test_cases", "urls", "links.test_cases"]
+  },
+  "notes": "CLONE CREATED: TR-9063 (__mcp-probe-clone-2026-09-18T07-05-00Z), project PR-2005 — this is disposable residue and MUST be reported to the user for cleanup; it was not deleted (delete is a destructive capability out of scope for this probe and not requested). One invocation only, first attempt succeeded (0 retries needed). \n\nWHAT IT COPIED: run-level tags (['mcp-probe'] carried over exactly, copy_tags default=true confirmed working), configurations ([] -> [], inconclusive since source had none), run_state ('new_run' on both source and clone — inconclusive whether this is a reset-to-default or a carry-through, since the source itself happened to already be new_run; cannot distinguish the two from this fixture). Plan linkage: source TR-9062 has no test_plan field at all (never linked), so 'test plan links are not carried over' could not be positively exercised here, only that the clone likewise has no test_plan field, consistent with the guidance. Per-case assignees (copy_tc_assignee default=true): all rows on both source and clone show assignee=null, so this too is unfalsifiable from this fixture (nothing to copy). \n\nRUN-LEVEL ASSIGNEE DRIFT-ADJACENT FINDING: the source run's own assignee is 'ing@bsstag.com' (confirmed via get_test_run_v2 and list_test_runs_v2 before/after), but the clone's run-level assignee came back null in both the create response and the subsequent list_test_runs_v2 read. copy_tc_assignee only governs per-test-case assignees per its own description, not the run-level assignee/owner field, and there is no separate declared option to copy the run-level assignee — so the run owner/assignee is silently NOT carried over on clone, and nothing in this capability's guidance says so. Flagging as a real behavioral gap, not just a schema mismatch.\n\nROW COUNT / DUPLICATE (the crux question): source has 5 rows (TC-54457 duplicated: latest_result_id 2150387252 AND 2150387283). The clone has 4 rows — TC-54457 appears exactly ONCE (latest_result_id 2150387393, a fresh id, as expected since a clone creates new result rows). The accidental duplicate mapping was NOT carried over; the clone's copy process normalizes/dedupes to one row per test case (at least for a null-configuration case), even though test_case_selection defaulted to 'all'. This is the single most informative finding of this probe: clone_test_run_v2 is not a byte-for-byte structural copy of the source's row table — it re-derives the case list, deduping what add_test_cases had duplicated.\n\nSYNCHRONOUS: response was 200 (not 202) — no build_pending flag, so per the capability's own guidance this codepath completed identity AND case-mapping synchronously in this instance (unlike a sibling capability's 202 in this batch). Verified in storage immediately after, no retry needed: get_test_run_test_cases_v2 on TR-9063 returned the full 4 rows on the very next call, and list_test_runs_v2 already showed count=4 with TR-9063 present. This is a genuine 200-that-actually-worked, unlike the two capabilities flagged upstream in this batch whose 200/202 changed nothing — confirmed by real before/after storage reads, not by trusting the response body alone.\n\nNUMERIC ID: neither the create response nor the clone's own get_test_run_v2-shape body exposes any numeric id or uuid for TR-9063 — only the TR-NNN string identifier. This matches the task's observation that no numeric run id appears anywhere on the v2 surface for a cloned run either; get_test_runs_v1 (not called here, out of scope for this probe) remains the only documented bridge to a numeric id.\n\nSOURCE INTEGRITY: TR-9062 was re-read after cloning via both get_test_run_test_cases_v2 (still exactly 5 rows, same 5 latest_result_id values: 2150387254, 2150387252, 2150387283, 2150387251, 2150387253 — byte-identical to the pre-clone baseline) and list_test_runs_v2 (still present, tags/assignee/run_state unchanged). Cloning did not modify the source. TR-9062 is left intact for the two write probes that follow (export_test_run_csv_v1, replace_test_run_v2, update_test_run_v2).\n\nCONTRACT DRIFT: declared_missing (id, uuid, owner, is_automation, is_dynamic, test_plans, test_cases_count, overall_progress, overall_progress_by_status_id, links.detail) matches the already-documented systemic 'test_run schema is over-declared entity-wide' pattern from this batch — same absent fields as seen elsewhere, not a new problem, severity LOW/consistent. undeclared_returned (filter_test_cases, urls, links.test_cases) also matches the pattern already seen on get_test_run_v2 and list_test_runs_v2 in this batch — same two extra top-level keys, severity LOW/consistent, not unique to clone. Per the batch's absolute rule, still recording verdict as DRIFT because both declared_missing and undeclared_returned are non-empty, even though severity is low and matches an already-known systemic pattern rather than a new one."
+}

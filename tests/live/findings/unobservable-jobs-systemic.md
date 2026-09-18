@@ -1,0 +1,54 @@
+# SYSTEMIC — job-initiating capabilities whose effect cannot be observed through this index
+
+- **Product:** tm
+- **Scope:** **not one capability** — at least five, across three entities, four batches
+- **Environment:** **preprod** (`test-management-preprod.bsstag.com`)
+- **Index version:** 1.14 working tree (`run5merge_2026-09-16T18:02:57Z`)
+- **Consolidated:** 2026-09-18
+
+## The claim
+
+Several capabilities exist to **produce an artifact or start a job**. Each returns a 2xx that means *"accepted"*, not *"done"*. **None of them can be verified through any capability in this index** — there is no status, polling, or download capability for any of them.
+
+For an agent, this means their headline purpose is unconfirmable by construction. A probe can only ever record "the request was accepted," never "the thing was produced."
+
+## The evidence
+
+| capability | batch | returns | how the artifact is delivered | can it be checked? |
+| --- | --- | --- | --- | --- |
+| `initiate_export` | 5 | `{success, export_id}` | file collected from the Test Management UI's exports list | **No** — no status/download capability exists; `export_id` is redeemable only in the UI |
+| `generate_test_case_automation_v1` | 5 | (crashes — see below) | webhook stamps completion onto the case later | **No** — no companion status capability; `get_test_case_v2` exposes `automation_status` but has no field for the `lcnc_link`/build metadata the guidance describes |
+| `export_test_run_csv_v1` | 6 | `{channel, success}` | CSV built async, **pushed over a websocket channel** to the requester's web session | **No** — response "carries no file and no download link" per its own guidance |
+| `download_report` | — | — | same websocket-push architecture | **No** — documents the identical limitation |
+| `export_dashboard_analytics` | — | — | same | **No** — documents the identical limitation |
+
+The last two were not probed in any batch; they were found during `export_test_run_csv_v1`'s search for an artifact-fetch path, and their contracts **document the same limitation in their own text**.
+
+Notably, the backing service's generic export machinery is documented as reporting **"pending forever"** and **404-ing on download** for these export types — so even the infrastructure that would normally provide polling does not serve them.
+
+## What this is, and what it is not
+
+**It is not a contract defect in any individual capability.** In every case the declared response matched what actually came back — `export_test_run_csv_v1` in particular returned `{"channel":"0cb604df-…","success":true}`, exactly its declared `{channel, success}` schema, with zero drift on request or response. These contracts are *honest*: several state outright that no file or link is returned.
+
+**It is a coverage gap in the index as a whole.** The product delivers these artifacts over websockets and UI surfaces that an API-driven agent cannot reach. So the index publishes capabilities an agent can *start* but never *finish*, and it offers no capability that closes the loop.
+
+**It is also why these probes are `UNVERIFIED` rather than `PASS`.** This suite judges writes on whether the effect landed. Where the effect is unobservable by design, "the request conformed" is the most that can honestly be claimed — and recording that as a PASS would overstate what was tested. (Contrast `count_binned_test_cases_v1`, a *read* whose entire declared shape was verifiable even over an empty bin, which correctly earned a PASS.)
+
+## Why it matters more than it looks
+
+An agent asked to "export the test run and tell me what's in it" will call the capability, receive `success: true`, and have **no way to obtain or confirm the result**. Worst case it reports success to a user for a file that was never produced — indistinguishable, from the API side, from one that was.
+
+This overlaps with a separate and worse pattern found in batch 6, where two `test_run` **write** capabilities returned success and demonstrably did nothing (`findings/assign_test_run_test_cases_v2.md`, `findings/bulk_update_test_run_test_cases_v2.md`). Those are bugs. **These are not** — but from the agent's vantage point the two are indistinguishable, because in both cases a 2xx is all there is. That is the deeper problem: **this index gives an agent no general way to tell a successful write from a no-op.**
+
+## Actions proposed
+
+1. **Decide whether these belong in an agent-facing index at all.** A capability an agent cannot complete may be worse than no capability, because it invites a confident false report. If they stay, their intent lines should say plainly: *"starts a job; the result is not retrievable through this API."*
+2. **Expose status/download capabilities** for the export family if the product can serve them. That would convert five UNVERIFIED results into verifiable ones and is the single highest-yield addition suggested by this suite so far.
+3. **Add a standard guidance sentence** to every job-initiating capability stating what the 2xx does and does not mean, and where the artifact actually lands.
+4. **Audit for others.** Five were found incidentally rather than by systematic search; a sweep for capabilities returning a job/channel/export id would likely find more.
+
+## Caveats
+
+- **Preprod only.** A production environment might expose retrieval paths this one does not.
+- **No backend source or logs** were consulted. The architecture described above comes from the capabilities' own contracts plus observed responses, not from reading the service.
+- `generate_test_case_automation_v1` is listed for the coverage gap only; it is separately **BLOCKED** because it crashes on every input, which is a distinct defect documented in its own finding.

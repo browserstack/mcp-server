@@ -55,7 +55,11 @@ So the nesting is not the problem — unlike `create_root_folder_v1`, where it w
 1. `list_templates_v2` → system templates **1164** "Test Case Steps" (default, `field_count` 45) and **1664** "Test Case BDD" (`field_count` 47).
 2. `get_template_v2` (`id: 1164`) → real layout: description system ids `[1,2,3,4,8,9]`, properties system ids `[10,11,12,13,14,15,16]`, plus 30 custom field ids.
 
-**No field in that response carries any "non-removable" marker.** `is_mandatory` is `false` on *every* entry — including Title, Attachments, Owner and Requirements, whose underlying `field_data.optional` is `false`.
+**No field in that response carries a "non-removable" marker at the mapping level.** `is_mandatory` is `false` on *every* entry — including Title, Attachments, Owner and Requirements, whose underlying `field_data.optional` is `false`.
+
+> **Amended 2026-09-18 after probing `get_template_v2` directly** (see `findings/get_template_v2.md`). The sentence above originally read "no field carries any 'non-removable' marker", which was too strong: it was reached by checking `is_mandatory` alone. There is a **second, undocumented required-ness signal** inside the unenumerated `field_data` object — `field_data.is_required`, which is genuinely `true` on custom field `CF_x3ckvk` (id 104762) while that same mapping row's `is_mandatory` is `false`.
+>
+> **This does not change the BLOCKED verdict.** Attempt 6 sent the *complete* field census of template 1164 — every id the read surface returns — and still failed identically, which makes the marker question moot: whatever create validates against is not among the ids any documented read exposes. But the hidden `field_data.is_required` flag is a live lead for whoever picks this up, and the original wording should not go to the product team unqualified.
 
 ## Why this is BLOCKED and not a payload mistake
 

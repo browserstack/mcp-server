@@ -1,0 +1,44 @@
+{
+  "capability": "list_custom_fields_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "query": { "p": 1, "count": 300 } },
+      "status": 200,
+      "error": null,
+      "changed": "none needed — first attempt succeeded"
+    }
+  ],
+  "probe": {
+    "arguments": { "query": { "p": 1, "count": 300 } },
+    "status": 200,
+    "response_keys": ["success", "custom_fields", "info"],
+    "item_shape": {
+      "id": "integer (e.g. 105921) — contract declares type string",
+      "field_type": "string, observed values: multi_dropdown, dropdown, string, url, date — none of these except dropdown/url/date match the declared enum verbatim",
+      "field_name": "string — matches contract",
+      "entity_type": "string, always \"TestCase\" in this listing — matches contract",
+      "is_required": "boolean — matches contract",
+      "default_value": "null in every row observed — matches contract (type unspecified there)",
+      "place_holder_text": "string, present — matches contract",
+      "system_name": "string, present — matches contract",
+      "is_bulk_editable": "boolean, present — matches contract",
+      "is_filterable": "boolean, present — matches contract",
+      "placeholder": "string — NOT declared anywhere in the contract's item schema",
+      "linked_projects_count": "integer, present — matches contract",
+      "group_id": "integer (e.g. 3452) — contract declares type string"
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": "none — this capability has no body; it takes only query params `p` (page, default 1) and `count` (page size, default 30, max 300), both optional with defaults",
+    "declared_missing": [],
+    "undeclared_returned": ["placeholder"]
+  },
+  "notes": "No setup/prerequisite calls were needed: describeCapability shows list_custom_fields_v2 takes no path_params and no project/workspace identifier at all (query-only: p, count) — consistent with the task's framing that custom fields are account-level, not folder- or project-scoped. The __mcp-capability__ fixture pool (project 379335744 / PR-2005, folders, cases, plan, run) was irrelevant to this capability and was not touched.\n\nInvoked with query {p:1, count:300} and got a real, non-empty collection on the first attempt: 30 rows, matching info.count=30, info.page=1, info.page_size=300, prev/next both null (single page) — consistent with the earlier finding that system template 1164 has 30 custom field ids attached. This is NOT a hollow probe: the contract commits to a full item schema plus a paginated info envelope, and the response can be compared against it field-by-field.\n\nDRIFT found, in three places:\n1. `id` is declared type `string` (schema example \"cf-123\") but every row returned it as a bare JSON integer (e.g. 105921, 105920, 103927).\n2. `group_id` is declared type `string` but every row returned it as a bare JSON integer (e.g. 3452 on all 30 rows — a single group for this workspace).\n3. `field_type` is declared as a closed enum [\"text\",\"textarea\",\"dropdown\",\"multiselect\",\"number\",\"date\",\"boolean\",\"url\"], but the actual values observed were: multi_dropdown, dropdown, string, url, date. \"dropdown\", \"url\" and \"date\" match the declared enum; \"string\" does not match the declared \"text\", and \"multi_dropdown\" does not match the declared \"multiselect\" — i.e. two of the five distinct field_types actually present in this workspace use different tokens than the contract promises. No row exercised \"textarea\", \"number\" or \"boolean\" so those couldn't be checked either way.\n\nAlso undeclared: every row carries a `placeholder` key (duplicate-looking sibling of the declared `place_holder_text`, same value in all observed rows, e.g. \"ad\") that the contract's item schema never mentions.\n\nNo declared field was missing from the response — every key the contract promises (id, field_type, field_name, entity_type, is_required, default_value, place_holder_text, system_name, is_bulk_editable, is_filterable, linked_projects_count, group_id) was present on every row. The pagination `info` object matched its declared shape exactly (page, page_size, count, prev, next).\n\nPer the capability's own guidance, rows are metadata-only — no options/datasets/levels nested structures appear, and none were expected: the guidance explicitly says to read the field's datasets separately for option values. So the absence of nested option data is NOT drift, it's exactly what the contract's guidance predicts.\n\nReal custom field ids + field_types observed (for the sibling get_custom_field_v2 probe), richest nested-shape candidates first:\n- id 105921, field_type multi_dropdown, field_name \"MultiSeverity_jzcdfp3_customFields-rmod6z\" (linked_projects_count 1)\n- id 105914, field_type multi_dropdown, field_name \"multi_dropdown_field_uw5mub\" (linked_projects_count 1)\n- id 105920, field_type dropdown, field_name \"Severity_jzcdfp3_customFields-fyu78i\" (linked_projects_count 1)\n- id 105915, field_type dropdown, field_name \"dropdown_field_pnw5i3\" (linked_projects_count 1)\n- id 105911, field_type dropdown, field_name \"customFields-zng8nq\" (linked_projects_count 1)\n- id 105898, field_type dropdown, field_name \"CF_DD_4outy\" (linked_projects_count 1)\n- id 103927, field_type dropdown, field_name \"Template Platform\" (linked_projects_count 912 — by far the most widely linked field in the account, good for checking linked-project behavior)\n- id 105902, field_type string, field_name \"A1Str_41qkpk\" (linked_projects_count 1)\n- id 105901, field_type url, field_name \"A1Url_x649y4\" (linked_projects_count 1)\n- id 104783, field_type date, field_name \"DateFilter_9lk7xq\" (linked_projects_count 1)\n- id 104785, field_type string, field_name \"CF_098rtx\", is_required true (only required-field example seen)\n\nAll 30 rows have entity_type TestCase and group_id 3452 (single group in this workspace)."
+}

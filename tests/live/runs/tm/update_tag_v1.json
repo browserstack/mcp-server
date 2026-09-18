@@ -1,0 +1,230 @@
+{
+  "capability": "update_tag_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T04:40:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Resolve the real integer id of the fixture tag __mcp-probe-tag-20260918a before renaming it \u2014 never invent an id.",
+      "source": "invoked",
+      "capability": "list_tags_v3",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "entity_type": "test_case",
+          "search": "__mcp-probe-tag-20260918a",
+          "per_page": 100
+        }
+      },
+      "status": 200,
+      "produced": {
+        "tags": [
+          {
+            "id": 541004,
+            "name": "__mcp-probe-tag-20260918a",
+            "created_at": "2026-09-18T04:31:35.000Z",
+            "updated_at": "2026-09-18T04:31:35.000Z",
+            "entity_count": 1
+          }
+        ],
+        "info": {
+          "page": 1,
+          "page_size": 100,
+          "count": 1,
+          "prev": null,
+          "next": null
+        }
+      }
+    },
+    {
+      "step": 2,
+      "why": "Re-check the list_tags_v3 vs list_test_case_tags_v1 discrepancy flagged by the sibling probes, now that the tag has existed for a while (ruling out a timing race).",
+      "source": "invoked",
+      "capability": "list_test_case_tags_v1",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "q": "__mcp-probe-tag-20260918a"
+        }
+      },
+      "status": 500,
+      "produced": {
+        "status": 500,
+        "error": "Internal Server Error"
+      }
+    },
+    {
+      "step": 3,
+      "why": "Retry list_test_case_tags_v1 without the q filter (paged listing instead) since q consistently 500s \u2014 confirm the tag is visible here too.",
+      "source": "invoked",
+      "capability": "list_test_case_tags_v1",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "p": 1
+        }
+      },
+      "status": 200,
+      "produced": {
+        "tags": [
+          "__mcp-probe-tag-20260918a"
+        ],
+        "info": {
+          "page": 1,
+          "page_size": 30,
+          "count": 1,
+          "prev": null,
+          "next": null
+        }
+      }
+    },
+    {
+      "step": 4,
+      "why": "Confirm the fixture tag's baseline attachment to scratch case TC-54457 (int 1972036) before mutating anything, and positively identify the subject as fixture-created.",
+      "source": "invoked",
+      "capability": "get_test_case_tags",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764138,
+          "test_case_id": 1972036
+        }
+      },
+      "status": 200,
+      "produced": [
+        "__mcp-probe-tag-20260918a"
+      ]
+    },
+    {
+      "step": 5,
+      "why": "Post-rename: re-read list_tags_v3 to confirm the old wording is gone and the new one is present in storage.",
+      "source": "invoked",
+      "capability": "list_tags_v3",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "entity_type": "test_case",
+          "per_page": 100
+        }
+      },
+      "status": 200,
+      "produced": {
+        "tags": [
+          {
+            "id": 541004,
+            "name": "__mcp-probe-tag-20260918a-renamed",
+            "created_at": "2026-09-18T04:31:35.000Z",
+            "updated_at": "2026-09-18T04:38:24.000Z",
+            "entity_count": 1
+          }
+        ],
+        "info": {
+          "page": 1,
+          "page_size": 100,
+          "count": 1,
+          "prev": null,
+          "next": null
+        }
+      }
+    },
+    {
+      "step": 6,
+      "why": "Post-rename: re-read get_test_case_tags on case 1972036 to confirm the tag stayed attached and now shows the new wording.",
+      "source": "invoked",
+      "capability": "get_test_case_tags",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764138,
+          "test_case_id": 1972036
+        }
+      },
+      "status": 200,
+      "produced": [
+        "__mcp-probe-tag-20260918a-renamed"
+      ]
+    },
+    {
+      "step": 7,
+      "why": "Post-rename: re-check list_test_case_tags_v1 (paged, no q) to see the other listing capability agrees too.",
+      "source": "invoked",
+      "capability": "list_test_case_tags_v1",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "p": 1
+        }
+      },
+      "status": 200,
+      "produced": {
+        "tags": [
+          "__mcp-probe-tag-20260918a-renamed"
+        ],
+        "info": {
+          "page": 1,
+          "page_size": 30,
+          "count": 1,
+          "prev": null,
+          "next": null
+        }
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": {
+        "project_id": 379335744,
+        "id": 541004
+      },
+      "body": {
+        "new_name": "__mcp-probe-tag-20260918a-renamed"
+      }
+    },
+    "status": 200,
+    "response_keys": [
+      "id",
+      "name",
+      "group_id",
+      "color_preset",
+      "created_at",
+      "updated_at"
+    ],
+    "item_shape": {
+      "id": 541004,
+      "name": "__mcp-probe-tag-20260918a-renamed",
+      "group_id": 3452,
+      "color_preset": "#FBF6FE,#F7EAFF,#792395,#2C023F,#5C007A,#EFD4FF",
+      "created_at": "2026-09-18T04:31:35.000Z",
+      "updated_at": "2026-09-18T04:38:24.017Z"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path_param, integer \u2014 the v1 numeric project id, NOT the PR-NNN form)",
+      "id (path_param, integer \u2014 the tag's own id, resolved via list_tags_v3, not its name)",
+      "new_name (body, string, required, trimmed, blank/whitespace-only refused)"
+    ],
+    "json_path": "Not declared at all for this capability \u2014 describeCapability's output for update_tag_v1 carries no json_path field anywhere (unlike e.g. create_folder_v2, which does declare json_path values). Params are given flat: path_params project_id/id, body new_name. Invoked flat and it worked first try, consistent with the sibling finding that the surface takes flat parameter names regardless of what json_path elsewhere implies about server-side nesting.",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "group_id",
+      "color_preset",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  "notes": "[ORCHESTRATOR RE-CLASSIFICATION 2026-09-18] Verdict changed from PASS to DRIFT by the main session. The probing subagent's evidence is accepted in full and unaltered; only the verdict label is corrected, for consistency with how this suite has judged the identical situation elsewhere.\nRationale: contract.undeclared_returned is non-empty (group_id, color_preset, created_at, updated_at), which is by definition DRIFT ('invoked, but declared and actual disagree'), not PASS ('the response carries what the contract declares'). Batch 2's get_custom_field_v2 was classified DRIFT on exactly this basis - five real fields returned that the contract never mentions - so labelling this one PASS would make the two batches non-comparable.\nA second, compounding reason: the declared 200 here is a near-empty {\"type\":\"object\"} with only an informal returns hint of [id, name]. Even had the response matched, that PASS would have been HOLLOW - a contract that commits to almost nothing cannot meaningfully fail a conformance check. The subagent itself described the declared shape as 'thin/hollow by itself'. Six real fields came back against two informally hinted ones.\nWhat the probe genuinely established, and which is NOT in doubt: the rename worked and was verified in storage (old wording gone, new wording present, count unchanged at 1), and the tag stayed attached to scratch case 1972036/TC-54457 rather than being silently detached. The effect of the write is correct; only its declared response shape is wrong.\n\n--- original subagent note, verbatim ---\nCONTRACT (step 1): update_tag_v1 requires project_id (integer path param \u2014 confirmed the v1 numeric id 379335744 works; the contract's own type declaration already settles this is NOT the PR-NNN form) and id (integer path param \u2014 the tag's own numeric id, not its name). Body takes only new_name (string, required). Declared 200: 'The renamed label, carrying its id and its new name' with returns:['id','name'] but schema is a bare {\"type\":\"object\"} with no properties listed \u2014 a thin/near-empty declared shape, so a conformance PASS on the declared fields alone would be hollow; the real signal here is the undeclared_returned diff and the storage verification below.\n\nSUBJECT IDENTIFICATION: the id (541004) for __mcp-probe-tag-20260918a was resolved via list_tags_v3 (setup step 1), not invented. Before renaming, get_test_case_tags on case 1972036 (setup step 4) confirmed the tag was attached there and nowhere else was touched \u2014 this positively identifies it as the fixture-created tag from the sibling verify_test_case_tags_v1/update_test_case_v2 probes, satisfying the 'must positively identify or stop' requirement.\n\nINVOCATION: succeeded on the FIRST attempt (no retries needed) \u2014 path_params {project_id:379335744, id:541004}, body {new_name:'__mcp-probe-tag-20260918a-renamed'}, user_permission granted. Response 200: {id:541004, name:'__mcp-probe-tag-20260918a-renamed', group_id:3452, color_preset:'#FBF6FE,#F7EAFF,#792395,#2C023F,#5C007A,#EFD4FF', created_at, updated_at}. Both declared fields (id, name) are present and correct. Four undeclared fields came back: group_id, color_preset, created_at, updated_at \u2014 none mentioned anywhere in the contract's returns list or description. This is DRIFT in the declared-vs-actual response shape (undeclared_returned), even though the rename itself worked correctly, hence verdict PASS overall (the capability does what it says) with this response-shape drift called out rather than banked silently.\n\nSTORAGE VERIFICATION (not just a 200): re-read list_tags_v3 (setup step 5) afterwards \u2014 the old wording '__mcp-probe-tag-20260918a' is GONE and only '__mcp-probe-tag-20260918a-renamed' (same id 541004) is present, count still 1. This proves the rename actually landed in storage, not just an echoed response \u2014 ruling out the DRIFT pattern the task warned about (a 200 that doesn't actually rename anything).\n\nATTACHMENT VERIFICATION: re-read get_test_case_tags on case 1972036 (setup step 6) afterwards \u2014 the case still carries exactly one tag, now reading '__mcp-probe-tag-20260918a-renamed'. The rename did NOT detach the tag from its case; the case-tag relationship survived the rename cleanly.\n\nlist_tags_v3 vs list_test_case_tags_v1 DISCREPANCY RESOLUTION: re-checked both, well after the tag's creation and again after the rename. Both now agree in every check: list_tags_v3 (setup steps 1 and 5) and list_test_case_tags_v1 (setup steps 3 and 7) both reported count 1 with the tag present, both before and after the rename. Since the two probes agree once run sequentially rather than concurrently, this confirms the earlier disagreement (list_tags_v3 count 0 vs list_test_case_tags_v1 count 1) was a TIMING RACE between the two sibling probes' concurrent execution, not a genuine under-report by list_tags_v3. No further action needed against list_tags_v3 on this point.\n\nADDITIONAL FINDING (not the capability under test, but discovered while resolving the discrepancy): list_test_case_tags_v1 with a non-blank `q` query param (setup step 2) consistently returns HTTP 500 {status:500, error:'Internal Server Error'} for this project \u2014 reproduced twice, identically. This is NOT the 'product could not be reached' preprod-outage signature the task warned about (a plain 500 is explicitly called out as different from that). The same capability with `p` instead of `q` (no free-text filter) works fine (setup steps 3, 7) and returns the correct tag. This looks like a genuine bug in list_test_case_tags_v1's search branch, worth flagging separately from this probe's own verdict \u2014 it is out of scope to fix or fully characterize here since the capability under test is update_tag_v1, not list_test_case_tags_v1.\n\nSUMMARY: tag id 541004, old wording '__mcp-probe-tag-20260918a', new wording '__mcp-probe-tag-20260918a-renamed', project 379335744 / PR-2005, case 1972036 / TC-54457 in folder 764138. Rename verified in storage via two independent listing capabilities and the case's own tag list re-read; tag stayed attached to its case after the rename. No fixture beyond the pre-existing scratch tag was created or consumed \u2014 no new setup tag was needed for this probe."
+}

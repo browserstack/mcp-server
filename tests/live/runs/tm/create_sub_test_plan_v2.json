@@ -1,0 +1,111 @@
+{
+  "capability": "create_sub_test_plan_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T05:09:53Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Read the newly created sub-plan back from storage (not the create response's echo) via get_test_plan_v2, and check whether parent_plan_id is populated on this independent read and in what form.",
+      "source": "invoked",
+      "capability": "get_test_plan_v2",
+      "arguments": { "project_id": "PR-2005", "test_plan_id": "STP-6" },
+      "status": 200,
+      "produced": {
+        "identifier": "STP-6",
+        "name": "__mcp-probe-subplan-2026-09-18T05:09:18Z",
+        "parent_plan_id": "TP-1616",
+        "sub_plans_count": 0,
+        "test_runs_count": { "active": 0, "closed": 0 },
+        "test_runs": [],
+        "links": { "self": "/api/v2/projects/PR-2005/test-plans/STP-6", "test_runs": "/api/v2/projects/PR-2005/test-plans/STP-6/test-runs" },
+        "urls": { "self": "https://test-management-preprod.bsstag.com/projects/379335744/test-plans/48284" }
+      }
+    },
+    {
+      "step": 2,
+      "why": "Re-read the parent plan TP-1616 to confirm sub_plans_count actually incremented (a 200 on create that did not really attach a child would be drift).",
+      "source": "invoked",
+      "capability": "get_test_plan_v2",
+      "arguments": { "project_id": "PR-2005", "test_plan_id": "TP-1616" },
+      "status": 200,
+      "produced": {
+        "identifier": "TP-1616",
+        "sub_plans_count": 1,
+        "test_runs_count": { "active": 1, "closed": 0 },
+        "test_runs": [ { "identifier": "TR-9061", "name": "MCP capability probe fixture run (link_entities_to_jira_issue)" } ],
+        "urls": { "self": "https://test-management-preprod.bsstag.com/projects/379335744/test-plans/48283", "sub_test_plans": "https://test-management-preprod.bsstag.com/api/v2/projects/PR-2005/test-plans/TP-1616/sub-test-plans" }
+      }
+    },
+    {
+      "step": 3,
+      "why": "Check whether the project-level plan listing (list_test_plans_v2) surfaces sub-plans or only top-level plans.",
+      "source": "invoked",
+      "capability": "list_test_plans_v2",
+      "arguments": { "project_id": "PR-2005", "count": 300 },
+      "status": 200,
+      "produced": {
+        "row_identifiers": ["TP-1616", "TP-1596"],
+        "info": { "page": 1, "page_size": 300, "count": 2, "prev": null, "next": null },
+        "sub_plan_present": false
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_plan_id": "TP-1616" },
+        "body": { "sub_test_plan": { "name": "__mcp-probe-subplan-2026-09-18T05:09:18Z", "description": "Disposable probe sub-plan created by create_sub_test_plan_v2 live probe." } }
+      },
+      "status": null,
+      "error": "unknown body: sub_test_plan. accepted: description, end_date, issue_tracker, issues, name, start_date, tags",
+      "changed": "Tested the capability's own guidance verbatim first ('Wrap the body in a sub_test_plan object'). Rejected client-side by invokeCapability before any HTTP request was made. Next attempt sends the same fields flat, matching invokeCapability's own accepted-field list and letting it apply the declared json_path mapping (/sub_test_plan/<field>) itself."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_plan_id": "TP-1616" },
+        "body": { "name": "__mcp-probe-subplan-2026-09-18T05:09:18Z", "description": "Disposable probe sub-plan created by create_sub_test_plan_v2 live probe." }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on this attempt."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005", "test_plan_id": "TP-1616" },
+      "body": { "name": "__mcp-probe-subplan-2026-09-18T05:09:18Z", "description": "Disposable probe sub-plan created by create_sub_test_plan_v2 live probe." }
+    },
+    "status": 200,
+    "response_keys": ["success", "sub_test_plan"],
+    "item_shape": {
+      "identifier": "STP-6",
+      "name": "__mcp-probe-subplan-2026-09-18T05:09:18Z",
+      "description": "Disposable probe sub-plan created by create_sub_test_plan_v2 live probe.",
+      "active_state": "active",
+      "tags": [],
+      "issues": [],
+      "test_runs_count": { "active": 0, "closed": 0 },
+      "parent_plan_id": "TP-1616",
+      "sub_plans_count": 0,
+      "start_date": null,
+      "end_date": null,
+      "created_at": "2026-09-18T05:09:53.000Z",
+      "project_id": "PR-2005",
+      "urls": { "self": "https://test-management-preprod.bsstag.com/projects/379335744/test-plans/48284" }
+    }
+  },
+  "contract": {
+    "required": ["name"],
+    "json_path": "/sub_test_plan/<field> (name, description, start_date, end_date, tags, issues, issue_tracker each map to a sub_test_plan.<field> path on the wire; invokeCapability wants these flat under their own names and applies the mapping itself — a literally-nested { sub_test_plan: {...} } body is rejected client-side, see attempts[0])",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "sub_test_plan.sub_plans_count — present on the created object (value 0) and documented in the nested response schema's property list, but absent from the capability's own flat top-level `returns` array, which lists 15 keys and omits it.",
+      "sub_test_plan.urls.self — `urls` is declared only as a bare `{type: object}` with no enumerated properties (description says only 'Web-app deep links for a human, plus a sub_test_plans link on top-level plans only'); the actual key returned (`self`) is nowhere spelled out."
+    ]
+  },
+  "notes": "Sub-plan created: identifier STP-6 (confirms the declared STP-NNN format), numeric plan id 48284 recoverable only from urls.self (https://test-management-preprod.bsstag.com/projects/379335744/test-plans/48284) — matches the pattern seen on TP-1616 (48283), i.e. no numeric id field in the payload. parent_plan_id CLOSES THE OPEN QUESTION: it is populated on the create response itself (value 'TP-1616', the parent's TP-NNN identifier — not its numeric id 48283), and remains populated identically on an independent get_test_plan_v2 read-back of STP-6 (again 'TP-1616'). So the nested schema's claim ('present only when this plan is a sub-plan') is correct in substance and, on this real sub-plan, is populated with the identifier form as documented — good news for that thread. However, the sibling's observation that the flat `returns` array lists parent_plan_id unconditionally (i.e. without the sub-plan caveat) still stands as a separate, lesser drift on the flat array's completeness, since on a top-level plan (TP-1616 itself) parent_plan_id is genuinely absent (not present-but-null) per the parent-plan probe. sub_plans_count on TP-1616 went 0 -> 1 after the sub-plan was created, confirmed via an independent get_test_plan_v2 re-read (not just the create echo) — the child is real, not drift. On the sub-plan itself (STP-6), sub_plans_count came back as the integer 0, not null, contradicting the nested schema's explicit claim ('sub_plans_count ... null on a sub-plan') — recorded as drift; the value is well-formed (an empty-children plan reporting 0) but the documented null-on-sub-plan behavior did not hold. list_test_plans_v2 (count=300, single page, info.count=2) returned only the project's two top-level plans (TP-1616, TP-1596) and did NOT include STP-6 — sub-plans do NOT appear in this listing; must use the per-parent sub-plan listing/read instead, consistent with list_test_plans_v2's own guidance ('list a parent's children through the sub-plans listing'). Depth limit for nesting a sub-plan under a sub-plan was NOT tested destructively per instructions: create_sub_test_plan_v2's own path_param regex for test_plan_id is ^(TP|STP)-\\d+$ (would route-match an STP-NNN parent too), but its prose describes the parent strictly as 'TP-NNN' and states a created sub-plan itself 'cannot be re-parented or promoted afterwards on v2' — the contract gives no explicit statement either way on whether STP-under-STP nesting is accepted or rejected server-side, so this remains an open question, not something inferred from an actual call. Guidance's request-shape trap (recommending a `sub_test_plan` wrapper that invokeCapability itself rejects) matches the pattern already seen on create_test_plan_v2 in this suite — same class of drift, different capability. No 4xx/5xx HTTP responses were encountered in this probe (the one rejection was client-side, before any HTTP call), so the error-envelope-honoured question does not apply here."
+}

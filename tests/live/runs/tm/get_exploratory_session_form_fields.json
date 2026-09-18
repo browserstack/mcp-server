@@ -1,0 +1,57 @@
+{
+  "capability": "get_exploratory_session_form_fields",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Fixture pool supplies the v1 integer project id for __mcp-capability-fixture__; contract declares project_id as path param type integer, so used the int form directly (no separate lookup call needed).",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "project_id": 379335744 },
+      "status": null,
+      "produced": {}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "values": true } },
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "Suspected the v1 integer id might be wrong for this route, so tried the v2 identifier form (PR-2005) next."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "values": true } },
+      "status": null,
+      "error": "'project_id' must be a number",
+      "changed": "Local type validation rejected the v2 string identifier outright (contract's declared type is integer), confirming this route only accepts the v1 int form. Reverted to project_id=379335744 and dropped the query.values param to isolate whether the query string itself was the cause of the 404."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "error": null,
+      "changed": "Succeeded. Body: {\"success\":true,\"custom_fields\":[],\"default_fields\":[]}. Re-added query.values=true afterward to confirm it was specifically that parameter causing the earlier 404 (see notes) - reproduced the 404 twice more, plus with values=\"true\" (string) and values=1 (all 404), while values=false and no query both returned 200 consistently (2/2 each). This isolates the drift to any truthy value of the declared `values` query parameter."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "query": {} },
+    "status": 200,
+    "response_keys": ["success", "custom_fields", "default_fields"],
+    "item_shape": {
+      "custom_fields": "empty array - no items returned for this project, so the per-field shape (id, field_name, field_user_name, field_type, entity_type, is_required, optional, option_values, field_values, default_value, placeholder, is_bulk_editable, is_filterable, parent_custom_field_id, links) is UNVERIFIABLE from actual data; only the contract's declared shape is known.",
+      "default_fields": "empty array, matches contract's claim that this is always empty on this path."
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Core finding is a reproducible DRIFT in the declared `values` query parameter, not in the response body shape. The contract says: 'Set to true to get each field's configured choices alongside its definition... Left off, the reply is a compact list... omitted.' In practice, query.values=true (and 'true' string, and 1) makes the request fail with HTTP 404 every time (4/4 attempts across two separate calls plus two truthiness variants), while values=false or omitting the param entirely returns 200 cleanly (2/2 and 2/2). So the one lever the contract offers for getting option_values/field_values - the whole reason an agent would call this with the richer form - is broken: an agent that follows the guidance ('Ask for the choices when you intend to write a session') will always get a 404 instead of data. This is worse than a documentation/response-shape mismatch: the documented capability of the endpoint is unreachable.\n\nSecondary finding: the 404 body is a bare {\"success\":false} with no `error` object at all, contradicting the capability's own declared 400/401/403/404/500 envelope (which requires error.code, error.message, error.details). Same bare-envelope pattern the task flagged for 500s, observed here on 404 instead.\n\nOn the base (working) call: response conforms exactly to the declared 200 schema - success, custom_fields, default_fields, nothing missing, nothing extra. But custom_fields was empty on the fixture project, so the richly-nested per-field shape (option_values, field_values, parent_custom_field_id, links, etc. - where drift is most likely per the task's own precedent with update_tag_v1 and get_template_v2) could not be enumerated at all, both because the project has no custom exploratory-session fields configured AND because the only way to request the nested option data (query.values=true) 404s. Could not test an alternate project: the fixture pool only supplies one project (__mcp-capability-fixture__); the v2 identifier form for that same project was rejected client-side on type (contract's declared integer type for project_id is correct - no drift there), and no other project id was available in the pool to try. The contract explicitly frames the endpoint as project-scoped (project_id required path param), not account-scoped, so no account-level variant exists to fall back to.\n\nNet: verdict is DRIFT rather than UNVERIFIED because we have a concrete, reproduced disagreement between declared and actual behavior (the values param), even though the nested item shape itself remains unverified due to the empty fixture project compounded by that same drift."
+}

@@ -1,0 +1,43 @@
+{
+  "capability": "submit_test_cases_for_review_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T06:12:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Check the review_approve project setting before invoking the write capability, as required by the probe protocol.",
+      "source": "invoked",
+      "capability": "get_project_settings",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": { "success": true, "project_settings": [] }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "ids": [1975349], "review_status": "in_review" }
+      },
+      "status": 400,
+      "error": "{\"errors\":\"Please enable review approve feature from project settings page\"}",
+      "changed": "None. This was a single entitlement-confirmation attempt (not a probe of the success path). The result confirmed review_approve is OFF on the fixture project, matching the contract's own declared guidance verbatim ('Needs the project setting review_approve ON (else 400 {errors:...})'). No second attempt was made because the entitlement gate, not a request-shape problem, is the blocker; retrying the same body would not change the outcome."
+    }
+  ],
+  "probe": {
+    "arguments": {},
+    "status": null,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": "/test_case (body wrapper implied by json_path prefixes on ids/select_all/de_selected_ids/folders/reviewers/review_status/comment/reauth_token; q and folder_id are siblings of test_case, not nested)",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "ENTITLEMENT: get_project_settings on project __mcp-capability-fixture__ (v1 id 379335744) returned {success:true, project_settings:[]} — an empty stored-settings array. Per the capability's own guidance this means 'no settings ever stored', so the effective review_approve value is the invisible group default; this read alone is INCONCLUSIVE, not a confirmed OFF. To settle it definitively (per instructions, rather than trusting the sibling get_test_case_v2 probe's inference from absent review_status/reviewers fields), I made one entitlement-confirmation invoke of submit_test_cases_for_review_v1 itself with TC-54458 (id 1975349). It returned HTTP 400 {\"errors\":\"Please enable review approve feature from project settings page\"} — this is the exact message the contract's own guidance predicts for the review_approve-OFF gate (as distinct from the 422 'Feature not available' gate for a missing Team/Pro plan). This DEFINITIVELY confirms review_approve is OFF on this project (a plan/entitlement gap, not a request-shape or index error), so the sibling probe's inference from absent fields was correct, but confirmed independently here rather than trusted. Verdict is therefore UNVERIFIED (entitlement unavailable), not BLOCKED (the index and spec both agree with what was actually observed) and not DRIFT (no successful response existed to compare against the contract). ERROR ENVELOPE: the actual 400 body {\"errors\":\"...\"} does NOT match this capability's own declared 400 envelope {success:false, error:{code,message,details}} — no `success` key, no `error` object, just a bare `errors` string. This is another instance of the systemic error-envelope drift already seen on five other capabilities in this suite; worth flagging even though it doesn't change the verdict here since nothing 'passed'. SECOND ROUTE: confirmed via describeCapability on update_test_case_v2 — it accepts `reviewers` (array of emails, or {value,operation}), `send_for_review` (boolean), and `review_status` (values: pending, in_review) in its body, and its own guidance states these three fields 'run a gate ladder (Team-Pro plan, the project's Review & Approve setting, 21 CFR Part 11) and are applied AFTER the case update has committed', with a specific partial-failure mode (502 reviewer_write_failed with test_case_updated:true). So YES, a second, distinct route into the review workflow exists on update_test_case_v2, gated by the exact same review_approve setting; an agent blocked on submit_test_cases_for_review_v1 by this entitlement would be equally blocked going through update_test_case_v2 — it is not a workaround, just an alternate door onto the same lock. HAND-OFF for apply_test_case_review_verdict_v1: TC-54458 is NOT in a review state. Re-read via get_test_case_v2 (PR-2005/TC-54458) after the failed attempt shows no `review_status` and no `reviewers` keys at all in the response body (folder_id still 764828, tags still just ['mcp-probe'], untouched) — consistent with get_test_case_v2's own guidance that these fields 'appear only when the project has Review & Approve enabled'. No review id, request id, or review state of any kind was produced. The sibling probe should NOT chase TC-54458 (or any case in this project) as a review-state prerequisite — that prerequisite cannot be created on this fixture project as configured; review_approve must first be turned on at the project-settings level, which is out of scope for this probe (no write path to that setting was invoked)."
+}

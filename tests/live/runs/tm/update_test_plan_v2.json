@@ -1,0 +1,108 @@
+{
+  "capability": "update_test_plan_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T05:12:00.000Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Record TP-1616's original name/description/tags/dates/run-linkage/sub_plans_count before touching anything.",
+      "source": "pool",
+      "capability": "get_test_plan_v2",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1616"}},
+      "status": 200,
+      "produced": {
+        "name": "__mcp-probe-plan-2026-09-18T00-00-00Z",
+        "description": "Disposable probe plan created by create_test_plan_v2 live probe. Safe to delete.",
+        "active_state": "active",
+        "tags": ["disposable", "mcp-probe"],
+        "start_date": "2026-09-18T00:00:00.000Z",
+        "end_date": "2026-10-18T00:00:00.000Z",
+        "test_runs_count": {"active": 1, "closed": 0},
+        "test_runs": [{"identifier": "TR-9061", "name": "MCP capability probe fixture run (link_entities_to_jira_issue)"}],
+        "sub_plans_count": 1,
+        "urls_self": "https://test-management-preprod.bsstag.com/projects/379335744/test-plans/48283"
+      }
+    },
+    {
+      "step": 2,
+      "why": "Baseline the plan's linked-run listing (separately from the plan preview) so the test_runs no-op test has a clean before/after via the dedicated runs-of-plan read.",
+      "source": "pool",
+      "capability": "get_test_plan_test_runs_v2",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1616"}, "query": {"p": 1}},
+      "status": 200,
+      "produced": {"test_runs": ["TR-9061"], "info": {"page": 1, "page_size": 30, "count": 1}}
+    },
+    {
+      "step": 3,
+      "why": "Re-read the plan immediately after the update to verify the change landed in storage (not just echoed).",
+      "source": "pool",
+      "capability": "get_test_plan_v2",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1616"}},
+      "status": 200,
+      "produced": {"name": "__mcp-probe-plan-2026-09-18T00-00-00Z-updated", "test_runs": ["TR-9061"], "sub_plans_count": 1}
+    },
+    {
+      "step": 4,
+      "why": "Re-read the plan's linked-run listing after the update to confirm the run set is genuinely unchanged (the test_runs silent-discard verification).",
+      "source": "pool",
+      "capability": "get_test_plan_test_runs_v2",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1616"}, "query": {"p": 1}},
+      "status": 200,
+      "produced": {"test_runs": ["TR-9061"], "info": {"page": 1, "page_size": 30, "count": 1}}
+    },
+    {
+      "step": 5,
+      "why": "Final re-read after restoring name/description/tags, to confirm the restoration itself landed.",
+      "source": "pool",
+      "capability": "get_test_plan_v2",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1616"}},
+      "status": 200,
+      "produced": {"name": "__mcp-probe-plan-2026-09-18T00-00-00Z", "tags": ["disposable", "mcp-probe"]}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1616"},
+        "body": {"test_plan": {"name": "__mcp-probe-plan-2026-09-18T00-00-00Z-updated", "description": "...[updated by update_test_plan_v2 probe]", "tags": ["disposable", "mcp-probe", "update-probe"], "test_runs": []}}
+      },
+      "status": null,
+      "error": "unknown body: test_plan. accepted: description, end_date, issue_tracker, issues, name, plan_status, start_date, tags (client-side rejection by invokeCapability — no HTTP request was made)",
+      "changed": "Tested the wrapped shape first because this capability's own guidance explicitly recommends it ('Wrap the body in a test_plan object... An unwrapped flat body is accepted too'). Rejected client-side, so next attempt drops the wrapper and sends fields flat."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1616"},
+        "body": {"name": "__mcp-probe-plan-2026-09-18T00-00-00Z-updated", "description": "...[updated by update_test_plan_v2 probe]", "tags": ["disposable", "mcp-probe", "update-probe"], "test_runs": []}
+      },
+      "status": null,
+      "error": "unknown body: test_runs. accepted: description, end_date, issue_tracker, issues, name, plan_status, start_date, tags (client-side rejection by invokeCapability — no HTTP request was made)",
+      "changed": "test_runs is not a declared body field on this capability at all (absent from the 'accepted' list echoed by both rejections). Dropped test_runs and sent only name/description/tags flat."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {"project_id": "PR-2005", "test_plan_id": "TP-1616"},
+      "body": {"name": "__mcp-probe-plan-2026-09-18T00-00-00Z-updated", "description": "Disposable probe plan created by create_test_plan_v2 live probe. Safe to delete. [updated by update_test_plan_v2 probe]", "tags": ["disposable", "mcp-probe", "update-probe"]}
+    },
+    "status": 200,
+    "response_keys": ["success", "test_plan"],
+    "item_shape": {
+      "test_plan_keys_returned": ["active_state", "description", "identifier", "test_runs_count", "tags", "name", "issues", "project_id", "sub_plans_count", "start_date", "end_date", "created_at", "urls"],
+      "test_runs_count": {"active": 1, "closed": 0},
+      "urls_subkeys": ["self", "sub_test_plans"],
+      "note": "test_runs and links are correctly absent from the UPDATE response (they are declared as present only on the single-plan READ, and the update's own returns list does not list them) — no drift there."
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_plan_id"],
+    "json_path": "Per-field, applied individually by invokeCapability: /test_plan/name, /test_plan/description, /test_plan/start_date, /test_plan/end_date, /test_plan/plan_status, /test_plan/tags, /test_plan/issues, /test_plan/issue_tracker. There is no single top-level json_path; the declared 'wrap the whole body in test_plan' guidance does not correspond to how invokeCapability actually accepts this body (flat top-level keys only).",
+    "declared_missing": ["parent_plan_id"],
+    "undeclared_returned": []
+  },
+  "notes": "Fields changed on TP-1616: name ('__mcp-probe-plan-2026-09-18T00-00-00Z' -> '...-updated'), description (appended '[updated by update_test_plan_v2 probe]'), tags (['disposable','mcp-probe'] -> ['disposable','mcp-probe','update-probe']). All three were RESTORED to their exact original values in a final call, and the restoration was re-verified via get_test_plan_v2 (step 5) — plan is left exactly as found. active_state, start_date, end_date, sub_plans_count and the attached run were never touched; plan_status was never sent, so no lifecycle move occurred (active_state stayed 'active' throughout).\n\nWRAP-VS-FLAT TRAP (7th hit in this suite): this capability's guidance explicitly says to wrap the body in a `test_plan` object (claiming a flat body 'is accepted too'). Tested wrapped first, as instructed, since the guidance recommends it: invokeCapability rejected it client-side with 'unknown body: test_plan. accepted: description, end_date, issue_tracker, issues, name, plan_status, start_date, tags' — no HTTP request was ever made. Only the flat form succeeded. DRIFT: the 'wrap is also accepted' half of the guidance does not hold through this tool.\n\nTEST_RUNS SILENT-DISCARD CLAIM: could NOT be verified as documented, and the claim as stated does not hold through this tool. The guidance says a `test_runs` list in the body is 'SILENTLY DISCARDED — 200, plan unchanged, nothing linked, no warning.' In fact test_runs is not even a declared body field on this capability — both rejection messages' 'accepted' list (description, end_date, issue_tracker, issues, name, plan_status, start_date, tags) omits it entirely. Sending test_runs: [] was rejected CLIENT-SIDE by invokeCapability itself before any HTTP call was made: no 200, no silent drop — an explicit, loud 'unknown body: test_runs' error instead. So (1) the call did NOT return 200 with the field silently ignored — it never reached the API at all, and (2) since no write happened, the plan's run linkage was trivially unchanged — confirmed independently anyway via get_test_plan_test_runs_v2 before (setup step 2) and after (setup step 4) every write in this probe: exactly one run, TR-9061, throughout. Net effect for a caller of this MCP surface is actually SAFER than documented (a clear rejection beats a silent trap), but it is still DRIFT against the specific documented mechanism ('no warning' is contradicted — there is a very clear warning), and it means the underlying HTTP API's alleged silent-200 behavior is unobservable through invokeCapability for this capability.\n\nStorage verification: the flat update (name/description/tags) returned 200 and a re-read via get_test_plan_v2 immediately after confirmed the new values were actually stored (not just echoed) — this half of the contract is a genuine PASS. Response shape matched the declared 'returns' list exactly except for the correctly-absent parent_plan_id (TP-1616 is a top-level plan; the flat returns array lists parent_plan_id unconditionally while the nested schema correctly notes it's sub-plan-only — the same overclaim pattern already seen on sibling capabilities in this batch). No undeclared fields were returned. Overall verdict is DRIFT because of the wrap-guidance contradiction and the test_runs claim mismatch, even though the core rename/description/tag update itself behaved exactly as declared and verifiably landed."
+}

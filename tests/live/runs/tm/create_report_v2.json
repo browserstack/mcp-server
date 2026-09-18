@@ -1,0 +1,126 @@
+{
+  "capability": "create_report_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T04:32:35Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Baseline carried over from the sibling list_reports_v2 probe that ran immediately before this one: project PR-2005 (v2 identifier form; the v1 integer id 379335744 is rejected client-side) had zero reports (total_report_count: 0, scheduled_report_count: 0) before this probe ran, so any SC-NNN found afterwards is unambiguously this probe's own.",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "project_id": "PR-2005" },
+      "status": null,
+      "produced": { "note": "carried-over fact, not re-verified independently before creating" }
+    },
+    {
+      "step": 2,
+      "why": "Verify the created report is genuinely persisted (not just echoed by the create response) by re-reading it through get_report_v2 with a fresh, independent GET.",
+      "source": "invoked",
+      "capability": "get_report_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "report_id": "SC-489" } },
+      "status": 200,
+      "produced": {
+        "id": "SC-489",
+        "title": "__mcp-probe-report-2026-09-18T04:32:18Z",
+        "report_type": "Test Run Summary",
+        "is_scheduled": false,
+        "next_run_at": null,
+        "frequency": "once"
+      }
+    },
+    {
+      "step": 3,
+      "why": "Double-verify persistence via the collection view (list_reports_v2) and confirm the project's total_report_count actually incremented off the sibling probe's zero baseline, ruling out an echo-only 201.",
+      "source": "invoked",
+      "capability": "list_reports_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "p": 1, "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "total_report_count": 1,
+        "scheduled_report_count": 0,
+        "reports": [{ "id": "SC-489", "title": "__mcp-probe-report-2026-09-18T04:32:18Z" }]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "body": {
+          "report_type": "Test Run Summary",
+          "report_timeframe": "last_one_week",
+          "report_creation_mode": "custom_report",
+          "title": "__mcp-probe-report-2026-09-18T04:32:18Z"
+        }
+      },
+      "status": 400,
+      "error": "{\"error\":\"Invalid JSON data\",\"details\":[\"The property '#/' did not contain a required property of 'report_filters'\",\"The property '#/' did not contain a required property of 'mail_to'\",\"The property '#/' did not contain a required property of 'frequency'\"]}",
+      "changed": "Built exactly as declared: only report_type, report_timeframe and report_creation_mode carry an explicit required:true in describeCapability's parameter list (title, frequency, mail_to and report_filters do not). The live API rejected this with 400, naming report_filters, mail_to and frequency as missing required top-level keys — none of which the parameter contract flags as required."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "body": {
+          "report_type": "Test Run Summary",
+          "report_timeframe": "last_one_week",
+          "report_creation_mode": "custom_report",
+          "title": "__mcp-probe-report-2026-09-18T04:32:18Z",
+          "frequency": "once",
+          "mail_to": { "users": [], "external_mails": [] },
+          "report_filters": {}
+        }
+      },
+      "status": 201,
+      "error": null,
+      "changed": "Added the three keys the 400 named as missing: frequency:'once' (explicit one-off), mail_to with both required nested arrays empty, and report_filters as an empty object (report_timeframe was a rolling window, last_one_week, so no scope filter was needed). Succeeded on this second attempt."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005" },
+      "body": {
+        "report_type": "Test Run Summary",
+        "report_timeframe": "last_one_week",
+        "report_creation_mode": "custom_report",
+        "title": "__mcp-probe-report-2026-09-18T04:32:18Z",
+        "frequency": "once",
+        "mail_to": { "users": [], "external_mails": [] },
+        "report_filters": {}
+      }
+    },
+    "status": 201,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "id": "SC-489",
+      "project_id": "PR-2005",
+      "project_ids": ["PR-2005"],
+      "report_type": "Test Run Summary",
+      "title": "__mcp-probe-report-2026-09-18T04:32:18Z",
+      "description": null,
+      "report_timeframe": "last_one_week",
+      "report_creation_mode": "custom_report",
+      "custom_date_range": null,
+      "frequency": "once",
+      "frequency_details": null,
+      "next_run_at": null,
+      "is_scheduled": false,
+      "created_at": "2026-09-18T04:32:35Z",
+      "owner": { "email": "ing@bsstag.com", "full_name": "ing" },
+      "mail_to": { "users": [], "external_mails": [] },
+      "report_filters": {},
+      "dynamic_filters": null,
+      "latest_attachment": null
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, PR-\\d+)", "report_type", "report_timeframe", "report_creation_mode"],
+    "json_path": "not disclosed by describeCapability (capability invoked by name; no method/path is published for named capabilities)",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Created report id SC-489 on project PR-2005, title '__mcp-probe-report-2026-09-18T04:32:18Z', report_type 'Test Run Summary', report_timeframe 'last_one_week', report_creation_mode 'custom_report'. It is NOT scheduled: frequency='once', frequency_details=null, is_scheduled=false, next_run_at=null. mail_to is {users:[],external_mails:[]} (no real address anywhere) and report_filters is {} (empty — valid because the timeframe is a rolling window, not one of the specific_* / requirements modes that need report_filters populated). Working create arguments: path_params {project_id:'PR-2005'}, body {report_type:'Test Run Summary', report_timeframe:'last_one_week', report_creation_mode:'custom_report', title:'__mcp-probe-report-2026-09-18T04:32:18Z', frequency:'once', mail_to:{users:[],external_mails:[]}, report_filters:{}}. Verified twice post-creation with independent reads: get_report_v2(project_id=PR-2005, report_id=SC-489) returned 200 with the identical record, and list_reports_v2(project_id=PR-2005) returned total_report_count=1 (up from the sibling probe's established baseline of 0) with SC-489 as the sole row — so this is confirmed stored state, not an echo of the create response (the echo trap flagged for this batch does not apply cleanly here: the create response, the get_report_v2 read, and the list_reports_v2 row are all byte-for-byte identical, which is itself worth flagging to the sibling get_report_v2 probe as a data point, not proof of no drift on other capabilities).\n\nMAIN FINDING (DRIFT): the capability's declared required set is wrong/misleading in two ways that point the same direction. First, describeCapability's machine-readable parameter list marks ONLY report_type, report_timeframe and report_creation_mode with required:true; title, frequency, mail_to and report_filters carry no required flag at all. Second, the capability's own prose guidance goes further and asserts outright that frequency, mail_to and report_filters 'are not' required despite the spec supposedly marking them so. Attempt 1 built the payload exactly per both of these signals (the 3 flagged-required fields plus title) and got a hard 400 naming report_filters, mail_to and frequency as missing required properties. So in truth the API requires those three keys to be PRESENT (trivial/empty values are accepted: 'once', {users:[],external_mails:[]}, {}) even though nothing in the contract said so and the guidance actively said the opposite. This is exactly the class of drift called out as the main event: a body shape built faithfully from the declared contract was rejected by the live API, and the fix (adding 3 undeclared-as-required keys) was needed to get a 201.\n\nSecondary check: the 201 response body and the create-time 'returns' schema agree field-for-field — every key describeCapability's success schema promises (id, project_id, project_ids, report_type, title, description, report_timeframe, report_creation_mode, custom_date_range, frequency, frequency_details, next_run_at, is_scheduled, created_at, owner, mail_to, report_filters, dynamic_filters, latest_attachment) is present in the actual response, with matching shapes for nested objects (owner: email+full_name; mail_to: users+external_mails arrays; report_filters: the strict-allow-list object, empty here; dynamic_filters: null as documented). No undeclared extra fields were returned either. So the response-shape half of the contract is clean; the required-field half is the drift.\n\nHand-off for the sibling get_report_v2 probe: fetch project_id='PR-2005', report_id='SC-489'. Expect report_type='Test Run Summary', title='__mcp-probe-report-2026-09-18T04:32:18Z', report_timeframe='last_one_week', is_scheduled=false, next_run_at=null, frequency='once' (this is the documented substitution for a stored null, not a real schedule), mail_to={users:[],external_mails:[]}, report_filters={}, dynamic_filters=null, latest_attachment=null (no file generated/downloaded for this report yet — do not expect content). No download job was requested against this report, so latest_attachment should stay null unless something else in the project generates a file first."
+}

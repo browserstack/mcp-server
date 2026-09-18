@@ -1,0 +1,101 @@
+{
+  "capability": "get_test_case_histories_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T06:10:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Project identifier PR-2005 and case identifiers TC-54458 (int 1975349, __scratch__/764828, richly edited by earlier fixture batches) and TC-54455 (int 1971631, __readonly__/764093, never modified) came from the fixture pool given in the task; no invocation was needed to obtain them.",
+      "source": "pool",
+      "capability": null,
+      "arguments": {},
+      "status": null,
+      "produced": {
+        "project_id": "PR-2005",
+        "test_case_ids_used": ["TC-54458", "TC-54455"]
+      }
+    },
+    {
+      "step": 2,
+      "why": "v2 history rows carry no numeric history_id (only version_id/version_name), and only the newest row on each page gets the full per-field `modified` map. To verify what the older V3/V4 rows for TC-54458 actually captured, cross-checked via the sibling v1 listing (which does expose numeric history ids) using the v1 integer ids from the pool.",
+      "source": "invoked",
+      "capability": "get_test_case_histories_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "test_case_id": 1975349 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": {
+        "history_ids": { "V1": 1662107, "V2": 1662108, "V3": 1662109, "V4": 1662110, "V5": 1662111 }
+      }
+    },
+    {
+      "step": 3,
+      "why": "Read the full modified old/new map for V4 (history_id 1662110) individually, since the v2 listing only enriches the newest row (V5) and V4's real before/after values were needed to confirm what the description-clear/restore actually recorded.",
+      "source": "invoked",
+      "capability": "get_test_case_history_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "test_case_id": 1975349, "history_id": 1662110 } },
+      "status": 200,
+      "produced": {
+        "modified": { "description": { "old": "mcp-probe temporary description", "new": null } }
+      }
+    },
+    {
+      "step": 4,
+      "why": "Read the full modified old/new map for V3 (history_id 1662109) individually, to confirm the bulk name/description/priority/tags/step-result change that V3's modified_fields names but the v2 listing does not enrich (not the newest row).",
+      "source": "invoked",
+      "capability": "get_test_case_history_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "test_case_id": 1975349, "history_id": 1662109 } },
+      "status": 200,
+      "produced": {
+        "modified": {
+          "description": { "old": null, "new": "mcp-probe temporary description" },
+          "priority": { "old": "Medium", "new": "High" },
+          "name": { "old": "__mcp-probe-case-2026-09-18T00:00:00Z", "new": "__mcp-probe-case-2026-09-18T00:00:00Z (probe-update)" },
+          "test_case_steps_result": { "old": "Login page is displayed", "new": "Login page is displayed - updated" },
+          "tags": { "old": ["mcp-probe"], "new": ["mcp-probe", "probe-update"] }
+        }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" }, "query": { "p": 1 } },
+      "status": 200,
+      "error": null,
+      "changed": "none needed - succeeded first try"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54455" }, "query": { "p": 1 } },
+      "status": 200,
+      "error": null,
+      "changed": "invoked again on the untouched __readonly__ case (TC-54455) as a contrast to see what a minimal history looks like"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" }, "query": { "p": 1 } },
+    "status": 200,
+    "response_keys": ["history", "info", "success"],
+    "item_shape": {
+      "version_id": "string uuid, e.g. \"010e1a17-dc8a-4b9d-bc67-e98e0a5c0daf\" - present on every row",
+      "version_name": "string, \"V1\".. \"V5\", newest first (V5 first, V1 last) - matches guidance",
+      "source": "string, \"create\" on V1, \"update\" on V2-V5 (no restore-source row occurred here; the field/name/priority reverts were done via ordinary update_test_case_v2 calls, not the restore endpoint)",
+      "modified_fields": "array[string] on V2-V5 (e.g. [\"folder\"], [\"description\"], [\"priority\",\"name\",\"test_case_steps\",\"tags\"]); null on V1 (create)",
+      "modified": "object, per-field {old,new} - ONLY present on V5 (the newest row on the page); absent on V1-V4, exactly as guidance states",
+      "comment": "null on every row observed",
+      "created_at": "string date-time, ISO 8601, strictly increasing across V1->V5 (05:51:55 -> 05:59:11 -> 06:04:07 -> 06:04:25 -> 06:04:44)",
+      "updated_by": "string email, \"ing@bsstag.com\" on every row - resolved, never null here",
+      "user_id": "integer, 6013 on every row (BrowserStack user id, not a TM one, as declared)",
+      "testcase_id": "string, \"TC-54458\" on every row (identifier form)",
+      "origin_channel": "string, \"api\" on every row - UNDECLARED, see contract.undeclared_returned"
+    }
+  },
+  "contract": {
+    "required": ["success", "history", "info"],
+    "json_path": "history[]",
+    "declared_missing": [],
+    "undeclared_returned": ["history[].origin_channel"]
+  },
+  "notes": "Both response bodies (TC-54458 and TC-54455) matched the declared 200 schema for success/history/info exactly, EXCEPT that every row in `history[]` carries an undeclared `origin_channel` field (value \"api\" in every row seen, on both test cases). Neither the nested per-item schema nor the flat `returns` array mentions it. Low severity (an extra descriptive field, does not mislead or break downstream consumption), but per the standing rule any undeclared returned field is DRIFT regardless of severity. No declared field was missing from any row.\n\nHISTORY COUNTS: TC-54458 (richly edited) has 5 history entries (info.count=5, single page). TC-54455 (never touched, __readonly__) has exactly 1 entry (info.count=1) - source=\"create\", modified_fields=null, no `modified` map (nothing to diff on a create). This is the expected floor: a case history is never actually empty, it always has at least the creation record, and an untouched case's history is minimal (creation-only) as the task predicted.\n\nWHICH OF TC-54458's KNOWN EDITS ARE ACTUALLY RECORDED - checked exhaustively by cross-referencing the v2 listing against the v1 listing (get_test_case_histories_v1) and the v1 single-revision read (get_test_case_history_v1) for the two non-enriched rows (V3, V4). All version_ids, version_names, source values, modified_fields and created_at timestamps agreed exactly between the v2 and v1 surfaces for every one of the 5 rows - this capability's listing is internally consistent with the older v1 listing, not just self-consistent.\n\n  - V1 (create, 05:51:55): the case's birth. Confirmed baseline: name \"__mcp-probe-case-2026-09-18T00:00:00Z\", description=null, priority=Medium, tags=[\"mcp-probe\"], step result \"Login page is displayed\" - matches the pool's stated create-time state (1 step, priority Medium, tags [\"mcp-probe\"]).\n  - V2 (update, 05:59:11, modified_fields=[\"folder\"]): the move_test_case_v2 from folder 764138 to 764828. Recorded as its own distinct revision with the correct field name (\"folder\"), immediately after create and well before the update batch that follows - timestamps line up with the task's described ordering (create, then move, then edits).\n  - V3 (update, 06:04:07, modified_fields=[\"description\",\"priority\",\"name\",\"test_case_steps\",\"tags\"]): read individually via the v1 single-revision endpoint since v2 does not enrich it. Confirmed as the single bulk update_test_case_v2 call the task describes - description null->\"mcp-probe temporary description\", priority Medium->High, name gained the \"(probe-update)\" suffix, the step's result text gained \"- updated\", tags gained \"probe-update\". All five fields moved together in one call, each with a correct, non-trivial old/new pair.\n  - V4 (update, 06:04:25, modified_fields=[\"description\"]): read individually. This IS the \"description separately cleared to null\" / \"restored\" event the task calls out as two conceptual steps - but because the case's ORIGINAL description was null (from V1), clearing description back to null via an empty-string write is simultaneously the clear AND the restore-to-original in one call: old=\"mcp-probe temporary description\", new=null. There is no missing sixth event; the task's two-step description narrative collapses into this single recorded revision because the origin value already was null, and the endpoint recorded it correctly and individually, separate from the V3/V5 bulk changes.\n  - V5 (update, 06:04:44, modified_fields=[\"priority\",\"name\",\"test_case_steps\",\"tags\"], enriched on the page): the restore of the remaining four fields back to their originals - priority High->Medium, name lost the \"(probe-update)\" suffix, step result lost \"- updated\", tags lost \"probe-update\". Description is correctly absent from this row's modified_fields because it had already been restored in V4, so the diff engine rightly saw no net change to description in this call. This is the \"opposite direction\" update event the task expects, and it is captured with a full correct `modified` map (enriched, being the newest row).\n\nSo all described edits - create, move, bulk-update, description-restore, and the-rest-restore - are each present as their own distinct, correctly-timestamped, correctly-attributed history row. Nothing was missing, merged, or duplicated; the apparent '6 events, 5 rows' tension resolves once you note the original description was null, making its 'clear' and 'restore' the same write.\n\nWHAT EACH ENTRY CAPTURES: source (create/update - no restore-source appeared since the reverts used ordinary update_test_case_v2, not a restore endpoint), created_at, modified_fields (names only, except the newest row which also gets full old/new via `modified`), updated_by (resolved email, never null in this data), user_id (raw BrowserStack id), version_id (uuid) and version_name (positional V-label). Getting a full old/new diff for a non-newest row requires the v1 single-revision read by numeric history_id - the v2 listing alone under-reports detail for anything but the latest change, exactly as guidance warns, and there is no v2 single-revision-read capability in the index to do this without dropping to v1 (the v2 guidance's promise of 'pass the version number to the single-version read' does not correspond to any registered v2 capability - only the v1 numeric-id read exists).\n\nTIMESTAMP CHECK (the specific question asked): TC-54458's created_at values across V1-V5 are strictly increasing, real, and consistent with the described real-world edit sequence (create -> move ~7min later -> three rapid updates ~20-40s apart), and they agree byte-for-byte between the v2 listing, the v1 listing, and the v1 single-revision read for the same rows. There is no staleness, no repeated/frozen timestamp, and no drift between what different endpoints report for the same revision. This directly contrasts with the sibling's TR-9062 finding that a test_run's `updated_at` never advances despite verified writes: on the test_case side, per-revision history timestamps DO advance correctly and DO reflect real edit times. This scopes the updated_at-never-advances bug to test_run - it is not a product-wide failure to persist modification times; test_case's history mechanism records them correctly.\n\nVERDICT: DRIFT, on the single undeclared `origin_channel` field returned in every history row on both test cases (low severity - it's an extra, harmless field, not a mismatch of a declared field's type or a missing declared field). Everything else - field presence, field types, sort order, enrichment-only-on-newest-row behavior, the create-has-no-diff behavior, and the 30-day/plan-restriction behavior (not exercised here since no plan_restriction flag appeared and all 5 revisions of a case created today were visible) - matched the contract exactly, and this is not a hollow contract: the schema declares ~10 substantive per-row fields plus pagination, and all were checked against real, non-empty, multi-row data for TC-54458 and single-row data for TC-54455."
+}

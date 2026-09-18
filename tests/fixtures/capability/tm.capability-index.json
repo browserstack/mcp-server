@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.25",
+  "version": "1.26",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -24314,10 +24314,21 @@
           {
             "name": "title",
             "description": "Display name. Genuinely optional: omit it and the server fills in the report type followed by today's date, which is easy to mistake later for a report someone else made. Titles are not unique, and this is the field the list search matches on."
+          },
+          {
+            "name": "report_creation_mode",
+            "type": "string",
+            "required": true,
+            "values": [
+              "custom_report",
+              "system_generated"
+            ],
+            "description": "Whether the report is one the caller defines or one the product generates. REQUIRED — the request schema rejects a body without it, so a create that omits it fails before anything is stored. It was missing from this contract entirely, which made the capability impossible to call successfully from here."
           }
         ],
         "intent": "Set up a new report over a project's test data — either a one-off you will download, or a recurring daily/weekly/monthly schedule that emails chosen people; this saves the report's definition (type, window, scope, recipients) and hands back its SC-NNN identifier, it does not produce any figures",
         "guidance": [
+          "`report_creation_mode` is required and takes `custom_report` or `system_generated`. Sending `system_generated` with a traceability report type is treated specially by the server, so use `custom_report` unless you specifically want the generated form.",
           "This returns a report DEFINITION, not report content. The created body is the saved configuration echoed back - identifier, type, timeframe, filters, schedule, recipients - and contains no counts, rows or figures at all. Never present it as the report's findings.",
           "Getting the content afterwards is a separate, ASYNCHRONOUS step: request a download for the new report identifier and the server answers with a job id and a status URL, having queued the generation; then poll the matching download-status read until status flips from 'processing' to 'ready' and a file URL appears (pdf or csv only). Nothing in this create waits for that.",
           "The alternative route to content is the v1 report reads (report detail and its section/widget reads), but those take the INTEGER report id and this API never exposes it - the public identifier is a per-group sequence, so you cannot derive it. Resolve it through the v1 schedules listing, which carries both ids on the same record.",
@@ -30843,13 +30854,15 @@
                   },
                   "user_role": {
                     "type": "string",
-                    "example": "Admin"
+                    "example": "Admin",
+                    "description": "The caller's role on this project. Present only when the caller holds an explicit role here — a user whose access is implicit, such as through workspace ownership, gets neither this nor `permissions`."
                   },
                   "permissions": {
                     "type": "array",
                     "items": {
                       "type": "string"
-                    }
+                    },
+                    "description": "What the caller may do in this project, derived from their role. Present only alongside `user_role` and on the same condition; absent together with it, never one without the other."
                   },
                   "test_cases_count": {
                     "type": "integer",

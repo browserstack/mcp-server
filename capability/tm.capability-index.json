@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.16",
+  "version": "1.17",
   "build_id": "b26a4d5e_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -17526,32 +17526,29 @@
           "The body must be wrapped in a `test_run` object; without it the request 400s before any field is read.",
           "400 'invalid data' also covers an assignee email that cannot be resolved in this group — the run is left untouched in that case.",
           "There is no undo: test runs keep no version history, so a field this call clears cannot be restored.",
-          "The updated run comes back at the top level as `testrun` — one word, no underscore, and no `data` envelope."
+          "The updated run comes back at the top level as `testrun` — one word, no underscore, and no `data` envelope.",
+          "The updated run comes back under `testrun` (no underscore) and is the NARROW v2 projection: no `id`, no `uuid`, no `owner`, no `is_automation`, no `test_cases_count`. Its identity is the TR-NNN string in `identifier`.",
+          "`urls.self` is a link to the run in the web UI, not an API path — it is built from the frontend base URL, so calling it returns HTML."
         ],
         "returns": [
-          "success",
-          "testrun",
-          "id",
-          "uuid",
           "identifier",
           "name",
           "description",
-          "owner",
           "assignee",
           "run_state",
           "active_state",
-          "is_automation",
-          "is_dynamic",
           "tags",
           "configurations",
-          "test_plans",
-          "test_cases_count",
+          "filter_test_cases",
+          "test_plan",
           "overall_progress",
-          "overall_progress_by_status_id",
+          "issues",
+          "issue_tracker",
           "project_id",
           "created_at",
           "updated_at",
-          "links"
+          "links",
+          "urls"
         ],
         "responses": {
           "200": {
@@ -21365,32 +21362,29 @@
           "Cases are unioned in, never out — this cannot remove a case from the run. Removal is the bulk test-cases call, and that one drops the removed cases' results.",
           "The body must be wrapped in a `test_run` object; without it the request 400s before any field is read.",
           "There is no undo: test runs keep no version history, so an overwritten name, description or tag list cannot be restored.",
-          "The updated run comes back at the top level as `testrun` — one word, no underscore, and no `data` envelope. This differs from the read endpoints, which use `test_run`."
+          "The updated run comes back at the top level as `testrun` — one word, no underscore, and no `data` envelope. This differs from the read endpoints, which use `test_run`.",
+          "The updated run comes back under `testrun` (no underscore) and is the NARROW v2 projection: no `id`, no `uuid`, no `owner`, no `is_automation`, no `test_cases_count`. Its identity is the TR-NNN string in `identifier`.",
+          "`urls.self` is a link to the run in the web UI, not an API path — it is built from the frontend base URL, so calling it returns HTML."
         ],
         "returns": [
-          "success",
-          "testrun",
-          "id",
-          "uuid",
           "identifier",
           "name",
           "description",
-          "owner",
           "assignee",
           "run_state",
           "active_state",
-          "is_automation",
-          "is_dynamic",
           "tags",
           "configurations",
-          "test_plans",
-          "test_cases_count",
+          "filter_test_cases",
+          "test_plan",
           "overall_progress",
-          "overall_progress_by_status_id",
+          "issues",
+          "issue_tracker",
           "project_id",
           "created_at",
           "updated_at",
-          "links"
+          "links",
+          "urls"
         ],
         "responses": {
           "200": {
@@ -36851,7 +36845,7 @@
         }
       },
       "TestRunWriteV2Response": {
-        "description": "The updated test run under `testrun` (no underscore between test and run) at the top level. No `data` envelope.",
+        "description": "The updated test run under `testrun` (no underscore between test and run) at the top level. No `data` envelope. The run object is the narrow v2 projection built by public_api_serialize_test_run — it carries `identifier` and no integer id, and includes `urls.self`, a web-UI link merged in by a shared helper.",
         "schema": {
           "type": "object",
           "properties": {

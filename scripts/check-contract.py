@@ -55,8 +55,9 @@ def main(path, quiet=False):
         if not ret or not node:
             continue
         pairs = resolve(tm, node)
-        if not pairs:
-            continue
+        # A schema that resolves to NOTHING is the strongest finding here, not an absent
+        # one: the capability declares fields and its 2xx describes no payload at all, so
+        # every entry is unbacked. Skipping these hid 12 capabilities and ~120 fields.
         names = {n for _, n in pairs}
         missing = [f for f in ret if f.split('.')[-1] not in names and f.split('.')[-1] not in ENVELOPE]
         if missing:

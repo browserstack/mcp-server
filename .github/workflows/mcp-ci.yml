@@ -24,3 +24,8 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - run: npm ci
     - run: npm test
+    # A contract correction can move `returns` and leave the response schema behind.
+    # The live replay cannot see that — it counts a field as declared if EITHER source
+    # carries it — so this static check is the only thing that fails the build on it.
+    - name: Capability contract gate (`returns` vs resolved schema)
+      run: npm run check:contract

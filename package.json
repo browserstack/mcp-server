@@ -16,6 +16,7 @@
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
+    "check:contract": "python3 scripts/check-contract.py capability/tm.capability-index.json --baseline scripts/contract-baseline/tm.json --quiet && python3 scripts/check-contract.py capability/loadtesting.capability-index.json --baseline scripts/contract-baseline/loadtesting.json --quiet",
     "eval:index": "tsx scripts/eval-index.mts",
     "seed:live": "tsx scripts/seed-live.mts",
     "plan:tests": "tsx scripts/plan-capability-tests.mts",

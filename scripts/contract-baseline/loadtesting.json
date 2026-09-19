@@ -1,0 +1,120 @@
+{
+  "empty_2xx": [],
+  "index": "capability/loadtesting.capability-index.json",
+  "no_2xx": [],
+  "unbacked": {
+    "compareLoadTestRuns": [
+      "kpiDeltas",
+      "transactionDeltas"
+    ],
+    "createLoadTest": [
+      "dashboardLink",
+      "name",
+      "projectId",
+      "testId",
+      "version"
+    ],
+    "estimateLoadTestRunCost": [
+      "estimatedVuHours",
+      "estimationBasis",
+      "fitsInQuota",
+      "rangeBasis",
+      "rangeExplanation",
+      "remainingAfterEstimate"
+    ],
+    "getLoadTest": [
+      "config",
+      "framework",
+      "name",
+      "ownerUserId",
+      "projectId",
+      "testId",
+      "testType",
+      "version"
+    ],
+    "getLoadTestHistoricalTrends": [
+      "metrics"
+    ],
+    "getLoadTestInsightSummary": [
+      "report",
+      "state",
+      "status"
+    ],
+    "getLoadTestMetricsManifest": [
+      "aliases",
+      "metrics",
+      "testType"
+    ],
+    "getLoadTestPlatformStatus": [
+      "checkedAt",
+      "components",
+      "platformState"
+    ],
+    "getLoadTestProjectTrends": [
+      "metrics"
+    ],
+    "getLoadTestQuota": [
+      "concurrency",
+      "plan",
+      "vuHours"
+    ],
+    "getLoadTestRunReport": [
+      "durationSec",
+      "errorsByCategory",
+      "kpis",
+      "meta",
+      "runId",
+      "slaVerdicts",
+      "status",
+      "testName",
+      "testType",
+      "transactions"
+    ],
+    "getLoadTestRunStatus": [
+      "elapsedSec",
+      "pollAfterSeconds",
+      "remainingSec",
+      "slaBreachFlags",
+      "status"
+    ],
+    "listActiveLoadTestRuns": [
+      "runs"
+    ],
+    "listLoadTestProjects": [
+      "hasMore",
+      "nextCursor",
+      "projects"
+    ],
+    "listLoadTestRuns": [
+      "hasMore",
+      "nextCursor",
+      "runs"
+    ],
+    "listLoadTests": [
+      "hasMore",
+      "nextCursor",
+      "tests"
+    ],
+    "listProjectLoadTestRuns": [
+      "hasMore",
+      "nextCursor",
+      "runs"
+    ],
+    "startLoadTestRun": [
+      "dashboardLink",
+      "estimatedVuHoursRange",
+      "runId",
+      "startedAt",
+      "status"
+    ],
+    "stopLoadTestRun": [
+      "runId",
+      "status",
+      "stoppedAt"
+    ],
+    "updateLoadTest": [
+      "testId",
+      "version"
+    ]
+  }
+}

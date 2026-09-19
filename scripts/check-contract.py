@@ -11,9 +11,23 @@ edit schemas makes them structurally incapable of maintaining.
 
 No fixture, no live call, no agents.
 
-  check_contract.py <index.json> [--quiet]
+  check-contract.py <index.json> [--quiet]
+  check-contract.py <index.json> --baseline <baseline.json> [--quiet]   # gate on the delta
+  check-contract.py <index.json> --write-baseline <baseline.json>       # re-record
+
+WHY THE GATE IS ON THE DELTA AND NOT ON ZERO
+
+The tm index carries 362 unbacked fields today and loadtesting 73. Most are unvalidated
+and some will turn out legitimate — a `returns` entry can name a field of a nested object
+that the schema describes loosely. Gating on zero would mean the check never runs in CI
+at all, which is how it has sat unwired since it was written. Gating on "no NEW unbacked
+field relative to the recorded baseline" is enforceable today and would have caught all
+three half-fixes on the day each landed. Zero is a project; this is a gate.
+
+The baseline is a ratchet. It is committed, it only ever shrinks, and shrinking it is the
+work — `--write-baseline` after a real fix, never to make a red build green.
 """
-import json, sys, collections
+import json, sys
 
 def load(p):
     d = json.load(open(p))
@@ -49,7 +63,9 @@ def resolve(tm, node, seen=None, path=''):
 # resolver difference rather than a definitional one.
 ENVELOPE = frozenset()
 
-def main(path, quiet=False):
+
+def scan(path):
+    """The findings, as data. Printing and gating are both built on this."""
     d, tm = load(path)
     rows, no2xx, empty = [], [], []
     for c in tm['capabilities']:
@@ -78,6 +94,10 @@ def main(path, quiet=False):
         if missing:
             rows.append((c['name'], missing, sorted({n for _, n in pairs if n not in ENVELOPE})))
     rows.sort(key=lambda r: -len(r[1]))
+    return d, tm, rows, no2xx, empty
+
+
+def report(d, tm, rows, no2xx, empty, quiet):
     print(f"index v{d.get('version')}   capabilities {len(tm['capabilities'])}\n")
     print(f"`returns` names a field the resolved 2xx schema has no property for, at any depth:")
     print(f"  {len(rows)} capabilities, {sum(len(m) for _, m, _ in rows)} fields\n")
@@ -92,7 +112,96 @@ def main(path, quiet=False):
     if empty:
         print(f"\n2xx schema is the empty literal {{'type': 'object'}}: {len(empty)}")
         for n in empty: print(f"    {n}")
+
+
+def as_baseline(index_path, rows, no2xx, empty):
+    return {
+        'index': index_path,
+        'unbacked': {name: sorted(missing) for name, missing, _ in rows},
+        'no_2xx': sorted(no2xx),
+        'empty_2xx': sorted(empty),
+    }
+
+
+def gate(index_path, baseline_path, rows, no2xx, empty):
+    """Fail only on findings the baseline does not already carry."""
+    try:
+        base = json.load(open(baseline_path))
+    except FileNotFoundError:
+        print(f"no baseline at {baseline_path} — write one with --write-baseline", file=sys.stderr)
+        return 2
+
+    base_unbacked = {k: set(v) for k, v in (base.get('unbacked') or {}).items()}
+    now_unbacked = {name: set(missing) for name, missing, _ in rows}
+
+    new_fields = {
+        name: sorted(fields - base_unbacked.get(name, set()))
+        for name, fields in now_unbacked.items()
+        if fields - base_unbacked.get(name, set())
+    }
+    new_no2xx = sorted(set(no2xx) - set(base.get('no_2xx') or []))
+    new_empty = sorted(set(empty) - set(base.get('empty_2xx') or []))
+
+    # The other direction is not a failure, but it is the only thing that should ever move
+    # the baseline, so say it plainly and name the command.
+    fixed_fields = sum(
+        len(fields - now_unbacked.get(name, set()))
+        for name, fields in base_unbacked.items()
+    )
+
+    if not (new_fields or new_no2xx or new_empty):
+        line = f"contract gate OK — no new unbacked field in {index_path}"
+        if fixed_fields:
+            line += f"; {fixed_fields} fewer than the baseline, re-record with --write-baseline"
+        print(line)
+        return 0
+
+    print(f"\ncontract gate FAILED for {index_path}\n", file=sys.stderr)
+    print("A capability declares a field in `returns` that its resolved 2xx schema has no", file=sys.stderr)
+    print("property for. describeCapability will publish the field; a caller reading the", file=sys.stderr)
+    print("schema will not find it. Fix BOTH halves — moving `returns` alone is what this", file=sys.stderr)
+    print("check exists to catch.\n", file=sys.stderr)
+    for name, fields in sorted(new_fields.items()):
+        print(f"  {name}", file=sys.stderr)
+        print(f"      new unbacked : {', '.join(fields)}", file=sys.stderr)
+    for n in new_no2xx:
+        print(f"  {n}\n      newly declares no 2xx response at all", file=sys.stderr)
+    for n in new_empty:
+        print(f"  {n}\n      2xx schema is newly the empty literal {{'type': 'object'}}", file=sys.stderr)
+    total = sum(len(f) for f in new_fields.values()) + len(new_no2xx) + len(new_empty)
+    print(f"\n{total} new finding(s). The baseline is a ratchet: it moves down after a real", file=sys.stderr)
+    print("fix, never up to make this green.", file=sys.stderr)
+    return 1
+
+
+def arg(flag):
+    return sys.argv[sys.argv.index(flag) + 1] if flag in sys.argv else None
+
+
+def main():
+    index_path = sys.argv[1]
+    quiet = '--quiet' in sys.argv
+    d, tm, rows, no2xx, empty = scan(index_path)
+
+    write_to = arg('--write-baseline')
+    if write_to:
+        with open(write_to, 'w') as f:
+            json.dump(as_baseline(index_path, rows, no2xx, empty), f, indent=2, sort_keys=True)
+            f.write('\n')
+        n = sum(len(m) for _, m, _ in rows)
+        print(f"baseline written to {write_to}: {len(rows)} capabilities, {n} fields, "
+              f"{len(no2xx)} without a 2xx, {len(empty)} empty")
+        return 0
+
+    baseline_path = arg('--baseline')
+    if baseline_path:
+        if not quiet:
+            report(d, tm, rows, no2xx, empty, quiet=True)
+        return gate(index_path, baseline_path, rows, no2xx, empty)
+
+    report(d, tm, rows, no2xx, empty, quiet)
     return 1 if (rows or no2xx or empty) else 0
 
+
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1], '--quiet' in sys.argv))
+    sys.exit(main())

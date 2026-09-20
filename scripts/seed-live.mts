@@ -482,6 +482,60 @@ async function main() {
     );
   }
 
+  // A BDD TEST CASE, for validate_bdd_export_selection_v1.
+  //
+  // That capability probed UNVERIFIED for a reason worth stating precisely: it did NOT
+  // fail. It returned 400 {success:false, message:"No BDD Test Case(s) selected."} — the
+  // validator working correctly and rejecting a selection, because the two `__readonly__`
+  // cases are built on `test_case_steps` and the validator filters non-BDD cases out. Only
+  // the rejection branch was ever exercised.
+  //
+  // Of the nine UNVERIFIED rows it is the ONLY one a seeder can close. The others are an
+  // empty collection with no creator published (folder attachments), a collection empty
+  // account-wide (shared components), a project setting we cannot flip (the two review
+  // capabilities), or an async job with no status capability to poll (the two exports).
+  //
+  // Note this uses create_test_case_v2, not the v1 bulk create used above: only the v2
+  // body declares `template: test_case_bdd`, and the BDD branch REQUIRES Gherkin in
+  // `feature` and `scenario` (422 if either is blank) while refusing `test_case_steps`
+  // rows outright. The two shapes cannot be mixed, which is why this is a separate case
+  // rather than a third entry in the bulk call.
+  if (!pool.gaps.bdd_case) {
+    const bdd = await write(
+      "create_test_case_v2",
+      {
+        path_params: {
+          project_id: pool.project.identifier,
+          folder_id: pool.readonly.folder,
+        },
+        body: {
+          name: "__probe-bdd-case",
+          template: "test_case_bdd",
+          feature: "Feature: capability probe\n  Exercises the BDD export validator.",
+          scenario:
+            "Scenario: a BDD case is selectable for export\n" +
+            "  Given a test case on the BDD template\n" +
+            "  When the export selection is validated\n" +
+            "  Then the case is accepted",
+        },
+      },
+      "seed one BDD-template case so validate_bdd_export_selection_v1 can exercise its ACCEPT branch, not only its reject branch",
+    );
+    pool.gaps.bdd_case = ok(bdd.status)
+      ? (bdd.body?.test_case?.identifier ??
+        bdd.body?.data?.test_case?.identifier ??
+        bdd.body?.test_case?.id ??
+        null)
+      : null;
+    console.log(
+      pool.gaps.bdd_case
+        ? `  bdd case     CREATED  ${pool.gaps.bdd_case}`
+        : `  bdd case     SKIPPED  ${bdd.status} ${JSON.stringify(bdd.error ?? bdd.body).slice(0, 160)}`,
+    );
+  } else {
+    console.log(`  bdd case     FOUND    ${pool.gaps.bdd_case}`);
+  }
+
   // AN ATTACHMENT, for list_entity_attachments_v2.
   //
   // Through the v2 route, which is MULTIPART and takes the file itself. That is the whole

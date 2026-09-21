@@ -58,9 +58,15 @@ import {
   decisionUrl,
   fetchAgentStreamTransport,
   fetchDecisionTransport,
+  fetchDeferredTransport,
   parseAsk,
 } from "./stream.js";
-import type { AgentStreamTransport, DecisionTransport } from "./stream.js";
+import type {
+  AgentStreamTransport,
+  DecisionTransport,
+  DeferredTransport,
+} from "./stream.js";
+import { incompleteResume, runDeferred, runResumed } from "./deferred.js";
 import {
   buildResult,
   decide,
@@ -103,6 +109,8 @@ export interface AskDeps {
    */
   streamTransport?: AgentStreamTransport;
   decisionTransport?: DecisionTransport;
+  /** The deferred START (one request, one JSON response). Substituted in tests. */
+  deferredTransport?: DeferredTransport;
 }
 
 /**
@@ -403,8 +411,22 @@ export function relayMode(server: McpServer): RelayMode {
   // elicitation can be answered there depends on the host keeping one server alive per
   // session — see `allowRemoteRelay`. Verified working against the hosted Streamable
   // HTTP server once it does (browserstack/remote-mcp-server#96).
-  if (appConfig.REMOTE_MCP && !allowRemoteRelay()) return "remote_mode";
-  // The real gate either way: can THIS client be asked? A client that never declared
+  if (appConfig.REMOTE_MCP) {
+    // DEFERRED, not elicitation, and not because elicitation would be worse here — it
+    // would be better. It is what makes this process stateful: a suspended
+    // `elicitation/create` pins an McpServer in one pod's heap until the answer
+    // arrives, so the hosted deployment has to keep sessions, pin requests to a pod and
+    // cap how many can be alive. Deferred removes the suspension, and with it the
+    // reason any of that exists. See the `deferred` RelayMode for the trade.
+    //
+    // The knob still gates it: a deployment that has not opted in stays read-only.
+    return allowRemoteRelay() ? "deferred" : "remote_mode";
+  }
+  // stdio keeps elicitation, deliberately: one process, nothing to pin, and the client
+  // renders the prompt so the model cannot fabricate the answer. Nothing is gained by
+  // making a local install pay the two-call cost.
+  //
+  // The real gate here: can THIS client be asked? A client that never declared
   // `elicitation` gets a read-only run whatever the deployment.
   return server.server.getClientCapabilities()?.elicitation
     ? "offered"
@@ -422,6 +444,9 @@ export function addAskBrowserStackAITool(
   // answer carrying that response's own status.
   const streamTransport = deps.streamTransport || fetchAgentStreamTransport();
   const decisionTransport = deps.decisionTransport || fetchDecisionTransport();
+  // Resolved here with the others: one place decides which transports this
+  // registration uses, so a test substituting one is not surprised by another.
+  const deferredTransport = deps.deferredTransport || fetchDeferredTransport();
   const tools: Record<string, RegisteredTool> = {};
 
   /** Instrumentation in the house style, and never fatal to the call it wraps. */
@@ -446,6 +471,35 @@ export function addAskBrowserStackAITool(
       query: z
         .string()
         .describe("What you want, in plain language. One thing per call."),
+      // --- resuming a parked run (the hosted, deferred path only) ---
+      //
+      // Both together or neither. They exist because that deployment cannot hold a
+      // prompt open mid-run: it returns the pending approval instead, and the caller
+      // comes back. On a local stdio install these are never needed — the prompt
+      // appears inside the first call — so they are optional and unmentioned in the
+      // description's main flow.
+      run_id: z
+        .string()
+        .optional()
+        .describe(
+          "Only when continuing a previous call that returned " +
+            'status "needs_approval": the `run_id` it gave you. Send `decision` too.',
+        ),
+      perm_id: z
+        .string()
+        .optional()
+        .describe(
+          "The `perm_id` the previous call returned, naming WHICH approval this " +
+            "answers. Send it with `run_id` and `decision`.",
+        ),
+      decision: z
+        .enum(["allow", "deny"])
+        .optional()
+        .describe(
+          "Your answer to the approval that previous call returned, once the user " +
+            "has told you which it is. Requires `run_id` and `perm_id`. " +
+            "Never assume allow — ask the user.",
+        ),
     },
     {
       // It can write now, which is the whole point of the relay. Destructive operations
@@ -460,7 +514,10 @@ export function addAskBrowserStackAITool(
       idempotentHint: false,
       title: "Ask BrowserStack AI (Alpha)",
     },
-    async ({ product, query }, extra): Promise<CallToolResult> => {
+    async (
+      { product, query, run_id, perm_id, decision },
+      extra,
+    ): Promise<CallToolResult> => {
       track("askBrowserStackAI");
       const approvals: ApprovalRecord[] = [];
       // Negotiated before anything else so the failure paths below report the mode they
@@ -483,6 +540,44 @@ export function addAskBrowserStackAITool(
         // Omitted ENTIRELY when unset, never sent as "".
         const username = (deps.credentialsFor().username || "").trim();
         if (username) body.user_id = username;
+
+        // RESUMING a parked run: no new run, no task — just the decision and the
+        // remainder. Checked before anything else because the arguments are mutually
+        // exclusive with starting one, and a caller that sent both meant to resume.
+        if (run_id) {
+          if (!perm_id || !decision) {
+            return toResult(incompleteResume());
+          }
+          return toResult(
+            await runResumed(
+              url,
+              headers,
+              run_id,
+              perm_id,
+              decision,
+              decisionTransport,
+              streamTransport,
+              mode,
+              product,
+            ),
+          );
+        }
+
+        // DEFERRED: the hosted shape. One request, one JSON answer, nothing held open
+        // while a human decides — see `deferred.ts` for why that matters here and why
+        // stdio does not use it.
+        if (mode === "deferred") {
+          return toResult(
+            await runDeferred(
+              url,
+              headers,
+              body,
+              deferredTransport,
+              mode,
+              product,
+            ),
+          );
+        }
 
         // A1: asking for a stream costs nothing to set up — no port, no listener, no
         // per-run bearer, because nothing dials in. Which is the whole point: the

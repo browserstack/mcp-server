@@ -146,9 +146,35 @@ export type RelayMode =
   /** The client declares no `elicitation` capability, so nobody could be prompted. */
   | "no_human"
   /** This process is the hosted multi-tenant server, which cannot prompt a human. */
-  | "remote_mode";
+  | "remote_mode"
+  /**
+   * The hosted server, relaying WITHOUT holding anything open.
+   *
+   * Elicitation is what makes this process stateful: a suspended `elicitation/create`
+   * pins an McpServer in one pod's heap until the answer arrives, which is why the
+   * hosted deployment needs sessions, ingress affinity and a session cap. `deferred`
+   * removes the suspension instead of routing around it — Atlas returns at its first
+   * ask, this tool hands that ask back, and the caller returns with the decision in a
+   * second call. Nothing is held between the two, so any pod can serve either.
+   *
+   * The trade, stated because it is real: approval rides the CLIENT's own permission
+   * prompt on that second call rather than an elicitation, so a client configured not
+   * to prompt (`--permission-mode auto`) approves without a human. Elicitation fails
+   * closed by construction; this fails closed only if the client asks.
+   */
+  | "deferred";
 
-export const ASK_STATUSES = ["ok", "blocked", "error", "rate_limited"] as const;
+export const ASK_STATUSES = [
+  "ok",
+  "blocked",
+  "error",
+  "rate_limited",
+  // Deferred only: the run reached an ask and is PARKED, not finished. Distinct from
+  // `blocked` (a human said no) and from `error` (nothing is waiting) — this one is the
+  // only status a caller is invited to come back from, and the only one carrying a
+  // `run_id`.
+  "needs_approval",
+] as const;
 export type AskStatus = (typeof ASK_STATUSES)[number];
 
 /** CONTRACT §5 — the single tool result. */
@@ -210,6 +236,15 @@ export interface AskResult {
    * side would otherwise silently become `null` here rather than reaching the caller.
    */
   atlas_response: unknown;
+  /**
+   * Deferred only: the parked run, and the ask waiting on it.
+   *
+   * Present exactly when `status === "needs_approval"`. Both are echoed back on the
+   * caller's second call — `perm_id` alongside `run_id` so the answer names WHICH ask it
+   * answers, which matters the moment a task needs more than one.
+   */
+  run_id?: string;
+  perm_id?: string;
   /**
    * Why the call failed, when it did.
    *

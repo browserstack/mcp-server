@@ -1269,12 +1269,15 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(payload.permission_relay.reason).toBe("remote_mode");
     });
 
-    it("DOES offer the relay in remote mode once the operator opts in", async () => {
-      // The refusal above is about the HOST, not this tool: a stateless host cannot
-      // deliver an elicitation answer to the instance waiting for it. Once the host keeps
-      // one server per session (verified against the hosted Streamable HTTP server,
-      // browserstack/remote-mcp-server#96) the refusal is wrong, so it is opt-in rather
-      // than absolute.
+    it("relays DEFERRED in remote mode once the operator opts in", async () => {
+      // The refusal above is about the HOST: a stateless host cannot deliver an
+      // elicitation answer to the instance waiting for it. The fix is NOT to make the
+      // host stateful and elicit anyway — that is what forced sessions, ingress affinity
+      // and a session cap onto the hosted deployment. It is to stop suspending: Atlas
+      // returns at its first ask, and the caller comes back with the decision.
+      //
+      // So the opt-in selects `deferred`, and the request goes over the REQUEST/RESPONSE
+      // transport rather than the stream — there is no stream to hold.
       vi.resetModules();
       process.env.REMOTE_MCP = "true";
       process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY = "true";
@@ -1293,26 +1296,57 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         const remote = new RemoteMcpServer({ name: "t", version: "0" });
         vi.spyOn(remote.server, "getClientCapabilities")
           .mockReturnValue({ elicitation: {} } as never);
+        const deferred = vi.fn(async () => ({
+          status: 200,
+          body: {
+            status: "needs_approval",
+            run_id: "run-abc",
+            asks: [{
+              perm_id: "perm-" + "a".repeat(32),
+              product: "tm",
+              mode: "ask-always",
+              description: "Creating the new project",
+            }],
+          },
+        }));
         const tools = addAskBrowserStackAITool(remote, {
           agentUrl: () => "https://atlas.example/agent",
           mintToken: async () => MINTED,
           credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
           streamTransport: streamed as never,
+          deferredTransport: deferred as never,
         });
 
         const { payload } = await call(tools);
-        expect((streamed.mock.calls[0] as never as unknown[])[2])
-          .toMatchObject({ permission_relay: { mode: "stream" } });
+        // The deferred transport carried it; the stream was never opened.
+        expect((deferred.mock.calls[0] as never as unknown[])[2])
+          .toMatchObject({ permission_relay: { mode: "deferred" } });
+        expect(streamed).not.toHaveBeenCalled();
+        // Parked, not finished, and carrying what the second call needs.
+        expect(payload.status).toBe("needs_approval");
+        expect(payload.run_id).toBe("run-abc");
+        expect(payload.perm_id).toBe("perm-" + "a".repeat(32));
+        expect(payload.applied_before_stop).toBe(false);
         expect(payload.permission_relay.reason).not.toBe("remote_mode");
       } finally {
         delete process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
       }
     });
 
-    it("the opt-in does NOT force the relay onto a client that cannot be asked", async () => {
-      // The flag only lifts the blanket refusal. Whether a human can actually be reached
-      // is still per-client, and a client that never declared `elicitation` must still get
-      // a read-only run — otherwise the hosted server would stream asks nobody can see.
+    it("deferred reaches a client that cannot be elicited, which elicitation never could", async () => {
+      // THIS PROPERTY IS DELIBERATELY INVERTED from what it was.
+      //
+      // It used to assert that a client without `elicitation` still got a read-only run
+      // even with the opt-in, because the only relay we had streamed asks nobody could
+      // see. Deferred does not stream an ask at all — it returns it, and approval rides
+      // the CLIENT's own permission prompt on the second call. Client elicitation support
+      // therefore stops being the gate.
+      //
+      // That is a widening, and worth naming: Claude Desktop declares no `elicitation`
+      // but does prompt before a tool call, so it gains writes it could never have had.
+      // The cost is the other half of the same fact — a client configured not to prompt
+      // (`--permission-mode auto`) now approves with no human, where elicitation failed
+      // closed by construction. stdio keeps elicitation for exactly that reason.
       vi.resetModules();
       process.env.REMOTE_MCP = "true";
       process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY = "true";
@@ -1331,17 +1365,32 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         const remote = new RemoteMcpServer({ name: "t", version: "0" });
         vi.spyOn(remote.server, "getClientCapabilities")
           .mockReturnValue({ roots: {} } as never);      // no elicitation
+        const deferred = vi.fn(async () => ({
+          status: 200,
+          body: {
+            status: "needs_approval",
+            run_id: "run-xyz",
+            asks: [{
+              perm_id: "perm-" + "b".repeat(32),
+              product: "tm",
+              mode: "ask-always",
+              description: "Creating the new project",
+            }],
+          },
+        }));
         const tools = addAskBrowserStackAITool(remote, {
           agentUrl: () => "https://atlas.example/agent",
           mintToken: async () => MINTED,
           credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
           streamTransport: streamed as never,
+          deferredTransport: deferred as never,
         });
 
         const { payload } = await call(tools);
-        expect("permission_relay" in (streamed.mock.calls[0] as never as unknown[])[2]!)
-          .toBe(false);
-        expect(payload.permission_relay.reason).toBe("no_human");
+        expect((deferred.mock.calls[0] as never as unknown[])[2])
+          .toMatchObject({ permission_relay: { mode: "deferred" } });
+        expect(payload.status).toBe("needs_approval");
+        expect(payload.permission_relay.reason).not.toBe("no_human");
       } finally {
         delete process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
       }

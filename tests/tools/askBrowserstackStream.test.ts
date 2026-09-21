@@ -409,3 +409,129 @@ describe("an auth outage is not a credential problem", () => {
     ).rejects.toThrow(/credentials were rejected/);
   });
 });
+
+describe("deferred — the two-call shape", () => {
+  const HEADERS = { authorization: "Bearer t" };
+  const ASK = {
+    perm_id: "perm-" + "c".repeat(32),
+    product: "tm",
+    mode: "ask-always",
+    description: "Creating the new project",
+  };
+
+  it("parks on the first ask and hands back what the second call needs", async () => {
+    const { runDeferred } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const transport = vi.fn(async () => ({
+      status: 200,
+      body: { status: "needs_approval", run_id: "run-1", asks: [ASK] },
+    }));
+    const result = await runDeferred(
+      "https://atlas.example/agent", HEADERS,
+      { task: "make one", product: "tm" },
+      transport as never, "deferred", "tm",
+    );
+    expect(result.status).toBe("needs_approval");
+    expect(result.ok).toBe(false);
+    expect(result.run_id).toBe("run-1");
+    expect(result.perm_id).toBe(ASK.perm_id);
+    expect(result.applied_before_stop).toBe(false);
+    // The answer must TELL the model to come back — the whole flow depends on it.
+    expect(String(result.answer)).toContain("run-1");
+    expect(String(result.answer)).toContain("call askBrowserStackAI again");
+  });
+
+  it("a read-only task still costs one call, not two", async () => {
+    const { runDeferred } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const transport = vi.fn(async () => ({
+      status: 200,
+      body: { ok: true, status: "ok", answer: "you have 3 projects" },
+    }));
+    const result = await runDeferred(
+      "https://atlas.example/agent", HEADERS,
+      { task: "list them", product: "tm" },
+      transport as never, "deferred", "tm",
+    );
+    expect(result.status).toBe("ok");
+    expect(result.run_id).toBeUndefined();
+  });
+
+  it("delivers the decision, then reattaches for the remainder", async () => {
+    const { runResumed } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const decided = vi.fn(async () => 204);
+    const streamed = vi.fn(() => ({
+      async *[Symbol.asyncIterator]() {
+        yield { event: "run", data: { run_id: "run-1" } };
+        yield { event: "result", data: { ok: true, status: "ok", answer: "made it" } };
+      },
+    }));
+    const result = await runResumed(
+      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
+      decided as never, streamed as never, "deferred", "tm",
+    );
+    // The decision names WHICH ask, and goes to the run's own endpoint.
+    expect(decided).toHaveBeenCalledWith(
+      "https://atlas.example/agent/run-1/permission",
+      HEADERS,
+      { perm_id: ASK.perm_id, decision: "allow", reason: "" },
+    );
+    // The reattach is a GET: no body.
+    expect((streamed.mock.calls[0] as never as unknown[])[0])
+      .toBe("https://atlas.example/agent/run-1/stream");
+    expect((streamed.mock.calls[0] as never as unknown[])[2]).toBeNull();
+    expect(result.status).toBe("ok");
+  });
+
+  it("parks AGAIN when the resumed run needs a second approval", async () => {
+    const { runResumed } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const second = { ...ASK, perm_id: "perm-" + "d".repeat(32),
+                     description: "Adding the first test run" };
+    const streamed = vi.fn(() => ({
+      async *[Symbol.asyncIterator]() {
+        yield { event: "run", data: { run_id: "run-1" } };
+        yield { event: "permission", data: second };
+      },
+    }));
+    const result = await runResumed(
+      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
+      (async () => 204) as never, streamed as never, "deferred", "tm",
+    );
+    expect(result.status).toBe("needs_approval");
+    expect(result.perm_id).toBe(second.perm_id);
+  });
+
+  it("an undelivered decision is reported as such, never as an approval", async () => {
+    const { runResumed } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const streamed = vi.fn();
+    for (const status of [0, 404, 409]) {
+      const result = await runResumed(
+        "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
+        (async () => status) as never, streamed as never, "deferred", "tm",
+      );
+      expect(result.status).toBe("error");
+      expect(result.ok).toBe(false);
+      expect(String(result.error)).toContain("could not be delivered");
+    }
+    // Never reattached: there is nothing to pick up when the answer did not land.
+    expect(streamed).not.toHaveBeenCalled();
+  });
+
+  it("a resume missing its arguments changes nothing and says which", async () => {
+    const { incompleteResume } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const result = incompleteResume();
+    expect(result.ok).toBe(false);
+    expect(String(result.error)).toContain("`perm_id`");
+    expect(result.applied_before_stop).toBe(false);
+  });
+});

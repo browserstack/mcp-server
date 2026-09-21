@@ -101,7 +101,15 @@ export function parseAsk(data: unknown): PermissionAsk | null {
 export type AgentStreamTransport = (
   url: string,
   headers: Record<string, string>,
-  body: AgentRequest,
+  /**
+   * `null` means REATTACH: `GET /agent/{run_id}/stream`, which carries no body.
+   *
+   * One transport rather than two because the half that is easy to get wrong is the
+   * SSE reader below — frame splitting across chunk boundaries — and a second copy of
+   * it would be a second place for an ask to be silently dropped. The method is the
+   * only thing that differs.
+   */
+  body: AgentRequest | null,
 ) => AsyncIterable<StreamEvent>;
 
 /** Posts one decision. Separate seam because it is a separate connection. */
@@ -182,9 +190,9 @@ export function fetchAgentStreamTransport(
           let response: Response;
           try {
             response = await fetch(url, {
-              method: "POST",
+              method: body === null ? "GET" : "POST",
               headers: { ...headers, Accept: "text/event-stream" },
-              body: JSON.stringify(body),
+              ...(body === null ? {} : { body: JSON.stringify(body) }),
               // A redirect from an authenticated API is usually a login bounce, and
               // following it turns a clear 401 into a 200 carrying an HTML page.
               redirect: "manual",
@@ -275,4 +283,45 @@ export function fetchDecisionTransport(timeoutMs = 30_000): DecisionTransport {
 /** `POST /agent/{run_id}/permission`, built from the base URL the tool already resolved. */
 export function decisionUrl(agentUrl: string, runId: string): string {
   return `${agentUrl.replace(/\/+$/, "")}/${encodeURIComponent(runId)}/permission`;
+}
+
+/** `GET /agent/{run_id}/stream` — the reattach, for picking a parked run back up. */
+export function resumeUrl(agentUrl: string, runId: string): string {
+  return `${agentUrl.replace(/\/+$/, "")}/${encodeURIComponent(runId)}/stream`;
+}
+
+/**
+ * The deferred START: one request, one JSON response, nothing held open.
+ *
+ * A separate seam from the streaming transport because it is a different kind of call,
+ * not a different URL — Atlas answers `mode: "deferred"` with ordinary JSON, so there is
+ * no stream to read and nothing to keep alive while a human decides. That is the entire
+ * point of the transport: this process holds no state between the ask and the answer.
+ */
+export type DeferredTransport = (
+  url: string,
+  headers: Record<string, string>,
+  body: AgentRequest,
+) => Promise<{ status: number; body: unknown }>;
+
+export function fetchDeferredTransport(timeoutMs = 120_000): DeferredTransport {
+  return async (url, headers, body) => {
+    try {
+      // `raise_error: false` for the same reason the decision transport does it: the
+      // caller reads the STATUS, and a thrown AxiosError would collapse a 403
+      // (not entitled) and a 503 (delegation off) into the unreachable case below.
+      const response = await apiClient.post<unknown>({
+        url,
+        headers,
+        body,
+        timeout: timeoutMs,
+        raise_error: false,
+      });
+      return { status: response.status, body: response.data };
+    } catch {
+      // Same sentence as the streaming transport, and for the same reason: the upstream
+      // detail names our plumbing rather than anything the reader can act on.
+      throw new AskError("BrowserStack AI could not be reached");
+    }
+  };
 }

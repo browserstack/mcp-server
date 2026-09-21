@@ -5,10 +5,6 @@ import {
   trackMCPCompleted,
 } from "./instrumentation.js";
 
-/**
- * Marks a handler we have already wrapped, so calling `instrumentToolLatency`
- * twice on the same tool map (library + remote wrapper) emits one event, not two.
- */
 const WRAPPED = Symbol.for("browserstack.mcp.latencyWrapped");
 
 type AnyHandler = (...args: unknown[]) => unknown;
@@ -22,19 +18,9 @@ function outcomeOf(result: unknown): ToolOutcome {
 }
 
 /**
- * Wrap every registered tool's handler with a stopwatch.
- *
- * Why here and not in each tool: the 51 call sites write their own `trackMCP`
- * rows by hand at entry, before any work happens, so none of them can carry a
- * duration. Wrapping at the registry gives every tool, current and future, the
- * same completion row from one place, and leaves the existing rows untouched.
- *
- * The wrapper is transparent: the result is returned as-is and a throw is
- * rethrown, so tool behaviour and the SDK's own error handling do not change.
- * The event is fire-and-forget; a telemetry failure never affects the call.
- *
- * Task-style handlers (objects with `createTask`) are left alone — none of our
- * tools use them, and the SDK dispatches them differently.
+ * Wraps every registered tool handler with a stopwatch and emits one
+ * `MCPToolCompleted` event per call. Transparent (result passed through,
+ * throws rethrown) and idempotent. Skips task-style (non-function) handlers.
  */
 export function instrumentToolLatency(
   tools: Record<string, RegisteredTool>,
@@ -61,8 +47,7 @@ export function instrumentToolLatency(
     };
     wrapped[WRAPPED] = true;
 
-    // Assign directly rather than via `tool.update()`: update() also fires a
-    // tools/list_changed notification, which is noise at registration time.
+    // Direct assignment: tool.update() would also fire tools/list_changed.
     (tool as { handler: unknown }).handler = wrapped;
   }
 }
@@ -82,6 +67,6 @@ function emit(
       config,
     );
   } catch {
-    // Telemetry must never decide whether a tool call succeeds.
+    // Telemetry must never affect the tool call.
   }
 }

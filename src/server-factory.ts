@@ -78,10 +78,7 @@ export class BrowserStackMcpServer {
       Object.assign(this.tools, added);
     });
 
-    // One completion row per tool call (duration + outcome), for every tool
-    // registered above. The per-tool trackMCP entry/catch rows are unchanged.
-    // getClientVersion() is empty until the client's initialize arrives, hence
-    // the thunk: it is read at call time, not now.
+    // Client info is read at call time; it is empty until initialize arrives.
     instrumentToolLatency(
       this.tools,
       () => this.server.server.getClientVersion() ?? {},

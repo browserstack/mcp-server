@@ -10,7 +10,6 @@ const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
 
 export type ClientInfo = { name?: string; version?: string };
 
-/** How a tool call ended, as seen by the completion wrapper. */
 export type ToolOutcome = "ok" | "error_result" | "threw";
 
 interface MCPEventPayload {
@@ -39,7 +38,6 @@ function baseProperties(toolName: string, clientInfo: ClientInfo) {
   };
 }
 
-/** Fire-and-forget POST. Never throws, never delays the caller. */
 function sendEvent(event: MCPEventPayload, config?: any): void {
   let authHeader: string | undefined;
   if (config) {
@@ -61,11 +59,7 @@ function sendEvent(event: MCPEventPayload, config?: any): void {
     .catch(() => {});
 }
 
-/**
- * The per-invocation event. Fired at tool entry with `success: true` (meaning
- * "invoked"), and again from the catch block with `success: false` when the
- * handler throws. A failing call therefore produces two rows.
- */
+/** Per-invocation row: fired at tool entry (success) and from the catch block (failure). */
 export function trackMCP(
   toolName: string,
   clientInfo: ClientInfo,
@@ -103,20 +97,8 @@ export function trackMCP(
 }
 
 /**
- * The per-completion event: one row per tool call, written AFTER the handler
- * settles, carrying wall-clock duration and how it ended.
- *
- * Deliberately a separate `event_type` from `MCPInstrumentation`, so every
- * existing query and dashboard keyed on that name keeps its row counts.
- *
- *   outcome = "ok"           handler returned a result without `isError`
- *   outcome = "error_result" handler returned `{ isError: true }` (a failure the
- *                            entry/catch rows never see today)
- *   outcome = "threw"        handler threw; the catch row also exists
- *
- * A call with an entry row and no completion row was killed before it finished
- * (client closed the IDE, process exit), which is the closest thing to a
- * timeout signal this event can give.
+ * Per-completion row, written after the handler settles, with duration and
+ * outcome. Separate event_type so existing MCPInstrumentation counts do not change.
  */
 export function trackMCPCompleted(
   toolName: string,

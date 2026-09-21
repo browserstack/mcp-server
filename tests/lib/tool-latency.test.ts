@@ -10,7 +10,6 @@ const clientInfo = { name: "test-client", version: "1.0" };
 const config = { "browserstack-username": "u", "browserstack-access-key": "k" };
 
 function fakeTool(handler: unknown) {
-  // Only the fields the wrapper touches; the real RegisteredTool has more.
   return { handler, enabled: true } as any;
 }
 

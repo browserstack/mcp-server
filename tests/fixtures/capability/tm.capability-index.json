@@ -18034,7 +18034,8 @@
           "This read returns the tag `id` alongside the name — that is what makes it the resolution step for a tag merge, which takes integer ids. The project-level tag reads return names only.",
           "Page size is fixed at 30 and there is no per_page parameter; page with `p`.",
           "`created_at` and `usage_count`, which the project-scoped tag search returns, are not guaranteed on this group-scoped path — treat `id` and `name` as the fields you can rely on.",
-          "Not permission-gated — the search-filter controller has no RBAC entry, and this route deliberately skips project resolution."
+          "Not permission-gated — the search-filter controller has no RBAC entry, and this route deliberately skips project resolution.",
+          "Neither `info.count` nor `info.next` can be trusted to size a fetch. Confirmed live: a listing that returns 30 rows on page 1 and 30 more distinct rows on page 2 reports a count of 31 on both, and `next` is correct on page 1 and then null on page 2 with 60 rows already returned. Page until a page comes back empty rather than until the count is satisfied or `next` is null, and never report the count to a user as a total."
         ],
         "max_page_size": 30
       },

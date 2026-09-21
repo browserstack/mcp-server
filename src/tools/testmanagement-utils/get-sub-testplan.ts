@@ -5,6 +5,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /**
  * Schema for fetching a single sub-test-plan by identifier under a parent test
@@ -167,7 +168,9 @@ export async function getSubTestPlan(
       `Sub-Test-Plan ${plan.identifier}: ${plan.name}`,
       `Parent plan: ${plan.parent_plan_id}`,
       `Status: ${plan.active_state}`,
-      plan.description ? `Description: ${plan.description}` : null,
+      plan.description
+        ? `Description:\n${wrapUntrusted("sub-test-plan description", plan.description)}`
+        : null,
       tagsLine,
       issuesLine,
       plan.start_date || plan.end_date

@@ -35,13 +35,6 @@ import { trackMCP } from '../../src/lib/instrumentation';
 import { signedUrlMap } from '../../src/lib/inmemory-store';
 import { uploadFile } from '../../src/tools/testmanagement-utils/upload-file';
 
-// Bypass the write-confirmation gate here; it is covered on its own in
-// tm-write-confirmation.test.ts. These tests exercise the tools' API behavior.
-vi.mock('../../src/tools/testmanagement-utils/confirm-write', () => ({
-  requireWriteConfirmation: () => null,
-  CONFIRM_TOKEN_FIELD_DESCRIPTION: '',
-}));
-
 
 // Mock dependencies
 vi.mock('../../src/tools/testmanagement-utils/create-project-folder', () => ({

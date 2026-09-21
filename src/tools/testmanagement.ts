@@ -62,10 +62,6 @@ import {
 
 import { createTestCasesFromFile } from "./testmanagement-utils/testcase-from-file.js";
 import { CreateTestCasesFromFileSchema } from "./testmanagement-utils/TCG-utils/types.js";
-import {
-  requireWriteConfirmation,
-  CONFIRM_TOKEN_FIELD_DESCRIPTION,
-} from "./testmanagement-utils/confirm-write.js";
 
 import {
   createLCASteps,
@@ -111,14 +107,6 @@ export async function createProjectOrFolderTool(
   config: BrowserStackConfig,
   server: McpServer,
 ): Promise<CallToolResult> {
-  const confirmationPrompt = requireWriteConfirmation(
-    "createProjectOrFolder",
-    "this creates a project and/or folder in BrowserStack Test Management.",
-    args,
-    config,
-  );
-  if (confirmationPrompt) return confirmationPrompt;
-
   try {
     trackMCP(
       "createProjectOrFolder",
@@ -159,14 +147,6 @@ export async function createTestCaseTool(
 ): Promise<CallToolResult> {
   // Sanitize input arguments
   const cleanedArgs = sanitizeArgs(args);
-  const confirmationPrompt = requireWriteConfirmation(
-    "createTestCase",
-    "this creates a test case in BrowserStack Test Management.",
-    args,
-    config,
-  );
-  if (confirmationPrompt) return confirmationPrompt;
-
   try {
     trackMCP(
       "createTestCase",
@@ -200,14 +180,6 @@ export async function updateTestCaseTool(
   config: BrowserStackConfig,
   server: McpServer,
 ): Promise<CallToolResult> {
-  const confirmationPrompt = requireWriteConfirmation(
-    "updateTestCase",
-    "this modifies an existing test case in BrowserStack Test Management.",
-    args,
-    config,
-  );
-  if (confirmationPrompt) return confirmationPrompt;
-
   try {
     trackMCP(
       "updateTestCase",
@@ -343,14 +315,6 @@ export async function createTestRunTool(
   config: BrowserStackConfig,
   server: McpServer,
 ): Promise<CallToolResult> {
-  const confirmationPrompt = requireWriteConfirmation(
-    "createTestRun",
-    "this creates a test run in BrowserStack Test Management.",
-    args,
-    config,
-  );
-  if (confirmationPrompt) return confirmationPrompt;
-
   try {
     trackMCP(
       "createTestRun",
@@ -417,14 +381,6 @@ export async function updateTestRunTool(
   config: BrowserStackConfig,
   server: McpServer,
 ): Promise<CallToolResult> {
-  const confirmationPrompt = requireWriteConfirmation(
-    "updateTestRun",
-    "this modifies an existing test run in BrowserStack Test Management.",
-    args,
-    config,
-  );
-  if (confirmationPrompt) return confirmationPrompt;
-
   try {
     trackMCP(
       "updateTestRun",
@@ -457,14 +413,6 @@ export async function addTestResultTool(
   config: BrowserStackConfig,
   server: McpServer,
 ): Promise<CallToolResult> {
-  const confirmationPrompt = requireWriteConfirmation(
-    "addTestResult",
-    "this records a test result in BrowserStack Test Management.",
-    args,
-    config,
-  );
-  if (confirmationPrompt) return confirmationPrompt;
-
   try {
     trackMCP(
       "addTestResult",
@@ -790,20 +738,11 @@ export default function addTestManagementTools(
 ) {
   const tools: Record<string, any> = {};
 
-  // Added to every state-changing TM tool so callers can pass a confirmation
-  // token; the write only executes once a valid token is supplied.
-  const confirmTokenShape = {
-    confirmToken: z
-      .string()
-      .optional()
-      .describe(CONFIRM_TOKEN_FIELD_DESCRIPTION),
-  };
-
   tools.createProjectOrFolder = server.tool(
     "createProjectOrFolder",
     "Create a project and/or folder in BrowserStack Test Management." +
       PROJECT_ID_ONLY_FOR_FOLDER,
-    { ...CreateProjFoldSchema.shape, ...confirmTokenShape },
+    CreateProjFoldSchema.shape,
     {
       title: "Create Project or Folder",
       readOnlyHint: false,
@@ -818,7 +757,7 @@ export default function addTestManagementTools(
     "createTestCase",
     "Use this tool to create a test case in BrowserStack Test Management." +
       NEEDS_PROJECT_ID,
-    { ...CreateTestCaseSchema.shape, ...confirmTokenShape },
+    CreateTestCaseSchema.shape,
     {
       title: "Create Test Case",
       readOnlyHint: false,
@@ -833,7 +772,7 @@ export default function addTestManagementTools(
     "updateTestCase",
     "Update an existing test case in BrowserStack Test Management. Any subset of the following fields may be changed: name, description, preconditions, test_case_steps, owner, priority, case_type, automation_status, status, tags, issues, custom_fields. Only the supplied fields are modified." +
       NEEDS_PROJECT_ID,
-    { ...UpdateTestCaseSchema.shape, ...confirmTokenShape },
+    UpdateTestCaseSchema.shape,
     {
       title: "Update Test Case",
       readOnlyHint: false,
@@ -891,7 +830,7 @@ export default function addTestManagementTools(
   tools.createTestRun = server.tool(
     "createTestRun",
     "Create a test run in BrowserStack Test Management." + NEEDS_PROJECT_ID,
-    { ...CreateTestRunSchema.shape, ...confirmTokenShape },
+    CreateTestRunSchema.shape,
     {
       title: "Create Test Run",
       readOnlyHint: false,
@@ -921,7 +860,7 @@ export default function addTestManagementTools(
     "updateTestRun",
     "Update a test run's metadata and/or add test cases to it." +
       NEEDS_PROJECT_ID,
-    { ...UpdateTestRunSchema.shape, ...confirmTokenShape },
+    UpdateTestRunSchema.shape,
     {
       title: "Update Test Run",
       readOnlyHint: false,
@@ -936,7 +875,7 @@ export default function addTestManagementTools(
     "addTestResult",
     "Add a test result to a specific test run via BrowserStack Test Management API." +
       NEEDS_PROJECT_ID,
-    { ...AddTestResultSchema.shape, ...confirmTokenShape },
+    AddTestResultSchema.shape,
     {
       title: "Add Test Result",
       readOnlyHint: false,

@@ -53,6 +53,7 @@ process.on("exit", () => {
 
 export { setLogger } from "./logger.js";
 export { BrowserStackMcpServer } from "./server-factory.js";
-export { trackMCP } from "./lib/instrumentation.js";
+export { trackMCP, trackMCPCompleted } from "./lib/instrumentation.js";
+export { instrumentToolLatency } from "./lib/tool-latency.js";
 export { default as addTfaRcaCollaborationTools } from "./tools/tfa-rca-collaboration.js";
 export const PackageJsonVersion = packageJson.version;

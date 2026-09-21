@@ -6,6 +6,13 @@ const packageJson = require("../../package.json");
 import { apiClient } from "./apiClient.js";
 import globalConfig from "../config.js";
 
+const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
+
+export type ClientInfo = { name?: string; version?: string };
+
+/** How a tool call ended, as seen by the completion wrapper. */
+export type ToolOutcome = "ok" | "error_result" | "threw";
+
 interface MCPEventPayload {
   event_type: string;
   event_properties: {
@@ -17,18 +24,55 @@ interface MCPEventPayload {
     error_message?: string;
     error_type?: string;
     is_remote?: boolean;
+    duration_ms?: number;
+    outcome?: ToolOutcome;
   };
 }
 
+function baseProperties(toolName: string, clientInfo: ClientInfo) {
+  return {
+    mcp_version: packageJson.version as string,
+    tool_name: toolName,
+    mcp_client: clientInfo?.name || "unknown",
+    node_version: process.versions.node,
+    is_remote: globalConfig.REMOTE_MCP,
+  };
+}
+
+/** Fire-and-forget POST. Never throws, never delays the caller. */
+function sendEvent(event: MCPEventPayload, config?: any): void {
+  let authHeader: string | undefined;
+  if (config) {
+    const authString = getBrowserStackAuth(config);
+    authHeader = `Basic ${Buffer.from(authString).toString("base64")}`;
+  }
+
+  apiClient
+    .post({
+      url: INSTRUMENTATION_ENDPOINT,
+      body: event,
+      headers: {
+        "Content-Type": "application/json",
+        ...(authHeader ? { Authorization: authHeader } : {}),
+      },
+      timeout: 2000,
+      raise_error: false,
+    })
+    .catch(() => {});
+}
+
+/**
+ * The per-invocation event. Fired at tool entry with `success: true` (meaning
+ * "invoked"), and again from the catch block with `success: false` when the
+ * handler throws. A failing call therefore produces two rows.
+ */
 export function trackMCP(
   toolName: string,
-  clientInfo: { name?: string; version?: string },
+  clientInfo: ClientInfo,
   error?: unknown,
   config?: any,
 ): void {
-  const instrumentationEndpoint = "https://api.browserstack.com/sdk/v1/event";
   const isSuccess = !error;
-  const mcpClient = clientInfo?.name || "unknown";
 
   // Log client information
   if (clientInfo?.name) {
@@ -42,12 +86,8 @@ export function trackMCP(
   const event: MCPEventPayload = {
     event_type: "MCPInstrumentation",
     event_properties: {
-      mcp_version: packageJson.version,
-      tool_name: toolName,
-      mcp_client: mcpClient,
-      node_version: process.versions.node,
+      ...baseProperties(toolName, clientInfo),
       success: isSuccess,
-      is_remote: globalConfig.REMOTE_MCP,
     },
   };
 
@@ -59,22 +99,38 @@ export function trackMCP(
       error instanceof Error ? error.constructor.name : "Unknown";
   }
 
-  let authHeader = undefined;
-  if (config) {
-    const authString = getBrowserStackAuth(config);
-    authHeader = `Basic ${Buffer.from(authString).toString("base64")}`;
-  }
+  sendEvent(event, config);
+}
 
-  apiClient
-    .post({
-      url: instrumentationEndpoint,
-      body: event,
-      headers: {
-        "Content-Type": "application/json",
-        ...(authHeader ? { Authorization: authHeader } : {}),
-      },
-      timeout: 2000,
-      raise_error: false,
-    })
-    .catch(() => {});
+/**
+ * The per-completion event: one row per tool call, written AFTER the handler
+ * settles, carrying wall-clock duration and how it ended.
+ *
+ * Deliberately a separate `event_type` from `MCPInstrumentation`, so every
+ * existing query and dashboard keyed on that name keeps its row counts.
+ *
+ *   outcome = "ok"           handler returned a result without `isError`
+ *   outcome = "error_result" handler returned `{ isError: true }` (a failure the
+ *                            entry/catch rows never see today)
+ *   outcome = "threw"        handler threw; the catch row also exists
+ *
+ * A call with an entry row and no completion row was killed before it finished
+ * (client closed the IDE, process exit), which is the closest thing to a
+ * timeout signal this event can give.
+ */
+export function trackMCPCompleted(
+  toolName: string,
+  clientInfo: ClientInfo,
+  completion: { durationMs: number; outcome: ToolOutcome },
+  config?: any,
+): void {
+  const event: MCPEventPayload = {
+    event_type: "MCPToolCompleted",
+    event_properties: {
+      ...baseProperties(toolName, clientInfo),
+      duration_ms: Math.max(0, Math.round(completion.durationMs)),
+      outcome: completion.outcome,
+    },
+  };
+  sendEvent(event, config);
 }

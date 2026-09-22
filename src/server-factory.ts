@@ -21,6 +21,10 @@ import { setupOnInitialized } from "./oninitialized.js";
 import { BrowserStackConfig } from "./lib/types.js";
 import addRCATools from "./tools/rca-agent.js";
 import addAskBrowserStackAITool from "./tools/ask-browserstack/register.js";
+import {
+  nodeUpgradeNotice,
+  withNodeUpgradeNotice,
+} from "./lib/node-version-notice.js";
 
 /**
  * Wrapper class for BrowserStack MCP Server
@@ -42,7 +46,34 @@ export class BrowserStackMcpServer {
     });
 
     setupOnInitialized(this.server, this.config);
+    this.applyNodeUpgradeNotice();
     this.registerTools();
+  }
+
+  /**
+   * On runtimes below Node 22, wrap server.tool so every registered tool's
+   * response carries a user-visible upgrade nudge (a stderr log alone never
+   * reaches the client chat). No-op on Node >= 22.
+   */
+  private applyNodeUpgradeNotice() {
+    const notice = nodeUpgradeNotice();
+    if (!notice) return;
+
+    const server = this.server;
+    const originalTool = server.tool.bind(server) as (
+      ...args: unknown[]
+    ) => RegisteredTool;
+
+    (server as unknown as { tool: (...args: unknown[]) => RegisteredTool }).tool =
+      (...args: unknown[]): RegisteredTool => {
+        const lastIndex = args.length - 1;
+        const cb = args[lastIndex];
+        if (typeof cb === "function") {
+          args[lastIndex] = async (...cbArgs: unknown[]) =>
+            withNodeUpgradeNotice(await cb(...cbArgs), notice);
+        }
+        return originalTool(...args);
+      };
   }
 
   /**

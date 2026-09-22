@@ -44,6 +44,19 @@ describe("loadtesting capability index — name contract", () => {
       expect(Array.isArray(doc.capabilities), name).toBe(true);
     }
   });
+
+  it("searchLoadTests is a group-scoped name lookup (no projectId path param)", () => {
+    const cap = lt.capabilities.find((c: any) => c.name === "searchLoadTests");
+    expect(cap).toBeTruthy();
+    expect(cap.method).toBe("GET");
+    expect(cap.path).toBe("/api/v1/agent/loadTests/search");
+    // group-scoped: it must NOT require a projectId the way listLoadTests does.
+    expect(cap.path_params || []).toHaveLength(0);
+    const queryNames = (cap.query || []).map((q: any) => q.name);
+    expect(queryNames).toContain("name");
+    // it resolves under the loadTest entity so describeEntity surfaces it.
+    expect(lt.entities.loadTest.capabilities).toContain("searchLoadTests");
+  });
 });
 
 // The resolution contract the guidance leans on: name-by-search on listLoadTests

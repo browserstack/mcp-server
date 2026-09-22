@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.30",
+  "version": "1.31",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -4864,7 +4864,7 @@
             "required": true,
             "example": "Root Folder A",
             "json_path": "/folder/name",
-            "description": "Folder name. Must be wrapped in a `folder` object — the handler reads a required `folder` wrapper, so a flat body is a 400 before any field is looked at."
+            "description": "Folder name. Send it flat — the `folder` wrapper is added for you from the field's json_path, and sending one yourself is refused before the call leaves."
           },
           {
             "name": "notes",
@@ -5244,7 +5244,7 @@
             "type": "string",
             "required": true,
             "json_path": "/folder/name",
-            "description": "Name of the new subfolder. Must be wrapped in a `folder` object — the handler reads a required `folder` wrapper, so a flat body is a 400 before any field is read."
+            "description": "Name of the new subfolder. Send it flat — the `folder` wrapper is added for you from the field's json_path, and sending one yourself is refused before the call leaves."
           },
           {
             "name": "notes",
@@ -16891,6 +16891,7 @@
           }
         },
         "guidance": [
+          "CURRENTLY IMPOSSIBLE TO COMPLETE, and not because of the field names here. The server accepts `source_id` exactly as declared, then forwards it to the backing service, which rejects the request asking for a differently-named plural field. So a correctly-formed call is refused downstream and no input from this surface succeeds. Do not work around it by renaming the field — the server's own check would then reject the call first. This needs a product fix, not a contract change.",
           "Which tag loses: `source_id`. After the merge the source tag no longer exists as a tag, and every test case, run, plan or shared step that carried it carries the target's tag instead. `target_id` is unchanged apart from gaining those usages. Getting the two the wrong way round destroys the tag you meant to keep.",
           "There is no unmerge. The response does not list what was re-tagged, so nothing here tells you which entities to fix afterwards — capture the source tag's usage list (search by that tag) BEFORE calling, or the mapping is unrecoverable.",
           "Not project-scoped despite the path: `project_id` is used for routing only and never reaches the backing service, so the merge applies across the entire workspace and can touch projects you were not looking at.",
@@ -17067,7 +17068,7 @@
             "name": "name",
             "type": "string",
             "json_path": "/folder/name",
-            "description": "New folder name. Must be wrapped in a `folder` object — the handler reads a required `folder` wrapper, so a flat body is a 400. Not strictly required: a notes-only edit is accepted, but the `folder` object itself must be present and non-empty."
+            "description": "New folder name. Send it flat — the `folder` wrapper is added for you from the field's json_path, and sending one yourself is refused before the call leaves. Not strictly required: a notes-only edit is accepted, but the `folder` object itself must be present and non-empty."
           },
           {
             "name": "notes",
@@ -25447,7 +25448,10 @@
           "total",
           "page",
           "page_size",
-          "total_pages"
+          "total_pages",
+          "template",
+          "created_by",
+          "creator_details"
         ],
         "paginated": true,
         "responses": {

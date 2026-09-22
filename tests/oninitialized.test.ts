@@ -21,8 +21,8 @@ describe("setupOnInitialized – Node version nudge", () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => setNode(realNode));
 
-  it.each(["18.19.0", "20.0.0", "20.8.9", "16.20.0"])(
-    "warns on Node < 20.9 (%s) without throwing",
+  it.each(["18.19.0", "20.9.0", "21.7.3", "16.20.0"])(
+    "warns on Node < 22 (%s) without throwing",
     (v) => {
       setNode(v);
       expect(() => setupOnInitialized(makeServer())).not.toThrow();
@@ -30,8 +30,8 @@ describe("setupOnInitialized – Node version nudge", () => {
     },
   );
 
-  it.each(["20.9.0", "20.10.0", "22.11.0", "24.3.0"])(
-    "does not warn on Node >= 20.9 (%s)",
+  it.each(["22.0.0", "22.11.0", "24.3.0", "26.1.0"])(
+    "does not warn on Node >= 22 (%s)",
     (v) => {
       setNode(v);
       setupOnInitialized(makeServer());

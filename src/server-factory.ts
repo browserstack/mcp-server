@@ -50,11 +50,6 @@ export class BrowserStackMcpServer {
     this.registerTools();
   }
 
-  /**
-   * On runtimes below Node 22, wrap server.tool so every registered tool's
-   * response carries a user-visible upgrade nudge (a stderr log alone never
-   * reaches the client chat). No-op on Node >= 22.
-   */
   private applyNodeUpgradeNotice() {
     const notice = nodeUpgradeNotice();
     if (!notice) return;

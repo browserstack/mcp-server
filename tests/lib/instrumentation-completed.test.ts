@@ -21,7 +21,7 @@ const config = {
 describe("trackMCPCompleted", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("posts a separate MCPToolCompleted event with duration and outcome", () => {
+  it("posts a completion row with phase, duration and outcome", () => {
     trackMCPCompleted(
       "listTestCases",
       clientInfo,
@@ -32,11 +32,12 @@ describe("trackMCPCompleted", () => {
     expect(apiClient.post).toHaveBeenCalledTimes(1);
     const call = (apiClient.post as any).mock.calls[0][0];
     expect(call.url).toBe("https://api.browserstack.com/sdk/v1/event");
-    expect(call.body.event_type).toBe("MCPToolCompleted");
+    expect(call.body.event_type).toBe("MCPInstrumentation");
     expect(call.body.event_properties).toMatchObject({
       tool_name: "listTestCases",
       mcp_client: "claude-code",
       is_remote: false,
+      phase: "completed",
       duration_ms: 1235,
       outcome: "ok",
     });
@@ -59,6 +60,7 @@ describe("trackMCPCompleted", () => {
     const body = (apiClient.post as any).mock.calls[0][0].body;
     expect(body.event_type).toBe("MCPInstrumentation");
     expect(body.event_properties.success).toBe(true);
+    expect(body.event_properties).not.toHaveProperty("phase");
     expect(body.event_properties).not.toHaveProperty("duration_ms");
     expect(body.event_properties).not.toHaveProperty("outcome");
   });

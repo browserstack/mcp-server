@@ -23,6 +23,7 @@ interface MCPEventPayload {
     error_message?: string;
     error_type?: string;
     is_remote?: boolean;
+    phase?: "completed";
     duration_ms?: number;
     outcome?: ToolOutcome;
   };
@@ -98,7 +99,9 @@ export function trackMCP(
 
 /**
  * Per-completion row, written after the handler settles, with duration and
- * outcome. Separate event_type so existing MCPInstrumentation counts do not change.
+ * outcome. Same event_type as the entry row because the Rails endpoint
+ * allowlists event types; `phase: "completed"` and the absence of `success`
+ * keep it out of existing success/failure counts.
  */
 export function trackMCPCompleted(
   toolName: string,
@@ -107,9 +110,10 @@ export function trackMCPCompleted(
   config?: any,
 ): void {
   const event: MCPEventPayload = {
-    event_type: "MCPToolCompleted",
+    event_type: "MCPInstrumentation",
     event_properties: {
       ...baseProperties(toolName, clientInfo),
+      phase: "completed",
       duration_ms: Math.max(0, Math.round(completion.durationMs)),
       outcome: completion.outcome,
     },

@@ -19,7 +19,7 @@ function outcomeOf(result: unknown): ToolOutcome {
 
 /**
  * Wraps every registered tool handler with a stopwatch and emits one
- * `MCPToolCompleted` event per call. Transparent (result passed through,
+ * completion row (`phase: "completed"`) per call. Transparent (result passed through,
  * throws rethrown) and idempotent. Skips task-style (non-function) handlers.
  */
 export function instrumentToolLatency(

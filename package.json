@@ -30,7 +30,7 @@
     "automation"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=20.9.0"
   },
   "author": "",
   "license": "ISC",

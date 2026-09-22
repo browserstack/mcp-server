@@ -190,6 +190,49 @@
         "max_page_size": 100
       },
       {
+        "name": "searchLoadTests",
+        "method": "GET",
+        "path": "/api/v1/agent/loadTests/search",
+        "mode": "read",
+        "entity": "loadTest",
+        "query": [
+          {
+            "name": "name",
+            "type": "string",
+            "description": "Test name to search for (substring match, case-insensitive); required."
+          },
+          {
+            "name": "limit",
+            "type": "integer",
+            "description": "Max items to return (1-100, default 50)."
+          }
+        ],
+        "intent": "Find a load test by name across ALL of the caller's projects — use this to resolve a named test to a testId without knowing which project it is in.",
+        "guidance": [
+          "Group-scoped: unlike listLoadTests it needs no projectId. Prefer it to resolve a named test in one call instead of paging every project.",
+          "Each row carries testId, projectId, name, testType and framework — disambiguate same-named tests in different projects by projectId.",
+          "Returns one row per test (its latest version); the numeric testId is what getLoadTest and startLoadTestRun need."
+        ],
+        "returns": [
+          "tests",
+          "hasMore"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Success"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
         "name": "getLoadTestProjectTrends",
         "method": "GET",
         "path": "/api/v1/agent/projects/{projectId}/trends",
@@ -1586,6 +1629,7 @@
         ],
         "capabilities": [
           "listLoadTests",
+          "searchLoadTests",
           "getLoadTest",
           "createLoadTest",
           "updateLoadTest"

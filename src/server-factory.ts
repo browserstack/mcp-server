@@ -64,16 +64,17 @@ export class BrowserStackMcpServer {
       ...args: unknown[]
     ) => RegisteredTool;
 
-    (server as unknown as { tool: (...args: unknown[]) => RegisteredTool }).tool =
-      (...args: unknown[]): RegisteredTool => {
-        const lastIndex = args.length - 1;
-        const cb = args[lastIndex];
-        if (typeof cb === "function") {
-          args[lastIndex] = async (...cbArgs: unknown[]) =>
-            withNodeUpgradeNotice(await cb(...cbArgs), notice);
-        }
-        return originalTool(...args);
-      };
+    (
+      server as unknown as { tool: (...args: unknown[]) => RegisteredTool }
+    ).tool = (...args: unknown[]): RegisteredTool => {
+      const lastIndex = args.length - 1;
+      const cb = args[lastIndex];
+      if (typeof cb === "function") {
+        args[lastIndex] = async (...cbArgs: unknown[]) =>
+          withNodeUpgradeNotice(await cb(...cbArgs), notice);
+      }
+      return originalTool(...args);
+    };
   }
 
   /**

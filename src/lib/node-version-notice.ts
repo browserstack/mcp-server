@@ -6,13 +6,14 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
  * compression is disabled below that via graceful fallback), and an upcoming
  * release will require Node >= 22 — so we steer users to Node 22 LTS.
  */
-export function nodeUpgradeNotice(version: string = process.versions.node): string {
+export function nodeUpgradeNotice(
+  version: string = process.versions.node,
+): string {
   const major = Number(version.split(".")[0]) || 0;
   if (major >= 22) return "";
   return (
     `⚠️ Please use Node version > 21.x.x (Node 22 LTS recommended). ` +
-    `This server is running on Node ${version}; older versions are unsupported ` +
-    `and image compression is disabled below Node 20.9.`
+    `This server is running on Node ${version}; older versions will be unsupported.`
   );
 }
 

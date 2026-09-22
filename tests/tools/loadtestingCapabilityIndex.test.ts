@@ -45,3 +45,23 @@ describe("loadtesting capability index — name contract", () => {
     }
   });
 });
+
+// The resolution contract the guidance leans on: name-by-search on listLoadTests
+// and date-window filtering on listLoadTestRuns. Without these params the agent
+// can only page-and-scan, which fans out badly in large projects.
+describe("loadtesting capability index — resolution contract", () => {
+  const byName = (n: string) =>
+    lt.capabilities.find((c: any) => c.name === n);
+  const queryNames = (n: string) =>
+    (byName(n)?.query || []).map((q: any) => q.name);
+
+  it("listLoadTests resolves a test by name via search", () => {
+    expect(queryNames("listLoadTests")).toContain("search");
+  });
+
+  it("listLoadTestRuns resolves a run by date window", () => {
+    const q = queryNames("listLoadTestRuns");
+    expect(q).toContain("sinceIso");
+    expect(q).toContain("untilIso");
+  });
+});

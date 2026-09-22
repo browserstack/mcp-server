@@ -161,6 +161,8 @@
         "intent": "List the load tests in a project — use this to find a testId or browse tests, optionally filtered by type, framework, tag or recent activity.",
         "guidance": [
           "Resolve projectId via listLoadTestProjects first.",
+          "To find a test by name, pass search=<name> so the server matches it in one call — do not page the whole project and match names yourself. In a large project this is the difference between one call and many.",
+          "If several tests match the name, disambiguate by lastRun / updatedSince — do not guess. A descriptive or auto-generated name (e.g. Automation_lts_*) is a real test, not noise; never silently drop it in favour of one that merely sounds more relevant.",
           "The numeric testId returned here is what getLoadTest and startLoadTestRun need — not a runId.",
           "lastRun summarises the most recent execution when present."
         ],
@@ -1156,6 +1158,8 @@
           "testId is numeric; runId values returned are UUIDs.",
           "Each run carries a tags array — its own run-level tags if set (via updateLoadTest with runId), otherwise the tags inherited from the test. Filter with the tag query param.",
           "Filter with status / verdict / date range; page with cursor + limit.",
+          "To find a run by date, pass sinceIso/untilIso to narrow server-side — do not list the full history and scan it yourself. To compare two dated runs, make one narrowed call per date rather than one broad listing.",
+          "If a date resolves to more than one run, ask the user which; do not assume the first or the latest.",
           "One call returns this test's run history — reuse it and page with cursor when needed; do not re-list the same window."
         ],
         "returns": [

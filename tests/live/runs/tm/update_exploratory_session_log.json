@@ -1,0 +1,96 @@
+{
+  "capability": "update_exploratory_session_log",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:46:07Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm required params, body json_path wrapper behavior and the declared 200 shape before invoking — this family (sibling create_exploratory_session_log) already has hashed_id/project_id/group_id/defects[].id/created_at/attachment_relations drift on its create path, so the update path's own declared schema had to be checked for the same pattern rather than assumed inherited.",
+      "source": "describeCapability",
+      "capability": "update_exploratory_session_log",
+      "status": "n/a (describe, not invoke)",
+      "produced": {
+        "path_params_required": ["project_id", "session_id", "log_id"],
+        "body_fields_all_individually_optional": true,
+        "mode": "write",
+        "json_path": ["/session_log/content", "/session_log/status", "/session_log/elapsed_time", "/session_log/defects"],
+        "guidance_claim_on_defects": "\"defects, when non-empty, REPLACES the log's defect links; omit the key to leave them alone... You cannot unlink every defect from a log: sending defects:[] is treated as 'not supplied' and the existing links survive.\"",
+        "declared_200_schema_gap": "returns summary lists hashed_id and attachment_relations, but the expanded 200 properties block for session_log has neither — same two-sources-disagree pattern as create_exploratory_session_log, present before any call was made."
+      }
+    },
+    {
+      "step": 2,
+      "why": "Establish the pre-update baseline for the target row — log 544 was minted by a prior probe (create_exploratory_session_log) specifically for this update probe, with a linked defect and a known elapsed_time, so its state going in is documented context, not something this run invoked.",
+      "source": "pool (prior run, not invoked this run — see tests/live/runs/tm/create_exploratory_session_log.json)",
+      "capability": "create_exploratory_session_log",
+      "produced": {
+        "log_id": 544,
+        "session_id": 779,
+        "project_id": 379335744,
+        "status": "note",
+        "elapsed_time": 45,
+        "defects": [{ "issue_id": "TM-1234", "issue_type": "Bug", "id": 849732 }],
+        "session_actual_duration_before_this_probe": 165,
+        "note": "165 = 120 (log 543's elapsed_time) + 45 (log 544's elapsed_time), on session 779 while active and never closed — the get_exploratory_session probe flagged this as an observed pattern, not a proven mechanism. This probe's step 3 below tests it directly."
+      }
+    },
+    {
+      "step": 3,
+      "why": "Read session 779 back after the update to (a) check whether actual_duration moves in lockstep with log 544's elapsed_time change, converting the prior probe's observed pattern into a demonstrated mechanism, and (b) confirm session_log_count is still accurate at 2.",
+      "source": "invoked",
+      "capability": "get_exploratory_session",
+      "arguments": { "path_params": { "project_id": 379335744, "session_id": 779 } },
+      "status": 200,
+      "produced": {
+        "actual_duration": 210,
+        "session_log_count": 2,
+        "session_state": "active",
+        "closed_at": null,
+        "timeline": [
+          { "status": "bug", "elapsed_time": 120 },
+          { "status": "note", "elapsed_time": 90 }
+        ],
+        "mechanism_confirmed": "210 = 120 + 90 (log 544's NEW elapsed_time after this probe's update). actual_duration moved by exactly the same delta (+45) as the elapsed_time change (45 -> 90). This is a demonstrated mechanism, not a coincidence: actual_duration is live-recomputed as the sum of the session's log elapsed_time values on every read, independent of session_state/closed_at, and it responded correctly to a single-field update on one log.",
+        "session_log_count_check": "stayed at 2, correctly matching the 2 rows (543, 544) that exist for session 779 — no count-vs-rows drift on this read."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "session_id": 779, "log_id": 544 },
+        "body": { "elapsed_time": 90 },
+        "user_permission": "granted",
+        "change_summary": "Probe: update log 544's elapsed_time from 45 to 90 (status/content/defects untouched) to check whether the linked defect TM-1234 survives a partial update and whether session 779's derived actual_duration moves to match."
+      },
+      "status": 200,
+      "response_verbatim": { "ok": true, "completed": true, "http_response": { "status": 200, "body": { "success": true, "session_log": { "id": 544, "session_id": 779, "project_id": 379335744, "group_id": 3452, "content": "<p>Verified login flow on mobile Safari — no issues observed.</p>", "status": "note", "elapsed_time": 90, "created_by": { "id": 2522, "email": "probe-user@example.invalid", "full_name": "ing", "group_id": 2615 }, "created_at": "2026-09-21T13:32:42.000Z", "updated_at": "2026-09-21T13:46:07.000Z", "defects": [{ "id": 849732, "issue_id": "TM-1234", "issue_type": "Bug", "created_at": "2026-09-21T13:32:42.000Z" }], "attachment_relations": [] } } } },
+      "note": "Succeeded on the first try. elapsed_time updated 45 -> 90 exactly as sent. content and status were both omitted from the request body and both came back unchanged from baseline (content byte-identical, status still 'note') — genuine partial-update behavior for these fields, matching the capability's own guidance that only present keys are forwarded. Log id (544) and session_id (779) are unchanged — no recreate-under-new-id happened."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "session_id": 779, "log_id": 544 },
+      "body": { "elapsed_time": 90 }
+    },
+    "status": 200,
+    "response_keys": ["success", "session_log"],
+    "item_shape": "session_log: {id, session_id, project_id, group_id, content, status, elapsed_time, created_by{id,email,full_name,group_id}, created_at, updated_at, defects[{id,issue_id,issue_type,created_at}], attachment_relations[]} — no hashed_id key present at all."
+  },
+  "contract": {
+    "required": ["project_id (path)", "session_id (path)", "log_id (path)"],
+    "json_path": "Flat body works exactly as declared — sending {\"elapsed_time\": 90} with no session_log wrapper and no other keys was accepted on the first attempt; invokeCapability built /session_log/elapsed_time itself. No wrapper trap observed on this capability.",
+    "declared_missing": "session_log.hashed_id — listed in the capability's own `returns` summary array but absent (not null, not present as a key) from the 200 response, and also absent from the describeCapability-expanded 200 properties block itself (the declaration is internally inconsistent before the response is even compared). Shallowest missing path: session_log.hashed_id.",
+    "undeclared_returned": [
+      "session_log.project_id (379335744) — not in the 200 schema's properties nor in the returns summary",
+      "session_log.group_id (3452) — same, undeclared anywhere",
+      "session_log.defects[].id (849732) — declared defects item schema only requires/declares {issue_id, issue_type}",
+      "session_log.defects[].created_at — same, undeclared on the defects item schema",
+      "session_log.attachment_relations ([]) — present in the `returns` summary list but ABSENT from the expanded 200 schema's `properties` object; the live response sides with the returns summary (the field is present), so the two declared sources disagree with each other and the response resolves that disagreement in favor of the summary, not the properties block."
+    ]
+  },
+  "notes": "VERDICT: DRIFT. 1/1 attempts succeeded on the first try (0 failures, well under the 3-attempt cap). No error was provoked in this probe, so the family's known bare-{success:false} error-envelope defect (10 prior confirmed hits) was not exercised here — nothing to add to that count from this run.\n\n**PUT-VS-PATCH, and the linked defect specifically — PATCH semantics confirmed, no data loss.** The update sent only `elapsed_time` (45 -> 90); `status`, `content` and `defects` were all omitted from the request body. The read-back (both the update's own 200 response and a subsequent independent get_exploratory_session read) shows: `status` unchanged ('note'), `content` byte-identical, and — the field this probe specifically targeted — the linked defect TM-1234 (defect record id 849732) survived completely intact, with its own id and created_at unchanged. This is genuine partial-update (PATCH) behavior for the fields not included in the request, and it matches the capability's own declared guidance ('omit the key to leave [defects] alone'). It does NOT reproduce the sibling defect on update_shared_step_v1 (silently recreating a row under a new id when resent without its id, orphaning references): log 544 kept the same id (544) under the same session_id (779), and defect record 849732 kept its own id unchanged — no recreate, no orphaning, no silent drop. Net: this specific data-loss shape was hunted for and NOT found — the linked defect survives an unrelated single-field update.\n\n**Derived field, demonstrated (not just observed).** The prior get_exploratory_session probe on session 779 noted `actual_duration: 165` while the session was active and never closed, exactly equal to the sum of its two logs' elapsed_time (120 + 45), and flagged this as an observed pattern rather than a proven mechanism. This probe changed log 544's elapsed_time from 45 to 90 (delta +45) and re-read the session: `actual_duration` came back **210** — exactly 120 + 90, i.e. it moved by precisely the same +45 delta as the log-level change. session_state stayed 'active' and closed_at stayed null throughout. This converts the earlier note into a demonstrated mechanism: actual_duration is not a value set on close as its own declared description claims — it is live-recomputed as the sum of the session's log elapsed_time values on every read of the session, independent of session_state.\n\n**session_log_count stayed correct.** Read back at 2 after the update (which changed an existing log's field, not the log count) — no count-vs-rows drift observed on this call, not a 6th hit for the family's count-vs-rows pattern (5 confirmed elsewhere).\n\n**Inherited drift from create_exploratory_session_log, confirmed present on update too.** All four items named in the brief reproduce on this endpoint's own 200 response: (1) `session_log.hashed_id` is named in the returns summary but is absent both from the response and from describeCapability's own expanded 200 properties block — the declaration disagrees with itself before any live comparison. (2) `session_log.project_id` and `session_log.group_id` are returned (379335744, 3452) but undeclared anywhere. (3) `defects[].id` (849732) and `defects[].created_at` are returned though the declared defects item schema only has `issue_id`/`issue_type`. (4) `attachment_relations` is named in the `returns` summary but missing from the expanded 200 `properties` block; the live response includes it (`[]`), so the response matches the summary and exposes the summary/properties-block disagreement rather than resolving it. None of this is new relative to the create path — it is the same drift, now confirmed to persist through an update call rather than being create-specific."
+}

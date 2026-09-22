@@ -16,7 +16,7 @@
         "user_count": 12,
         "group_id": 2615,
         "user_id_set_identical_to_list_users": true,
-        "myself": { "id": 2522, "full_name": "ing", "email": "ing@bsstag.com" }
+        "myself": { "id": 2522, "full_name": "ing", "email": "probe-user@example.invalid" }
       }
     }
   ],
@@ -58,7 +58,7 @@
         "id": 2522,
         "browserstack_user_id": 6013,
         "full_name": "ing",
-        "email": "ing@bsstag.com",
+        "email": "probe-user@example.invalid",
         "group_id": 2615,
         "onboarded": 1,
         "reports_and_notification_enabled": true,
@@ -72,5 +72,5 @@
     "declared_missing": [],
     "undeclared_returned": []
   },
-  "notes": "Scoping: list_users is ACCOUNT/WORKSPACE-scoped, not project-scoped, despite requiring a project_id path param. The contract states project_id 'gates access only; the returned list is not filtered to this project's members', and this was verified empirically: invoking get_group_users_v2_v1 (which takes no project id at all and is explicitly group-scoped) against the same account returned the identical 12 users with identical fields and the same group_id (2615) as list_users. So project_id here functions purely as an access/permission check, not a filter - same 'no real project scope' pattern flagged for list_configuration_groups, except list_users does require a project_id argument where list_configuration_groups apparently requires none. project_id form: only the v1 INTEGER id was tested (379335744, from the fixture pool) and it worked on the first attempt; the contract explicitly types project_id as 'integer' (example 11046), so the v2 identifier form (PR-2005) was not attempted - not needed to answer the question and would contradict the declared type. User id form returned throughout: 'id' is a small TM-internal integer (e.g. 2522, 3741, 5465, ...), separate from 'browserstack_user_id' (also integer, e.g. 6013, 13450). Both are integers, never USR-NNN or email strings. Probe account's own user: id=2522, browserstack_user_id=6013, full_name='ing', email='ing@bsstag.com' (myself.id in the list_users response matches this). Total active user count in the account: 12 (unpaginated, no truncation observed). No role field is present anywhere in the response, matching the contract's own guidance ('No role field'). Declared schema and actual response matched exactly in both directions - no drift found for this capability."
+  "notes": "Scoping: list_users is ACCOUNT/WORKSPACE-scoped, not project-scoped, despite requiring a project_id path param. The contract states project_id 'gates access only; the returned list is not filtered to this project's members', and this was verified empirically: invoking get_group_users_v2_v1 (which takes no project id at all and is explicitly group-scoped) against the same account returned the identical 12 users with identical fields and the same group_id (2615) as list_users. So project_id here functions purely as an access/permission check, not a filter - same 'no real project scope' pattern flagged for list_configuration_groups, except list_users does require a project_id argument where list_configuration_groups apparently requires none. project_id form: only the v1 INTEGER id was tested (379335744, from the fixture pool) and it worked on the first attempt; the contract explicitly types project_id as 'integer' (example 11046), so the v2 identifier form (PR-2005) was not attempted - not needed to answer the question and would contradict the declared type. User id form returned throughout: 'id' is a small TM-internal integer (e.g. 2522, 3741, 5465, ...), separate from 'browserstack_user_id' (also integer, e.g. 6013, 13450). Both are integers, never USR-NNN or email strings. Probe account's own user: id=2522, browserstack_user_id=6013, full_name='ing', email='probe-user@example.invalid' (myself.id in the list_users response matches this). Total active user count in the account: 12 (unpaginated, no truncation observed). No role field is present anywhere in the response, matching the contract's own guidance ('No role field'). Declared schema and actual response matched exactly in both directions - no drift found for this capability."
 }

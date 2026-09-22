@@ -1,0 +1,90 @@
+{
+  "capability": "reorder_folders",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T09:40:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "task warned a concurrent probe is moving folder 765883 right now — re-read the tree immediately before acting rather than trusting the snapshot",
+      "source": "invoked",
+      "capability": "get_folder_tree_v1",
+      "arguments": {"path_params": {"project_id": 379335744}},
+      "status": 200,
+      "produced": {
+        "note": "Snapshot was already stale in two ways. (1) 765883 was still a child of 765811 at cases_count 2 in this first read, but a follow-up list_folder_contents(765811) moments later showed only ONE subfolder (765817) — 765883 had vanished from under 765811 between these two reads. A third read (get_folder_tree_v1 again) confirmed 765883 had landed at ROOT level, a sibling of 764093/764138/765811 — the concurrent probe was caught mid-move. (2) 765811 therefore has only 765817 left as a child, not the two-sibling group (765817, 765883) the task brief described — insufficient to run a reorder among 765811's own subfolders.",
+        "deviation": "Per the task's fallback logic (prefer 765811's subfolders; use root only if the capability is root-only), I instead used the 7 probe-owned subfolders under 764138 (__scratch__) — 764828, 765548, 765620, 765621, 765623, 765651, 765652 — since they are equally probe-owned, plentiful enough to test partial-list and anchor semantics properly, and touching them keeps the probe entirely off root and off 765811/765883 (which the other concurrent probe still owns). Root-level folders (764093, 764138, 765811, 765883) and 765817 were never reordered."
+      }
+    },
+    {
+      "step": 2,
+      "why": "check whether any read exposes folder order as a field, before assuming array sequence is meaningful",
+      "source": "described",
+      "capability": "get_folder_tree_v1 / get_root_folders_v1 / list_folder_contents",
+      "produced": "None of the three declare a position/order/sequence field anywhere in their returned keys. get_folder_tree_v1's own folder_sort_by only accepts name-asc/-desc/created_at-asc/-desc — there is no 'manual'/'position' sort value, and none of the three schemas list a rank/position field. So order, if observable at all, can only come from implicit array sequence, not a declared field."
+    },
+    {
+      "step": 3,
+      "why": "baseline the 7 __scratch__ subfolders' order and shape before touching anything",
+      "source": "invoked",
+      "capability": "list_folder_contents",
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764138}},
+      "status": 200,
+      "produced": {
+        "baseline_order": [764828, 765548, 765620, 765621, 765623, 765651, 765652],
+        "group_id_split": "Same response, same folder ids: the top-level `folders` array reports group_id as a plain INTEGER (2615) for every child, while `self.contents` reports group_id as the STRING \"3452\" for the identical ids in the identical call. This is a sharper version of the group_id inconsistency the task asked about — not just 'different capabilities disagree', but two arrays inside one response from the same capability disagree with each other."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"current": [765652], "next": 764828}},
+      "status": 200,
+      "error": null,
+      "changed": "765652 (originally last, position 7) moved to position 2, landing immediately AFTER 764828 — not BEFORE it as `next` is documented to mean. Verified via list_folder_contents(764138) + get_folder_tree_v1 immediately after: new order [764828, 765652, 765548, 765620, 765621, 765623, 765651]. All 7 ids still children of 764138, all counts (cases_count/sub_folders_count/total_cases_count) unchanged."
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"current": [765621], "prev": 765652, "next": 765548}},
+      "status": 200,
+      "error": null,
+      "changed": "765621 landed immediately AFTER 765548 (the `next` anchor), not in the gap between prev (765652) and next (765548) as documented, and not immediately after prev either. New order: [764828, 765652, 765548, 765621, 765620, 765623, 765651]. Confirms attempt 1's pattern: whenever `next` is present, the moved item lands immediately after next's pre-move position, contradicting the documented 'next = land before' semantics."
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"current": [765817], "prev": 765651, "next": 765652}},
+      "status": 200,
+      "error": null,
+      "changed": "CROSS-PARENT TEST. 765817's real parent is 765811, not 764138 — sent it anchored against 764138's siblings anyway. Response was 200 {success:true} but nothing happened to 765817: get_folder_tree_v1 afterward shows 765817 still solely a child of 765811 (764138's sub_folders_count stayed 7, 765811's stayed 1). Silent 200 half-success on the cross-parent id: no reparenting occurred (good — no data-integrity breach), but the API claims success for an id it silently ignored rather than rejecting the request or reporting that part failed."
+    },
+    {
+      "n": 4,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"current": [999999999], "prev": 765651, "next": 765652}},
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"The API request is invalid or improperly formed\"}",
+      "changed": "n/a — clean rejection. Body shape does not match either declared error schema: no `error:{code,message,details}` object at all, just a flat {success, message}. A sixth distinct bad-id behaviour for this family of routes (generic 400, not the 404 or 422 the contract declares for bad input)."
+    },
+    {
+      "n": 5,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"current": [765620], "prev": 765651}},
+      "status": 200,
+      "error": null,
+      "changed": "Sent `prev` alone (no `next`) to isolate its effect after next-only and next+prev trials both showed the item landing after 'next'. Result: 765620 landed immediately BEFORE 765651 (the prev anchor) — i.e. `prev` alone produces the 'land before' placement that the contract documents for `next`, not the 'land after' placement documented for `prev`. New order: [764828, 765652, 765548, 765621, 765623, 765620, 765651]. All 7 ids still children of 764138; counts unchanged."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}, "body": {"current": [765652], "next": 764828}},
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": "Flat {data:{success:true, message:'Folders reordered successfully'}} — exactly the declared 200 schema, no missing or undeclared keys. The order itself is never echoed; the only way to see the effect is to re-read a folder listing."
+  },
+  "contract": {
+    "required": ["project_id (path)", "current (body, array of integers)", "at least one of prev/next (body) — sending neither is 422"],
+    "json_path": "Body is flat: current / prev / next all top-level, no nested wrapper. `prev: null` is rejected client-side before the request is even sent ('prev' must be a number) — despite the spec calling prev/next 'integer or null', a literal null in this field errors locally; omitting the key entirely is what actually reaches the API and is accepted. No `name` field exists on this capability at all, so the shared false 'folder wrapper required' description (flagged on create_root_folder_v1 and its sibling) does not apply here — nothing to check.",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "IS ORDER OBSERVABLE? Yes, but only implicitly. None of get_folder_tree_v1 / get_root_folders_v1 / list_folder_contents declares or returns a position/order/sequence field — order is inferable ONLY from array sequence (`contents`/`structure` in get_folder_tree_v1, `folders`/`self.contents` in list_folder_contents), and that sequence does change and persist after a reorder call, confirmed across 5 separate before/after reads. So this capability's effect is verifiable, just not through any documented field — a caller has no supported way to assert on order besides diffing array positions.\n\nHEADLINE FINDING — prev/next semantics are SWAPPED relative to the documented contract. The spec says prev='land after this id', next='land before this id'. Observed, across three independent trials: whenever `next` is supplied (attempts 1 and 2, whether or not `prev` was also given), the moved folder lands immediately AFTER next's pre-move position — the opposite of 'before'. When `next` is omitted and only `prev` is given (attempt 5), the moved folder lands immediately BEFORE prev's pre-move position — the opposite of 'after'. In other words the two parameters behave exactly as if their names were exchanged: `prev` actually means 'land before this id' and `next` actually means 'land after this id'. When both are supplied, `next`'s 'land after' behaviour wins and `prev` has no independent effect on final position (attempt 2). This is a silent, high-impact defect: every 200 response looks identical ({success:true, message:'Folders reordered successfully'}) whether or not the folder landed where the documented contract promised, so a caller following the docs literally will consistently place folders one slot off from where they intended, with no error signal at all.\n\nPARTIAL-LIST BEHAVIOUR: unlike edit_test_run.test_case_ids' destructive-replace precedent, `current` here is genuinely additive/minimal. Across all 5 reorder calls (each moving only 1 of the 7 siblings), the 6 folders NOT named in `current` kept both their parent (764138 throughout — sub_folders_count stayed 7 every time, get_folder_tree_v1 confirmed every id's parent_id unchanged) and their relative order among themselves. Nothing was appended-to-end, dropped, or reparented for being omitted from `current`. This capability does NOT reproduce the edit_test_run bug — omitted siblings are left alone.\n\nCROSS-PARENT ID: sending an id from a different parent (765817, actually a child of 765811) anchored against 764138's siblings returned 200 {success:true} but was a complete no-op on 765817 — no reparenting, but also no error or partial-failure indication. This is the 'silent 200 half-success' bad-id behaviour category, applied here to a wrong-parent id rather than a nonexistent one. No data-integrity breach (765817 stayed exactly where it was), but the response cannot be trusted to mean 'everything in current was moved'.\n\nBAD ID (nonexistent folder, 999999999): clean 400, but body shape is `{success:false, message:'The API request is invalid or improperly formed'}` — flat, no `error:{code,message,details}` object at all, unlike either declared error schema (400 and 422 both declare a nested `error` object). This is a sixth distinct answer to the running bad-id-behaviour question across this capability family (previously seen: silent 200 half-success, clean 400 with nested error, bare 404 {success:false}, 404 {error:...} with no success key, 502). reorder_folders' 400 is its own seventh variant: flat body, no nested error object, generic message that doesn't name the bad id.\n\nGROUP_ID STRING VS INTEGER: not returned by reorder_folders itself (its success body carries no folder data at all), but the read side used to verify it (list_folder_contents) shows the split within a SINGLE response: `folders[].group_id` is the plain integer 2615, `self.contents[].group_id` is the string \"3452\", for the identical folder ids in the identical call. Confirms the group_id serializer inconsistency is not just cross-capability but can appear twice in one payload from one capability.\n\ndata.project EMBEDDING: not present. reorder_folders' 200 body is exactly {data:{success,message}} — no project object, nothing to compare against either serializer variant.\n\nNothing was renamed, deleted, or reparented by this probe. Final state of 764138's 7 children (order only, all other fields unchanged from baseline): [764828, 765652, 765548, 765621, 765623, 765620, 765651]. 765811/765817/765883 and all root-level folders were left untouched throughout."
+}

@@ -1,0 +1,59 @@
+{
+  "capability": "get_folder_tree_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:31:34Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope — folder tree is read per project",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 } },
+    "status": 200,
+    "response_keys": ["structure", "success"],
+    "item_shape": {
+      "root_folder_node": {
+        "id": "string (quoted, e.g. \"764093\")",
+        "project_id": "integer",
+        "name": "string",
+        "is_automation": "integer (0/1)",
+        "cases_count": "integer",
+        "sub_folders_count": "integer",
+        "total_cases_count": "integer",
+        "contents": "array (recursive, same node shape)",
+        "links": "object ({ self: string })",
+        "parent_id": "ABSENT on root nodes",
+        "group_id": "ABSENT — never observed at any depth"
+      },
+      "nested_folder_node (depth 1 and depth 2 both observed)": {
+        "id": "string (quoted)",
+        "project_id": "integer",
+        "name": "string",
+        "parent_id": "integer (unquoted) — same logical id space as `id`, but typed differently",
+        "is_automation": "integer (0/1)",
+        "cases_count": "integer",
+        "sub_folders_count": "integer",
+        "total_cases_count": "integer",
+        "contents": "array (recursive)",
+        "links": "object",
+        "group_id": "ABSENT"
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)"],
+    "json_path": null,
+    "declared_missing": [
+      "group_id — listed in describeCapability's `returns` for every node, never present on any root or nested folder in the actual response"
+    ],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded (200), no retries needed. Top-level shape matches the declared schema exactly: {success: boolean, structure: array}. The declared 200 schema itself is a bare `structure: {type: array, items: {type: object}}` with no per-field properties — an unfalsifiable contract at the schema level; the only falsifiable field list comes from describeCapability's prose `returns` array, which is what this probe checked against. Two findings against that prose: (1) `group_id` is declared as a returned field but was absent on every one of the 9 folder nodes observed (2 roots + 7 nested, across 2 depth levels) — declared_missing. (2) Guidance text explicitly states 'Folder ids in the tree are plain integers' — false for the `id` field itself, which is returned as a quoted STRING (e.g. \"764093\") throughout, while the co-referencing `parent_id` field on child nodes holds the identical value range as an unquoted INTEGER (e.g. 764138). Same id space, two different JSON types depending on which field carries it — a genuine prose-vs-reality disagreement, not just an omission. EMPTY-CASE / NESTING: not applicable as a concern — the pool's __scratch__ folder (764138) has real depth: __scratch__ -> __mcp-probe-movetarget-2026-09-18T04-31-51Z (764828) -> __mcp-probe-folder-renamed-2026-09-18T05-00-00Z (764827), so the recursive `contents` branch of the declared shape WAS exercised to 2 levels, not left implicit. `__readonly__` (764093) is a leaf with cases_count:2 but contents:[] and total_cases_count:0 (note total_cases_count reads 0 even though cases_count is 2 — total_cases_count appears to aggregate only over `contents`, i.e. descendant folders, not the folder's own direct case count; worth flagging but not scored as drift since neither describeCapability's schema nor prose defines the aggregation rule precisely enough to falsify). FOLDERS ARRAY-VS-MAP CHECK: does NOT reproduce here — `structure` is declared as an array and returned as an array at every level (top-level structure, and each node's `contents`), unlike the array-vs-map mismatch confirmed elsewhere this session on `folders` (search_project_entities, get_entity_filter_details_v1) and `system_fields` (get_project_id_custom_fields_v2_v1). This capability's container typing is consistent. ROUTE-NAMING: describeCapability's response (intent + guidance, both read via include_responses=all) never mentions the underlying HTTP route at all, let alone the fact that it is `/api/v1/projects/{project_id}/repository/mapping` rather than something folder-tree-shaped — the contract is silent on the name/route mismatch; nothing in the tool output confirms or denies the route string independently. ERROR SHAPE: not exercised — no error occurred on this probe (single successful attempt), so no error-envelope comparison is reported for this capability; describeCapability declared only a bare 401 'Unauthorized' with no schema for the error body."
+}

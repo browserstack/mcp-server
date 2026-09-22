@@ -1,0 +1,102 @@
+{
+  "capability": "create_test_cases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:34:53Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "target folder — this route puts folder_id in the PATH (unlike create_test_case_v1, which needs it in the body too), so no top-level body folder_id was sent",
+      "source": "pool",
+      "capability": null,
+      "produced": { "folder_id": 764138, "folder_name": "__scratch__" }
+    },
+    {
+      "step": 3,
+      "why": "priority/case_type/status option ids, deliberately chosen from the UPPER of the two disjoint duplicate id blocks (same ids the sibling create_test_case_v1 probe used) to check whether both blocks are live on this route too",
+      "source": "external",
+      "capability": null,
+      "produced": {
+        "note": "ids reused from this session's create_test_case_v1 probe (tests/live/runs/tm/create_test_case_v1.json), themselves sourced from get_system_field_values_v1; not invoked fresh here",
+        "priority_upper": 318618,
+        "case_type_upper": 318626,
+        "status_upper": 318632
+      }
+    },
+    {
+      "step": 4,
+      "why": "read siblings create_test_case_v1 and create_bulk_test_cases_v1 (describeCapability only, no invoke) to answer why three case-creation capabilities exist",
+      "source": "external",
+      "capability": null,
+      "produced": { "note": "see notes for the redundancy analysis" }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 764138 },
+      "body": {
+        "test_case": {
+          "name": "__mcp-probe-createcases-20260921-1",
+          "test_case_folder_id": "764138",
+          "priority": 318618,
+          "case_type": 318626,
+          "status": 318632,
+          "template": "test_case_steps",
+          "test_case_steps": [
+            { "step": "Open the login page", "result": "Login page is displayed" }
+          ],
+          "tags": ["mcp-probe"]
+        }
+      }
+    },
+    "status": 200,
+    "response_keys": [
+      "data.success",
+      "data.test_case",
+      "data.folder",
+      "data.project",
+      "data.path_folders",
+      "data.request_trace_id"
+    ],
+    "item_shape": {
+      "test_case.id": 1985023,
+      "test_case.identifier": "TC-54489",
+      "test_case.case_type": { "id": 318626, "internal_name": "other", "colour": null, "value_category": null, "name": "Other" },
+      "test_case.priority": { "id": 318618, "internal_name": "medium", "colour": null, "value_category": null, "name": "Medium" },
+      "test_case.status": { "id": 318632, "internal_name": "active", "colour": "active", "value_category": null, "name": "Active" },
+      "test_case.steps": "[] -- empty, despite test_case_steps being sent and populated (same drift as create_test_case_v1)",
+      "test_case.test_case_steps": "ARRAY (declared as a single object in the contract): [{record_status, id, step, result, order, project_id, group_id, test_case_id, updated_at, created_at}]",
+      "test_case.template / template_step_type / template_name / template_id": "'test_case_steps' / 'test_case_steps' / 'Test Case Steps' / 1164 -- all echoed correctly; template_step_type, template_name, template_id are undeclared",
+      "test_case.automation_state": "{id, internal_name, colour, value_category, name} -- entirely undeclared, alongside the declared automation_status {name,value}",
+      "test_case.is_shared / test_case.test_case_dataset / test_case.test_run_results_count / test_case.test_run_results_issues_count / test_case.comments_count": "undeclared, all present",
+      "folder.notes": "undeclared field present on both folder and every path_folders[] entry",
+      "path_folders[0]": "carries identifier, created_at, updated_at, deleted, parent_id, source, entity_type -- none declared"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "folder_id (path)", "test_case.name", "test_case.test_case_folder_id"],
+    "json_path": "test_case",
+    "declared_missing": [
+      "test_case.case_type.field_name / test_case.priority.field_name / test_case.status.field_name (declared on all three option objects, present on none)",
+      "test_case.test_case_steps (declared as a single object; actual is an array -- none of the declared object's step-authoring keys (background, feature, hashed_id, scenario, sharedStep, shared_step_detail_id, shared_step_id, test_data, test_recording_id, title) appear on the array items)"
+    ],
+    "undeclared_returned": [
+      "test_case.automation_state (full option object; automation_status is separately declared and also present)",
+      "test_case.template_step_type, test_case.template_id, test_case.template_name",
+      "test_case.is_shared, test_case.test_case_dataset, test_case.test_run_results_count, test_case.test_run_results_issues_count, test_case.comments_count",
+      "test_case.case_type.value_category / test_case.priority.value_category / test_case.status.value_category",
+      "test_case.test_case_steps[].record_status / .group_id / .test_case_id",
+      "folder.notes, path_folders[].notes/identifier/created_at/updated_at/deleted/parent_id/source/entity_type"
+    ]
+  },
+  "notes": "WRAPPER TRAP -- not encountered. describeCapability declares `test_case` as a required nested body object (not display-only json_path metadata over a flat body). Sent nested exactly as declared (`{test_case: {...}}`, folder in path_params, no top-level folder_id) and it worked on the first attempt: 200, created TC-54489 (integer id 1985023) in project PR-2005 (379335744), folder __scratch__ (764138). No flat-body form was tried since the nested form worked immediately and a second write attempt was not warranted to test a form the contract does not suggest.\n\nEXISTENCE VERIFIED INDEPENDENTLY -- get_test_cases_v1 with all_folders=true, sort_by=name-DESC, required[fields]=name, per_page=100 returned TC-54489 (id 1985023) in folder_id 764138 with name '__mcp-probe-createcases-20260921-1' and step_count=1, confirming it is actually persisted, not just echoed by the create response. The listing's info.count (27) matched the number of rows actually returned (27) -- no count-vs-rows mismatch on this read, unlike other endpoints in this campaign.\n\nSIBLING FINDINGS INHERITED AND CONFIRMED TO HOLD HERE, IDENTICALLY: test_case.steps came back `[]` even though test_case_steps was sent and landed in test_case.test_case_steps; test_case_steps is declared a single object but returned as an array with a materially different field set (id/step/result/order/project_id/updated_at/created_at plus undeclared record_status/group_id/test_case_id, none of the declared BDD/shared-step authoring keys); field_name is declared on case_type/priority/status but present on none of the three; value_category is undeclared but present (null) on all three; both duplicate option-id blocks are live -- the UPPER block (priority 318618/case_type 318626/status 318632) was sent and echoed back unchanged with correct, matching internal_name/name, exactly as it was for create_test_case_v1 in the same session.\n\nTHE MAIN QUESTION -- why three case-creation capabilities exist, and this one is REDUNDANT with create_test_case_v1, not a distinct job:\n\ncreate_test_cases and create_test_case_v1 both create exactly ONE case per call (body is a single `test_case` object in both, never an array) and return the identical response shape (`data.test_case`, `data.folder`, `data.project`, `data.path_folders`, `data.request_trace_id`), the identical field allow-list on the body, and the identical drift profile (steps/test_case_steps split, field_name absent, both id blocks live). They differ in exactly one way, and it is a transport detail, not a capability: create_test_cases takes `folder_id` in the URL path (`path_params: {project_id, folder_id}`) and needs no folder_id in the body beyond `test_case.test_case_folder_id`; create_test_case_v1 takes only `project_id` in the path and needs a top-level `folder_id` body field pointing at the same folder (confirmed live in this session's create_test_case_v1 probe, which targeted this exact folder 764138 -- a project that already had folders -- by sending `test_case.test_case_folder_id` + top-level `folder_id` together, and it worked identically to this capability). The index's own guidance assigns create_test_case_v1 a narrower nominal role ('the call to use to seed the FIRST case in a project that has no folders yet, via create_at_root... for any project that already has folders, prefer the folder-scoped create instead'), but that is a documentation preference, not an enforced capability boundary: create_test_case_v1's contract and this session's own probe of it show the route fully supports targeting an existing folder, with no observable difference in behaviour, defaults, validation, or response shape from create_test_cases doing the same thing. Concretely: same required fields, same optional-field set (attachments/automation_state/automation_status/case_type/custom_fields/description/estimate/estimated_duration_seconds/expected_result/is_dataset_modified/issues/owner/preconditions/priority/review_status/reviewers/send_for_review/shared_precondition_id/status/tags/template/template_id/template_step_type/test_case_dataset/test_case_steps), same create_subfolder/scenario_name behaviour, same create_at_root behaviour (a no-op-turned-400 here since the path folder already exists; the identical 400 on v1 once a project has folders). There is no field, id form, folder semantic, or response key that one of these two capabilities exposes and the other does not. This IS the redundant pair: say so plainly -- create_test_cases and create_test_case_v1 are the same write with two different calling conventions for 'which folder', and neither the index nor the live responses mark either one preferred or deprecated.\n\ncreate_bulk_test_cases_v1, by contrast, is genuinely different and not part of this redundancy (describeCapability only, not invoked -- this was a read): it takes an UNWRAPPED array `test_cases` (no per-item `test_case` key) capped at 10 on the synchronous path (500 with `unique_id` + async flag), and its per-item allow-list is materially narrower and behaves differently even for shared fields -- `automation_state`, `review_status`, `reviewers`, `send_for_review`, `shared_precondition_id`, `template_step_type`, and `estimated_duration_seconds` are all silently dropped on the bulk path (present and honoured on both single-case routes), and `custom_fields`/`attachments` are read from the FIRST item only and force-copied onto every case in the batch rather than being per-item. So the three-way set resolves to a two-way exact duplicate (create_test_cases == create_test_case_v1 for the common case) plus one genuinely distinct capability (create_bulk_test_cases_v1, for >1 case with a different, narrower contract) -- not three meaningfully different capabilities.\n\nNot exercised in this probe (write budget conservation, single case already sufficient to confirm the contract and the redundancy): create_at_root (already 400 by contract once the project has folders, and not invoked to avoid spending the write budget confirming an already-documented 400), create_subfolder/scenario_name, shared_precondition_id, reviewers/review_status e-signature gating (project has no stored project_settings per this session's earlier get_project_settings probe, so review-approve is off and unreachable), owner non-membership fallback, and a flat (non-nested) body form (the nested form worked on the first attempt so the 'other form' of the wrapper trap was not exercised as a second write)."
+}

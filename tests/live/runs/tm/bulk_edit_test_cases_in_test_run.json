@@ -1,0 +1,95 @@
+{
+  "capability": "bulk_edit_test_cases_in_test_run",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:41:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project/run scope, as given by the task",
+      "source": "pool/task",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005", "test_run_id": "TR-9120", "test_run_uuid": 17578918 }
+    },
+    {
+      "step": 2,
+      "why": "mapping_id is proven unstable (shifts to the new result's own id after every write) — resolve TR-9120's current mapping_ids live, immediately before use, rather than trusting any previously recorded value",
+      "source": "invoked",
+      "capability": "get_test_cases_for_v1_test_run",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9120" }, "query": { "per_page": 100 } },
+      "status": 200,
+      "produced": {
+        "rows_seen": [
+          { "identifier": "TC-54486", "id": 1985020, "mapping_id": 2150424070, "latest_status": "untested" },
+          { "identifier": "TC-54485", "id": 1985019, "mapping_id": 2150424068, "latest_status": "untested" },
+          { "identifier": "TC-54458", "id": 1975349, "mapping_id": 2150424069, "latest_status": "untested" },
+          { "identifier": "TC-54456", "id": 1971632, "mapping_id": 2150424067, "latest_status": "untested" },
+          { "identifier": "TC-54455", "id": 1971631, "mapping_id": 2150424066, "latest_status": "untested" }
+        ],
+        "note": "info.count: 5. All 5 rows untested, confirming the task's premise about TR-9120's fresh state. Preferred TC-54485/TC-54486 for the write over TC-54458 per instruction, even though TC-54458's row in TR-9120 is not the campaign's evidence copy (that lives in TR-9062)."
+      }
+    },
+    {
+      "step": 3,
+      "why": "resolve an authoritative numeric result-status id for 'Blocked' rather than sending the display name (contract prefers status_id; status-by-name silently no-ops when unresolvable)",
+      "source": "invoked",
+      "capability": "get_test_runs_form_fields_v1",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": { "status_id": 318612, "name": "Blocked", "also_noted": { "passed": 318610, "failed": 318611 } }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "TR-9120" },
+        "body": { "mapping_ids": [2150424068, 2150424070], "status_id": 318612, "description": "<p>mcp-probe bulk_edit_test_cases_in_test_run write probe 2026-09-22</p>" }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded on the first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_run_id": "TR-9120" },
+      "body": { "mapping_ids": [2150424068, 2150424070], "status_id": 318612, "description": "<p>mcp-probe bulk_edit_test_cases_in_test_run write probe 2026-09-22</p>" }
+    },
+    "status": 200,
+    "response_keys": ["success", "info", "test_cases", "skipped_test_case_ids"],
+    "item_shape": ["assignee", "creator_details", "created_at", "updator_details", "updated_at", "case_type", "priority", "status", "automation_state", "is_shared", "project_name", "case_type_imported", "description", "custom_fields", "estimate", "expected_result", "id", "identifier", "is_automation", "links", "name", "history_count", "owner", "preconditions", "owner_imported", "priority_imported", "project_id", "status_imported", "steps", "tags", "template", "template_step_type", "template_id", "test_case_folder_id", "step_count", "test_case_folders_path", "test_case_steps", "lcnc_build_map", "automation_status", "test_run_results_count", "test_run_results_issues_count", "issues", "comments_count", "metadata", "dataset_values", "latest_status", "result_status", "result_custom_fields", "defects", "mapping_id", "test_assignee", "last_executed_by", "deleted", "test_run_id", "configuration", "assignee_imported", "result_notes", "last_executed_at", "test_case_id", "planned_execution_date", "execution_eligible"],
+    "used_cases": {
+      "TC-54485": { "mapping_id_sent": 2150424068, "new_mapping_id_in_response": 2150424086 },
+      "TC-54486": { "mapping_id_sent": 2150424070, "new_mapping_id_in_response": 2150424087 }
+    },
+    "note": "Deliberately did not use TC-54458's row for the primary probe, per instruction, even though a write to it inside TR-9120 cannot affect the campaign's evidence copy in TR-9062."
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id"],
+    "json_path": null,
+    "declared_missing": [
+      "test_cases[].latest_result_id",
+      "test_cases[].folder_path",
+      "test_cases[].configuration_id",
+      "test_cases[].dataset",
+      "test_cases[].source_project_id"
+    ],
+    "undeclared_returned": [
+      "test_cases[].mapping_id",
+      "test_cases[].test_case_id",
+      "test_cases[].test_run_id",
+      "test_cases[].result_status",
+      "test_cases[].result_custom_fields",
+      "test_cases[].custom_fields",
+      "test_cases[].defects",
+      "test_cases[].tags",
+      "test_cases[].owner",
+      "test_cases[].links",
+      "test_cases[].test_case_folders_path",
+      "... and roughly 30 more keys — see probe.item_shape for the full list"
+    ]
+  },
+  "notes": "SHALLOWEST/BIGGEST FINDING: describeCapability's own guidance for this route explicitly claims the response's test_cases rows come from 'a different serializer from the run's case LISTING... kept separate so corrections to the listing shape do not silently redescribe this one', and declares a narrow item shape (identifier, name, description, priority as a string label, status as a string, case_type, latest_status, latest_result_id, assignee as a string, folder_path as int array, configuration_id, dataset, project_id as 'PR-1' string, source_project_id as 'PR-7' string). The ACTUAL response is not that shape at all — it is the exact same wide row shape get_test_cases_for_v1_test_run returns (assignee/priority/case_type/automation_state as full objects, mapping_id instead of latest_result_id, configuration instead of configuration_id, test_case_folders_path instead of folder_path, no source_project_id, project_id as a bare integer not 'PR-NNN'). The 'kept separate' claim in the guidance is false: this is the listing shape, unmodified. Confirmed on both writes in this probe (identical item shape both times).\n\nWHAT IT ACTUALLY EDITS — CONFIRMED EMPIRICALLY: after the write, get_test_case_by_integer_id_v1 on TC-54485 (1985019) showed the case's OWN record completely untouched by this call — description still read the leftover text from an unrelated prior probe ('PARTIAL-EDIT PROBE: single-field update via edit_test_case_partial_v1...'), status still 'Active' (id 318632), updated_at still 2026-09-21T13:42:43.000Z (a full 16 hours before this probe's write at 05:38:20 the next day). Meanwhile the SAME call correctly set the run row's latest_status to 'blocked' and minted a new result (id 2150424086). This capability writes execution results scoped to a run row, never the case's own fields — the guidance's own claim on this point holds up under test, and the misleading part is purely the response-shape claim above, not the write-scope claim.\n\nSTATUS-ID INCONSISTENCY — CONFIRMED, SAME RESULT ROW, TWO READERS DISAGREE: sent status_id=318612 (resolved from get_test_runs_form_fields_v1 as 'Blocked'). get_test_cases_for_v1_test_run's re-read of the same row echoes result_status.id=318612 (matches what was sent). But get_test_results_for_test_case, reading the identical result row (id 2150424086) by its own dedicated per-result read, reports result_status.id=318639 for the SAME field_value 'Blocked' / internal_name 'blocked' / colour '#818CF8'. Same fact, same instant, two callers, two different numeric ids for the same status — reproducing exactly the 318612-vs-318639 pattern flagged elsewhere in this campaign, now confirmed on this capability's own write and a sibling read of the row it just created.\n\nDUPLICATE-ROW CHECK — NEGATIVE, NOTABLE: re-read TR-9120's row count via get_test_cases_for_v1_test_run immediately after the first write (5 cases in, 5 rows out, info.count:5) and again after the second write (still 5 rows, info.count:5). The create_step_result_v1 duplicate-row defect (one call producing two case-level result rows) does NOT reproduce on this capability across two separate writes — a genuine, useful negative result for this specific route.\n\nSILENT PARTIAL FAILURE — CONFIRMED, NO SIGNAL AT ALL: a second write sent mapping_ids:[2150424067 (valid, TC-54456), 999999999 (nonexistent)] with status_id=318611 (Failed). Response: 200, success:true, skipped_test_case_ids: [] (empty — not populated for a bad mapping_id, only for review-gate exclusions per its own doc), the valid row (TC-54456) correctly updated to Failed, and absolutely no field anywhere in the response indicating that one of the two requested mapping_ids matched nothing. This is a fourth distinct partial-failure behavior in this bulk-route family (alongside create_bulk_test_cases_v1's silent-discard-200, edit_test_run/get_test_cases_for_v1_test_run's named-skip, and bulk_assign_test_cases_to_test_run's all-or-nothing-502): silent-no-op-200-with-zero-signal. An agent cannot tell from this response alone whether N or N-1 (or fewer) of its requested mapping_ids actually applied.\n\ndescription/comment persistence: the 'description' body field IS persisted as the new result's own description/comment (confirmed via get_test_results_for_test_case on the row it created), but is invisible from both run-listing readers used in this probe (get_test_cases_for_v1_test_run and get_test_run_v2 both report result_notes:null / no comment field at all on the same row) — an agent checking whether its comment landed via either listing read would wrongly conclude it did not.\n\nmapping_id instability reconfirmed a further time: TC-54485 2150424068 -> 2150424086, TC-54486 2150424070 -> 2150424087, TC-54456 2150424067 -> 2150424089, all minted fresh by this capability's own writes.\n\nprogress consistency (secondary check, not the primary target of this probe): get_test_run_v2's overall_progress on TR-9120 read {Blocked:2, Untested:3} after the first write, correctly aggregating regardless of the absence of configurations. get_test_run_progress_v1 (called without configuration_id) returned an empty configurations array (info.count:0) for the same run at the same time — not a contradiction of the same bucket (TR-9120 genuinely has zero configured 'configurations', all rows have configuration:null), but it means that reader is useless for a run like this one and only get_test_run_v2 (or the v1 single-run detail) has the real aggregate. Recorded for context; this is a different capability's gap, not bulk_edit_test_cases_in_test_run's.\n\nTR-9110, TR-9062, TR-9061, TR-9075 were never referenced by any call in this probe. Only TR-9120 was written to, exactly as instructed."
+}

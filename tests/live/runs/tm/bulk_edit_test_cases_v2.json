@@ -1,0 +1,84 @@
+{
+  "capability": "bulk_edit_test_cases_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:26:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "baseline read of TC-54489 (public v2 shape) before any write, to record its tags/custom_fields for a read-back comparison rather than trusting the write response",
+      "source": "invoked",
+      "capability": "get_test_case_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54489" } },
+      "status": 200,
+      "produced": { "identifier": "TC-54489", "folder_id": 764138, "tags": ["mcp-probe"], "custom_fields": [], "issues": [], "last_updated_at": "2026-09-21T13:34:53.000Z" }
+    },
+    {
+      "step": 2,
+      "why": "baseline read of the same case in the internal v1 shape, to capture the write-and-discard-cluster fields (estimate, expected_result, metadata, test_case_dataset) and the test_case.steps vs test_case_steps split, none of which the v2 read exposes",
+      "source": "invoked",
+      "capability": "get_test_case_by_integer_id_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985023 } },
+      "status": 200,
+      "produced": { "id": 1985023, "tags": ["mcp-probe"], "custom_fields": [], "estimate": null, "expected_result": null, "metadata": { "lcnc_build_map": { "resource_path": null, "status": null, "profileId": null }, "ai_prompt": { "status": false } }, "test_case_dataset": {}, "steps": [], "test_case_steps_count": 1 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "ids": [1985023], "select_all": false, "tags": { "operation": "add", "value": ["v2-add-test"] }, "custom_fields": {} } },
+      "status": 400,
+      "error": "{\"error\":\"Invalid JSON data\",\"details\":[\"The property '#/test_case/tags' of type string did not match one or more of the following types: object, null\"]}",
+      "changed": "n/a - identical retry, to rule out a transient error"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "ids": [1985023], "select_all": false, "tags": { "operation": "add", "value": ["v2-add-test"] }, "custom_fields": {} } },
+      "status": 400,
+      "error": "{\"error\":\"Invalid JSON data\",\"details\":[\"The property '#/test_case/tags' of type string did not match one or more of the following types: object, null\"]}",
+      "changed": "Identical error on retry - not transient. Switched to a different enveloped field (priority) to check whether the fault is specific to tags."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "ids": [1985023], "select_all": false, "priority": { "operation": "ignore" }, "custom_fields": {} } },
+      "status": 400,
+      "error": "{\"error\":\"Invalid JSON data\",\"details\":[\"The property '#/test_case/priority' of type string did not match one or more of the following types: object, null\"]}",
+      "changed": "Same failure signature on a second, unrelated field (priority, sent as a bare {operation:'ignore'} no-op) - the fault is generic to every field this capability declares with type 'string', not specific to tags or to the add operation."
+    },
+    {
+      "n": 4,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "ids": [1985023], "select_all": false, "tags": ["mcp-probe", "v2-add-test"], "custom_fields": {} } },
+      "status": 400,
+      "error": "{\"error\":\"Invalid JSON data\",\"details\":[\"The property '#/test_case/tags' of type string did not match one or more of the following types: object, null\"]}",
+      "changed": "Tried tags as a bare array (legacy v1 full-replace shape) instead of the documented {operation,value} envelope, to see if the live API actually wants the old shape. Identical error - confirms the failure is not about which shape we send for tags; every payload for this field is rejected the same way."
+    },
+    {
+      "n": 5,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "ids": [1985023], "select_all": false, "custom_fields": { "1": { "operation": "ignore" } } } },
+      "status": 200,
+      "error": null,
+      "changed": "Sent ONLY custom_fields (the one field this capability declares as type 'object' rather than 'string'), as a no-op ignore. This is the only field/value combination in the whole surface that got past validation."
+    },
+    {
+      "n": 6,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "ids": [1985023, 999999999], "select_all": false, "custom_fields": {} } },
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "Partial-failure probe: one real id (1985023) plus one nonexistent id (999999999) in the same call, using the only body shape that reaches the API at all. Whole call fails bare 404 with no error object, no code, no message - not the documented 400/401/403/404/422/500 shape (which all declare an `error:{code,message,details}` object) and not a silent 200 half-success."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "body": { "ids": [1985023], "select_all": false, "custom_fields": { "1": { "operation": "ignore" } } } },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "folders", "info", "filter_details", "workflow"],
+    "item_shape": ["assignee", "creator_details", "created_at", "updator_details", "updated_at", "case_type", "priority", "status", "automation_state", "is_shared", "case_type_imported", "description", "custom_fields", "estimate", "estimated_duration_seconds", "expected_result", "id", "identifier", "is_automation", "links", "name", "history_count", "owner", "preconditions", "owner_imported", "attachments", "priority_imported", "project_id", "status_imported", "steps", "tags", "template", "template_step_type", "template_id", "template_name", "test_case_folder_id", "step_count", "test_case_steps", "lcnc_build_map", "automation_status", "test_run_results_count", "test_run_results_issues_count", "issues", "metadata", "test_case_dataset"]
+  },
+  "contract": {
+    "required": ["project_id (path)", "ids", "custom_fields"],
+    "json_path": "/test_case/tags, /test_case/issues, /test_case/custom_fields, /test_case/priority, /test_case/status, /test_case/case_type, /test_case/automation_state, /test_case/automation_status, /test_case/owner, /test_case/preconditions, /test_case/review_status, /test_case/reviewers, /test_case/ids, /test_case/select_all, /test_case/de_selected_ids",
+    "declared_missing": ["success.async", "success.unique_id"],
+    "undeclared_returned": ["test_cases", "folders", "info", "filter_details", "workflow"]
+  },
+  "notes": "PRIMARY FINDING: this capability does NOT earn its '(PREFERRED bulk write)' label - as invoked through this surface, it cannot perform its one distinguishing feature at all. Every enveloped field it declares as type 'string' (tags, issues, priority, status, case_type, automation_state, automation_status, owner, preconditions, review_status, reviewers - i.e. every field except custom_fields) is rejected on every attempt with a 400 'Invalid JSON data' / \"property ... of type string did not match ... object, null\" - regardless of whether the payload sent for that field is the documented {operation,value} object (attempts 1-3) or a bare legacy array (attempt 4). Same failure on tags (add) and priority (ignore, no value) - reproduced 4/4 times across two unrelated fields and two payload shapes, so this is not a fluke of one field or one operation; it is the described type declaration itself (type:'string' for a field whose real shape is an object) causing the request to be rejected before the operation semantics can even run. CONSEQUENCE FOR THE TASK: add/remove/replace/empty/ignore on tags could NOT be exercised - not add-preserves-existing, not remove, not replace/empty for silent-discard risk, not ignore-vs-omit. None of it is reachable. The safety claim over v1 (add/remove instead of destructive full-replace) is unverifiable in its current state, and in practice the capability is currently WORSE than v1 for tags: v1's bulk_edit_test_cases at least accepts a write; this one accepts none for tags.\n\nSECOND FINDING (the one field that IS invokable returns the wrong response entirely): custom_fields is declared type 'object' rather than 'string' and is the only combination that reached the API (a no-op {'1':{'operation':'ignore'}} against a project with no field id 1 configured). It returned 200, but the body is not the declared {success, async, unique_id} bulk-edit ack at all - it is a project-wide test-case LISTING (test_cases[], folders{}, info{}, filter_details{}, workflow{}) covering all 30 cases across every folder in the project, including __readonly__ (764093) and TC-54455. This is a wholesale response-shape mismatch, not a missing/extra key. Read-back confirms no data was actually changed on any case other than TC-54489 (whose last_updated_at alone moved, to the call's own timestamp; its tags stayed ['mcp-probe'] and custom_fields stayed [] throughout) - so the mismatch is in what is returned, not in what got mutated. Still, returning a full unfiltered project listing (which happens to include the two protected/off-limits ids, TC-54455 and the __readonly__ folder) from what is supposed to be a scoped bulk-edit response is worth flagging to the product team as a real information/response-shape leak, independent of the type-string bug above.\n\nTHIRD FINDING (partial failure, third distinct behaviour): ids=[1985023 (real), 999999999 (nonexistent)] with the one working custom_fields no-op body produced a bare 404 {\"success\":false} - no `error` object, no code, no message, despite the capability's own declared 404 schema requiring one. This is a new (fourth) partial-failure behaviour among the bulk routes surveyed so far (silent 200 half-success x2, bare 404 x2 now with this one, 502 x1) and confirms 404-without-error-object is not a one-off.\n\nWhat could NOT be tested as a result of the above: add vs remove tag semantics, replace/empty silent-discard risk on tags or issues, ignore-vs-omit distinction (ignore was only exercised on custom_fields/priority as a forced no-op, never contrasted against genuinely omitting the field, since any field present at all beyond custom_fields 400s regardless of operation), and any write-and-discard-cluster field (expected_result, estimate, metadata, test_case_dataset) - none of those are even parameters this capability exposes, so the write-and-discard question does not apply to v2's declared surface at all. What WAS confirmed clean: TC-54489 was not corrupted by any of the six attempts - tags, custom_fields, and steps are unchanged from baseline; only last_updated_at moved. No other case (including the protected __readonly__/TC-54455/TC-54458 set) shows a write-attributable timestamp change."
+}

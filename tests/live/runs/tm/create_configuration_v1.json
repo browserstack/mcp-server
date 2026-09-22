@@ -1,0 +1,66 @@
+{
+  "capability": "create_configuration_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:28:04Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the required project_id path param (pool: 379335744 = PR-2005)",
+      "source": "pool",
+      "capability": null,
+      "produced": {
+        "project_id": 379335744
+      }
+    },
+    {
+      "step": 2,
+      "why": "baseline read to confirm pre-write count before creating, matching the stated pool figure",
+      "source": "get_configurations_v1",
+      "capability": "get_configurations_v1",
+      "produced": {
+        "pre_write_count": 244
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "attempt": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "name": "__mcp-probe-config-20260921" }
+      },
+      "shape_tried": "flat (no json_path wrapper attempted -- describeCapability declared only a single flat 'name' field with no nesting, so there was nothing to wrap)",
+      "status": 200,
+      "result": "success on first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": { "name": "__mcp-probe-config-20260921" }
+    },
+    "status": 200,
+    "response_keys": ["configuration", "success"],
+    "item_shape": {
+      "configuration": {
+        "id": "integer",
+        "group_id": "integer",
+        "name": "string",
+        "record_status": "string",
+        "is_suggested": "boolean",
+        "is_valid_on_bstack": "boolean",
+        "created_at": "string (date-time)"
+      },
+      "success": "boolean"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "name (body)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["is_valid_on_bstack"]
+  },
+  "notes": "First attempt succeeded, no retries needed. Body sent flat ({\"name\": ...}) since describeCapability declared no wrapper/json_path for this capability's single body field -- the JSON_PATH WRAPPER TRAP did not apply here, nothing to try both ways on. Response came back under 'configuration' (not 'data'), matching the declared 200 schema; the only undeclared field was 'is_valid_on_bstack:false' on the created record, which the schema's properties list omits (a smaller, milder version of the same gap already flagged on get_configurations_v1's item shape -- both the create and list schemas in this index under-declare fields the backing service actually returns). No declared field was missing.\n\nSCOPE FINDING (the specific interest of this probe): the created configuration landed at GROUP level, not project level, confirming the capability's own guidance text ('Group-scoped, not project-scoped: project_id matches the route but is never sent onward'). Verified two ways: (1) group_id on the created record is 3452, the same group_id every row in the existing 244-configuration pool carries; (2) a follow-up get_configurations_v1 call against the SAME project_id (379335744) with per_page=300 (no name filter) returned info.count=245 and 245 rows -- i.e. the pool visible from PR-2005's own route grew from the pre-write baseline of 244 to 245, and the new row (id 5189868, name '__mcp-probe-config-20260921') is present in that undifferentiated list alongside the pre-existing configurations. A separate name-filtered read (q=__mcp-probe-config-20260921) also returned exactly one row, same id, confirming the write round-trips cleanly. Conclusion: this is a genuinely group-wide, blast-radius write -- calling create_configuration_v1 through ANY project in group 3452 adds to the same shared pool every other project in that group reads from. There is no project-scoped variant; an agent that assumes project_id constrains the write is wrong, and duplicate-by-name creation is not prevented (per guidance) so repeated/retried calls would silently multiply entries in the shared pool.\n\nTR-9062 / TC-54457 configuration-null contradiction: NOT chased in this probe. create_configuration_v1's response (a plain new configuration record with no run/mapping linkage) and the get_configurations_v1 follow-up read (a flat list of configuration rows, no run or case-mapping fields) neither one surfaces any case-configuration mapping data, so this probe's own response shape sheds no light on which configuration(s) TC-54457's two TR-9062 mapping_ids actually point at. That contradiction needs a dedicated probe against the test-run/case-mapping read capabilities (e.g. get_test_cases_for_v1_test_run), not this one.\n\nOther standing campaign watch-items (entitlement-gates-as-200, 3/11 correct error envelopes, duplicate-option-id ranges) were not exercised by this single successful write -- no error path or option-list response was produced here to check against them."
+}

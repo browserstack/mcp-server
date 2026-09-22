@@ -9,3 +9,4 @@ tests.md
 .env
 tests/live/.id-pool.json
 tests/live/capability-test-plan.csv
+__pycache__/

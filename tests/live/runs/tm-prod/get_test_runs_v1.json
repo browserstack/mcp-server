@@ -1,0 +1,40 @@
+{
+  "capability": "get_test_runs_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "PASS",
+  "note_on_scope": "get_test_runs_v1 is not one of the 6 test_plan read capabilities in this batch (it is a test_run capability), but it is invoked here specifically to cross-check the plan-linkage defect the task asked about, which is inherently a two-reader comparison against get_test_plan_test_runs_v1. This file records that cross-check; it is not a full standalone recheck of get_test_runs_v1's own preprod DRIFT verdict (undeclared fields, type mismatches — see tests/live/runs/tm/get_test_runs_v1.json for that, unrelated to this task).",
+  "preprod_reference": {
+    "systemic_claim": "Per tests/live/findings/update_test_plan_v1.md ('Reader disagreement, re-confirmed after a real write'): get_test_plan_test_runs_v1 confirms a run (TR-9111, and earlier TR-9061) is linked to a plan, but get_test_runs_v1(project_id, include_test_plan='true') re-read in the same pass still shows test_plans:[] for that same run. Stated as 'reproduced a second time, across two probes on two different days' with staleness/caching explicitly ruled out — framed as 'a genuinely broken reader'."
+  },
+  "setup": [
+    { "step": 1, "why": "find a plan with linked runs to test against", "source": "invoked", "capability": "list_test_plans_v1", "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1 } }, "status": 200, "produced": { "plan_182865": "TP-4036 Testing parikshit, test_runs_count.active=1" } },
+    { "step": 2, "why": "get_test_plan_test_runs_v1 confirms which run is linked to plan 182865", "source": "invoked", "capability": "get_test_plan_test_runs_v1", "arguments": { "path_params": { "project_id": 332537, "test_plan_id": 182865 }, "query": { "p": 1 } }, "status": 200, "produced": { "linked_run": "TR-5217429 / uuid 72374668", "info": { "count": 1 }, "count": { "active": 1, "closed": 0 } } }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 2, "include_test_plan": "true" } },
+    "status": 200,
+    "response_keys": ["success", "test_runs", "info", "count"],
+    "found_row": {
+      "id": "TR-5217429",
+      "uuid": 72374668,
+      "created_at": "2026-09-04T12:29:14.000Z",
+      "test_plans": [{ "id": 182865, "name": "Testing parikshit" }]
+    }
+  },
+  "dual_reader_comparison": {
+    "reader_A_get_test_plan_test_runs_v1": "Confirms linkage by LIST MEMBERSHIP: TR-5217429 appears as the single row when querying test_plan_id=182865, and count/info both agree (count.active=1, info.count=1). The row's own embedded test_plans field is [] (see get_test_plan_test_runs_v1.json — this capability never populates that field on its own rows, on any plan tried).",
+    "reader_B_get_test_runs_v1_include_test_plan_true": "Confirms linkage by FIELD VALUE: the same run TR-5217429, found on page 2 of the project-wide run listing, carries test_plans:[{\"id\":182865,\"name\":\"Testing parikshit\"}] — the actual linked plan object, correctly populated.",
+    "verdict": "THE TWO READERS AGREE. This is the opposite of the preprod-reported behavior. Preprod's finding was that get_test_plan_test_runs_v1 confirms a link that get_test_runs_v1 then fails to show (test_plans:[] despite include_test_plan=true) — described as systemic across two probes on two different days. On production, with a real plan/run pair (not a scratch fixture), get_test_runs_v1 correctly surfaces the linkage. This is the strongest possible statement in the OPPOSITE direction: the preprod-reported systemic reader defect does NOT reproduce on production.",
+    "corroborating_negative_evidence": "Pages 1 and 2 of get_test_runs_v1(include_test_plan=true) were scanned in full (60 rows) — every OTHER row on both pages has test_plans:[], which is expected and correct since the overwhelming majority of this project's 2,378 runs are not plan-linked (only a handful of plans have any linked runs at all, per the test_runs_count fields seen in list_test_plans_v1). TR-5217429 was the only plan-linked run encountered in that 60-row window, and it is the one row that correctly shows a non-empty test_plans array. This rules out 'got lucky, the field happens to always render empty arrays that just look right' — the field is genuinely differentiating linked from unlinked runs."
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "HEADLINE FOR THIS CROSS-CHECK: the plan-linkage reader-disagreement defect reported as systemic on preprod (get_test_runs_v1 + include_test_plan=true always returns test_plans:[], even for runs get_test_plan_test_runs_v1 confirms are linked) does NOT reproduce on production. Found a real linked pair (plan 182865 'Testing parikshit' / run TR-5217429) via get_test_plan_test_runs_v1, then located that exact same run inside get_test_runs_v1's project-wide listing (include_test_plan=true) two pages deep, and it correctly carries the linked plan object — not an empty array. This is environment-dependent behavior, not an environment-independent defect: the preprod finding should be scoped to preprod (or investigated for a preprod-specific data/caching condition) rather than treated as a universal product defect. It remains true (see get_test_plan_test_runs_v1.json) that get_test_plan_test_runs_v1's OWN row-level test_plans field is always empty on both environments — that narrower, second-order gap does reproduce — but the primary systemic claim about get_test_runs_v1 itself does not."
+}

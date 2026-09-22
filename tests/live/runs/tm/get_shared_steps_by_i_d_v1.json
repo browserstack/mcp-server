@@ -1,0 +1,48 @@
+{
+  "capability": "get_shared_steps_by_i_d_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T11:02:16Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the path param",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    },
+    {
+      "step": 2,
+      "why": "shared_step_id to read — pool-listed id 27842, confirmed live today (this session) by a sibling probe of get_shared_steps_v1, which returned it as the sole row (title \"__probe-shared-step\")",
+      "source": "pool",
+      "capability": null,
+      "produced": { "shared_step_id": 27842 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "shared_step_id": 27842 },
+      "query": { "paginated": true }
+    },
+    "status": 200,
+    "response_keys": ["data", "success"],
+    "item_shape": {
+      "title": "string",
+      "id": "integer",
+      "created_by": "object",
+      "updated_by": "object",
+      "tags": "array",
+      "page_info": "object",
+      "shared_step_details": "array"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "shared_step_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["data.tags", "data.page_info"]
+  },
+  "notes": "Succeeded on the first attempt with the two required path params plus query paginated=true (needed to get page_info per the capability's own guidance — without it a truncated block would look complete). Response: {success:true, data:{title:\"__probe-shared-step\", id:27842, created_by:{id:2522,full_name:\"ing\"}, updated_by:{id:2522,full_name:\"ing\"}, tags:[], page_info:{page:1,page_size:150,count:1,prev:null,next:null}, shared_step_details:[{id:76579,step:\"probe step\",result:\"probe result\",test_data:null,order:1}]}}. All schema-required data fields present (title, id, created_by, updated_by, shared_step_details); the single shared_step_details row carries all four required row fields (id, step, result, order) plus the optional test_data. Prose-vs-schema disagreement (same pattern as the sibling get_shared_steps_v1 probe): the capability's flat top-level `returns` list names tags and page_info as returned fields, and the live response does include both — but the nested 200 JSON schema's `data.properties` never declares either, only title/id/created_by/updated_by/shared_step_details. Recorded as undeclared_returned against the strict nested schema; the flat returns summary is the half that matches reality. step_count and test_case_count (also named in the flat returns list) did NOT appear in this response — consistent with the capability's own guidance, which explicitly warns 'test_case_count and step_count appear only when the backing service returns them on this path — do not rely on them here,' so their absence is documented behavior, not drift. Detail-vs-listing distinction confirmed: this single-item read returns the actual ordered step/result rows (shared_step_details: id/step/result/test_data/order) that the referencing test cases render, whereas the sibling get_shared_steps_v1 listing for the same shared step (id 27842, same title) returns only summary fields {title,id,step_count,test_case_count,tags,created_by,updated_by} and never the row content — exactly as this capability's intent states ('Read one shared step with its full ordered step/result rows'), so that distinction is correctly documented and this probe confirms it holds in practice. No container-shape mismatch: data is declared and returned as a single object (not array/map confusion), and shared_step_details is declared and returned as an array. No type/value inconsistency observed: id (27842), shared_step row id (76579), and created_by/updated_by ids (2522) are all plain integers, not quoted strings. Not an unfalsifiable contract — the schema is concretely typed throughout, so this PASS is a genuine one. No non-2xx response was hit, so declared_missing/undeclared_returned were derived only from the successful body, per instruction never to diff an error body against the success schema."
+}

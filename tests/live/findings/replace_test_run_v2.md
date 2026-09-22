@@ -17,7 +17,7 @@ A deliberately partial body (`{"description": "...", "tags": ["replace-probe-tag
 
 | field | write response echoed | actual storage | verdict |
 | --- | --- | --- | --- |
-| `assignee` | `"ing@bsstag.com"` — the **old** value | **`null`** (cleared by the write itself) | **wrong** |
+| `assignee` | `"probe-user@example.invalid"` — the **old** value | **`null`** (cleared by the write itself) | **wrong** |
 | `overall_progress` | `{Untested: 4}` | `{Untested: 5}` | **wrong** |
 | `updated_at` | a fresh `2026-09-18T07:11:25.000Z` | **`06:27:38.743Z`** — unchanged since creation; never persisted | **wrong** |
 | `tags` | `["replace-probe-tag"]` | same | correct |

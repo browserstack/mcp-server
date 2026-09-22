@@ -1,0 +1,55 @@
+{
+  "capability": "get_exploratory_session",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "recheck of a preprod DRIFT finding (tests/live/findings/get_exploratory_session.md) against production — needed to know whether prod has any real exploratory sessions before anything else, and this task is strictly read-only (no create/clone/log allowed)",
+      "source": "invoked",
+      "capability": "list_exploratory_sessions",
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "q[session_state]": "active" } },
+      "status": 200,
+      "produced": { "info.count": 8, "count": { "active": 8, "closed": 2 }, "ids_seen": [862, 819, 818, 639, 81, 71, 70, 49] }
+    },
+    {
+      "step": 2,
+      "why": "session_state defaults to active and hides closed sessions; had to ask explicitly for closed to get the full picture",
+      "source": "invoked",
+      "capability": "list_exploratory_sessions",
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "q[session_state]": "closed" } },
+      "status": 200,
+      "produced": { "info.count": 2, "count": { "active": 8, "closed": 2 }, "ids_seen": [810, 48] }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "session_id": 819 } },
+    "status": 200,
+    "response_keys": ["success", "exploratory_session"],
+    "item_shape": {
+      "exploratory_session": ["attachments", "attachment_relations", "id", "identifier", "test_plan_id", "test_plan", "project_id", "group_id", "title", "description", "timebox_duration", "duration", "session_state", "assignee", "owner", "charter", "created_by", "closed_by", "closed_at", "actual_duration", "record_status", "created_at", "updated_at", "tags", "configurations", "issues", "timeline", "session_log_count", "custom_fields"],
+      "timeline[0]": ["status", "elapsed_time", "created_by"]
+    },
+    "also_probed": {
+      "session_810": {
+        "path_params": { "project_id": 332537, "session_id": 810 },
+        "status": 200,
+        "session_state": "closed",
+        "timeline_item_shape": ["status", "elapsed_time", "created_by"],
+        "actual_duration": 4,
+        "timeline_elapsed_sum": 4,
+        "note": "closed session, linked to the same test_plan_id (182865) as 819 — used to cross-check the timeline shape and actual_duration pattern on an independent, differently-lifecycled session"
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id", "session_id"],
+    "json_path": "exploratory_session",
+    "declared_missing": ["name", "summary", "folder_id"],
+    "undeclared_returned": ["attachment_relations", "project_id", "group_id", "owner", "record_status"]
+  },
+  "notes": "SESSIONS FOUND: yes. Project 332537 (PR-18723, 'Demo Project 1') has real exploratory sessions on prod — discovered via list_exploratory_sessions: 8 active (ids 862, 819, 818, 639, 81, 71, 70, 49) and 2 closed (ids 810, 48). Read in full via get_exploratory_session: session 819 (active, 3 logs, linked to test_plan_id 182865/'Testing parikshit') as the primary probe, and session 810 (closed, 2 logs, also linked to test_plan_id 182865) as a cross-check. No create/clone/log/update/close capability was invoked at any point — both sessions pre-existed in the account.\n\nRECHECKING THE 4 PREPROD DRIFT POINTS:\n\n1. `timeline` declared as lifecycle events {created_by, action, timestamp} vs actual log-shaped rows — REPRODUCES. On both 819 and 810, every timeline row is {status, elapsed_time, created_by}. `action` and `timestamp` are absent (keys do not exist, not null) on all rows across both sessions; `status`/`elapsed_time` (both undeclared) appear instead. Example from 819: {\"status\":\"bug\",\"elapsed_time\":7,\"created_by\":{...}}. Identical shape on 810's two rows. Confirmed on prod with two independent real sessions, same as preprod.\n\n2. `folder_id` declared across the family, absent from every response — REPRODUCES. `folder_id` does not appear anywhere in the exploratory_session object on either 819 or 810 (full key list captured above under item_shape/probe). Consistent with the preprod finding and with the create/clone family pattern cited there (not independently re-verified here, since this run only touches get_exploratory_session and list_exploratory_sessions).\n\n3. `name`, `summary`, and the expanded `test_plan` object declared and absent — PARTIALLY REPRODUCES, with one correction to the preprod finding. `name` is absent (only `title` is present, no `name` key at all) — reproduces. `summary` is absent from get_exploratory_session's response on both 819 and 810 — reproduces (note: `summary` DOES appear on the list_exploratory_sessions rows for these same sessions, e.g. {\"bug\":1,\"fail\":1,\"note\":1} for 819 — so `summary` exists on the list endpoint but is dropped on the single-item read; this is a sharper version of the same declared-but-absent gap, not a contradiction). HOWEVER `test_plan` (the expanded object) is NOT absent here — both 819 and 810 are linked to test_plan_id 182865 and both return a fully populated test_plan object: {\"id\":182865,\"identifier\":\"TP-4036\",\"name\":\"Testing parikshit\",\"parent_plan_id\":null}. The preprod finding had explicitly flagged this as 'unverified rather than confirmed-absent' because both preprod sessions probed had test_plan_id: null (no linked plan) — it never observed a linked session. Prod supplies exactly that missing case, and the expansion works correctly: `test_plan` is populated when a plan is linked. So this closes preprod's open question in the capability's favor — `test_plan` expansion is not broken, only `name` and `summary` are actually missing from this read.\n\n4. `actual_duration` declared 'set on close', observed non-null on an active never-closed preprod session (165), matching the sum of that session's own logs' elapsed_time (120+45) — REPRODUCES, and again matches the log-sum pattern exactly. Session 819 is active (session_state: active, closed_at: null, closed_by: null) with actual_duration: 7. Its 3 timeline rows have elapsed_time 7, 0, 0 — summing to 7, an exact match. Session 810 (closed) has actual_duration: 4, and its 2 timeline rows have elapsed_time 0 and 4, summing to 4 — also an exact match, though for a closed session a non-null actual_duration is not itself surprising (that's the declared behavior). The active-session case (819) is the one that reproduces the drift: actual_duration is populated and non-null on a session that has never been closed, and its value equals the exact sum of that session's own logs' elapsed_time — consistent with the preprod hypothesis that actual_duration is live-recomputed from summed log elapsed_time rather than set only on close. As on preprod, this remains an observed pattern from black-box reads, not a proven mechanism (no server code read).\n\nOVERALL: all 4 preprod DRIFT points were re-tested against real prod data. 3 of 4 reproduce as originally stated (timeline shape, folder_id absence, actual_duration live-recompute pattern). The 4th (point 3) reproduces in part (name, summary absent) but corrects the preprod finding's open question on `test_plan`: the expanded object is NOT absent — it renders correctly when a plan is linked, which preprod never got to observe. Verdict is DRIFT (not PASS) because real, confirmed schema gaps remain (name, summary, folder_id absent; timeline schema wrong; 5 undeclared keys returned); not UNVERIFIED, since two independent real sessions with non-trivial content (logs, a linked test plan, one active/one closed) were read end to end."
+}

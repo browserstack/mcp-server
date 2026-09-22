@@ -1,0 +1,44 @@
+{
+  "capability": "import_dataset_c_s_v",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T00:00:00.000Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the path param",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": {}
+      },
+      "status": 400,
+      "error": "{\"error\":\"No file uploaded\"}",
+      "changed": "n/a — no dataset field exists in this capability's schema to attempt a payload on. describeCapability's own guidance already establishes the mechanism problem (\"NOT INVOKABLE from this profile: it takes a multipart file upload\", \"this record has no parameter for the one input it needs\"); this single call exists only to confirm that declared behavior against the live API rather than take it on faith. Did not retry with variant bodies (e.g. base64 string under some guessed key) because describeCapability's path_params/body contract lists literally nothing besides `project_id` — there is no declared field to put a file or file-reference into, guessing an undeclared key would not test the contract, it would test a guess."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": {}
+    },
+    "status": 400,
+    "response_keys": ["error"],
+    "item_shape": "n/a — 400 error body only, never diffed against the declared 200 success schema"
+  },
+  "contract": {
+    "required": ["project_id (path, integer)"],
+    "json_path": "none declared — describeCapability returns no body/query parameters at all for this capability; the only input the contract needs (the CSV file) has no field to carry it",
+    "declared_missing": "not verifiable — no 2xx response was reachable to diff against the declared success schema (data.success/data.headers/data.rows), and error bodies are not diffed against the success schema",
+    "undeclared_returned": "not verifiable — same reason"
+  },
+  "notes": "THE MECHANISM, established before any invocation: describeCapability's contract for import_dataset_c_s_v declares exactly one input, the path param `project_id`. There is no body parameter, no query parameter, and no declared field of any kind for the CSV content itself — the endpoint's only real input is a multipart/form-data file part, and invokeCapability is a JSON-only tool (path_params/query/body, all JSON-typed). There is no key to put a byte stream, a base64 blob, or a file reference into, because none is declared. This is not a guessable gap to work around; the registry entry itself already flags it in guidance as a 'QUARANTINE CANDIDATE — do not attempt to call this,' stating plainly that any invocation from this profile fails with 400 {error:'No file uploaded'}. One invocation was made anyway (project_id only, empty body) purely to confirm that documented behavior against the live preprod API rather than take the registry's word for it: it returned exactly 400 {\"error\":\"No file uploaded\"}, matching the guidance verbatim. No second or third attempt was made — there is no alternative body shape to try when the contract declares zero fields for the file; retrying the identical no-file call would only reproduce the same 400 deterministically, and inventing an undeclared field name would be testing a guess, not the contract. VERIFICATION (never trust the write response, always read back): re-read the existing probe dataset de04f15e-b88a-4409-8b9d-eeff038c3109 via get_dataset immediately after the attempt — still name '__mcp-probe-dataset-20260921-renamed', still exactly 2 rows (Chrome/Windows, Firefox/MacOS), rows_count:2 agreeing with rows.length, created_at unchanged (2026-09-21T13:28:33.000Z). Nothing was written, confirming both that the 400 rejected before touching any dataset and that the capability's own guidance is correct that it never writes even on a hypothetical success (\"it does not create a dataset... Nothing was written — no dataset is created or modified by this call\" — the 200 response is a bare parse-preview: {data:{success, headers, rows}}, no dataset object, no uuid, nothing an import destination could even reference). SILENT-REPLACE-ON-IMPORT QUESTION: does not apply here — this route never modifies a dataset's rows even when it succeeds, at any project_id/uuid, because it is a stateless CSV-parse-and-preview endpoint with no dataset-identifying parameter at all (no `uuid` in path_params). The data-loss hazard this task asked to check for (an import silently replacing all rows, the way update_dataset's own minItems:1 guard prevents wiping via omission) is a non-issue for this specific capability by construction — there is no dataset reference to target, destructive or otherwise. It would become a live question only for whatever downstream capability actually consumes this endpoint's parsed {headers, rows} output to perform the real import (not present in this registry snapshot under a name probed so far). MALFORMED-CSV QUESTION: not reachable — testing mismatched column counts or a bad header requires actually sending file content, which is exactly the blocked step; the registed guidance separately documents that reachable malformed-input failures return 422 {success:false, error:...} (bad extension, blank headers, oversized file, over the 40-col/100-row standard-tier limit), but this could not be exercised live from this profile. INHERITED create_dataset CHECKS: not applicable to this capability's own contract — its declared 200 response is {data:{success,headers,rows}}, with no `variables` field and no `created_by` sub-object at all, so neither the variables-array-shape check nor the created_by nested-drift check (browserstack_user_id/group_id missing, role undeclared-but-present) has a corresponding field here to compare against; those checks apply to dataset-shaped responses (create/get/update/list-variables), and this endpoint never returns a dataset. BROADER FINDING FOR THE REGISTRY: this is a real coverage gap, not a probe failure — three other queued attachment-upload capabilities almost certainly hit the identical wall (any endpoint whose sole content-bearing input is multipart/form-data has no way to be expressed through invokeCapability's JSON-only path_params/query/body surface). Recommend either (a) marking all such capabilities non-invokable/quarantined at the registry level exactly as this one already is, so future probes don't re-discover the same wall per-capability, or (b) adding a documented base64-body escape hatch to invokeCapability if the underlying API can accept one. Also worth flagging: the capability's own name and its declared 200 schema both frame it as import/write-shaped (mode:'write', name 'import_dataset_c_s_v'), but its guidance and its actual response shape (a bare parse preview, no dataset object, no uuid) describe a pure read/validate operation with a misleading name — the real import path for CSV data is 'parse client-side then call create_dataset with variables/rows', which was already exercised and confirmed clean in create_dataset.json."
+}

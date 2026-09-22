@@ -1,0 +1,58 @@
+{
+  "capability": "get_selected_report_testcases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "get_selected_report_testcases' path_params (project_id, report_id) are both typed `integer` in its own contract — unlike the sibling v2 report capabilities (list_reports_v2/get_report_v2/create_report_v2), which take the PR-NNN/SC-NNN string forms. list_schedules is the capability whose own guidance names it as the discovery call for a numeric report_id ('every other report capability needs an integer report_id, and this is where it comes from — data[].id; identifier is the SC-NNN display string and is not accepted as an id anywhere'), so it was invoked read-only to resolve SC-489's numeric id and the project's numeric id before probing the target capability.",
+      "source": "invoked",
+      "capability": "list_schedules",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": {
+        "resolved": { "project_id": 379335744, "report_id": 10374, "identifier": "SC-489" },
+        "pool_state_note": "The project actually holds THREE reports (SC-489 id=10374, SC-490 id=10390, SC-491 id=10391), not only SC-489 as the task's pool description states. This probe made no writes and did not create the extra two; they were already present. Not acted on — probing proceeded against SC-489 as instructed."
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "report_id": 10374 } },
+    "status": 200,
+    "response_keys": ["success", "selection_data", "selection", "shared_selection"],
+    "item_shape": {
+      "selection_data": null,
+      "selection": {},
+      "shared_selection": {}
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "report_id (path, integer)"],
+    "json_path": null,
+    "declared_missing": [
+      "selection_data: root `required` array lists it as mandatory and its schema is `type: object` with its own `required: [select_all, folders, unique_test_case_count]`, not marked nullable anywhere. The live 200 response returned `selection_data: null` — a bare JSON null, not an object, so none of select_all/folders/unique_test_case_count could be checked. This also contradicts the capability's own prose guidance, which states for exactly this case (a report with no case filters saved, which SC-489 is — report_filters: {} confirmed via get_report_v2) that the endpoint 'simply returns an unfiltered project selection tree' — i.e. a populated folder-keyed object, not null."
+    ],
+    "undeclared_returned": []
+  },
+  "empty_case_check": {
+    "rule_applied": "selection ({}) alone would be the documented empty case (no saved selection) and would make the folder-tree item shape UNVERIFIED rather than exercised. But selection_data is not merely empty here — it is null, which is a type violation of a declared-required, non-nullable object field, and directly contradicts the guidance's explicit promise of an 'unfiltered project selection tree' for this exact no-filters state. Per the shallowest-missing-path rule, that top-level type/prose disagreement is reported as DRIFT rather than downgraded to UNVERIFIED; the deeper question of whether folders/select_all/unique_test_case_count individually match their sub-schema remains unexercised as a consequence, but is not the primary finding.",
+    "selection_populated": false,
+    "selection_data_populated": false
+  },
+  "pagination_check": {
+    "applicable": false,
+    "note": "describeCapability does not mark get_selected_report_testcases as paginated (no `paginated` key, no `info`/page params in its contract, and the actual response has no info/prev/next/total_pages field). No pagination behavior to exercise."
+  },
+  "verification_after_invoke": {
+    "why": "Route is /reports/{report_id}/selection/edit — path contains 'edit' despite mode:read, so per instructions the report was re-read afterward to prove the invoke changed nothing.",
+    "source": "invoked",
+    "capability": "get_report_v2",
+    "arguments": { "path_params": { "project_id": "PR-2005", "report_id": "SC-489" } },
+    "status": 200,
+    "result": "Unchanged: title, report_type ('Test Run Summary'), report_timeframe ('last_one_week'), report_creation_mode ('custom_report'), frequency ('once'), frequency_details (null), next_run_at (null), is_scheduled (false), report_filters ({}) and dynamic_filters (null) are all byte-identical to the baseline snapshot recorded earlier in tests/live/runs/tm/get_report_v2.json. The only difference from that earlier snapshot is `latest_attachment`, which was null there and is now `{generated_at: 2026-09-18T12:53:09Z, file_type: text/csv, ready: true}` — but that generation timestamp is from 2026-09-18, days before this session's read-only call, so it reflects pre-existing report-generation activity from an earlier probe batch (coincides with the SC-491 creation timestamp), not a side effect of get_selected_report_testcases. No configuration field the 'edit' path could plausibly touch (report_filters, selection state) changed."
+  },
+  "notes": "Verdict is DRIFT on a single, shallow finding: SC-489 has report_filters: {} (no case filters saved), which the capability's own guidance describes as the trigger for returning 'an unfiltered project selection tree' in selection_data. The live 200 response instead returned selection_data: null, violating both that prose promise and the declared schema (selection_data is in the root `required` list and typed as a non-nullable object with its own required sub-fields). selection ({}) and shared_selection ({}) both matched their documented empty-state shapes correctly (no saved primary-project selection, no cross-project report) and are not part of the drift. Case-id-format guidance ('integers, not TC-NNN') could not be checked against a real case id because no case ids were returned in any field. Mode was confirmed read (single-report GET-style read despite the 'edit' in its path) before invoking, per the read-only-round constraint; no write or destructive capability was called at any point. Only one attempt was needed — the invoke succeeded on the first try (200), so no retries were exercised."
+}

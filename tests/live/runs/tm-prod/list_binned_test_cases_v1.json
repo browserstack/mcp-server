@@ -1,0 +1,99 @@
+{
+  "capability": "list_binned_test_cases_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Retrieve the full declared contract before touching production - both the flat `returns` list and the fully expanded response schema - to compare them against each other before comparing either against reality.",
+      "source": "invoked",
+      "capability": "describeCapability",
+      "arguments": { "name": "list_binned_test_cases_v1", "product": "tm", "include_responses": "all" },
+      "status": 200,
+      "produced": {
+        "result": "THE TWO DECLARED SOURCES DISAGREE WITH EACH OTHER, before any live call. The flat `returns` array is: [success, test_cases, metadata, id, identifier, name, priority, status, owner, owner_details, tags, issues, folder_name, folder_path, updated_by, updator_details, trashed_at, days_remaining, total, page, page_size, total_pages]. The expanded 200 schema's test_cases[] item additionally declares `template` (string), `created_by` (integer) and `creator_details` (object: browserstack_user_id, email, full_name, group_id) - none of which appear anywhere in `returns`. This is a live half-fix: git history shows commit 5816161 ('the recycle bin returns the wide v1 case shape, not the trimmed v2 one') added template/created_by/creator_details to the response SCHEMA's properties (plus re-shaped priority/status into {field_value, colour, field_name, value_category, internal_name} objects) but never touched the flat `returns` array in the same edit. The follow-up commit 13208e2 ('assert returns and the resolved schema agree, with no fixture') added scripts/check-contract.py, whose own commit message states the gate 'resolves a capability's 2xx schema... collects every property name at any depth, and reports each `returns` entry with no property behind it' - i.e. it only flags returns entries that are UNBACKED by the schema. It has no check for the reverse direction (schema properties absent from returns), so a schema field added without a matching returns entry - exactly this case - is structurally invisible to that gate. This is precisely the 'half-fix, in the direction the CI contract gate cannot see' this retest was asked to verify."
+      }
+    },
+    {
+      "step": 2,
+      "why": "Confirm the sibling count-only capability's contract before using it for bin-population diligence checks.",
+      "source": "invoked",
+      "capability": "describeCapability",
+      "arguments": { "name": "count_binned_test_cases_v1", "product": "tm" },
+      "status": 200,
+      "produced": { "result": "returns: [success, count]; same feature gate and project_id-integer-only rule as the listing." }
+    },
+    {
+      "step": 3,
+      "why": "Re-confirm get_archived_test_cases's own contract keeps 'archived' and 'binned' conceptually separate, as the preprod probe found, before using it live to cross-check the store separation on prod.",
+      "source": "invoked",
+      "capability": "describeCapability",
+      "arguments": { "name": "get_archived_test_cases", "product": "tm" },
+      "status": 200,
+      "produced": { "result": "intent/guidance never mention bin, trash or soft-delete; no shared fields or terminology with list_binned_test_cases_v1 / count_binned_test_cases_v1 - same clean separation preprod recorded." }
+    },
+    {
+      "step": 4,
+      "why": "Check the bin's population on the designated fixture project before probing the listing route itself.",
+      "source": "invoked",
+      "capability": "count_binned_test_cases_v1",
+      "arguments": { "path_params": { "project_id": 332537 } },
+      "status": 200,
+      "produced": { "count": 0 }
+    },
+    {
+      "step": 5,
+      "why": "The fixture project's bin was empty, contrary to the task's expectation. Per the diligence pattern used on preprod, checked 2 additional large/old prod projects (from a 89,105-project account) before concluding the bin is genuinely unpopulated rather than project-specific: PR-63/id 11663 (oldest large project, 36,154 test cases) and PR-130/id 11713 (945 test cases, from the earliest project batch).",
+      "source": "invoked",
+      "capability": "count_binned_test_cases_v1",
+      "arguments": { "project_ids_tried": [11663, 11713] },
+      "status": 200,
+      "produced": { "result": "both returned count: 0 as well - 3 prod projects checked total (332537, 11663, 11713), all count:0. The Move-to-Bin feature/data appears broadly unpopulated across this prod account's sampled projects, not specific to the fixture project." }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": "PR-18723" } },
+      "status": null,
+      "error": "'project_id' must be a number",
+      "changed": "tried the v2 identifier form first, matching the preprod methodology - rejected client-side identically to preprod, confirming this v1 route still only accepts the integer id on prod"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537 } },
+      "status": 200,
+      "error": null,
+      "changed": "switched to the integer project id - succeeded immediately with an empty bin (test_cases: [], metadata: {total:0, page:1, page_size:30, total_pages:0})"
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1, "limit": 5 } },
+      "status": 200,
+      "error": null,
+      "changed": "sent an explicit limit=5 to check whether it is honoured (per_page was just observed silently ignored on get_root_folders_v1 on this same project). metadata.page_size came back 5, matching the request exactly - limit IS honoured on this route, unlike get_root_folders_v1's per_page bug."
+    },
+    {
+      "n": 4,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 2 } },
+      "status": 200,
+      "error": null,
+      "changed": "paged a second time (no limit sent, so page_size reverted to the 30 default) to check count-vs-rows and pagination consistency - still test_cases: [] and total_pages: 0, matching page 1; no drift between pages, no error on an out-of-range page"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 } },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "metadata"],
+    "item_shape": "UNVERIFIED - test_cases was an empty array on the fixture project (332537 / PR-18723, 16,267 total cases) across 2 pages, and on 2 additional large/old prod projects checked for diligence (id 11663, 36,154 cases; id 11713, 945 cases) - so, exactly as on preprod, no binned-case row was ever returned. The disputed fields from setup step 1 (template, created_by, creator_details, plus the re-shaped priority/status objects) could not be exercised against a real row on production either - the half-fix remains unresolved by this retest for the same structural reason it was unresolved on preprod."
+  },
+  "contract": {
+    "required": ["project_id (path, integer)"],
+    "json_path": "no body - GET request; path_params.project_id, plus query: p (or page alias), limit, search, folder_id, moved_to_bin_by (or updated_by alias), owner, date_from, date_to, sort_by, sort_order, status (or status_id alias), priority (or priority_id alias), type (or category_id alias), automation_state (or automation_state_id alias), tags",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "SIDE-BY-SIDE VERDICTS. Preprod (tests/live/runs/tm/list_binned_test_cases_v1.json, probed 2026-09-18T05:03:57Z): UNVERIFIED - bin empty on the fixture project and 4 additional preprod projects checked. Production (this probe, 2026-09-22): UNVERIFIED - bin empty on the fixture project (332537/PR-18723) and 2 additional large/old prod projects checked. SAME VERDICT, SAME REASON, in both environments: the drift the task asked about is NOT environmental - it reproduces (or rather, fails to resolve) identically on both. Note a timing wrinkle: the preprod run file's UNVERIFIED verdict was recorded BEFORE commit 5816161 (same day, later) added the disputed template/created_by/creator_details fields to the schema - so the preprod probe as literally recorded never had a chance to observe the current half-fixed contract at all. This prod retest is the first live attempt against the corrected contract, on either environment, and it also could not resolve it - the bin being empty everywhere sampled means the exact shape the CI gate is blind to remains completely unexercised by any live probe to date.\n\nCONTRACT-SOURCE DISAGREEMENT (explicit, as asked): YES, the two declared sources disagree with each other here, before reality even enters. See setup step 1 for full detail - the response schema declares `template`, `created_by`, and `creator_details` (with sub-fields) on each bin row; the flat `returns` array does not list any of the three. This is a genuine, pre-existing defect in the published contract itself, not a live-drift finding, and it is exactly the shape of gap AIMCP-219's bidirectional-gate work item exists to close: scripts/check-contract.py (added in 13208e2) only walks `returns` entries looking for ones unbacked by the schema; it has no pass that walks the schema looking for properties absent from `returns`. A schema-only addition, like this one, is therefore invisible to it in both directions of CI on both environments - this is a static/documentation-level fact, not something either environment's live data can be blamed for or credited with.\n\nENVELOPE AND BEHAVIOR (everything that COULD be exercised, matched the declared contract exactly, on prod): status 200, response_keys {success, test_cases, metadata}, metadata sub-keys {total, page, page_size, total_pages} all present and correctly typed; total_pages correctly 0 (not 1) when total is 0, matching preprod's prior observation. The v1 route rejected the PR-18723 identifier client-side with the same 'project_id must be a number' error preprod produced - no environmental difference there either.\n\nPER_PAGE / LIMIT CHECK (explicitly requested): unlike get_root_folders_v1 on this same project (asked for 3, got 30, per_page silently ignored), list_binned_test_cases_v1's `limit` parameter IS honoured - asking for limit=5 returned metadata.page_size: 5 exactly. When no limit is sent the default page_size is 30 (not the 25 the backing service's client docs claim, per this capability's own describeCapability guidance) - this echoes, not newly discovers, the same minor prose-vs-reality note preprod already recorded; not counted as new drift.\n\nCOUNT-VS-ROWS: metadata.total (0) matched len(test_cases) (0) on both pages checked (p1 with limit=5, p2 with default limit) - no disagreement, though with zero rows on every page this check has essentially no power to catch a real miscount; the systemic count-vs-rows pattern (5 confirmed hits elsewhere on preprod) simply could not be exercised here for the same empty-bin reason as everything else.\n\nARCHIVE VS BIN SEPARATION - VERIFIED TO HOLD ON PROD, WITH A CLEAN CONFIRMING DATA POINT: get_archived_test_cases on the SAME fixture project (332537) returned a POPULATED result - info: {page:1, page_size:30, count:86, prev:null, next:2}, 30 rows on page 1, real archived test cases (e.g. TC-1418956, id 51231680) with full case detail. This is a strong confirming signal, not just an absence-of-contradiction: the very same project has 86 archived cases and simultaneously 0 binned cases, live and reproducible via two structurally distinct routes with two structurally distinct envelopes (`info`{count,next,prev} vs `metadata`{total,page,page_size,total_pages}) - the two stores are demonstrably tracked independently on production, exactly as preprod found. Could not check id-level overlap (the classic 'do archived ids ever appear in the bin, or vice versa' test) because the binned set is empty and therefore trivially disjoint from the archived set - that specific overlap check remains as untested on prod as it was inherently untestable on preprod once its own bin was empty too; the population divergence on the same project (86 vs 0) is nonetheless real, live evidence of separation, not merely an inherited assumption.\n\nWHY UNVERIFIED AND NOT PASS OR DRIFT: every dimension of live behavior this probe could exercise - envelope shape, pagination metadata, page-2 consistency, client-side path validation, limit honouring, count-vs-rows on empty pages, and the archive/bin store separation - matched the declared contract with zero discrepancies, which would argue for PASS. But the declared item-row shape itself, including the specific disputed fields (template/created_by/creator_details and the object-shaped priority/status), was never checked against a single real row on either environment, and the `returns` vs schema disagreement is a real, live, present-tense defect in the contract regardless of what any bin returns - so this cannot be scored PASS. It is also not DRIFT, because DRIFT requires an observed live-vs-declared mismatch and no live row was ever available to mismatch against; scoring DRIFT here would be diffing a schema disagreement against itself rather than against reality, which is not what was observed. Not BLOCKED, because every read call succeeded cleanly end-to-end with fully correct behavior - nothing was refused or errored. Per the task's own empty-case rule, UNVERIFIED with this reason is correct, and it is worth being explicit that this makes THREE consecutive live-probe attempts (1 preprod, 1 preprod diligence sweep of 4 more projects, 1 prod fixture, 1 prod diligence sweep of 2 more projects - 8 projects total across both environments) that have all landed on an empty bin. The declared item shape, and specifically which of the two disagreeing sources is correct, remains completely unverified by live testing to date; resolving it will require either finding an already-populated bin somewhere in the account or accepting a destructive-mode write (bulk_delete_test_cases with the workspace's move-to-bin feature enabled) under explicit human approval, neither of which this read-only retest was authorized to do.\n\nNo bin, archive, or restore action was performed. No case was created, deleted, archived, or modified. Read-only throughout."
+}

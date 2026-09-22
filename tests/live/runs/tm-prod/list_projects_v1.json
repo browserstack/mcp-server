@@ -1,0 +1,83 @@
+{
+  "capability": "list_projects_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "query": { "q": "Demo Project 1" } },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    },
+    {
+      "n": 2,
+      "arguments": { "query": { "q": "zzzznonexistentproject12345" } },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    },
+    {
+      "n": 3,
+      "arguments": { "query": { "p": 1 } },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    },
+    {
+      "n": 4,
+      "arguments": { "query": { "p": 2 } },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    }
+  ],
+  "probe": {
+    "arguments": { "q": "Demo Project 1" },
+    "status": 200,
+    "response_keys": ["success", "projects", "info"],
+    "item_shape": {
+      "name": "string",
+      "identifier": "string (PR-NNN)",
+      "id": "integer",
+      "thProjectId": "integer (undeclared)",
+      "description": "string|null",
+      "created_at": "string date-time",
+      "import_id": "string|null",
+      "test_cases_count": "integer",
+      "test_runs_count": "integer",
+      "test_plans_count": "integer (undeclared)",
+      "links": {
+        "repository": "string",
+        "self": "string",
+        "test_runs": "string",
+        "test_plans": "string (undeclared sub-field)",
+        "users": "string"
+      },
+      "normalisedName": "string (undeclared)",
+      "starred": "boolean (undeclared)",
+      "jira_mapped": "boolean (undeclared)",
+      "projectVisibilityBanner": "null (undeclared)",
+      "duplicates_tc_count": "integer (undeclared)"
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": ["project_creator"],
+    "undeclared_returned": [
+      "thProjectId",
+      "test_plans_count",
+      "normalisedName",
+      "starred",
+      "jira_mapped",
+      "projectVisibilityBanner",
+      "duplicates_tc_count",
+      "info.starred_count"
+    ]
+  },
+  "notes": "Reproduction of preprod DRIFT finding on prod, against the 89k-project fixture account. RESULT: the 'filter silently ignored at scale' failure mode does NOT reproduce for list_projects_v1's `q` param — q genuinely narrows on prod. q='Demo Project 1' returned info.count=16 (a real fuzzy/substring match set, including 'Demo Project 1', 'Demo Project 12', 'Demo Project 1 v1', 'TM demo project 1', etc.), not ~89k. A nonsense query q='zzzznonexistentproject12345' returned info.count=0, projects=[] (200, not an error) — further confirming q is applied server-side, not decorative. This is the OPPOSITE of the known v2 projects-listing bug (query/search/name/filter silently ignored there); list_projects_v1 (v1 route) filters correctly. Unfiltered paging: p=1 -> info={page:1,page_size:30,count:89111,prev:null,next:2}, len(projects)=30, matching page_size. p=2 -> info={page:2,page_size:30,count:89111,prev:1,next:3}, len(projects)=30, and the 30 rows on p=2 are a completely disjoint, chronologically-later slice from p=1 (no repeated ids) — genuine pagination, not a stuck/repeated page. count is stable at 89111 across both pages (close to the documented ~89,102; small delta is expected account churn between when the fixture doc was written and this probe, not a bug). page_size stayed fixed at 30 with no size param, per the declared guidance. Schema drift from preprod REPRODUCES unchanged on prod: `project_creator` (declared boolean field on the shared Project schema) is never emitted on any row (declared_missing) - consistent with the documented 'commented out in the serializer'. The same 8 undeclared-but-always-returned fields from the preprod finding are also present verbatim on prod: thProjectId, test_plans_count, normalisedName, starred, jira_mapped, projectVisibilityBanner, duplicates_tc_count, and info.starred_count. Verdict is DRIFT because the declared-vs-actual schema mismatch (missing project_creator + 8 undeclared fields) is a genuine, reproducible contract defect on real populated prod data - but the critical business-risk question ('are filters silently ignored at scale') is answered NO for this capability: q is honest and functional at 89k-project scale."
+}

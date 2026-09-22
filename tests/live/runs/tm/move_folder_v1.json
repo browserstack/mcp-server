@@ -1,0 +1,74 @@
+{
+  "capability": "move_folder_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:35:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "re-read the live tree before touching anything, per task instruction that the probe-owned tree is changing under concurrent probes",
+      "source": "invoked",
+      "capability": "get_folder_tree_v1",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": {
+        "765811": { "name": "__mcp-probe-renamefolder-20260922", "parent_id": null, "cases_count": 2, "sub_folders_count": 2, "children": [765817, 765883] },
+        "765817": { "name": "__mcp-probe-subfolder-20260921", "parent_id": 765811, "cases_count": 2, "sub_folders_count": 0 },
+        "765883": { "name": "copy-of-__mcp-probe-subfolder-20260921", "parent_id": 765811, "cases_count": 2, "sub_folders_count": 0 },
+        "764093": "__readonly__ - untouched", "764138": "__scratch__ - untouched", "764828": "holds evidence case TC-54458 - untouched"
+      }
+    },
+    {
+      "step": 2,
+      "why": "describeCapability's guidance for this route explicitly claims 'moving a folder into one of its own descendants is NOT blocked ... the move endpoint does not [check]' (unlike copy_folder, which it says does check). This is the specific claim attempt 2 below tests against live behavior.",
+      "source": "invoked",
+      "capability": "move_folder_v1",
+      "arguments": null,
+      "status": null,
+      "produced": null
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 765883 }, "body": {} },
+      "status": 200,
+      "error": null,
+      "changed": "Moved folder 765883 (copy-of-__mcp-probe-subfolder-20260921) from under 765811 to the project root (new_base_folder_id omitted). Response's own destination_path_folders[0] showed 765883 with parent_id:null, cases_count:2, sub_folders_count:0, total_cases_count:2; source_path_folders[0] showed 765811 with sub_folders_count 2->1 (cases_count still 2, own direct cases untouched) and total_cases_count:4 (own 2 + remaining child 765817's 2). A fresh, independent get_folder_tree_v1 read taken immediately after matched exactly: 765883 now sits at the project's top level alongside 764093/764138/765811, and 765811.sub_folders_count is 1 with only 765817 remaining as a child. Both ends verified."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 765811 }, "body": { "new_base_folder_id": 765817 } },
+      "status": 400,
+      "error": "{\"success\":false,\"error\":null,\"message\":null}",
+      "changed": "THE CYCLE TEST. Attempted to move 765811 into 765817, which is 765811's own direct child at the time of the call. Result: a clean 400 with both `error` and `message` null (no human-readable text at all, just the two keys present and empty). A fresh get_folder_tree_v1 read immediately after confirmed NOTHING moved: 765811 is still root-level with sub_folders_count:1 and 765817 still its only child, parent_id unchanged on both sides. This directly CONTRADICTS the capability's own stored guidance (see setup step 2), which asserts this exact case is accepted, not blocked. See notes."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 765883 }, "body": { "new_base_folder_id": 999999999 } },
+      "status": 422,
+      "error": "{\"success\":false,\"error\":\"Destination folder not found in the specified project\"}",
+      "changed": "Nothing moved. A fresh get_folder_tree_v1 read immediately after confirmed 765883 is still at project root, untouched by this call. This is a clean, correctly-worded, self-explanatory 422 - a fourth distinct bad-destination-id behavior for the campaign ledger, and the best-behaved one seen yet: create_bulk_test_cases_v1 silently discards a bad folder id and files the case elsewhere (200, no signal); bulk_move_test_cases hard-rejects with a generic 400 ('The API request is invalid or improperly formed'); bulk_assign_test_cases_to_test_run fails with an undeclared 502; move_folder_v1 rejects with a 422 that names the actual problem in plain language."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "folder_id": 765883 }, "body": {} },
+    "status": 200,
+    "response_keys": ["data.success", "data.async", "data.folder", "data.source_path_folders", "data.destination_path_folders"],
+    "item_shape": ["id", "project_id", "group_id", "name", "is_automation", "cases_count", "total_cases_count", "sub_folders_count", "links"]
+  },
+  "contract": {
+    "required": ["project_id", "folder_id"],
+    "json_path": "$.data.source_path_folders[].links",
+    "declared_missing": [
+      "source_path_folders[].links and destination_path_folders[].links - the declared schema gives every path-folder item a links:{self} object; the live items (both source_path_folders[0] and destination_path_folders[0]) omit the key entirely, not merely set it null."
+    ],
+    "undeclared_returned": [
+      "source_path_folders[] and destination_path_folders[] items also carry notes, identifier, created_at, updated_at, deleted, parent_id, source, entity_type - none declared in the schema (which lists only id/project_id/group_id/name/is_automation/sub_folders_count/links/cases_count/total_cases_count).",
+      "group_id came back as a quoted STRING (\"3452\") everywhere it appeared in this response - data.folder.group_id, source_path_folders[0].group_id, and destination_path_folders[0].group_id - against the declared integer type. Every other id-shaped field (id, project_id, parent_id) was a plain JSON integer in the same objects; the drift is narrowly on group_id.",
+      "data.unique_id was absent on this synchronous, same-project move. This matches the capability's own guidance (unique_id is described as the async-path artifact) so it is NOT treated as drift, just recorded for completeness."
+    ]
+  },
+  "notes": "PRIMARY REQUESTED MOVE (attempt 1): PASS functionally. 765883 (copy-of-__mcp-probe-subfolder-20260921, 2 cases, no subfolders, the newest and least-depended-on of 765811's two children) moved cleanly from under 765811 to project root. Verified on both ends via the response body and an independent get_folder_tree_v1 re-read: identical counts, identical parentage. 765811 now holds only 765817 as a child (sub_folders_count 2->1); its own 2 direct cases were untouched. No case data was touched by this call, only folder parentage.\n\nTHE CYCLE TEST - HIGH-VALUE RESULT: attempted to move 765811 into its own direct child 765817. Got a clean 400 {success:false, error:null, message:null} and confirmed via independent re-read that NOTHING moved - 765811 stayed root-level, 765817 stayed its only child, no orphaning, no corruption. This is the 'right answer' the task asked us to hope for. BUT it directly contradicts this same capability's own stored guidance text, which reads (verbatim, from describeCapability): 'Moving a folder into one of its own descendants is NOT blocked. The only self-move check compares the folder id to the destination id, so a move into a child is accepted here (the copy endpoint does check for this - the move endpoint does not).' Live behavior on preprod today says otherwise: the destination-is-a-descendant case IS blocked, just with an uninformative null/null 400 body instead of a real message. Either the guidance was written against stale/incorrect analysis, or backend behavior changed since it was authored, or the check fires for a reason distinct from what the doc describes (e.g. a generic ancestry-cycle guard rather than the narrow 'folder id == destination id' comparison the doc describes) - in any case, THE GUIDANCE ITSELF IS NOW FALSIFIED BY A LIVE CALL and should be corrected at the capability-index source (not done here per instruction not to edit the index directly) rather than trusted as-is. This is arguably a more valuable finding than either a clean accept or a clean reject alone would have been: it shows the index's own defect-tracking text can go stale/wrong, not just the API.\n\nBAD DESTINATION ID (attempt 3): 999999999 as new_base_folder_id got a 422 {success:false, error:'Destination folder not found in the specified project'} - clean, specific, and correctly worded. This is the fourth distinct bad-folder-id behavior on record for the campaign (alongside create_bulk_test_cases_v1's silent-200-discard, bulk_move_test_cases's generic 400, and bulk_assign_test_cases_to_test_run's undeclared 502) and by far the best-behaved of the four.\n\nGROUP_ID TYPE QUESTION (settled, third data point): this capability - a mutation route like rename_folder_v1 and bulk_move_test_cases - returned group_id as the STRING \"3452\" in every location it appeared (data.folder, source_path_folders[], destination_path_folders[]). create_sub_folder_v1 (a creation route) returned it as a plain integer for the same folder family. This is now a 3-for-3 pattern: string form on mutation-serializer responses (rename, bulk-move, and now move), integer form on the creation serializer (create_sub_folder_v1). Strongly supports the hypothesis that the string form belongs to the mutation serializers specifically, not to some fields-are-sometimes-strings general inconsistency.\n\nEMBEDDED data.project LEAK (settled, does NOT recur here): move_folder_v1's response - data.folder, source_path_folders[], destination_path_folders[] - carries no project object anywhere. This confirms the leaky embedded project (4 declared fields missing / 16 undeclared, previously found only on create_root_folder_v1) stays confined to that one capability; sub-folder creation, rename, and now move all correctly omit it.\n\nCOUNTS ACCURACY (third and settling confirmation): cases_count / sub_folders_count / total_cases_count on old parent (765811), new parent (project root, i.e. no parent object to check but the moved folder's own counts), and the moved folder (765883) were all internally consistent between the move response and an independent get_folder_tree_v1 read taken right after, with the arithmetic checking out (765811: 2 own cases + 2 from remaining child 765817 = total_cases_count 4). Counts can now be treated as reliable across all three capabilities where this has been checked.\n\nSHARED-TEMPLATE 'name must be wrapped' DEFECT - NOT APPLICABLE HERE: move_folder_v1 has no `name` field in its body contract at all (its writable fields are new_base_folder_id, new_base_project_id, auto_rename, prev, next) - there is nothing for the false wrapped-object sentence to attach to, so this is not a fourth instance, just a capability the defect cannot occur on.\n\nRESIDUAL STATE: 765883 now sits at project root (2 cases, no subfolders) instead of under 765811 - this was the intended, requested move and is left as-is, not reverted. 765811 keeps 765817 as its only child. No corrupting state was created (the one operation that could have corrupted the tree - the cycle attempt - was rejected, so no revert-the-cycle step was needed). No case data, other folders (764093, 764138, 764828 and its evidence case TC-54458), or unrelated probe folders under 764138 were touched.\n\nNo status:0 was seen on any call; all three real attempts and both tree re-reads returned clean, distinguishable HTTP statuses (200/400/422/200/200). No retry-on-outage situation arose, so the 3-attempt cap was not exercised as a retry budget - all three attempts were distinct, deliberate experiments, not retries of one failing call."
+}

@@ -1,0 +1,59 @@
+{
+  "capability": "get_test_cases_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:57:00Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": true,
+  "setup": [
+    "describeCapability get_test_cases_v1 (product tm) to get the declared contract",
+    "Baseline: project_id=332537 (Demo Project 1, 16,267 total cases, 294 root folders), all_folders='true', per_page=100, p=1",
+    "sort_by=name-ASC, all_folders='true', per_page=20, p=1",
+    "sort_by=name-DESC, all_folders='true', per_page=20, p=1",
+    "required[fields]=priority, all_folders='true', per_page=5, p=1 (check field-nulling side effect)",
+    "sort_by=priority-ASC + required[fields]=owner (mismatched column, expect 422)",
+    "sort_by=priority-ASC + required[fields]=priority (matching column, expect success)",
+    "per_page=50, p=1 (page-size honour check; per_page=5 already covered above; per_page=100 covered in baseline)"
+  ],
+  "attempts": [
+    {"desc": "baseline project-wide read", "query": {"all_folders": "true", "per_page": 100, "p": 1}, "status": 200, "result": "success, info.count=16261 (true project total, not page count), len(test_cases)=100 (page size), info.next=2"},
+    {"desc": "sort_by=name-ASC", "query": {"all_folders": "true", "per_page": 20, "p": 1, "sort_by": "name-ASC"}, "status": 200, "result": "names returned in strict ascending order (verified)"},
+    {"desc": "sort_by=name-DESC", "query": {"all_folders": "true", "per_page": 20, "p": 1, "sort_by": "name-DESC"}, "status": 200, "result": "names returned in strict descending order (verified)"},
+    {"desc": "required[fields]=priority", "query": {"all_folders": "true", "per_page": 5, "p": 1, "required[fields]": "priority"}, "status": 200, "result": "assignee, owner, and automation_state all came back null across all 5 rows despite baseline showing non-null values for the same kind of rows"},
+    {"desc": "sort_by=priority-ASC + required[fields]=owner (mismatched)", "query": {"all_folders": "true", "per_page": 5, "p": 1, "sort_by": "priority-ASC", "required[fields]": "owner"}, "status": 422, "result": "{\"success\":false,\"message\":\"Sort by column priority is not present in required fields\"}"},
+    {"desc": "sort_by=priority-ASC + required[fields]=priority (matching)", "query": {"all_folders": "true", "per_page": 5, "p": 1, "sort_by": "priority-ASC", "required[fields]": "priority"}, "status": 200, "result": "success; rows returned in priority order, assignee/owner/automation_state again nulled out"},
+    {"desc": "per_page=50", "query": {"all_folders": "true", "per_page": 50, "p": 1}, "status": 200, "result": "info.page_size=50, len(test_cases)=50 — honoured"},
+    {"desc": "per_page=5 (from required[fields] test above)", "query": {"all_folders": "true", "per_page": 5, "p": 1}, "status": 200, "result": "info.page_size=5, len(test_cases)=5 — honoured"}
+  ],
+  "probe": {
+    "arguments": {"project_id": 332537, "all_folders": "true", "per_page": 100, "p": 1},
+    "status": 200,
+    "response_keys": ["success", "test_cases", "info", "folders"],
+    "item_shape": {
+      "declared_fields": ["assignee","creator_details","created_at","updator_details","updated_at","case_type","priority","status","case_type_imported","description","custom_fields","estimate","expected_result","id","identifier","is_automation","links","name","history_count","owner","preconditions","owner_imported","priority_imported","project_id","status_imported","steps","tags","template","test_case_folder_id","test_case_steps","lcnc_build_map","automation_status","issues","comments_count","metadata"],
+      "actual_fields_observed": ["assignee","creator_details","created_at","updator_details","updated_at","reviewers","review_status","case_type","priority","status","automation_state","is_shared","case_type_imported","description","custom_fields","estimate","estimated_duration_seconds","expected_result","id","identifier","is_automation","links","name","history_count","owner","preconditions","owner_imported","priority_imported","project_id","status_imported","steps","tags","template","template_step_type","template_id","template_name","test_case_folder_id","step_count","test_case_steps","lcnc_build_map","automation_status","test_run_results_count","test_run_results_issues_count","issues","metadata","test_case_dataset"]
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "all_folders=true (query, string)"],
+    "json_path": "test_cases",
+    "declared_missing": ["comments_count"],
+    "undeclared_returned": ["reviewers", "review_status", "automation_state", "is_shared", "estimated_duration_seconds", "template_step_type", "template_id", "template_name", "step_count", "test_run_results_count", "test_run_results_issues_count", "test_case_dataset"]
+  },
+  "prod_vs_preprod": {
+    "count_vs_rows": "info.count=16261 across all probes (true project-wide total across 16,267-case project, close enough that the small ~6-case delta is normal churn on a live large project — NOT the page size). len(test_cases) always equals the requested per_page (100, 50, 20, 5), confirming info.count reflects the whole project, not the page, and info.next correctly advances (next=2 with 16,261 remaining >> page size) — unlike preprod's small pool where count and page-row-count happened to coincide.",
+    "sort_question_settled": {
+      "name_ASC_actually_sorts": true,
+      "name_DESC_actually_sorts": true,
+      "evidence": "ASC (per_page=20) first names in order: '      Test', '_Test', \"'''223233''111\", '\"Can you explain why...\"', '@Test', '1\\tValid username...', '1000 Plus Concurrent Users...', '12', '123', '123', '123\\\\', '123123'... — strict ascending ASCII/ lexicographic order (whitespace/punctuation/digits before letters). DESC (per_page=20) first names: 'ZZTest', 'ZTest', 'Zoom Rooms Meeting Initiation...', 'Zoom Rooms Application Initial Load...', 'ZIP code-based shipping...', 'ZIP Code Input Triggers Dynamic Shipping...', 'ZIP Code Input Triggers Accurate Tax...'... — strict descending order. Both directions sort correctly on production's real 16k-row dataset; the preprod disagreement does not reproduce on prod."
+    },
+    "required_fields_nulls_other_fields": true,
+    "sort_by_plus_required_fields_422": true,
+    "test_case_steps_type": "declared as object (background/created_at/feature/id/order/step/result/etc.), actual is always an empty array [] on every row observed, including rows with step_count 1 through 13 — confirmed across baseline (100 rows), ASC/DESC sorted samples, and required[fields] samples",
+    "field_name_present": true,
+    "per_page_honoured": true,
+    "summary": "The sort trap does NOT reproduce on production: sort_by=name-ASC sorts correctly (verified strict ascending order over a real 16k-row project) and sort_by=name-DESC also sorts correctly (strict descending) — so on prod's real dataset neither direction silently no-ops; the preprod disagreement looks like it was a preprod-only artifact (small pool, possibly a caching/index quirk) rather than a real defect in the sort implementation. Everything else preprod found as DRIFT does reproduce on prod: info.count correctly reflects the true project-wide total (16,261, matching the ~16,267 fixture) while test_cases stays page-sized (confirms count-vs-rows works correctly at scale, this is actually NOT a defect — count is right), required[fields] silently nulls out assignee/owner/automation_state even for unrelated fields, sort_by+required[fields] column mismatch 422s as documented, per_page is honoured for valid values, test_case_steps is declared as an object but always returns an empty array regardless of step_count (container-type mismatch reproduces exactly), field_name is present on the priority/automation_state sub-objects, comments_count is declared but never returned, and several undeclared fields (reviewers, review_status, automation_state, is_shared, estimated_duration_seconds, template_step_type/id/name, step_count, test_run_results_count, test_run_results_issues_count, test_case_dataset) are returned on every row without being in the schema."
+  },
+  "notes": "Production project_id=332537 (Demo Project 1, identifier PR-18723) confirmed against fixture: total ~16,267 cases; info.count returned 16261 consistently across all probes (small live delta, not a bug). case_type and status objects were null on every sampled row across all probes (a data characteristic of this project's sampled cases, not something this probe can attribute to an endpoint defect — field_name presence was verified instead on the non-null priority and automation_state objects, both of which include field_name). No folder-scoping parameter is exposed by this capability outside all_folders=true, so the folder-40231630-specific steps check was done via representative rows returned in the whole-project reads (several of which belong to folder 40231630) rather than a folder-isolated call; test_case_steps was empty [] on all of them regardless of step_count. No writes or mutations were performed; all calls were read-only GETs against the get_test_cases_v1 capability."
+}

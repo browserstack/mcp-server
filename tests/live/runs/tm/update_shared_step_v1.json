@@ -1,0 +1,124 @@
+{
+  "capability": "update_shared_step_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "capability": "get_shared_steps_by_i_d_v1",
+      "purpose": "Baseline read of the target shared step before any write, to capture its current title, tags and step-row id(s) for recovery/comparison.",
+      "arguments": {
+        "path_params": {"project_id": 379335744, "shared_step_id": 27846},
+        "query": {"paginated": true}
+      },
+      "status": 200,
+      "result": {
+        "title": "__mcp-probe-sharedstep-20260921",
+        "tags": [],
+        "shared_step_details": [
+          {"id": 76580, "step": "Open the login page", "result": "Login page is displayed", "test_data": "user=probe", "order": 1}
+        ],
+        "test_case_count": null,
+        "note": "test_case_count/step_count not present on this read path per its own docs; page_info showed count:1 row."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "purpose": "Title-only update, omitting shared_step_details entirely — simulates an agent that (wrongly) expects PATCH semantics.",
+      "arguments": {
+        "path_params": {"project_id": 379335744, "shared_step_id": 27846},
+        "body": {"title": "__mcp-probe-sharedstep-20260921-titleonly"}
+      },
+      "status": null,
+      "result": "BLOCKED_CLIENT_SIDE — never reached the live API. Verbatim response: {\"ok\":false,\"error\":\"missing required parameter(s): shared_step_details\"}. This is the MCP tool layer's own param-presence guard (shared_step_details is declared required), not a server response — so it cannot be diffed against the declared error schema and does not by itself prove server-side behavior for an omitted field."
+    },
+    {
+      "n": 2,
+      "purpose": "Correct full-replacement update: change only the title, resend the single existing step row verbatim INCLUDING its id (76580).",
+      "arguments": {
+        "path_params": {"project_id": 379335744, "shared_step_id": 27846},
+        "body": {
+          "title": "__mcp-probe-sharedstep-20260921-titleonly",
+          "shared_step_details": [
+            {"id": 76580, "step": "Open the login page", "result": "Login page is displayed", "test_data": "user=probe", "order": 1}
+          ]
+        }
+      },
+      "status": 200,
+      "result": {
+        "title": "__mcp-probe-sharedstep-20260921-titleonly",
+        "id": 27846,
+        "test_case_count": 0,
+        "step_count": 1,
+        "tags": [],
+        "shared_step_details": [
+          {"id": 76580, "step": "Open the login page", "result": "Login page is displayed", "test_data": "user=probe", "order": 1}
+        ]
+      }
+    },
+    {
+      "n": 3,
+      "purpose": "Send the same step content again but WITHOUT the row's existing id, to test the documented claim that id-less rows are created fresh rather than matched to the existing row.",
+      "arguments": {
+        "path_params": {"project_id": 379335744, "shared_step_id": 27846},
+        "body": {
+          "title": "__mcp-probe-sharedstep-20260921-iddrop",
+          "shared_step_details": [
+            {"step": "Open the login page", "result": "Login page is displayed", "test_data": "user=probe", "order": 1}
+          ]
+        }
+      },
+      "status": 200,
+      "result": {
+        "title": "__mcp-probe-sharedstep-20260921-iddrop",
+        "id": 27846,
+        "test_case_count": 0,
+        "step_count": 1,
+        "tags": [],
+        "shared_step_details": [
+          {"id": 76581, "step": "Open the login page", "result": "Login page is displayed", "test_data": "user=probe", "order": 1}
+        ]
+      }
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {"project_id": 379335744, "shared_step_id": 27846},
+      "body": {
+        "title": "__mcp-probe-sharedstep-20260921-titleonly",
+        "shared_step_details": [
+          {"id": 76580, "step": "Open the login page", "result": "Login page is displayed", "test_data": "user=probe", "order": 1}
+        ]
+      }
+    },
+    "status": 200,
+    "response_keys": ["title", "id", "test_case_count", "step_count", "created_by", "updated_by", "tags", "shared_step_details"],
+    "item_shape": {
+      "shared_step_details[0]": ["id", "step", "result", "test_data", "order"]
+    }
+  },
+  "contract": {
+    "required": ["title", "shared_step_details", "shared_step_details[].order"],
+    "json_path": "none declared for this capability's body params",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "data.tags — returned on every response, absent from the declared 200 response schema's `data` properties (title, id, created_by, updated_by, shared_step_details only). Same drift the create probe found, now confirmed present on the update path too.",
+      "data.step_count — returned (1) but not in the declared 200 schema's `data` properties.",
+      "data.test_case_count — returned (0) but not in the declared 200 schema's `data` properties."
+    ]
+  },
+  "notes": [
+    "PUT-vs-PATCH SETTLED: this is full-replacement (PUT-like) semantics, not a partial PATCH, and this matches its own documented guidance. `shared_step_details` and `title` are BOTH mandatory on every call — attempt 1 (title only, array omitted) was rejected before it ever reached the server, by the MCP tool's own required-param check ('missing required parameter(s): shared_step_details'). So the specific silent-data-loss scenario the campaign worried about (an agent naively PATCHing just the title and the server quietly nulling the step list) cannot happen through this tool surface — the client-side guard catches the omission first. This is a positive finding worth stating as plainly as the drift: the danger is real in principle (per the capability's own guidance: 'shared_step_details is a full replacement, not a merge... deleting a row orphans the shared_step_detail_id') but this MCP layer's required-field enforcement forecloses the easiest way to trigger it.",
+    "Confirmed by direct test (attempt 3): rows sent WITHOUT their existing id are created fresh rather than matched by content. The single row that started as id 76580 became id 76581 after resending identical step/result/test_data/order but omitting `id`. The old row identity is gone — any test-case step pointing at shared_step_detail_id 76580 would now be orphaned. This is exactly the documented behavior, empirically confirmed, and is the real mechanism by which references silently break: not by omitting the whole array (blocked), but by omitting a row's `id` while still sending shared_step_details.",
+    "Confirmed by direct test (attempt 2): when the full array IS resent correctly with the row's existing id, the row survives unchanged (same id 76580, same content) and only the title changes. So 'update title without disturbing steps' is achievable, but only by round-tripping the full current array with ids intact — there is no shortcut.",
+    "STEPS-CONTAINER NEGATIVE RESULT RE-CONFIRMED ON THE UPDATE PATH: shared_step_details is declared `array` on both the request body field and the 200 response schema, and was returned as a genuine JSON array in both successful invocations (attempts 2 and 3). This entity's serializer does NOT exhibit the object-declared/array-returned defect seen on test_case_steps across five other capabilities. The negative result from the create probe holds for the whole shared_step entity, both create and update.",
+    "Inherited drift confirmed: data.tags is returned on every 200 (present as [] in all three reads/writes) but is not part of the declared 200 response schema's `data` properties — it is documented only as a request-body input field. Additionally, data.step_count and data.test_case_count are returned but likewise undeclared in the 200 schema's `data` properties (though the capability's top-level `returns` summary list does mention them, so the drift lives specifically in the expanded JSON schema being narrower than the summary list — the schema is the deeper, more specific contract and is what was diffed against).",
+    "test_case_count reported as 0 for shared step 27846 on both writes. Plausible and consistent with it being a fresh probe-only artifact never embedded in a test case; not independently cross-checked against a test-case listing since none is known to reference it, so this is not a confirmed count-vs-rows mismatch (unlike the five other capabilities with confirmed hits) — noted as unverified rather than claimed as drift.",
+    "No error-shape or entitlement-gate finding to report: no genuine server-side error was provoked in this probe. The only failure (attempt 1) was a client-side/tool-layer rejection before any HTTP request was made, so per instructions it was not diffed against the success schema, and it also cannot be used to confirm or deny the create probe's documented non-conforming 400 error shape ({errors:{message}, no_toast, success}) since that shape was never seen here — this remains untested on the update path.",
+    "Verdict is DRIFT solely on the undeclared-fields basis (data.tags/step_count/test_case_count returned but absent from the declared 200 `data` schema) — shallowest missing path is data.tags. All declared required response fields (created_by, id, shared_step_details, title, updated_by) were present on every successful call. No BLOCKED condition encountered (tc_write permission held); no UNVERIFIED condition (all core questions — full-replace semantics, id-preservation, array shape — were directly exercised and answered).",
+    "27846 was left in a mutated state by design (expendable probe target): title is now '__mcp-probe-sharedstep-20260921-iddrop', and its single step row now carries id 76581 (was 76580). Shared step 27842 (__probe-shared-step) was not touched."
+  ]
+}

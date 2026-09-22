@@ -1,0 +1,35 @@
+{
+  "capability": "get_project_settings",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:19:49Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "query": { "in_review_count": "true" }
+    },
+    "status": 200,
+    "response_keys": ["success", "project_settings"],
+    "item_shape": {
+      "note": "project_settings returned as an empty array; there is no element 0 to inspect, and info/meta_data are both absent."
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded (200) on the first try, so no retries were needed. Arguments sent: project_id=379335744 (path), in_review_count=true (query) — the latter to also exercise the meta_data/in_review_count path per the guidance. The live response was {success: true, project_settings: []} with NO `info` and NO `meta_data` keys at all. This is exactly the documented empty-settings case in the contract's guidance ('A project with no stored settings returns {success:true, project_settings:[]} with NO info and NO meta_data at all — not an object of defaults'), so this is a verified PASS of that specific documented behavior, not a partial/degenerate result. Per the empty-case rule, only the shallowest missing path is reported: project_settings[0] (the flat settings object) is simply not present because the array itself is empty — there is nothing beneath it to enumerate as missing/present flags. Consequently `review_approve` cannot be read as a value here (true/false) because there is no settings object at all for this project — the fixture project __mcp-capability-fixture__ (379335744) has never had project_settings rows written for it. This corroborates the other probes' finding (review_approve OFF, from two review capabilities 400ing with 'Please enable review approve feature from project settings page') from a third angle: not merely 'review_approve=false' but the stronger case of no project_settings stored at all, i.e. every settings-gated feature including review-approve is at its unconfigured/group-default state, consistent with those 400s. The requested in_review_count=true had no observable effect since meta_data is entirely absent in the no-settings case (guidance says it is present 'whenever any setting exists' — none do here), so the in_review_count/test_plan_in_review_count behavior remains unverified by this probe; that is expected given the empty case and not a contract violation. No write or destructive capability was invoked; project_id came straight from the fixture pool (source: pool)."
+}

@@ -1,0 +1,50 @@
+{
+  "capability": "update_custom_field_dataset_option_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:23:42Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "baseline read of dataset 31320's three options before the write, to record the live default and each option's option_value/updated_at going in — dataset 31320 (custom field 106131) was created by this campaign and is deliberately unlinked from every project, the safest target; preferred over 31319 which is linked to PR-2005 and visible to other probes",
+      "source": "get_custom_field_dataset_v2(106131, 31320, fetch_options=true)",
+      "capability": "get_custom_field_dataset_v2",
+      "produced": {
+        "options_before": [
+          { "id": 146670, "option_value": "__mcp-probe-cfoption-20260921", "is_default": true, "updated_at": "2026-09-21T13:47:13.000Z" },
+          { "id": 146669, "option_value": "__mcp-probe-cfdataset-20260921-B", "is_default": false, "updated_at": "2026-09-21T13:34:12.000Z" },
+          { "id": 146668, "option_value": "__mcp-probe-cfdataset-20260921-A", "is_default": false, "updated_at": "2026-09-21T13:47:13.000Z" }
+        ],
+        "note": "146670 (created by the create_custom_field_dataset_option_v2 sibling probe) is the current live default; 146668 was demoted to false by that same earlier create call, which is why its updated_at already shows the earlier probe's timestamp rather than dataset-creation time."
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "custom_fields_id": 106131, "dataset_id": 31320, "option_id": 146669 },
+      "body": { "option_value": "__mcp-probe-cfdataset-20260921-B", "is_default": true },
+      "wrapper_used": "flat body, no json_path nesting — describeCapability declared body as flat top-level fields (option_value, is_default) with no wrapper property; flat shape accepted on the first attempt (200).",
+      "deliberate_choice": "option_value was resent unchanged (required even when unchanged per guidance, or a 400) so this is a pure is_default flip on 146669 — deliberately chosen while 146670 (not 146669) was the live default, to test whether this UPDATE call auto-demotes the previous default the same way its sibling CREATE call was observed to."
+    },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "data": {
+        "id": 146669,
+        "option_value": "__mcp-probe-cfdataset-20260921-B",
+        "is_default": true,
+        "colour": null,
+        "parent_option_id": null
+      }
+    }
+  },
+  "contract": {
+    "required": ["custom_fields_id", "dataset_id", "option_id", "option_value", "is_default"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded (200), no retries needed, attempts[] is empty. No status:0 / hang observed — the v2 tier was reachable for this write, consistent with the sibling create call working earlier.\n\n*** THE HEADLINE TEST — RESOLVED: THE GUIDANCE TEXT IS WRONG. CREATE AND UPDATE AGREE. ***\nThis capability's own declared guidance says: 'Making an option the default does not clear the previous default; on a single-select dropdown clear the old one yourself.' That is false, measured directly.\n\nBefore this call: 146670 was the live default (is_default:true), 146669 and 146668 were both false.\nThe call sent ONLY option_id=146669 with option_value unchanged and is_default:true. It never named 146670 anywhere in path or body.\nReading all three options back afterward (not trusting the write response) shows:\n  - 146669: is_default:true (as sent) — updated_at bumped to 2026-09-22T05:23:42.000Z\n  - 146670: is_default:**false** — silently flipped, updated_at bumped to the SAME 2026-09-22T05:23:42.000Z, i.e. mutated in the same request as a side effect\n  - 146668: untouched — still is_default:false, updated_at still 2026-09-21T13:47:13.000Z (unchanged from before this call)\nSo the outcome is outcome #1 from the task's three possibilities: 146670 was auto-demoted. Only one option is ever default at a time; nobody ends up with two defaults. This UPDATE path enforces single-default exactly the same way the CREATE path was observed to (creating 146670 with is_default:true had silently demoted 146668 in the earlier probe). The two sibling write calls do NOT have different default-demotion semantics — they agree with each other and disagree with this capability's own authored guidance. Verdict is DRIFT on that basis: the declared behavioral contract (guidance text) contradicts the measured behavior, even though the response *schema* itself was a clean match (see below) — this is a guidance/behavior drift, not a shape drift.\n\n*** RESPONSE SCHEMA — CLEAN MATCH, SEPARATE FROM THE GUIDANCE DRIFT ***\nThe 200 body was exactly {success:true, data:{id, option_value, is_default, colour, parent_option_id}} — every declared key present (id:146669, option_value echoed verbatim, is_default:true as sent, colour:null, parent_option_id:null), nothing undeclared. declared_missing and undeclared_returned are both empty. If judged purely on response shape this would be a PASS; the DRIFT verdict here is specifically about the guidance-vs-behavior contradiction, which is the more consequential defect and the reason this probe was run.\n\n*** PARTIAL-UPDATE FIELD PRESERVATION — CONFIRMED ***\ncolour and parent_option_id are not accepted as body params by this capability at all (only option_value and is_default are declared, both required). Read-back confirms both stayed exactly as they were (colour:null, parent_option_id:null on 146669, unchanged) — not because the handler merges fields, but because it structurally cannot touch them. option_value was resent unchanged and round-tripped unchanged. This is a full replace of a two-field subset, not a partial-fields-omitted-preserved semantics; there's no way to test 'omit option_value and see if it's preserved' because omitting it is a 400 per the declared guidance (not attempted here, matches contract, not retried).\n\n*** DUPLICATE-OPTION CHECK — FIFTH INDEPENDENT CONFIRMATION ***\nget_custom_field_dataset_v2(fetch_options=true) after the update still shows exactly 3 rows (info.count:3), ids 146670/146669/146668 each appearing exactly once. Combined with the four prior confirmations logged against the create-path siblings (field-definition-create, dataset-create, single-option-create via two read paths), this is a fifth independent read confirming new/updated custom-field options never double — the historical duplication seen on the old default fields (priority/status/case_type) is confirmed, again, as legacy data rather than a live serializer defect anywhere on this surface.\n\n*** THIN-WRITE vs FULL-READ DISCRIMINATOR — CONFIRMED AGAIN ***\nThe update's own 200 response (id, option_value, is_default, colour, parent_option_id) does not carry record_status/created_at/updated_at/dataset_id — deliberately thin, matching the declared schema exactly. Reading the same option back through get_custom_field_dataset_v2 shows the full stored row for 146669: {id:146669, group_id:3452, project_id:null, custom_field_id:106131, dataset_id:31320, option_value:'__mcp-probe-cfdataset-20260921-B', is_default:true, parent_option_id:null, record_status:'active', created_at:'2026-09-21T13:34:12.000Z', updated_at:'2026-09-22T05:23:42.000Z'}. Same pattern as the create-path sibling: write response thin, read carries everything, and updated_at moved while created_at did not — consistent with an in-place update rather than a delete+recreate.\n\n*** ADJACENT DRIFT NOTED (not this capability's contract, flagged for completeness) ***\nget_custom_field_dataset_v2's own declared 200 schema lists `options` as a plain array; the actual response nests it as `options.data` (array) plus an `options.info` paging envelope ({page, page_size, count, prev, next}) that isn't declared anywhere on that capability. This didn't block reading back this probe's results (the array was found one level deeper than declared) but is a genuine shape mismatch on the READ sibling, separate from and additional to the guidance-drift found on update_custom_field_dataset_option_v2 itself.\n\nCREATED/MUTATED-RESOURCE SUMMARY: no new resource created. Mutated: option 146669's is_default flipped true (as intended), and option 146670's is_default silently flipped false as a side effect (the finding). Dataset 31320's live default is now 146669. Both mutations logged in CLEANUP-LEDGER.md."
+}

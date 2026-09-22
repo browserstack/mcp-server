@@ -75,7 +75,7 @@
         "description": "",
         "identifier": "TR-9058",
         "name": "probe run",
-        "assignee": "ing@bsstag.com",
+        "assignee": "probe-user@example.invalid",
         "project_id": "PR-2005",
         "tags": [],
         "configurations": [],

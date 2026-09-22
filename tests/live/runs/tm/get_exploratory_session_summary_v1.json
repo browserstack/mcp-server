@@ -1,0 +1,79 @@
+{
+  "capability": "get_exploratory_session_summary_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T14:05:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the probe (path_params.project_id)",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744, "identifier": "PR-2005"}
+    },
+    {
+      "step": 2,
+      "why": "confirm, empirically, that the two write-probe sessions (779/780) still exist and are active before re-probing the summary, and capture their created_by/assignee to cross-check the summary's expanded fields",
+      "source": "invoked",
+      "capability": "list_exploratory_sessions",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"q[session_state]": "active"}},
+      "status": 200,
+      "produced": {
+        "count": {"active": 2, "closed": 0},
+        "info.count": 2,
+        "sessions": [
+          {"id": 780, "identifier": "ES-15", "title": "__mcp-probe-exploratory-clone-20260921", "assignee": null, "created_by": {"id": 2522, "email": "probe-user@example.invalid", "full_name": "ing"}, "summary": {"bug": 1, "note": 1}},
+          {"id": 779, "identifier": "ES-14", "title": "__mcp-probe-exploratory-20260921", "assignee": null, "created_by": {"id": 2522, "email": "probe-user@example.invalid", "full_name": "ing"}, "summary": {"bug": 1, "note": 1}}
+        ]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"mode": "session_selection", "session_ids": "779,780"}},
+      "status": 200,
+      "error": "",
+      "changed": ""
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"mode": "time_period", "start_date": "2026-09-01", "end_date": "2026-09-21"}},
+      "status": 200,
+      "error": "",
+      "changed": "Second mode exercised deliberately (contract's own guidance flags mode as branching behavior); same two sessions fall inside this date window so this is a genuine second path through the code, not a repeat of attempt 1."
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"mode": "session_selection", "session_ids": "779"}},
+      "status": 200,
+      "error": "",
+      "changed": "Single-session scope, to check the aggregate (outcomes.bugs_found, sessions[].summary) against the two-session aggregate for a count-vs-rows cross-check."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}, "query": {"mode": "session_selection", "session_ids": "779,780"}},
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "data.total_hours": 1.05,
+      "data.bugs_per_session": 1,
+      "data.avg_duration": 1883,
+      "data.top_testers": "[] - still empty even with 2 sessions / 2 bugs; {user, bug_count} item shape remains unexercised (see notes)",
+      "data.outcomes": {"bugs_found": 2, "issues_found": 0, "needs_followup": 0, "skipped": 0, "no_issues": 0, "no_activity": 0},
+      "data.sessions[0]": {"id": 780, "identifier": "ES-15", "title": "__mcp-probe-exploratory-clone-20260921", "session_state": "active", "assignee": null, "outcome": "bugs_found", "summary": {"bug": 1, "note": 1}},
+      "data.sessions[1]": {"id": 779, "identifier": "ES-14", "title": "__mcp-probe-exploratory-20260921", "session_state": "active", "assignee": null, "outcome": "bugs_found", "summary": {"bug": 1, "note": 1}},
+      "data.total_count": 2,
+      "data.state_distribution": {"active": 2, "closed": 0},
+      "data.sessions_linked_with_plans": 0
+    }
+  },
+  "contract": {
+    "required": ["success", "data"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["data.total_hours", "data.bugs_per_session", "data.avg_duration", "data.total_count", "data.state_distribution", "data.sessions_linked_with_plans"]
+  },
+  "notes": "SUPERSEDES the prior UNVERIFIED verdict (probed_at 2026-09-21T10:55:47Z), which was scored on a project with zero exploratory sessions (every figure zeroed, sessions:[] and top_testers:[]). That is no longer the case: write probes since created session 779 (ES-14, active, 2 logs - one bug, one note carrying linked defect TM-1234) and session 780 (ES-15, a clone of 779 with 2 copied logs). Re-verified live here (setup step 2) before probing: both sessions are active, created_by is a real user (id 2522, 'ing'), and each carries summary {bug:1, note:1}. RE-PROBE RESULT, STILL UNVERIFIED - two independent reasons: (1) UNFALSIFIABLE CONTRACT, RE-CONFIRMED: describeCapability was re-checked this run and the 200 schema still declares `data` as a bare `{type: object}` with a prose description only - zero enumerated properties. Per this campaign's settled rule (three other tm capabilities already carry this same flag in check-contract.py) an unfalsifiable contract can never register DRIFT and must not be counted as a clean PASS either, regardless of how sensible or well-populated the actual response looks. This alone caps the verdict below PASS/DRIFT no matter what the data shows. (2) EMPTY-CASE STILL OPEN FOR top_testers: even with 2 sessions, 4 logs and 2 confirmed bugs, top_testers came back [] in all three attempts (both modes, and the single-session and two-session scopes). The declared item shape `{user, bug_count}` remains completely unexercised - this is the named empty case from the task and it is being named here explicitly, not folded into a pass. Working hypothesis for WHY it stays empty: list_exploratory_sessions' own guidance says assignee/created_by/closed_by are resolved separately, and both probe sessions have assignee:null (confirmed in setup step 2) despite having a real created_by. If top_testers is ranked off assignee rather than created_by/log-author, an unassigned session can never contribute a top tester no matter how many bugs it logs - which would mean this capability's populated-vs-empty behavior for top_testers depends on a write path (assign_test_run_owner or session assignment) that the write probes never exercised. This is a plausible but UNCONFIRMED explanation, offered as a lead for whoever runs the next write-probe wave, not stated as fact. RELATED PARTIAL GAP - assignee expansion: the contract says sessions[].assignee is 'expanded from ids into user objects server-side, and come back null for a tester who is no longer a TM user.' Both sessions here return assignee:null, but list_exploratory_sessions confirms this is because no assignee was ever set (not because a former assignee's account is gone) - so the 'expanded to a real user object' branch of this field is still never actually exercised either; only the null branch is, and for a different reason than the one the contract names. MODE COMPARISON (session_selection vs time_period): both modes were exercised against the same two sessions (attempt 1 vs attempt 2) and returned byte-identical `data` shapes and values - no divergence was found. This capability does NOT reproduce the sibling defect seen on list_workspace_fields_v2 (conditional `info` by mode); the mode-selection risk flagged in the task did not materialize here. COUNT-VS-ROWS CHECK, PASSES: outcomes.bugs_found=2 for the two-session query matches the sum of sessions[].summary.bug (1+1=2) - the clone's (780's) logs ARE counted in the aggregate, not silently dropped. Cross-checked further with a single-session query (attempt 3, session_ids=779 alone): outcomes.bugs_found=1, matching sessions[0].summary.bug=1 and matching a sibling probe's independently-reported number for session 779 in isolation. So the aggregate-vs-row arithmetic is internally consistent here - this capability does NOT show the count-vs-rows defect this wave was watching for, despite the pattern hitting five other capabilities in this campaign. UNDECLARED FIELDS, RE-CONFIRMED PLUS TWO NEW: total_hours, bugs_per_session, avg_duration and total_count repeat from the prior zeroed-response probe (none of the four are named anywhere in the schema or guidance prose, which only mentions 'session counts, outcome breakdown, sessions ... and top_testers'). Two more undeclared fields are visible now that data is populated and were not itemized in the prior probe's item_shape: state_distribution ({active, closed} counts) and sessions_linked_with_plans (0 here, both probe sessions have test_plan_id:null). Since the schema is unfalsifiable this is not a hard violation, just a widening of the prose-vs-reality gap worth a documentation follow-up. No session, log, or defect was created, modified, or closed by this probe - read-only throughout."
+}

@@ -1,0 +1,58 @@
+{
+  "capability": "get_folder_remove_summary",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "confirm mode from describeCapability before touching anything live",
+      "source": "describeCapability",
+      "capability": "get_folder_remove_summary",
+      "produced": {
+        "mode": "read",
+        "note": "Guidance states explicitly: 'Read-only despite the delete machinery behind it: the handler calls the delete path with dry_run set, so nothing is removed.' Confirmed genuinely non-mutating before invoking."
+      }
+    },
+    {
+      "step": 2,
+      "why": "a populated folder to summarise, chosen over __readonly__ per instructions since it is a genuine read",
+      "source": "pool",
+      "capability": null,
+      "produced": {
+        "project_id": 379335744,
+        "folder_id": 764138,
+        "folder_name": "__scratch__"
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": {
+        "project_id": 379335744,
+        "folder_id": 764138
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "has_other_product_entity", "deleted_entity_count"],
+    "item_shape": {
+      "success": true,
+      "has_other_product_entity": false,
+      "deleted_entity_count": {
+        "sub_folders": 8,
+        "active_test_case_count": 19,
+        "archived_test_case_count": 0,
+        "test_recordings_count": 0
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "folder_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "describeCapability confirmed mode:read with explicit guidance that the handler invokes the delete path with dry_run set, so nothing is actually removed — this is a genuine preview endpoint, not a mutating one, so invocation proceeded. Invoked once against __scratch__ (764138), which was non-empty (18 direct / 19 total cases, 7 direct subfolders), so the populated response shape was exercised and the empty-case rule does not force UNVERIFIED. No failed attempts; single call succeeded first try (status 200). Response matched the declared 200 schema exactly: all three required top-level keys present (success, has_other_product_entity, deleted_entity_count), and all four properties of deleted_entity_count present (active_test_case_count, archived_test_case_count, sub_folders, test_recordings_count) with no undeclared fields. has_other_product_entity=false is consistent with test_recordings_count=0, matching the documented derivation rule. VERIFY AFTERWARDS: re-read via get_root_folders_v1 (project 379335744) immediately after the probe. __scratch__ (764138) still showed cases_count=18, total_cases_count=19, sub_folders_count=7, and __readonly__ (764093) still showed its untouched cases_count=2 (TC-54455/TC-54456 intact) — nothing was removed, confirming the 'remove summary' is non-destructive in practice as well as by contract. One benign discrepancy worth recording, not a contract drift: get_folder_remove_summary reported sub_folders=8 (recursive count of the whole subtree the delete would touch) while get_root_folders_v1 reported __scratch__'s sub_folders_count=7 (direct children only). These are two different, individually well-defined quantities (recursive vs. immediate), not a schema violation — both fields matched their own declared contracts exactly."
+}

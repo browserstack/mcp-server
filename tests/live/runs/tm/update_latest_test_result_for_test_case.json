@@ -1,0 +1,102 @@
+{
+  "capability": "update_latest_test_result_for_test_case",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:24:00Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project/run/case scope for this probe, per the pool/task assignment",
+      "source": "pool/task",
+      "capability": null,
+      "produced": { "project_id": 379335744, "test_run_id": "TR-9110", "test_run_uuid": 17577900, "test_case_id": "TC-54486", "test_case_int_id": 1985020, "mapping_id": 2150424053, "folder_id": 764138 }
+    },
+    {
+      "step": 2,
+      "why": "THE PREREQUISITE QUESTION: does TC-54486 already have a result row in TR-9110 (possibly minted at mapping time per the documented trap), or has it genuinely never been executed? Read before any write.",
+      "source": "invoked",
+      "capability": "get_test_results_for_test_case",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985020 }, "query": { "mapping_id": 2150424053 } },
+      "status": 200,
+      "produced": { "test-results": [], "info": { "count": 0 }, "unique_issues": [] }
+    },
+    {
+      "step": 3,
+      "why": "cross-check via the case detail slide-over: test_run_results_count before any write",
+      "source": "invoked",
+      "capability": "get_test_case_detail",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985020 } },
+      "status": 200,
+      "produced": { "test_run_results_count": 0, "identifier": "TC-54486", "name": "__mcp-probe-bulkcase-20260921-2" }
+    },
+    {
+      "step": 4,
+      "why": "Both reads agree: zero result rows exist. The documented trap (latest_result_id populated even on never-executed rows, because the row is minted when the case is mapped into the run) describes get_test_run_test_cases_v2's mapping-row field specifically, not this per-case result history — and it does not hold here regardless: the result history is genuinely empty, not merely 'untested'. update_latest_test_result_for_test_case only ever EDITS an existing result (per its own guidance) and cannot create one, so the documented recovery is to log a result first. Created that missing prerequisite result via the sibling create endpoint.",
+      "source": "invoked",
+      "capability": "create_test_result_for_test_case",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985020 }, "body": { "status_id": 318612, "description": "setup baseline result for update_latest_test_result_for_test_case probe (2026-09-22) — TC-54486 had never been executed in TR-9110", "mapping_id": 2150424053 }, "user_permission": "granted" },
+      "status": 200,
+      "produced": { "result_id": 2150424064, "status_sent": 318612, "result_status_echoed": { "id": 318612, "field_value": "Blocked" }, "note": "HTTP 200, not the capability's own declared 201; links.self on this same response pointed at a DIFFERENT result id (9990220143) than the top-level id (2150424064) — an undeclared drift on the sibling create capability, not the target of this probe, flagged here only because it produced the prerequisite object this probe depends on." }
+    },
+    {
+      "step": 5,
+      "why": "confirm the prerequisite result is now visible before attempting the target capability",
+      "source": "invoked",
+      "capability": "get_test_results_for_test_case",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985020 }, "query": { "mapping_id": 2150424053 } },
+      "status": 200,
+      "produced": { "count": 1, "id": 2150424064, "result_status": { "id": 318639, "field_value": "Blocked", "internal_name": "blocked" }, "note": "result IS visible here — and note the id drift: the create response echoed status_id 318612, but this read (and every later read) reports result_status.id 318639 for the identical 'Blocked' value. Likely the project's known duplicate-option-id-block pattern (already documented elsewhere in this project for case_type/priority/status) extended to result statuses; not investigated further as it is off this probe's target." }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985020 },
+        "body": { "status_id": 318610, "mapping_id": 2150424053 }
+      },
+      "status": 404,
+      "error": "{\"success\":false,\"message\":\"No test results found\"}",
+      "changed": "n/a - first attempt, mapping_id sent in body root exactly as the contract documents ('query string or body root')"
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985020 },
+        "body": { "status_id": 318610, "mapping_id": 2150424053 }
+      },
+      "status": 404,
+      "error": "{\"success\":false,\"message\":\"No test results found\"}",
+      "changed": "Retried the identical call unchanged, after re-confirming via get_test_results_for_test_case (step 5 above) that the result row genuinely exists and is queryable by this exact mapping_id — ruled out a simple index-lag race."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985020 },
+        "query": { "mapping_id": "2150424053" },
+        "body": { "status_id": 318610 }
+      },
+      "status": 404,
+      "error": "{\"success\":false,\"message\":\"No test results found\"}",
+      "changed": "Moved mapping_id from the body root to the query string (the contract's other documented location for this parameter), in case the body-root form was silently ignored. Same 404."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985020 },
+      "body": { "status_id": 318610, "mapping_id": 2150424053 }
+    },
+    "status": 404,
+    "response_keys": ["success", "status", "message"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id", "test_case_id"],
+    "json_path": "/test_result/status_id (and description, custom_fields, attachments, issues)",
+    "declared_missing": [],
+    "undeclared_returned": [],
+    "note": "Never reached a 200, so the declared success schema was never diffed against a real response — per instructions, an error body is not compared against the success shape. The 404 itself IS one of the capability's declared responses, but its declared TRIGGER ('with nothing logged yet') did not hold: a result demonstrably existed (created moments earlier, independently confirmed visible via get_test_results_for_test_case and get_test_case_detail) and the endpoint still reported 'No test results found' on all 3 attempts, across both documented locations for mapping_id."
+  },
+  "notes": "VERDICT: BLOCKED — and the prerequisite question is the real finding here, in a shape the task's own trap warning did not anticipate.\n\nPREREQUISITE ANSWER (asked first, as instructed): TC-54486 had GENUINELY never been executed in TR-9110. Both `get_test_results_for_test_case` (mapping_id-scoped: count 0, empty `test-results`) and `get_test_case_detail` (`test_run_results_count: 0`) agreed before any write in this probe. The documented trap — 'latest_result_id populated even on never-executed cases because the row is minted at mapping time' — refers to `get_test_run_test_cases_v2`'s per-row mapping field, a DIFFERENT surface from the one checked here; it does not contradict this finding, and on this pairing the straightforward reads already show the honest 'never executed' state with no trap to fall into. So: this is the genuine-prerequisite branch, not the always-populated-id branch. `update_latest_test_result_for_test_case` cannot create a result (confirmed by its own guidance and by the 404 on the very first attempt against a truly empty history) — a prior result is a real, hard prerequisite the contract already states in prose ('log a result first, then amend it'), and this probe followed that path via the sibling `create_test_result_for_test_case`.\n\nTHE ACTUAL DEFECT: following the contract's own documented recovery did not fix it. After `create_test_result_for_test_case` returned 200 and created result id 2150424064 (independently confirmed visible and correctly attributed via TWO different reads — `get_test_results_for_test_case` and `get_test_case_detail`'s `test_run_results_count` flipping 0→1), `update_latest_test_result_for_test_case` still answered 404 {success:false, message:'No test results found'} on all 3 attempts: once with `mapping_id` in the body root (as documented), once retried unchanged to rule out an indexing race (a fresh read moments before attempt 2 confirmed the row was queryable), and once with `mapping_id` moved to the query string (the contract's other documented location for the same parameter). Every attempt used the identical, correct project/run/case/mapping identifiers that both read endpoints accept without complaint. This means the capability's 'latest result' lookup is blind to a result that plainly exists and is visible through every read surface checked — a genuine, reproducible functional break, not a transport hiccup (no status:0 was seen) and not a stale-object problem (fresh reads bracketed every attempt).\n\nPUT-VS-PATCH FIELD SURVIVAL — UNVERIFIED, not fabricated. The task asked to update one field and read back to see if the others survived (the `update_shared_step_v1` id-recreation precedent). That check requires a successful write, and none was ever reached here across the 3-attempt budget; nothing in this file should be read as evidence either way about field survival on this specific capability.\n\nINHERIT-AND-CHECK, confirmed a second time on a different case: reading TC-54486's own result (via `get_test_results_for_test_case`) reproduces both previously-documented drifts — `configuration_id` is declared on the row schema but the key is ENTIRELY ABSENT from the actual row (not merely null), and `custom_fields` is declared an object but returned as `[]`. These match the findings already on record for TC-54458's 14 rows, so the pattern is systemic to the endpoint, not particular to that one case/run. The v2 sibling (`get_test_results_for_test_case_v2`), read against the same result, echoed `result_status: {field_value: 'Blocked'}` only — confirming v2's cut-down shape against v1's full object on this same underlying row. Which shape the TARGET capability itself echoes could not be confirmed empirically (no 200 was ever reached); its OWN declared 200 schema (from describeCapability) specifies the full v1-style object (id/field_value/internal_name/field_name/colour/value_category/valueDetails), so if it ever does succeed it is declared to echo the v1 shape, not v2's — but this is a declared-contract statement, not an observed one.\n\nWRONG-DATA WATCH: `get_test_case_detail`'s `test_run_results_count` correctly went from 0 (before) to 1 (after creating the prerequisite result), matching the one real result now on this case in this run. This is a useful SECOND data point against the pattern already on file for TC-54458, where the same field reports 0 despite 14 real results — here, on a case with exactly 1 result, it reports correctly. So the 'reports 0 regardless of real count' defect is not universal to every case; it may be specific to TC-54458/TR-9062 (an older, much-amended row) or to some other condition not exercised by this fresh, single-result case. Worth a follow-up probe on a case with 2–3 results to see where the count stops tracking reality.\n\nWRITE-AND-DISCARD CLUSTER: this capability adds a NEGATIVE instance, not a new positive one — all 3 attempts failed with an explicit 404 and a re-read after every attempt confirmed NOTHING changed (result stayed at status Blocked, original description, updated_at unchanged at 05:24:17.561Z throughout). The error was honest: it said nothing was found, and reading back confirms nothing was in fact written. This is the contract working as advertised on the 'trust nothing, verify by reading back' front, even though the underlying capability itself is broken.\n\nSIDE FINDING (not the probe target, encountered en route while building the prerequisite): `create_test_result_for_test_case`'s own 200 response carried a `links.self` pointing at result id 9990220143 while the same response's top-level `id` was 2150424064 — two different numbers for what should be the same freshly-created row. Every subsequent read (by both v1 and v2 result-history endpoints) confirms 2150424064 is the real, addressable id; 9990220143 never resolved to anything queried in this probe. Flagging for whoever owns that capability's contract, since it was not this probe's assignment.\n\nSIDE FINDING 2: the status id sent at creation (318612, taken from `get_test_runs_form_fields_v1`'s 'Blocked' option) does not match the status id every subsequent read reports for the same result (318639, also labelled 'Blocked'/'blocked'). Both resolve to the same display name and internal_name, so the write was not misinterpreted as a different status — but two distinct numeric ids representing one status value is consistent with this project's already-documented duplicate-option-id-block pattern (seen elsewhere for case_type/priority/status), now apparently extended to result statuses. Not chased further; off this probe's target.\n\nCLEANUP LEDGER ENTRY: created test result id 2150424064 (status Blocked) on TC-54486 (1985020) / mapping_id 2150424053 in TR-9110, via `create_test_result_for_test_case`, purely as the prerequisite this probe needed. No delete-result capability was invoked against it (out of scope for this probe); it is safe to leave, remove via `delete_test_result_v1`, or overwrite via a future successful `update_latest_test_result_for_test_case` once the underlying defect is fixed. TC-54458 (1975349), TR-9062, and TC-54485/mapping 2150424052 were never referenced by any call in this probe."
+}

@@ -1,0 +1,96 @@
+{
+  "capability": "list_test_plans_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T10:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "query": { "p": 1 }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_plans", "info", "count"],
+    "item_shape": {
+      "id": "integer",
+      "identifier": "string (TP-NNN)",
+      "name": "string",
+      "description": "string",
+      "plan_status": "string",
+      "active_state": "string",
+      "record_status": "string",
+      "start_date": "string",
+      "end_date": "string",
+      "owner": "integer",
+      "assignee": "object",
+      "created_by": "object",
+      "tags": "array",
+      "issues": "array",
+      "custom_fields": "array (empty)",
+      "parent_plan_id": "integer|null",
+      "sub_plans_count": "integer",
+      "test_runs_count": "object {active,closed}",
+      "total_test_runs_count": "object {active,closed}",
+      "test_plan_progress_v2": "object",
+      "project_id": "integer",
+      "created_at": "string",
+      "updated_at": "string",
+      "links": "object {self, test_runs}"
+    }
+  },
+  "pagination": {
+    "note": "Page size is fixed at 30 (no per_page override). The pool's 29 plans (top-level only: 15, since one holds 14 sub-plans) never exceeds 30, so a genuine second page of real data cannot be produced from this pool under any parameter combination -- confirmed structurally, not just by observation.",
+    "branch_single_page": {
+      "arguments": { "p": 1 },
+      "info": { "page": 1, "page_size": 30, "count": 15, "prev": null, "next": null },
+      "test_plans_length": 15
+    },
+    "branch_include_sub_plans": {
+      "arguments": { "p": 1, "include_sub_plans": "true" },
+      "info": { "page": 1, "page_size": 30, "count": 15, "prev": null, "next": null },
+      "test_plans_length": 29,
+      "drift": "info.count stayed at 15 (top-level-only count) even though the array grew to 29 rows once sub-plans were included. The declared schema says info.count is 'Total number of items' -- it tracks the top-level filter scope, not len(test_plans), so it silently disagrees with the array it's paginating whenever include_sub_plans=true is used."
+    },
+    "branch_page_beyond_data": {
+      "arguments": { "p": 2 },
+      "info": { "page": 2, "page_size": 30, "count": 15, "prev": 1, "next": null },
+      "test_plans_length": 0,
+      "note": "Envelope shape identical to the single-page branch (page, page_size, count, prev, next all present; prev correctly populated, next correctly null). No total_pages/prev/next inconsistency here -- unlike the tracked list_workspace_fields_v2 defect, this capability's info envelope is stable and matches the declared required set across all three branches probed."
+    },
+    "verdict_on_known_defect_class": "NOT PRESENT. This capability does not exhibit the list_workspace_fields_v2-style envelope drift (dropping total_pages / adding undeclared prev-next only on multi-page). Its info shape is fixed and matches contract across all observed branches. The real drift found here is different: info.count desyncs from the actual row count when include_sub_plans changes what's in the array (see branch_include_sub_plans above)."
+  },
+  "v1_vs_v2": {
+    "id_form": "v1 rows carry both a numeric `id` (what every other v1 plan route needs) and the display `identifier` (TP-NNN/STP-NNN). v2 rows carry ONLY `identifier` -- there is no numeric id field at all; the numeric project/plan ids are recoverable only by parsing them out of the `urls.self` web-app link.",
+    "project_id_param": "v1 path takes the numeric project_id (e.g. 379335744). v2 path requires the PR-NNN string form (regex-constrained ^PR-\\d+$) -- a bare integer never matches the v2 route.",
+    "filtering": "v1 supports status, sort_by, q (free text/tags/ids/owner/team/custom-fields/date filters), include_sub_plans, minify, filter_mapping, filter_details, ignore_type. v2 has NONE of this -- only p and count/page_size. v2's own guidance says to filter client-side or fall back to v1.",
+    "page_size": "v1: fixed at 30, no override parameter exists. v2: default 30, overridable via `count` (or `page_size` alias) up to a hard ceiling of 300 (400 above that, not clamped); v2 also caps deep paging at 30,000 rows via a 429.",
+    "envelope": "Both declare the same info{page,page_size,count,prev,next} shape. v1 additionally returns a project-wide `count`{active,completed} rollup at the top level that v2 does not have at all.",
+    "row_shape": "v1 rows are the full plan object (owner, assignee, created_by, custom_fields, test_plan_progress_v2, record_status, review_status, links, etc). v2 rows are slimmer: no owner/assignee/created_by/custom_fields/progress/record_status -- just identifier, name, description, active_state, tags, issues, test_runs_count, sub_plans_count, parent_plan_id, start/end/created_at, project_id (as PR-NNN), and urls{self, sub_test_plans}.",
+    "parent_plan_id_semantics": "v1: integer, key always present, null on a top-level plan. v2: string TP-NNN identifier, and the key is ABSENT ENTIRELY on a top-level plan (never returned as null) -- opposite null-vs-absent convention from v1.",
+    "preferred_or_deprecated": "Neither describeCapability record carries a preferred/deprecated flag or any cross-reference to the other. They are an unlabelled near-duplicate pair: same intent ('list a project's test plans'), same route family, materially different id space, params and row shape, with no contract signal steering a caller to one over the other."
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "test_plans[].completed_by",
+      "test_plans[].test_plan_progress (always {}, separate from the declared test_plan_progress_v2)",
+      "test_plans[].test_results_trend",
+      "test_plans[].test_results_trend_v2",
+      "test_plans[].attachments",
+      "test_plans[].review_status"
+    ]
+  },
+  "notes": "Capability works end to end and the request/response mechanics (path param, p, include_sub_plans, envelope) all behave as documented. Verdict is DRIFT rather than PASS for two reasons: (1) six row-level fields (completed_by, test_plan_progress, test_results_trend, test_results_trend_v2, attachments, review_status) are returned on every row but are absent from the capability's declared `returns` list -- an undeclared-field gap in the same class the registry's returns/schema build check is meant to catch. (2) info.count silently desyncs from len(test_plans) once include_sub_plans=true pulls extra rows into the array -- the field keeps reporting the top-level-only total, not the count of what's actually being paginated. Separately, sub-plan rows (fetched via include_sub_plans=true) return null for a cluster of fields the schema types as plain (non-nullable) string/object/array -- plan_status, tags, issues, created_by, owner, assignee, record_status, start_date, end_date, created_at, updated_at, sub_plans_count, test_plan_progress_v2 were all null on the STP-* rows -- an undeclared-nullability gap, shallowest path: test_plans[].tags (typed {type:array}, no nullable, observed null). Pagination itself is clean: the known list_workspace_fields_v2-style envelope-drift defect does NOT reproduce here across single-page, sub-plans-inflated, and beyond-data-page branches; genuinely could not force a real second page of data since the pool's 29 items never exceed the fixed page size of 30 under any filter combination. v1 vs v2 is a real unlabelled-duplicate case: different id space (numeric id vs identifier-only), different project_id form (int vs PR-NNN), v1 has rich filtering v2 lacks entirely, and neither carries a preferred/deprecated marker."
+}

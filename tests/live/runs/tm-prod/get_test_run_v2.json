@@ -1,0 +1,75 @@
+{
+  "capability": "get_test_run_v2",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": "PR-18723", "test_run_id": "TR-5401273"}, "query": {}},
+      "status": 200,
+      "notes": "baseline (no minify) on the `done` run — establishes the default query works before testing minify"
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": "PR-18723", "test_run_id": "TR-5401273"}, "query": {"minify": "true"}},
+      "status": 200,
+      "notes": "THE TEST. Returned 200 with a well-formed body. Does NOT reproduce the preprod null-body 500 — the crash does not exist on production for this run."
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": "PR-18723", "test_run_id": "TR-5401273"}, "query": {"minify": "false"}},
+      "status": 200,
+      "notes": "explicit minify=false, same run — byte-for-byte identical to the default (attempt 1); confirms both the default and the explicit-false path are exercised and equally healthy"
+    },
+    {
+      "n": 4,
+      "arguments": {"path_params": {"project_id": "PR-18723", "test_run_id": "TR-5394831"}, "query": {}},
+      "status": 200,
+      "notes": "baseline (no minify) on the second target run (new_run state) — also healthy"
+    },
+    {
+      "n": 5,
+      "arguments": {"path_params": {"project_id": "PR-18723", "test_run_id": "TR-5394831"}, "query": {"minify": "true"}},
+      "status": 200,
+      "notes": "minify=true on the second run too — also 200. Confirms the (non-)crash is universal across both target runs, not run-specific."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": "PR-18723", "test_run_id": "TR-5401273"}, "query": {}},
+    "status": 200,
+    "response_keys": [
+      "active_state", "run_state", "created_at", "updated_at", "description", "identifier", "name",
+      "assignee", "project_id", "tags", "configurations", "filter_test_cases", "test_cases", "issues",
+      "links", "urls"
+    ],
+    "item_shape": {
+      "identifier": "string, \"TR-5401273\" — matches declared",
+      "name": "string, \"regression sample1 #77\"",
+      "description": "string (empty)",
+      "assignee": "string (plain email, \"user-e@example.invalid\") — matches declared nullable string, never an object",
+      "run_state": "\"done\" — first `done` run seen in this suite (preprod had none). active_state came back \"active\", which is CORRECT per the declared derivation (\"closed\" only when run_state==\"closed\"; \"done\" is a separate terminal state that still maps to \"active\") — not a bug, just a state the preprod fixtures never exercised.",
+      "project_id": "string, \"PR-18723\" — matches the current declared type (string, example \"PR-2005\"); no int/string mismatch on prod",
+      "configurations": "[] (empty array of ints) — consistent with declared shape, run has none",
+      "filter_test_cases.is_dynamic": "boolean, false — matches declared boolean type on both target runs",
+      "test_cases": "[] present as an empty array under the default query; ABSENT entirely under minify=true (see contract note below)",
+      "issues": "[] present as an empty array under the default query; ABSENT entirely under minify=true — see contract note, this contradicts the field's own declared conditional-absence rule",
+      "links": "{self, test_cases} — matches declared, no `detail` key (matches declared: 'no detail link on v2')",
+      "urls.self": "absolute web-UI link, e.g. https://test-management.browserstack.com/projects/332537/test-runs/TR-5401273 — matches declared",
+      "overall_progress": "ABSENT on both target runs — both have 0 mapped test cases, so this is the documented CONDITIONAL absence (\"omitted when no case-status summary\"), not a gap. Could not be positively exercised — no run with populated progress was in scope.",
+      "test_plan": "ABSENT on both target runs — neither TR-5401273 nor TR-5394831 is linked to a plan, so this is the documented CONDITIONAL absence, not a gap. Could not be positively exercised on prod — no plan-linked run was in the given target set.",
+      "issue_tracker": "ABSENT on both — no issues on either run, consistent with declared condition",
+      "closed_at / closed_by": "not applicable — these are NOT declared anywhere in get_test_run_v2's own contract (guidance explicitly calls them v1-only), so their absence here is expected, not a gap, even though this is the first `done` run in the suite",
+      "type / self_ui_link": "absent from the response AND absent from this capability's own declared `returns`/schema (unlike sibling capabilities create_test_run_v2, close_test_run_v1, edit_test_run, which still declare them but never return them). Consistent with the task's framing that no test-run capability actually returns these."
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id"],
+    "json_path": "test_run",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "HEADLINE: the preprod BLOCKED verdict does NOT reproduce on production. minify=true returned 200 on every attempt (2/2 across both target runs: TR-5401273 done, TR-5394831 new_run), never a 500, and the body matches the declared narrow v2 schema. Default (no minify), minify=false, and minify=true were all exercised on TR-5401273, plus default+minify=true on TR-5394831 — 5/5 calls returned 200, 0/5 returned 500. So on the narrow question asked: production is clean; this is preprod-only (or at minimum, not reproducible with these fixtures on prod).\n\nIMPORTANT CORRECTION TO THE TASK'S PREMISE: the preprod verdict as framed in this task (\"minify=true returned a 500 with a literally null body... reproduced on retry, so it was not flake\") does not match this repo's own current record. tests/live/findings/get_test_run_v2.md Finding 7 is headed 'RETRACTED AND REPLACED (2026-09-18)': the orchestrator re-tested minify=true directly and got 200; a sibling probe (get_test_run_progress_v1) had meanwhile hit three consecutive null-body 500s on unrelated, already-trusted calls in the same window, and the 2/2 minify=true 500s were reclassified as a preprod flakiness burst that coincided with those calls, not a parameter-triggered crash. tests/live/findings/error-envelopes-systemic.md line 35 independently confirms the same withdrawal (\"a tenth instance was briefly recorded here... and was withdrawn on re-test\"). tests/live/runs/tm/get_test_run_v2.json (the preprod run file) still shows the original DRIFT verdict and attempts with the 500s recorded, but the narrative finding built on top of it was retracted the same day. So the honest side-by-side is: preprod's own most-current record says NOT REPRODUCIBLE / FLAKE, and prod's fresh evidence today also says NOT REPRODUCIBLE (5/5 clean). These agree with each other — both say there is no minify-triggered crash — they just disagree with how this task described the preprod result. Flagging this because routing decisions built on the premise of a confirmed preprod crash should be revisited: per the repo's own record, that crash was never confirmed, so there's no vindicated defect to compare prod against, and no over-escalation to walk back either — the routing premise itself needs updating, not just the prod answer.\n\nCONTRACT SHAPE: no declared-and-required field was missing, and no undeclared field was returned, on any of the 5 calls. One genuine minor DRIFT found independently of the crash question: `issues` is declared 'CONDITIONAL — the key is absent, not empty, when the run payload carries no issues association', but the actual default-query response returns `issues: []` (present, empty array) rather than omitting the key, on both runs (neither has any issues). This is a small but real declared-vs-actual mismatch, distinct from and unrelated to the minify/500 question.\n\nSECONDARY OBSERVATION on minify: contrary to the (now-superseded) preprod finding that 'minify does nothing' (byte-identical payloads), on prod minify=true DOES have an observable effect — it drops the `test_cases` and `issues` keys entirely (present-but-empty under default, ABSENT under minify=true) on both target runs. Both target runs have 0 mapped test cases so this can't be verified against a populated `test_cases` array, but the key-presence difference itself is real and reproducible (2/2). Worth re-testing minify against a run with actual test cases to see whether it also truncates non-empty `test_cases`.\n\nFIRST-TIME-EXERCISED FIELDS: this is the first `done`-state run in the whole suite (preprod had none). `run_state: \"done\"` came back correctly, and `active_state` correctly derived to \"active\" (only `run_state: \"closed\"` maps to `active_state: \"closed\"\" per the declared rule) — this is new information, not a preprod behavior repeat, and it is correct. However `closed_at`, `closed_by`, `overall_progress`, and `test_plan` were NOT newly populated as the task anticipated, because both target runs have 0 mapped test cases and neither is plan-linked — those fields remain unexercised on prod too, for a data reason (empty runs) rather than an environment reason. `closed_at`/`closed_by` are additionally not declared anywhere in this capability's own contract (v1-only per its guidance), so their absence is expected regardless of run state.\n\nSIBLING DEFECTS CHECKED (as requested): (1) `project_id` — declared string (example \"PR-2005\"), returned as string (\"PR-18723\") on prod: consistent, no int/string mismatch here. (2) `is_dynamic` — declared boolean at `filter_test_cases.is_dynamic`, returned boolean (false) on both prod runs: consistent. (3) `type` / `self_ui_link` — absent from the actual response on prod (as they were on preprod), and also absent from get_test_run_v2's own declared contract now (unlike sibling capabilities create_test_run_v2/close_test_run_v1/edit_test_run, which still declare-but-never-return them) — consistent with the claim that no test-run capability actually returns these two fields. (4) `test_plans` returning `[]` for linked runs — NOT reproducible or falsifiable on this probe: get_test_run_v2's current contract already declares the field as singular `test_plan` (object), not a `test_plans` array, so the specific 'array comes back empty for a linked run' defect pattern doesn't apply to this capability as currently declared; and neither TR-5401273 nor TR-5394831 is plan-linked, so `test_plan` itself was never positively exercised on prod in this probe — UNVERIFIED, not confirmed clean, for the plan-linkage behavior specifically.\n\nNo writes were made; only GET reads were performed against the two target runs, all within the project (PR-18723 / 332537) already designated for read-only prod retesting."
+}

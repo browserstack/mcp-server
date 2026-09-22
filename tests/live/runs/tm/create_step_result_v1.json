@@ -1,0 +1,130 @@
+{
+  "capability": "create_step_result_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:31:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project and run scope, and the two probe-owned executed cases in TR-9110",
+      "source": "pool/task",
+      "capability": null,
+      "produced": {
+        "project_id": 379335744,
+        "test_run_id": "TR-9110",
+        "test_run_uuid": 17577900,
+        "TC-54485": 1985019,
+        "TC-54486": 1985020
+      }
+    },
+    {
+      "step": 2,
+      "why": "mapping_id is documented as unstable and was already proven to shift after a prior sibling write, so re-resolve it fresh before touching anything, and get a pre-write baseline of the run's case grid to diff against after the write",
+      "source": "invoked",
+      "capability": "get_test_cases_for_v1_test_run",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" }, "query": { "per_page": 100 } },
+      "status": 200,
+      "produced": {
+        "count": 5,
+        "rows_of_interest": [
+          { "identifier": "TC-54485", "id": 1985019, "mapping_id": 2150424062, "latest_status": "passed", "result_status_id": 318637 },
+          { "identifier": "TC-54486", "id": 1985020, "mapping_id": 2150424064, "latest_status": "blocked", "result_status_id": 318612 },
+          { "identifier": "TC-54458", "id": 1975349, "mapping_id": 2150424058, "latest_status": "untested" }
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "why": "THE PREREQUISITE QUESTION: create_step_result_v1's step_id path param is described as 'the numeric id of the step on the test case (from the case detail), not its position' - had to be read-resolved before any write attempt was possible",
+      "source": "invoked",
+      "capability": "get_test_case_detail",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985019 } },
+      "status": 200,
+      "produced": {
+        "test_case_steps": [
+          { "id": 12372581, "order": 1, "step": "Open the app", "result": "App opens successfully" },
+          { "id": 12372582, "order": 2, "step": "Tap login button", "result": "Login screen is displayed" }
+        ]
+      },
+      "note": "Obtainable read-only, with no ambiguity: step_id is a genuine integer id on each test_case_steps row, distinct from the 1-based `order`. Not a synthetic id, not derived from a result. Used step_id 12372581 (the case's first step) for the write below."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985019, "step_id": 12372581 },
+        "body": { "status": "passed", "description": "mcp-probe create_step_result_v1 write 20260922" }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded on the first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985019, "step_id": 12372581 },
+      "body": { "status": "passed", "description": "mcp-probe create_step_result_v1 write 20260922" }
+    },
+    "status": 200,
+    "response_keys": ["id", "updated_by", "author", "backtrace", "created_at", "description", "error_description", "expanded", "failure_type", "finished_at", "log_type", "started_at", "status", "result_status", "time_elapsed", "updated_at", "attachments", "created_by_imported", "issues", "links", "custom_fields", "test_run_step_result"],
+    "item_shape": {
+      "top_level_result": "the full case-level result object, no envelope (matches declared 200 shape)",
+      "test_run_step_result_NEVER_BEFORE_POPULATED": ["id", "status", "status_id", "step_mapping_id", "btcer_id", "created_at", "updated_at", "colour", "field_value", "step", "result", "test_data", "order", "is_latest", "record_status", "total_step_result_count"]
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id", "test_case_id", "step_id"],
+    "json_path": {
+      "status": "/test_run_step_result/status",
+      "status_id": "/test_run_step_result/status_id",
+      "description": "/test_run_step_result/description",
+      "attachments": "/test_run_step_result/attachments",
+      "custom_fields": "/test_run_step_result/custom_fields",
+      "issues": "/test_run_step_result/issues"
+    },
+    "declared_missing": ["/configuration_id"],
+    "undeclared_returned": [
+      "test_run_step_result.id", "test_run_step_result.status_id", "test_run_step_result.step_mapping_id",
+      "test_run_step_result.btcer_id", "test_run_step_result.is_latest", "test_run_step_result.record_status",
+      "test_run_step_result.colour", "test_run_step_result.field_value", "test_run_step_result.total_step_result_count"
+    ]
+  },
+  "prerequisite_findings": {
+    "what_it_needs": "step_id: the numeric `id` of a row in the case's test_case_steps array (from get_test_case_detail), NOT its `order`/position and NOT a result id or a test_run_step_result id.",
+    "obtainable_read_only": true,
+    "how": "get_test_case_detail(project_id, folder_id, test_case_id) -> data.test_case.test_case_steps[].id. folder_id (764138 for both TC-54485/86) was itself sourced from test_case_folder_id on the run's case-grid rows.",
+    "note": "Unlike the sibling capability update_latest_test_result_for_test_case, this endpoint does NOT resolve anything by looking up 'the latest result' first - it is a CREATE against explicit path params (project_id/test_run_id/test_case_id/step_id), so it has no dependency on the same blind lookup that 404s there. It is NOT vulnerable to that sibling's failure mode, and the write here succeeded cleanly on the first attempt, confirming that."
+  },
+  "duplicate_mapping_row_finding": {
+    "severity": "primary finding - undeclared and serious",
+    "what_happened": "ONE call to create_step_result_v1 persisted TWO separate case-level result rows for TC-54485 in TR-9110, not one: id 2150424076 (carries the real test_run_step_result payload for step 12372581) and id 2150424077 (created ~140ms later per created_at, test_run_step_result: null, otherwise identical status/description).",
+    "evidence_1": "get_test_results_for_test_case(TC-54485/TR-9110) returned 3 rows post-write (was 2 pre-write): newest-first order is [2150424077 (step_result null), 2150424076 (step_result populated), 2150424062 (pre-existing, from an earlier sibling probe)].",
+    "evidence_2": "get_test_cases_for_v1_test_run(TR-9110) returned 6 rows post-write (was 5 pre-write), with TC-54485 (test_case_id 1985019) appearing TWICE - once as mapping_id 2150424076, once as mapping_id 2150424077 - both with identical latest_status 'passed' and no configuration to distinguish them. The pre-write mapping_id (2150424062) is gone from the listing entirely, replaced by two new ones instead of one.",
+    "why_it_matters": "Per get_test_results_for_test_case's own guidance, 'newest first: the first entry is the latest attempt, and it is exactly the one the PATCH-latest capability edits' - so the row a future 'latest result' consumer would resolve to (2150424077) is precisely the one WITHOUT the step outcome that was just logged. The run's per-case grid also now shows one case as two indistinguishable rows, breaking the one-row-per-case(-config) invariant every other run listing in this campaign has held.",
+    "conclusion": "This is a bigger and more specific instance of the already-known mapping_id instability: not just 'the id shifts to the new result', but 'one write silently fans out into two distinct persisted rows', undeclared anywhere in the contract."
+  },
+  "status_id_inconsistency_finding": {
+    "what_was_sent": "status: \"passed\" (name only, no status_id)",
+    "ids_observed_for_the_SAME_row_id_2150424076": {
+      "invoke_write_response": 318610,
+      "get_test_cases_for_v1_test_run_reread": 318610,
+      "get_test_results_for_test_case_reread": 318637
+    },
+    "conclusion": "Extends the already-flagged duplicate-option-id pattern (previously 318612 -> 318639 for 'Blocked') to 'Passed' as well: two different numeric ids (318610, 318637) both render as the display value 'Passed', and which one a given read returns depends on which endpoint you ask, not on which row. The nested test_run_step_result.status_id was consistently 318610 everywhere it appeared."
+  },
+  "self_misreport_finding": {
+    "field": "created_at / updated_at for result id 2150424076",
+    "invoke_write_response": { "created_at": "2026-09-22T05:30:31.201Z", "updated_at": "2026-09-22T05:30:31.340Z" },
+    "get_test_results_for_test_case_reread": { "created_at": "2026-09-22T05:30:31.000Z", "updated_at": "2026-09-22T05:30:31.000Z" },
+    "conclusion": "The write response's own timestamps for the row it just created do not match a subsequent read of the identical row id. Consistent with the campaign's running finding that a write's own response cannot be trusted and must be verified by reading back - this is at least a sixth capability caught doing this."
+  },
+  "inherited_pattern_checks": {
+    "configuration_id": "Absent (key entirely missing, not null) from every response sampled for this write: the invoke response body and both read-backs. Now confirmed on a third result for TC-54485/TC-54486, same systemic gap as previously logged.",
+    "custom_fields": "Declared as an object at /test_run_step_result/custom_fields; every response returned [] (empty array) at the case level - same systemic mismatch as previously logged, reaffirmed here.",
+    "links_self": "Did NOT reproduce the earlier bug this time: links.self for both 2150424076 and 2150424077 correctly pointed at their own id (\"/api/v1/projects/379335744/test-results/<own id>\"), not an unrelated id. Still 2-for-2 on the prior sightings (9990220142, 9990220143), not 3-for-3."
+  },
+  "evidence_pair_untouched": "TC-54458 (1975349) and TR-9062 were never referenced by any call in this probe. Re-confirmed via the pre- and post-write get_test_cases_for_v1_test_run reads: TC-54458's mapping_id remained 2150424058 and latest_status remained 'untested' throughout.",
+  "notes": "create_step_result_v1 genuinely WORKS for its stated purpose on the first attempt: it logged a real step-level outcome against test_case_steps id 12372581 on TC-54485, and get_test_results_for_test_case subsequently returned that step's own row - test_run_step_result - populated for the first time in this entire campaign (previously declared but never seen with real data). Its shape: {id, status, status_id, step_mapping_id, btcer_id, is_latest, record_status, created_at, updated_at, colour, field_value, step, result, test_data, order, total_step_result_count} - step_mapping_id is the step_id you sent, and btcer_id is the id of the case-level result row it is nested under.\n\nHowever the call is not clean: it silently created TWO case-level result rows from one invocation (2150424076 with the step data, 2150424077 without it and now the 'newest' row that a latest-result consumer would pick), duplicated TC-54485's presence in the run's case grid (5 rows -> 6, one case shown twice with identical status and nothing to tell the rows apart), and reported a status id (318610) for its own write that a different read endpoint reports as 318637 for the same row - all undeclared. Combined with mismatched created_at/updated_at between the write response and a reread of the same id, this is a clear DRIFT verdict: the documented single-result-per-call contract does not hold, even though the headline step-logging behavior itself functions correctly and was NOT subject to the sibling's blind 'latest result' 404 (this capability creates via explicit path params, it does not look anything up first).\n\nTC-54458/TR-9062 (the campaign's evidence pair) were never touched. TC-54486 was left untouched by this probe (its mapping_id remained 2150424064 in both baseline and post-write reads) - only TC-54485 was written to."
+}

@@ -37,7 +37,7 @@
       "type": "ABSENT",
       "description": "string (empty)",
       "owner": "ABSENT",
-      "assignee": "string (plain email, e.g. \"ing@bsstag.com\") on TR-9062/TR-9058; null on TR-9061 (no assignee) — never an object",
+      "assignee": "string (plain email, e.g. \"probe-user@example.invalid\") on TR-9062/TR-9058; null on TR-9061 (no assignee) — never an object",
       "environment": "ABSENT",
       "overall_progress": "object, but shape diverges hard from contract: contract declares {untested,passed,retest,failed,blocked,skipped,in_progress} (all-lowercase, always-present keys); actual is {\"Untested\": 4} — a single capitalized key, only the statuses with nonzero counts appear",
       "overall_progress_by_status_id": "ABSENT",

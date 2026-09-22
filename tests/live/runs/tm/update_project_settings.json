@@ -1,0 +1,57 @@
+{
+  "capability": "update_project_settings",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:41:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope — explicitly the throwaway probe project, NOT the load-bearing fixture PR-2005",
+      "source": "user-specified",
+      "capability": null,
+      "produced": { "project_id": 379339429, "project_ref": "PR-2011 / __mcp-probe-project-20260921" }
+    },
+    {
+      "step": 2,
+      "why": "read baseline settings on PR-2011 before any write, per instruction to record baseline in setup[]",
+      "source": "capability",
+      "capability": "get_project_settings",
+      "arguments": { "path_params": { "project_id": 379339429 }, "query": { "in_review_count": "true" } },
+      "produced": { "success": true, "project_settings": [] },
+      "note": "PR-2011 has NO stored settings rows at all — same empty state as PR-2005 (379335744), whose own get_project_settings baseline (tests/live/runs/tm/get_project_settings.json) also returned {success:true, project_settings:[]} with info/meta_data absent. So the two projects' baselines are IDENTICAL (both fully unconfigured / at group defaults) — a fresh probe-created project shows no divergence from the fixture project here, because the fixture itself was never configured either. Nothing to flag as 'probe project defaults differ from real fixture', since the fixture has no configured defaults to compare against."
+    }
+  ],
+  "attempts": [
+    {
+      "attempt": 1,
+      "arguments": {
+        "path_params": { "project_id": 379339429 },
+        "body": { "preferred_jira_host": "https://mcp-probe-test.atlassian.net" },
+        "user_permission": "granted",
+        "change_summary": "Probe write: set preferred_jira_host on throwaway project PR-2011 to an inert placeholder URL to test PUT-vs-PATCH semantics on project settings."
+      },
+      "status": 200,
+      "result": "success — {success:true, project_settings:[{\"preferred_jira_host\":\"https://mcp-probe-test.atlassian.net\"}]}",
+      "note": "First attempt succeeded immediately; no retries needed."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379339429 },
+      "body": { "preferred_jira_host": "https://mcp-probe-test.atlassian.net" }
+    },
+    "status": 200,
+    "response_keys": ["success", "project_settings"],
+    "item_shape": {
+      "project_settings": "array of one single-key object per setting written, e.g. [{\"preferred_jira_host\": \"<value>\"}] — matches the declared write-response shape, which the contract explicitly notes DIFFERS from get_project_settings' single flattened object at element 0."
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "SETTING CHOSEN: preferred_jira_host (an inert Jira-site display/naming preference — no mail, no invites, no entitlement or retention impact) as the ONE setting changed, per instruction to avoid review/e-signature/timer/entitlement fields. review_approve was deliberately NOT touched: enabling it would gate later writes across the campaign, so per instruction I only note its presence in the body schema (Team Pro-gated, 422 otherwise) without invoking it.\n\nPUT-VS-PATCH — SETTLED, CONFIRMED PARTIAL UPDATE (PATCH semantics), with a real (not just declared) two-step test: (1) baseline on PR-2011 was project_settings:[] (nothing stored). (2) Wrote ONLY preferred_jira_host → get_project_settings read back exactly {preferred_jira_host: \"https://mcp-probe-test.atlassian.net\"}, info.count=1. (3) Wrote a SECOND, different setting — tc_sharing:\"true\" — in a separate call that did NOT resend preferred_jira_host. The write response for step 3 echoed only {\"tc_sharing\":true} (one-object-per-setting-written, as declared). (4) Read all settings back again: {success:true, project_settings:[{\"tc_sharing\":true,\"preferred_jira_host\":\"https://mcp-probe-test.atlassian.net\"}], info:{count:2,...}}. preferred_jira_host SURVIVED a write that did not mention it. This is the strong version of the test (an empty baseline alone would have been inconclusive, since a single-key body trivially looks the same under PUT or PATCH when nothing pre-existed to wipe) — the second write proves omitted keys are preserved, not reset. VERDICT: this is genuine partial-update (PATCH-like, upsert-per-attribute-row) semantics, matching the capability's own documented guidance ('This is a partial update: only the keys you send are touched, and the others keep their stored values. It does NOT reset omitted settings.'). No disaster scenario observed: toggling one flag did not silently reset any others.\n\nDRIFT FOUND — value typing contradicts documented guidance: the contract explicitly states 'Values are stored as strings in an EAV table, so send booleans as the strings \\\"true\\\"/\\\"false\\\"; that is also how they read back' and separately (on the read side) 'Every value is stored as a string ... booleans come back as \\\"true\\\"/\\\"false\\\"'. Observed reality: tc_sharing was sent as the string \"true\" but both the WRITE response ({\"tc_sharing\":true}) and the subsequent GET response ({\"tc_sharing\":true, ...}) returned it as a native JSON boolean, not the string \"true\". preferred_jira_host (a genuinely string-typed field) round-tripped correctly as a string, so this is specifically a boolean-vs-string coercion drift, not a blanket failure — the EAV-store 'everything is a string' claim in the guidance is false for at least this field. This is the basis for the DRIFT verdict.\n\nCROSS-CAPABILITY PROJECT-SERIALIZER CHECK: not applicable here — neither the update_project_settings write response nor the get_project_settings read response embeds a project object of any kind (no data.project, no nested project fields at all); both are pure settings payloads ({success, project_settings[, info, meta_data]}). So this capability cannot be compared against create_root_folder_v1's degraded embedded-project serializer or create_project_v1's clean one — there is no third variant to report, because there is no embedded project object at all in this response family.\n\nOTHER CROSS-CUTTING CHECKS: (a) Unfalsifiable settings blob — does NOT apply; the write body has 22 explicitly enumerated named settings (not a bare {type:object}), so DRIFT/PASS remains falsifiable. (b) Entitlement-gate-as-200-{success:false} — NOT exercised by this probe by design (review_approve and the two eligible-review-status fields, which carry the Team Pro gate, and part_11_reauth*, which carries the Enterprise gate, were deliberately never sent, to avoid gating later writes and per the explicit instruction not to enable review-approve). This probe therefore cannot confirm or refute that pattern for update_project_settings specifically; the sibling defect referenced in the campaign was observed on a different capability. (c) Error-envelope drift (3/11 declared shapes correct) — not exercised; both attempts here were clean 200s with no errors, so no error envelope was observed for this capability in this run. (d) No destructive or entitlement-changing field was touched; test_case_id_prefix, timer_*, part_11_*, and Jira/Azure allow-list fields were all left untouched. Final live state of PR-2011 after this probe: project_settings = {tc_sharing: true, preferred_jira_host: \"https://mcp-probe-test.atlassian.net\"} — left as-is since PR-2011 is expendable and no revert was requested."
+}

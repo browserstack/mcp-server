@@ -1,0 +1,106 @@
+{
+  "capability": "create_test_result_for_test_case",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:24:08Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Resolve a valid status_id for 'Passed' in this project before writing -- v1 create takes status_id (an integer), not a status name, and no capability lists a project's configured statuses directly. Read the 14 pre-existing results on TC-54458/TR-9062 (read-only, not a write against the forbidden case) to get a live example.",
+      "source": "invoked",
+      "capability": "get_test_results_for_test_case",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9062", "test_case_id": 1975349 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "count": 14, "result_status": { "id": 318637, "field_value": "Passed", "internal_name": "passed", "field_name": "status", "colour": "#059669" } }
+    },
+    {
+      "step": 2,
+      "why": "Baseline the target run row: confirm TC-54485's mapping_id, folder id (needed for get_test_case_detail's path) and pre-write latest_status, and reconfirm TC-54486's mapping_id (2150424053, the concurrent probe's row) so it is never touched.",
+      "source": "invoked",
+      "capability": "get_test_cases_for_v1_test_run",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" }, "query": { "p": 1, "per_page": 100 } },
+      "status": 200,
+      "produced": {
+        "TC-54485": { "id": 1985019, "mapping_id": 2150424052, "test_case_folder_id": 764138, "latest_status": "untested" },
+        "TC-54486": { "id": 1985020, "mapping_id": 2150424053, "latest_status": "untested (untouched, belongs to a concurrent probe)" }
+      }
+    },
+    {
+      "step": 3,
+      "why": "Baseline read of the high-value test: confirm TC-54485's test_run_results_count before any write, so the post-write value is a meaningful before/after.",
+      "source": "invoked",
+      "capability": "get_test_case_detail",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985019 } },
+      "status": 200,
+      "produced": { "test_run_results_count": 0 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985019 },
+        "body": {
+          "status_id": 318637,
+          "description": "Probe write from capability-registry live-probe suite: recording a passed outcome on TC-54485 (mapping_id 2150424052) in TR-9110 to verify create_test_result_for_test_case (v1) end-to-end and to test whether the test_run_results_count undercount reproduces on a second case.",
+          "mapping_id": 2150424052
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "N/A -- built exactly as declared: test_result-nested fields (status_id, description) sent flat under their own declared names, letting invokeCapability apply the /test_result/ re-nesting; mapping_id sent at the top level per its own json_path. Succeeded on the first attempt, no wrapper needed. New result id 2150424062."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985019 },
+        "body": {
+          "status_id": 318637,
+          "description": "Probe write (bad-id check): same target TC-54485/TR-9110 but a deliberately bogus mapping_id (999999999999), to see whether a wrong mapping id gives a clean 4xx.",
+          "mapping_id": 999999999999
+        }
+      },
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "N/A -- deliberate negative-path probe (not a retry of attempt 1). A nonexistent mapping_id is rejected with a bare 404 {success:false} and no error code/message. Verified by re-reading TC-54485's result history afterward: still exactly 1 result (2150424062) -- the bad mapping_id was not silently accepted against test_case_id as a fallback, and no phantom row was created."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_run_id": "TR-9110", "test_case_id": 1985019 },
+      "body": {
+        "status_id": 318637,
+        "description": "Probe write from capability-registry live-probe suite: recording a passed outcome on TC-54485 (mapping_id 2150424052) in TR-9110 to verify create_test_result_for_test_case (v1) end-to-end and to test whether the test_run_results_count undercount reproduces on a second case.",
+        "mapping_id": 2150424052
+      }
+    },
+    "status": 200,
+    "response_keys": ["data.success", "data.test-result", "data.unique_issues"],
+    "item_shape": {
+      "success": "true",
+      "test-result.id": "2150424062 -- integer, the new result's id",
+      "test-result.status": "null -- DECLARED type string (example 'passed'), ACTUAL null on the create response itself. The same result read back moments later via get_test_results_for_test_case DOES show status:'passed' -- so the create response under-populates a field its own sibling read populates correctly.",
+      "test-result.result_status": "{id:318637, field_value:'Passed', internal_name:'passed', field_name:'status', colour:'#059669', value_category:'completed'} -- full object, matches declared shape",
+      "test-result.description": "exact echo of sent description",
+      "test-result.updated_by": "{id:2522,...} -- UNDECLARED key, not in the 201 schema's test-result properties at all",
+      "test-result.links.self": "'/api/v1/projects/379335744/test-results/9990220142' -- the id in this self link (9990220142) does NOT match the created result's own id (2150424062); same anomaly as the discard-cluster pattern elsewhere in this suite, flagged here as an undeclared-behavior observation rather than a schema-type drift since the field is still a well-formed string",
+      "test-result.configuration_id": "ABSENT -- declared required-nullable field, key not present at all",
+      "test-result.custom_fields": "ABSENT -- declared type object, key not present at all (contrast: the case-scoped read of this same result DOES return custom_fields, as an empty ARRAY not object -- see contract notes)",
+      "test-result.test_run_step_result": "ABSENT -- declared nullable object, key not present at all"
+    }
+  },
+  "contract": {
+    "required": ["status_id (effectively required; a missing value is accepted and leaves the result unstatused, per the capability's own guidance)", "mapping_id (top level; used here to target TC-54485's exact case x configuration row)"],
+    "json_path": "status_id/description/custom_fields/issues/attachments/elapsed_time are declared one level under /test_result/<field>; mapping_id and configuration_id are declared at the TOP level, not nested. Body was sent FLAT (status_id, description, mapping_id all top-level) and invokeCapability applied the /test_result/ re-nesting itself -- worked on the first attempt, no wrapper needed.",
+    "declared_missing": [
+      "response.data.test-result.configuration_id (declared, key entirely absent on the 201/200 create response)",
+      "response.data.test-result.custom_fields (declared object, key entirely absent on the create response; present as an empty ARRAY -- not object -- on the case-scoped read of the same row)",
+      "response.data.test-result.test_run_step_result (declared, key entirely absent on the create response)"
+    ],
+    "undeclared_returned": [
+      "response.data.test-result.updated_by (not in the declared 201 schema's test-result properties)"
+    ]
+  },
+  "notes": "WRITE SUCCEEDED AND WAS VERIFIED IN STORAGE TWICE OVER. New result id 2150424062, on TR-9110 / TC-54485 (mapping_id 2150424052 at write time), project PR-2005 (379335744). TC-54458/TR-9062 (the campaign's 14-result case) and TC-54486/mapping 2150424053 (the concurrent probe's row) were never referenced by any write argument in this probe -- only read, for status_id resolution and baseline confirmation respectively.\n\n1) HTTP STATUS DRIFT: the capability's own 201 response is documented as the success schema, but the live create returned HTTP 200, not 201. Same '200 not 201' drift already seen on this capability's v2 sibling (create_test_results_for_test_run_v2), now confirmed on v1 too, in the opposite direction from what that endpoint's docs imply for v1 (v1's own docs say 201; v2's docs correctly predict 200).\n\n2) THE HIGH-VALUE TEST -- ANSWER: 'CORRECTLY FLIPPED, NOT A GENERAL FIELD-LEVEL BUG.' get_test_case_detail reported test_run_results_count:0 for TC-54485 before the write and test_run_results_count:1 immediately after it -- the counter moved correctly on this second case. TC-54458's persistent test_run_results_count:0-despite-14-results is therefore NOT reproduced here: the undercount is specific to TC-54458's own data/history (it has been repeatedly overwritten by many prior probes across multiple sessions -- see its 14 identical-description rows), not a systemic field-level bug in how test_run_results_count is computed. This narrows the campaign's strongest finding: report it as case-specific until/unless a THIRD case reproduces it.\n\n3) MAPPING_ID IS NOT STABLE ACROSS A WRITE -- NEW FINDING, POTENTIALLY SIGNIFICANT. get_test_cases_for_v1_test_run's own guidance frames mapping_id as the fixed case x configuration identifier ('the id every bulk operation on this run takes'). Empirically: TC-54485's mapping_id was 2150424052 before the write and 2150424062 AFTER it -- and 2150424062 is exactly the new result's id, not a stable row identifier that survived the write. The same pattern hit the concurrent probe's untouched row: TC-54486's mapping_id moved from 2150424053 to 2150424064 between the two get_test_cases_for_v1_test_run reads in this probe, coinciding with that other probe recording a 'Blocked' result on it. So this endpoint's 'mapping_id' column is actually reporting something closer to 'latest_result_id' for executed rows, not a case x configuration mapping that stays constant across the row's execution history -- despite being the field this whole campaign has been told to treat as the stable id for targeting bulk operations. A caller who reads mapping_id once, writes a result, then reuses the SAME mapping_id for a second write (e.g. an edit) would be reusing a now-stale value. Recommend routing this to the team that owns the mapping_id contract -- it may explain some of the bulk-route id confusion already logged elsewhere in this campaign.\n\n4) BAD MAPPING_ID -> CLEAN 4XX, NO WRAPPER TEXT. A deliberately nonexistent mapping_id (999999999999, targeting the same otherwise-valid project/run/case) is rejected with a bare 404 {success:false} -- no error code, no message, and critically NOT a silent 200 or a fallback onto test_case_id. Verified by re-reading TC-54485's result history immediately after: still exactly one result (2150424062), so the bad id did not leave any phantom row. This is a fourth distinct behavior in the 'wrong id' family this campaign has now catalogued for bulk/mapping routes (silent 200 / bare 404 / 502 / here: bare 404 again, but on a non-bulk single-create route).\n\n5) FIELD-BY-FIELD DRIFT ON THE CREATE RESPONSE ITSELF (against its own declared 201 schema): configuration_id, custom_fields and test_run_step_result are all declared but entirely ABSENT from the create response (not null -- missing keys). updated_by is returned but UNDECLARED. test-result.status came back null on the create response despite being declared as a string (example 'passed') -- the same result, read back seconds later via get_test_results_for_test_case, DOES show status:'passed' correctly, so the create call's own echo under-reports a field its sibling read populates. test-result.links.self pointed at test-results/9990220142, not the created result's own id 2150424062 -- an internal inconsistency in the write response, flagged as an anomaly rather than a type-level schema drift.\n\n6) INHERIT-AND-CHECK, CONFIRMED ON A SECOND ROW: reading the created result back via get_test_results_for_test_case (case-scoped v1 read) reproduces the exact previously-logged drift -- configuration_id is declared but its key is ENTIRELY ABSENT from the row (not present at all, not even null), and custom_fields is declared type object but returns as an empty ARRAY ([]) instead. Both match the standing finding on get_test_results_for_test_case exactly, now confirmed against a freshly created row rather than historical data. result_status on this read carries the full 5-field object (id/field_value/internal_name/field_name/colour) -- the v1 shape, as expected, distinct from v2's field_value-only cut-down shape.\n\n7) LATEST_STATUS FLIPPED CORRECTLY: get_test_cases_for_v1_test_run's TC-54485 row moved from latest_status:'untested' (pre-write) to latest_status:'passed' (post-write) -- confirming, as the task instructed to check, that creating a real result does flip latest_status correctly for this case, consistent with 'never executed' being reliably read from latest_status rather than from a non-null result id.\n\nVERDICT RATIONALE: the write itself functioned correctly -- record created, persisted, retrievable, and both read-side counters (test_run_results_count, latest_status) updated accurately. Marked DRIFT per the task's standing rule that any declared-but-absent field or any undeclared-but-returned field is DRIFT regardless of severity: three declared create-response fields (configuration_id, custom_fields, test_run_step_result) are missing outright, one undeclared field (updated_by) is returned, the declared HTTP code (201) does not match the live one (200), and the create response's own status field returns null where a sibling read of the identical row returns 'passed'. Severity is LOW across the board (nothing here stopped the write, the count, or the status flip from working), but each is a genuine contract mismatch and is reported rather than folded into a false PASS."
+}

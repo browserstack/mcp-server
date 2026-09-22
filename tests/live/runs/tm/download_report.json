@@ -1,0 +1,33 @@
+{
+  "capability": "download_report",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "report id and project id were provided directly by the probe assignment (report 10393 / identifier SC-492, our own report created by an earlier campaign in project 379335744 / PR-2005), not obtained via the id-pool fixture or invoked here",
+      "source": "given",
+      "capability": null,
+      "produced": { "project_id": 379335744, "report_id": 10393, "identifier": "SC-492" }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "report_id": 10393 },
+      "body": { "file_type": "csv" }
+    },
+    "status": 200,
+    "response_keys": ["channel", "success"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["file_type"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "READ vs WRITE: describeCapability declares mode:\"write\" despite the name/intent being read-shaped (\"download\"). Confirmed correct on the evidence: the call does not fetch or return existing bytes — it kicks off a new async export job in a background worker each time it is invoked (a side-effecting action with its own job/channel, not an idempotent retrieval), so 'write' is the right classification even though a caller experiences it as 'downloading a report'. Invoked with user_permission granted and a change_summary per the write protocol.\n\nInvoke succeeded first attempt, zero drift: declared response {channel, success} matched the actual body exactly -> {\"channel\":\"996cbba6-3e8d-4417-bdb7-dc8919d52998\",\"success\":true}. No file bytes, base64 blob, or redirect came back at any point -- so the 'if it returns binary' question does not arise here, unlike import_dataset_c_s_v's multipart-send gap this is not a JSON-transport casualty, it never attempts to carry the file at all.\n\nSTRUCTURAL FINDING -- this is a THIRD confirmed instance of the 'mints a handle nothing can redeem' pattern already found twice in this campaign (get_report_attachment_url: structurally unreachable, no capability produces its attachment_id; export_dashboard_analytics: export_id is a correlation token only, generic status/download endpoints report pending forever / 404). download_report's own contract is honest about this in its guidance text ('no endpoint to poll it and no way to fetch the artefact through the API'), so this is not a contract-accuracy defect in this one capability -- the declared behaviour and the live behaviour agree exactly. It is a coverage gap in the profile as a whole: the input side works (project_id + report_id resolve fine against our real report 10393/SC-492), but the output side mints a websocket-pushed 'channel' uuid that no other capability in the tm profile can subscribe to, poll, or redeem. This capability is already listed (previously undocumented as untested) in tests/live/findings/unobservable-jobs-systemic.md, which has been updated with this run's concrete confirmation.\n\nPREREQUISITE vs DEFECT: report 10393/SC-492 is deliberately unscheduled (frequency:null, no mail_to) so it plausibly has never been generated as an output before. That is irrelevant to this call's own semantics, though -- download_report always starts a fresh export job on every invocation; it does not read a previously-produced artifact, so there is no 'nothing to download yet' precondition to distinguish from a bug. Verdict is UNVERIFIED rather than PASS/DRIFT for the same reason as the sibling capabilities in the systemic finding: the suite judges writes on whether the effect (a usable file) actually landed, and that is unobservable by construction here -- 'the request was accepted' is the most that can honestly be claimed.\n\nNO EMAIL TRIGGERED: file_type=csv only initiates a background export pushed over a realtime channel; the contract exposes no recipient list, send flag, or scheduling field for this capability (those live on the held-back send_report_email_now_v1 sibling, not here), and report 10393 remains unscheduled/no mail_to throughout. Nothing in this probe could have mailed anything.\n\ncreate_report/update_report shared-serializer check: out of scope for this probe (download_report's own response has no mail_to, project_ids, or included_projects fields to compare -- its declared and actual shape is just {channel, success}), so no evidence either way was produced here on that separate finding."
+}

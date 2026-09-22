@@ -1,0 +1,104 @@
+{
+  "capability": "bulk_edit_test_cases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:11:40Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool/task",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "target case for this probe, in __scratch__",
+      "source": "task",
+      "capability": null,
+      "produced": { "test_case_id": 1985020, "identifier": "TC-54486", "folder_id": 764138, "folder_name": "__scratch__" }
+    },
+    {
+      "step": 3,
+      "why": "verify state BEFORE writing anything — task flagged that a previous attempt at this probe was stopped mid-outage and may have already committed",
+      "source": "invoked",
+      "capability": "get_test_case_by_integer_id_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985020 } },
+      "status": 200,
+      "produced": {
+        "confirms_prior_commit": true,
+        "history_count": 2,
+        "preconditions": "bulk_edit_test_cases probe 20260921",
+        "tags": [],
+        "template": "test_case_steps", "template_id": 1164, "template_name": "Test Case Steps", "template_step_type": "test_case_steps",
+        "test_case_steps[0].id": 12372583,
+        "case_type.id": 318599, "priority.id": 318591, "status.id": 318605,
+        "note": "preconditions already carried a value dated the PREVIOUS day (20260921) and history_count was already 2 (baseline create = 1) — the earlier attempt at this exact probe had in fact written, despite apparently being interrupted. This read became the true pre-probe baseline; nothing here was assumed clean."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "why": "main probe write, deliberately including one nonexistent case id alongside TC-54486 to test partial-failure behavior in the same call",
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "ids": [1985020, 999999999], "custom_fields": {}, "preconditions": "bulk_edit_test_cases semantics probe 20260922" }
+      },
+      "status": 404,
+      "error_verbatim": "{\"success\":false}",
+      "note": "Whole call rejected, bare body, no error/message/code field. 404 is NOT among this capability's declared responses (400/401/403/422/500) — an undeclared status on an undeclared-shape body. Distinct from both prior partial-failure findings on record: create_bulk_test_cases_v1 silently discarded the bad row under a 200, and bulk_assign_test_cases_to_test_run failed the whole call with an undeclared 502. This is a THIRD distinct behavior: whole-call rejection with an undeclared 404."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": { "ids": [1985020], "custom_fields": {}, "preconditions": "bulk_edit_test_cases semantics probe 20260922" }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "folders", "info", "filter_details", "workflow"],
+    "item_shape": {
+      "test_cases[].id/identifier": "1985020 / TC-54486 (present among 29 rows — the endpoint's 200 body is the WHOLE unfiltered project listing, not just the edited case; verified only TC-54486's preconditions changed, all 28 other rows including TC-54455/54456/54458/54484/54485/54487/54489/54490/54491 were byte-identical to their pre-probe state, i.e. the EDIT itself was correctly scoped to `ids` even though the returned listing is unscoped)",
+      "test_cases[].preconditions": "'bulk_edit_test_cases semantics probe 20260922' — write applied, confirmed by independent read-back",
+      "test_cases[].template / .template_id / .template_name / .template_step_type": "'test_case_steps' / 1164 / 'Test Case Steps' / 'test_case_steps' — ALL SURVIVED, unchanged from pre-probe baseline, despite the request never mentioning template/template_id/template_name at all",
+      "test_cases[].test_case_steps": "[] in this write response despite step_count:1 on the same row — the real step (id 12372583) is intact and only visible via an independent get_test_case_by_integer_id_v1 read; the bulk-edit response's own test_case_steps does not reflect actual content",
+      "test_cases[].steps": "[] (declared field, always empty here too, matching the known sibling-field drift)",
+      "test_cases[].case_type/.priority/.status": "318599/318591/318605 (Other/Medium/Active) — unchanged, still in the lower id block, no cross-block movement from an edit that didn't touch them",
+      "test_cases[].case_type.value_category / .priority.value_category / .status.value_category / .automation_state.value_category": "all present (null/null/null/'manual'), none declared",
+      "test_cases[].case_type.valueDetails / .priority.valueDetails / .status.valueDetails / .automation_state.valueDetails": "present (array of {id, custom_values_id, project_id, record_status, dataset_id}), entirely undeclared",
+      "test_cases[].history_count / .test_run_results_count / .test_run_results_issues_count": "null in the write response itself, real integers (4 / 0 / 0) on the very next independent read — transient-null-in-write-response pattern, same as edit_test_case_v1",
+      "top-level 'folders' and 'workflow'": "both present, neither declared (declared 200 top-level keys are success/info/test_cases/filter_details only)"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path)",
+      "custom_fields (body, object — required key even when empty; omitting it 500s, per guidance, not independently re-verified here)",
+      "ids OR select_all (body — at least one; empty selection is a bare 400)"
+    ],
+    "json_path": {
+      "ids": "/test_case/ids",
+      "select_all": "/test_case/select_all",
+      "custom_fields": "/test_case/custom_fields",
+      "preconditions": "/test_case/preconditions",
+      "estimate": "/test_case/estimate",
+      "template": "/test_case/template",
+      "folder_id (inside test_case, MOVES cases)": "/test_case/folder_id"
+    },
+    "declared_missing": [],
+    "undeclared_returned": [
+      "top-level: folders, workflow",
+      "test_cases[].value_category (on case_type/priority/status/automation_state)",
+      "test_cases[].valueDetails (on case_type/priority/status/automation_state)",
+      "test_cases[].is_shared",
+      "test_cases[].estimated_duration_seconds",
+      "test_cases[].template_id, .template_name, .template_step_type",
+      "test_cases[].test_run_results_count, .test_run_results_issues_count",
+      "test_cases[].test_case_dataset",
+      "test_cases[].attachments",
+      "test_cases[].step_count"
+    ]
+  },
+  "notes": "SEMANTICS VERDICT vs. its two documented single-case cousins: bulk_edit_test_cases behaves like edit_test_case_partial_v1, NOT like edit_test_case_v1. Two successive bulk edits (preconditions, then estimate) that never mentioned template/template_id/template_name left all three fully intact ('test_case_steps'/1164/'Test Case Steps', unchanged from the pre-probe baseline) — this route does NOT have edit_test_case_v1's silent template-reset defect. Steps kept their id (test_case_steps[0].id stayed 12372583 across every read/write in this probe). The option-id block (case_type 318599/priority 318591/status 318605) stayed put in its own (lower) block throughout — no cross-block corruption from unrelated edits. So for the one gap the task named, bulk_edit_test_cases is clean: PATCH-like and non-destructive on template/steps/option-ids, matching edit_test_case_partial_v1's behavior rather than edit_test_case_v1's.\n\nSIBLING COMPARISON (bulk_edit_test_cases vs bulk_edit_test_cases_v2 vs bulk_edit_test_cases_in_test_run), from describeCapability only (no invokes on the siblings):\n\n1. bulk_edit_test_cases (this one): entity test_case, project-wide selection (ids/select_all/q/folder_id/folders), every field is a flat REPLACE — tags and issues REPLACE the whole list (read-modify-write is on the caller), custom_fields keyed by id with no add/remove concept. Uniquely has: template (closed 4-value enum, silently dropped if invalid), estimate (accepted but a confirmed no-op — see below), comment, cross-folder selection via `folders`, and `test_case.folder_id` to MOVE the selected cases. Cannot touch name/description/expected_result/steps at all.\n2. bulk_edit_test_cases_v2: registered under entity 'tag' (an odd taxonomy artifact — its own intent string calls it out explicitly as the '(PREFERRED bulk write)'). Same selection shape, but every settable field (tags, issues, custom_fields, priority, status, case_type, automation_state/status, owner, preconditions, review_status, reviewers) is wrapped as {operation: add|remove|replace|empty|ignore, value}. This is a genuine, material improvement over v1 for tags/issues/custom_fields specifically — non-destructive add/remove without first reading the existing list. In exchange v2 drops template, estimate, comment, folder-move, and the cross-folder `folders` selector entirely.\nDecisive answer: v1 and v2 are NOT an exact duplicate pair (unlike create_test_cases/create_test_case_v1) — each has settable fields the other lacks. But for the fields they share, v2 is explicitly marked preferred and is strictly safer (add/remove vs full-replace); v1 is legacy for that overlap and should only be reached for when the caller actually needs template/estimate/comment/folder-move/cross-folder selection, none of which v2 exposes.\n3. bulk_edit_test_cases_in_test_run: entity nominally test_case, but it is a different kind of operation altogether — its selection unit is mapping_ids (the run's per-case mapping id; NOT a test-case id, NOT TC-NNN — sending a case id 'silently matches nothing' per its own guidance), the body is completely FLAT (no test_case wrapper concept at all, unlike both project-wide siblings), and every field it writes (status_id/status, assignee_id, description/comment, issues, attachments, custom_fields) lands on the EXECUTION RESULT for that case inside that one run — the case's own name/priority/status/tags/template are untouched. It is not misnamed the way bulk_assign_test_cases_to_test_run was (that one claims to assign cases to a run but cannot map new cases in at all) — bulk_edit_test_cases_in_test_run genuinely edits 'test cases in a test run', just at the execution-result layer, not the test-case-entity layer. Still worth flagging: its name invites the same confusion the task warns about (reader assumes 'edit test cases' means the case's fields), when it is functionally closer to a bulk 'mark results' endpoint than to bulk_edit_test_cases/v2.\n\nPARTIAL-FAILURE FINDING (task's fourth data point): including one nonexistent case id (999999999) alongside TC-54486 (1985020) failed the WHOLE call: HTTP 404, body exactly {\"success\":false} — no error object, no message, no code. This is a THIRD distinct partial-failure behavior on record for this product, next to create_bulk_test_cases_v1 (silently discards the bad row, reroutes it, 200 success) and bulk_assign_test_cases_to_test_run (undeclared 502, whole call fails). 404 does not appear in bulk_edit_test_cases' declared error surface (400/401/403/422/500) at all, and the bare body doesn't match the declared error envelope shape ({success, error:{code,message,details}}) either — another hit on the 'error-envelope drift, 3 of 11 declared shapes correct' pattern. Re-running with only the valid id (1985020) succeeded immediately (200), confirming the 404 was specifically caused by the bad id in the selection, not some other malformed part of the body.\n\nWRITE-AND-DISCARD CLUSTER — tested `estimate` (the only cluster field this route can even set; expected_result/metadata/test_case_dataset are not in bulk_edit_test_cases' editable field list at all, so they could not be tested here). Sent estimate:'2h' on TC-54486. Result: 200 {success:true}; the write response's own listing already showed estimate:null (not merely a display lag); the independent get_test_case_by_integer_id_v1 read-back afterward also showed estimate:null; AND history_count did not increment at all between the preconditions-edit read and the estimate-edit read (stayed at 4), meaning the write created no new version whatsoever — a complete silent no-op end-to-end, not just an unreflected field. This is the 5th confirmed instance of the write-and-discard pattern (expected_result, estimate [single-case, already known], metadata, test_case_dataset, and now estimate on the bulk path too) — the contract's own guidance already half-admits this ('every read serialises estimate as null, so you cannot confirm it and should not report it as saved'), and this probe confirms it as a hard no-op, not merely unconfirmable.\n\nPRIOR-ATTEMPT VERIFICATION: read TC-54486 before making any write. It already carried preconditions = 'bulk_edit_test_cases probe 20260921' (dated the day before this session) and tags = ['__mcp-probe-mergetag-20260922-a','__mcp-probe-mergetag-20260922-b'] (tag names suggesting a bulk_edit_test_cases_v2 add-operation experiment), with history_count already at 2 before this probe's own first write. This confirms the earlier, apparently-interrupted attempt at this exact probe HAD committed writes — consistent with the task's warning that other 'failed' probes had in fact written. This probe's own writes touched only `preconditions` and `estimate`; tags were never sent in any of this probe's requests and their pre-existing value was left as found (no attempt made to revert prior state, since the task's scope is verification/reporting, not cleanup).\n\nINHERITED PATTERNS CHECKED (all confirmed present on this capability too, not new): `test_case_steps` declared as a single OBJECT in the 200 schema (background/feature/hashed_id/order/result/scenario/step/... as top-level keys) but always returned as an ARRAY — here the bulk-edit response's own array is `[]` despite the case genuinely having one step (`step_count:1`), while an independent single-case read shows the array populated with the real step object. The sibling `test_case.steps` field is `[]` throughout regardless. `value_category` (and, newly noted, the fuller `valueDetails` array) is undeclared on case_type/priority/status/automation_state option objects and present (mostly null) on every row.\n\nNothing was ever sent with `select_all`, `q`, `folder_id`, `folders`, or `test_case.folder_id` (the move-cases path) — those remain unexercised by this probe. TC-54485, TC-54487, TC-54489, TC-54490, TC-54491, TC-54484 (other probes' cases), __readonly__ 764093 / TC-54455 / TC-54456, and TC-54458 (the campaign's evidence case) were never referenced by any request this probe made — confirmed by diffing the full 29-row listing returned in the successful probe response against the pre-probe baseline: only TC-54486 differed."
+}

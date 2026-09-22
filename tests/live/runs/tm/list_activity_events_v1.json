@@ -1,0 +1,46 @@
+{
+  "capability": "list_activity_events_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:08:10Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    { "step": 1, "why": "project scope filter for the query", "source": "pool", "capability": null, "produced": { "project_id": 379335744 } }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "query": { "project_id": 379335744, "limit": 20 } },
+      "status": 403,
+      "error": "{\"success\":false,\"error\":\"Activity feed is not enabled\"}",
+      "changed": "Contract guidance says this exact 403 means the group feature flag is off, not a payload/permission issue. Retried with the group-wide form (no project_id) to check whether narrowing to a project was the problem."
+    },
+    {
+      "n": 2,
+      "arguments": { "query": { "limit": 20 } },
+      "status": 403,
+      "error": "{\"success\":false,\"error\":\"Activity feed is not enabled\"}",
+      "changed": "Same error with no filters at all, so it is not project-specific. Tried starred_only to see if a different query branch behaves differently."
+    },
+    {
+      "n": 3,
+      "arguments": { "query": { "starred_only": "true" } },
+      "status": 403,
+      "error": "{\"success\":false,\"error\":\"Activity feed is not enabled\"}",
+      "changed": "Identical 403 across all three query shapes confirms this is a group-level feature-flag gate in preprod, not a payload defect. Stopped retrying — no combination of documented query params can get past this gate."
+    }
+  ],
+  "probe": {
+    "arguments": {},
+    "status": null,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Never reached a 200. Every query shape (project-scoped, group-wide, starred_only) returned the identical 403 {success:false, error:'Activity feed is not enabled'}, which the capability's own guidance documents as: 'A 403 ... means the feed is off for the group, not that the caller lacks permission.' This is a genuine environment precondition (group feature flag) that this read-only round cannot satisfy — enabling a feature flag is not something invokeCapability can do, and no write/destructive capability was invoked per the read-only constraint. Verdict is UNVERIFIED rather than BLOCKED: the contract's own guidance correctly predicted and explained this exact response, so nothing here suggests the index or spec is wrong. What's missing to verify PASS: an account/group in preprod with the activity feed feature flag enabled, so the 200 shape (events[], pagination{next_cursor,has_next_page,limit}, projects{}, optional no_starred_projects) can actually be exercised and its item shape checked against the declared (fully generic, untyped) events[] schema."
+}

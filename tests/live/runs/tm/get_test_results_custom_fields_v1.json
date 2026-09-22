@@ -1,0 +1,30 @@
+{
+  "capability": "get_test_results_custom_fields_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope — only required param the endpoint takes",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744}
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}, "query": {"p": 1}},
+    "status": 200,
+    "response_keys": ["success", "data", "info"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded (200), no failed attempts to record. Response body: {success:true, data:[], info:{page:1,page_size:30,count:0,prev:null,next:null}}. Project PR-2005/379335744 defines zero custom fields scoped to entity_type=TestResult, so `data` came back empty. Per the EMPTY-CASE RULE this is UNVERIFIED, not PASS: the declared item shape (id, field_type enum incl. legacy spellings, field_name, entity_type, field_user_name, optional, is_bulk_editable, is_filterable, links.self, is_required, plus optional placeholder/default_value/option_values/field_values/sort_options) was never exercised — no item was returned to check any of it against. The container itself (top-level success/data/info, with info.page/page_size/count/prev/next) matches the declared schema exactly even though data is empty, so there is no structural container mismatch to report here (no bare-array-vs-wrapped-object drift observed). WATCH-FOR fields (value_category, valueDetails, colour, entity_type on option objects): not applicable / not observed — no option_values or any item rows were returned, so undeclared option-descriptor fields could not be checked either way; this is a genuine gap, not a clean pass on that front. Entity-twin note: this capability is explicitly the TestResult-entity counterpart of the test-case custom-field read — its own guidance says it hard-codes entity_type=TestResult and that TestCase-scoped fields never appear here 'whatever the project', and the declared entity_type enum on items (TestCase/TestResult/TestExecution/Build) is what a caller would use to route field definitions to the right entity if items were ever returned. So the contract does tell a caller how to distinguish the two reads, but since this project has no TestResult custom fields defined, that entity_type discrimination could not be observed in a live response either. No other live TestResult (e.g. id 2150387456 on TR-9062/TC-54458, or the pool's TR-9075) has non-null custom field values to probe against, and this endpoint doesn't take a run/result id anyway — it lists field *definitions* for the project, not per-result values, so the pool's real test result is not usable to fill this gap."
+}

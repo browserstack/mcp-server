@@ -19,10 +19,10 @@ For an agent, this means their headline purpose is unconfirmable by construction
 | `initiate_export` | 5 | `{success, export_id}` | file collected from the Test Management UI's exports list | **No** — no status/download capability exists; `export_id` is redeemable only in the UI |
 | `generate_test_case_automation_v1` | 5 | (crashes — see below) | webhook stamps completion onto the case later | **No** — no companion status capability; `get_test_case_v2` exposes `automation_status` but has no field for the `lcnc_link`/build metadata the guidance describes |
 | `export_test_run_csv_v1` | 6 | `{channel, success}` | CSV built async, **pushed over a websocket channel** to the requester's web session | **No** — response "carries no file and no download link" per its own guidance |
-| `download_report` | — | — | same websocket-push architecture | **No** — documents the identical limitation |
+| `download_report` | — | `{channel, success}` | same websocket-push architecture | **No** — now live-probed (report 10393/SC-492, preprod, 2026-09-22): returned `{"channel":"996cbba6-3e8d-4417-bdb7-dc8919d52998","success":true}`, exactly the declared `{channel, success}` shape, zero drift. No status/poll/download capability in the profile accepts that `channel` |
 | `export_dashboard_analytics` | — | — | same | **No** — documents the identical limitation |
 
-The last two were not probed in any batch; they were found during `export_test_run_csv_v1`'s search for an artifact-fetch path, and their contracts **document the same limitation in their own text**.
+`export_dashboard_analytics` was not probed in any batch; it was found during `export_test_run_csv_v1`'s search for an artifact-fetch path, and its contract **documents the same limitation in its own text**. `download_report` has since been probed directly (see `tests/live/runs/tm/download_report.json`) and the live response confirms the prediction exactly: the `project_id`/`report_id` input side works fine (report 10393 exists, is ours, and the id was accepted), but the `channel` the call mints is, precisely like the other rows, unredeemable by anything else this index exposes — a third confirmed instance of the mint-a-handle-nothing-can-redeem pattern, not a second suspicion.
 
 Notably, the backing service's generic export machinery is documented as reporting **"pending forever"** and **404-ing on download** for these export types — so even the infrastructure that would normally provide polling does not serve them.
 

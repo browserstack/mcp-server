@@ -1,0 +1,62 @@
+{
+  "capability": "get_report_detail",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T10:55:17Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "get_report_detail's report_id path param is an INTEGER (the internal report id). Neither the pool-given SC-489 nor list_reports_v2 (which only exposes SC-NNN) can supply that form — list_schedules is the capability documented as returning `id` (integer) and `identifier` (SC-NNN) side by side, so it resolves SC-489 -> the integer id to pass.",
+      "source": "invoked",
+      "capability": "list_schedules",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": {} },
+      "status": 200,
+      "produced": {
+        "matched_row": { "id": 10374, "identifier": "SC-489", "report_type": "Test Run Summary", "project_id": 379335744 },
+        "note": "list_schedules also returned two other reports in this project (SC-490 id 10390, SC-491 id 10391) created by other probes since the pool description was written — the project no longer has only one report, but SC-489/10374 is unambiguously present and matches the described config (Test Run Summary, last_one_week, frequency null)."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744, "report_id": 10374 }, "query": {} },
+      "status": 200,
+      "error": "",
+      "changed": "none needed — succeeded on the first attempt with the resolved integer id"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "report_id": 10374 }, "query": { "is_print": true } },
+    "status": 200,
+    "response_keys": ["data", "report_filters", "is_dynamic", "filters", "dynamic_filters", "report_data", "project"],
+    "item_shape": {
+      "data": "report definition object (id, report_type, title, frequency, identifier=SC-489, next_run_at, report_timeframe, owner, mail_to, ...) — matches declared schema",
+      "report_filters": "{} — empty; report_timeframe=last_one_week does not populate report_filters (that field is only used by the specific_* timeframe modes)",
+      "report_data.test_run_data": "{active:30, closed:0, test_cases:116, test_results:1} — populated on the BARE call too",
+      "report_data.issues_data": "{total:0, linked_with_test_runs:0, linked_with_test_results:0} — null on bare call, populated only with is_print/sections",
+      "report_data.test_run_status": "{New:29, In_Progress:0, Under_Review:1, Rejected:0, Done:0, Closed:0} — null on bare call",
+      "report_data.test_cases_status": "array of {count, result_status:{id, field_value, internal_name, field_name, colour}} — Untested:58, Passed:1, rest 0 — null on bare call",
+      "report_data.user_result_stats": "[] — empty array (no per-user results yet), same on bare call",
+      "report_data.issues_by_status": "[] with is_print (was null on bare call)",
+      "report_data.issues_by_priority": "[] with is_print (was null on bare call)",
+      "report_data.time_tracking": "{total_elapsed_seconds:0, cases_with_elapsed:0, cases_in_scope:119} — only appears with is_print/sections, not declared in schema at all",
+      "report_data.estimated_vs_actual": "[] — only appears with is_print/sections, not declared in schema at all",
+      "report_data.time_tracking_enabled": "false — undeclared field, appears only with is_print/sections"
+    }
+  },
+  "contract": {
+    "required": ["data", "report_filters", "dynamic_filters", "report_data", "project"],
+    "json_path": "$.report_data",
+    "declared_missing": [
+      "report_data.test_run_data (and the other 6 schema-required report_data properties) — ALL absent when sections=<a *_drilldown value>&widget_type=... is used; see undeclared_returned for what replaces them. Verified with sections=tr_drilldown&widget_type=active_runs."
+    ],
+    "undeclared_returned": [
+      "is_dynamic, filters — present on every call (bare, is_print, drilldown); listed in the capability's own `returns` summary array but absent from the formal 200 response JSON-schema `properties` block (prose-vs-schema disagreement, not a runtime defect)",
+      "report_data.time_tracking_enabled — present with is_print/sections, not declared anywhere in this capability's schema (time_tracking and estimated_vs_actual ARE declared as valid section names but time_tracking_enabled is not documented at all)",
+      "report_data.rows, report_data.total, report_data.info — when a *_drilldown section is requested, report_data is wholly replaced by this paginated-rows shape ({rows:[...], total:30, info:{page,page_size}}); this replacement shape is not present in the schema's report_data definition at all, which is fixed to the 7 aggregate fields with no oneOf/alternate for drilldown mode"
+    ]
+  },
+  "notes": "SUCCESS/CONTRACT: get_report_detail works end-to-end on preprod (project 379335744/PR-2005, report SC-489/id 10374). Bare call (no query) returns the full envelope with test_run_data populated but issues_data/test_run_status/test_cases_status/issues_by_status/issues_by_priority all null, exactly as guidance describes ('null means NOT COMPUTED'). is_print=true (the documented shortcut for Test Run Summary) computes every aggregate section in one call with real non-zero figures (test_run_status New:29/Under_Review:1, test_cases_status Untested:58/Passed:1, time_tracking cases_in_scope:119) — so report CONTENT is genuinely non-empty here, not just the config. VERIFIED: report config fields (data/project/identifier=SC-489) AND computed report_data content (via is_print) AND the *_drilldown row-paging path (sections=tr_drilldown&widget_type=active_runs, 30 rows returned). NOT EXERCISED: other widget_types, other report types (only Test Run Summary was available in the pool), report_data_only trap, and the specific_test_plans 422 case (report_timeframe here is last_one_week, not specific_test_plans). EMPTY-CASE RULE: distinguished cleanly — the report's own config (data/project) was never in question; what was actually empty on the BARE call was the unrequested report_data sections (null, by design per guidance) rather than an execution-driven emptiness, and once sections were requested (is_print) the figures came back real and non-trivial (this project has actual run/case activity, so it never hit a true zero-data case). PAGINATION: exercised both p=1 and p=2 for the tr_drilldown/active_runs section. total=30 exactly equals page_size=30 (one full page), so a genuinely empty second page could not be produced from this pool's data; p=2 returned byte-identical rows to p=1 with info.page still reporting 1 — inconclusive whether `p` is honored at all for this section or whether it silently clamps to the only available page; flagging as a possible defect worth a pool with >30 active runs to confirm. The info shape itself ({page, page_size} only, no count/prev/next/total_pages) is undeclared — get_report_detail's schema has no pagination envelope documented anywhere for report_data at all. GET_REPORT_DETAIL vs GET_REPORT_V2: this is a genuinely distinguished pair, not an unlabelled near-duplicate — three real differences, not one: (1) ID FORM — get_report_detail takes project_id/report_id as INTEGERS (the internal report id, obtainable only via list_schedules, not via list_reports_v2/get_report_v2 which only expose SC-NNN); get_report_v2 takes PR-NNN/SC-NNN strings directly off list_reports_v2. (2) ENVELOPE — get_report_detail returns {data, report_filters, filters, is_dynamic, dynamic_filters, report_data, project} including the resolved project record; get_report_v2 returns {success, data} with no project object. (3) CONFIG vs COMPUTED CONTENT — this is the decisive split: get_report_v2 is documented and observed as configuration-only, hard-coding dynamic_filters to null and never returning report_data/counts/rows under any parameters; get_report_detail is the only one of the two that computes and returns report_data (aggregates via sections/is_print, or paginated rows via *_drilldown+widget_type). A caller who has an SC-NNN and wants figures cannot get them from get_report_v2 at all — they must resolve the integer id (via list_schedules) and call get_report_detail. Both capabilities' own descriptions already state this distinction explicitly, so unlike other pairs flagged elsewhere in this index as unlabelled duplicates, this pair is correctly documented as non-duplicate."
+}

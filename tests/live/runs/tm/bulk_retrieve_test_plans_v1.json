@@ -1,0 +1,79 @@
+{
+  "capability": "bulk_retrieve_test_plans_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "confirm the declared contract before invoking — required params, body shape, declared error surface",
+      "source": "describeCapability",
+      "capability": "bulk_retrieve_test_plans_v1",
+      "arguments": { "name": "bulk_retrieve_test_plans_v1", "include_responses": "all" },
+      "status": 200,
+      "produced": {
+        "mode": "write",
+        "intent": "Restore archived test plans in bulk — the undo for a bulk archive",
+        "body_field": "test_plan_ids (array of integer ids; test_plan.ids / ids / test_plan_ids all accepted, first present wins)",
+        "select_all_field": "none — same single test_plan_ids array as the archive sibling, no select_all/de_selected_ids footgun on this capability",
+        "guidance": "Same group feature flag as archive: when it is off this returns 404 with {success:false, errors:'Feature not available'} — a feature gap, not a missing plan.",
+        "declared_404": "Explicitly declared in this capability's own response schema ('Test-plan archiving is not enabled for this group') — unlike the archive sibling, whose declared error surface did NOT include this 404."
+      }
+    },
+    {
+      "step": 2,
+      "why": "check whether list_test_plans_v1 exposes an archived state/count that could surface a real target",
+      "source": "describeCapability",
+      "capability": "list_test_plans_v1",
+      "status": 200,
+      "produced": {
+        "row_field": "record_status ('archived' for an archived plan) exists on the row schema",
+        "guidance": "'Archived plans are NOT in this listing under any filter — they have their own archived listing.' So list_test_plans_v1 cannot be used to find an archived plan to restore."
+      }
+    },
+    {
+      "step": 3,
+      "why": "check whether the archived-plans listing/count (this capability's natural id source) is itself reachable, per prior probes already on disk",
+      "source": "prior run file",
+      "capability": "list_archived_test_plans_v1",
+      "produced": { "verdict": "BLOCKED", "status": 404, "error": "{\"success\":false,\"errors\":\"Feature not available\"}" }
+    },
+    {
+      "step": 4,
+      "why": "same check via the count endpoint",
+      "source": "prior run file",
+      "capability": "get_archived_test_plan_count_v1",
+      "produced": { "verdict": "BLOCKED", "status": 404, "error": "{\"success\":false,\"errors\":\"Feature not available\"}" }
+    },
+    {
+      "step": 5,
+      "why": "confirm the archive sibling itself is blocked by the same flag, per prior probe already on disk",
+      "source": "prior run file",
+      "capability": "bulk_archive_test_plans_v1",
+      "produced": { "verdict": "BLOCKED", "status": 404, "error": "{\"success\":false,\"errors\":\"Feature not available\"}" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "test_plan_ids": [48319] }, "user_permission": "granted" },
+      "status": 404,
+      "error": "{\"success\":false,\"errors\":\"Feature not available\"}",
+      "changed": "n/a (first attempt) — sent our own disposable active plan TP-1632 (48319), never TP-1616/48283 or any of the other 28 pre-existing plans. Stopped at 1 of the allowed 3: the response matches this capability's own documented 404 verbatim and a deterministic group-feature-flag gate, already independently confirmed by three other probes on this same project (archive sibling, archived-listing, archived-count) in the exact same shape — a 2nd or 3rd identical retry would add no information."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "body": { "test_plan_ids": [48319] } },
+    "status": 404,
+    "response_keys": ["success", "errors"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "test_plan_ids (body, array, minItems 1)"],
+    "json_path": "flat: body.test_plan_ids (integer plan ids); alternate accepted shapes body.test_plan.ids / body.ids tried first, first-present wins",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "VERDICT: BLOCKED. Prediction confirmed exactly: bulk_retrieve_test_plans_v1 returns the identical 404 {success:false, errors:'Feature not available'} as its archive sibling, on the first and only attempt. One attempt was enough — the error is deterministic and contract-documented, and three other capabilities scoped to this exact project (bulk_archive_test_plans_v1, list_archived_test_plans_v1, get_archived_test_plan_count_v1) all independently hit the same 404 in prior probes, so this is not a fluke or a payload problem. No 200 was ever returned, so declared_missing/undeclared_returned stay empty (never diff an error body against the success schema).\n\nONE FLAG, WHOLE PAIR: this cleanly confirms the single group feature flag disables both halves of test-plan archiving — archive AND un-archive/restore — for this preprod group/project. There is no asymmetry where a caller could restore something they can't archive; both directions are equally unreachable.\n\nCONTRAST WITH TEST-CASE ARCHIVING: test-*case* archiving is NOT gated the same way — bulk_archive_test_cases_by_project and bulk_retrieve_test_cases both worked live (four cases archived and cleanly restored). So this feature flag is specific to test *plans*; it does not touch the equivalent test-case flow at all. Worth stating explicitly as a scoping fact about the flag, not a general 'archiving is broken here' claim.\n\nCONTRACT ASYMMETRY WORTH NOTING: bulk_retrieve_test_plans_v1's own describeCapability response DOES declare this 404 explicitly in its response schema ('Test-plan archiving is not enabled for this group'). Per the task brief, the archive sibling's declared error surface did NOT include this 404 — so the two capabilities in the same undo pair document their shared failure mode inconsistently: the restore side owns up to it in its contract, the archive side doesn't. That is itself a small drift worth flagging to whoever authored the archive capability's error responses.\n\nNO TARGET, TWO INDEPENDENT REASONS: no archived test plan exists to restore, and there is also no way to discover one even if it existed. (1) list_test_plans_v1's own guidance states archived plans never appear in that listing under any filter. (2) The dedicated archived-plans listing (list_archived_test_plans_v1) and count (get_archived_test_plan_count_v1) are themselves both gated 404 by the same flag, per prior probes on this same project. So the capability is unreachable for two compounding reasons: the flag blocks the restore call itself, AND even the id-discovery path for a target is blocked by the same flag. Sent our disposable TP-1632 (48319, active, not archived) as the id purely to exercise the route; TP-1616 (48283) and the other 28 pre-existing plans were never referenced.\n\nSENDING A NON-ARCHIVED ID: TP-1632 is active, not archived, so this attempt also tested how the route responds to an id that isn't archived — but the feature-flag gate fires before any id-validity logic runs, so nothing was learned about that specific behavior (no 'plan is not archived' style response was reached; the flag masks it entirely).\n\nSELECT_ALL / FOOTGUN CHECK: describeCapability shows exactly one body field, test_plan_ids (a plain integer array) — no select_all or de_selected_ids parameter exists on this capability, matching its archive sibling. No footgun to avoid here.\n\nNAME-INVITES-WRONG-MODEL, FOURTH INSTANCE: 'retrieve' in the name strongly suggests a read, but this is a write (mode: 'write') that restores/un-archives plans — the exact same pattern already seen in bulk_assign_test_cases_to_test_run, undo_remove_folder, and bulk_retrieve_test_cases. This is a fourth confirmed case of a capability name inviting the wrong operation model, worth flagging as a recurring naming-convention problem across this index rather than a one-off.\n\nNOT EXERCISED (and why): the synchronous vs. async (>30 ids) response split, the to_i id-coercion/zero-drop behavior, and the 400 'Please provide test plan ids' empty-array path were all left unexercised — the feature-flag gate fires before any of that request-shape logic can run, so none of it is reachable in this environment regardless of payload."
+}

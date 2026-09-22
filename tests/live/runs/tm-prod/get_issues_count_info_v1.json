@@ -1,0 +1,40 @@
+{
+  "capability": "get_issues_count_info_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:54:49Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 332537 },
+        "query": { "q[created_at]": "all_time" }
+      },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 332537 },
+      "query": { "q[created_at]": "all_time" }
+    },
+    "status": 200,
+    "response_keys": ["data", "empty_data"],
+    "item_shape": {
+      "declared": "object {label: string, count: integer}",
+      "actual": "2-element positional array [label, count]",
+      "example": ["Oct", 7]
+    }
+  },
+  "contract": {
+    "required": ["label", "count"],
+    "json_path": "$.data[*]",
+    "declared_missing": ["label", "count"],
+    "undeclared_returned": []
+  },
+  "notes": "Preprod vs prod side by side: preprod invoked with path_params {project_id: 379335744}, query {q[created_at]: all_time} -> 200, empty_data:true, data = 12 zero-padded positional pairs (e.g. [\"Oct\", 0]) -- container shape (positional array, not {label,count} object) was verifiable but every count was 0, so the numeric-value check was UNVERIFIED on preprod. Prod, invoked identically with path_params {project_id: 332537} (v1 integer id for Demo Project 1, 16,267 cases / 2,378 runs), returned empty_data:false with genuinely non-zero counts across all 12 months: [[\"Oct\",7],[\"Nov\",4],[\"Dec\",7],[\"Jan\",4],[\"Feb\",10],[\"Mar\",7],[\"Apr\",4],[\"May\",6],[\"Jun\",6],[\"Jul\",6],[\"Aug\",7],[\"Sep\",5]]. Every entry is confirmed to be a 2-element positional array [label, count], never a {label, count} object with those keys -- this directly contradicts the declared 200 JSON schema (data items required: [label, count] as object properties), while matching the capability's own prose guidance ('Each entry in data is a positional pair -- period label first, count second -- not a {label, count} object; the CSV exporter reads them by index'). A consumer coding strictly to the declared schema (item.label, item.count) would read undefined for every row. Only one attempt was needed since prod returned real non-zero data on the first try -- no window variation required. This settles both parts of the preprod DRIFT: the container shape is confirmed positional (was already checkable at 0 on preprod, now reconfirmed), AND the numeric values themselves are now confirmed real and non-zero (this part was UNVERIFIED on preprod, now VERIFIED on prod). Verdict: DRIFT reproduces on prod with full confidence, no residual uncertainty."
+}

@@ -54,7 +54,7 @@
       "priority": "string, \"Medium\"",
       "case_type": "string, \"Other\" - POPULATED (see notes, check 2)",
       "automation_status": "string, \"not_automated\"",
-      "owner": "string email, \"ing@bsstag.com\"",
+      "owner": "string email, \"probe-user@example.invalid\"",
       "tags": "array[string], [\"mcp-probe\"]",
       "issues": "array, [] (empty - proves nothing about item shape)",
       "steps": "array[{step,result}], 1 item matching create-time content exactly",

@@ -1,0 +1,41 @@
+{
+  "capability": "get_root_folders_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:31:47Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744}
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}},
+    "status": 200,
+    "response_keys": ["folders", "info"],
+    "item_shape": {
+      "id": "integer",
+      "project_id": "integer",
+      "group_id": "integer",
+      "name": "string",
+      "is_automation": "boolean",
+      "cases_count": "integer",
+      "total_cases_count": "integer",
+      "sub_folders_count": "integer",
+      "links": {"self": "string"},
+      "notes": "string, HTML-escaped — present only on the __scratch__ row, absent on __readonly__ and undeclared in the 200 schema"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path_param)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["folders[].notes"]
+  },
+  "notes": "First attempt succeeded (200), no retries needed. Called with only the required project_id path param — no p/per_page/folder_name/case_count/folder_sort_by sent, so this exercises the plain unpaged root listing. EMPTY-CASE CHECK: both known root folders are present and no residue beyond them — folders array has exactly 2 rows, matching info.count=2: __readonly__ (id 764093, cases_count=2, total_cases_count=2, sub_folders_count=0 — the 2 matches TC-54455/TC-54456 as expected) and __scratch__ (id 764138, cases_count=18, total_cases_count=19, sub_folders_count=7). The __readonly__ count of 2 is corroborating evidence the counts are live, not stale, since it matches the pool's known fixture. No stale-echo could be tested for __scratch__ (no prior baseline in the pool description), but total_cases_count (19) > cases_count (18) is internally consistent with 7 declared sub-folders holding at least one more case, so nothing looks copied/frozen. CONTRACT DRIFT: the 200 schema's folders[] item type is fully specified (id, project_id, group_id, name, is_automation, sub_folders_count, links, cases_count, total_cases_count) — a falsifiable, non-bare object schema — and it omits `notes`, yet the live __scratch__ row returned notes (HTML-escaped: '<p>write probes create their own objects in here</p>'). All 9 schema-declared fields were present on both rows, so nothing schema-declared is missing; the sole drift is this one undeclared field. Note this partially resolves a prose/schema split already visible in describeCapability: the capability's top-level `returns` list separately promises both `notes` and `parent_id`, neither of which the folders[] schema object declares. Live behavior sides with prose on `notes` (it does appear) but contradicts both prose and the capability's own guidance ('parent_id is null on root folders') on `parent_id` — it does not appear at all on either row, not even as a null key, for these root folders. CROSS-CAPABILITY SHAPE CHECK: get_root_folders_v1's declared folders[] item schema is field-for-field identical to search_project_entities' declared folders[] item schema (same 9 fields: id, project_id, group_id, name, is_automation, sub_folders_count, links, cases_count, total_cases_count) — no array-vs-map mismatch here, and no row-shape divergence between the two capabilities as declared; both declare `folders` as a plain array of the same row shape. This capability was not part of the array-vs-map bug seen elsewhere this session."
+}

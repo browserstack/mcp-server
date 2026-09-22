@@ -1,0 +1,76 @@
+{
+  "capability": "update_test_plan_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:11:26Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "A previous attempt at this same capability spent ~6 minutes on backoff during the preprod v2 outage and was stopped before confirming success or failure. Two other probes in this suite reported failure yet had actually committed writes, so the stopped attempt's effect on our target plan (TP-1632 / id 48319) had to be verified by reading, not assumed to be a no-op.",
+      "source": "invoked",
+      "capability": "get_test_plan_by_integer_id_v1",
+      "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48319}},
+      "status": 200,
+      "produced": {"name": "__mcp-probe-planclone-20260921", "updated_at": "2026-09-21T13:44:07.000Z", "created_at": "2026-09-21T13:44:07.000Z"}
+    },
+    {
+      "step": 2,
+      "why": "name still equals the value clone_test_plan_v1 minted it with, and updated_at is byte-identical to created_at (never moved since the clone) — the stopped attempt left NO trace. Also confirm the linked run (TR-9111) is intact before mutating anything.",
+      "source": "invoked",
+      "capability": "get_test_plan_test_runs_v1",
+      "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48319}, "query": {"p": 1}},
+      "status": 200,
+      "produced": {"test_runs": ["TR-9111"], "count": {"active": 1, "closed": 0}}
+    },
+    {
+      "step": 3,
+      "why": "Confirm the fixture plan TP-1616 (id 48283), which must never be touched by this probe, is still in the exact state the clone_test_plan_v1 probe last verified (that verified-unchanged state is itself evidence worth preserving).",
+      "source": "invoked",
+      "capability": "get_test_plan_by_integer_id_v1",
+      "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48283}},
+      "status": 200,
+      "produced": {"name": "__mcp-probe-plan-2026-09-18T00-00-00Z-updated", "updated_at": "2026-09-18T12:53:05.000Z", "sub_plans_count": 14}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": {"project_id": 379335744, "test_plan_id": 48319},
+        "body": {"name": "__mcp-probe-planclone-20260921-updated"}
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — sent flat (no test_plan wrapper) despite guidance insisting on the wrapper, per the wrapper-trap pattern already seen on this entity (create_test_plan_v1, update_test_plan_v2). Succeeded on the first try."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": {"project_id": 379335744, "test_plan_id": 48319},
+        "body": {"test_plan": {"name": "__mcp-probe-planclone-20260921-updated"}}
+      },
+      "status": null,
+      "error": "unknown body: test_plan. accepted: attachments, custom_fields, description, end_date, issues, name, owner, parent_plan_id, plan_status, reviewers, start_date, tags, test_runs. test_plan is a wrapper this surface builds for you from each field's json_path — send the fields directly instead of nesting them",
+      "changed": "Deliberate second call (not a retry of a failure — attempt 1 already succeeded) made specifically to settle the wrapper question: does the nested form guidance recommends also work? Rejected CLIENT-SIDE, no HTTP request made, so this caused no second write and no risk to the plan's state."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {"project_id": 379335744, "test_plan_id": 48319},
+      "body": {"name": "__mcp-probe-planclone-20260921-updated"}
+    },
+    "status": 200,
+    "response_keys": ["success", "test_plan"],
+    "item_shape": {
+      "test_plan": ["active_state", "plan_status", "completed_by", "description", "created_by", "id", "identifier", "tags", "test_plan_progress", "test_plan_progress_v2", "test_results_trend", "test_results_trend_v2", "test_runs_count", "total_test_runs_count", "name", "project_id", "issues", "start_date", "end_date", "created_at", "updated_at", "attachments", "parent_plan_id", "sub_plans_count", "custom_fields", "links", "owner", "assignee", "record_status", "review_status"]
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "test_plan_id (path, integer)", "name (effectively required on any content edit per guidance)"],
+    "json_path": "/test_plan/name (and other fields under /test_plan/*, per-field). Guidance states verbatim 'Everything goes inside a test_plan object. A flat body is rejected before any field is read' — this is BACKWARDS from live behavior: invokeCapability rejects the nested `test_plan` wrapper CLIENT-SIDE ('unknown body: test_plan ... send the fields directly instead') and only the flat body succeeded (200). Same wrap-vs-flat contradiction already found on update_test_plan_v2 and create_test_plan_v1.",
+    "declared_missing": ["test_plan.reviewers — listed in the capability's `returns` array but entirely absent (not even null) from the actual 200 body"],
+    "undeclared_returned": ["test_plan.test_plan_progress", "test_plan.test_results_trend", "test_plan.test_results_trend_v2"]
+  },
+  "notes": "VERIFIED-CLEAN START: the stopped 6-minute-backoff attempt left no trace on TP-1632/48319 (name and updated_at unchanged, matched the clone-time baseline exactly) and TP-1616/48283 was still in the exact byte-identical state clone_test_plan_v1 last verified (updated_at 2026-09-18T12:53:05.000Z, sub_plans_count 14, name/description/tags all matching) — confirmed by reading, not assumed.\n\nWRAPPER QUESTION — SETTLED, and the create_test_plan_v1 500 does NOT generalize: guidance for update_test_plan_v1 makes the same wrap-required claim that made create_test_plan_v1 unusable, but the outcome here is different and better. Flat body -> clean 200, correctly updated, correctly persisted (re-read confirmed). Nested body -> rejected CLIENT-SIDE before any HTTP call, with an explicit, helpful error naming the accepted flat fields and telling the caller to send them directly (not a 500, not an ambiguous failure). So: (1) the guidance's wrapper claim is wrong here too — same DRIFT family as create_test_plan_v1 and update_test_plan_v2 — but (2) unlike create_test_plan_v1, the flat body that actually works does NOT 500; it succeeds cleanly. This RULES OUT the theory that the entity's whole write surface degraded — update_test_plan_v1's flat-body path is healthy, and preprod v1 was demonstrably reachable and correct throughout this probe (ruling out the earlier outage as an explanation for anything found here). The create_test_plan_v1 500 remains an isolated defect on that one capability, not evidence of a broader entity-wide write failure.\n\nPUT-VS-PATCH — SETTLED: this capability behaves as a PARTIAL/PATCH-style update, not a full-object replace, despite `update_test_plan_v1` sounding like it could overwrite the whole record. Sending a body containing ONLY `name` left every other field exactly as it was: tags stayed [], owner (2522) and assignee unchanged, start_date/end_date stayed null, custom_fields/attachments/issues stayed empty, sub_plans_count stayed 0, and test_runs_count stayed {active:1,closed:0} — only `name` and `updated_at` changed. One minor exception worth flagging: `description` flipped from an empty string (\"\") pre-update to a bare `null` post-update, even though `description` was never included in the request body — a small representation drift (empty-string vs null), not real data loss, but it means 'omitted field' is not perfectly idempotent for every field the way it is for owner/tags/dates in this same response.\n\nRUN LINK — CONFIRMED STILL LINKED: get_test_plan_test_runs_v1(48319) before AND after the rename both show exactly one run, TR-9111 (uuid 17578623), still attached. The update, which never sent a `test_runs` key at all, did not unlink it — consistent with the guidance's claim that omitting `test_runs` 'leaves the linkage alone.' No unintended unlink occurred; the existence of a dedicated `unlink_test_runs_from_test_plan` capability is corroborated as the only deliberate path to break this link, not a side effect of a rename.\n\nUPDATED_AT DOES MOVE: pre-update, TP-1632's updated_at (2026-09-21T13:44:07.000Z) was byte-identical to created_at, i.e. genuinely untouched since the clone. Post-update it became 2026-09-22T05:11:26.000Z — a real, live-verified bump on a genuine content edit. This is the opposite of update_filter's already-documented inert `entity`/`updated_at` under a 200; update_test_plan_v1 does move the clock when something actually changes.\n\nREADER DISAGREEMENT — RE-CHECKED POST-UPDATE, STILL SYSTEMIC: get_test_plan_test_runs_v1(48319) independently confirms TR-9111 linked (one row, present, matching uuid). get_test_runs_v1(project_id=379335744, include_test_plan='true') was re-read in the same pass and STILL shows test_plans:[] for TR-9111 (row present on page 1, test_plans empty), reproducing the exact defect already confirmed systemic in clone_test_plan_v1's probe. The write side is proven correct (one reader shows the link); get_test_runs_v1 with include_test_plan=true remains the one broken reader, now confirmed across three separate runs (TR-9061, and now TR-9111 both before and after an unrelated plan edit) and two separate probes on two different days — ruling out staleness/caching as an explanation.\n\nCOUNT-VS-ROWS: test_runs_count={active:1,closed:0} on the updated plan matches the single actual row returned by get_test_plan_test_runs_v1 — no desync observed here.\n\nCONTRACT COMPLETENESS: declared `returns` includes `reviewers`, but the actual 200 body has no `reviewers` key anywhere (not null, just absent) — shallowest missing path, since no reviewers were ever configured on this plan and a reviewers-only edit was never attempted (out of scope for 'update only the name'). Three fields returned but never declared in `returns`: `test_plan_progress` (guidance elsewhere calls this always-{} legacy, matches observation of {}), `test_results_trend` (null here), and `test_results_trend_v2` (populated). These three exactly match the same undeclared-field DRIFT already recorded against the sibling read capability get_test_plan_by_integer_id_v1 (tests/live/runs/tm/get_test_plan_by_integer_id_v1.json) — expected, since this capability's success body is described as 'the plan, re-read' using the same underlying shape.\n\nFixture left as-is: TP-1632/48319 is a disposable, probe-owned scratch plan (minted by clone_test_plan_v1 specifically to give later write probes — update_test_plan_v1, unlink_test_runs_from_test_plan, bulk_archive_test_plans_v1, bulk_retrieve_test_plans_v1 — something to target), not a shared read-only fixture like TP-1616, so its renamed state was left as `__mcp-probe-planclone-20260921-updated` rather than restored. TP-1616/48283 (the protected fixture) was read twice for verification and never written to."
+}

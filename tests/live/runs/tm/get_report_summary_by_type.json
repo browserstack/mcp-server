@@ -1,0 +1,60 @@
+{
+  "capability": "get_report_summary_by_type",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T10:55:15Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "confirm the pool report SC-489 exists, get its own report_type/timeframe/filters",
+      "source": "invoked",
+      "capability": "list_reports_v2",
+      "arguments": {"path_params": {"project_id": "PR-2005"}, "query": {"report_type": "Test Run Summary"}},
+      "status": 200,
+      "produced": {
+        "id": "SC-489",
+        "report_type": "Test Run Summary",
+        "report_timeframe": "last_one_week",
+        "report_filters": {}
+      }
+    },
+    {
+      "step": 2,
+      "why": "get_report_summary_by_type needs the integer report_id; list_reports_v2 only exposes SC-NNN, so resolve it via the v1 schedules listing which returns id+identifier side by side",
+      "source": "invoked",
+      "capability": "list_schedules",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"q[query]": "Test Run Summary"}},
+      "status": 200,
+      "produced": {"identifier": "SC-489", "id": 10374, "report_type": "Test Run Summary"}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": {"project_id": 379335744, "report_id": 10374, "report_type": "test_runs_summary"},
+        "query": {"reportTimeRange": "last_one_week", "sections": "test_run_data,issues_data,test_run_status,test_cases_status,user_result_stats,issues_by_priority,issues_by_status,time_tracking,estimated_vs_actual"}
+      },
+      "status": 200,
+      "error": "",
+      "changed": ""
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {"project_id": 379335744, "report_id": 10374, "report_type": "test_runs_summary"},
+      "query": {"reportTimeRange": "last_one_week", "sections": "test_run_data,issues_data,test_run_status,test_cases_status,user_result_stats,issues_by_priority,issues_by_status,time_tracking,estimated_vs_actual"}
+    },
+    "status": 200,
+    "response_keys": ["success", "test_run_data", "issues_data", "test_run_status", "test_cases_status", "user_result_stats", "issues_by_status", "issues_by_priority", "time_tracking", "estimated_vs_actual"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["success"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["test_run_data", "issues_data", "test_run_status", "test_cases_status", "user_result_stats", "issues_by_status", "issues_by_priority", "time_tracking", "estimated_vs_actual"]
+  },
+  "notes": "renderer=test_runs_summary matched SC-489's own type (Test Run Summary) so figures are trustworthy for this report. Response body: {success:true, test_run_data:{active:30,closed:0,test_cases:116,test_results:1}, issues_data:null, test_run_status:null, test_cases_status:null, user_result_stats:[], issues_by_status:null, issues_by_priority:null, time_tracking:null, estimated_vs_actual:null}. test_run_data confirms this is the right pool report (30 active runs, ~1 executed result) but is a fixed-key scalar object, not a list, so it does not exercise any item-shape question. Every list-bearing widget (test_run_status, test_cases_status, issues_by_priority, issues_by_status, time_tracking, estimated_vs_actual) came back null -- per get_report_detail's documented semantics null means NOT COMPUTED, not 'zero rows' -- and the one section that did compute an array, user_result_stats, is a genuinely empty [] with no zero-padded rows. So none of this capability's array-shaped sections were ever populated: cannot say whether it falls on the same side as get_closed_test_runs_info_v1/get_issues_count_info_v1 (declared-object-actual-positional-array bug) or the get_test_case_count_trend_v1 side (genuine maps) -- no evidence either way, unlike those siblings where zero-padded buckets still exposed the shape. Per the empty-case rule this is a structurally-empty result for item-shape purposes -> UNVERIFIED, despite the call itself succeeding at 200 with real (if sparse) top-line counts. Separately, the declared 200 schema is essentially unfalsifiable: it requires only {success:boolean} and declares nothing else, so every other top-level key returned is technically undeclared, though the capability's own prose already warns 'the response is the renderer's payload merged onto {success:true} -- read what came back rather than assuming a fixed shape,' so this is a documented gap rather than a silent contract violation. No 4xx/5xx encountered; only one probe attempt was needed."
+}

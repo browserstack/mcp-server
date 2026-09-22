@@ -1,0 +1,97 @@
+{
+  "capability": "get_test_runs_form_fields_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T10:30:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the form-fields read (path param only; no run/group/config setup needed)",
+      "source": "pool",
+      "capability": null,
+      "arguments": null,
+      "status": null,
+      "produced": { "project_id": 332537, "project_identifier": "PR-18723" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "all": true } },
+      "status": 200,
+      "error": null,
+      "changed": "succeeded first try, no retry needed"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "all": true, "minify": true } },
+      "status": null,
+      "error": "unknown query: minify. accepted: all",
+      "changed": "gateway rejected the request outright (400-style error body, not a 200 with a param silently ignored) — confirms minify is not accepted here, and unlike some siblings it is not silently dropped, it's actively rejected"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "query": { "all": true } },
+    "status": 200,
+    "response_keys": ["custom_fields", "default_fields", "success"],
+    "item_shape": {
+      "default_fields.status": {
+        "total_count": 57,
+        "values.length": 30,
+        "links": { "self": "/api/v1/projects/332537/test-case/status" },
+        "values[0]_passed": { "internal_name": "passed", "is_default": 0, "colour": "#059669", "value_category": "completed", "value": 982100, "name": "Passed" },
+        "values[5]_untested": { "internal_name": "untested", "is_default": 0, "colour": "#E5E7EB", "value": 982105, "name": "Untested" },
+        "values[9]_default_row": { "internal_name": "Conditionally Passed", "is_default": 1, "colour": "#19A699", "value_category": "completed", "value": 1669943, "name": "Conditionally Passed" }
+      },
+      "custom_fields[0]_dropdown": {
+        "id": 193254,
+        "field_type": "field_multi_dropdown",
+        "field_name": "trail multi select",
+        "entity_type": "TestResult",
+        "field_user_name": "trail multi select",
+        "optional": true,
+        "is_bulk_editable": true,
+        "is_filterable": true,
+        "links": { "self": "/api/v1/projects/332537/test-result/custom-fields/193254" },
+        "option_values": [
+          { "id": 157359, "option_value": "a", "is_default": false, "record_status": "active", "created_at": "2025-01-31T06:58:05.000Z", "updated_at": "2025-01-31T06:58:05.000Z", "dataset_id": 34255 }
+        ],
+        "field_values": [],
+        "is_required": false,
+        "default_value": null
+      },
+      "custom_fields[2]_string": {
+        "id": 197335,
+        "field_type": "field_string",
+        "field_name": "New new",
+        "entity_type": "TestResult",
+        "option_values": [],
+        "field_values": ["dsadas", "dsfsdf"],
+        "placeholder": "",
+        "is_required": false,
+        "default_value": null
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [
+      "custom_fields[].options — declared key never appears; actual key is 'option_values' with a completely different item shape",
+      "custom_fields[].place_holder_text — declared; actual key (when present) is 'placeholder' (different spelling/casing, and absent entirely on the multi_dropdown fields)",
+      "custom_fields[].applies_to_all_projects — declared, never present on any of the 3 returned custom fields",
+      "custom_fields[].assigned_projects — declared, never present",
+      "custom_fields[].link_to_future_projects — declared, never present"
+    ],
+    "undeclared_returned": [
+      "default_fields.status.values[].value_category — still undeclared (as on preprod); present on 29 of 30 rows, absent only on 'untested'",
+      "custom_fields[].field_user_name, optional, is_bulk_editable, is_filterable, links — all undeclared, present on every custom field row",
+      "custom_fields[].option_values[] — undeclared key entirely replacing the declared 'options' key, with an undeclared per-option shape: {id, option_value, is_default, record_status, created_at, updated_at, dataset_id}",
+      "custom_fields[].field_values[] — undeclared key, present on every row (empty for dropdown types, populated with literal values for the string-type field)",
+      "custom_fields[].field_type values ('field_multi_dropdown', 'field_string') — do not match ANY value in the declared enum (string, text, user, dropdown, multi_dropdown, url, boolean, int, date); every field_type observed carries an undeclared 'field_' prefix not in the declared enum",
+      "custom_fields[].id — declared type 'string', actual type is integer (e.g. 193254, not \"193254\")"
+    ]
+  },
+  "notes": "VERDICT: DRIFT — confirmed on prod, and worse than preprod: preprod had one undeclared field (value_category); prod adds a genuine count-vs-rows mismatch and a near-total reshaping of custom_fields.\n\n(1) MISNAMING — REPRODUCES EXACTLY. default_fields.status.links.self = '/api/v1/projects/332537/test-case/status' on prod, same pattern as preprod's '/api/v1/projects/379335744/test-case/status' — a test-CASE/result status route, not a test-run route, for a capability named/pathed as if it served test-run form fields. This is not a naming/intent bug specific to the preprod fixture; it's baked into the API on prod too. Capability's own guidance text is honest about this ('These are TEST RESULT fields, not test run fields — despite the path').\n\n(2) DESCRIPTOR SHAPE for default_fields.status.values[] — SAME HYBRID AS PREPROD, confirmed on real data. Keys observed on every row: {internal_name, is_default, colour, value_category (usually), value, name}. This is the field-definition core {value, name, internal_name, is_default} (all declared) PLUS 'colour' (declared) and 'value_category' (undeclared) grafted on. No 'id' key and no 'field_name' key anywhere in this array, so it is NOT the case-row shape ({id, internal_name, field_name, colour, value_category, name}) despite sharing colour/value_category with it. Verdict: field-definition-plus-hybrid-extras, exactly as preprod characterized it.\n\n(3) UNDECLARED value_category — REPRODUCES, but the correlation preprod proposed is REFUTED/REFINED by prod. Preprod (8 rows, 'untested' happened to be the is_default:1 row) observed value_category absent only on the is_default row and hypothesized 'absent on the default/open state'. On prod (30 rows returned, real project), the is_default:1 row is 'Conditionally Passed' (a custom-renamed status) and IT DOES carry value_category:'completed'. The ONLY row missing value_category is 'untested' by internal_name — is_default:0 on prod. So the true rule is: value_category is absent specifically for internal_name='untested' (the literal untested/unstarted semantic state), independent of which row currently holds is_default:1. Preprod's fixture just made these two things (untested + is_default) coincide, masking the real correlation. This is a meaningful correction to report upstream.\n\n(4) COUNT-VS-ROWS — DOES NOT REPRODUCE CLEAN; NEW DRIFT FOUND ON PROD. default_fields.status.total_count=57 but values.length=30 (verified by script, not eyeballing) — a 27-row shortfall. Preprod's fixture only had 8 statuses total so total_count(8)==values.length(8) trivially held; it could never have exercised this path. This capability declares NO pagination mechanism for default_fields.status (no 'next' link, no page param in describeCapability's query params — only 'all' is accepted, confirmed by the rejected minify probe's error listing accepted params as just 'all'). So on a project with >30 custom statuses, the endpoint silently truncates the values array to what looks like a fixed page size while total_count still reports the true total, with no declared or visible way to fetch the remainder. This is a genuine contract violation: total_count is supposed to describe the returned values array per the declared schema ('Total number of test result status values'), and here it doesn't.\n\n(5) CONTAINER TYPES — still match declared types. default_fields is an object keyed by field name ({status: {...}}), custom_fields is an array (3 items) — both as declared, no array-vs-object mismatch, consistent with preprod.\n\n(6) CUSTOM_FIELDS — FINALLY POPULATED (preprod's fixture had zero), and the shape diverges heavily from the declared schema. 3 custom result fields returned: two field_multi_dropdown fields ('trail multi select', 'futureproj') and one field_string field ('New new'). Key findings:\n  - field_type values are 'field_multi_dropdown' / 'field_string' — the declared enum (string/text/user/dropdown/multi_dropdown/url/boolean/int/date) has NONE of these; every observed value carries an undeclared 'field_' prefix. The declared enum is simply wrong/stale for this environment.\n  - The declared 'options' array is entirely absent; instead every field carries 'option_values', an undeclared key with an undeclared shape: {id, option_value, is_default, record_status, created_at, updated_at, dataset_id} — richer than the declared {option_value, is_default} and NOT matching either the field-definition shape or the case-row shape from default_fields.status. This is effectively a THIRD descriptor shape (call it 'option-row': id + option_value + is_default + record_status + timestamps + dataset_id), distinct from both shapes named in the original brief.\n  - 'id' is declared as string but is returned as an integer (193254, not \"193254\") — a type mismatch, not just a naming one.\n  - Declared 'place_holder_text' never appears; the actual (undeclared) key is 'placeholder', and even that is missing entirely from the two field_multi_dropdown rows (only the field_string row has it, as an empty string).\n  - Declared 'applies_to_all_projects', 'assigned_projects', 'link_to_future_projects' never appear on any of the 3 rows.\n  - Undeclared-but-always-present: field_user_name, optional, is_bulk_editable, is_filterable, links (a self-link to /api/v1/projects/332537/test-result/custom-fields/<id>), field_values (empty array for dropdown types; for the field_string row it holds actual literal values ['dsadas','dsfsdf'] — i.e. it looks like recently-used/autocomplete values for a free-text field, not an 'options' list).\n  In short: custom_fields' declared response schema barely resembles what prod actually returns — this is the single largest drift found here, and preprod could not have caught it since its fixture project had custom_fields:[] (nothing to compare against).\n\n(7) MINIFY — no minify param. describeCapability declares only 'all' as a query param. Probing with minify=true was actively REJECTED by the gateway ('unknown query: minify. accepted: all') rather than silently ignored or corrupting values — so this capability exhibits none of the three known minify behaviours (no-op / key-dropping / value-corrupting) because minify isn't a recognized parameter here at all; the gateway enforces a closed query-param allowlist for this capability.\n\nOVERALL vs preprod: misnaming reproduces exactly; the field-definition/hybrid descriptor shape for default_fields.status reproduces exactly; value_category-undeclared reproduces but its root cause is refined (tied to internal_name='untested', not to is_default); containers still match. Two things preprod flagged as open/unverifiable are now resolved on prod, both unfavorably: count-vs-rows is NOT clean here (27-row silent truncation with no declared pagination), and custom_fields — populated for the first time — reveals a near-total contract mismatch (wrong enum values, renamed/reshaped options key, wrong id type, three declared keys that never appear, five undeclared keys that always appear). Net: DRIFT confirmed and substantially deepened on production."
+}

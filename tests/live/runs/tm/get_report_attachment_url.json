@@ -1,0 +1,62 @@
+{
+  "capability": "get_report_attachment_url",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "resolve an attachment_id for report SC-489 via its latest_attachment field",
+      "source": "invoked",
+      "capability": "get_report_v2",
+      "arguments": {"path_params": {"project_id": "PR-2005", "report_id": "SC-489"}},
+      "status": 200,
+      "produced": {
+        "latest_attachment": {"generated_at": "2026-09-18T12:53:09Z", "file_type": "text/csv", "ready": true},
+        "note": "latest_attachment has no id field at all (only generated_at/file_type/ready) — matches the declared schema, which also has no id property. Even a present, ready attachment gives no attachment_id to feed into the capability under test."
+      }
+    },
+    {
+      "step": 2,
+      "why": "confirm latest_attachment is project-wide (not per-report) and never carries an id, across every report in the pool project",
+      "source": "invoked",
+      "capability": "list_reports_v2",
+      "arguments": {"path_params": {"project_id": "PR-2005"}, "query": {"p": 1, "page_size": 30}},
+      "status": 200,
+      "produced": {
+        "reports": ["SC-491", "SC-490", "SC-489"],
+        "note": "All three reports in PR-2005 — including SC-491 and SC-490, which were also unscheduled/never explicitly run by this probe — return the IDENTICAL latest_attachment {generated_at: 2026-09-18T12:53:09Z, file_type: text/csv, ready: true}. This confirms the capability's own guidance: latest_attachment is the newest generated file for the whole project, not this report's, and it never exposes an id under any circumstance. No read in this index returns an attachment_id."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "attachment_id": 999999999}},
+      "status": 404,
+      "error": "{\"url\":null,\"success\":false}",
+      "changed": ""
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744, "attachment_id": 1}},
+      "status": 404,
+      "error": "{\"url\":null,\"success\":false}",
+      "changed": "attachment_id: 999999999 -> 1"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "attachment_id": 1}},
+    "status": 404,
+    "response_keys": ["url", "success"],
+    "item_shape": {"url": null, "success": false}
+  },
+  "contract": {
+    "required": ["project_id", "attachment_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "BLOCKED read-only, exactly as expected. No capability in the tm index ever hands out an attachment_id: get_report_v2's and list_reports_v2's latest_attachment field carries only {generated_at, file_type, ready} — no id property, in either the actual responses or the declared schema — and it is scoped to the whole project rather than to a specific report (confirmed identical across SC-489/490/491 in PR-2005/379335744). SC-489 itself (unscheduled, no mail recipients, never run) has no attachment of its own to begin with. Since no attachment_id can be obtained read-only, get_report_attachment_url could not be reached with a real id; verdict is UNVERIFIED rather than PASS/DRIFT. Tried: get_report_v2(PR-2005, SC-489) and list_reports_v2(PR-2005) — both 200, neither yields an id. Two fabricated-id calls were made anyway per instructions (project_id=379335744, attachment_id=999999999 then 1): both returned HTTP 404 with body {url:null, success:false}, matching this capability's own guidance ('a miss returns HTTP 404 with a normal-looking body {url:null,success:false} rather than an error envelope') but NOT matching the declared 404 schema, which specifies the standard {success,error:{code,message,details}} envelope. Since no 200 was observed, declared_missing/undeclared_returned are left empty rather than being inferred from this error body. On the expiry/signing question: the declared 200 schema types `url` as a plain string (format: uri) with no expiry, signed-param, or TTL field anywhere in the shape — a caller reading only the schema would have no way to know the link is time-limited. The 100-minute expiry and presigned nature are stated only in the capability's prose guidance ('Returns a presigned URL... It expires in 100 minutes, so fetch it promptly rather than storing it'), not encoded in the response contract itself — exactly the caching trap the task flagged."
+}

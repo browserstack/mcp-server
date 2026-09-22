@@ -1,0 +1,50 @@
+{
+  "capability": "get_test_run_cases_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "resolve TR-9062's integer run id read-only before probing, per instructions",
+      "source": "invoked",
+      "capability": "get_test_runs_v1",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "run_id": "TR-9062", "uuid": 17575382 }
+    },
+    {
+      "step": 2,
+      "why": "project scope for the run",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9062" } },
+      "status": 200,
+      "error": null,
+      "changed": "none needed — succeeded first try"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9062" } },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "not_applicable": true,
+      "reason": "response carries no case-level array or collection at all — see notes. 'item_shape' does not apply; the only nested object is data.test_run itself, whose keys are: active_state, run_state, assignee, created_at, description, environment, id, identifier, uuid, is_automation, overall_progress, overall_progress_by_status_id, name, owner, project_id, tags, test_cases_count, updated_at, test_plans, is_dynamic, attachments, links, configurations, metadata, assignee_imported, created_by, updated_by, closed_at, closed_by, issues, test_result_issues, observability_id, observability_url, trtc_folder_progress_enabled, build_normalised_name, build_serial_id, dynamic_filter, filters"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id"],
+    "json_path": "data.test_run",
+    "declared_missing": ["all_test_cases"],
+    "undeclared_returned": ["environment", "assignee_imported", "build_normalised_name", "build_serial_id"]
+  },
+  "notes": "PASS on invocation (200, first try) but DRIFT on contract: the declared 'returns' list promises 'all_test_cases' and it never appears in the actual data.test_run body (checked against TR-9062, test_cases_count=5, has recorded results — if 'all_test_cases' rendered anywhere it would render here). This is the same class of bug the capability's own response description already flags for a *different* field ('the current definition declares a data.project that the handlers never render') — a declared-but-dead field, now found again in this capability's own contract. Four fields are returned but undeclared: environment, assignee_imported, build_normalised_name, build_serial_id (the last two are per-run build metadata not listed in describeCapability's 'returns'). Required params and the data.test_run json_path are otherwise exactly as declared — the 'REPLACEMENT' 200 schema's property list also matches (properties like environment/assignee_imported ARE in that fuller schema; only the flat 'returns' summary list omits them, so the mismatch is between the two declared-contract sources as much as against the live body).\n\nWRONG-DATA WATCH (TC-54458 / TR-9062 corroboration): this capability CANNOT corroborate the get_test_case_detail undercount defect, and that is itself the finding worth recording. Despite its name and path implying per-case rows, get_test_run_cases_v1 returns ONLY the run header (id, uuid, name, owner, run_state, overall_progress, overall_progress_by_status_id, tags, issues, etc.) under data.test_run — there is no test_cases array, no case rows, and therefore no TC-54458 row, no result count, and no latest-result field of any kind anywhere in the response. This was independently verified empirically here, not just taken from the index: the full response body for TR-9062 (test_cases_count: 5, overall_progress {untested:4, passed:1, ...}) was inspected in full and contains zero case-level entries. So this capability is structurally the wrong one to check TC-54458's recorded result count — it is NOT a second serializer surfacing the same (possibly wrong) count, it simply does not carry that data at all. The index's own guidance already says this accurately ('Despite the path, this returns NO per-case rows... the run's cases come from the run's test-cases listing'), so this is a confirmed-true warning rather than newly discovered drift — but it directly matters to the wrong-data investigation because it rules this capability out as a corroborating source. The v2 'latest_result_id populated even on untested rows' trap is likewise not applicable here, for the same reason: no case-level or result-level fields exist in this response to carry latest_result_id or any equivalent.\n\nCross-check: overall_progress on this read (untested:4, passed:1, sums to test_cases_count:5) is consistent with get_test_runs_v1's overall_progress_by_status_id for the same run (uuid 17575382): 318610/Passed count:1, 318642/Untested count:3, 318615/Untested count:1 — wait, get_test_run_cases_v1 shows keys 318610(passed:1) and 318615(untested:1) and 318642(untested:3), while get_test_runs_v1's list-row for TR-9062 shows 318610(passed:1) and 318615(untested:4) only, collapsing the two distinct 'untested' status ids (318615 and 318642) into a single 318615:4 bucket. Both agree on the 5-total and the 1-passed count, but the run-list read folds two distinct custom untested statuses into one — a count-vs-rows / container mismatch between the two run-level reads, worth flagging alongside the primary DRIFT above though out of scope for this capability's own contract file."
+}

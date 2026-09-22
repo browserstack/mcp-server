@@ -1,0 +1,140 @@
+{
+  "capability": "list_folder_test_cases_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T10:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "read-only folder with a known, pinned 2-case contents (baseline for the primary probe)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "folder_id": 764093, "expected_cases": ["TC-54455 (1971631)", "TC-54456 (1971632)"] }
+    },
+    {
+      "step": 3,
+      "why": "scratch folder with a known 18-direct / 19-including-subfolders split, to exercise include_subfolders_tc and check info.count against len(rows)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "folder_id": 764138, "direct_cases": 18, "cases_incl_subfolders": 19, "subfolder_chain": "764138 -> 764828 -> 764827" }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 764093 }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "info"],
+    "item_shape": {
+      "assignee": "object {id, browserstack_user_id, full_name, email, group_id, onboarded, reports_and_notification_enabled}",
+      "creator_details": "object|null",
+      "created_at": "string|null",
+      "updator_details": "object|null",
+      "updated_at": "string|null",
+      "case_type": "object|null {id, internal_name, field_name, colour, name}",
+      "priority": "object {id, internal_name, field_name, colour, name, value_category}",
+      "status": "object|null {id, internal_name, field_name, colour}",
+      "automation_state": "object {id, internal_name, field_name, colour, value_category, name} -- UNDECLARED",
+      "is_shared": "boolean -- UNDECLARED",
+      "case_type_imported": "string",
+      "description": "string|null",
+      "custom_fields": "array (empty)",
+      "estimate": "null (always, matches guidance)",
+      "estimated_duration_seconds": "null -- UNDECLARED",
+      "expected_result": "string|null",
+      "id": "integer",
+      "identifier": "string (TC-NNN)",
+      "is_automation": "boolean",
+      "links": "object {self, detail, folder}",
+      "name": "string",
+      "history_count": "integer|null",
+      "owner": "integer|null",
+      "preconditions": "string|null",
+      "owner_imported": "string",
+      "priority_imported": "string",
+      "project_id": "integer",
+      "status_imported": "string",
+      "steps": "array (empty observed)",
+      "tags": "array",
+      "template": "string",
+      "template_step_type": "string -- UNDECLARED",
+      "template_id": "integer -- UNDECLARED",
+      "template_name": "string -- UNDECLARED",
+      "test_case_folder_id": "integer",
+      "step_count": "integer -- UNDECLARED",
+      "test_case_steps": "array (empty) -- TYPE MISMATCH, contract declares object",
+      "lcnc_build_map": "object {resource_path, status}",
+      "automation_status": "object {name, value}",
+      "test_run_results_count": "null -- UNDECLARED",
+      "test_run_results_issues_count": "null -- UNDECLARED",
+      "issues": "array (empty)",
+      "metadata": "object {lcnc_build_map, ai_prompt}",
+      "test_case_dataset": "object (empty) -- UNDECLARED",
+      "duplicates_tc_count": "null -- UNDECLARED"
+    }
+  },
+  "readonly_folder_check": {
+    "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764093 } },
+    "status": 200,
+    "test_cases_length": 2,
+    "info": { "page": 1, "page_size": 30, "count": 2, "prev": null, "next": null },
+    "verified_against_pool": "Exact match: id 1971631 -> TC-54455, id 1971632 -> TC-54456, both test_case_folder_id 764093. info.count (2) == len(test_cases) (2)."
+  },
+  "scratch_folder_flag_comparison": {
+    "note": "Exercised the pool's __scratch__ folder (764138) both with and without include_subfolders_tc, specifically to check for the list_test_plans_v1-style count/rows desync when a subfolder flag inflates the array. Result: NOT PRESENT here -- info.count tracked len(test_cases) correctly in both branches.",
+    "branch_direct_only": {
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138 } },
+      "status": 200,
+      "test_cases_length": 18,
+      "info": { "page": 1, "page_size": 30, "count": 18, "prev": null, "next": null },
+      "count_vs_rows": "info.count (18) == len(test_cases) (18) -- matches"
+    },
+    "branch_include_subfolders_tc_true": {
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764138 },
+        "query": { "include_subfolders_tc": true }
+      },
+      "status": 200,
+      "test_cases_length": 19,
+      "info": { "page": 1, "page_size": 30, "count": 19, "prev": null, "next": null },
+      "count_vs_rows": "info.count (19) == len(test_cases) (19) -- matches. The extra row (TC-54458, id 1975349) carries test_case_folder_id 764828, the direct child of 764138 -- consistent with the pool's documented 18-direct/19-total split.",
+      "folders_block": {
+        "declared": "type: object, no properties -- unfalsifiable",
+        "actual": "object keyed by (stringified) folder id -> array of ancestor-chain entries, each {id: integer, name: string, parent_id: integer|null, ui_position: integer}. Observed keys '764138' (the invoked folder itself, one entry, parent_id null) and '764828' (the child that holds the extra case, two entries: itself with parent_id 764138, then 764138 again as the root of that chain).",
+        "finding": "This is a real instance of the 'unfalsifiable {type:object}' pattern -- the contract promises nothing checkable about `folders`, and the actual shape (a folder-id-keyed map of ancestor chains) is a genuine, non-trivial structure worth declaring."
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "folder_id (path)"],
+    "json_path": null,
+    "declared_missing": [
+      "test_cases[].test_case_steps -- declared as a nested object (background, feature, scenario, hashed_id, id, order, project_id, result, sharedStep, shared_step_detail_id, shared_step_id, step, test_data, test_case_id, test_recording_id, title, created_at, updated_at); every observed row across both folders (20 rows total) returns an empty ARRAY instead. This is a type mismatch, not just an empty-collection ambiguity -- the container type itself disagrees with the contract, so none of those nested fields are reachable via this response shape."
+    ],
+    "undeclared_returned": [
+      "test_cases[].automation_state -- a full descriptor object (id, internal_name, field_name, colour, value_category, name), entirely absent from the declared schema, which documents only the differently-shaped automation_status:{name,value}. The two co-exist on every row and describe the same underlying state.",
+      "test_cases[].priority.value_category -- undeclared extra key on the otherwise-matching priority object (always null in observations)",
+      "test_cases[].is_shared",
+      "test_cases[].estimated_duration_seconds",
+      "test_cases[].template_step_type",
+      "test_cases[].template_id",
+      "test_cases[].template_name",
+      "test_cases[].step_count",
+      "test_cases[].test_run_results_count",
+      "test_cases[].test_run_results_issues_count",
+      "test_cases[].test_case_dataset",
+      "test_cases[].duplicates_tc_count",
+      "folders (top-level, only present when include_subfolders_tc=true) -- declared as bare {type:object}; see scratch_folder_flag_comparison.branch_include_subfolders_tc_true.folders_block for the actual shape"
+    ]
+  },
+  "notes": "Both pool folders exercised as instructed. __readonly__ (764093) round-tripped exactly: 2 rows, ids/identifiers matching the pool record verbatim, info.count == len(rows). __scratch__ (764138) exercised both with and without include_subfolders_tc: 18 rows direct (info.count 18), 19 rows with the flag (info.count 19, extra row correctly attributed to child folder 764828). COUNT-VS-ROWS was checked deliberately per the standing caution about list_test_plans_v1's flag-triggered desync (15/29 rows vs a stuck count of 15) -- that defect does NOT reproduce here; this capability's info.count stayed in sync with len(test_cases) in every branch. Container/folder-id consistency also checked: test_case_folder_id on each row matches the folder its `links.folder` points at, including the subfolder row surfaced only by the recursive flag -- no container mismatch found. status and case_type were null on every one of the 20 rows observed (no case in either pool folder has a custom status or case_type set), so their declared nested shapes (id/internal_name/field_name/colour/name) could not be positively verified against a non-null value -- flagged as an unverified sub-shape rather than folded into the DRIFT verdict, since it doesn't contradict the contract, just leaves it unexercised. Verdict is DRIFT rather than PASS on the strength of two things: the test_case_steps object-vs-array type mismatch (declared_missing, shallowest path picked per instruction) and a substantial undeclared-field list including a duplicate automation-state object (automation_state alongside the declared automation_status) and the unfalsifiable `folders` block. All three invocations succeeded on the first attempt; no retries were needed and none of the response bodies were diffed against an error schema."
+}

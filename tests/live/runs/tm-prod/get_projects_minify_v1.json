@@ -1,0 +1,56 @@
+{
+  "capability": "get_projects_minify_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "query": {} },
+      "status": 200,
+      "error": null,
+      "changed": "default page (p=1, count=300) returned 300 projects, envelope {success, projects} with no info block, as documented"
+    },
+    {
+      "n": 2,
+      "arguments": { "query": { "p": 2 } },
+      "status": 200,
+      "error": null,
+      "changed": "page 2 returned a second, non-overlapping batch of 300 projects (ids 4131368-4145741) vs page 1's 300 (ids 4145744-4158874, 0 id overlap) -- confirms p= paging works correctly at 89,102-project account scale despite the response never exposing a total count or info block"
+    }
+  ],
+  "probe": {
+    "arguments": { "query": {} },
+    "status": 200,
+    "response_keys": ["success", "projects"],
+    "item_shape": {
+      "keys_present": ["name", "id", "thProjectId", "description", "import_id", "normalisedName", "starred", "access_via_secondary_team"],
+      "keys_absent": ["permissions"],
+      "sample_item": {
+        "name": "APPA11Y-6160-xcuitest-a11y-postgrant",
+        "id": 4158874,
+        "thProjectId": 4158874,
+        "description": null,
+        "import_id": null,
+        "normalisedName": "APPA11Y-6160-xcuitest-a11y-postgrant",
+        "starred": false,
+        "access_via_secondary_team": false
+      },
+      "access_via_secondary_team_present_count": "300/300",
+      "permissions_present_count": "0/300"
+    }
+  },
+  "contract": {
+    "required": ["success", "projects"],
+    "json_path": null,
+    "declared_params": [
+      { "name": "p", "type": "integer", "default": 1, "location": "query" },
+      { "name": "count", "type": "integer", "default": 300, "max": 300, "location": "query" }
+    ],
+    "declared_missing": ["permissions"],
+    "undeclared_returned": ["access_via_secondary_team"]
+  },
+  "notes": "Preprod DRIFT reproduces exactly on prod at real scale (89,102 projects on this account). describeCapability confirms declared params are only p (page) and count (rows/page, clamped to 300) -- guidance explicitly states 'no search on this route at all -- no q in any form', so there is no filter param to test for silent-ignore behavior (point 5 of the task is N/A: nothing declared to narrow). Formal 200 item schema declares permissions:array as a property but 0/300 rows on either page carried it (declared_missing). Every row on both pages carried access_via_secondary_team:boolean, which is absent from the formal schema properties (only listed loosely in the capability's 'returns' array/prose) -- undeclared_returned, matching preprod. Response envelope is exactly {success, projects} with no info block on prod too, consistent with the documented contract (a documented omission, not itself drift). Verified pagination DOES work correctly at this scale even without info/count metadata: p=1 and p=2 each returned exactly 300 rows with zero id overlap between the two batches (p=1: ids 4145744-4158874; p=2: ids 4131368-4145741), so a caller can still safely page-until-short-page to enumerate all 89,102 projects despite the missing total count."
+}

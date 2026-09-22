@@ -1,0 +1,132 @@
+{
+  "delete_custom_field_dataset_option_v2": {
+    "arguments": {
+      "path_params": { "custom_fields_id": 106131, "dataset_id": 31319, "option_id": 146668 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_custom_field_dataset_option_v2 is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Probe-created custom field 106131 / dataset 31319 / option 146668. Refused before binding; no HTTP call made."
+  },
+  "delete_custom_field_dataset_v2": {
+    "arguments": {
+      "path_params": { "custom_fields_id": 106131, "dataset_id": 31320 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_custom_field_dataset_v2 is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Probe-created custom field 106131 / dataset 31320. Confirms the previously-observed refusal on this same capability; identical wording."
+  },
+  "delete_custom_field_definition_v2": {
+    "arguments": {
+      "path_params": { "custom_fields_id": 106131 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_custom_field_definition_v2 is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Probe-created custom field 106131. Confirms the previously-observed refusal on this same capability; identical wording."
+  },
+  "delete_dataset": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "uuid": "de04f15e-b88a-4409-8b9d-eeff038c3109" }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_dataset is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Probe-created dataset uuid under project PR-2005 (379335744)."
+  },
+  "delete_filter": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "filter_id": 542 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_filter is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Probe-created filter 542 under project PR-2005. Confirms the previously-observed refusal on this same capability; identical wording."
+  },
+  "delete_folder_and_contents": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 765811 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_folder_and_contents is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Probe-created folder 765811 under project PR-2005."
+  },
+  "undo_remove_folder": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 765811 }
+    },
+    "response_verbatim": { "ok": false, "error": "undo_remove_folder is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Same target folder 765811 as delete_folder_and_contents (its describeCapability confirms the handler is a one-line alias that forwards to the same DELETE). Refusal wording and mechanism identical despite the misleadingly restorative name."
+  },
+  "delete_report_schedule": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "schedule_id": 10393 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_report_schedule is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "schedule_id set to the report's own id (10393 / SC-492) — per describeCapability there is no separate schedule object; the id path targets the report record itself."
+  },
+  "delete_shared_step_v1": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "shared_step_id": 27846 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_shared_step_v1 is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Probe-created shared step 27846 under project PR-2005."
+  },
+  "delete_test_plan_v1": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_plan_id": 9999999 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_test_plan_v1 is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "No probe-created test plan id was supplied for this sweep, and TP-1616 is an excluded fixture/evidence object, so a placeholder integer id (9999999, matching no real plan) was used. This is safe and does not weaken the finding: the refusal fires before path-param binding/validation, so the id's validity is irrelevant to the observed behaviour."
+  },
+  "delete_exploratory_session": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "session_id": 780 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_exploratory_session is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Session 780, the clone minted for destruction, under project PR-2005."
+  },
+  "delete_exploratory_session_log": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "session_id": 780, "log_id": 543 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_exploratory_session_log is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Log 543 under session 780, both minted for destruction."
+  },
+  "bulk_delete_test_cases": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": { "test_case": { "ids": [1985019, 1985020] } }
+    },
+    "response_verbatim": { "ok": false, "error": "bulk_delete_test_cases is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Probe-created test cases TC-54485/1985019 and TC-54486/1985020, selected by explicit ids (not select_all) under project PR-2005."
+  },
+  "delete_v1_test_run": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_v1_test_run is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Probe-created run TR-9110/17577900 under project PR-2005."
+  },
+  "bulk_delete_test_results_v1": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": { "result_ids": [17577900] }
+    },
+    "response_verbatim": { "ok": false, "error": "bulk_delete_test_results_v1 is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "No probe-created test-RESULT id was supplied in the brief (17577900 is run TR-9110's integer id, reused here only as a well-formed placeholder). Irrelevant to the finding since the refusal precedes any binding/validation of result_ids."
+  },
+  "delete_test_result_v1": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_result_id": 17577900 }
+    },
+    "response_verbatim": { "ok": false, "error": "delete_test_result_v1 is a destructive operation and is not available through this surface" },
+    "refused": true,
+    "note": "Same placeholder-id caveat as bulk_delete_test_results_v1 above; no probe-created result id was available."
+  }
+}

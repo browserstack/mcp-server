@@ -1,7 +1,7 @@
-# A declared input crashes the server — three capabilities, one shape
+# A declared input crashes the server — two capabilities, one shape
 
 - **Product:** tm
-- **Environment:** **preprod** (`test-management-preprod.bsstag.com`)
+- **Environment:** originally preprod only; `list_tags_v3` is now confirmed in **production** too (see escalation)
 - **Status:** for the product team. Nothing here is fixable from the index.
 
 ## The shape
@@ -10,34 +10,47 @@ In each case the contract declares an input, a caller supplies exactly that inpu
 server answers **500**. Not a malformed payload, not an undocumented parameter — the
 declared vocabulary, used as declared.
 
+> **One entry was removed on 2026-09-22.** `get_test_run_v2` / `minify=true` was listed here as a
+> third crash. It should not have been: the underlying finding was **retracted on 2026-09-18**
+> (see `findings/get_test_run_v2.md`, Finding 7) as a preprod flakiness burst, and this file was
+> never updated to match. A production retest on 2026-09-22 confirms it: **5/5 calls returned
+> 200**, `minify=true` included. Nothing to route.
+
 That is what separates these from the ordinary preprod flake recorded at the bottom of this
-file: each was **reproduced on retry**, and in each case a neighbouring value of the same
-parameter returns 200, which rules out an environment outage.
+file: each was **reproduced on retry**. The original test also required a neighbouring value of
+the same parameter to return 200, ruling out an environment outage — that control still holds
+for `list_test_case_tags_v1`, but `list_tags_v3` has since lost it by failing on every value.
 
 | capability | the declared input | result | control that works |
 | --- | --- | --- | --- |
-| `get_test_run_v2` | `minify=true` | 500, **null body** | default query → 200 |
-| `list_tags_v3` | `entity_type=test_recording` | 500 `{type:server_error}` | other 4 enum values → 200 |
+| `list_tags_v3` | **every** `entity_type` value | 500 | **no control left — see escalation below** |
 | `list_test_case_tags_v1` | `q=<term>` | 500 Internal Server Error | same call paged without `q` → 200 |
 
-## 1. `get_test_run_v2` — `minify=true`
+## ESCALATION 2026-09-22 — `list_tags_v3` now fails on every declared input
 
-`GET /api/v2/projects/{project_id}/test-runs/{test_run_id}?minify=true`
+When this was first recorded, one of five enum values crashed and the other four returned 200;
+that contrast was the evidence it was a branch bug rather than an outage.
 
-Two identical attempts, both **500 with a literally null body** — no envelope at all, which
-does not match the capability's own declared 500 schema of
-`{success:false, error:{code,message,details}}`. The probe's note is explicit: *"reproduced
-on retry — this is a real server error, not the preprod status-0 flake."*
+**That is no longer true.** Re-tested 2026-09-22 across the full enum, with and without paging,
+in **both** environments:
 
-Dropping `minify` and reissuing the unqualified request returned 200, and the rest of the
-probe ran on the default query. So the response *shape* was verified; it is the declared
-option that crashes.
+| `entity_type` | preprod | production |
+| --- | --- | --- |
+| `test_case` | 500 | 500 |
+| `test_run` | 500 | 500 |
+| `test_plan` | 500 | 500 |
+| `shared_step` | 500 | 500 |
+| `test_recording` | 500 | 500 |
 
-**Two defects here, not one.** The crash, and the fact that the 500 does not carry the error
-envelope the contract promises — a caller with error handling built against the declared
-schema gets `null` and fails a second time trying to read `error.code`.
+**10 of 10 calls return 500.** The capability is completely unreachable, in production as well
+as preprod, and there is no longer a working value to contrast against. Whatever regressed took
+the four healthy branches with it.
 
-## 2. `list_tags_v3` — `entity_type=test_recording`
+This raises the priority: it is no longer one bad enum branch on an otherwise working read, it
+is a published capability that cannot be called at all. The original single-branch detail is
+kept below as the record of what it looked like before.
+
+## 1. `list_tags_v3` — originally only `entity_type=test_recording`
 
 `GET /api/v1/projects/{project_id}/tags/v3?entity_type=test_recording`
 
@@ -51,7 +64,7 @@ crash, not intermittency. The other four enum values (`test_case`, `test_run`, `
 An enum value that is published as valid and cannot be sent is worse than an undocumented
 one: the contract actively directs a caller into it.
 
-## 3. `list_test_case_tags_v1` — the `q` filter
+## 2. `list_test_case_tags_v1` — the `q` filter
 
 `GET /api/v1/projects/{project_id}/test-case/tags-v2?q=<term>`
 
@@ -91,7 +104,7 @@ The test applied here: **reproduced on retry, and a neighbouring input succeeds.
 
 ## Suggested next step for the product team
 
-Three separate crashes, likely three separate causes. The `minify` and `entity_type` ones
-should be cheap to locate — both are a single branch on a declared parameter. Worth checking
+Two separate crashes, likely two separate causes. The `entity_type` one should be cheap to
+locate — a single branch on a declared enum value. Worth checking
 whether any spec covers those branches, since the pattern established elsewhere in this
 campaign is that **the crashing path is stubbed in the spec**, which is why CI stays green.

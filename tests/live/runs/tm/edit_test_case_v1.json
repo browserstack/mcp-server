@@ -1,0 +1,150 @@
+{
+  "capability": "edit_test_case_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:36:56Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project/folder/case ids for TC-54484, our expendable target case in __scratch__",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985018 },
+      "status": null,
+      "produced": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985018 }
+    },
+    {
+      "step": 2,
+      "why": "baseline read of TC-54484 BEFORE any edit, for the partial-update before/after comparison",
+      "source": "invoked",
+      "capability": "get_test_case_by_integer_id_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985018 } },
+      "status": 200,
+      "produced": {
+        "name": "__mcp-probe-createcase-20260921",
+        "priority": { "id": 318618, "internal_name": "medium", "field_name": "priority", "name": "Medium" },
+        "case_type": { "id": 318626, "internal_name": "other", "field_name": "category", "name": "Other" },
+        "status": { "id": 318632, "internal_name": "active", "field_name": "status", "name": "Active" },
+        "tags": ["mcp-probe"],
+        "steps": [],
+        "test_case_steps": [ { "id": 12372580, "step": "Open the login page", "result": "Login page is displayed", "order": 1 } ],
+        "template": "test_case_steps",
+        "template_step_type": "test_case_steps",
+        "template_id": 1164,
+        "template_name": "Test Case Steps",
+        "history_count": 1
+      }
+    },
+    {
+      "step": 3,
+      "why": "second successful edit invocation used for the PARTIAL-UPDATE experiment: send ONLY `name`, omit every other field (steps, priority, case_type, status, tags, template_step_type) and see what survives",
+      "source": "invoked",
+      "capability": "edit_test_case_v1",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985018 },
+        "body": { "name": "__mcp-probe-createcase-20260921-edited" },
+        "user_permission": "granted",
+        "change_summary": "Probe: partial-update semantics test — send ONLY name, omitting steps/priority/case_type/status/tags/template fields, to determine whether edit_test_case_v1 is full-replace (PUT) or partial-merge (PATCH)."
+      },
+      "status": 200,
+      "produced": {
+        "name": "__mcp-probe-createcase-20260921-edited",
+        "priority_survived": true,
+        "case_type_survived": true,
+        "status_survived": true,
+        "tags_survived": true,
+        "test_case_steps_survived": true,
+        "template_and_template_step_type_reset_to": "test_case_text",
+        "template_id_and_template_name_reset_to": null,
+        "history_count_and_run_counts_in_response": null
+      }
+    },
+    {
+      "step": 4,
+      "why": "independent read AFTER both edits, via a different capability (get_test_case_by_integer_id_v1), to confirm the edit response's own echoed state actually persisted and wasn't just a rendering artifact",
+      "source": "invoked",
+      "capability": "get_test_case_by_integer_id_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985018 } },
+      "status": 200,
+      "produced": {
+        "name": "__mcp-probe-createcase-20260921-edited",
+        "priority": { "id": 318618, "name": "Medium", "field_name": "priority" },
+        "case_type": { "id": 318626, "name": "Other", "field_name": "category" },
+        "status": { "id": 318632, "name": "Active", "field_name": "status" },
+        "tags": ["mcp-probe"],
+        "test_case_steps": [ { "id": 12372587, "step": "Navigate to the probe login page (edited)", "result": "Probe login page renders with edited content", "order": 1 } ],
+        "steps": [],
+        "template": "test_case_text",
+        "template_step_type": "test_case_text",
+        "template_id": null,
+        "template_name": null,
+        "history_count": 3,
+        "test_run_results_count": 0,
+        "test_run_results_issues_count": 0
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985018 },
+        "body": { "test_case": { "tags": ["mcp-probe", "nested-wrapper-test"] } }
+      },
+      "status": "rejected client-side, no HTTP call made",
+      "error": "unknown body: test_case. accepted: attachments, automation_state, automation_status, case_type, custom_fields, description, estimate, estimated_duration_seconds, expected_result, isMergedDuplicate, is_dataset_modified, issues, name, owner, preconditions, priority, reauth_token, review_status, reviewers, send_for_review, shared_precondition_id, status, steps, tags, template, template_id, template_step_type, test_case_dataset, test_case_folder_id, test_case_steps, third_party_identifier. test_case is a wrapper this surface builds for you from each field's json_path — send the fields directly instead of nesting them",
+      "changed": "This was a deliberate confirmatory negative test of the wrapper-trap check, run AFTER the successful flat-body edits below (not part of a retry chain). The contract's guidance explicitly said flat is required and nested is rejected as an unknown body key — this attempt confirms that claim is accurate for edit_test_case_v1 (unlike create_test_case_v1, where nested was actually required). No drift here: guidance and behavior match."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985018 },
+      "body": {
+        "test_case_steps": [ { "step": "Navigate to the probe login page (edited)", "result": "Probe login page renders with edited content", "order": 1 } ],
+        "template_step_type": "test_case_steps",
+        "priority": 318618
+      },
+      "user_permission": "granted",
+      "change_summary": "Probe: set new step content on TC-54484 to determine which field edit_test_case_v1 reads steps from and where they land on read-back (decisive experiment vs create_test_case_v1 finding); also resend priority=318618 unchanged to check echo of upper-block option id."
+    },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "data.test_case": [
+        "assignee", "creator_details", "created_at", "updator_details", "updated_at",
+        "case_type", "priority", "status", "automation_state", "is_shared",
+        "case_type_imported", "description", "custom_fields", "estimate",
+        "estimated_duration_seconds", "expected_result", "id", "identifier",
+        "is_automation", "links", "name", "history_count", "owner", "preconditions",
+        "owner_imported", "attachments", "priority_imported", "project_id",
+        "status_imported", "steps", "tags", "template", "template_step_type",
+        "template_id", "template_name", "test_case_folder_id", "test_case_steps",
+        "lcnc_build_map", "automation_status", "test_run_results_count",
+        "test_run_results_issues_count", "issues", "comments_count", "metadata",
+        "test_case_dataset"
+      ]
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "folder_id (path)", "test_case_id (path)"],
+    "json_path": "/test_case/<field> per field (e.g. /test_case/name, /test_case/test_case_steps) — but this is a per-field wrapper notation only. The body must be sent FLAT; a literal nested `test_case` object is rejected client-side with 'unknown body: test_case'. Confirmed accurate (see attempts[0]).",
+    "declared_missing": [
+      "data.test_case.priority.field_name",
+      "data.test_case.case_type.field_name",
+      "data.test_case.status.field_name"
+    ],
+    "undeclared_returned": [
+      "data.test_case.automation_state",
+      "data.test_case.is_shared",
+      "data.test_case.template_step_type",
+      "data.test_case.template_id",
+      "data.test_case.template_name",
+      "data.test_case.test_run_results_count",
+      "data.test_case.test_run_results_issues_count",
+      "data.test_case.test_case_dataset",
+      "data.test_case.case_type.value_category / priority.value_category / status.value_category / automation_state.value_category"
+    ]
+  },
+  "notes": "DECISIVE EXPERIMENT (steps field, in vs out): the request body field that actually carries steps into edit_test_case_v1 is `test_case_steps` (flat, array of {step, result, order, ...}) — exactly the same field name as create_test_case_v1. Sending it (with `template_step_type: \"test_case_steps\"` alongside it, per the contract's own warning that template defaults to test_case_text otherwise) landed the new step content. On read-back, the content comes back in `test_case_steps` (an ARRAY of step objects), while the OTHER declared field `test_case.steps` came back as `[]` (empty) both immediately in the edit response and on an independent GET afterward. This is CONSISTENT with the create_test_case_v1 finding: `test_case_steps` is the only field that round-trips step content on both create and edit; `steps` is dead on both paths. NEW drift found here that create_test_case_v1's probe did not surface: edit_test_case_v1's declared 200 schema types `test_case.test_case_steps` as a single OBJECT (with properties background/feature/hashed_id/order/result/scenario/step/... at the top level), but the actual field is always an ARRAY of such objects — a real type mismatch, not just an empty-vs-populated difference.\n\nPARTIAL-UPDATE SEMANTICS (PUT vs PATCH): for ordinary content fields, edit_test_case_v1 behaves as a genuine PARTIAL MERGE (PATCH-like), not a destructive full replace. Evidence: setup step 3 sent ONLY `{name: ...}`, omitting steps/priority/case_type/status/tags entirely, and setup step 4's independent read-back confirms priority (318618/Medium), case_type (318626/Other), status (318632/Active), tags (['mcp-probe']), and the steps set in the prior edit all SURVIVED unchanged. This contradicts the naive inference from the existence of an `edit_test_case_partial_v1` sibling that this path must be a destructive full replace — for the fields tested, it is not.\n\nHOWEVER, there IS a real, undeclared, destructive side effect worth flagging: `template_id` and `template_name` get reset to `null`, and `template`/`template_step_type` silently revert to `test_case_text`, on ANY edit call that does not explicitly resend `template_id` — even when the edit is about a completely unrelated field like `name`. This is a real persisted change (confirmed via an independent GET after the edit, not just an artifact of the edit response), even though the underlying `test_case_steps` row data itself is NOT deleted (it is still returned in full on the next read) — only the template/step-shape classification is silently downgraded. This is more specific than the contract's own warning ('template defaults to test_case_text when omitted, which discards test_case_steps you sent') — the discarding claim is partly wrong: the step records survive, but the template metadata does not. Recommend the contract explicitly say 'omitting `template_id`/`template_step_type` on ANY edit call resets the case's template classification to test_case_text, independent of which fields you are actually editing' rather than framing it only as a steps-discarding risk.\n\nOne more response-shape wrinkle: `history_count`, `test_run_results_count` and `test_run_results_issues_count` came back as `null` in the edit response itself (setup step 3) but as real integers (3, 0, 0) on the very next independent GET (setup step 4) — a transient/eventually-consistent rendering quirk of the edit response specifically, not real data loss. Worth noting so nobody reads a null count in an edit response as the count having been wiped.\n\nWRAPPER TRAP: contract guidance for edit_test_case_v1 explicitly and correctly states the body must be FLAT — sending a nested `test_case` object is rejected client-side before any HTTP call, verbatim: 'unknown body: test_case ... test_case is a wrapper this surface builds for you from each field's json_path — send the fields directly instead of nesting them'. Confirmed exactly as declared (attempts[0]). This is the OPPOSITE of create_test_case_v1 (where nested was required) and MATCHES create_test_plan_v1 (flat required) — no drift on this point for edit_test_case_v1.\n\nOTHER OBSERVATIONS: priority id 318618 was resent unchanged in the decisive-experiment edit and echoed back correctly as {id:318618, internal_name:'medium', name:'Medium'} confirming the upper-block option ids are live on this path too. `field_name` is declared on priority/case_type/status option objects in edit_test_case_v1's response schema, but is ABSENT from the actual edit response for all three (confirmed twice, across both successful edits) — yet the SAME fields DO carry `field_name` when read via get_test_case_by_integer_id_v1 (baseline and final read-back both have it). So this is an edit-response-specific omission, not a general absence. Undeclared `value_category` appears on case_type/priority/status/automation_state option objects in the edit response, exactly as flagged as a risk in the task brief (null for the first three, 'manual' for automation_state) — none of these are mentioned in the declared schema."
+}

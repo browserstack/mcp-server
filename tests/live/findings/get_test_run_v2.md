@@ -34,7 +34,7 @@ This compounds the gap noted in `findings/create_test_run_v2.md`: v1 run capabil
 
 ## Finding 3 — `assignee` declared an object, returned a string
 
-Returned as a plain email string (`"ing@bsstag.com"`) or `null` — never the declared object. **Identical to the create response**, so this is another entity-wide type error rather than an endpoint quirk.
+Returned as a plain email string (`"probe-user@example.invalid"`) or `null` — never the declared object. **Identical to the create response**, so this is another entity-wide type error rather than an endpoint quirk.
 
 ## Finding 4 — `overall_progress` is present here, but with an incompatible shape
 

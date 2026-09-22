@@ -85,7 +85,7 @@
       "modified": "object, per-field {old,new} - ONLY present on V5 (the newest row on the page); absent on V1-V4, exactly as guidance states",
       "comment": "null on every row observed",
       "created_at": "string date-time, ISO 8601, strictly increasing across V1->V5 (05:51:55 -> 05:59:11 -> 06:04:07 -> 06:04:25 -> 06:04:44)",
-      "updated_by": "string email, \"ing@bsstag.com\" on every row - resolved, never null here",
+      "updated_by": "string email, \"probe-user@example.invalid\" on every row - resolved, never null here",
       "user_id": "integer, 6013 on every row (BrowserStack user id, not a TM one, as declared)",
       "testcase_id": "string, \"TC-54458\" on every row (identifier form)",
       "origin_channel": "string, \"api\" on every row - UNDECLARED, see contract.undeclared_returned"

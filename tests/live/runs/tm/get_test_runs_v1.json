@@ -1,0 +1,92 @@
+{
+  "capability": "get_test_runs_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {}},
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}, "query": {}},
+    "status": 200,
+    "response_keys": ["success", "test_runs", "info", "count"],
+    "item_shape": {
+      "id": "TR-9075",
+      "identifier": "TR-9075",
+      "uuid": 17576237,
+      "name": "__mcp-probe-run-2026-09-18T06-35-00Z",
+      "description": "update-probe-second-description",
+      "run_state": "under_review",
+      "active_state": "active",
+      "owner": 2522,
+      "assignee": {"id": 2522, "browserstack_user_id": 6013, "email": "probe-user@example.invalid", "full_name": "ing", "group_id": 2615, "onboarded": 1},
+      "environment": "",
+      "overall_progress": null,
+      "overall_progress_by_status_id": {"318615": {"count": 4, "result_status": {"id": 318615, "field_value": "Untested", "internal_name": "untested", "field_name": "status", "colour": "#E5E7EB", "value_category": null}}},
+      "test_cases_count": 4,
+      "tags": [],
+      "is_automation": false,
+      "is_dynamic": 0,
+      "project_id": 379335744,
+      "test_plans": [],
+      "configurations": [],
+      "metadata": null,
+      "assignee_imported": null,
+      "attachments": null,
+      "created_by": null,
+      "updated_by": null,
+      "closed_at": null,
+      "closed_by": null,
+      "observability_id": "17576237",
+      "observability_url": "https://observability.browserstack.com/builds/839a8d3ecc005eee373b8ef8b03feb0821c192c3",
+      "build_meta": {"id": 17576237, "name": "__mcp-probe-run-2026-09-18T06-35-00Z", "creationType": "MANUAL", "buildNormalisedName": "__mcp-probe-run-2026-09-18T06-35-00Z", "build_number": 1},
+      "links": {},
+      "created_at": "2026-09-18T10:40:46.657Z",
+      "updated_at": "2026-09-18T11:56:43.000Z"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)"],
+    "json_path": "N/A — GET with only path_params (project_id) and query (p, ignore_run_type, include_test_plan, filter_mapping); no request body",
+    "declared_missing": [
+      "test_runs[].type — declared string (example 'TestRun'); absent from every one of the 30 rows returned.",
+      "test_runs[].self_ui_link — declared string; absent from every row (same depth as `type`, both reported since neither sits inside another missing path)."
+    ],
+    "undeclared_returned": [
+      "test_runs[].attachments (null in all 30 rows)",
+      "test_runs[].created_by (null in all 30 rows)",
+      "test_runs[].updated_by (null in all 30 rows)",
+      "test_runs[].closed_at (null in all 30 rows)",
+      "test_runs[].closed_by (null in all 30 rows)",
+      "test_runs[].observability_id (string, duplicates the numeric part of observability_url; also equals `uuid` numerically, e.g. TR-9075: uuid=17576237, observability_id=\"17576237\")",
+      "test_runs[].build_meta (object: id, name, creationType, buildNormalisedName, build_number) — not in the declared schema or the capability's `returns` list",
+      "test_runs[].assignee.email — the declared assignee object lists only {id, browserstack_user_id, full_name, group_id, onboarded}; actual assignee objects (e.g. TR-9075, TR-9091, TR-9089) additionally carry an `email` string"
+    ],
+    "type_mismatches": [
+      "test_runs[].project_id — declared type string, actual is a bare JSON integer (379335744, not \"379335744\") on every row.",
+      "test_runs[].is_dynamic — declared type boolean, actual is the integer 0 on every row. Matches the pattern flagged on a sibling capability, confirmed here directly against this endpoint's own declared schema.",
+      "test_runs[].owner — declared non-nullable integer; actual null on 15 of 30 rows (e.g. TR-9090, TR-9088, TR-9086, TR-9061). Present rows (e.g. TR-9075=2522) confirm the field is otherwise correctly typed, so this is a nullability gap, not a wrong type.",
+      "test_runs[].assignee — declared non-nullable object; actual null on 15 of 30 rows (the same rows where owner is null).",
+      "test_runs[].overall_progress — declared non-nullable object {untested/passed/retest/failed/blocked/skipped/in_progress}; actual null on ALL 30 rows, with zero exceptions. The capability's own guidance says suppressed analytics 'come back empty rather than absent' — but 'empty' here reads as null, not an empty/zeroed object, and the schema never marks the field nullable. Both the guidance prose and the schema are arguably imprecise about what actually comes back.",
+      "test_runs[].assignee_imported — declared boolean; actual null on ALL 30 rows, zero exceptions observed.",
+      "test_runs[].metadata — declared as a bare object (non-nullable, no sub-schema); actual is null on most rows, {} on one (TR-9062), and a populated object on another (TR-9061: {test_plan_error: 'PLAN_LINKED'}). The null cases are a nullability gap against the declared type; the schema itself is unfalsifiable ({type:object}, no properties) since it never specifies what keys metadata can hold."
+    ],
+    "content_omission": [
+      "test_runs[].test_plans is declared as an array of {id, name} and returned [] for every row on both the default call and a re-probe with include_test_plan=true. TR-9061 carries metadata.test_plan_error = 'PLAN_LINKED', which is direct evidence that run IS linked to a plan, yet test_plans stayed empty even with the flag documented to populate it ('include each run's linked test plan on the row, so you can tell which runs are already attached to a plan without a second read'). The include_test_plan flag appears to have no observable effect: the two responses (with and without it) are otherwise identical."
+    ],
+    "unverified": [
+      "test_runs[].configurations element shape — every row in the pool returned [], so array-of-object vs any other shape could not be checked against a real element.",
+      "test_runs[].links.self / links.detail — declared object with two string properties, neither required; every row returned links: {} (empty object), which is schema-valid but never exercises those two keys.",
+      "filter_mapping=true's {id, identifier}-only shape and ignore_run_type='true' behavior were not probed (only the default call, p=2, and include_test_plan='true' were exercised, per the 3-attempt guidance and since all three succeeded with no need to retry)."
+    ]
+  },
+  "notes": "PASS on core function: 200, 30 real test_run rows for project 379335744/PR-2005, matching the pool description (30 active, 0 closed, no desync between info.count, count.active and len(rows)). DRIFT on the row contract: two declared fields (type, self_ui_link) never appear; eight undeclared fields do (attachments/created_by/updated_by/closed_at/closed_by/observability_id/build_meta/assignee.email); and six fields disagree on type or nullability with the declared schema (project_id string-vs-int, is_dynamic boolean-vs-int, owner/assignee/overall_progress/assignee_imported/metadata non-nullable-vs-null-in-practice).\n\nSPECIFIC INTEREST (uuid as the numeric run id): CONFIRMED. Every row carries a numeric id in a field literally called `uuid` (e.g. TR-9075 -> uuid 17576237), matching this capability's own guidance and matching what list_test_runs_v2 reportedly needs for run->plan linkage. The declared schema (uuid: integer) and actual response agree on type — no drift there. Flagging on its own, per the task's instruction: this integer is not a UUID in any conventional sense (no dashes, no 36-char hex form) — it is the same integer as build_meta.id and the numeric suffix of observability_id, i.e. an internal build id repurposed as `uuid`. The name is misleading even though the mechanism (numeric id for cross-capability linking) works as documented.\n\nCOUNT-VS-ROWS (boundary at the 30-row page size): default call returned info={page:1, page_size:30, count:30, prev:null, next:null} with count={active:30, closed:0} and exactly 30 rows in test_runs — count, page_size and len(rows) all agree, and `next` is correctly null despite the page being exactly full (no off-by-one hint that a next page might exist). Followed up with p=2: returned test_runs: [] (correctly empty) and info={page:2, page_size:30, count:30, prev:1, next:null} — page 2 is genuinely empty, NOT a repeat of page 1 and NOT an error. This endpoint's pagination is well-behaved at the exact page-size boundary, unlike the sibling noted in the task brief that silently repeated page 1 on p=2.\n\nContainer types: no container mismatches observed (test_runs is correctly an array in every call; test_plans/tags/configurations are correctly arrays, just empty; overall_progress_by_status_id and metadata are correctly objects). overall_progress_by_status_id's declared schema is an unfalsifiable {type:object} with no properties — the actual value is a map keyed by result_status id containing nested descriptor objects (id, field_value, internal_name, field_name, colour, value_category), none of which are declared anywhere in this capability's contract — undeclared descriptor fields on a status object, matching the pattern flagged across siblings.\n\nThree calls made, all 200, no retries needed: (1) default p=1, (2) p=2 for the count-vs-rows boundary check, (3) include_test_plan='true' re-probe to test the content_omission on test_plans. No writes were made; this capability is read-only and the probe did not touch __readonly__ TR-9075 or any other run."
+}

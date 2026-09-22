@@ -1,0 +1,188 @@
+{
+  "capability": "get_test_cases_for_v1_test_run",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project id for the fixture",
+      "source": "pool",
+      "capability": null,
+      "produced": {
+        "project_id": 379335744
+      }
+    },
+    {
+      "step": 2,
+      "why": "resolve TR-9062's integer uuid",
+      "source": "invoked",
+      "capability": "get_test_runs_v1",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "p": 1,
+          "ignore_run_type": "true"
+        }
+      },
+      "status": 200,
+      "produced": {
+        "uuid": 17575382
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9062"
+        },
+        "query": {
+          "p": 1,
+          "per_page": 30
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "none \u2014 documented TR-NNN path form worked on first try"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {
+        "project_id": 379335744,
+        "test_run_id": "TR-9062"
+      },
+      "query": {
+        "p": 1,
+        "per_page": 30
+      }
+    },
+    "status": 200,
+    "response_keys": [
+      "success",
+      "info",
+      "test_cases",
+      "skipped_test_case_ids"
+    ],
+    "item_shape": {
+      "keys": [
+        "assignee",
+        "creator_details",
+        "created_at",
+        "updator_details",
+        "updated_at",
+        "case_type",
+        "priority",
+        "status",
+        "automation_state",
+        "is_shared",
+        "project_name",
+        "case_type_imported",
+        "description",
+        "custom_fields",
+        "estimate",
+        "expected_result",
+        "id",
+        "identifier",
+        "is_automation",
+        "links",
+        "name",
+        "history_count",
+        "owner",
+        "preconditions",
+        "owner_imported",
+        "priority_imported",
+        "project_id",
+        "status_imported",
+        "steps",
+        "tags",
+        "template",
+        "template_step_type",
+        "template_id",
+        "test_case_folder_id",
+        "step_count",
+        "test_case_folders_path",
+        "test_case_steps",
+        "lcnc_build_map",
+        "automation_status",
+        "test_run_results_count",
+        "test_run_results_issues_count",
+        "issues",
+        "comments_count",
+        "metadata",
+        "dataset_values",
+        "latest_status",
+        "result_status",
+        "result_custom_fields",
+        "defects",
+        "mapping_id",
+        "test_assignee",
+        "last_executed_by",
+        "deleted",
+        "test_run_id",
+        "configuration",
+        "assignee_imported",
+        "result_notes",
+        "last_executed_at",
+        "test_case_id",
+        "planned_execution_date",
+        "execution_eligible"
+      ],
+      "example_row": {
+        "id": 1975349,
+        "identifier": "TC-54458",
+        "mapping_id": 2150413868,
+        "test_case_id": 1975349,
+        "test_run_id": 17575382,
+        "latest_status": "passed",
+        "test_run_results_count": null,
+        "comments_count": 14
+      }
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer)",
+      "test_run_id (path, string, ^(TR-)?[0-9]+$)"
+    ],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "automation_state",
+      "is_shared",
+      "project_name",
+      "template_step_type",
+      "template_id",
+      "step_count",
+      "test_case_folders_path",
+      "test_run_results_count",
+      "test_run_results_issues_count",
+      "dataset_values",
+      "deleted",
+      "assignee_imported",
+      "result_notes"
+    ],
+    "undeclared_in_json_schema_but_named_in_returns_list": [
+      "latest_status",
+      "result_status",
+      "result_custom_fields",
+      "defects",
+      "mapping_id",
+      "test_assignee",
+      "last_executed_by",
+      "last_executed_at",
+      "test_run_id",
+      "configuration",
+      "test_case_id",
+      "planned_execution_date",
+      "execution_eligible"
+    ]
+  },
+  "notes": "Attempt count: 1/3 \u2014 the documented TR-NNN path form (path_params.test_run_id='TR-9062') worked immediately, no retries needed. project_id 379335744 + test_run_id 'TR-9062' + p=1/per_page=30 returned 200, info={page:1,page_size:30,count:5,prev:null,next:null}, 5 rows, top-level skipped_test_case_ids:[] present as documented, no data envelope (flat {success,info,test_cases}) \u2014 matches the declared contract's envelope shape exactly.\n\nSCHEMA DRIFT: the describeCapability 200 JSON-schema's expanded item properties (assignee, creator_details, created_at, updator_details, updated_at, case_type, priority, status, case_type_imported, description, custom_fields, estimate, expected_result, id, identifier, is_automation, links, name, history_count, owner, preconditions, owner_imported, priority_imported, project_id, status_imported, steps, tags, template, test_case_folder_id, test_case_steps, lcnc_build_map, automation_status, issues, comments_count, metadata) are a strict SUBSET of what the row actually returns. Every declared field was present and correctly typed (declared_missing: none), but the actual row carries ~26 additional fields the expanded schema never lists. Critically, the fields the capability's own prose and top-level 'returns' summary treat as central to this endpoint's whole purpose \u2014 mapping_id, latest_status, test_case_id, test_run_id, configuration, test_assignee, last_executed_by, last_executed_at, planned_execution_date, execution_eligible, result_status, result_custom_fields, defects \u2014 are ALL present in the 'returns' name list and in guidance text ('mapping_id is the id every bulk operation on this run takes...') but are completely absent from the expanded JSON schema's properties block. So the schema-authoring is internally inconsistent: the free-text contract (returns[], guidance[]) correctly describes the row: the machine-checkable schema does not. An agent that validated strictly against the expanded schema would not even know mapping_id \u2014 the field the guidance calls indispensable for bulk ops \u2014 exists. The remaining ~13 undeclared fields (automation_state, is_shared, project_name, template_step_type, template_id, step_count, test_case_folders_path, test_run_results_count, test_run_results_issues_count, dataset_values, deleted, assignee_imported, result_notes) aren't named anywhere in the contract at all \u2014 pure surplus.\n\nROW GRAIN: confirmed exactly as documented \u2014 case\u00d7configuration mapping, not one-row-per-case. TC-54457 (id 1972036) appears TWICE in the 5-row page with two different mapping_id values (2150387252 and 2150413862) and identical id/identifier/name \u2014 textbook confirmation of the 'same id, different mapping_id per configuration' guidance. configuration_id is not exposed here (unlike v2's flat configuration_id) \u2014 the row has a nested 'configuration' field, which was null on every row in this page (no distinguishing config data actually surfaced despite two mappings for the same case, though that's a data-content gap, not a contract gap, and out of scope for a shallow diff).\n\nTC-54458 CROSS-CHECK: TC-54458 (id 1975349) appears once, mapping_id 2150413868, latest_status='passed' (consistent with having real recorded results, not 'untested'). But the row's test_run_results_count field \u2014 itself undeclared in the schema \u2014 is null, not 14. The known truth is TC-54458 has 14 real recorded results (get_test_case_detail wrongly reports 0 for the same field name). Here the same-named field reports null instead of 0 \u2014 a different wrong value than the known bad case, but the same underlying defect class: a result-count field on TC-54458 that does not reflect the true count of 14. Flagging this as a second, independent sighting of the same broken/unpopulated result-count concept, this time manifesting as null rather than 0. (comments_count:14 on this row is a coincidental match in value only \u2014 it counts comments, not results, and is a genuinely different, apparently correct field; do not conflate the two.)\n\nTHREE-WAY COMPARISON \u2014 what actually separates the three run-case-listers:\n1. get_test_run_cases_v1 (already inspected, not by me): despite its name/path suggesting a case list, its declared 200 shape is a run HEADER under a data envelope (data.test_run: progress counts, assignee, dynamic_filter, linked issues) \u2014 no per-case rows at all. It is not a case-lister; it's a run-summary endpoint that happens to sit in the same naming family. That's worth stating plainly rather than folding into 'differs from siblings': callers using this name to try to list cases will get zero case rows, full stop.\n2. get_test_run_test_cases_v2 (already probed, PASS): PR-NNN/TR-NNN only (no bare integers), pages with p/page_size (max 300, 30 if fetch_steps=true, hard 400 above max), flat {success,info,test_cases}, row keyed by string identifier + configuration_id (no mapping_id concept), flat label fields (latest_status, assignee as flat-ish), self link documented as malformed, large structured filter surface (tags, assignee, status, folder_id, date ranges, free-text query).\n3. get_test_cases_for_v1_test_run (this one): accepts TR-NNN OR bare integer (^(TR-)?[0-9]+$) \u2014 looser than v2's PR/TR-only route. Pages with p/per_page (max 100, silent fallback to 30 on out-of-range \u2014 a soft-failure mode, the opposite of v2's hard 400). Row keyed by integer id + mapping_id (the run-mapping id bulk ops actually take) \u2014 richer/heavier row than v2's, with nested objects for status/priority/case_type instead of v2's flat label strings, plus test_case_steps, lcnc_build_map, automation_status, issues, comments_count, metadata, custom_fields. Filter surface is different in kind, not just size: q (generic filter object), shared (return only cross-project-shared cases), source_project_id (slice by contributing project), required[fields] (an allow-list of OPTIONAL columns \u2014 a concept neither sibling has), and a sort_by that is trapped by required[fields] (sort column must be included in required[fields] or the call 400s with a named error). Top-level skipped_test_case_ids is unique to this endpoint (cases the review gate excluded) \u2014 v2 has no equivalent concept.\n\nVERDICT ON REDUNDANCY: this is NOT a redundant near-duplicate of v2 \u2014 it is a genuinely distinct, heavier tool for a different job. v2 is the lightweight, filterable execution-grid view (flat labels, configuration_id, hard-capped paging, big structured filter set) suited to UI-style browsing/searching of a run. This v1 capability is the bulk-ops-oriented view: it is the only one of the three that actually returns mapping_id \u2014 the id every bulk mutation on the run (assign, bulk-edit-result, unlink) requires \u2014 so any agent workflow that needs to identify or use mapping ids has no substitute; v2 cannot serve that need. The two are complementary, not overlapping: v2 for querying/filtering/browsing a run's cases, this one for enumerating mapping ids to feed into write capabilities, with richer per-case objects (steps, custom_fields, case_type) as a side benefit. No text anywhere in this capability's intent/guidance, nor in what's known of the other two, marks any of the three as legacy/deprecated/preferred over another \u2014 there is no 'use instead' or 'replaced by' language. So the real finding is: get_test_run_cases_v1 is the true dead-weight/misleadingly-named one of the trio (a header endpoint masquerading as a case-lister), while v2 and this v1 capability are both live and each earn their place for different callers \u2014 a two-way real duplication risk (both list cases, differ in grain/paging/filters) plus one outright misnamed non-lister, not a clean three-way redundant set. Also worth noting per the task's tip: unlike search_test_cases_by_folder_v1's unconditional 200 [], this capability's skipped_test_case_ids:[] here is legitimately empty (no cases were excluded by the review gate for this run) \u2014 not a sign of a dead/broken route, since test_cases itself returned real, populated rows."
+}

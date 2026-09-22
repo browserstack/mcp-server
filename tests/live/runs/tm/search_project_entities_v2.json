@@ -1,0 +1,137 @@
+{
+  "capability": "search_project_entities_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope — integer project id required by the {project_id} path segment",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    },
+    {
+      "step": 2,
+      "why": "folder scope to guarantee matching rows, mirroring what worked for the v1 sibling — the __readonly__ folder is confirmed to hold TC-54455/TC-54456",
+      "source": "pool",
+      "capability": null,
+      "produced": { "folder_id": 764093 }
+    },
+    {
+      "step": 3,
+      "why": "known integer test-case ids, to exercise v2's `ids` filter — a direct-fetch-by-id capability v1 does not expose",
+      "source": "pool",
+      "capability": null,
+      "produced": { "ids": [1971631, 1971632] }
+    }
+  ],
+  "attempts": [
+    {
+      "attempt": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "entity": "test-cases" },
+        "body": { "query": { "folder_id": "764093" }, "p": 1, "per_page": 5 }
+      },
+      "status": 200,
+      "result": "SILENT NO-OP, not a failure — `query` is a real top-level body field (free-text search string per the spec), so nesting {folder_id: ...} under it neither errored nor filtered; the API returned success:true with test_cases:[], info.count:0, despite the two known fixture cases existing in the pool. This is the same silent-no-op behavior describeCapability calls out for a misplaced `match` value, generalized: sending a field in an unexpected shape/location does not 400, it just filters nothing."
+    },
+    {
+      "attempt": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "entity": "test-cases" },
+        "body": { "q": { "folder_id": "764093" }, "p": 1, "per_page": 5 }
+      },
+      "status": "rejected (client-side, by the MCP surface — never reached the live API)",
+      "error_verbatim": "unknown body: q. accepted: automation_state, automation_status, case_type, created_at, custom_fields, date_range, empty, fields, folder_id, folder_ids, ids, is_archived, issue_ids, issue_type, last_executed_by, match, owner, p, per_page, priority, query, result_custom_fields, review_status, reviewers, status, tags, updated_at. q is a wrapper this surface builds for you from each field's json_path — send the fields directly instead of nesting them"
+    },
+    {
+      "attempt": 3,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "entity": "test-cases" },
+        "body": { "folder_id": "764093", "p": 1, "per_page": 5 }
+      },
+      "status": 200,
+      "result": "SUCCESS — flat top-level `folder_id` (not nested) is correct; the surface builds the declared /q/folder_id json_path itself. Returned exactly TC-54455 and TC-54456. This is the canonical probe, recorded below."
+    },
+    {
+      "attempt": 4,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "entity": "test-cases" },
+        "body": { "ids": "1971631,1971632", "p": 1, "per_page": 5 }
+      },
+      "status": 200,
+      "result": "SUCCESS — exercised the v2-only `ids` filter (direct fetch by integer id; v1 has no equivalent). Returned exactly the 2 requested rows, info.count=2 matches len(rows)=2, item shape byte-for-byte identical to the folder-scoped probe (same case_type/priority/status/automation_state option objects, same undeclared-field set). Confirms the documented v2 filter-language advantage actually works, not just that it's declared."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "entity": "test-cases" },
+      "body": { "folder_id": "764093", "p": 1, "per_page": 5 }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "folders", "info", "filter_details"],
+    "item_shape": {
+      "id": "integer",
+      "identifier": "string (e.g. TC-54455)",
+      "name": "string",
+      "project_id": "integer",
+      "test_case_folder_id": "integer",
+      "case_type": "object {id, internal_name, field_name, colour, value_category, valueDetails[], name} — undeclared (schema has no test_cases property at all)",
+      "priority": "object (same shape as case_type) — undeclared",
+      "status": "object (same shape as case_type, plus colour string) — undeclared",
+      "automation_state": "object {id, internal_name, field_name, colour, value_category, valueDetails[], name} — undeclared",
+      "automation_status": "object {name, value} — undeclared",
+      "assignee": "object (user) — undeclared",
+      "creator_details": "object (user) — undeclared",
+      "updator_details": "object|null — undeclared",
+      "owner": "integer — undeclared",
+      "is_automation": "boolean — undeclared",
+      "is_shared": "boolean — undeclared",
+      "steps": "array — undeclared",
+      "tags": "array — undeclared",
+      "custom_fields": "array — undeclared",
+      "attachments": "array of {id,name,content_type,key,product_id,byte_size,checksum,size} — undeclared",
+      "template": "string — undeclared",
+      "template_id": "integer — undeclared",
+      "template_name": "string — undeclared",
+      "template_step_type": "string — undeclared",
+      "step_count": "integer — undeclared",
+      "estimated_duration_seconds": "null — undeclared",
+      "test_run_results_count": "null — undeclared",
+      "test_run_results_issues_count": "null — undeclared",
+      "test_case_dataset": "object {} — undeclared",
+      "links": "object {self, detail, folder} — undeclared",
+      "metadata": "object {lcnc_build_map, ai_prompt} — undeclared",
+      "comments_count": "ABSENT from the row — same underlying behavior as v1, but not a declared-vs-actual mismatch here since v2 never declares this field either",
+      "folders (sibling of test_cases, not a row field)": "OBJECT keyed by folder_id whose value is an ARRAY of one trimmed folder object {id, name, parent_id, ui_position} — e.g. {\"764093\":[{\"id\":764093,\"name\":\"__readonly__\",\"parent_id\":null,\"ui_position\":0}]} — entirely undeclared"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer)",
+      "entity (path, enum: test-cases | trtc | test-runs | test-plans)"
+    ],
+    "json_path": "Every body field declares /q/<name> (or /required/<name> for fields, custom_fields, result_custom_fields) — but this is spec-internal wiring, not a client-facing envelope: the invoke surface auto-builds the q wrapper from flat top-level keys. Sending a literal `q` wrapper is rejected outright (attempt 2); sending a literal `query` wrapper silently no-ops because `query` is itself a real (differently-typed) field (attempt 1). Body fields must be sent flat.",
+    "declared_missing": [
+      "None in the strict sense — the declared 200 schema has NO properties at all for test_cases, folders, or filter_details (only `success` and `info`), so there is nothing declared to be missing. Worth flagging separately: comments_count, which v1 wrongly declares-and-omits, is also absent from every v2 row, but v2 simply never declares it, so this is not a contract violation for v2 the way it is for v1 — it's a symptom of the schema not describing the payload at all."
+    ],
+    "undeclared_returned": [
+      "test_cases[] — the entire array and all ~40 row fields are undeclared, since the schema has no `test_cases` property whatsoever",
+      "test_cases[].automation_state",
+      "test_cases[].is_shared",
+      "test_cases[].attachments[]",
+      "test_cases[].template_id / template_name / template_step_type",
+      "test_cases[].step_count",
+      "test_cases[].estimated_duration_seconds",
+      "test_cases[].test_run_results_count",
+      "test_cases[].test_run_results_issues_count",
+      "test_cases[].test_case_dataset",
+      "test_cases[].case_type.value_category / valueDetails (also present on priority, status, automation_state)",
+      "folders — the entire object is undeclared; behaviorally it repeats v1's bug pattern (object keyed by folder_id rather than an array) and adds a further undocumented wrinkle: each value is itself a 1-element array of the trimmed folder object, not the object directly",
+      "filter_details — undeclared object, returned empty ({}) in every call made here"
+    ]
+  },
+  "notes": "Path/body shape required two corrections before a real call succeeded: (1) the declared /q/<field> json_path is NOT something the caller constructs — sending fields flat is correct, and wrapping them in `q` is rejected server-side (i.e. by the MCP surface) with a verbatim 'unknown body: q ...' error; (2) wrapping fields in `query` doesn't error at all, it silently no-ops, because `query` is itself a real (string, free-text) field — nesting an object under it just matches nothing. That silent-no-op behavior generalizes the one describeCapability documents for a misplaced `match` value, and is a real footgun: a caller who gets the envelope wrong gets an empty result set, not an error, and could easily misread that as 'no matching rows' rather than 'my request was malformed.'\n\nOnce corrected (flat body, folder_id=764093), the call succeeded (200) and reproduced the item shape needed to check v1's three defects against v2:\n\n1. comments_count — REPRODUCES BEHAVIORALLY, NOT AS A CONTRACT VIOLATION. It's absent from every v2 row exactly as it is in v1. But v2's declared 200 schema has NO test_cases property at all (only `success` and `info`), so v2 never claims comments_count exists — there's nothing to contradict. The underlying data gap is identical; the contract-drift framing from v1 doesn't transfer because v2's contract says nothing to begin with.\n\n2. folders structural mismatch — REPRODUCES AND IS WORSE. Actual: an OBJECT keyed by folder_id (same bug pattern as v1: array declared conceptually, object returned), but v2 additionally wraps each value in a 1-element array — {\"764093\":[{\"id\":764093,\"name\":\"__readonly__\",\"parent_id\":null,\"ui_position\":0}]} — versus v1's {\"764093\":{...}} (no array wrapper). Since v2's schema declares nothing for `folders` either, this can't be scored as a declared-vs-actual type mismatch the way it was for v1; it's simply undeclared. But the underlying implementation clearly shares code/behavior with v1's buggy folders serialization, plus a new wrinkle.\n\n3. Long tail of undeclared fields — REPRODUCES AND IS MUCH MORE SEVERE. Every field v1 was cited for leaving undeclared is confirmed present and undeclared here too (automation_state as a full option object, is_shared, attachments[], template_id/template_name/template_step_type, step_count, estimated_duration_seconds, test_run_results_count, test_run_results_issues_count, test_case_dataset, and value_category/valueDetails nested inside case_type/priority/status/automation_state) — but because v2's 200 schema declares literally nothing beyond `success` and `info`, this isn't a 'long tail', it's the entire payload. This is the 'unfalsifiable {type:object}'-style problem taken to its extreme: the declared contract makes no claims at all about the one thing callers actually use the capability for (the rows and folders map), so almost nothing can be scored as a declared-vs-actual mismatch even though the actual payload is large, rich, and completely undocumented.\n\nDistinguishing filter (required by the brief, since routing found v1/v2 confusable): exercised `ids` (attempt 4), a v2-only direct-fetch-by-id filter with no v1 equivalent. It worked correctly — info.count=2, len(rows)=2, and the returned rows were byte-for-byte identical in shape to the folder-scoped probe, confirming the capability's headline advantage (richer, precise filtering: ids/match/empty/custom_fields/is_archived/issue_type/issue_ids/last_executed_by/date_range) is real and functional, not just declared. I did not additionally exercise `match`/`empty`/`custom_fields` given the attempt budget — `ids` was sufficient to confirm the filter language actually resolves server-side and returns the documented item shape; those three remain UNVERIFIED for this probe (no reason to expect they'd differ, but not exercised).\n\ncount-vs-rows: matched in both successful calls (info.count=2, len(rows)=2 for both the folder-scoped and ids-scoped queries). Only checked on this 2-row subset of the 21-case pool — a full paginated walk across pages was not attempted (out of scope for a single-capability probe budget), so multi-page count-vs-rows consistency is UNVERIFIED beyond this sample.\n\nerror-envelope drift: NOT exercised against the live API — the only error encountered (attempt 2) was a client-side rejection by the MCP invoke surface itself, before any request reached the product's API, so per instruction it is not diffed against the success schema and is not evidence either way for live 4xx/5xx envelope shape.\n\nOverall verdict: DRIFT. The 200 status and the declared `info` pagination object both match reality exactly. But the declared schema is silent on the entire substantive payload (test_cases[], folders, filter_details), while the actual response is large and well-formed with a long, consistent, entirely undocumented shape that carries forward — and in the folders case, slightly worsens — the same defects found in v1."
+}

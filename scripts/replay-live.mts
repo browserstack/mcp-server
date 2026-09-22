@@ -25,7 +25,7 @@
  * conclusion. So the response is flattened to every key at every depth before comparing.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { bind } from "../src/tools/capability-registry/bind.js";
@@ -36,6 +36,17 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const args = process.argv.slice(2);
 const WRITES = args.includes("--writes");
 const ALL = args.includes("--all");
+// --emit-types <file>: for every undeclared path, write the type OBSERVED in the response.
+// Declaring a field needs its type, and re-deriving that by hand from a live call per field
+// is where wrong types get guessed. The replay already holds the body; this just reads it.
+// --skip a,b,c : leave these capabilities out entirely. Replaying a write repeats its effect
+// on a shared fixture, and a few of them (bulk archive, unlink, reorder, settings, uploads)
+// are the ones whose effect other payloads then assert against. Naming them keeps a write
+// run reproducible without making it all-or-nothing.
+const SKIP_AT = args.indexOf("--skip");
+const SKIP = new Set(SKIP_AT >= 0 ? (args[SKIP_AT + 1] ?? "").split(",").filter(Boolean) : []);
+const TYPES_AT = args.indexOf("--emit-types");
+const TYPES_FILE = TYPES_AT >= 0 ? args[TYPES_AT + 1] : undefined;
 
 const username = process.env.TM_LIVE_USERNAME || process.env.BROWSERSTACK_USERNAME;
 const accessKey = process.env.TM_LIVE_ACCESS_KEY || process.env.BROWSERSTACK_ACCESS_KEY;
@@ -57,9 +68,16 @@ const doc = JSON.parse(
 );
 const index: ProductIndex = doc.products ? doc.products.tm : doc.tm;
 const byName = new Map(index.capabilities.map((c) => [c.name!, c]));
-const saved = JSON.parse(
-  readFileSync(`${ROOT}tests/live/payloads/tm.json`, "utf8"),
-);
+// {{RUNID}} — a per-run token substituted into saved payloads.
+//
+// A create with a hard-coded name succeeds once and then 400s "already exists" on every
+// later replay, which reads in the report as a contract failure when it is only the fixture
+// remembering the first run. Four capabilities were sitting in the drift list for exactly
+// that reason. The token keeps each replay's created objects distinct and still prefixed so
+// they stay identifiable as probe residue.
+const RUNID = new Date().toISOString().replace(/[-:T.]/g, "").slice(2, 14);
+const savedRaw = readFileSync(`${ROOT}tests/live/payloads/tm.json`, "utf8");
+const saved = JSON.parse(savedRaw.split("{{RUNID}}").join(RUNID));
 const pool = JSON.parse(readFileSync(`${ROOT}tests/live/.id-pool.json`, "utf8"));
 
 /**
@@ -90,6 +108,18 @@ function looksKeyedByData(record: Record<string, unknown>): boolean {
  * shipped a third half-fix" to the person who had just fixed the first two. Any response
  * carrying any nested entity hits this, so it is a class, not an instance.
  */
+/**
+ * Paths present but carrying NOTHING — null, [] or {}.
+ *
+ * A null parent proves as little about its children as an empty array does, and the absent
+ * filter already knew that for arrays. `exploratory_session.assignee` comes back null on a
+ * session with no assignee, and reporting `assignee.email` as a missing declaration says
+ * the contract is wrong when the fixture simply had no assignee. Same for a null
+ * `frequency_details` on an unscheduled report. Collected here and used to suppress
+ * children, exactly as an empty array is.
+ */
+const hollow = new Set<string>();
+
 function pathsOf(
   value: unknown,
   prefix = "",
@@ -100,11 +130,14 @@ function pathsOf(
   if (Array.isArray(value)) {
     // One element is enough to learn an array's item shape; the rest repeat it.
     if (value.length > 0) pathsOf(value[0], prefix, out, open);
+    else if (prefix) hollow.add(prefix);
     return out;
   }
+  if (value === null && prefix) hollow.add(prefix);
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
     if (looksKeyedByData(record)) return out;
+    if (prefix && Object.keys(record).length === 0) hollow.add(prefix);
     for (const [k, v] of Object.entries(record)) {
       const path = prefix ? `${prefix}.${k}` : k;
       out.add(path);
@@ -145,9 +178,12 @@ function openObjectPaths(capability: Capability): Set<string> {
     const obj = node as Record<string, any>;
     for (const ref of ["$schema", "$response"] as const) {
       if (typeof obj[ref] === "string") {
-        if (seen.has(obj[ref])) return;
+        // Keyed by KIND and name, for the same reason as declaredFields: several responses
+        // share a name with a schema, and a name-only guard reads that as a cycle.
+        const key = `${ref}:${obj[ref]}`;
+        if (seen.has(key)) return;
         const table = ref === "$schema" ? index.schemas : index.responses;
-        return walk((table || {})[obj[ref]], prefix, new Set([...seen, obj[ref]]));
+        return walk((table || {})[obj[ref]], prefix, new Set([...seen, key]));
       }
     }
     if (obj.type === "object" && !obj.properties && !obj.allOf && !obj.anyOf && prefix) {
@@ -161,6 +197,15 @@ function openObjectPaths(capability: Capability): Set<string> {
     }
     if (obj.items) walk(obj.items, prefix, seen);
     if (obj.schema) walk(obj.schema, prefix, seen);
+    // COMPOSED SCHEMAS COUNT TOO. This walked properties/items/schema but never allOf, so a
+    // field inherited through composition was invisible here while being perfectly visible
+    // to declaredFields. `overall_progress` is declared an open map on TestRun and reached
+    // through V1TestRunDetailRow's allOf; without this its status keys were reported as
+    // seven undeclared fields, which is precisely the "keys are data, not fields" case this
+    // function exists to suppress.
+    for (const key of ["allOf", "anyOf", "oneOf"]) {
+      if (Array.isArray(obj[key])) obj[key].forEach((x: unknown) => walk(x, prefix, seen));
+    }
   };
   const ok = Object.entries(capability.responses || {}).find(([c]) => c.startsWith("2"));
   if (ok) walk(ok[1], "", new Set());
@@ -177,9 +222,17 @@ function declaredFields(capability: Capability): Set<string> {
       if (typeof obj[ref] === "string") {
         // Recursion guard is per BRANCH, not global: the same schema legitimately appears
         // at two different paths, and a global guard would silently drop the second.
-        if (seen.has(obj[ref])) return;
+        //
+        // KEYED BY KIND AND NAME, not by name alone. Several responses share a name with a
+        // schema — `TestResultCustomFieldsResponse` is both — so a name-only guard treats
+        // the response's own `{$schema: "<same name>"}` as a cycle and returns before
+        // declaring anything. Those capabilities then report EVERY field as undeclared,
+        // which reads as a contract with no schema at all rather than as a walk that gave
+        // up. `index-loader.ts` already keys its guard `${kind}:${name}` for this reason.
+        const key = `${ref}:${obj[ref]}`;
+        if (seen.has(key)) return;
         const table = ref === "$schema" ? index.schemas : index.responses;
-        return walk((table || {})[obj[ref]], prefix, new Set([...seen, obj[ref]]));
+        return walk((table || {})[obj[ref]], prefix, new Set([...seen, key]));
       }
     }
     if (obj.properties && typeof obj.properties === "object") {
@@ -313,6 +366,7 @@ function unique(args: any): any {
   return walk(args);
 }
 
+const observedTypes: Record<string, Record<string, { type: string; nullable: boolean; sample: string }>> = {};
 const transport = fetchTransport();
 const headers = authHeaders({ username, accessKey }, index.auth);
 
@@ -348,6 +402,10 @@ for (const [name, entry] of entries) {
   }
   if (capability.mode !== "read" && !WRITES) {
     rows.push({ name, mode: capability.mode, status: "skipped", undeclared: [], absent: [], note: "write — rerun with --writes" });
+    continue;
+  }
+  if (SKIP.has(name)) {
+    rows.push({ name, mode: capability.mode, status: "skipped", undeclared: [], absent: [], note: "excluded by --skip" });
     continue;
   }
 
@@ -391,10 +449,30 @@ for (const [name, entry] of entries) {
     response.status < 300;
   const declaredPaths = succeeded ? declaredFields(capability) : new Set<string>();
   const declaredLeaves = new Set(capability.returns || []);
+  hollow.clear();
   const present = succeeded
     ? pathsOf(response.body, "", new Set(), openObjectPaths(capability))
     : new Set<string>();
   const leaf = (path: string) => path.slice(path.lastIndexOf(".") + 1);
+  const valueAt = (root: unknown, path: string): unknown[] => {
+    let nodes: unknown[] = [root];
+    for (const seg of path.split(".")) {
+      const next: unknown[] = [];
+      for (const n of nodes) {
+        const o = Array.isArray(n) ? n[0] : n;
+        if (o && typeof o === "object" && seg in (o as Record<string, unknown>))
+          next.push((o as Record<string, unknown>)[seg]);
+      }
+      nodes = next;
+      if (!nodes.length) return [];
+    }
+    return nodes;
+  };
+  const jsonType = (v: unknown): string =>
+    v === null ? "null" : Array.isArray(v) ? "array"
+      : typeof v === "object" ? "object"
+      : typeof v === "number" ? (Number.isInteger(v) ? "integer" : "number")
+      : typeof v;
   rows.push({
     name,
     mode: capability.mode,
@@ -412,10 +490,36 @@ for (const [name, entry] of entries) {
       .filter((k) => !present.has(k) && !declaredLeaves.has(leaf(k)))
       .filter((k) => {
         const parent = k.slice(0, k.lastIndexOf("."));
-        return !parent || present.has(parent);
+        if (!parent) return true;
+        if (!present.has(parent)) return false;
+        // A parent that is null, [] or {} carries no evidence about its children.
+        for (let p: string = parent; p; p = p.slice(0, p.lastIndexOf("."))) {
+          if (hollow.has(p)) return false;
+          if (!p.includes(".")) break;
+        }
+        return true;
       })
       .sort(),
   });
+  if (TYPES_FILE) {
+    const seen: Record<string, { type: string; nullable: boolean; sample: string }> = {};
+    for (const p of rows[rows.length - 1].undeclared) {
+      const vals = valueAt(response.body, p).flatMap((v) => (Array.isArray(v) ? v.slice(0, 1) : [v]));
+      const ts = new Set(vals.map(jsonType));
+      const nonNull = vals.find((v) => v !== null);
+      seen[p] = {
+        type: [...ts].filter((t) => t !== "null").join("|") || "null",
+        nullable: ts.has("null"),
+        sample: JSON.stringify(nonNull ?? null).slice(0, 80),
+      };
+    }
+    observedTypes[name] = seen;
+  }
+}
+
+if (TYPES_FILE) {
+  writeFileSync(TYPES_FILE, JSON.stringify(observedTypes, null, 1));
+  console.log(`observed types for ${Object.keys(observedTypes).length} capabilities -> ${TYPES_FILE}`);
 }
 
 // ---- report ----

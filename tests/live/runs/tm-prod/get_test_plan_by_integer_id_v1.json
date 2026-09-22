@@ -1,0 +1,59 @@
+{
+  "capability": "get_test_plan_by_integer_id_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "preprod_reference": {
+    "run_file": "tests/live/runs/tm/get_test_plan_by_integer_id_v1.json",
+    "verdict": "DRIFT",
+    "reasons": [
+      "test_plan.test_plan_progress and test_plan.test_results_trend returned but absent from the declared `returns` array (guidance mentions them in prose, formal schema does not).",
+      "declared_missing (parent_plan, reviewers) flagged only because required by the shallowest-missing-path rule — both are documented-expected absences (top-level plan, no review workflow configured), not real defects.",
+      "test_plan_progress_v2 and test_results_trend_v2 came back as literal null on a 0-run plan — not verifiable as a type mismatch since the schema doesn't type-expand those fields at all."
+    ]
+  },
+  "setup": [
+    { "step": 1, "why": "resolve a real plan id via list_test_plans_v1", "source": "invoked", "capability": "list_test_plans_v1", "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1 } }, "status": 200, "produced": { "test_plan_id": 181340, "identifier": "TP-4011", "name": "Test Plan - 10/08/2026" } }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "test_plan_id": 181340 } },
+    "status": 200,
+    "response_keys": ["success", "test_plan"],
+    "item_shape": {
+      "id": 181340,
+      "identifier": "TP-4011",
+      "name": "Test Plan - 10/08/2026",
+      "plan_status": "started",
+      "active_state": "active",
+      "record_status": "active",
+      "owner": 305420,
+      "assignee": "object (resolved user)",
+      "created_by": "object",
+      "completed_by": "null",
+      "tags": [],
+      "issues": [],
+      "custom_fields": "array, one populated entry (Automation Status 01 dropdown) — matches declared 'array, empty when none'",
+      "attachments": "[] (declared type mismatch: guidance says 'attachments' is in returns; live is an empty array, not null — consistent shape)",
+      "parent_plan_id": null,
+      "sub_plans_count": 0,
+      "test_runs_count": { "active": 2, "closed": 0 },
+      "total_test_runs_count": { "active": 2, "closed": 0 },
+      "test_plan_progress_v2": "object, real rollup: {982101 (Failed): 2, 982105 (Untested): 16430}",
+      "review_status": "pending",
+      "reviewers": "[] — PRESENT on prod (declared field), unlike preprod where it was reported declared_missing (absent entirely)",
+      "review_settings": { "enabled": false, "sub_plan_mode": "independent" },
+      "test_plan_progress": "UNDECLARED — always {} (empty)",
+      "test_results_trend": "UNDECLARED — null",
+      "test_results_trend_v2": "null — same as preprod, but this time on a plan WITH real activity (test_plan_progress_v2 populated with 16432 total statuses), not an empty plan. Confirms test_results_trend_v2 does not populate from real data either, ruling out 'it's just an empty-plan artifact' as an explanation."
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_plan_id"],
+    "json_path": "test_plan",
+    "declared_missing": ["test_plan.parent_plan — expected absence, this is a top-level plan (parent_plan is sub-plan-only per guidance)"],
+    "undeclared_returned": ["test_plan.test_plan_progress (always {})", "test_plan.test_results_trend (null)"]
+  },
+  "notes": "PREPROD VERDICT REPRODUCES, with one real divergence. Both undeclared fields (test_plan_progress, test_results_trend) reproduce exactly as preprod found them. test_results_trend_v2 is confirmed null again, but this time on a plan with genuine activity (2 failed + 16430 untested in test_plan_progress_v2) rather than preprod's 0-run plan — this rules out 'empty plan, nothing to show' as the explanation and strengthens the case that test_results_trend_v2 simply never populates on this route, whatever its intended trigger is. ONE DIVERGENCE FROM PREPROD: preprod reported `reviewers` as declared_missing (the key was absent from the body entirely); on prod, `reviewers` IS present, as an empty array ([]). Same review_settings ({enabled:false}) on both environments, so this isn't explained by a review-workflow-enabled/disabled difference visible in the response — it's simply a different key-presence behavior for the same 'no review workflow configured' state between the two environments/plans. Not a severe finding (both are 'no reviewers' in effect), but worth flagging since it means the 'declared_missing: reviewers' item from preprod's report should not be assumed to hold universally — it is plan/environment-dependent whether the key is included at all. Everything else about the function (200, correct nesting under test_plan with no data wrapper, id/identifier/owner/assignee present, custom_fields correctly an array) behaves as documented on both environments."
+}

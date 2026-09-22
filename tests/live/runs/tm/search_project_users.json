@@ -1,0 +1,73 @@
+{
+  "capability": "search_project_users",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "pool project to run the primary search against, and the group whose known members supply a term that will actually match",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "test_plan": "PR-2005", "group_id": 2615 }
+    },
+    {
+      "step": 2,
+      "why": "a different project id, to test whether the declared (and guidance-doubted) project scoping is real - contract's own guidance says project_id resolves the route and is never used in the lookup",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335189, "project_name": "JD RCA Flaky Samples" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "q": "Savio" } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded on first attempt, q=\"Savio\" matches the known group-2615 members User D and User D Test"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335189 }, "query": { "q": "Savio" } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded on first attempt; same query re-run against a different, unrelated project id to test scoping"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "query": { "q": "Savio" } },
+    "status": 200,
+    "response_keys": ["users", "info"],
+    "item_shape": {
+      "users[]": {
+        "id": "integer (TM user id, e.g. 3325)",
+        "full_name": "string, e.g. \"User D\"",
+        "email": "string - returned live but NOT in the 200 schema's item properties",
+        "onboarded": "integer, observed 0 or 1 (not boolean)",
+        "group_id": "integer, both matches share group_id 2615",
+        "browserstack_user_id": "integer, distinct from id",
+        "role": "string enum, observed \"user\"",
+        "has_access": "boolean",
+        "permissions": "array of strings",
+        "productRole": "string, observed \"User\"",
+        "is_re_arch_enabled": "boolean - returned live but NOT in the 200 schema's item properties",
+        "is_test_plan_detailed_report_enabled": "boolean - returned live but NOT in the 200 schema's item properties",
+        "plus": "is_delighted_visible, is_product_intro_visible, is_onboarding_project_header_visible, is_lcnc_explore_dismissed, reports_and_notification_enabled, customisable_dashboard_accessible, webhook_accessible, is_build_listing_enabled, is_new_project_settings_visible, is_jira_app_project_panel_visible - all present and all declared"
+      },
+      "info": { "page": 1, "page_size": 30, "count": 2, "prev": null, "next": null },
+      "illustrative_rows": [
+        { "id": 3325, "full_name": "User D", "email": "user-d@example.invalid", "group_id": 2615, "browserstack_user_id": 9021 },
+        { "id": 4650, "full_name": "User D Test", "email": "user-f@example.invalid", "group_id": 2615, "browserstack_user_id": 14554 }
+      ]
+    }
+  },
+  "contract": {
+    "required": ["users", "info"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["email", "is_re_arch_enabled", "is_test_plan_detailed_report_enabled"]
+  },
+  "notes": "SCOPE TEST (decisive): q=\"Savio\" against pool project 379335744 and against unrelated project 379335189 (\"JD RCA Flaky Samples\") returned byte-for-byte identical results - same 2 users (id 3325 \"User D\", id 4650 \"User D Test\"), same group_id 2615, same full payload. This confirms the capability's own guidance: despite the path param and the name, project_id resolves the route only and is never used in the lookup - the search is group-scoped (caller's group 2615), not project-scoped. Like its sibling get_project_users_v2_v1, the 'project users' naming is nominal here too; the precedent from search_group_tags (genuinely group-scoped, contrary to the user-listing siblings) does NOT extend to this capability - it lands with the other nominally-project-scoped user listings, making this the fourth user-listing capability confirmed to ignore project_id in its filter. DRIFT is scoped narrowly to the response schema: the 200 schema's user item `properties` omits `email`, `is_re_arch_enabled`, and `is_test_plan_detailed_report_enabled`, but all three are returned on every row in both live calls. Notably this is a prose-vs-schema split where prose is the one that's right: the capability's own flat top-level `returns` list (outside the expanded JSON schema) already names all three fields correctly - only the expanded 200 schema's `properties` block under-declares them. All required fields (id, full_name, onboarded, group_id, browserstack_user_id, role, has_access, permissions) were present on both rows, so no declared_missing. info.count (2) matched len(users) (2) exactly - no count-vs-rows disagreement here, and next:null is correct since count < page_size (30), so no second page existed to walk. No error responses were encountered (both attempts succeeded on the first try), so no error-envelope comparison applies and none was attempted."
+}

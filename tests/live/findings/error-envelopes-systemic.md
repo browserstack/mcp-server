@@ -21,13 +21,14 @@ This is filed as a single finding rather than five tickets because the fix is on
 | `verify_test_case_tags_v1` | tag | **500** | `{success:false, error:{code,message}}` | `{"status":500,"error":"Internal Server Error"}` |
 | `global_search_v1` | project | **400** | `{success:false, error:{code,message,details}}` | `{"error":"No entities provided for search"}` |
 | `get_exploratory_session_form_fields` | exploratory_session | **404** | `{success:false, error:{code,message,details}}` | `{"success":false}` |
+| `get_exploratory_session` | exploratory_session | **404** | `{success:false, error:{code,message,details}}` | `{"success":false}` — confirmed 2026-09-21 re-probe, see `runs/tm/get_exploratory_session.json` |
 | `update_test_case_v2` | test_case | **400** | `{success:false, error:{code,message,details}}` | `{"success":false,"message":"updated_at must be greater than or equal to current time"}` |
 | `submit_test_cases_for_review_v1` | test_case | **400** | `{success:false, error:{code,message,details}}` | `{"errors":"Please enable review approve feature from project settings page"}` |
 | `apply_test_case_review_verdict_v1` | test_case | **400** (status itself *is* declared) | `{success:false, error:{code,message,details}}` | `{"errors":"Please enable review approve feature from project settings page"}` — **identical shape and text** to the row above |
 | `generate_test_case_automation_v1` | test_case | **422** — *not in the declared set at all* | declared set is 200/400/401/403/404/451/500 | `{"success":false,"message":"{\"message\":{\"title\":\"Internal Error\",\"message\":\"undefined method `[]' for nil:NilClass\"}}"}` |
 | `get_test_run_progress_v1` | test_run | **404** (unknown run id) | `{success:false, error:{code,message,details}}` | `{"success":false,"message":"Test Run ID is invalid. Please enter valid Test Run ID and try again"}` |
 
-Nine capabilities, six entities, four distinct status codes (400/404/422/500), and **six different actual body shapes** — none of which is the declared one.
+Ten capabilities, six entities, four distinct status codes (400/404/422/500), and **six different actual body shapes** — none of which is the declared one. (`get_exploratory_session` added 2026-09-21 on re-probe: byte-identical to its sibling `get_exploratory_session_form_fields` row, same entity, same bare-`{success:false}` shape.)
 
 ### A withdrawn instance, and why it matters
 

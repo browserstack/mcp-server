@@ -2,9 +2,9 @@
   "_comment": "Replayable payloads rolled up from tests/live/runs/tm/*.json by the capability-live-probe orchestrator. Phase 2 COMPLETE: all 69 capabilities probed across 7 batches. Only capabilities whose probe returned a 2xx appear in \"payloads\". Replaying depends on the live fixture - run `npm run seed:live` first, and note that many arguments reference objects created during probe runs (see each run file's setup[]). WARNING: a 2xx from a tm write does NOT reliably mean the write took effect - see findings/test-run-writes-untrustworthy-systemic.md. A replay checker must verify against storage, not against the response.",
   "product": "tm",
   "env": "preprod",
-  "index_version": "1.14",
-  "index_build_id": "run5merge_2026-09-16T18:02:57Z",
-  "phase": "phase 2 complete - 69/69 capabilities probed",
+  "index_version": "1.32",
+  "index_build_id": "cb63a4a5_2026-09-16T18:02:57Z",
+  "phase": "phase 1 + phase 2; payloads rolled up from tests/live/runs/tm/*.json",
   "batches": [
     "rows 1-30 probed 2026-09-17",
     "rows 31-60 probed 2026-09-18",
@@ -14,8 +14,24 @@
     "rows 151-180 probed 2026-09-18",
     "rows 181-207 probed 2026-09-18"
   ],
-  "rolled_up_at": "2026-09-18T07:53:48Z",
+  "rolled_up_at": "2026-09-22T11:04:34.392790Z",
   "payloads": {
+    "bulk_assign_test_cases_to_test_run": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9222"
+        },
+        "body": {
+          "assignee_id": 3741,
+          "mapping_ids": [
+            2150429059,
+            2150429060
+          ]
+        }
+      }
+    },
     "add_test_case_comment_v1": {
       "verdict": "DRIFT",
       "arguments": {
@@ -40,11 +56,11 @@
           "assign_to": [
             {
               "test_case_id": "TC-54457",
-              "assignee": "ing@bsstag.com"
+              "assignee": "probe-user@example.invalid"
             },
             {
               "test_case_id": "TC-54458",
-              "assignee": "ing@bsstag.com"
+              "assignee": "probe-user@example.invalid"
             }
           ]
         }
@@ -83,6 +99,32 @@
         }
       }
     },
+    "clone_exploratory_session_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "session_id": 779
+        },
+        "body": {
+          "name": "__mcp-probe-exploratory-clone-20260921",
+          "copy_tags": false,
+          "copy_issues": false,
+          "copy_session_owner": false
+        }
+      },
+      "replay_note": "flat body, no exploratory_session wrapper. This exercises only the SYNC path (source had 2 logs, well under the 50-log threshold) - the async path (>=50 logs, 202, no session object returned) is untested and structurally different. The clone's own inline response under-reports session_log_count/timeline immediately after a sync clone even though the logs were genuinely copied (confirmed by a follow-up read) - see findings/clone_exploratory_session_v1.md."
+    },
+    "close_test_run_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9243"
+        }
+      },
+      "replay_note": "No body at all - the transition to run_state:closed is fixed. This run is now permanently closed on preprod (a real state change, not a scratch object), so do not replay this exact call again. The write's own 200 misreports two of its own fields: uuid comes back as 359844 instead of the run's real uuid 17578623, and closed_by comes back null even though the run was genuinely closed by a real user (both confirmed wrong via an immediate get_test_run_by_integer_id_v1 read-back). project_id is returned as an integer though the schema declares it a string. type, self_ui_link and observability_url are declared on testrun and never returned; attachments, created_by and updated_by are returned but undeclared. See findings/close_test_run_v1.md."
+    },
     "clone_test_run_v2": {
       "verdict": "DRIFT",
       "arguments": {
@@ -100,6 +142,24 @@
       "arguments": {
         "path_params": {
           "project_id": 379335744
+        }
+      }
+    },
+    "create_filter": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "name": "__mcp-probe-filter-20260921-{{RUNID}}",
+          "entity": "testcase",
+          "is_project_level": false,
+          "filters": {
+            "priority": [
+              "P1"
+            ]
+          }
         }
       }
     },
@@ -136,6 +196,26 @@
         }
       },
       "replay_note": "title carries {{unique}}: a fixed report title collides on replay and 400s, and the error body's fields then read as undeclared successes"
+    },
+    "create_shared_step_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "title": "__mcp-probe-sharedstep-20260921-{{RUNID}}",
+          "shared_step_details": [
+            {
+              "order": 1,
+              "step": "Open the login page",
+              "result": "Login page is displayed",
+              "test_data": "user=probe"
+            }
+          ]
+        }
+      },
+      "replay_note": "folder_id must be a shared-field/shared-step folder id, NOT a test-case folder id - they are separate id namespaces. Omitting folder_id leaves the step at folder root (Unassigned), which is what worked here. The pool's __scratch__ folder (764138) is a test-case folder and 400s with 'Target folder not found' if passed as folder_id."
     },
     "create_sub_test_plan_v2": {
       "verdict": "DRIFT",
@@ -195,7 +275,7 @@
       "arguments": {
         "path_params": {
           "project_id": "PR-2005",
-          "test_run_id": "TR-9062"
+          "test_run_id": "TR-9216"
         },
         "body": {
           "test_case_id": "TC-54458",
@@ -228,7 +308,7 @@
         },
         "body": {
           "name": "__mcp-probe-run-2026-09-18T06-35-00Z",
-          "assignee": "ing@bsstag.com",
+          "assignee": "probe-user@example.invalid",
           "run_state": "new_run",
           "tags": [
             "mcp-probe"
@@ -277,6 +357,15 @@
       "arguments": {
         "path_params": {
           "id": 105920
+        }
+      }
+    },
+    "get_exploratory_session": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "session_id": 779
         }
       }
     },
@@ -358,6 +447,14 @@
           "test_case_id": "TC-54458"
         }
       }
+    },
+    "get_test_cases_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "project_id": 379335744,
+        "all_folders": "true"
+      },
+      "replay_note": "all_folders must be present (string or bool both work through this tool) or the response silently narrows to whatever folder scope a bare read defaults to (returned only the 2 __readonly__ cases, count=2, success:true) instead of the project's 21 cases - see findings/get_test_cases_v1.md"
     },
     "get_test_plan_test_runs_v2": {
       "verdict": "DRIFT",
@@ -542,6 +639,14 @@
         }
       }
     },
+    "list_test_case_templates_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "query": {
+          "entity_type": "TestCase"
+        }
+      }
+    },
     "list_test_plans_v2": {
       "verdict": "PASS",
       "arguments": {
@@ -559,8 +664,8 @@
       "arguments": {
         "path_params": {
           "project_id": 379335744,
-          "test_run_id": "TR-9062",
-          "test_case_id": 1971631
+          "test_run_id": "TR-9222",
+          "test_case_id": 1975349
         },
         "query": {
           "p": 1
@@ -737,6 +842,1616 @@
           "run_state": "under_review"
         }
       }
+    },
+    "edit_test_run": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9110"
+        },
+        "body": {
+          "run_state": "new_run",
+          "test_case_ids": [
+            1985019,
+            1985020
+          ]
+        }
+      },
+      "note": "test_case_ids REPLACES the run case list with exactly the ids sent - it is NOT additive despite the index guidance. Resend the full existing case-id union or this will detach every other case in the run. See findings/edit_test_run.md."
+    },
+    "download_report": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "report_id": 10393
+        },
+        "body": {
+          "file_type": "csv"
+        }
+      },
+      "note": "200 with zero drift ({channel, success} exactly as declared), but the channel it mints cannot be redeemed by any capability in this profile - same unobservable-job pattern as export_test_run_csv_v1/export_dashboard_analytics/get_report_attachment_url. See findings/unobservable-jobs-systemic.md and runs/tm/download_report.json."
+    },
+    "assign_test_run_owner": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9110"
+        },
+        "body": {
+          "owner": 3741
+        }
+      }
+    },
+    "bulk_archive_test_cases_by_project": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "ids": [
+            1983896,
+            1983897,
+            1983898,
+            1983899
+          ],
+          "de_selected_ids": [],
+          "select_all": false
+        }
+      }
+    },
+    "bulk_copy_test_cases": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "ids": [
+            1985023,
+            999999999
+          ],
+          "destination_folder_id": 765817
+        }
+      }
+    },
+    "bulk_edit_test_cases": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "ids": [
+            1985020
+          ],
+          "custom_fields": {},
+          "preconditions": "bulk_edit_test_cases semantics probe 20260922"
+        }
+      }
+    },
+    "bulk_edit_test_cases_in_test_run": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9120"
+        },
+        "body": {
+          "mapping_ids": [
+            2150424068,
+            2150424070
+          ],
+          "status_id": 318612,
+          "description": "<p>mcp-probe bulk_edit_test_cases_in_test_run write probe 2026-09-22</p>"
+        }
+      }
+    },
+    "bulk_edit_test_cases_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "ids": [
+            1985023
+          ],
+          "select_all": false,
+          "custom_fields": {
+            "1": {
+              "operation": "ignore"
+            }
+          }
+        }
+      }
+    },
+    "bulk_move_test_cases": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "folder_id": 765811,
+          "ids": [
+            1985021
+          ],
+          "destination_folder_id": 765817
+        }
+      }
+    },
+    "bulk_retrieve_test_cases": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "ids": [
+            1986676,
+            1986675,
+            1986653,
+            1986654
+          ],
+          "de_selected_ids": [],
+          "select_all": false
+        }
+      }
+    },
+    "clone_test_plan_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_plan_id": 48283
+        },
+        "body": {
+          "name": "__mcp-probe-planclone-20260921-{{RUNID}}",
+          "copy_all_runs": true
+        }
+      }
+    },
+    "clone_test_run": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9110"
+        },
+        "body": {
+          "name": "__mcp-probe-runclone-20260922-{{RUNID}}",
+          "copy_all_cases": true,
+          "copy_tags": true,
+          "copy_tc_assignee": true,
+          "copy_issues": true
+        }
+      }
+    },
+    "close_exploratory_session": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "session_id": 826
+        },
+        "body": {}
+      }
+    },
+    "copy_folder": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "source_folder_id": 765817,
+          "destination_folder_id": 765811
+        }
+      }
+    },
+    "count_run_selection_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "select_all": false,
+          "folders": {
+            "764093": {
+              "test_case_select_all": true,
+              "selected_test_cases": [],
+              "deselected_test_cases": []
+            }
+          },
+          "configurations": []
+        }
+      }
+    },
+    "create_bulk_test_cases_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764138
+        },
+        "body": {
+          "test_cases": [
+            {
+              "name": "__mcp-probe-bulkcase-20260921-1",
+              "test_case_folder_id": "764138",
+              "template": "test_case_steps",
+              "test_case_steps": [
+                {
+                  "step": "Open the app",
+                  "result": "App opens successfully"
+                },
+                {
+                  "step": "Tap login button",
+                  "result": "Login screen is displayed"
+                }
+              ],
+              "priority": 318618,
+              "case_type": 318626,
+              "status": 318632,
+              "description": "mcp create_bulk_test_cases_v1 probe row 1 (upper-block option ids + steps)"
+            },
+            {
+              "name": "__mcp-probe-bulkcase-20260921-2",
+              "test_case_folder_id": "764138",
+              "template": "test_case_steps",
+              "test_case_steps": [
+                {
+                  "step": "Navigate to settings",
+                  "result": "Settings page loads"
+                }
+              ],
+              "description": "mcp create_bulk_test_cases_v1 probe row 2 (plain valid row, no explicit option ids)"
+            }
+          ]
+        }
+      }
+    },
+    "create_configuration_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "name": "__mcp-probe-config-20260921-{{RUNID}}"
+        }
+      }
+    },
+    "create_custom_field_dataset_option_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "custom_fields_id": 106131,
+          "dataset_id": 31320
+        },
+        "body": {
+          "option_value": "__mcp-probe-cfoption-20260921-{{RUNID}}",
+          "is_default": true
+        }
+      }
+    },
+    "create_custom_field_dataset_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "custom_fields_id": 106131
+        },
+        "body": {
+          "options": [
+            {
+              "option_value": "__mcp-probe-cfdataset-20260921-A",
+              "is_default": true
+            },
+            {
+              "option_value": "__mcp-probe-cfdataset-20260921-B",
+              "is_default": false
+            }
+          ],
+          "link_to_future_projects": false
+        }
+      }
+    },
+    "create_custom_field_definition_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "body": {
+          "field_name": "__mcp-probe-cfdef-20260921-{{RUNID}}",
+          "field_type": "dropdown",
+          "entity_type": "TestCase",
+          "is_required": false,
+          "datasets": [
+            {
+              "linked_projects": [
+                379335744
+              ],
+              "options": [
+                {
+                  "option_value": "ProbeOptA",
+                  "is_default": true
+                },
+                {
+                  "option_value": "ProbeOptB",
+                  "is_default": false
+                },
+                {
+                  "option_value": "ProbeOptC",
+                  "is_default": false
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "create_dataset": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "name": "__mcp-probe-dataset-20260921-{{RUNID}}",
+          "variables": [
+            {
+              "name": "Browser"
+            },
+            {
+              "name": "OS"
+            }
+          ],
+          "rows": [
+            {
+              "row_number": 1,
+              "row_data": [
+                "Chrome",
+                "Windows"
+              ]
+            },
+            {
+              "row_number": 2,
+              "row_data": [
+                "Firefox",
+                "MacOS"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "create_exploratory_session": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "title": "__mcp-probe-exploratory-20260921-{{RUNID}}",
+          "description": "Live MCP probe for create_exploratory_session on tm/preprod.",
+          "charter": "Verify create_exploratory_session contract end to end.",
+          "timebox_duration": 60,
+          "folder_id": 764138
+        }
+      }
+    },
+    "create_exploratory_session_log": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "session_id": 815
+        },
+        "body": {
+          "content": "<p>Tapped checkout \u2014 spinner appeared but no order was created.</p>",
+          "status": "bug",
+          "elapsed_time": 120
+        }
+      }
+    },
+    "create_project_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "body": {
+          "name": "__mcp-probe-project-20260921-{{RUNID}}"
+        }
+      }
+    },
+    "create_report": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "project_id": 379335744,
+          "report_type": "Test Run Summary",
+          "report_timeframe": "last_one_week",
+          "report_creation_mode": "custom_report",
+          "title": "__mcp-probe-report-20260921-{{RUNID}}",
+          "description": "MCP live probe of create_report capability"
+        }
+      }
+    },
+    "create_root_folder_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "name": "__mcp-probe-createrootfolder-20260921-{{RUNID}}",
+          "notes": "Live probe of create_root_folder_v1 - safe to delete."
+        }
+      }
+    },
+    "create_step_result_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9110",
+          "test_case_id": 1985019,
+          "step_id": 12372581
+        },
+        "body": {
+          "status": "passed",
+          "description": "mcp-probe create_step_result_v1 write 20260922"
+        }
+      }
+    },
+    "create_sub_folder_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 765811
+        },
+        "body": {
+          "name": "__mcp-probe-subfolder-20260921-{{RUNID}}"
+        }
+      }
+    },
+    "create_test_case_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "test_case": {
+            "name": "__mcp-probe-createcase-20260921",
+            "test_case_folder_id": "764138",
+            "priority": 318618,
+            "case_type": 318626,
+            "status": 318632,
+            "template": "test_case_steps",
+            "test_case_steps": [
+              {
+                "step": "Open the login page",
+                "result": "Login page is displayed"
+              }
+            ],
+            "tags": [
+              "mcp-probe"
+            ]
+          },
+          "folder_id": 764138
+        }
+      }
+    },
+    "create_test_cases": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764138
+        },
+        "body": {
+          "test_case": {
+            "name": "__mcp-probe-createcases-20260921-1",
+            "test_case_folder_id": "764138",
+            "priority": 318618,
+            "case_type": 318626,
+            "status": 318632,
+            "template": "test_case_steps",
+            "test_case_steps": [
+              {
+                "step": "Open the login page",
+                "result": "Login page is displayed"
+              }
+            ],
+            "tags": [
+              "mcp-probe"
+            ]
+          }
+        }
+      }
+    },
+    "create_test_result_for_test_case": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9110",
+          "test_case_id": 1985019
+        },
+        "body": {
+          "status_id": 318637,
+          "description": "Probe write from capability-registry live-probe suite: recording a passed outcome on TC-54485 (mapping_id 2150424052) in TR-9110 to verify create_test_result_for_test_case (v1) end-to-end and to test whether the test_run_results_count undercount reproduces on a second case.",
+          "mapping_id": 2150424052
+        }
+      }
+    },
+    "create_test_run_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "run_state": "new_run",
+          "name": "__mcp-probe-createrun-20260921-{{RUNID}}",
+          "test_case_ids": [
+            1971631,
+            1971632,
+            1975349
+          ]
+        }
+      }
+    },
+    "edit_test_case_partial_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764138,
+          "test_case_id": 1985019
+        },
+        "body": {
+          "description": "PARTIAL-EDIT PROBE: single-field update via edit_test_case_partial_v1, touching description only (2026-09-21)"
+        }
+      }
+    },
+    "edit_test_case_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764138,
+          "test_case_id": 1985018
+        },
+        "body": {
+          "test_case_steps": [
+            {
+              "step": "Navigate to the probe login page (edited)",
+              "result": "Probe login page renders with edited content",
+              "order": 1
+            }
+          ],
+          "template_step_type": "test_case_steps",
+          "priority": 318618
+        }
+      }
+    },
+    "export_dashboard_analytics": {
+      "verdict": "PASS",
+      "arguments": {
+        "body": {
+          "type": "csv",
+          "created_at": "all_time"
+        }
+      }
+    },
+    "get_active_test_runs_info_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {}
+      }
+    },
+    "get_archived_test_cases": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "get_automation_stats_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "get_closed_test_runs": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "get_closed_test_runs_info_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "q[closed_at]": "6_month"
+        }
+      }
+    },
+    "get_closed_test_runs_split_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "q[created_at]": "all_time",
+          "q[closed_at]": "5_year"
+        }
+      }
+    },
+    "get_configurations_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "get_custom_field_dataset_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "custom_fields_id": 105915,
+          "dataset_id": 31196
+        },
+        "query": {
+          "fetch_options": true
+        }
+      }
+    },
+    "get_custom_field_definition_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "custom_fields_id": 105915
+        }
+      }
+    },
+    "get_custom_field_values_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "entity_type": "test-case",
+          "field_id": "105915"
+        }
+      }
+    },
+    "get_dataset": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "uuid": "92d4a614-57d3-4201-8ffc-3f3c9faf9747"
+        }
+      }
+    },
+    "get_dataset_linked_test_cases": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "uuid": "92d4a614-57d3-4201-8ffc-3f3c9faf9747"
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "get_dataset_variables": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "get_dedupe_status_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "get_entity_filter_details_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "entity": "test-cases"
+        },
+        "query": {
+          "q[status]": "318605",
+          "q[priority]": "318591",
+          "q[case_type]": "318599",
+          "q[folder_ids]": "764093,764138",
+          "q[owner]": "2522",
+          "q[test_case_tags]": "[\"mcp-probe\",\"probe-update\"]"
+        }
+      }
+    },
+    "get_exploratory_session_summary_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "mode": "session_selection",
+          "session_ids": "779,780"
+        }
+      }
+    },
+    "get_folder_remove_summary": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764138
+        }
+      }
+    },
+    "get_folder_tree_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "get_group_users_v2_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "query": {}
+      }
+    },
+    "get_issues_count_info_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "q[created_at]": "all_time"
+        }
+      }
+    },
+    "get_project_by_integer_id_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "get_project_id_custom_fields_v2_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "get_project_settings": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "in_review_count": "true"
+        }
+      }
+    },
+    "get_project_users_v2_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "get_projects_basic_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "query": {
+          "q[identifier]": "PR-2005"
+        }
+      }
+    },
+    "get_projects_minify_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "query": {}
+      }
+    },
+    "get_report_detail": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "report_id": 10374
+        },
+        "query": {
+          "is_print": true
+        }
+      }
+    },
+    "get_report_section_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "report_id": 10374,
+          "section_name": "test_run_data"
+        }
+      }
+    },
+    "get_report_summary_by_type": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "report_id": 10374,
+          "report_type": "test_runs_summary"
+        },
+        "query": {
+          "reportTimeRange": "last_one_week",
+          "sections": "test_run_data,issues_data,test_run_status,test_cases_status,user_result_stats,issues_by_priority,issues_by_status,time_tracking,estimated_vs_actual"
+        }
+      }
+    },
+    "get_root_folders_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "get_selected_report_testcases": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "report_id": 10374
+        }
+      }
+    },
+    "get_shared_steps_by_i_d_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "shared_step_id": 27842
+        },
+        "query": {
+          "paginated": true
+        }
+      }
+    },
+    "get_shared_steps_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "get_system_field_values_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "field_name": "status"
+        }
+      }
+    },
+    "get_test_case_by_integer_id_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764093,
+          "test_case_id": 1971631
+        }
+      }
+    },
+    "get_test_case_count_trend_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "q[created_at]": "all_time"
+        }
+      }
+    },
+    "get_test_case_detail": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764828,
+          "test_case_id": 1975349
+        },
+        "query": {
+          "include": "folder_path",
+          "hasDuplicates": true
+        }
+      }
+    },
+    "get_test_case_histories_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_case_id": 1975349
+        }
+      }
+    },
+    "get_test_case_history_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_case_id": 1975349,
+          "history_id": 1674611
+        }
+      }
+    },
+    "get_test_case_tags": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764093,
+          "test_case_id": 1971631
+        }
+      }
+    },
+    "get_test_case_type_split_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "q[created_at]": "all_time"
+        }
+      }
+    },
+    "get_test_cases_for_v1_test_run": {
+      "verdict": "BLOCKED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9062"
+        },
+        "query": {
+          "p": 1,
+          "per_page": 30
+        }
+      }
+    },
+    "get_test_plan_by_integer_id_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_plan_id": 48300
+        }
+      }
+    },
+    "get_test_plan_execution_trend_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "test_plan_id": 48283
+        }
+      }
+    },
+    "get_test_plan_linked_sessions_chart_data_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_plan_id": 48283
+        }
+      }
+    },
+    "get_test_plan_test_runs_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_plan_id": 48283
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "get_test_results_custom_fields_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "get_test_results_for_test_case": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9062",
+          "test_case_id": 1975349
+        }
+      }
+    },
+    "get_test_run_by_integer_id_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": 17574995
+        }
+      }
+    },
+    "get_test_run_cases_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_run_id": "TR-9062"
+        }
+      }
+    },
+    "get_test_runs_form_fields_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "all": true
+        }
+      }
+    },
+    "get_test_runs_selection": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "select_all": false,
+          "folders": {
+            "764093": {
+              "test_case_select_all": true,
+              "selected_test_cases": [],
+              "deselected_test_cases": []
+            }
+          },
+          "count": 50
+        }
+      }
+    },
+    "get_test_runs_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {}
+      }
+    },
+    "list_custom_field_dataset_options_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "custom_fields_id": 105915,
+          "dataset_id": 31196
+        },
+        "query": {}
+      }
+    },
+    "list_datasets": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "list_duplicates_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "list_exploratory_sessions": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {}
+      }
+    },
+    "list_filters": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "p": 1,
+          "entity": "testcase"
+        }
+      }
+    },
+    "list_folder_contents": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764138
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "list_folder_test_cases_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 764093
+        }
+      }
+    },
+    "list_projects_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "query": {
+          "q": "__mcp-capability-fixture__"
+        }
+      }
+    },
+    "list_schedules": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        }
+      }
+    },
+    "list_test_case_tags_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {}
+      }
+    },
+    "list_test_plans_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "p": 1
+        }
+      }
+    },
+    "list_workspace_fields_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "query": {
+          "field_source": "all",
+          "p": 1
+        }
+      }
+    },
+    "move_folder_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 765883
+        },
+        "body": {}
+      }
+    },
+    "rename_folder_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 765811
+        },
+        "body": {
+          "name": "__mcp-probe-renamefolder-20260922-{{RUNID}}"
+        }
+      }
+    },
+    "reorder_folders": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "current": [
+            765652
+          ],
+          "next": 764828
+        }
+      }
+    },
+    "reorder_test_cases_by_folder_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "folder_id": 765883
+        },
+        "body": {
+          "test_cases": [
+            1985217
+          ],
+          "bottom_test_case": "1985216",
+          "page": 1
+        }
+      }
+    },
+    "restore_history_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_case_id": 1985018,
+          "history_id": 1677339
+        }
+      }
+    },
+    "search_duplicates_v1": {
+      "verdict": "UNVERIFIED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "q": {}
+        }
+      }
+    },
+    "search_group_tags": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "entity_type": "test_case"
+        },
+        "query": {
+          "q": "probe"
+        }
+      }
+    },
+    "search_project_entities": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "entity": "test-cases"
+        },
+        "query": {
+          "q[folder_ids]": "764093",
+          "per_page": 10,
+          "filter_details": "true"
+        }
+      }
+    },
+    "search_project_entities_v2": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "entity": "test-cases"
+        },
+        "body": {
+          "folder_id": "764093",
+          "p": 1,
+          "per_page": 5
+        }
+      }
+    },
+    "search_project_users": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "q": "Savio"
+        }
+      }
+    },
+    "search_test_case_tags": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "query": {
+          "q": "mcp-probe"
+        }
+      }
+    },
+    "unlink_test_runs_from_test_plan": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_plan_id": 48319
+        },
+        "body": {
+          "test_runs": [
+            17578623
+          ]
+        }
+      }
+    },
+    "update_custom_field_dataset_option_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "custom_fields_id": 106131,
+          "dataset_id": 31320,
+          "option_id": 146669
+        },
+        "body": {
+          "option_value": "__mcp-probe-cfdataset-20260921-B",
+          "is_default": true
+        }
+      }
+    },
+    "update_custom_field_dataset_project_mapping_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "custom_fields_id": 106131,
+          "dataset_id": 31320
+        },
+        "body": {
+          "link_projects": [
+            379339429
+          ],
+          "unlink_projects": [],
+          "link_to_future_projects": true
+        }
+      }
+    },
+    "update_custom_field_definition_v2": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "custom_fields_id": 106131
+        },
+        "body": {
+          "field_name": "__mcp-probe-cfdef-20260921-renamed",
+          "field_type": "dropdown",
+          "is_required": false,
+          "entity_type": "TestCase"
+        }
+      }
+    },
+    "update_dataset": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "uuid": "de04f15e-b88a-4409-8b9d-eeff038c3109"
+        },
+        "body": {
+          "name": "__mcp-probe-dataset-20260921-renamed",
+          "variables": [
+            {
+              "name": "Browser",
+              "uuid": "295cf5d6-2d04-434e-845d-bd0f8b0a990e"
+            },
+            {
+              "name": "OS",
+              "uuid": "8941c080-e862-47bd-940f-24a805e4842c"
+            }
+          ],
+          "rows": [
+            {
+              "row_number": 1,
+              "row_data": [
+                "Chrome",
+                "Windows"
+              ],
+              "uuid": "38827ae2-f56b-42ab-b81a-b7dd03740e9a"
+            },
+            {
+              "row_number": 2,
+              "row_data": [
+                "Firefox",
+                "MacOS"
+              ],
+              "uuid": "264bcbd3-f3db-47a2-a4a4-ee54f6c7cb95"
+            }
+          ]
+        }
+      }
+    },
+    "update_exploratory_session": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "session_id": 815
+        },
+        "body": {
+          "title": "__mcp-probe-exploratory-20260921-{{RUNID}}",
+          "charter": "Probe charter: verifying update_exploratory_session persists this field (was dropped on create)."
+        }
+      }
+    },
+    "update_exploratory_session_log": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "session_id": 779,
+          "log_id": 544
+        },
+        "body": {
+          "elapsed_time": 90
+        }
+      }
+    },
+    "update_filter": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "filter_id": 542
+        },
+        "body": {
+          "name": "__mcp-probe-filter-20260921-renamed",
+          "entity": "testcase"
+        }
+      }
+    },
+    "update_project_settings": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379339429
+        },
+        "body": {
+          "preferred_jira_host": "https://mcp-probe-test.atlassian.net"
+        }
+      }
+    },
+    "update_report": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "report_id": 10393
+        },
+        "body": {
+          "projectId": 379335744,
+          "report_type": "Test Run Summary",
+          "report_timeframe": "last_one_week",
+          "report_creation_mode": "custom_report",
+          "grain": "test_case",
+          "title": "__mcp-probe-report-20260921-{{RUNID}}",
+          "description": "PUT-vs-PATCH probe: description changed by update_report attempt 3, 2026-09-21"
+        }
+      }
+    },
+    "update_shared_step_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "shared_step_id": 27846
+        },
+        "body": {
+          "title": "__mcp-probe-sharedstep-20260921-titleonly",
+          "shared_step_details": [
+            {
+              "id": 76580,
+              "step": "Open the login page",
+              "result": "Login page is displayed",
+              "test_data": "user=probe",
+              "order": 1
+            }
+          ]
+        }
+      }
+    },
+    "update_test_plan_v1": {
+      "verdict": "DRIFT",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "test_plan_id": 48319
+        },
+        "body": {
+          "name": "__mcp-probe-planclone-20260921-updated"
+        }
+      }
+    },
+    "upload_a_i_attachments": {
+      "verdict": "BLOCKED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {}
+      }
+    },
+    "upload_generic_attachments": {
+      "verdict": "BLOCKED",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {}
+      }
     }
   },
   "not_replayable": {
@@ -784,5 +2499,7 @@
       "verdict": "BLOCKED",
       "reason": "no successful invocation on record - see runs/tm/verify_test_case_tags_v1.json"
     }
-  }
+  },
+  "_runid_note": "Any payload value containing {{RUNID}} is substituted by scripts/replay-live.mts with a per-run token. Creates with a fixed name 400 with 'already exists' on the second replay, which reads as a contract failure when it is only the fixture remembering the first run.",
+  "_oneshot_note": "close_test_run_v1 and close_exploratory_session are ONE-SHOT state transitions: once the object is closed the same payload 404s/400s. They are verifiable once per target, so their ids must be refreshed before a re-run. Not a contract defect."
 }

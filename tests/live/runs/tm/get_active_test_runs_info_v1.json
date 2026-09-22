@@ -1,0 +1,44 @@
+{
+  "capability": "get_active_test_runs_info_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:09:04Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the chart",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "query": {}
+    },
+    "status": 200,
+    "response_keys": ["data", "empty_data"],
+    "item_shape": {
+      "name": "string",
+      "y": "integer",
+      "result_status": {
+        "id": "integer",
+        "field_value": "string",
+        "internal_name": "string",
+        "field_name": "string",
+        "colour": "string",
+        "value_category": "null (undeclared)"
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["data[].result_status.value_category"]
+  },
+  "notes": "First attempt succeeded (200) with no query filters, so no retries were needed. Response body was the declared OBJECT with a `data` array (not the bare array the shipped/old schema used) plus `empty_data: false`, matching the capability's stated purpose ('REPLACEMENT for the existing ActiveTestRunsInfo'). Only one row came back: {name: 'Untested', y: 62, result_status: {...}} — the fixture project's 62 active-run results are apparently all still Untested. This is a genuine non-empty array (not the empty-case exemption), so the normal (non-'Other') item shape was validated against the declared schema: name, y, and result_status with id/field_value/internal_name/field_name/colour all present exactly as declared. One extra field, result_status.value_category (null here), was returned but is not in the declared result_status properties list — recorded as undeclared_returned; it did not contradict anything declared, so it did not change the verdict to DRIFT on its own. Two declared behaviors could NOT be exercised by this data and remain unverified: (1) the >6-status collapse into a single 'Other' entry with a `links.filter` URL and no `result_status`, since only one status is present in this project's active runs; (2) the `filter_details=true` echo and the q[created_at]/q[owner] filtering paths, since no query filters were sent (kept the probe minimal and matching what worked on the first try, per the three-attempt budget being unnecessary once attempt 1 passed). No write or destructive capability was invoked; project_id came straight from the fixture pool (source: pool)."
+}

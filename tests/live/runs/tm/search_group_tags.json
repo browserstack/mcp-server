@@ -1,0 +1,56 @@
+{
+  "capability": "search_group_tags",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T11:04:23Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "none needed — group-scoped: the only path param is entity_type, no project_id or group_id is accepted, group is resolved from the authenticated session (group 2615 per task context)",
+      "source": "pool",
+      "capability": null,
+      "produced": {}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"q": "mcp-probe"}},
+      "status": 200,
+      "error": null,
+      "changed": "initial payload — entity_type=test_case chosen per task guidance since the known tags are test-case tags"
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"entity_type": "test_run"}, "query": {"p": 1}},
+      "status": 200,
+      "error": null,
+      "changed": "swapped entity_type to the other declared enum value (test_run) to exercise it"
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"entity_type": "test_plan"}, "query": {"p": 1}},
+      "status": null,
+      "error": "{\"ok\":false,\"error\":\"'entity_type' must be one of: test_case, test_run\"}",
+      "changed": "tried an undeclared entity_type value to test describeCapability's own claim that entity_type is 'Not validated against a list here — an unrecognised value is forwarded to the backing service rather than rejected'. Request never reached the API — no http_response at all, rejected at the invocation layer. Contradicts the documented behavior."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"q": "probe"}},
+    "status": 200,
+    "response_keys": ["tags", "info"],
+    "item_shape": {"tags[]": {"id": "integer", "name": "string"}, "info": {"page": "integer", "page_size": "integer", "count": "integer", "prev": "integer|null", "next": "integer|null"}}
+  },
+  "contract": {
+    "required": ["entity_type (path, declared enum test_case|test_run)"],
+    "json_path": null,
+    "declared_missing": [
+      "tag_objects — declared required in the 200 schema, never present in any of the 4 successful live responses observed (entity_type=test_case and test_run; with and without q; p=1 and p=2)"
+    ],
+    "undeclared_returned": [
+      "tags[].id — the declared 200 schema types `tags` as a plain array of strings ('Simple array of tag names (for backward compatibility)'); every live response instead returned `tags` as an array of {id, name} objects. Both the formal schema and its own prose are wrong about this field's shape."
+    ]
+  },
+  "notes": "GROUP-SCOPE FINDING (the main ask): confirmed GENUINE, not nominal. list_test_case_tags_v1(project_id=379335744) — the project-scoped sibling — returns exactly the 3 known tags (__mcp-probe-tag-20260918a-renamed, mcp-probe, probe-update; count=3). search_group_tags(entity_type=test_case) for the same group returns 31 distinct test_case tags across 2 pages, the large majority of which (2FA, Booking, Bet, Price, Setup, TOTP, Wallet, admin, android, chrome, backend, cloud, ...) do not belong to project 379335744's 3-tag vocabulary and are clearly drawn from other projects in group 2615. This is the opposite of the pattern found earlier this session with the three user-listing capabilities (where the scope difference was nominal and the same set came back regardless) — here the group listing is a real, different, larger set than the project listing. entity_type=test_run corroborates this further: it returns a completely different-looking vocabulary (commit-hash-like strings, P0, Regression, Java, Python, SQL) consistent with aggregating run tags across many projects, not one.\n\nENTITY_TYPE ENUM: only 2 declared values (test_case, test_run), both tried, both succeed live with distinct, plausible data — the split is real. A 3rd, undeclared value (test_plan) does NOT reach the backend at all: invokeCapability itself rejects it pre-flight with `'entity_type' must be one of: test_case, test_run` (no http_response, no status code). This directly contradicts describeCapability's guidance text, which explicitly claims entity_type is 'Not validated against a list here... forwarded to the backing service rather than rejected.' The opposite is true — it IS validated, and rejected, before the backend ever sees it. (Unlike the TestPlan-empty-no-error case found elsewhere this session, this is a hard reject, not a silent empty success — but the doc's characterization of the validation behavior is simply wrong.)\n\nERROR-ENVELOPE DRIFT: describeCapability documents invalid `p` (non-positive/non-numeric) as rejected 'globally with 400 `{success:false, error:\"Invalid Params\"}`' — implying a backend 400 response. Live: p=0 was rejected as `{\"ok\":false,\"error\":\"'p' must be at least 1\"}` — again no http_response/status at all (invocation-layer rejection, not an API 400), with a different envelope shape (`ok`/string `error` vs documented `success`/object `error`) and a different, more specific message. Never diffed this against the success schema — it has no 2xx counterpart; noting only that the actual rejection shape doesn't match the documented one.\n\nPAGINATION DRIFT: entity_type=test_case, no q — page 1 (p=1): 30 tags, info={page:1,count:31,next:2}. Page 2 (p=2): a further 30 DISTINCT tags (correct continued alphabetical/ASCII sort order, zero overlap with page 1), info={page:2,count:31,next:null}. That is 60 distinct tags actually observed across the two pages, yet both pages report count:31 and page 2 falsely claims next:null as if the vocabulary ended at 31. info.count/next cannot be trusted as an accurate total or end-of-data signal on this endpoint.\n\nMINOR: the known tag `__mcp-probe-tag-20260918a` now returns as `__mcp-probe-tag-20260918a-renamed` — a data change since the task context was written (renamed at some point), not a capability contract issue.\n\nWhat the docs got RIGHT: this route is the one that resolves tag ids (needed for a tag merge) — confirmed, ids are present and correct-looking on every tag returned. Page size fixed at 30, no per_page param — confirmed. Not permission-gated — consistent with successful calls having no auth-scoping friction beyond the implicit group."
+}

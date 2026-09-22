@@ -17,11 +17,11 @@ It also cleared the twins of one suspicion and found an undocumented difference 
 
 Two partial writes, each compared against a fresh `get_test_run_v2` read:
 
-**Write 1** — `{assignee: "ing@bsstag.com", run_state: "in_progress"}`:
+**Write 1** — `{assignee: "probe-user@example.invalid", run_state: "in_progress"}`:
 
 | field | response echoed | storage |
 | --- | --- | --- |
-| `assignee` | **`null`** — the stale *pre-write* value | `"ing@bsstag.com"` — correctly applied |
+| `assignee` | **`null`** — the stale *pre-write* value | `"probe-user@example.invalid"` — correctly applied |
 | `overall_progress` | `{Untested: 4}` | `{Untested: 5}` |
 | `updated_at` | fresh `07:16:59.000Z` | **`06:27:38.743Z`** — unchanged |
 
@@ -85,6 +85,6 @@ Declared-but-absent (`id`, `uuid`, `owner`, `is_automation`, top-level `is_dynam
 
 ## Final state of `TR-9062` (batch residue)
 
-`identifier` TR-9062 · `PR-2005` (numeric `17575382`) · name `__mcp-probe-run-2026-09-18T06-35-00Z` · description `update-probe-second-description` (plain, unwrapped) · tags `["replace-probe-tag"]` · assignee `ing@bsstag.com` · `run_state` **`under_review`** · `active_state` active · configurations `[]` · `updated_at` **still `06:27:38.743Z`** · storage `overall_progress` `{Untested: 5}`.
+`identifier` TR-9062 · `PR-2005` (numeric `17575382`) · name `__mcp-probe-run-2026-09-18T06-35-00Z` · description `update-probe-second-description` (plain, unwrapped) · tags `["replace-probe-tag"]` · assignee `probe-user@example.invalid` · `run_state` **`under_review`** · `active_state` active · configurations `[]` · `updated_at` **still `06:27:38.743Z`** · storage `overall_progress` `{Untested: 5}`.
 
 **5 rows**, all untested/unassigned: `TC-54458` (2150387254), `TC-54457` ×2 (2150387252, 2150387283 — duplicate preserved), `TC-54456` (2150387251), `TC-54455` (2150387253). **No underlying test case was modified** — only run-level fields and run-owned rows.

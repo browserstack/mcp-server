@@ -1,0 +1,33 @@
+{
+  "capability": "get_dedupe_status_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:29:45Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the dedupe status lookup",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744}
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}},
+    "status": 200,
+    "response_keys": ["status", "message"],
+    "item_shape": {
+      "status": "NOT_ENABLED",
+      "message": "No dedupe job found for this project"
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First call succeeded on attempt 1 (200), no retries needed. project_id is a required path segment (route only matches digits); no body/json_path is used. Declared 200 schema matched exactly for the NOT_ENABLED case: status='NOT_ENABLED' plus message present, and job_id/scheduled_run_time/actual_end_time/updated_at correctly absent (all documented as absent when NOT_ENABLED). No error response was encountered on this probe, so the error-envelope-drift watch item does not apply here. EMPTY-CASE RULE: only the NOT_ENABLED state was actually observed against pool project 379335744 -- none of the other 16 declared statuses (QUEUED, PENDING, IN_PROGRESS, CLUSTER, CLUSTERING, COMPLETED, FAILED, RETRY, RETRY_FAILED, STATISTICAL_FAILED, STATISTICAL_RETRY, CLUSTERING_FAILED, CLUSTERING_RETRY, CANCELLED, BACKFILLING, LLM_ANALYSIS_SKIPPED, CLUSTERING_LIMIT) were exercised or verified, since the pool offers only this one project and it has never had a dedupe job. Do not read this PASS as validating the full state machine -- only the NOT_ENABLED branch of the schema is confirmed correct. MOST VALUABLE FINDING FOR SIBLING PROBES: dedupe has NEVER run on project 379335744 (PR-2005) -- there is no job row at all (status=NOT_ENABLED, synthesised, no job_id/timestamps). This means list_duplicates_v1, search_duplicates_v1, get_duplicate_v1 and get_duplicate_source_test_case_v1 should all expect ZERO duplicate records for this project, and any empty result they see is consistent with 'dedupe never ran' rather than 'ran and found nothing' -- this endpoint is the only way to tell those two cases apart, and for this project the answer is definitively 'never ran'."
+}

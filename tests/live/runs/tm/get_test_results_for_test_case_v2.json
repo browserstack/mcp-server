@@ -92,7 +92,7 @@
         "id": 2150387456,
         "created_at": "2026-09-18T07:44:42.000Z",
         "updated_at": "2026-09-18T07:44:47.508Z",
-        "created_by": "ing@bsstag.com",
+        "created_by": "probe-user@example.invalid",
         "description": "Probe write from capability-registry live-probe suite: recording a passed outcome on TC-54458 in TR-9062 to verify the result entity end-to-end (create_test_results_for_test_run_v2).",
         "test_case_id": "TC-54458",
         "test_run_id": "TR-9062",

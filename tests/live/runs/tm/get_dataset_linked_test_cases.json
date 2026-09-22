@@ -1,0 +1,44 @@
+{
+  "capability": "get_dataset_linked_test_cases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:25:51Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "need a real dataset uuid to invoke get_dataset_linked_test_cases",
+      "source": "invoked",
+      "capability": "list_datasets",
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "query": { "p": 1 }
+      },
+      "status": 200,
+      "produced": {
+        "uuid": "92d4a614-57d3-4201-8ffc-3f3c9faf9747",
+        "name": "__probe-dataset-1789734836192",
+        "rows_count": 2,
+        "test_cases_count": 0
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "uuid": "92d4a614-57d3-4201-8ffc-3f3c9faf9747" },
+      "query": { "p": 1 }
+    },
+    "status": 200,
+    "response_keys": ["test_cases", "info"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id (path)", "uuid (path)"],
+    "json_path": "/projects/{project_id}/datasets/{uuid}/test_cases",
+    "declared_missing": [],
+    "undeclared_returned": [],
+    "notes": "Declared 200 envelope is exactly {test_cases:[...], info:{page,page_size,count,prev,next}} with NO `success` key, per describeCapability guidance ('This response has NO success key, unlike every other dataset endpoint'). Actual response matched exactly: keys were test_cases and info only, info had all five required sub-fields (page:1, page_size:30, count:0, prev:null, next:null), and no success key was present. No structural drift observed at the envelope level."
+  },
+  "notes": "EMPTY-CASE: the only dataset in project 379335744 (found via list_datasets) is '__probe-dataset-1789734836192' (uuid 92d4a614-57d3-4201-8ffc-3f3c9faf9747), and list_datasets already reported test_cases_count:0 for it before this call was made. This is case 2 of the empty-case rule: a dataset EXISTS (confirmed reachable) and the capability call succeeded (200) with the declared envelope shape intact, but it returned an empty test_cases array (count:0) because no test cases are linked to it. The capability itself is reachable and its container contract (test_cases/info, no success key, info sub-fields) is verified and matches the declared schema exactly. What could NOT be verified is the per-item shape of a linked test-case row (declared only as a bare `{type:object}` with no fields specified, and describeCapability's own guidance notes the row shape is 'passed through from the backing store unchanged; not shaped by this service'), because no dataset in this project/pool had a linked test case. No dataset was created and no case was linked, per instructions. Verdict is UNVERIFIED specifically for item_shape, not because the capability is broken or unreachable -- distinct from the other empty-case scenario (no dataset existing at all), which did not occur here."
+}

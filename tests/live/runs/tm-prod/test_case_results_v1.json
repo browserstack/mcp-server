@@ -1,0 +1,54 @@
+{
+  "capability": "test_case_results_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:13:42Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Fetched the full contract on the PROD MCP server (describeCapability) before invoking, rather than reusing the preprod contract. Confirms GET /api/v1/integrations/{issue_type}/test-case/results/{test_case_id}: path params issue_type (closed enum: jira-app, azure, asana, linear, clickup, confluence, figma, devrev, gitlab, github, custom, trello - non-enum values 404 rather than validation-error) and test_case_id (integer, must belong to caller's own group); optional query p (page - sending it switches to full result history, omitting it quietly narrows results) and per_page (only effective when p is also sent). Declared 200 shape: {data:{success, test_case:{...,issues,test_run_results,test_run_results_count,...}}}, json_path data.test_case. Declared error shapes at 400/401/403/404/500 are all the standard {success:false, error:{code,message,details}} envelope - i.e. a bare {status,error} body (what preprod returned every time) is NOT one of the declared shapes.",
+      "source": "invoked",
+      "capability": "describeCapability",
+      "arguments": { "name": "test_case_results_v1", "product": "tm", "include_responses": "all" },
+      "status": 200,
+      "produced": { "path_params": ["issue_type", "test_case_id"], "query": ["p", "per_page"], "json_path": "data.test_case", "declared_error_envelope": "{success:false, error:{code,message,details}}" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "issue_type": "jira-app", "test_case_id": 32747791 }, "query": { "p": 1, "per_page": 10 } },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Case TC-838571 (int 32747791), from the fixture pool (folder 9697326 'MCP Testing', project PR-18723 / 332537), issue_type jira-app, requesting full result history with p=1. Bare 500 - not the declared {success:false,error:{code,message}} shape. Identical to the preprod signature."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "issue_type": "custom", "test_case_id": 32747791 }, "query": { "p": 1, "per_page": 10 } },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Same case, switched issue_type to custom (matching what the preprod probe also tried after jira-app failed there). Identical bare 500. Rules out issue_type=jira-app specifically being the trigger."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "issue_type": "jira-app", "test_case_id": 32747562 } },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Different fixture case, TC-838570 (int 32747562), same folder/project, issue_type reverted to jira-app, no pagination params sent at all (server-default result set). Identical bare 500. Rules out both the specific case id and the presence/absence of p/per_page as the trigger."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "issue_type": "jira-app", "test_case_id": 32747562 } },
+    "status": 500,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["issue_type", "test_case_id"],
+    "json_path": "data.test_case",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Side-by-side with preprod: on preprod, test_case_results_v1 was BLOCKED - all 3 attempts (issue_type varied jira-app/custom, with/without p/per_page, across multiple case ids) returned an identical bare {\"status\":500,\"error\":\"Internal Server Error\"} body, not the declared {success:false,error:{code,message}} envelope; a second independent probe (unlink_test_case_v1) hit the same 500 on two more cases. That left two live hypotheses: (1) no external-tracker integration configured for any issue_type on that account, causing the handler to crash instead of returning a graceful empty/not-configured result, or (2) the endpoint is broken outright, confounded by preprod having almost no cases with real recorded results/history (a possible data-emptiness-shaped block). On PROD, against the real fixture (project PR-18723 / 332537, 16,267 cases, folder 9697326 with genuine test cases, and a done run TR-5401273 in the same project that plausibly has real result/tracker history somewhere in this account's data), the identical bare 500 reproduced on all 3 attempts, varying issue_type (jira-app, custom) and case id (TC-838571 int 32747791, TC-838570 int 32747562) and pagination presence. The block does NOT dissolve on prod. Because prod is a real, populated account with finished runs and real data elsewhere (list_tags_v3 and other probes against this same project returned genuine live data on prod), the fact that this endpoint still 500s uniformly - regardless of issue_type or case id, with no observed variation in error shape - weakens the 'no data / no tracker configured' explanation and strengthens the 'broken code' hypothesis: this looks like a code-path defect in the handler (crashing rather than returning a graceful not-configured/empty result, or crashing on the underlying issue/results join query itself) rather than an artifact of preprod's sparse fixture data. Could not establish which fixture cases specifically ran through TR-5401273 without extra invocations beyond the 3-attempt budget, so results/tracker linkage to that run was not confirmed either way - moot regardless, since the endpoint never returned a 200 to inspect."
+}

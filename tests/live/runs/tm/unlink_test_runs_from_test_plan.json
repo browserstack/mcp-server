@@ -1,0 +1,83 @@
+{
+  "capability": "unlink_test_runs_from_test_plan",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:31:20Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Baseline TP-1632 (48319) before touching it: confirm it still carries exactly one linked run, TR-9111, per the CLEANUP-LEDGER record of clone_test_plan_v1's side effect.",
+      "source": "invoked",
+      "capability": "get_test_plan_by_integer_id_v1",
+      "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48319}},
+      "status": 200,
+      "produced": {"test_runs_count": {"active": 1, "closed": 0}, "total_test_runs_count": {"active": 1, "closed": 0}, "name": "__mcp-probe-planclone-20260921-updated", "sub_plans_count": 0}
+    },
+    {
+      "step": 2,
+      "why": "Confirm the linked run's exact identity and integer uuid (needed for the unlink body, per this capability's own guidance).",
+      "source": "invoked",
+      "capability": "get_test_plan_test_runs_v1",
+      "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48319}, "query": {"p": 1}},
+      "status": 200,
+      "produced": {"test_runs": [{"id": "TR-9111", "uuid": 17578623, "test_cases_count": 1}], "count": {"active": 1, "closed": 0}}
+    },
+    {
+      "step": 3,
+      "why": "Baseline TR-9111 directly, and check whether THIS reader (unlike get_test_runs_v1) correctly surfaces the plan link, per the task's request to settle the get_test_runs_v1 test_plans[] defect.",
+      "source": "invoked",
+      "capability": "get_test_run_by_integer_id_v1",
+      "arguments": {"path_params": {"project_id": 379335744, "test_run_id": 17578623}},
+      "status": 200,
+      "produced": {"test_plans": [{"id": 48319, "identifier": "TP-1632", "name": "__mcp-probe-planclone-20260921-updated"}], "test_cases_count": 1, "updated_at": "2026-09-21T13:44:10.000Z"},
+      "notes": "CORRECTLY shows the link. This is a THIRD working reader for plan<->run linkage, alongside get_test_plan_test_runs_v1 (both already proven correct in prior probes)."
+    },
+    {
+      "step": 4,
+      "why": "Re-confirm the known get_test_runs_v1 defect on the SAME run, same instant, for direct comparison against the two correct readers above.",
+      "source": "invoked",
+      "capability": "get_test_runs_v1",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"include_test_plan": "true", "p": 1}},
+      "status": 200,
+      "produced": {"TR-9111_row": {"test_plans": []}},
+      "notes": "test_plans: [] while the run IS genuinely linked (per steps 2 and 3). Reproduces the systemic defect on this run specifically, immediately before any write."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48319}, "body": {"test_runs": ["TR-9111"]}},
+      "status": 200,
+      "error": null,
+      "changed": "NONE. Response was {\"success\": true} — a clean, undifferentiated success — but a re-read of get_test_plan_test_runs_v1(48319) immediately afterward showed TR-9111 STILL linked (count.active still 1, row still present, uuid 17578623) and get_test_plan_by_integer_id_v1(48319) still showed test_runs_count.active:1. Sending the TR-NNN STRING form silently did nothing while claiming success."
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48319}, "body": {"test_runs": [17578623]}},
+      "status": 200,
+      "error": null,
+      "changed": "REAL UNLINK. Response {\"success\": true}. Re-reads confirmed: get_test_plan_test_runs_v1(48319) -> test_runs:[], count:{active:0,closed:0}. get_test_plan_by_integer_id_v1(48319) -> test_runs_count:{active:0,closed:0}, total_test_runs_count:{active:0,closed:0} (correctly dropped from 1, matching the row count exactly — no count-vs-rows desync here). get_test_run_by_integer_id_v1(17578623) -> run STILL EXISTS (200, full object returned), test_plans now [] (correctly empty, since it really is unlinked now), test_cases_count still 1, updated_at bumped 2026-09-21T13:44:10.000Z -> 2026-09-22T05:31:20.000Z (the unlink touched the run's own updated_at), metadata changed null -> {} as a side detail."
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48319}, "body": {"test_runs": [17574995]}},
+      "status": 200,
+      "error": null,
+      "changed": "NONE, as expected — deliberate bad-id test per the task, run AFTER the real unlink in attempt 2 (not a retry of it). 17574995 is TR-9061's uuid, a run that has never been linked to TP-1632/48319 (it belongs to a DIFFERENT plan, TP-1616/48283). Response was {\"success\": true}. Re-reads confirmed TP-1616 (48283) is completely untouched: updated_at still 2026-09-18T12:53:05.000Z byte-identical to its long-standing fixture baseline, TR-9061 still linked (get_test_plan_test_runs_v1(48283) still shows it, count.active:1), sub_plans_count still 14. TP-1632 remains at 0 linked runs, unchanged from after attempt 2."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48319}, "body": {"test_runs": [17578623]}},
+    "status": 200,
+    "response_keys": ["success"],
+    "item_shape": "Flat object, no data envelope: {success: boolean}. No `error` key present on any success response in this probe (only ever seen in attempt 1's superficially-identical-looking 200, which also omitted `error` despite doing nothing — see contract notes)."
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "test_plan_id (path, integer)", "test_runs (body, array, top-level, no test_plan wrapper)"],
+    "json_path": "N/A — body is flat {test_runs: [...]} at the top level, confirmed exactly as this capability's own guidance describes. No wrapper trap here.",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "VERDICT RATIONALE: the declared 200 schema ({success, error}) is honestly small and every response observed fit it exactly — no missing/undeclared keys anywhere. DRIFT is scored against the capability's own GUIDANCE PROSE, not its JSON schema: the guidance claims sending the TR-NNN string 'fails upstream rather than being rejected here' — implying an error of some kind. What actually happened (attempt 1) was a plain HTTP 200 {\"success\": true} that changed NOTHING, verified by two independent re-reads immediately after. That is a THIRD, previously undocumented failure mode for this capability, worse than the one the guidance already warns about ({success:false, error:'Please check test runs'} for a missing/non-array test_runs): a wrong-typed-but-present array element produces a 200 that LIES about having succeeded, with no error key at all to distinguish it from a genuine unlink. A caller who does not independently re-read the plan after this call would believe the unlink happened and would have no way to know otherwise.\n\nQUESTION 1 (the one that matters most) — DOES UNLINKING DELETE THE RUN? NO, DEFINITIVELY. get_test_run_by_integer_id_v1(17578623) returned a full 200 test_run object immediately after the real unlink (attempt 2): same identifier TR-9111, same test_cases_count (1), same name, only test_plans emptied and updated_at bumped. The run was NOT deleted — it survives as an orphaned, plan-less run, exactly as this capability's own intent text promises ('Detach test runs from a test plan without deleting them'). This capability's mode classification (write, not destructive) is THEREFORE CORRECT for TR-9111's case: there is no hidden destructive side effect routing around the destructive-tier gate. This is a clean, reassuring answer, not a defect.\n\nQUESTION 2 — THE get_test_runs_v1 test_plans[] READER BUG, FINAL PIECE: before the unlink (setup steps 3+4), get_test_run_by_integer_id_v1 and get_test_plan_test_runs_v1 both correctly showed TR-9111 linked to TP-1632, while get_test_runs_v1 (same run, same instant, include_test_plan=true) showed test_plans:[]. After the real unlink (attempt 2), get_test_runs_v1 was re-read (p=1) and STILL shows TR-9111's test_plans:[] — but now that value is actually TRUE, since the run really is unlinked. Because the field reads [] in BOTH the genuinely-linked and genuinely-unlinked states, with zero observable difference between them, this confirms what the task suspected: get_test_runs_v1's test_plans field does not merely return stale data, it NEVER populates at all, regardless of the real underlying state. get_test_plan_test_runs_v1 and get_test_run_by_integer_id_v1 both correctly flip from populated to [] across the same write — two independent working readers, one broken reader, all observed on the identical run across the identical change.\n\nQUESTION 3 — ID FORM: the capability's guidance insists on the integer uuid and warns the TR-NNN string 'fails upstream.' Empirically it does NOT fail upstream — it returns a clean 200 success and silently no-ops (see attempt 1 above). Only the bare integer uuid (17578623) actually performs the unlink. This directly answers the task's 'which id form is demanded' question: the integer is required for the write to take effect, but the wrong form is not rejected — it is silently absorbed with a false-positive success, which is arguably worse than 'failing upstream' as documented.\n\nQUESTION 4 — PUT-VS-PATCH / ADDITIVE-VS-REPLACE: NOT INFERRED, per the task's explicit instruction, because TP-1632 had exactly one linked run (TR-9111) and no way existed to test partial unlinking against a multi-run plan without touching TP-1616 (explicitly off-limits). No claim is made here about whether unlink is additive-vs-replace for a list of run ids; only the single-run case was exercised.\n\nQUESTION 5 — test_runs_count ON THE PLAN: updated correctly. get_test_plan_by_integer_id_v1(48319) went from test_runs_count/total_test_runs_count {active:1,closed:0} to {active:0,closed:0} immediately after the real unlink, matching get_test_plan_test_runs_v1's row count exactly (0 rows). No count-vs-rows desync observed on this capability's own effect.\n\nQUESTION 6 — BAD-ID TEST (run id not linked to this plan): attempt 3 sent TR-9061's uuid (17574995, a run genuinely linked to a DIFFERENT plan, TP-1616/48283) as if unlinking it from TP-1632/48319. Result: 200 {\"success\": true}, absorbed silently — exactly matching this capability's own guidance ('ids that were never linked to this plan... are absorbed silently'). Verified TP-1616 was NOT touched: get_test_plan_by_integer_id_v1(48283) updated_at is still 2026-09-18T12:53:05.000Z, byte-identical to its established fixture baseline; TR-9061 remains linked via get_test_plan_test_runs_v1(48283); sub_plans_count still 14. So unlike attempt 1's lying-success-that-does-nothing-when-it-should-have-worked, this is a lying-success-that-correctly-does-nothing-because-there-was-nothing-to-do — the SAME response shape ({success:true}, no distinguishing field) covers both a genuine unlink, a wrong-id-form no-op, and a not-linked-here no-op. All three are indistinguishable from the response alone; only independent re-reads separate them.\n\nSCOPE / SAFETY: only TP-1632 (48319) and TR-9111 (17578623) were mutated. TP-1616 (48283) and TR-9061 (17574995) were read four times total across this probe and never written to; both are confirmed byte-identical to their pre-probe baselines. TR-9111 now sits unlinked from any test plan, per the task's expectation that it is expendable and disposable. Entitlement-gated 200 {success:false} and error-envelope drift were not observed/exercised — no 4xx/5xx was produced by any of the three attempts, so those two watch items remain unverified for this capability specifically."
+}

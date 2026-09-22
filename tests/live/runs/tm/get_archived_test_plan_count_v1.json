@@ -1,0 +1,47 @@
+{
+  "capability": "get_archived_test_plan_count_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T11:03:23Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope (from pool: project 379335744 / PR-2005, 29 test plans)",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744}},
+      "status": 404,
+      "error": "{\"success\":false,\"errors\":\"Feature not available\"}",
+      "changed": ""
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744}},
+      "status": 404,
+      "error": "{\"success\":false,\"errors\":\"Feature not available\"}",
+      "changed": "retried identical payload unmodified, to confirm the 404 was deterministic rather than transient"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}},
+    "status": 404,
+    "response_keys": ["success", "errors"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [],
+    "error_envelope_match": true,
+    "envelope_note": "404 body matches the declared 404 schema exactly: {success: boolean, errors: string}. Note this envelope shape ('errors', a plain string) differs from this same capability's own declared 401/403/500 shape ({error: {code, message, details}}) — a documented, self-consistent-with-itself special case per the guidance ('feature gate' 404), not an undeclared drift."
+  },
+  "notes": "Both attempts returned an identical, contract-matching 404 before any 200 was ever reached: {\"success\":false,\"errors\":\"Feature not available\"}. This is the capability's own documented behavior per its guidance: 'Gated on the same group archive flag as archive/restore: when it is off the call is 404 {success: false, errors: \"Feature not available\"} — a feature gap, not an empty project.' So this 404 is not a malformed-request problem (path_params were exactly and only what describeCapability required: project_id=379335744, no body, no json_path, no query) and not a permissions problem signature (403 is the documented shape for that) — it is the group-level test-plan-archiving feature flag being off for project 379335744/PR-2005 in preprod. Because the 200 path was never reached, the declared {success, count} shape could not be exercised at all — this is stronger than the count=0-is-still-PASS nuance the task called out: a 0 in a 200 body would count as a fully-formed scalar response, but a 404 feature-gate means the endpoint could not be exercised in its documented working mode in this environment, so this is BLOCKED, not PASS/UNVERIFIED with a zero count. No further attempts were useful: the capability takes no other parameters to vary (path_params.project_id only, no query, no body, no json_path), and the response was deterministic across both calls, so a 3rd identical attempt was skipped as pointless. CROSS-CHECK FLAG for the parallel list_archived_test_plans_v1 probe: if that sibling capability returns a 200 with an empty list for this same project, that is a meaningful mismatch worth surfacing — it would mean the archived-plans *listing* is reachable (or silently treats the gate differently) while the *count* is hard-gated 404 for the identical project/group, i.e. the two endpoints in this documented pair disagree on how they behave when archiving is disabled. If the sibling also 404s the same way, that's consistent and expected. NAMING/DOCS: get_archived_test_plan_count_v1's own intent text does cross-reference its listing sibling ('use the archived-plans listing when you need the plans themselves'), so — unlike the count_binned_test_cases_v1/listing precedent flagged as a documentation gap — this count/list pair IS documented as a pair in its own intent field, which is the good case."
+}

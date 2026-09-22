@@ -1,0 +1,57 @@
+{
+  "capability": "get_custom_field_definition_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "custom_fields_id for the path param — took the pool-provided known custom field id directly, no resolution call needed",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "custom_fields_id": 105915 },
+      "status": null,
+      "produced": { "note": "id 105915 / dropdown_field_pnw5i3, expected 1 dataset (id 31196), from the task pool" }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "custom_fields_id": 105915 } },
+    "status": 200,
+    "response_keys": ["success", "data", "info"],
+    "item_shape": {
+      "data": {
+        "id": 105915,
+        "field_name": "dropdown_field_pnw5i3",
+        "field_type": "dropdown",
+        "system_name": "dropdown_field_pnw5i3",
+        "is_required": false,
+        "place_holder_text": "Sample Placeholder for dropdown",
+        "is_bulk_editable": true,
+        "is_filterable": true,
+        "default_value": null,
+        "type": "Custom",
+        "datasets": [
+          {
+            "id": 31196,
+            "link_to_future_projects": false,
+            "linked_project_count": 1,
+            "linked_to_all_projects": false,
+            "linked_projects": [
+              { "id": 379334209, "identifier": "PR-1944", "name": "testproject-4dh0" }
+            ]
+          }
+        ]
+      },
+      "info": { "page": 1, "page_size": 30, "count": 1, "prev": null, "next": null }
+    }
+  },
+  "contract": {
+    "required": ["custom_fields_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded (200), no retries needed. `levels` is correctly absent — it's declared as present only for field_type=nested_dropdown, and this field is `dropdown`, so absence here is the documented conditional case, not a contract miss (per the empty-case rule, this is expected-shape absence, not evidence either way). All returned keys (data.id/field_name/field_type/system_name/is_required/place_holder_text/is_bulk_editable/is_filterable/default_value/type/datasets, dataset fields, info paging) exactly match the declared 200 schema; nothing undeclared came back and nothing required was missing. STRUCTURAL CONTAINER MISMATCH: does not apply here — `data.datasets` is returned as a plain array exactly as declared, not nested in an extra wrapper; the array/object-container issue seen elsewhere (get_custom_field_dataset_v2's data.options, folders as array-vs-map) is not present on this capability. PROSE VS SCHEMA DISAGREEMENT: found, in two places, and reality matches the machine-checkable schema in both, not the prose. (1) This capability's own guidance says system_name is 'null for user-defined fields'; the schema itself only declares it as nullable string. The probed field (type literal 'Custom', i.e. user-defined) actually returned system_name='dropdown_field_pnw5i3' (non-null, equal to field_name) — the prose guidance is wrong, the (weaker) schema type is what actually holds. (2) Cross-capability conflict: get_custom_field_v2's own guidance describes 'the admin-settings single-field read' (i.e. this capability) as returning 'the field with its datasets and options inline'. That is false for this endpoint: this capability's declared schema and guidance both say datasets carry no option values ('Options are NOT included — read them from the dataset options list'), and the live probe confirms it — datasets[0] has only id/link_to_future_projects/linked_project_count/linked_to_all_projects/linked_projects, no options anywhere. Reality matches THIS capability's own contract; the sibling capability's cross-referencing prose about it is stale/wrong. SURFACE CONFUSION (admin `_definition_` vs public `get_custom_field_v2`): a caller can tell them apart by (a) envelope key — this one wraps the field under `data`, the public one wraps it under `custom_field`; (b) entity_type — present on the public read, completely absent from this one (this capability's own guidance says explicitly 'entity_type is NOT in this response; take it from the workspace field list instead'); (c) dataset representation — the public read gives only references (`dataset_ids` + ready-made `dataset_urls`/`datasets_url`, pointing at the dataset-collection path, defaulting to page size 20/max 300 via `page`+`per_page`), while this admin read embeds the dataset objects themselves inline (id, linked_project_count, linked_projects, link_to_future_projects, derived linked_to_all_projects) under a differently-shaped pager (`p` only, fixed page_size 30, `per_page` silently ignored) — i.e. same underlying dataset ids, richer inline objects here vs URL hints there, but neither includes option values."
+}

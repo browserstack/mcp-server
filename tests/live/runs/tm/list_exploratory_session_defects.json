@@ -1,0 +1,51 @@
+{
+  "capability": "list_exploratory_session_defects",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T12:15:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope (from pool: project 379335744 / PR-2005)",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744}
+    },
+    {
+      "step": 2,
+      "why": "resolve a real exploratory session_id to invoke the defects listing against, per the capability's own guidance ('Take id (integer) from a row ... and carry it as session_id into ... defects ... calls')",
+      "source": "invoked",
+      "capability": "list_exploratory_sessions",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"p": 1}},
+      "status": 200,
+      "produced": {
+        "exploratory_sessions": [],
+        "info": {"page": 1, "page_size": 30, "count": 0, "prev": null, "next": null},
+        "count": {"active": 0, "closed": 0}
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "session_id": 999999999}, "query": {"p": 1}},
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "deliberate negative-space probe with a fabricated session_id -- no real session_id was obtainable (see setup step 2), so this is not a retry of a failed real invocation, it is the only call this probe could make"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "session_id": 999999999}, "query": {"p": 1}},
+    "status": 404,
+    "response_keys": ["success"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id", "session_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "PREREQUISITE BLOCKED -> UNVERIFIED: this project (379335744/PR-2005) has zero exploratory sessions, confirmed by directly invoking list_exploratory_sessions myself (setup step 2, not taken on the sibling's word): exploratory_sessions=[], info.count=0, and the top-level per-state count object shows {active:0, closed:0} -- i.e. not just 'none in the default active view', the project has never had one, closed or active. There is therefore no session_id anywhere in this pool to carry into list_exploratory_session_defects, and the capability's happy path (a real 200 with actual defect rows) could not be reached. This corroborates the sibling's finding on this same project and extends it: not just 0 active sessions, 0 sessions in any state.\n\nWhich id I could not obtain / which read I tried: session_id (integer, path param) for project_id=379335744. Tried: list_exploratory_sessions(project_id=379335744, p=1) with no session_state filter (defaults to 'active') -- got exploratory_sessions=[]. Since guidance says the default view hides closed sessions and a session vanishes the moment it's closed, count.closed=0 in the same response additionally rules out 'there's a closed one I'm just not seeing' -- there is no session in this project at all, active or closed.\n\nSTILL WORTH DOING -- fabricated-id probe: called list_exploratory_session_defects with project_id=379335744, session_id=999999999 (an id essentially certain not to exist). Got HTTP 404, body exactly `{\"success\":false}`. This matches the capability's own declared guidance verbatim: 'An unknown session_id returns a bare {success:false} with 404 and no message.' So on this occasion prose and reality agree for the unknown-id case -- but note this bare-404 behavior CONTRADICTS the capability's own formally declared 404 response schema, which is the standard richer envelope `{success: false, error: {code, message, details}}`. That formal schema was never exercised (no code/message/details were present), so per the 'never diff an error body against the success schema' rule this is not scored against declared_missing/undeclared_returned (those stay empty, and in any case the error was diffed only against the guidance's own bare-404 prose, not the success schema) -- but it is a real, checkable prose-vs-formal-schema split worth flagging: the free-text guidance is the accurate description of this endpoint's actual unknown-id behavior; the structured 404 schema block is not.\n\nANSWERS TO THE FOUR CONTRACT QUESTIONS (checkable from describeCapability alone, no session needed):\n1. Row shape: CONFIRMED as reported. The declared 200 schema's `defects[]` items are full issue-link records: id, issue_id, issue_type, issue_status, priority, record_status, entity_type, entity_id, entity_uuid, project_id, metadata (free-form object), created_at, updated_at -- not the slim {issue_id, issue_type} shape. The guidance text says this explicitly ('Rows are full issue-link records, not just {issue_id, issue_type}...'), and the schema block matches it field-for-field. Worth noting for contrast: the *embedded* `issues[]` array returned inline on each row of the sibling list_exploratory_sessions IS the slim {issue_id, issue_type} shape (required: issue_id, issue_type only) -- so the two 'issues/defects' shapes in this API are genuinely different sizes depending on which endpoint you read them from, and this capability's contract is honest about which one it is.\n2. Session-vs-log coverage: CONFIRMED. The schema carries entity_type (values illustrated: 'ExploratorySession' vs 'ExploratorySessionLog') and entity_id, and guidance is explicit: 'This is the session-wide view: rows carry entity_type and entity_id, so the list can include both links made on the session itself and links made on individual log entries. Read entity_type to tell them apart; read a log's own `defects` if you only want that log's.' That is also the extent of the documented overlap statement -- it says a log's own `defects` field is the log-scoped subset of what this session-wide endpoint returns, but does not spell out whether the log-level `defects` field embeds the exact same record shape (id/issue_status/priority/etc.) or the slimmer {issue_id, issue_type} shape; that would need the sibling probing list_exploratory_session_logs to confirm from its side, per the prompt's own note that it's asked the same question.\n3. Paging/filters: CONFIRMED verbatim. Query params declare only `p` (page, default 1, 400 'Invalid Params' on non-positive/non-numeric) and `per_page` (accepted, documented as NOT honoured -- 'the handler overwrites it with the fixed page size of 30'). Guidance states directly: 'Paging uses `p`, NOT `page`.', '`per_page` is accepted and ignored -- the page size is fixed at 30. Walk `p` until a page comes back short.', and 'There are no filters on this endpoint: no status, tracker or date narrowing. Filter client-side.' No other query params are declared at all.\n4. Async defect-link visibility: CONFIRMED, documented explicitly in guidance: 'Defect links written by the session or log write calls are applied asynchronously, so a defect linked a moment ago may not be here yet -- retry rather than concluding the link failed.'\n\nPATTERN CHECK: `metadata` in the declared defects[] item is `{type:'object', nullable:true}` with only a prose description ('ticket url, title, display_category, issue_category') and no properties enumerated -- this is the unfalsifiable-{type:object} pattern: nothing about its actual key names or types can be confirmed or refuted from the contract, and since no 200 was ever reached here it remains completely unverified in practice too. No container-mismatch or count-vs-rows issue applies to this capability's own declared schema (it only exposes info.count for pagination, unlike its list_exploratory_sessions sibling which separately warns its top-level `count` is a per-state object, not a row count) -- but that sibling ambiguity is worth carrying forward since the same project/pool is shared.\n\nRETRY POLICY: only one call was made against the fabricated id (not three) -- this was a deliberate single negative-space probe, not a retry loop against a failed real request, so there was nothing to retry: the 404 is the expected, correct outcome for an unknown id, not a failure to diagnose."
+}

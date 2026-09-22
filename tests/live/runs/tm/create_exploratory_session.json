@@ -1,0 +1,36 @@
+{
+  "capability": "create_exploratory_session",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:29:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 999999999}, "body": {"title": "__mcp-probe-exploratory-20260921-errorcheck"}},
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "Deliberate error probe per the task brief, not a fix-and-retry cycle: used a nonexistent project_id (999999999) with an otherwise-valid title to force a failure and inspect the error envelope before attempting the real create. Declared 400/404 schema promises {success:false, error:{code,message,details}}; actual body was the bare {\"success\":false} with no `error` key at all — confirms this family's known error-envelope defect (structured envelope declared, flat bare envelope returned)."
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"title": "__mcp-probe-exploratory-20260921", "description": "Live MCP probe for create_exploratory_session on tm/preprod.", "charter": "Verify create_exploratory_session contract end to end.", "timebox_duration": 60, "folder_id": 764138}},
+      "status": 201,
+      "result": "Success. Body sent FLAT (no `exploratory_session` wrapper) and it worked on the first try, confirming describeCapability's guidance that invokeCapability builds the wrapper itself from each field's json_path. Created session id=779, identifier=ES-14, in project PR-2005 (379335744), folder_id requested=764138 (__scratch__)."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}, "body": {"title": "__mcp-probe-exploratory-20260921", "description": "Live MCP probe for create_exploratory_session on tm/preprod.", "charter": "Verify create_exploratory_session contract end to end.", "timebox_duration": 60, "folder_id": 764138}},
+    "status": 201,
+    "response_keys": ["success", "exploratory_session"],
+    "item_shape": "exploratory_session: {attachments[], attachment_relations[], id, identifier, test_plan_id, project_id, group_id, title, description, timebox_duration, duration, session_state, assignee, owner, charter, created_by{id,email,full_name,group_id}, closed_by, closed_at, actual_duration, record_status, created_at, updated_at, tags[], configurations[], issues[], timeline[], session_log_count, custom_fields[]}"
+  },
+  "contract": {
+    "required": ["project_id", "title"],
+    "json_path": "Flat body worked (no `exploratory_session` wrapper needed) — invokeCapability builds /exploratory_session/* itself from each field's declared json_path, matching describeCapability's guidance verbatim.",
+    "declared_missing": ["/exploratory_session/folder_id"],
+    "undeclared_returned": ["attachments", "attachment_relations", "identifier", "test_plan_id", "project_id", "group_id", "owner", "closed_at", "record_status", "custom_fields"]
+  },
+  "notes": "CREATED SESSION FOR DEPENDENT PROBES — session_id (integer, use this) = 779, identifier = ES-14 (display only; per get_exploratory_session's own guidance the identifier fails routing as a 404, so the six gated capabilities must be called with the integer 779), project_id = 379335744 (PR-2005), folder_id requested = 764138 (__scratch__), session_state = 'active', session_log_count = 0 at creation (so a clone probe should hit clone_exploratory_session_v1's SYNCHRONOUS path per its own guidance — the async threshold is 50+ logs). owner/assignee were left unset in this probe (untested) — if update/close probes want to exercise ownership they need a valid TCM owner id first. DRIFT #1 (declared_missing): folder_id is a declared property of the 201 response schema (and of get_exploratory_session's return list) but the key is completely ABSENT — not null, just missing — from both the create response and a follow-up get_exploratory_session(project_id=379335744, session_id=779) read-back (200, body identical in every other respect). So it is unverifiable from the API surface whether the session actually landed in folder 764138 (__scratch__) or at the project root; a caller cannot confirm folder placement through this capability's own response or through get_exploratory_session. DRIFT #2 (value-level, not required/json_path but worth flagging for the other six probes): `charter` was sent as a non-empty string ('Verify create_exploratory_session contract end to end.') and came back `null` on both the create response AND the read-back — the field is silently dropped on create despite being declared writable with its own json_path (distinct from the already-documented 'cloning does not copy charter' behavior — this is create itself losing it). Anything relying on charter being set at creation time should instead set it via update_exploratory_session and re-verify. Error envelope: confirmed the family's known defect — a deliberate 404 (nonexistent project_id) returned bare {\"success\":false} with no `error` object, against the declared {success:false,error:{code,message,details}} schema; per instructions this was NOT diffed into declared_missing/undeclared_returned (no 200 was involved), only called out here. Entitlement-gate check: not applicable/not observed — the error path returned a proper 404 status, not a 200 {success:false}, so no evidence of the 2xx-masking-refusal product defect on this capability. Container check: response correctly nested under `exploratory_session` with no `data` wrapper, matching the declared shape — no container mismatch here. Minor quirk: `project_id` (undeclared in the response schema either way) comes back as a STRING (\"379335744\") on the create response but as an INTEGER (379335744) on the get_exploratory_session read-back of the same session — inconsistent typing between the two endpoints for an undeclared field, noted for awareness only since it's not part of the declared contract. Guidance for the six gated capabilities: session is currently ACTIVE with 0 logs and no issues/attachments/configurations/tags — a clean starting state. Whether close_exploratory_session subsequently blocks update/log edits is UNKNOWN and should be tested by probing update/log-create/clone before close_exploratory_session, then confirming afterward whether edits on a closed session are rejected — recommend running close last among the six so the other five aren't stranded if closing does lock the session."
+}

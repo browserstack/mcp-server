@@ -1,0 +1,66 @@
+{
+  "capability": "get_test_case_histories_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T11:22:51Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Primary subject: TC-54458 (int 1975349, folder 764828, project 379335744/PR-2005) — flagged by the task as a case with a genuinely rich revision trail (a renamed custom field and a renamed tag exist in this project, and earlier probe runs have edited this specific case repeatedly), so it exercises the revision-entry item shape properly rather than the single-entry trail a never-touched case would give. Came straight from the pool/task description; nothing was invoked to produce it.",
+      "source": "pool",
+      "capability": null,
+      "arguments": {},
+      "status": null,
+      "produced": { "project_id": 379335744, "test_case_id": 1975349 }
+    },
+    {
+      "step": 2,
+      "why": "Second case, used only as a cross-check per the EMPTY-CASE RULE (\"try more than one case\"). TC-54455 (int 1971631) sits in the nominally __readonly__ folder 764093, but turned out to already carry 5 revisions (4x attachment edits + the original create) from earlier probe fixture runs — so even the 'pristine' pool case was not empty. Used to confirm the item shape and the two DRIFT findings below hold on a second, independent case, and to see the true floor shape (a from-scratch create-only record does not occur in this pool; the closest floor observed is still 5 rows).",
+      "source": "pool",
+      "capability": null,
+      "arguments": {},
+      "status": null,
+      "produced": { "project_id": 379335744, "test_case_id": 1971631 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744, "test_case_id": 1975349 } },
+      "status": 200,
+      "error": null,
+      "changed": "none needed - succeeded first try"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "test_case_id": 1975349 } },
+    "status": 200,
+    "response_keys": ["histories", "info", "plan_restriction", "success"],
+    "item_shape": {
+      "id": "integer - numeric history record id, e.g. 1674611. This is the id the sibling get_test_case_history_v1 and get_test_case_history_diff_v1 take as history_id / versions[].",
+      "entity_id": "integer - the test case id (1975349 on every row)",
+      "entity_type": "string, \"TestCase\"",
+      "version_id": "string uuid, present on every row",
+      "source": "string, \"update\" on 18 of 19 rows, \"create\" on the oldest (V1)",
+      "modified_fields": "array[string] on update rows (e.g. [\"test_case_steps\"], [\"description\",\"priority\",\"name\",\"test_case_steps\",\"tags\"], [\"folder\"]); null on the create row (V1) - see contract note, schema does not declare this nullable",
+      "project_id": "integer, 379335744 on every row",
+      "group_id": "integer, 3452 on every row",
+      "comment": "null on every row observed",
+      "user_id": "integer, 6013 on every row (BrowserStack user id)",
+      "origin_channel": "string, \"api\" on every row - UNDECLARED, see contract.undeclared_returned",
+      "created_at": "string date-time, ISO 8601, strictly increasing oldest(V1)->newest(V19)",
+      "modified": "object, per-field {old,new} map - present ONLY on the first/newest record on the page (V19 here); absent on all 18 other rows, exactly as guidance states",
+      "version_name": "string, positional label \"V1\"..\"V19\", newest first",
+      "user": "object {id, browserstack_user_id, full_name, group_id, onboarded, reports_and_notification_enabled} on every row - schema also declares `email` here but it is never present, see contract.declared_missing",
+      "links": "object { self: \"/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories/{id}\" } on every row"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_case_id"],
+    "json_path": null,
+    "declared_missing": ["histories[].user.email"],
+    "undeclared_returned": ["histories[].origin_channel"]
+  },
+  "notes": "CASE USED, AND WHY: TC-54458 (int 1975349) was probed as the primary subject because the task flagged it as having a genuinely rich trail (renamed custom field + renamed tag in the project, repeated edits by earlier probe runs) - confirmed live: 19 revisions (info.count=19), sources create + 18x update, modified_fields touching test_case_steps, description, priority, name, tags and folder across different rows, so the enrichment behaviour (modified map on the newest row only) and the create-vs-update source split were both genuinely exercised, not just theorised from an empty page. Per the EMPTY-CASE RULE a second case was also probed: TC-54455 (int 1971631, nominally __readonly__) - it turned out not to be pristine either (5 revisions: 1 create + 4 attachment edits from earlier fixture runs), which itself confirms the rule's premise that pool cases in an actively-probed project rarely stay untouched. Both DRIFT findings below reproduced identically on both cases.\n\nFINDING 1 - undeclared_returned, histories[].origin_channel: every row on both test cases carries \"origin_channel\":\"api\", but neither the flat `returns` list nor the nested item schema in this capability's contract mentions it. Low severity (an extra, harmless descriptive field - it does not mislead a caller building a payload), but per the standing rule any returned-but-undeclared field is DRIFT. Notably this is NOT a fresh discovery: the sibling get_test_case_histories_v2 (tests/live/runs/tm/get_test_case_histories_v2.json, probed 2026-09-18) hit the exact same undeclared origin_channel on its listing at the time - but v2's current index entry (re-checked via describeCapability just now) HAS since been fixed to declare origin_channel explicitly, with a full guidance line explaining its enum. v1's has not. Same underlying API field, same product, one sibling's contract was corrected and the other was not - the v1 fix is a one-line schema addition mirroring what v2 already has.\n\nFINDING 2 - declared_missing, histories[].user.email: the nested `user` object's schema promises `email` as a property (alongside id, browserstack_user_id, full_name, group_id, onboarded, reports_and_notification_enabled), but the key is absent - not null, entirely missing - from every row's `user` object on both cases. v2 sidesteps this by not nesting a user object at all: it exposes a flat `updated_by` (email, nullable) plus `user_id` directly, so v2 promises less and does not over-promise. v1 promises an email it never sends.\n\nMINOR, not counted as a separate DRIFT: `modified_fields` is declared `{\"type\":\"array\", items: string}` with no nullable annotation in v1's schema, yet the create-source row (V1 on every case) always returns `modified_fields: null`. v2's schema for the same underlying field explicitly marks it `nullable: true` with a note that it's null on the creating revision. v1's contract has the same real behaviour but the type declaration doesn't admit it - another instance of the v1/v2 sibling schemas having silently diverged in strictness despite describing the same data.\n\nWHAT MATCHED EXACTLY: response envelope (success/histories/info/plan_restriction, all present, all correctly typed); info block (page, page_size=30, count, prev, next - count matched histories.length exactly on both cases: 19/19 and 5/5, no count-vs-rows mismatch here); container key `histories` (plural) matches its own schema and its own `returns` list consistently (contrast with v2, whose own docs flag its container as deliberately singular `history` - not a defect on either side, just a real, documented asymmetry); the guidance claim that only the first/newest record on a page carries the full `modified` map held on every page fetched (both cases); version_name is a strictly sequential positional label matching count; all numeric ids (id, entity_id, project_id, group_id, user_id) came back as JSON integers matching their declared `integer` type - no id-as-quoted-string inconsistency was observed on this capability. plan_restriction was false on both probes (this account is not on the 30-day-clamped tier here), so the plan-gating behaviour described in guidance could not be exercised either way - not claiming pass or fail on that path, just unverified.\n\nSPECIFIC INTEREST - settling the v1/v2 tie: the routing eval scored v1 (\"who changed it, when, which fields moved\") and v2 (\"what changed on a test case, when, and who changed it\") as indistinguishable from the intent prose alone. They are not a tie once you look at the contracts and the live data:\n  1. ID SPACE: v1's path takes raw internal integers (project_id, test_case_id) with no resolution step. v2's path requires PR-NNN / TC-NNN (or a third-party identifier) and resolves them via identifier lookup first - a bare internal numeric case id 404s on v2 ('Test case not found') and a bare integer project id never matches the route at all.\n  2. ENVELOPE: v1's array is keyed `histories` (plural); v2's is keyed `history` (singular) - a real, deliberate naming asymmetry that v2's own schema description calls out.\n  3. ROW ADDRESSABILITY (the decisive difference): v1 rows carry a numeric `id` and a `links.self` pointing straight at the single-revision read. v2 rows carry NO numeric id at all - only an opaque `version_id` uuid and a positional `version_name` label that renumbers as old revisions age out of the visible window. Concretely: v2's own probe file had to fall back to invoking v1's `get_test_case_histories_v1` and `get_test_case_history_v1` to obtain the numeric ids needed for a full old/new diff on non-newest rows, and it explicitly notes that v2's own guidance dangles a promise - 'pass the version number to the single-version read' - that corresponds to no registered v2 capability; only the v1 numeric-id read exists. So v2 cannot self-sufficiently chain into a single-revision view, a diff, or a restore; v1 can.\n  4. EDITOR IDENTITY SHAPE: v1 nests a nine-ish-field `user` object (and over-promises `email` within it, per Finding 2 above). v2 flattens this to one string, `updated_by` (email, nullable, resolved from the same underlying `user_id`) - simpler, and it does not promise a field it fails to deliver.\n  5. origin_channel: returned by both live APIs on every row; only v2's current contract declares it (see Finding 1) - v1's does not, yet.\n  6. Neither capability's describeCapability output carries any preferred/deprecated marker - the index treats both as live, undifferentiated entries.\n  CONCLUSION: for pure browsing - 'what changed, when, by whom, which field names' - either lists that information adequately, so the eval's read of the two *intents* as overlapping is fair. But the two are not interchangeable in practice: any agent flow that needs to follow a listing with a single-revision view or a diff (the natural next step after 'show me the history') needs v1's numeric ids - v2's rows cannot feed the diff endpoint at all (which only accepts numeric versions[]) and have no v2-side single-read to feed either. v1 is the functionally necessary member of the pair; v2 is a lighter, easier-to-address (PR-/TC- ids, no lookup burden on the caller) but self-contained-only listing.\n\nHOW THE FOUR RELATE: get_test_case_histories_v1 (list) -> get_test_case_history_v1 (single, by numeric history_id) -> get_test_case_history_diff_v1 (compare two numeric history_ids) form one consistent, interoperating numeric-id family - the list's `id`/`links.self` feeds the single read directly, and two of those ids feed the diff. get_test_case_histories_v2 is not a fourth member of that family; it is a separate, string-id-keyed listing with no v2-side single-read or diff sibling in the index at all, and it can only participate in 'view one revision in full' or 'diff two revisions' by dropping back down to v1's numeric ids - which is not a stated part of its own contract."
+}

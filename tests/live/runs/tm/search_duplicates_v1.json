@@ -1,0 +1,46 @@
+{
+  "capability": "search_duplicates_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:31:11Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the duplicate-pair search (path param)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": {}
+      },
+      "status": 400,
+      "error": "{\"error\":\"Invalid JSON data\",\"details\":\"unexpected end of input at line 1 column 1\"}",
+      "changed": "body {} (no q key) -> body {\"q\": {}} — an entirely empty JSON body appears to serialize to an empty request payload server-side, which the parser rejects before any contract validation runs"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": { "q": {} }
+    },
+    "status": 200,
+    "response_keys": ["success", "duplicates", "info"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [
+      "duplicates[] — JSON schema declares only `items: {type: object}` (no properties); the capability's `returns` list separately enumerates id, ai_score, reason, duplicate_type, test_cases, identifier, folder_id, folder_path, title, description, owner_id, owner as if they were item fields, but that is prose, not schema"
+    ],
+    "undeclared_returned": []
+  },
+  "notes": "EMPTY-CASE, per instructions: every attempt returned duplicates:[] (info.count:0), so the item shape was never exercised — verdict is UNVERIFIED, not PASS. Tried three query shapes against the pool project (379335744 / PR-2005): free-text q.query='probe case' (200, empty), fully unfiltered q:{} (200, empty), and q.folder_ids='764093' scoped to the __readonly__ folder (200, empty). Did not trigger a dedupe run and did not invoke get_dedupe_status_v1 to disambiguate 'no duplicates' from 'feature flag off / scan never run' — that capability is out of scope for this probe of search_duplicates_v1, but its existence is itself the documented way this ambiguity is meant to be resolved (its own guidance says exactly that, and list_duplicates_v1's guidance repeats the same warning almost verbatim). One genuine error was hit: sending an empty JSON object as the body produced HTTP 400 {\"error\":\"Invalid JSON data\",\"details\":\"unexpected end of input at line 1 column 1\"} — an envelope that matches NONE of the declared error shapes (the declared 400 is {success:false, error:'Invalid Params'} for a bad `p`; 401/403/500 use {success:false, error:{code,message,details}}; 422 uses {success:false, message:...}). This looks like a request-serialization artifact (an empty object apparently became an empty body) rather than a deliberate contract violation, but it is a real observed non-2xx shape outside the declared set, so it is recorded as error-envelope drift rather than diffed against the success schema. Sending {q:{}} instead avoided it. Name/path mismatch: the task states the live route is /ai-duplicates/search-v2 despite the capability being named search_duplicates_v1. describeCapability's output for this capability carries no path/method field at all (that only appears for capabilities returned without a `name`), so the v1-name/v2-path mismatch could not be independently confirmed or explained through the MCP contract itself — nothing in intent or guidance mentions versioning or the backend route. Checked via searchCapability(entity=duplicate) for a sibling search_duplicates_v2: none exists. The full duplicate-entity family is entirely _v1: search_duplicates_v1, list_duplicates_v1, get_duplicate_v1, get_dedupe_status_v1, get_duplicate_source_test_case_v1, resolve_duplicate_v1, discard_duplicate_v1. So the _v1 capability name is simply stale/uninformative relative to its v2 backend path, not evidence of a parallel v2 capability being missed. Separately: even had a match been returned, the declared 200 schema's `duplicates` items are unfalsifiable (bare {type:object}) — real field names live only in the `returns` prose list, so a full contract diff on item shape would not have been possible from the JSON schema alone regardless of data."
+}

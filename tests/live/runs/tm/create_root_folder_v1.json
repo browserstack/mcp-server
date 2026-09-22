@@ -1,0 +1,130 @@
+{
+  "capability": "create_root_folder_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:27:35Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope — root folders are created per project",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [
+    {
+      "attempt": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": {
+          "name": "__mcp-probe-createrootfolder-20260921",
+          "notes": "Live probe of create_root_folder_v1 - safe to delete."
+        }
+      },
+      "result": "SUCCESS — 200, folder created (id 765811)",
+      "note": "Sent flat per describeCapability's top-level `guidance` (name/notes not wrapped in a `folder` object). This DIRECTLY CONTRADICTS the field-level description on `name` in the same describeCapability response, which states: 'Must be wrapped in a `folder` object — the handler reads a required `folder` wrapper, so a flat body is a 400 before any field is looked at.' The flat body worked on the first try — the guidance was correct, the field description was wrong (likely stale, left over from before the v1.11 fix the guidance itself describes)."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": {
+        "name": "__mcp-probe-createrootfolder-20260921",
+        "notes": "Live probe of create_root_folder_v1 - safe to delete."
+      }
+    },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "data.success": "boolean (true)",
+      "data.folder": {
+        "id": "integer (765811)",
+        "project_id": "integer",
+        "group_id": "integer",
+        "name": "string",
+        "root": "boolean (true) — UNDECLARED, not in the 200 schema's folder properties",
+        "notes": "string, HTML-escaped/sanitised (e.g. '<p>...</p>' entity-escaped) — UNDECLARED in the 200 schema's folder properties, despite `notes` being a documented request field with its own json_path",
+        "is_automation": "boolean",
+        "created_by": "integer — UNDECLARED",
+        "updated_by": "integer — UNDECLARED",
+        "attachments": "array (empty here) — UNDECLARED",
+        "links": { "self": "string" },
+        "cases_count": "integer",
+        "total_cases_count": "integer",
+        "sub_folders_count": "integer"
+      },
+      "data.project": {
+        "id": "integer",
+        "group_id": "integer — UNDECLARED",
+        "user_id": "integer — UNDECLARED",
+        "name": "string",
+        "slug": "string — UNDECLARED",
+        "description": "string",
+        "identifier": "string (e.g. PR-2005)",
+        "import_id": "null",
+        "is_demo": "boolean — UNDECLARED",
+        "publicly_readable": "boolean — UNDECLARED",
+        "access": "null — UNDECLARED",
+        "applicable_role_id": "null — UNDECLARED",
+        "applicable_role": "string — UNDECLARED",
+        "created_at": "string (date-time)",
+        "build_updated_at": "null — UNDECLARED",
+        "web_percy_build_updated_at": "null — UNDECLARED",
+        "app_percy_build_updated_at": "null — UNDECLARED",
+        "visual_scanner_percy_build_updated_at": "null — UNDECLARED",
+        "source": "string — UNDECLARED",
+        "archived": "integer (0) — UNDECLARED",
+        "team_id": "string (empty) — UNDECLARED",
+        "default_team_id": "null — UNDECLARED",
+        "sub_group_id": "null — UNDECLARED",
+        "test_cases_count": "DECLARED but ABSENT from actual response",
+        "test_runs_count": "DECLARED but ABSENT from actual response",
+        "links": "DECLARED (repository/self/test_runs/users) but ABSENT from actual response",
+        "project_creator": "DECLARED but ABSENT from actual response"
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "name (body, string)"],
+    "json_path": "/folder/name and /folder/notes on the request side — confirmed auto-wrapped: sending name/notes FLAT (no `folder` key in the body) produced a valid write on the first attempt, matching the top-level `guidance` text, not the contradictory per-field description (see attempts[0].note).",
+    "declared_missing": [
+      "data.project.test_cases_count",
+      "data.project.test_runs_count",
+      "data.project.links",
+      "data.project.project_creator"
+    ],
+    "undeclared_returned": [
+      "data.folder.root",
+      "data.folder.notes",
+      "data.folder.created_by",
+      "data.folder.updated_by",
+      "data.folder.attachments",
+      "data.project.group_id",
+      "data.project.user_id",
+      "data.project.slug",
+      "data.project.is_demo",
+      "data.project.publicly_readable",
+      "data.project.access",
+      "data.project.applicable_role_id",
+      "data.project.applicable_role",
+      "data.project.build_updated_at",
+      "data.project.web_percy_build_updated_at",
+      "data.project.app_percy_build_updated_at",
+      "data.project.visual_scanner_percy_build_updated_at",
+      "data.project.source",
+      "data.project.archived",
+      "data.project.team_id",
+      "data.project.default_team_id",
+      "data.project.sub_group_id"
+    ]
+  },
+  "notes": "THE HEADLINE FINDING: the original bug this capability was built for (flat {name} vs required {folder:{name}}) is FIXED. A flat body — name and notes at the top level, no folder wrapper — succeeded on the very first attempt (200, folder id 765811 created correctly under project 379335744 with the exact requested name). No retries were needed. HOWEVER the fix is only half-documented: describeCapability's top-level `guidance` correctly says to send fields flat and that the wrapper is applied for you server-side/tool-side ('do not add it back'), but the per-field `description` on the `name` parameter in the SAME describeCapability response still carries the old, wrong claim that a flat body is a 400 and the folder object is required. That is a live self-contradiction inside one capability's own contract — guidance and field description disagree about the exact same request shape, and only guidance matches reality. This is worth fixing at the source (the field description is stale) even though it did not block the probe, because an integrator reading fields before guidance would build the wrong (nested) request and could easily conclude — wrongly — that the original bug is still present. SCHEMA DRIFT: substantial on the nested `data.project` object. Four fields the 200 schema declares (test_cases_count, test_runs_count, links, project_creator) are entirely absent from the actual create-root-folder response; describeCapability's own guidance says data.project 'is present only on root-folder creation' (true — it did show up here) but does not say its shape is a cut-down version of the full project record. In exchange the actual response carries 16 project fields the schema never declares (group_id, user_id, slug, is_demo, publicly_readable, access, applicable_role_id, applicable_role, four *_build_updated_at nullables, source, archived, team_id, default_team_id, sub_group_id) plus 5 undeclared folder fields (root, notes, created_by, updated_by, attachments) — notably `notes` is a documented REQUEST field (with its own json_path) but is not listed among the declared RESPONSE properties, even though the server echoes it back (HTML-sanitised) on every create. None of this is unfalsifiable — the 200 schema for both data.folder and data.project is a normal enumerated property list, not a bare {type:object} — so this is genuine, checkable DRIFT, not a shrug case. Entitlement-gate check: not applicable here, the write went through as a normal 200/success:true with no {success:false} refusal-wearing-200 pattern observed. Error envelope: not exercised — the single attempt succeeded, so per instructions no error body was diffed against the success schema and declared_missing/undeclared_returned reflect only the 200 path.",
+  "created": {
+    "folder_id": 765811,
+    "folder_name": "__mcp-probe-createrootfolder-20260921",
+    "project_id": 379335744,
+    "project_identifier": "PR-2005"
+  }
+}

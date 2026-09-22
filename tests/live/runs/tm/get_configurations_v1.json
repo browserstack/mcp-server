@@ -1,0 +1,49 @@
+{
+  "capability": "get_configurations_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the required project_id path param",
+      "source": "pool",
+      "capability": null,
+      "produced": {
+        "project_id": 379335744
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": {
+        "project_id": 379335744
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "info", "configurations"],
+    "item_shape": {
+      "id": "integer",
+      "name": "string",
+      "os": "string|null",
+      "os_version": "string|null",
+      "device": "string|null",
+      "browser": "string|null",
+      "browser_version": "string|null",
+      "record_status": "string",
+      "is_valid_on_bstack": "boolean",
+      "is_suggested": "boolean",
+      "group_id": "integer",
+      "created_at": "string (date-time)"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["os", "os_version", "device", "browser", "browser_version", "is_valid_on_bstack"]
+  },
+  "notes": "First attempt succeeded, no retries needed. The response was NOT empty: page 1 of 244 total configurations was returned with 30 rows, so the declared item shape was genuinely exercised (EMPTY-CASE RULE does not apply here) -> verdict is PASS, not UNVERIFIED. Contract check: the declared 200 schema's 'configurations[]' properties list only id/group_id/name/record_status/is_suggested/created_at, but every row also carries os/os_version/device/browser/browser_version/is_valid_on_bstack. This is not fresh drift -- the capability's own top-level 'returns' list and its guidance text already call out exactly these six extra fields ('Rows carry os, os_version, device, browser, browser_version and is_valid_on_bstack in addition to id/name/group_id/record_status/is_suggested -- more than the Configuration schema in this index describes'), so it's flagged here as undeclared_returned against the JSON schema strictly, but is a known, already-documented gap between the schema block and the guidance/returns block, not a surprise. No declared_missing fields. Also per guidance the list is group-scoped (group_id 3452), not filtered by project_id -- project_id only satisfies the route; the same 244-row set would come back for any project in this group."
+}

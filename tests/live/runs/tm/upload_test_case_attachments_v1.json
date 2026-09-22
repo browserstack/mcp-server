@@ -1,0 +1,44 @@
+{
+  "capability": "upload_test_case_attachments_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T00:00:00.000Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "scratch scope for the write — project, folder and the target test case (TC-54489), well clear of the evidence case (TC-54458) and the read-only folder",
+      "source": "pool/task",
+      "capability": null,
+      "produced": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985023, "identifier": "TC-54489" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985023 },
+        "body": { "attachments": [10288829, 10288830] }
+      },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "n/a — this capability's own guidance already states the mechanism problem (\"the handler calls an attach method that the object it holds does not have, so the call raises before anything is stored\") and explicitly says no body makes it succeed. This single call exists to confirm that against the live API rather than take it on faith. The two ids used are the exact example blob ids from the contract's own `attachments` field, so the call is well-formed by the declared schema; no second attempt was made with different ids because the guidance is explicit that the crash happens before blob validation, not because of the ids chosen."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985023 },
+      "body": { "attachments": [10288829, 10288830] }
+    },
+    "status": 500,
+    "response_keys": ["status", "error"],
+    "item_shape": "n/a — bare 500 body only, never diffed against the declared 200 success schema"
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "folder_id (path, integer)", "test_case_id (path, integer)", "attachments (body, array<integer>, json_path /test_case/attachments)"],
+    "json_path": "/test_case/attachments",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "IMPORTANT DISTINCTION FROM THE OTHER TWO PROBED SIBLINGS: this capability is NOT transport-blocked the way upload_generic_attachments / upload_a_i_attachments / import_dataset_c_s_v are. Its real input is JSON, not multipart — despite the misleading name, this is documented plainly in its own intent ('Link already-uploaded files to a test case by their blob ids — the second half of the two-step attach flow; it does not carry file content') and guidance ('Despite the name and the published spec this is NOT a multipart file upload. The body is JSON and attachments is a list of INTEGER blob ids'). invokeCapability can express this input completely: path_params (project_id/folder_id/test_case_id) plus a flat JSON array of integers in body.attachments. There is no transport gap here at all.\n\nWhat's broken instead is server-side: the guidance states plainly this 'DOES NOT WORK. A well-formed request returns a bare 500. The handler calls an attach method that the object it holds does not have, so the call raises before anything is stored... There is no request that makes it succeed.' One live invocation, using the exact example blob ids (10288829, 10288830) from the contract's own body-field example, against a safe scratch case (TC-54489 / 1985023, project 379335744, folder 764138 — not TC-54455/54456/54458 or the __readonly__ folder), returned exactly the predicted bare 500 {status:500, error:'Internal Server Error'}. No second attempt was made: the guidance is explicit that the crash is unconditional (happens before blob existence/ownership is even checked), so a different body would only reproduce the identical deterministic failure rather than test anything new.\n\nVerdict is DRIFT rather than BLOCKED: the capability IS reachable and invocable exactly as its contract declares (no transport mismatch, no missing field), but it can never succeed regardless of input — a real behavioral gap between the declared 200 success schema (attachments array with id/filename/content_type/byte_size) and reality (always 500). This is a materially different failure shape than the two siblings below, and worth flagging distinctly to the product team: this one is a genuine server bug in a well-specified, well-formed endpoint, not a registry/transport coverage gap. TC-54458 (evidence case), TC-54455, TC-54456, and the __readonly__ folder (764093) were never referenced by this probe. delete_test_case_attachment was not invoked, per standing instruction."
+}

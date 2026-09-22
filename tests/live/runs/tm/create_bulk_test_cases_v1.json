@@ -1,0 +1,126 @@
+{
+  "capability": "create_bulk_test_cases_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:34:26Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "target folder for both the path folder_id and every item's test_case_folder_id",
+      "source": "pool",
+      "capability": null,
+      "produced": { "folder_id": 764138, "folder_name": "__scratch__" }
+    },
+    {
+      "step": 3,
+      "why": "priority/case_type/status option ids, deliberately UPPER-block (318618/318626/318632) to confirm this bulk route treats them the same way create_test_case_v1 did minutes earlier",
+      "source": "external",
+      "capability": null,
+      "produced": {
+        "note": "ids and the 'both blocks live' finding carried over from this session's create_test_case_v1 probe (tests/live/runs/tm/create_test_case_v1.json), not re-derived here",
+        "priority_upper": 318618,
+        "case_type_upper": 318626,
+        "status_upper": 318632
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "attempt": 3,
+      "why": "force a genuine server-side partial-failure row by omitting the required 'name' field on one item while keeping a valid item alongside it, to see whether the valid row commits while the bad one fails, and how the response identifies the failure",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764138 },
+        "body": {
+          "test_cases": [
+            { "name": "__mcp-probe-bulkcase-20260921-validpair", "test_case_folder_id": "764138", "template": "test_case_steps", "test_case_steps": [{ "step": "Valid pair step", "result": "Valid pair result" }] },
+            { "test_case_folder_id": "764138", "template": "test_case_steps", "test_case_steps": [{ "step": "Missing-name row step", "result": "Missing-name row result" }] }
+          ]
+        }
+      },
+      "result": "FAILED — never reached the live API. The MCP client validates every array item against the declared schema before dispatch and rejected the whole call locally, including the valid row.",
+      "error_verbatim": "{\"ok\":false,\"error\":\"missing required parameter(s): test_cases.name\"}"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 764138 },
+      "body": {
+        "test_cases": [
+          {
+            "name": "__mcp-probe-bulkcase-20260921-1",
+            "test_case_folder_id": "764138",
+            "template": "test_case_steps",
+            "test_case_steps": [
+              { "step": "Open the app", "result": "App opens successfully" },
+              { "step": "Tap login button", "result": "Login screen is displayed" }
+            ],
+            "priority": 318618,
+            "case_type": 318626,
+            "status": 318632,
+            "description": "mcp create_bulk_test_cases_v1 probe row 1 (upper-block option ids + steps)"
+          },
+          {
+            "name": "__mcp-probe-bulkcase-20260921-2",
+            "test_case_folder_id": "764138",
+            "template": "test_case_steps",
+            "test_case_steps": [{ "step": "Navigate to settings", "result": "Settings page loads" }],
+            "description": "mcp create_bulk_test_cases_v1 probe row 2 (plain valid row, no explicit option ids)"
+          }
+        ]
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "data.test_cases", "data.path_folders", "data.request_trace_id"],
+    "item_shape": {
+      "test_cases[0].id": 1985019,
+      "test_cases[0].identifier": "TC-54485",
+      "test_cases[0].case_type": { "id": 318626, "internal_name": "other", "colour": null, "value_category": null, "name": "Other" },
+      "test_cases[0].priority": { "id": 318618, "internal_name": "medium", "colour": null, "value_category": null, "name": "Medium" },
+      "test_cases[0].status": { "id": 318632, "internal_name": "active", "colour": "active", "value_category": null, "name": "Active" },
+      "test_cases[1].id": 1985020,
+      "test_cases[1].identifier": "TC-54486",
+      "test_cases[1].case_type/priority/status": "row 2 sent NO explicit option ids and defaulted to the LOWER block (318599/318591/318605) -- confirms both id blocks are live: explicit upper-block ids are honoured unchanged (row 1), the project default falls back to the lower block when unset (row 2)",
+      "test_cases[*].steps": "[] -- empty on both rows, despite test_case_steps being sent and populated (same drift as create_test_case_v1)",
+      "test_cases[*].test_case_steps": "ARRAY (declared as a single object in the response contract): [{record_status, id, hashed_id, project_id, step, result, order, group_id, test_case_id, created_at, updated_at}]",
+      "test_cases[*].template / template_step_type / template_name / template_id": "'test_case_steps' / 'test_case_steps' / null / 1164 -- template/template_step_type echoed correctly; template_id, template_step_type, template_name (null) are all undeclared",
+      "test_cases[*].automation_state": "{id, internal_name, colour, value_category, name} -- entirely undeclared, alongside the declared automation_status {name,value}",
+      "test_cases[*].folder": "full nested folder summary object (id, project_id, group_id, name, notes, is_automation, cases_count, total_cases_count, sub_folders_count, links) -- entirely undeclared per-item",
+      "path_folders[0]": "carries identifier, created_at, updated_at, deleted, parent_id, source, entity_type, notes -- none declared",
+      "request_trace_id": "null (declared string; null across all 3 invocations this probe made)"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path)",
+      "folder_id (path)",
+      "test_cases (body, array, unwrapped items, max 10 on the sync path)",
+      "test_cases[].name",
+      "test_cases[].test_case_folder_id"
+    ],
+    "json_path": "test_cases",
+    "declared_missing": [
+      "test_cases[].steps (declared array of {step,result}; always returns empty despite test_case_steps holding real step data)",
+      "test_cases[].test_case_steps (declared as a single OBJECT in the response schema; actual is an ARRAY of step records -- none of the declared object's step-authoring keys (background, feature, hashed_id, scenario, sharedStep, shared_step_detail_id, shared_step_id, test_data, test_recording_id, title) appear on the array items)",
+      "test_cases[].case_type.field_name / .priority.field_name / .status.field_name (declared on all three option objects, present on none)",
+      "request_trace_id (declared string; returned null every time)"
+    ],
+    "undeclared_returned": [
+      "test_cases[].automation_state (full option object; automation_status is separately declared and also present)",
+      "test_cases[].template_step_type, .template_id, .template_name",
+      "test_cases[].is_shared, .test_case_dataset, .test_run_results_count, .test_run_results_issues_count",
+      "test_cases[].case_type.value_category / .priority.value_category / .status.value_category",
+      "test_cases[].test_case_steps[].record_status / .group_id / .test_case_id",
+      "test_cases[].folder (full nested folder summary object, entirely undeclared per-item)",
+      "path_folders[].identifier/created_at/updated_at/deleted/parent_id/source/entity_type/notes"
+    ]
+  },
+  "notes": "Created 4 cases total in project PR-2005 (379335744), folder __scratch__ (764138): TC-54485 (id 1985019, __mcp-probe-bulkcase-20260921-1), TC-54486 (id 1985020, __mcp-probe-bulkcase-20260921-2), TC-54487 (id 1985021, __mcp-probe-bulkcase-20260921-3), TC-54488 (id 1985022, __mcp-probe-bulkcase-20260921-bad). All four for cleanup. __readonly__ (764093) and TC-54458 (1975349) were never touched.\n\nWRAPPER TRAP -- not encountered, and unambiguous this time. describeCapability explicitly declares test_cases as an UNWRAPPED plain array ('One UNWRAPPED object per case (no per-item test_case key)'), unlike the single-case route where the wrapper turned out to be a real required body field, or create_test_plan_v1 where nesting was rejected. Sent exactly as declared on the first attempt and it worked immediately (200) -- no flat-vs-nested trial needed.\n\nINHERITED FINDINGS FROM create_test_case_v1, CONFIRMED ON BULK:\n1. test_case_steps object-vs-array: same drift, now also present in the RESPONSE contract for this endpoint (declared as a single object with BDD/shared-step-authoring keys; actual is always an array of plain step records). The other declared steps field, test_cases[].steps, is empty on every row despite steps being sent and landing correctly in test_case_steps -- confirmed on both rows of the clean probe.\n2. Both duplicate option-id blocks are live on bulk too: row 1 explicitly sent upper-block priority 318618/case_type 318626/status 318632 and got them back unchanged with correct names (Medium/Other/Active). Row 2 sent no option ids at all and defaulted to the LOWER block (priority 318591/case_type 318599/status 318605) -- the project's actual default is the lower block, and the upper block is equally acceptable when supplied explicitly. This matches, and extends, the single-case finding.\n3. field_name is declared on case_type/priority/status but present on none, in every row across all 3 invocations; value_category is undeclared and present (always null) on all three objects throughout.\n\nPARTIAL-FAILURE INVESTIGATION -- this was the real point of the probe, and the honest answer is: still open, but what we found is arguably worse than either a clean rollback or a clean partial-commit.\n\nAttempt 2 (200, not a failure -- included in the JSON body above only via this note, not in `attempts[]` since it did not fail): sent one valid row (__mcp-probe-bulkcase-20260921-3, landed as TC-54487/1985021) alongside a row whose test_case_folder_id was set to a nonexistent folder (\"999999999\"), expecting either a whole-batch rejection or a per-row failure naming the bad row. Neither happened: BOTH rows were created, HTTP 200, success:true. The 'bad' row (TC-54488/1985022) came back with test_case_folder_id \"764138\" -- the PATH folder -- not the bogus value it was sent with, and its nested `folder` object confirms it actually landed in __scratch__. The invalid per-item value was silently discarded and replaced with the path folder; no error, no warning, no differing status. This directly contradicts the describeCapability guidance text ('test_case_folder_id is required inside each item even though the folder is already in the path... omitting it is the usual cause of a 422 wrapping an upstream 404') -- that text describes what happens when the field is OMITTED; here it was PRESENT but wrong, and the wrong-but-present case degrades silently instead of erroring. This is a real trap: an agent could send a batch intending several rows to land in different folders (or catch a typo'd folder id as a hard failure) and instead have everything silently pooled into the path folder with a fully successful-looking 200.\n\nAttempt 3 (FAILED, recorded verbatim in attempts[]): tried to force a genuine SERVER-side partial-failure by omitting the required `name` field on one row while keeping a valid row alongside it. This never reached the live API at all -- the MCP client itself validates every item in the array against the declared required-field list before dispatch, and rejected the ENTIRE call locally (`{\"ok\":false,\"error\":\"missing required parameter(s): test_cases.name\"}`), blocking the valid row along with the invalid one. No HTTP status was returned because no HTTP request was made.\n\nNet result after 3 attempts: the underlying product question -- does a bulk write half-commit and report 200 when one row is genuinely invalid, and does the response identify which row failed -- remains UNVERIFIED for the missing-required-field class of defect (the MCP client's own schema gate makes that shape unreachable through this tool), and for the one invalid-but-well-typed defect we COULD get to the server (a bad test_case_folder_id), the server did not fail at all -- it silently reinterpreted the row rather than rejecting or partially failing it. Given the max-3-attempt budget, no further attempts were spent. A future probe wanting to test true server-side partial failure would need a defect that is well-typed enough to pass MCP client-side validation but semantically invalid in a way the server does NOT silently paper over (candidates not yet tried: a case_type/priority/status id from neither known block, a folder id belonging to a different project/group, or exceeding the 10-item sync cap combined with a bad row).\n\nCOUNT-VS-ROWS: not directly testable on the 200 sync path -- there is no separate top-level `count` field in the 200 response to compare against `data.test_cases.length` (count only appears in the declared 202 async schema). In both successful invocations, data.test_cases.length matched the number of rows sent (2 and 2) with no silent drops or duplicates.\n\nRESPONSE SHAPE: the route returns full created row objects at data.test_cases (not just ids), consistent with the declared 200 schema's structure.\n\nNot exercised in this probe (budget spent on partial-failure instead): unique_id/async 202 path, create_subfolder/scenario_name, attachments/custom_fields first-item-only behavior, the >10-item 400 cap."
+}

@@ -1,0 +1,102 @@
+{
+  "capability": "edit_test_case_partial_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:41:42Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "external",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "fixed target case assigned for this probe -- created minutes earlier by create_bulk_test_cases_v1, carrying upper-block option ids and one populated step list; must not touch sibling TC-54484 (1985018), __readonly__ 764093/TC-54455/TC-54456, or the campaign evidence case TC-54458 (1975349)",
+      "source": "external",
+      "capability": null,
+      "produced": { "folder_id": 764138, "folder_name": "__scratch__", "test_case_id": 1985019, "identifier": "TC-54485" }
+    },
+    {
+      "step": 3,
+      "why": "baseline read to capture pre-edit state for every field the probe needs to check for survival",
+      "source": "capability",
+      "capability": "get_test_case_detail",
+      "produced": {
+        "name": "__mcp-probe-bulkcase-20260921-1",
+        "description": "mcp create_bulk_test_cases_v1 probe row 1 (upper-block option ids + steps)",
+        "priority": { "id": 318618, "name": "Medium", "field_name": "priority", "value_category": null },
+        "status": { "id": 318632, "name": "Active", "field_name": "status", "value_category": null },
+        "case_type": { "id": 318626, "name": "Other", "field_name": "category", "value_category": null },
+        "steps": [],
+        "test_case_steps": "2 populated step objects (order 1 'Open the app', order 2 'Tap login button'), ids 12372581/12372582, created_at/updated_at both 2026-09-21T13:34:26.000Z",
+        "tags": [],
+        "custom_fields": [],
+        "test_case_folder_id": 764138,
+        "owner": 2522,
+        "history_count": 1
+      }
+    },
+    {
+      "step": 4,
+      "why": "baseline revision trail, to compare against the post-edit history entry",
+      "source": "capability",
+      "capability": "get_test_case_histories_v1",
+      "produced": { "count": 1, "only_revision": "V1, source=create, modified_fields=null (creating revision, nothing to diff)" }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985019 },
+      "body": {
+        "description": "PARTIAL-EDIT PROBE: single-field update via edit_test_case_partial_v1, touching description only (2026-09-21)"
+      }
+    },
+    "status": 200,
+    "response_keys": ["success"],
+    "item_shape": { "success": true },
+    "read_back": {
+      "capability": "get_test_case_detail",
+      "description": "CHANGED as sent -- old value replaced with the new probe string.",
+      "name": "UNCHANGED -- '__mcp-probe-bulkcase-20260921-1'",
+      "priority": "UNCHANGED -- {id: 318618, name: 'Medium'} (upper block, identical object)",
+      "status": "UNCHANGED -- {id: 318632, name: 'Active'} (upper block, identical object)",
+      "case_type": "UNCHANGED -- {id: 318626, name: 'Other'} (upper block, identical object)",
+      "test_case_steps": "UNCHANGED -- both step records identical byte-for-byte, including ids 12372581/12372582 and untouched created_at/updated_at timestamps (2026-09-21T13:34:26.000Z) -- proves the steps were never rewritten, not merely re-saved with the same content",
+      "top_level_steps": "still [] both before and after -- pre-existing sibling-field drift (see notes), not caused by this edit",
+      "tags": "still [] both before and after -- started empty, so survival is UNVERIFIED (see notes caveat)",
+      "custom_fields": "still [] both before and after -- started empty, so survival is UNVERIFIED (see notes caveat)",
+      "test_case_folder_id": "UNCHANGED -- 764138 (still in __scratch__)",
+      "owner": "UNCHANGED -- 2522",
+      "history_count": "went 1 -> 2"
+    },
+    "history_after": {
+      "capability": "get_test_case_histories_v1",
+      "new_revision": {
+        "version_name": "V2",
+        "source": "update",
+        "modified_fields": ["description"],
+        "modified": {
+          "description": {
+            "old": "mcp create_bulk_test_cases_v1 probe row 1 (upper-block option ids + steps)",
+            "new": "PARTIAL-EDIT PROBE: single-field update via edit_test_case_partial_v1, touching description only (2026-09-21)"
+          }
+        }
+      }
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path)",
+      "folder_id (path)",
+      "test_case_id (path)"
+    ],
+    "json_path": "body fields are flattened at the top level; each is wrapped server-side onto /test_case/<field> per its own declared json_path (e.g. /test_case/description) -- sending a test_case wrapper object yourself is rejected pre-call as an unknown body key",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "TARGET AND ISOLATION: only TC-54485 (1985019) in __scratch__ (764138) was touched, with exactly one write. TC-54484 (1985018, sibling probe's case), __readonly__ (764093, TC-54455, TC-54456) and TC-54458 (1975349, campaign evidence case) were never read or written by this probe.\n\nTHE NAME QUESTION -- this was the point of the probe, and the answer is clean: edit_test_case_partial_v1 genuinely implements PATCH semantics. A single-field body ({description: <new value>}) changed only description and left every other checked field byte-identical: name, priority (upper-block id 318618, unchanged), status (upper-block id 318632, unchanged), case_type (upper-block id 318626, unchanged), test_case_folder_id, owner. Most tellingly, test_case_steps came back with the SAME step ids (12372581/12372582) and the SAME created_at/updated_at timestamps as the pre-edit read -- the steps were not touched at all, not merely re-saved with identical content. This directly answers the flagged risk in the brief: a partial edit that omits priority/status/case_type does NOT silently rewrite the upper-block option ids to the project's lower-block default. No data-changing bug found there. Given the sibling edit_test_case_v1 is being probed in parallel as the presumed full-replace counterpart, this pair's names appear to be an accurate, trustworthy safety promise rather than an eighth unlabelled near-duplicate -- the opposite of the failure mode the brief was hunting for.\n\nEVIDENCE GAP (flagged, not a defect): tags and custom_fields were already [] on TC-54485 before this edit, so this run cannot distinguish 'tags/custom_fields survived the partial edit' from 'tags/custom_fields were silently reset to their already-empty state.' The steps and option-id findings above are solid because those fields held real, non-default values going in; tags/custom_fields do not have that same strength of evidence here. A follow-up probe against a case with populated tags/custom_fields would close this gap.\n\nHISTORY: correctly recorded. history_count went 1 -> 2, and the new revision's source is 'update' with modified_fields exactly ['description'] and a correct old/new diff -- no wrong-field-named-in-the-revision defect, no missing revision.\n\nCONTRACT FOR THIS CAPABILITY'S OWN RESPONSE: matches exactly. describeCapability declares 200 as {success: boolean}, required=[success], and 'NOTHING ELSE' -- the actual response was the literal body {\"success\": true}. No missing declared key, nothing undeclared. This is the cleanest contract match seen in this session's probes.\n\nINHERITED CASE-ENTITY DEFECTS, RECHECKED VIA THE READ-BACK (get_test_case_detail, not this write capability's own contract -- edit_test_case_partial_v1 returns no test_case fields at all to check):\n1. test_case_steps object-vs-array: reconfirmed. get_test_case_detail's contract declares test_case_steps as a single object but both before and after the edit it returned an ARRAY of 2 step records.\n2. Sibling `steps` empty []: reconfirmed. Top-level `steps` was [] both before and after despite `test_case_steps` holding 2 real, populated entries throughout -- a caller reading only `steps` would wrongly conclude this case has none, both pre- and post-edit.\n3. field_name / value_category on priority/status/case_type: PARTIAL MATCH to the inherited pattern, worth flagging as a difference. On get_test_case_detail specifically, field_name IS present and populated (priority.field_name='priority', status.field_name='status', case_type.field_name='category' -- note: 'category', not 'case_type') -- this contradicts the 'present on none' pattern confirmed on the five other capabilities (including both create paths). value_category IS present but null on all three, which does match the other capabilities' pattern (undeclared, present). This is a per-capability inconsistency in the field_name drift, not something edit_test_case_partial_v1 itself controls (it never returns these objects), but worth the campaign noting since get_test_case_detail is the common read used to verify writes on this entity.\n\nNOT ENCOUNTERED / NOT EXERCISED: entitlement gate (200 {success:false}) -- this call hit a clean 200 {success:true} with no gating visible; error-envelope shape -- zero failed attempts were produced (the single invocation succeeded on the first try), so this capability's own error-body drift status remains untested by this run, not confirmed either way."
+}

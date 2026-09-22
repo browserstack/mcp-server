@@ -1,0 +1,90 @@
+{
+  "capability": "edit_test_run",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:11:20Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "A prior probe attempt died mid-outage claiming nothing was written. Verify TR-9110's actual state before touching it, per the CLEANUP-LEDGER 'outage residue' precedent where two other probes made this same false claim and had in fact committed.",
+      "source": "invoked",
+      "capability": "get_test_run_by_integer_id_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": 17577900 } },
+      "status": 200,
+      "produced": { "owner": 3741, "test_cases_count": 3, "run_state": "new_run", "name": "__mcp-probe-createrun-20260921" }
+    },
+    {
+      "step": 2,
+      "why": "Confirm which 3 cases and their mapping_ids, as a baseline to detect any detachment caused by the edit.",
+      "source": "invoked",
+      "capability": "get_test_cases_for_v1_test_run",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" }, "query": { "per_page": 100 } },
+      "status": 200,
+      "produced": {
+        "cases": [
+          { "id": "TC-54455", "test_case_id": 1971631, "mapping_id": 2150421282 },
+          { "id": "TC-54456", "test_case_id": 1971632, "mapping_id": 2150421284 },
+          { "id": "TC-54458", "test_case_id": 1975349, "mapping_id": 2150421283 }
+        ]
+      },
+      "notes": "Baseline confirmed clean - the previous attempt genuinely wrote nothing to this run (count matched expectation exactly), unlike the two outage-era probes documented in CLEANUP-LEDGER.md that wrongly reported failure after actually committing."
+    },
+    {
+      "step": 3,
+      "why": "The pool-supplied cases TC-54485 (1985019) and TC-54486 (1985020) are the ones this probe was asked to add. No creation needed - both already exist in __scratch__ from an earlier bulk-create probe.",
+      "source": "pool",
+      "capability": null,
+      "produced": { "test_case_ids": [1985019, 1985020], "identifiers": ["TC-54485", "TC-54486"] }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" },
+        "body": { "run_state": "new_run", "test_case_ids": [1985019, 1985020] }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded 200 on the first attempt, sent flat per the standing lesson from create_test_run_v1/v2 (json_path describes server-side re-nesting, not what invokeCapability's caller sends). BUT the response itself surfaced the critical finding below: test_cases_count dropped 3 -> 2 in the SAME response, immediately raising the additive-vs-replace question the task asked to settle."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" },
+      "body": { "run_state": "new_run", "test_case_ids": [1985019, 1985020] }
+    },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "data_keys_returned": ["success", "testrun", "project"],
+      "skipped_test_case_ids_present": true,
+      "skipped_test_case_ids_value": [],
+      "testrun_keys_returned": [
+        "active_state", "run_state", "assignee", "created_at", "description", "environment", "id", "identifier",
+        "uuid", "is_automation", "overall_progress", "overall_progress_by_status_id", "name", "owner", "project_id",
+        "tags", "test_cases_count", "updated_at", "test_plans", "is_dynamic", "attachments", "links", "configurations",
+        "metadata", "assignee_imported", "created_by", "updated_by", "closed_at", "closed_by", "issues",
+        "test_result_issues", "observability_id", "observability_url"
+      ],
+      "project_id_type_returned": "integer (379335744) - declared 'string' in this SAME endpoint's own schema. DRIFT. This falsifies the clean 'only get_test_runs_v1's list serializer is broken' theory from the create_test_run_v1 probe: edit_test_run's write-response serializer has the identical project_id-as-integer bug, so at least two endpoints (list AND edit) share it, not just one reader.",
+      "is_dynamic_type_returned": "boolean (false) - matches declared boolean. CORRECT, same as create_test_run_v1.",
+      "overall_progress_returned": "non-null object, e.g. {untested:2,...} after attempt 1 - matches declared non-nullable shape. CORRECT, same as create_test_run_v1.",
+      "type_field": "declared in the response schema (example 'TestRun'), never present in any of the 4 edit responses taken in this probe.",
+      "self_ui_link_field": "declared in the response schema, never present in any of the 4 edit responses taken in this probe.",
+      "observability_url_field": "present and populated on every edit response (unlike create_test_run_v1, where this field is declared but always absent). This is a genuine difference between the create and edit write paths for the same field.",
+      "skipped_test_case_ids_field": "present as [] on every edit response in this probe (unlike create_test_run_v1, where this top-level key is declared 'always added' but never actually appears). Edit's serializer keeps this promise; create's does not."
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "test_run_id (path, TR-NNN or bare integer)", "run_state (body, enum: new_run|in_progress|under_review|rejected|done|closed - validated before anything else)"],
+    "json_path": "Run-level fields declare /test_run/<field> (name, description, owner, is_dynamic, configurations, test_plans, tags, issues, environment, attachments, metadata, build_group_id, run_state). Case-selection keys (test_case_ids, selection.*, shared_selection, filters, dynamic_filter, trtc_configuration_mappings, auto_assign, top-level is_dynamic) declare no test_run wrapper. invokeCapability wants ALL of it flat regardless - confirmed across all 4 successful calls in this probe, no nested wrapper was ever needed.",
+    "declared_missing": [
+      "type (declared, e.g. 'TestRun' - never returned in any of 4 responses)",
+      "self_ui_link (declared - never returned in any of 4 responses)"
+    ],
+    "undeclared_returned": ["attachments", "created_by", "updated_by", "closed_at", "closed_by", "issues", "test_result_issues", "observability_id"]
+  },
+  "notes": "SUMMARY OF FOUR edit_test_run CALLS MADE (all 200, all against TR-9110 / 17577900 / project 379335744):\n1) body={run_state:'new_run', test_case_ids:[1985019,1985020]} -> test_cases_count went 3 -> 2. Re-read via get_test_cases_for_v1_test_run confirmed only TC-54486 (mapping 2150424053) and TC-54485 (mapping 2150424052) remained; TC-54455/54456/54458 were SILENTLY DETACHED.\n2) Recovery: body={run_state:'new_run', test_case_ids:[1971631,1971632,1975349,1985019,1985020]} (all 3 original + 2 new) -> test_cases_count went to 5, and a re-read confirmed all 5 present with NEW mapping_ids for the three re-added cases (TC-54455 mapping 2150424057, TC-54456 mapping 2150424056, TC-54458 mapping 2150424058 - all changed from their pre-detachment values, proof these are fresh mappings, not the originals reattached). This same response ALSO showed owner going from 3741 to null, despite owner never being sent.\n3) Owner-restore attempt: body={run_state:'new_run', owner:3741}. The response itself echoed owner:null and an unchanged updated_at (STALE - matches the systemic write-misreporting pattern already documented in findings/test-run-writes-untrustworthy-systemic.md for update_test_run_v2/replace_test_run_v2, now reproduced on edit_test_run/v1 too). An independent re-read one call later showed owner:3741 with a fresh updated_at - the write DID apply, the response body just didn't reflect it.\n4) PUT-vs-PATCH probe requested by the task: body={run_state:'new_run', name:'__mcp-probe-createrun-20260921-name-edit-probe'} - no owner, no test_case_ids. Re-reads (two independent capabilities: get_test_run_cases_v1 and get_test_cases_for_v1_test_run) confirmed: (a) the 5 cases from step 2 were UNTOUCHED (still 5, same mapping_ids) - so PATCH-style partial-field semantics hold for the CASE LIST when the case-selection keys are omitted entirely; (b) owner was cleared to null AGAIN, the second reproduction, this time by a call that never mentioned test_case_ids at all - proving the owner-clearing is not test_case_ids-specific, it happens on ANY edit_test_run call that omits owner. Owner was restored a final time afterward (call 5, not counted above since it repeats call 3's shape) and independently verified durable at owner:3741 with test_cases_count:5.\n\nFINDING 1 (CRITICAL, contradicts declared contract, data-loss hazard): test_case_ids is documented ('This is additive for cases: test_case_ids and selection ADD to the run and never remove') but behaves as a full REPLACE of the run's case list with exactly the ids sent. Confirmed twice: sending [1985019,1985020] alone dropped the run from 3 cases to exactly those 2; sending all 5 ids together produced exactly 5. Any caller trusting the documented additive semantics and sending only new case ids to 'add a case to a run' will silently detach every other case already in it - this is precisely the misreading that made bulk_assign_test_cases_to_test_run look like the wrong tool for the job in the first place, and edit_test_run's own docs actively mislead toward the same mistake. ANSWER TO THE TASK'S QUESTION: TR-9110 ended up with 5 cases only after explicitly resending all 5 ids in one call - not because test_case_ids merged with the existing selection.\n\nFINDING 2 (CRITICAL, product/data-integrity bug, reproduced twice): owner is cleared to null by ANY edit_test_run call that omits the owner field, even one touching only name and run_state. This contradicts the omit-to-preserve semantics implied for every other optional field (tags, is_dynamic, configurations, etc., all documented 'omit the key to leave alone'). This was reproduced twice independently (once alongside a test_case_ids edit, once with an edit touching only name), each time confirmed via two different read capabilities (get_test_run_by_integer_id_v1 and get_test_run_cases_v1) taken after the stale write-response had already been observed to lag. The task assumed owner would be 'verified durable through two independent readers' across a name-only edit - it is NOT durable; it must be resent on every single edit_test_run call or the run loses its owner.\n\nFINDING 3 (write response staleness, extends existing systemic finding): edit_test_run's write response can echo pre-write field values for fields the caller did not send in that call (observed for owner and updated_at, exactly as findings/test-run-writes-untrustworthy-systemic.md documented for update_test_run_v2 and replace_test_run_v2). This is the same failure mode reproduced on a third, v1, endpoint - widening that finding's scope beyond the v2 routes it was previously confirmed on. Fields the caller DID send in the same call (name, test_case_ids) were reflected correctly and immediately.\n\nFINDING 4 (three-field serializer check requested by the task): is_dynamic (boolean) and overall_progress (non-null object) are CORRECT on every edit response, matching create_test_run_v1's already-confirmed-correct behavior. project_id is WRONG - returned as an integer despite being declared a string on this exact endpoint's own schema. This means the project_id defect is NOT isolated to get_test_runs_v1's list serializer alone (as the create-side probe hypothesized) - edit_test_run's write-response serializer shares it. The clean 'write path is right, one reader is broken' conclusion does not hold; project_id is wrong on at least two paths (list read, edit write) and right on at least one (create write).\n\nFINDING 5 (minor, contrasts with create): type and self_ui_link remain declared-but-never-returned on edit too (consistent with create_test_run_v1's finding - looks like a dead field across the whole test_run surface, not isolated). observability_url and the top-level skipped_test_case_ids key, by contrast, ARE present and correct on every edit response, unlike create_test_run_v1 where both are declared-but-absent - so edit's serializer keeps two promises that create's serializer breaks for the identical entity.\n\nRESULT FOR THE TASK'S UNBLOCKING GOAL: TC-54485 (1985019) -> mapping_id 2150424052. TC-54486 (1985020) -> mapping_id 2150424053. TR-9110 ends the probe holding all 5 cases (TC-54455/56/58/85/86), owner 3741, run_state new_run, active_state active, NOT closed, name changed to '__mcp-probe-createrun-20260921-name-edit-probe' (as part of the requested PATCH-vs-PUT name-only test - left renamed, not reverted, since nothing asked for reversion and it remains an obviously-a-probe name). TR-9075, TR-9061, TR-9062 and TR-9111 were never referenced or touched by any call in this probe."
+}

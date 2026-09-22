@@ -1,0 +1,122 @@
+{
+  "capability": "update_custom_field_definition_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:50:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "campaign fixture: field 106131 (__mcp-probe-cfdef-20260921, dropdown, TestCase, group 3452), its two datasets and five options, established by prior probes this campaign",
+      "source": "pool",
+      "capability": null,
+      "produced": {
+        "custom_fields_id": 106131,
+        "project_id": 379335744,
+        "project_identifier": "PR-2005",
+        "dataset_ids": [31319, 31320],
+        "option_ids": [146665, 146666, 146667, 146668, 146669]
+      }
+    },
+    {
+      "step": 2,
+      "why": "read current field state before mutating, to build a correct REPLACE payload (contract requires field_name+field_type+is_required together) and to have a pre-update baseline for the survival check",
+      "source": "invoked",
+      "capability": "get_custom_field_definition_v2",
+      "arguments": { "path_params": { "custom_fields_id": 106131 } },
+      "status": 200,
+      "produced": {
+        "field_name": "__mcp-probe-cfdef-20260921",
+        "field_type": "dropdown",
+        "is_required": false,
+        "place_holder_text": null,
+        "default_value": null,
+        "datasets": [
+          { "id": 31319, "linked_project_count": 1 },
+          { "id": 31320, "linked_project_count": 0 }
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "why": "readback after the update to check name change, dataset survival and option survival",
+      "source": "invoked",
+      "capability": "get_custom_field_definition_v2",
+      "arguments": { "path_params": { "custom_fields_id": 106131 } },
+      "status": 200,
+      "produced": {
+        "field_name": "__mcp-probe-cfdef-20260921-renamed",
+        "datasets": [
+          { "id": 31319, "linked_project_count": 1 },
+          { "id": 31320, "linked_project_count": 0 }
+        ]
+      }
+    },
+    {
+      "step": 4,
+      "why": "option-level survival check on dataset 31319 (fetch_options not embedded in the definition read)",
+      "source": "invoked",
+      "capability": "get_custom_field_dataset_v2",
+      "arguments": { "path_params": { "custom_fields_id": 106131, "dataset_id": 31319 }, "query": { "fetch_options": true } },
+      "status": 200,
+      "produced": { "option_ids": [146667, 146666, 146665], "default": 146665 }
+    },
+    {
+      "step": 5,
+      "why": "option-level survival check on dataset 31320",
+      "source": "invoked",
+      "capability": "get_custom_field_dataset_v2",
+      "arguments": { "path_params": { "custom_fields_id": 106131, "dataset_id": 31320 }, "query": { "fetch_options": true } },
+      "status": 200,
+      "produced": { "option_ids": [146670, 146669, 146668], "note": "146670 is a THIRD option not in the original pool of five; pre-existing, not created by this probe (update's body carries no datasets/options key) — see notes" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "custom_fields_id": 106131 }, "body": { "field_name": "__mcp-probe-cfdef-20260921-renamed" } },
+      "status": null,
+      "error": "missing required parameter(s): field_type, is_required",
+      "changed": "n/a (first attempt) — refused at the invoke-runtime layer before any HTTP request was made, confirming the contract's stated requirement that field_name+field_type+is_required must all be present"
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "custom_fields_id": 106131 },
+        "body": { "field_name": "__mcp-probe-cfdef-20260921-renamed", "field_type": "dropdown", "is_required": false, "entity_type": "TestCase" }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "added field_type (current value, dropdown), is_required (current value, false) and entity_type (current value, TestCase) to satisfy the REPLACE contract's required trio; place_holder_text and default_value deliberately omitted since both were already null on this field, so omission causes no visible change"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "custom_fields_id": 106131 },
+      "body": { "field_name": "__mcp-probe-cfdef-20260921-renamed", "field_type": "dropdown", "is_required": false, "entity_type": "TestCase" }
+    },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "id": "present (106131)",
+      "group_id": "present, undeclared (3452)",
+      "entity_type": "present, declared (TestCase)",
+      "field_type": "present, declared — value 'dropdown' (canonical vocabulary, not legacy 'field_dropdown')",
+      "field_name": "present, declared (__mcp-probe-cfdef-20260921-renamed)",
+      "system_name": "present, undeclared — silently mirrors field_name even though system_name is not a body input (__mcp-probe-cfdef-20260921-renamed)",
+      "is_required": "present, declared (false)",
+      "is_bulk_editable": "present, undeclared (true)",
+      "is_filterable": "present, undeclared (true)",
+      "parent_custom_field_id": "present, undeclared (null)",
+      "default_value": "ABSENT — declared by returns/schema, missing entirely from the response body (key not present, not even as null)",
+      "place_holder_text": "ABSENT — declared by returns/schema, missing entirely from the response body (key not present, not even as null)"
+    }
+  },
+  "contract": {
+    "required": ["custom_fields_id (path)", "field_name (body)", "field_type (body)", "is_required (body)"],
+    "json_path": null,
+    "declared_missing": ["default_value", "place_holder_text"],
+    "undeclared_returned": ["group_id", "system_name", "is_bulk_editable", "is_filterable", "parent_custom_field_id"]
+  },
+  "notes": "CONTRACT: path param custom_fields_id (int, required). Body is flat, no json_path nesting: field_name (string, required, max 256), field_type (enum of 10 canonical values, required — forwarded upstream unchecked against the stored type), is_required (boolean, required, literal JSON bool), entity_type (enum, optional, used only client-side to pick validation rules, never sent upstream), place_holder_text (string, optional — omitting it sends null and CLEARS the stored value), default_value (boolean, optional — forced to null upstream for any non-boolean field regardless of what is sent). describeCapability did not surface an HTTP method string. The invoke-runtime layer itself enforces the required trio pre-flight: attempt 1 (field_name only) was rejected locally with 'missing required parameter(s): field_type, is_required' before any HTTP call was made — the same enforcement style seen elsewhere in this campaign for destructive-mode refusals, now confirmed for a plain required-field gate on a write. Attempt 2, resending the field's current field_type/is_required/entity_type alongside the new field_name, succeeded (HTTP 200) on the first real network attempt (2 of 3 allowed attempts used).\n\nPUT-vs-PATCH VERDICT: hybrid, and the contract's own guidance turned out to be accurate. At the SCALAR-ATTRIBUTE level (field_name, field_type, is_required, place_holder_text, default_value) this is genuine full-replace/PUT semantics — the contract text warns place_holder_text and default_value are cleared if omitted, and this probe deliberately avoided exercising that clearing behavior by not testing it (both were already null on this field, so it was untestable here without a dirtier payload). At the RELATIONSHIP level (datasets, options, project links) the endpoint does not touch them AT ALL, in either direction — not a merge, not a wipe, simply out of scope, because the request body carries no datasets/options key upstream. Evidence: readback after the rename shows both dataset 31319 (linked_project_count:1, PR-2005) and dataset 31320 (linked_project_count:0) still present and unchanged; get_custom_field_dataset_v2 with fetch_options:true on 31319 shows options 146665/146666/146667 present, unchanged, undoubled, with is_default still on 146665; on 31320 options 146668 and 146669 are present, unchanged option_value strings, undoubled. So for a rename-only payload: PASS on the 'does not wipe datasets/options' question — this is NOT PUT-full-replace-of-the-whole-object semantics (which would have been the dangerous outcome), it is scoped-PUT-for-scalars-only. No write-and-discard observed either: the rename persisted correctly on readback, not just in the update response.\n\nANOMALY (unrelated to this update, reported for completeness per instructions to watch for defects during the readback): dataset 31320 now has a THIRD option, id 146670 ('__mcp-probe-cfoption-20260921', is_default:true, created_at 13:47:13Z), with the original default option 146668 flipped to is_default:false at the same timestamp. This was not created by update_custom_field_definition_v2 — its body never references datasets or options, and the contract explicitly states so. It reflects state from a different capability probe in this same campaign (evidently create/set-default option calls run against this dataset) that landed between the fixture being established and this probe's readback. Within the ORIGINAL five options (146665-146669) specifically: all five are present, unchanged, and undoubled after this update — the duplicate-option question the task asked to confirm is answered clean.\n\nSERIALIZER COMPARISON: update's response body is MISSING default_value and place_holder_text entirely (absent keys, not null) — this matches create_custom_field_definition_v2's already-confirmed defective serializer, NOT get_custom_field_definition_v2's read serializer, which returns both explicitly (as null on this field). So the write-path serializer (shared or at least identically broken across create and update) systematically drops two fields its own declared response schema promises; only the read path includes them. Update's response also carries the SAME five undeclared fields already found on create's response — group_id, system_name, is_bulk_editable, is_filterable, parent_custom_field_id — all present and all absent from the declared schema. This confirms the create/update write-serializer gap is not create-specific; it's a write-surface-wide pattern distinct from the read surface. One additional undeclared-input-turned-output curiosity: system_name is not a body parameter on update at all, yet the response (and the readback) show it silently renamed in lockstep with field_name — i.e. system_name tracks field_name on user-defined fields rather than being independently settable or stable.\n\nVOCABULARY SPLIT: update's response echoes field_type as 'dropdown' — the canonical value — not the legacy 'field_dropdown' form that get_project_id_custom_fields_v2_v1 reports for the same field. This update capability speaks the canonical vocabulary exclusively: its own declared field_type enum (string, text, user, dropdown, multi_dropdown, url, boolean, int, date, nested_dropdown) does not even include 'field_dropdown' as a legal value, so a caller doing read-modify-write using the legacy value straight from the v1 project-scoped read would almost certainly get it rejected as an invalid enum member (not tested directly here, to conserve the attempt budget for the primary rename probe as the task allowed — attempt 2 already succeeded so there was no natural opportunity to spend a third attempt on this without deliberately breaking the field). Net: the two-vocabulary split is real and this capability is on the canonical side of it; a caller bridging the v1 legacy read and this v2 update must translate field_dropdown -> dropdown (and by extension multi_field_dropdown -> multi_dropdown etc.) itself, since nothing in this contract does it for them.\n\nNo entitlement-gate (200 {success:false}) or error-envelope drift observed on the successful path; attempt 1's failure was a local pre-flight rejection, not a server error envelope, so it does not speak to the API's own 4xx shape."
+}

@@ -1,0 +1,75 @@
+{
+  "capability": "search_test_cases_by_folder_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Discover exact case titles/ids/identifiers inside __scratch__ (764138) to use as exact-match search terms, since search_test_cases_by_folder_v1's own contract only accepts EXACT id/name/identifier equality (no free-text substring param).",
+      "source": "invoked",
+      "capability": "search_project_entities_v2",
+      "arguments": {"path_params": {"project_id": 379335744, "entity": "test-cases"}, "body": {"folder_id": "764138", "p": 1, "per_page": 5}},
+      "status": 200,
+      "produced": {"sample_titles": ["__mcp-probe-case-2026-09-18T00:00:00Z"], "sample_ids": [1984015, 1984014, 1984013, 1983914, 1983913], "sample_identifiers": ["TC-54483", "TC-54482", "TC-54481", "TC-54480", "TC-54479"], "info": {"page": 1, "page_size": 5, "count": 18}, "folders_field_observed_type": "object (keyed by folder id), not an array"}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764138}, "query": {"name": "probe"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Term was a plain word/substring, and the contract explicitly says `name` is EXACT match, not substring — so a miss here is expected per the contract itself.",
+      "changed": "Switched to the full, exact case title as the `name` value to remove the substring-vs-exact confound."
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764138}, "query": {"name": "__mcp-probe-case-2026-09-18T00:00:00Z"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact full title (equal to a real case's `name` returned by search_project_entities_v2 moments earlier) still produced zero rows.",
+      "changed": "Tried the `identifier` filter instead of `name`, using a known real identifier from the same folder."
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764138}, "query": {"identifier": "TC-54483"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact identifier of a real, existing case still produced zero rows.",
+      "changed": "Tried the `id` filter (integer case id) instead of name/identifier, same case."
+    },
+    {
+      "n": 4,
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764138}, "query": {"id": 1984015}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact integer id of a real, existing case still produced zero rows.",
+      "changed": "Suspected the freshly-created __probe-* cases might not have been fully indexed anywhere the legacy table reads from, so switched to the __readonly__ pool fixture (folder 764093, cases TC-54455/TC-54456, pre-existing and stable) to rule that out."
+    },
+    {
+      "n": 5,
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764093}, "query": {"name": "probe case A"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact name of the stable __readonly__ pool fixture case still produced zero rows.",
+      "changed": "Tried `id` filter for the same __readonly__ fixture case as a final check."
+    },
+    {
+      "n": 6,
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764093}, "query": {"id": 1971631}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact integer id of the stable __readonly__ pool fixture case still produced zero rows. Six exact-match attempts across two folders (one freshly created, one long-lived) and all three supported filter fields (name/identifier/id) all returned HTTP 200 with an empty array — no combination of correct, real, exact-match arguments ever produced a hit.",
+      "changed": "Stopped attempting further payload variations; concluded this matches the capability's own declared guidance verbatim: it queries a deprecated local legacy table that is not the system of record for this project, and returns an empty 200 list unconditionally. No item was ever returned, so item shape, pagination, descriptor-field, and container-type checks cannot be performed for this capability."
+    }
+  ],
+  "probe": {
+    "arguments": null,
+    "status": null,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id (path)", "folder_id (path)"],
+    "json_path": "n/a — GET with query params (id, name, identifier), not a body/json_path capability",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "VERDICT REASONING: mode is correctly declared 'read' (matches the read/survey expectation for a search capability — no write path taken). Six exact-match invocations (name, identifier, and integer id, each individually, across two different folders — one freshly-created (__scratch__/764138) and one long-lived pool fixture (__readonly__/764093)) all returned HTTP 200 with body [] (a bare JSON array, exactly the declared container type — no object/map mismatch observed, since the declared and actual top-level shape are both 'bare array'). This exactly matches the capability's own guidance text verbatim: 'DEPRECATED AND EFFECTIVELY DEAD. It queries the legacy local test-case table, which is no longer the system of record — for any project whose data lives in the current backend it returns an empty list with 200, whatever you search for.' Because every real, exact-match query against confirmed-existing cases came back empty, item_shape, pagination (count vs len(rows)), the case_type/priority/status/automation_state descriptor-field check, and any nested-container-type check are all structurally impossible to perform on this capability — there is no successful non-empty response to inspect, not due to a bad payload but because the underlying legacy table is empty/unused for this (current-backend) project, as documented. Verdict is BLOCKED rather than PASS/DRIFT because the probe's core objective (inspect a returned item's shape and declared-vs-actual field diff) could not be completed despite correct, contract-compliant, exact-match arguments built from real fixture data.\n\nSPECIAL-CHARACTER / SUBSTRING OBSERVATION: this capability has NO free-text query parameter at all — id/name/identifier are all documented as EXACT equality matches (name explicitly: 'not a substring search'). Attempt 1 used a plain word ('probe', a substring of the real title) and got zero rows, consistent with 'not a substring search'; attempt 2 used the full exact title and also got zero rows. Because the endpoint is unconditionally dead for this project, these two outcomes are indistinguishable — the probe cannot separately confirm 'exact-match-only' is enforced versus 'the whole endpoint just never returns rows here.' This differs from the sibling search_project_entities (v1), whose q[query] free-text parameter is explicitly documented as stripping special characters before matching — that stripping behavior is a property of a parameter this capability does not have, so it does not apply here; I note the analogous risk exists on the siblings but could not be exercised on this capability.\n\nCOMPARISON TO SIBLINGS (describeCapability only, not invoked): search_project_entities (v1, GET, entity=test-cases with bracketed q[...] params) supports free-text q[query] (special chars stripped), q[folder_ids] (comma-separated, plus include_subfolders_tc to descend sub-folders), numeric filters (status_id/priority_id/category_id/automation_state/owner/tags/dates), pagination (p/per_page, max 300 before silently degrading to compact id-only rows), a count-only mode, and a richer response {success, test_cases, folders, info, filter_details}. search_project_entities_v2 (POST body) supports the same breadth of filters plus richer operators (match/empty, custom_fields, date_range as epoch ms, ids list) with per_page up to 100, and its own intent text calls it 'the general way to find cases by attribute' — i.e. positioned as the preferred general-purpose finder. Both siblings already provide folder scoping via q[folder_ids]/folder_id, matching or exceeding what search_test_cases_by_folder_v1's folder_id path param would offer — and, critically, search_test_cases_by_folder_v1's own guidance states 'The folder id in the path is not used to scope the query; only the project and group are' — meaning despite its name, this capability does NOT actually filter by the folder_id in its path at all. So nothing distinguishes search_test_cases_by_folder_v1 from its two siblings beyond a name that overpromises folder scoping it does not deliver; both siblings are strictly more capable (real folder scoping, free-text search, rich filters, pagination) and read from the current, live backend rather than a dead legacy table. PREFERRED/DEPRECATED: search_test_cases_by_folder_v1 explicitly self-declares 'DEPRECATED AND EFFECTIVELY DEAD' with guidance to use 'the project search or the folder listing instead' — an explicit deprecation notice, confirmed live by this probe. Neither search_project_entities nor search_project_entities_v2 carries an explicit 'deprecated' label relative to the other or to this capability, but v2's own intent phrasing ('the general way to find cases by attribute') reads as the de facto preferred general-purpose search, with v1's bracket-query GET form appearing to be the older sibling of the pair."
+}

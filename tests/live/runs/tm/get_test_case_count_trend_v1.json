@@ -1,0 +1,39 @@
+{
+  "capability": "get_test_case_count_trend_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:20:24Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope (integer id required by the route)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "query": { "q[created_at]": "all_time" }
+    },
+    "status": 200,
+    "response_keys": ["data", "empty_data", "order"],
+    "item_shape": {
+      "data.<CaseTypeOrAutomationState>": {
+        "graphData": "object keyed by 3-letter month abbreviation -> integer count",
+        "field": "string (e.g. 'case_type' or 'automation_state') - ABSENT on the 'Total' entry",
+        "value": "array (string case-type/automation ids for normal entries; [null] for 'Total')"
+      }
+    }
+  },
+  "contract": {
+    "required": ["data", "empty_data", "order"],
+    "json_path": null,
+    "declared_missing": ["data.Total.field"],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded on the first call (q[created_at]=all_time, integer project_id 379335744); no retries needed. SPECIFIC INTEREST CHECK: unlike get_closed_test_runs_info_v1 / get_issues_count_info_v1, this capability's `data` is NOT an array at all - it is an object map keyed by case-type name (Other, Acceptance, Accessibility, ... Automated, Manual, Total), exactly as the schema declares. The monthly series one level down, `data.<Type>.graphData`, is likewise an object keyed by month abbreviation (Jan..Dec) -> integer, not a positional array like [\"Mar\",0]. Both the schema and the live response agree on this OBJECT/map shape - there is no schema-vs-guidance contradiction of the sibling-capability kind here, and the guidance text does not claim otherwise. This was checkable even though the project has almost no historical spread: every month key is present with value 0 except Sep 2026 (21), so the zero-padded buckets confirmed the map-keyed-by-month shape independent of data volume. The one real drift found: the schema marks `field` as required for every entry under `data`, but the live 'Total' entry omits `field` entirely (it only has `graphData` and `value`); `Total.value` is also `[null]` rather than an array of strings as the schema's `value` items type declares, though only the missing required `field` key is reported per the shallowest-missing-path rule. This matches the capability's own guidance note that 'Total is a sibling key ... the CSV exporter special-cases it' - the guidance flags Total as special but the schema does not relax its required-field list to account for that."
+}

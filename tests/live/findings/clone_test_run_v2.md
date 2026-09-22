@@ -15,7 +15,7 @@ The clone works, is synchronous, and was verified in storage. **One genuinely ne
 
 | | run-level `assignee` |
 | --- | --- |
-| source `TR-9062` | `"ing@bsstag.com"` |
+| source `TR-9062` | `"probe-user@example.invalid"` |
 | clone `TR-9063` | **`null`** |
 
 The contract offers `copy_tc_assignee`, but its own description scopes it to **per-case** assignees. There is **no declared option to carry the run-level owner/assignee**, and nothing in the guidance says it is dropped.

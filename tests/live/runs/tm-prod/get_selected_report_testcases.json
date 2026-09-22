@@ -1,0 +1,47 @@
+{
+  "capability": "get_selected_report_testcases",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "get_selected_report_testcases' path_params (project_id, report_id) are both integer; list_schedules is the discovery call that resolves the SC-NNN a caller would have from list_reports_v2 into the integer id this route actually needs",
+      "source": "invoked",
+      "capability": "list_schedules",
+      "arguments": { "path_params": { "project_id": 332537 }, "query": {} },
+      "status": 200,
+      "produced": { "resolved": { "project_id": 332537, "report_id": 95008, "identifier": "SC-12541", "report_type": "Test Run Summary", "report_timeframe": "last_one_week" } }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "report_id": 95008 } },
+    "status": 200,
+    "response_keys": ["success", "selection_data", "selection", "shared_selection"],
+    "item_shape": {
+      "selection_data": null,
+      "selection": {},
+      "shared_selection": {}
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "report_id (path, integer)"],
+    "json_path": null,
+    "declared_missing": [
+      "selection_data: root `required` array marks it mandatory, typed `object` with its own required sub-fields (select_all, folders, unique_test_case_count), not nullable anywhere in the schema. The live 200 response returned selection_data: null — a bare JSON null, not an object, so none of select_all/folders/unique_test_case_count could be checked. This also directly contradicts the capability's own guidance, which says for exactly this state (a report with no case filters saved, and report_filters:{} was confirmed for SC-12541 via get_report_detail/list_reports_v2 in the sibling run files) it 'simply returns an unfiltered project selection tree' — i.e. a populated folder-keyed object, not null."
+    ],
+    "undeclared_returned": []
+  },
+  "empty_case_check": {
+    "rule_applied": "selection ({}) alone would be the documented empty case (no saved selection) and would leave the folder-tree item shape UNVERIFIED rather than exercised. But selection_data is not merely empty here — it is null, a type violation of a declared-required, non-nullable object field, and it directly contradicts the guidance's explicit promise of an 'unfiltered project selection tree' for a report with no case filters. Per the shallowest-missing-path rule this is reported as DRIFT, not downgraded to UNVERIFIED. The deeper question of whether folders/select_all/unique_test_case_count individually match their sub-schema remains unexercised as a consequence, not the primary finding.",
+    "selection_populated": false,
+    "selection_data_populated": false
+  },
+  "pagination_check": {
+    "applicable": false,
+    "note": "describeCapability does not mark this capability as paginated (no `paginated` key, no page params, and the live response has no info/prev/next/total_pages field). No pagination behavior to exercise."
+  },
+  "notes": "PREPROD (tests/live/runs/tm/get_selected_report_testcases.json): DRIFT — selection_data returned null against a declared-required, non-nullable object schema, contradicting the guidance's own promise of an 'unfiltered project selection tree' for a report with no saved case filters (report_filters:{}). PROD RESULT: DRIFT reproduces exactly, same shape.\n\nProbed against project 332537/PR-18723, report 95008 (SC-12541, Test Run Summary, report_filters:{} confirmed empty via the sibling get_report_detail run in this same batch). The 200 response was {success:true, selection_data:null, selection:{}, shared_selection:{}} — byte-for-byte the same defect pattern as preprod: selection_data is null instead of a populated folder-keyed selection tree, despite report_filters being empty (the exact condition the guidance says triggers the 'unfiltered project selection tree' fallback). selection ({}) and shared_selection ({}) both matched their documented empty-state shapes correctly (no saved primary-project selection persisted for this report; report is not a cross-project Test Case Activity report) and are not part of the drift.\n\nID-FORM TRAP: applies identically here — path_params are integers only, and list_reports_v2 (which a caller would naturally browse first) never exposes them, only SC-NNN. Resolved correctly via list_schedules (see sibling run files' setup steps in this same batch for the full list_reports_v2 cross-check); not re-run here to avoid a redundant call, but the trap is the same id (95008) vs the naive stripped value (12541) documented in the other two capabilities' run files in this batch.\n\nCase-id-format guidance ('integers, not TC-NNN' inside selection_data) could not be checked against a real case id because selection_data itself came back null — no case ids were returned in any field, so this sub-check is UNVERIFIED as a direct consequence of the primary DRIFT, not a separate finding.\n\nSHARED-SERIALIZER CHECK: not directly applicable — this capability's response envelope ({success, selection_data, selection, shared_selection}) has no `data`/report-definition object at all, so there is no mail_to/project_ids/included_projects surface to compare against the create_report/update_report pattern found on get_report_detail.\n\nCOUNT-VS-ROWS: not applicable — describeCapability marks this capability as unpaginated and the response carries no page/count/rows structure.\n\nNo write, no email: single read call, no mode:write parameter touched, no send-adjacent field exists on this capability's contract at all (path_params only)."
+}

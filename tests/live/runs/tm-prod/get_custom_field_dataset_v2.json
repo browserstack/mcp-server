@@ -1,0 +1,88 @@
+{
+  "capability": "get_custom_field_dataset_v2",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T07:38:14Z",
+  "verdict": "BLOCKED",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": null,
+  "setup": [
+    {
+      "why": "Get the current declared contract for get_custom_field_dataset_v2 before invoking, per the dedicated-recheck instructions.",
+      "capability": "describeCapability(get_custom_field_dataset_v2, product=tm, include_responses=all)",
+      "arguments": {},
+      "status": "n/a (describe, not invoke)",
+      "produced": "Confirmed `data.options` is still declared as `{type: array, items: {type: object}}` -- a bare array of option objects. No mention of any nested paging envelope inside options. Matches the preprod baseline's description of the declared shape."
+    },
+    {
+      "why": "Find a project's TestCase custom fields to locate one with a dataset carrying option values, using the fixture's v1 project id.",
+      "capability": "get_project_id_custom_fields_v2_v1",
+      "arguments": {"path_params": {"project_id": 332537}},
+      "status": 200,
+      "produced": "16 custom_fields returned. Several field_dropdown / field_multi_dropdown fields carry inline option_values with dataset_id, e.g. id=180001 'saple pronya te' -> dataset_id 19355 (30 option rows inline), id=223478 'tets dp' -> dataset_id 66785 (2 option rows), id=233776 'Sample DD field with >30 values' -> dataset_id 77246 (30 option rows inline, values '1'..'30', ids 5059334-5059363), id=194184 'aaas' (multi_dropdown) -> dataset_id 35347 (30 option rows inline). Field 233776's name explicitly signals it was created to exceed one page of options, so its dataset (77246) was selected as the primary target for the recheck (best candidate for the paging sub-check)."
+    },
+    {
+      "why": "Attempt to confirm dataset_ids for the chosen field directly via get_custom_field_v2, per the fixture's suggested setup chain.",
+      "capability": "get_custom_field_v2",
+      "arguments": {"path_params": {"id": 233776}},
+      "status": 403,
+      "produced": "{\"success\":false,\"error\":\"This action is not permitted for the user\",\"data\":{\"login_url\":\".../auth/start-sso\"}}. Did not block the recheck since dataset_id was already known from setup call #2 (inline in the v1 project custom-fields response)."
+    }
+  ],
+  "attempts": [
+    {
+      "capability": "get_custom_field_dataset_v2",
+      "arguments": {"path_params": {"custom_fields_id": 233776, "dataset_id": 77246}, "query": {"fetch_options": true}},
+      "status": 403,
+      "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}
+    },
+    {
+      "capability": "get_custom_field_dataset_v2",
+      "arguments": {"path_params": {"custom_fields_id": 180001, "dataset_id": 19355}, "query": {"fetch_options": true}},
+      "status": 403,
+      "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}},
+      "note": "Retried against a second, independent field/dataset pair to rule out a bad id pair -- same 403."
+    },
+    {
+      "capability": "get_custom_field_dataset_v2",
+      "arguments": {"path_params": {"custom_fields_id": 233776, "dataset_id": 77246}, "query": {}},
+      "status": 403,
+      "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}},
+      "note": "Retried WITHOUT fetch_options to rule out fetch_options itself triggering the 403 -- same 403 on the bare call, so this is not specific to the options request."
+    },
+    {
+      "capability": "list_workspace_fields_v2",
+      "arguments": {"query": {"field_source": "custom", "entity_type": "TestCase", "p": 1}},
+      "status": 403,
+      "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}},
+      "note": "Corroboration check: the fixture's suggested alternate discovery path (list_workspace_fields_v2) also 403s, and so does list_custom_fields_v2 (below) -- this is not isolated to get_custom_field_dataset_v2, it is systemic across the entire v2 custom_field capability family for this prod session."
+    },
+    {
+      "capability": "list_custom_fields_v2",
+      "arguments": {"query": {"p": 1, "count": 10}},
+      "status": 403,
+      "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"custom_fields_id": 233776, "dataset_id": 77246}, "query": {"fetch_options": true}},
+    "status": 403,
+    "response_keys": ["success", "error", "data"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["custom_fields_id (path, positive int)", "dataset_id (path, positive int)"],
+    "declared_missing": null,
+    "undeclared_returned": null
+  },
+  "prod_vs_preprod": {
+    "point_1_declared_options_type": "describeCapability on prod still declares data.options as a bare ARRAY of option objects -- unchanged from the preprod baseline. No `info` sub-envelope is mentioned anywhere in the declared schema, on either preprod or prod.",
+    "point_2_invoke_with_fetch_options": "Every invoke attempt against get_custom_field_dataset_v2 on prod returned HTTP 403 {success:false, error:'This action is not permitted for the user', data:{login_url:'.../auth/start-sso'}} -- across two independent, verified-real (custom_fields_id, dataset_id) pairs, and reproducing identically with fetch_options both true and omitted. No 2xx response body was ever obtained, so none of points 3-6 could be evaluated against real prod data.",
+    "point_3_options_object_vs_array": "UNVERIFIED -- could not invoke successfully.",
+    "point_4_option_row_shape": "UNVERIFIED -- could not invoke successfully.",
+    "point_5_duplicate_option_ids": "UNVERIFIED -- could not invoke successfully.",
+    "point_6_paging_helper_reliability": "UNVERIFIED -- could not invoke successfully.",
+    "scope_of_the_403": "Confirmed systemic, not specific to this capability: get_custom_field_v2, list_workspace_fields_v2, and list_custom_fields_v2 (the whole v2 custom_field family) all return the identical 403 on this prod session, while the v1 sibling get_project_id_custom_fields_v2_v1 (used in setup) succeeded normally with 200 and returned full custom-field + inline option data for the same project. describeCapability's own guidance for get_custom_field_v2 notes 'Needs the field-view permission when role-based access is on; 403 otherwise' -- consistent with this prod session/role lacking a 'field-view' permission that the v2 custom-field surface requires but the v1 project-form endpoint does not."
+  },
+  "notes": "This is a dedicated recheck of get_custom_field_dataset_v2 against production, and it came back BLOCKED rather than PASS or DRIFT: every invoke of the capability itself returned 403 'This action is not permitted for the user' with an SSO login prompt, regardless of which valid (custom_fields_id, dataset_id) pair was used or whether fetch_options was set. This was verified not to be a fluke of one bad id pair (tried two independent pairs discovered live via get_project_id_custom_fields_v2_v1) and not to be specific to the fetch_options=true parameter (bare call also 403s). It was further verified to be systemic across the entire v2 custom_field capability family on this prod session -- get_custom_field_v2, list_workspace_fields_v2 and list_custom_fields_v2 all 403 identically -- while the v1 endpoint used for setup (get_project_id_custom_fields_v2_v1) succeeds normally and returns real option data inline for the same project (332537). Point 1 (declared options type) could still be settled from describeCapability alone: the contract is unchanged from preprod -- options is declared as a bare array, with no options.info envelope mentioned. Points 3 through 6 (options-as-object-with-info, option row shape/descriptor variant, duplicate-option-id doubling, and the paging-helper reliability sub-check) could NOT be settled on prod at all in this session -- they are UNVERIFIED, not PASS, because the capability under test never returned a 2xx body to inspect. Per the task's own rule, an error body was never diffed against the preprod success schema to manufacture a verdict. Root cause is very likely a permission/role gap on this specific prod credential (missing 'field-view' permission for the v2 custom-field surface) rather than evidence that the preprod DRIFT has been fixed or still reproduces -- reproduces_preprod is left null (unknown) rather than true/false for that reason. This needs either a prod session with the field-view permission granted, or escalation to whoever owns prod credentials for this capability index, before the DRIFT can actually be confirmed fixed or reconfirmed on production."
+}

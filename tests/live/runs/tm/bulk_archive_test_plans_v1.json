@@ -1,0 +1,83 @@
+{
+  "capability": "bulk_archive_test_plans_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:33:41Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "TP-1632 is shared with a concurrent probe on unlink_test_runs_from_test_plan; re-read its real state immediately before acting rather than trusting the campaign's earlier description of it",
+      "source": "invoked",
+      "capability": "get_test_plan_by_integer_id_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "test_plan_id": 48319 } },
+      "status": 200,
+      "produced": { "identifier": "TP-1632", "record_status": "active", "test_runs_count": { "active": 0, "closed": 0 }, "updated_at": "2026-09-22T05:11:26.000Z" }
+    },
+    {
+      "step": 2,
+      "why": "confirm directly whether TR-9111 is still linked to TP-1632 before archiving, since the task's premise (one linked run) predates a concurrent unlink probe",
+      "source": "invoked",
+      "capability": "get_test_plan_test_runs_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "test_plan_id": 48319 } },
+      "status": 200,
+      "produced": { "test_runs": [], "count": { "active": 0, "closed": 0 } }
+    },
+    {
+      "step": 3,
+      "why": "verify TR-9111 itself still exists and is healthy, independent of its link to TP-1632, so a later cascade question isn't answered from a stale assumption",
+      "source": "invoked",
+      "capability": "get_test_run_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9111" } },
+      "status": 200,
+      "produced": { "identifier": "TR-9111", "active_state": "active", "run_state": "new_run", "test_plan_key_present": false }
+    },
+    {
+      "step": 4,
+      "why": "capture the project's baseline active-plan count and confirm TP-1632/TP-1616 identities before any write, so a count-drop or fixture-collision would be detectable",
+      "source": "invoked",
+      "capability": "list_test_plans_v1",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "count": { "active": 30, "completed": 0 }, "info.count_top_level_rows": 16, "TP-1632_present": true, "TP-1616_present": true, "TP-1616_sub_plans_count": 14 }
+    },
+    {
+      "step": 5,
+      "why": "check the declared undo path (bulk-retrieve) and its runtime reachability before archiving, per the destructive-tier / reversibility requirement",
+      "source": "invoked",
+      "capability": "bulk_retrieve_test_plans_v1 (describeCapability only, not invoked)",
+      "arguments": { "name": "bulk_retrieve_test_plans_v1", "include_responses": "all" },
+      "status": 200,
+      "produced": { "mode": "write", "guidance": "same group feature flag as archive; 'To undo, call the bulk-retrieve capability with the same ids.'" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "test_plan_ids": [48319] }, "user_permission": "granted" },
+      "status": 404,
+      "error": "{\"success\":false,\"errors\":\"Feature not available\"}",
+      "changed": "n/a (first attempt) — single explicit id [48319], no select_all field exists on this capability to worry about"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "test_plan_ids": [48319] }, "user_permission": "granted" },
+      "status": 404,
+      "error": "{\"success\":false,\"errors\":\"Feature not available\"}",
+      "changed": "nothing — identical retry to confirm the 404 is a stable, deterministic feature-gate response and not a transient hiccup. Stopped after 2 of the allowed 3 attempts: this error is not a payload problem (it matches the contract's own documented gate response verbatim), so a differently-shaped body could not change the outcome and a 3rd identical call would add no information."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "body": { "test_plan_ids": [48319] } },
+    "status": 404,
+    "response_keys": ["success", "errors"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "test_plan_ids (body, array, minItems 1)"],
+    "json_path": "flat: body.test_plan_ids (integer plan ids). The contract also documents two alternate shapes tried in order — body.test_plan.ids, then body.ids, then body.test_plan_ids, first-present wins — but no nested json_path is required for this call.",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "VERDICT AND WHY: BLOCKED, not DRIFT. Both attempts returned exactly the 404 {success:false, errors:'Feature not available'} that the capability's own contract predicts verbatim for a group where archiving is feature-flagged off ('Archiving is gated on a group feature flag... a 404 here means the feature is unavailable, NOT that the plans are missing'). The index is telling the truth about its own environment; this is a live-environment/group configuration gap, not a contract bug, so no error body was diffed against the success schema (none was ever returned) and declared_missing/undeclared_returned are empty because there is nothing to compare.\n\nSELECT-ALL FOOTGUN: checked before invoking. describeCapability shows exactly one body field, test_plan_ids (a plain array of integer ids) — there is no select_all or de_selected_ids parameter anywhere on this capability's contract. The footgun sibling capabilities warn about does not exist here, so nothing was deliberately avoided beyond sending a single explicit id ([48319]) as the whole array, per instructions.\n\nREVERSIBILITY: bulk_retrieve_test_plans_v1 is the documented undo ('To undo, call the bulk-retrieve capability with the same ids') and its mode is 'write', not 'destructive' — so it is NOT in the destructive tier refused at the invokeCapability runtime layer, and would be reachable purely on mode grounds. HOWEVER its own guidance states it shares the exact same group feature flag as archive ('Same group feature flag as archive: when it is off this returns 404...'). Since that flag is off in this preprod group (as proven by the archive call itself failing the same way), the undo path is presently just as unreachable as the archive path — for the same root cause, not because of destructive-tier policy. Net effect for this environment: archiving cannot be performed at all right now, so the question 'is it reversible' is moot here — nothing was changed to reverse.\n\nCASCADE / TR-9111: TP-1632 was never actually archived (verified by an independent re-read after both attempts: record_status is still 'active' and updated_at is unchanged at 2026-09-22T05:11:26.000Z, identical to the pre-attempt read — no mutation occurred). Separately and independently, TR-9111 was confirmed to still exist and be active (get_test_run_v2: active_state='active', run_state='new_run', one untested case TC-54457) but is NO LONGER linked to TP-1632 — TP-1632's own test_runs_count is {active:0, closed:0} and get_test_plan_test_runs_v1 returned an empty list, and TR-9111's v2 payload carries no `test_plan` key at all (that key is present only when a run is linked). This matches the note that a concurrent unlink_test_runs_from_test_plan probe was operating on this exact plan; by the time this probe read TP-1632, the link to TR-9111 had already been removed by that other probe. So even setting aside that archiving itself was blocked, there was no linked run left on TP-1632 for an archive to cascade onto, and TR-9111 was unaffected either way. Sub-plans: TP-1632 has sub_plans_count 0, so no sub-plan cascade question applies to it.\n\nSCOPE DISCIPLINE: TP-1616 (48283) was read only via the passive list_test_plans_v1 baseline call, never targeted for any write; it remains present with its expected sub_plans_count of 14 and its 'update-probe' tag, byte-identical in the fields checked. No id besides 48319 was ever placed in test_plan_ids on any attempt. The other 28 pre-existing plans in PR-2005 were never referenced.\n\nNOT EXERCISED (and why): (1) count.active dropping 30->29 — could not be checked because the archive call never took effect; count.active remained 30 throughout (confirmed by the pre-attempt list_test_plans_v1 baseline). (2) Whether an archived plan disappears from list_test_plans_v1 vs. merely flips a flag — moot, nothing was archived. (3) Nonexistent-plan-id behavior — deliberately not spent as a 3rd attempt, since even the real, in-scope id (48319) is blocked by the feature gate; a bad-id call would only reconfirm the same 404 gate response, not reveal new bad-id-handling behavior, and would not distinguish which of the four known bad-id patterns applies. (4) Independent-read verification of the archive's own success response — N/A, no success response was ever returned to check for self-misreporting. (5) select_all path — N/A, the field does not exist on this capability at all; nothing was deliberately withheld beyond confirming that."
+}

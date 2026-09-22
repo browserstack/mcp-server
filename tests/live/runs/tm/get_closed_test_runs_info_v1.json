@@ -1,0 +1,36 @@
+{
+  "capability": "get_closed_test_runs_info_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:50:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the chart",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "query": { "q[closed_at]": "6_month" }
+    },
+    "status": 200,
+    "response_keys": ["data", "empty_data"],
+    "item_shape": {
+      "declared": { "month": "string", "count": "integer" },
+      "actual": ["string (month label)", "integer (count)"]
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded (200), so no retries were needed. Deliberately sent only q[closed_at]=6_month and no q[created_at], per the capability's own guidance that any q[created_at] (even implicit/defaulted) shadows q[closed_at] entirely. The resulting window was Mar-Sep, which includes the required 2026-09 (today is 2026-09-21). Response: {data:[['Mar',0],['Apr',0],['May',0],['Jun',0],['Jul',0],['Aug',0],['Sep',0]], empty_data:true} - the fixture project has no CLOSED runs in this window, so empty_data=true correctly signals 'nothing to plot' and the numeric counts themselves cannot be treated as validated (empty-case rule: a padded zero-count series proves nothing about whether real non-zero counts would render correctly, and this is a read-only round so no run could be closed to force one). However, the declared 200 schema types each `data` entry as an OBJECT ({month: string, count: integer}), while every entry actually returned is a 2-element ARRAY (positional pair, e.g. ['Mar', 0]) - this is directly observable from the padded entries themselves (they are non-empty, just zero-valued), so the empty-case rule does not shield this specific mismatch: the container shape of each item is confirmed regardless of the count values being trivial. The capability's own guidance text already flags this exact discrepancy ('Each entry in `data` is a positional pair... not a {month, count} object'), meaning the guidance is accurate but the machine-readable response schema was never updated to match it - a genuine declared-vs-actual disagreement, hence DRIFT rather than PASS. `empty_data` itself matched its declared boolean type, and no undeclared top-level keys were returned. No write or destructive capability was invoked; project_id came from the fixture pool (source: pool)."
+}

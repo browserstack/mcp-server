@@ -1,0 +1,106 @@
+{
+  "capability": "get_test_results_for_test_case_v2",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "The task's suggested target run TR-5401273 (uuid 75057293, run_state:done) was checked first, since a finished run should carry real results",
+      "source": "invoked",
+      "capability": "get_test_run_test_cases_v2",
+      "arguments": {"project_id": "PR-18723", "test_run_id": "TR-5401273", "p": 1, "page_size": 30},
+      "status": 200,
+      "produced": {"note": "info.count:0, test_cases:[] -- this run has ZERO test cases mapped into it, confirmed a second way via get_test_run_v2 (test_cases:[]) and a third way via the v1 sibling get_test_cases_for_v1_test_run against both the TR- identifier and the numeric uuid 75057293 (both 0 rows). A done run with no mapped cases has nothing to carry a result -- the task's premise that this run's cases 'should carry real results' does not hold as of this probe; either the fixture description is stale or another concurrent probe emptied it since PROD-FIXTURE.md was written today."}
+    },
+    {
+      "step": 2,
+      "why": "Resolve a different case that actually has a genuinely logged result, per the task's own fallback instruction, by listing closed runs and reading their per-status progress counts",
+      "source": "invoked",
+      "capability": "get_closed_test_runs",
+      "arguments": {"project_id": 332537, "p": 1},
+      "status": 200,
+      "produced": {"note": "TR-4827350 (uuid 68420073): overall_progress_by_status_id shows 1 Passed + 1 Failed across 2 cases -- a small, clean, non-empty closed run. TR-3866741 (uuid 61078641): 1 Blocked + 20 Untested across 21 cases -- a second run with a distinct real status."}
+    },
+    {
+      "step": 3,
+      "why": "Resolve the case identifiers and mapping for TR-4827350 and TR-3866741 before invoking the target capability",
+      "source": "invoked",
+      "capability": "get_test_cases_for_v1_test_run",
+      "arguments": {"project_id": 332537, "test_run_id": "TR-4827350 / TR-3866741"},
+      "status": 200,
+      "produced": {"note": "TR-4827350: TC-5508207 (id 126144964, Failed), TC-5472086 (id 125494645, Passed). TR-3866741: TC-1041809 (id 38648454, result_status.field_value:Blocked, though its own latest_status column reads 'untested' -- the pre-existing status-id-disagreement defect, out of scope here and already tracked in findings/status-id-disagreement.md)."}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"project_id": "PR-18723", "test_run_id": "TR-4827350", "test_case_id": "TC-5508207", "p": 1, "page_size": 30},
+      "status": 200,
+      "notes": "First real target -- succeeded on the first try, no retries needed"
+    },
+    {
+      "n": 2,
+      "arguments": {"project_id": "PR-18723", "test_run_id": "TR-4827350", "test_case_id": "TC-5472086", "p": 1, "page_size": 30},
+      "status": 200,
+      "notes": "Second case in the same run, opposite status (Passed) -- confirms the item shape across both outcomes"
+    },
+    {
+      "n": 3,
+      "arguments": {"project_id": "PR-18723", "test_run_id": "TR-3866741", "test_case_id": "TC-1041809", "p": 1, "page_size": 30},
+      "status": 200,
+      "notes": "Third case, third distinct status value (Blocked), different run and project folder -- confirms the shape isn't a one-off"
+    },
+    {
+      "n": 4,
+      "arguments": {"project_id": "PR-18723", "test_run_id": "TR-2576430", "test_case_id": "TC-681528", "p": 1, "page_size": 30},
+      "status": 200,
+      "notes": "Negative control: TC-681528 carries two linked Jira issues (SCRUM-22, SCRUM-23) on the test-case record itself and shows a non-untested-looking result_status.field_value ('Unnamed 1') in the run's case grid, but this capability correctly returns test_results:[] for it -- confirming the same 'mapping-time placeholder is not a logged execution' semantics documented on preprod. Case-level issue links do not imply a logged result exists."
+    }
+  ],
+  "probe": {
+    "arguments": {"project_id": "PR-18723", "test_run_id": "TR-4827350", "test_case_id": "TC-5508207", "p": 1, "page_size": 30},
+    "status": 200,
+    "response_keys": ["success", "test_results", "info"],
+    "item_shape": {
+      "returned_item_TC-5508207_Failed": {
+        "id": 2187459590,
+        "created_at": "2026-08-10T10:11:05.000Z",
+        "updated_at": "2026-08-10T10:11:05.000Z",
+        "created_by": "user-b@example.invalid",
+        "description": "<p ...>env was incorrect</span></p>",
+        "test_case_id": "TC-5508207",
+        "test_run_id": "TR-4827350",
+        "result_status": {"field_value": "Failed"},
+        "issues": [],
+        "custom_fields": [],
+        "step_result": null,
+        "configuration_id": null,
+        "urls": {"self": "https://test-management.browserstack.com/projects/332537/test-runs/TR-4827350/126144964/1644510686"},
+        "execution_id": "a05dad94d5499726818f5fd8697b592a836bac45a95cd47ba04be4b488de77c6",
+        "dataset": []
+      },
+      "field_by_field": {
+        "id/created_at/updated_at/created_by/description": "matches -- all present, types as declared",
+        "test_case_id/test_run_id": "matches -- echoed as TC-/TR- identifiers, not numeric ids, exactly per guidance",
+        "result_status": "MATCHES THE CORRECTED DECLARATION. All three sampled results (Failed, Passed, Blocked) returned exactly {field_value: <status>} -- id, internal_name, field_name and colour were absent on every one of the 3 rows checked, on prod, same as preprod. The index's corrected guidance ('deliberately cut down... never appear') is confirmed accurate against real production data, not just the preprod fixture.",
+        "custom_fields": "MATCHES THE CORRECTED DECLARATION. custom_fields:[] (an array) on all 3 rows -- confirms the v2 index correction (array, not object) is correct on prod, not a preprod-only artifact.",
+        "step_result": "matches -- null on all 3 (all case-level results); populated shape remains UNEXERCISED -- no step-level result was found anywhere reachable in this project",
+        "configuration_id": "matches -- null, present as a key, on all 3 rows; this run/case combination has no configuration. Populated (non-null) shape remains UNEXERCISED -- no configured run with a genuine result was found",
+        "dataset": "matches -- [] on all 3; populated (data-driven) shape remains UNEXERCISED",
+        "issues": "matches on type (array); empty on all 3 real results found -- populated item shape inside issues[] remains UNEXERCISED even though case TC-681528 (attempt 4) has 2 real linked Jira issues at the CASE level, because that case has never been genuinely executed (test_results:[] for it) -- the issues sit on the case record, not on a logged result",
+        "urls.self": "matches -- populated, absolute deep link, on all 3",
+        "execution_id": "matches -- present, non-null string, on all 3"
+      }
+    }
+  },
+  "contract": {
+    "required": ["success", "test_results", "info"],
+    "json_path": "$.test_results[]",
+    "declared_missing": [],
+    "undeclared_returned": [],
+    "type_mismatches": []
+  },
+  "notes": "VERDICT: PASS. Neither of the two preprod defects reproduces on production -- production confirms the index's CORRECTED declarations are right, and preprod's original raw behavior (before correction) was the true platform behavior all along, not a preprod-only artifact.\n\n=== DEFECT 1 SIDE BY SIDE: result_status ===\nPreprod (original, pre-correction diagnosis): v2 returned ONLY {field_value}, missing id/internal_name/field_name/colour that the schema then required together -- scored DRIFT, then the index was corrected to declare field_value alone with guidance saying the others are 'deliberately dropped here and never appear'.\nProd (this probe): identical -- {field_value} alone, on 3/3 independently sampled real results (Failed, Passed, Blocked), across 2 different runs and 2 different case folders. id/internal_name/field_name/colour absent on every row.\nCONCLUSION: prod agrees with the CORRECTED declaration. The correction was right; preprod was not the odd one out and neither is prod. Both preprod and prod cut result_status down to field_value -- this is genuine, consistent v2 serializer behavior, not an environment quirk. (v1's sibling get_test_results_for_test_case, re-checked here on the SAME 3 underlying result rows via TR-4827350/TR-3866741, still returns the full result_status object with id/internal_name/field_name/colour/value_category on prod -- so the v1-vs-v2 serializer split observed on preprod also reproduces exactly on prod.)\n\n=== DEFECT 2 SIDE BY SIDE: custom_fields ===\nPreprod (original): declared type object, returned []  -- scored DRIFT, then v2's index entry was corrected to declare an array (v1's was left as object, uncorrected).\nProd (this probe): custom_fields:[] on 3/3 real results -- an array, matching the corrected v2 declaration exactly.\nCONCLUSION: prod confirms the v2 correction was right. (Not in scope for this v2-only retest, but noted for completeness: v1's own schema for custom_fields is still declared object and returns [] on the same prod result rows -- carrying the SAME uncorrected mismatch preprod's v1 sibling finding flagged; that finding's proposed fix -- correct v1 the same way v2 was corrected -- still applies and still hasn't been done.)\n\n=== configuration_id CROSS-CHECK (v1 sibling) ===\nTask asked to check configuration_id on the v1 sibling, where preprod found the declared key entirely ABSENT (not null) on all rows. Re-checked here on prod: TC-5508207 and TC-1041809's v1 results (get_test_results_for_test_case, hyphenated test-results key) both come back with NO configuration_id key at all in the JSON -- same declared_missing pattern as preprod, reproduced exactly, including that v2's own configuration_id (this capability under test) DOES appear as an explicit null on the same underlying rows. The v1-vs-v2 asymmetry on this field is confirmed real and environment-independent, not a preprod fluke.\n\n=== PROD DATA THAT REMAINS UNPOPULATED (an honest miss, not a fabricated find) ===\nThe task asked to specifically hunt for populated attachments, step_result/test_run_step_result, dataset and configuration_id, since preprod never had any. Real effort was spent looking: 3 closed runs with genuinely logged results were found and read (TR-4827350 x2 cases, TR-3866741 x1 case), a 4th case with real Jira issue links was found and checked (TC-681528, but it turned out never actually executed -- issues sit on the case, not a result), and a 21-case and 28-case run were also scanned for configuration matrices or dataset-driven mappings. None were found: every real result in this project fixture is a plain case-level manual submission with no configuration, no dataset, no step-level breakdown, and no attachments (attachments:[] on the v1 sibling, which is the only one of the two capabilities that declares the field at all -- v2 doesn't return or declare attachments). So these four fields remain UNVERIFIED IN THEIR POPULATED FORM even after using real production data -- 'PASS' above is scoped strictly to the two defects actually asked about (result_status, custom_fields) and the configuration_id cross-check, not a claim that the whole schema is now fully exercised.\n\n=== COUNT-VS-ROWS ===\ninfo.count matched len(test_results) exactly on every call made: 1/1 (TC-5508207), 1/1 (TC-5472086), 1/1 (TC-1041809), 0/0 (TC-681528, the never-executed negative control). No contradiction found. Could NOT page twice as instructed -- this capability's result set is scoped to one case within one run, and every case sampled here (like every case on preprod) carries at most a single logged execution per run; no case with more than one recorded attempt was found anywhere reachable in this project to exercise a second page. This is a structural property of the endpoint's scope (one case x one run), not a gap in diligence -- multi-page behavior for this specific capability would need a case that was re-executed many times within the same run, which did not turn up in this fixture.\n\n=== INCIDENTAL, OUT OF SCOPE ===\nsearch_test_results_v1 (a different capability, used only to hunt for candidate rows) returned {test_results:[], info:null} on every one of 4 attempts on prod, with and without compact=false -- the same 'failures are swallowed, info:null means the search didn't run' defect its own guidance documents, reproducing on prod. Not scored against this capability's verdict; flagging only because it explains why get_closed_test_runs + get_test_cases_for_v1_test_run (not search) was used to locate real results instead.\n\nNo writes were made anywhere in this probe; only GET reads against project PR-18723 / 332537, all within the designated read-only prod retest scope."
+}

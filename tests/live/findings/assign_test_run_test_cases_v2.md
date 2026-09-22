@@ -20,8 +20,8 @@ Built exactly as declared: flat body, top-level
 
 ```json
 "assign_to": [
-  {"test_case_id": "TC-54457", "assignee": "ing@bsstag.com"},
-  {"test_case_id": "TC-54458", "assignee": "ing@bsstag.com"}
+  {"test_case_id": "TC-54457", "assignee": "probe-user@example.invalid"},
+  {"test_case_id": "TC-54458", "assignee": "probe-user@example.invalid"}
 ]
 ```
 
@@ -29,7 +29,7 @@ Built exactly as declared: flat body, top-level
 
 Re-reading `get_test_run_test_cases_v2` **immediately** and again **~15 s later**: both targeted rows still `assignee: null`. Nothing changed. The two untargeted rows were also correctly untouched, so this is not a blanket-update problem — it is a **no-op**.
 
-The assignee value is not the likely culprit: `ing@bsstag.com` (TM user id 2522) is the same account already recorded as `created_by` on these very rows, so it plainly resolves.
+The assignee value is not the likely culprit: `probe-user@example.invalid` (TM user id 2522) is the same account already recorded as `created_by` on these very rows, so it plainly resolves.
 
 ## Drift 2 — the `execution_id` catch-22
 

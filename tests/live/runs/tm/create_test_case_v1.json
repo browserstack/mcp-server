@@ -1,0 +1,95 @@
+{
+  "capability": "create_test_case_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:28:30Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "target folder for both test_case.test_case_folder_id and the top-level folder_id the response build requires",
+      "source": "pool",
+      "capability": null,
+      "produced": { "folder_id": 764138, "folder_name": "__scratch__" }
+    },
+    {
+      "step": 3,
+      "why": "priority/case_type/status option ids to send, deliberately chosen from the UPPER of the two disjoint duplicate id blocks (the pool's known-good ids are all lower-block: status 318605, priority 318591, case_type 318599) so the create response would reveal which block a create echoes back",
+      "source": "external",
+      "capability": null,
+      "produced": {
+        "note": "ids taken from this session's earlier get_system_field_values_v1 probe (tests/live/runs/tm/get_system_field_values_v1.json), not invoked fresh here",
+        "priority_upper": 318618,
+        "case_type_upper": 318626,
+        "status_upper": 318632
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": {
+        "test_case": {
+          "name": "__mcp-probe-createcase-20260921",
+          "test_case_folder_id": "764138",
+          "priority": 318618,
+          "case_type": 318626,
+          "status": 318632,
+          "template": "test_case_steps",
+          "test_case_steps": [
+            { "step": "Open the login page", "result": "Login page is displayed" }
+          ],
+          "tags": ["mcp-probe"]
+        },
+        "folder_id": 764138
+      }
+    },
+    "status": 200,
+    "response_keys": [
+      "data.success",
+      "data.test_case",
+      "data.folder",
+      "data.project",
+      "data.path_folders",
+      "data.request_trace_id"
+    ],
+    "item_shape": {
+      "test_case.id": 1985018,
+      "test_case.identifier": "TC-54484",
+      "test_case.case_type": { "id": 318626, "internal_name": "other", "colour": null, "value_category": null, "name": "Other" },
+      "test_case.priority": { "id": 318618, "internal_name": "medium", "colour": null, "value_category": null, "name": "Medium" },
+      "test_case.status": { "id": 318632, "internal_name": "active", "colour": "active", "value_category": null, "name": "Active" },
+      "test_case.steps": "[] -- empty, despite test_case_steps being sent and populated",
+      "test_case.test_case_steps": "ARRAY (declared as a single object in the contract): [{record_status, id, step, result, order, project_id, group_id, test_case_id, updated_at, created_at}]",
+      "test_case.template / template_step_type / template_name / template_id": "'test_case_steps' / 'test_case_steps' / 'Test Case Steps' / 1164 -- all echoed correctly; template_step_type, template_name, template_id are undeclared",
+      "test_case.automation_state": "{id, internal_name, colour, value_category, name} -- entirely undeclared, alongside the declared automation_status {name,value}",
+      "folder.notes": "undeclared field present on both folder and every path_folders[] entry",
+      "path_folders[0]": "carries identifier, created_at, updated_at, deleted, parent_id, source, entity_type, notes -- none declared"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "test_case.name", "test_case.test_case_folder_id"],
+    "json_path": "test_case",
+    "declared_missing": [
+      "test_case.case_type.field_name / test_case.priority.field_name / test_case.status.field_name (declared on all three option objects, present on none)",
+      "test_case.test_case_steps (declared as a single object; actual is an array -- none of the declared object's step-authoring keys (background, feature, hashed_id, scenario, sharedStep, shared_step_detail_id, shared_step_id, test_data, test_recording_id, title) appear on the array items)"
+    ],
+    "undeclared_returned": [
+      "test_case.automation_state (full option object; automation_status is separately declared and also present)",
+      "test_case.template_step_type, test_case.template_id, test_case.template_name",
+      "test_case.is_shared, test_case.test_case_dataset, test_case.test_run_results_count, test_case.test_run_results_issues_count",
+      "test_case.case_type.value_category / test_case.priority.value_category / test_case.status.value_category",
+      "test_case.test_case_steps[].record_status / .group_id / .test_case_id",
+      "folder.notes, path_folders[].notes/identifier/created_at/updated_at/deleted/parent_id/source/entity_type"
+    ]
+  },
+  "notes": "Created TC-54484 (integer id 1985018) in project PR-2005 (379335744), folder __scratch__ (764138). Single attempt, 200 on the first try -- no retries needed.\n\nJSON_PATH WRAPPER TRAP -- not encountered here, and that is itself the finding: describeCapability lists `test_case` as an explicit required BODY FIELD (an object), not as separate json_path display-only metadata layered over a flat body. Sent nested exactly as declared (`{test_case: {...}, folder_id: ...}`) and it worked immediately; no flat-vs-nested rejection to report. This capability's nesting is real, not cosmetic.\n\nV1 TEMPLATE SUPPORT -- settled: v1 DOES support templates, contrary to the possibility that template selection is v2-only. Sending `test_case.template: \"test_case_steps\"` (the step-shaped template) was accepted and correctly switched the case onto that template: the response echoes template=test_case_steps, template_step_type=test_case_steps, template_name='Test Case Steps', template_id=1164, and the sent test_case_steps payload was actually stored (visible in test_case.test_case_steps, see below) -- it was not silently dropped. v1 does not ignore templates.\n\nTEST_CASE_STEPS OBJECT-VS-ARRAY -- CONFIRMED on the write side. The contract's own declared 200 schema for `test_case.test_case_steps` is a single OBJECT with step-authoring fields (background, feature, hashed_id, scenario, sharedStep, shared_step_detail_id, shared_step_id, test_data, test_recording_id, title, plus id/order/project_id/result/step/updated_at/created_at). The live response instead returns an ARRAY of step records, and the items carry a materially different field set: present are id, step, result, order, project_id, updated_at, created_at (7 of the declared keys) plus three undeclared keys (record_status, group_id, test_case_id); absent are all 10 of the BDD/shared-step-authoring keys the declared object promises (background, feature, hashed_id, scenario, sharedStep, shared_step_detail_id, shared_step_id, test_data, test_recording_id, title). This is exactly the write-side half of the read-side `test_case_steps` object/array drift already seen on sibling read capabilities -- confirmed here on create_test_case_v1 too. Separately, the contract's OTHER declared steps field, `test_case.steps` (an array of {step,result}), came back as an empty array `[]` even though steps were sent and did land in `test_case_steps` -- so `steps` is not where step data actually surfaces on this route; a caller reading only the declared `steps` field would conclude the case has no steps when it does.\n\nDUPLICATE-ID BLOCK QUESTION -- this create settles it for THIS endpoint, in the 'both blocks are live' direction, not the 'one canonical' direction: priority/case_type/status were deliberately sent using the UPPER id block (318618/318626/318632) rather than the pool's known-good LOWER block (318591/318599/318605), and the response echoed back the exact SAME upper-block ids with correct, matching internal_name/name (Medium/Other/Active) -- the create did not reject the upper block, silently substitute the lower/canonical block, or produce any inconsistency between the id and its name/internal_name. That is one data point (single endpoint, single field set) toward 'both copies in a duplicate pair are equally live and interchangeable' rather than 'one is canonical and the other stale' -- consistent with, and now directly supporting from the write side, the open question raised by get_system_field_values_v1's probe this session.\n\nOTHER DRIFT: every one of the three option objects (case_type, priority, status) declares a `field_name` property that is never populated on any of the three -- it is simply absent, not null, on all three in this response. Each of the three also returns an undeclared `value_category` (null for case_type/priority, null for status too here since automation_state is the only field_name that populates it). `automation_state` is returned in full (id/internal_name/colour/value_category/name) alongside the declared `automation_status` ({name,value}) -- two different representations of the same underlying fact, only one of which is in the contract. `folder` and every `path_folders[]` entry carry several undeclared bookkeeping fields (notes, identifier, created_at/updated_at, deleted, parent_id, source, entity_type) beyond the declared folder-summary schema, mirroring the same 'the summary object is bigger in practice than declared' pattern seen elsewhere in this campaign.\n\nField-type note (not treated as drift): request-side `test_case.test_case_folder_id` is declared type `string` and was sent as `\"764138\"`; the response's `test_case.test_case_folder_id` is declared and returned as an `integer` (764138). The API accepts a numeric string on write and always serializes an integer on read -- consistent, not contradictory, but worth flagging since the two schemas use different types for the same logical field.\n\nNot exercised in this probe: `create_at_root` (project already has folders, so this would 400 'Root Folder Already Exists' per the contract's own guidance -- not worth spending the write budget confirming an already-documented 400), `create_subfolder`/`scenario_name`, `shared_precondition_id`, `reviewers`/`review_status` e-signature gating (project has no stored project_settings, confirmed by this session's get_project_settings probe, so review-approve is off and that path is unreachable here), and `owner` non-membership fallback."
+}

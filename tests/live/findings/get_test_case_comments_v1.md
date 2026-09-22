@@ -18,7 +18,7 @@ Severity is low-to-moderate: nothing is absent or malformed, but a caller who tr
 The real row (comment id 1307, created by the sibling `add_test_case_comment_v1` probe):
 
 ```json
-{"id":1307,"user_id":{"id":2522,"full_name":"ing","email":"ing@bsstag.com"},
+{"id":1307,"user_id":{"id":2522,"full_name":"ing","email":"probe-user@example.invalid"},
  "group_id":2615,"project_id":379335744,"parent_id":null,
  "entity_id":1975349,"entity_type":"TestCase",
  "created_at":"2026-09-18T07:36:43.727Z",

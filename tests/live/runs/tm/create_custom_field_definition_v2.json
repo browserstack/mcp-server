@@ -1,0 +1,70 @@
+{
+  "capability": "create_custom_field_definition_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:28:46Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for datasets.linked_projects — took the pool-provided, re-verified project id directly, no resolution call needed",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "body": {
+        "field_name": "__mcp-probe-cfdef-20260921",
+        "field_type": "dropdown",
+        "entity_type": "TestCase",
+        "is_required": false,
+        "datasets": [
+          {
+            "linked_projects": [379335744],
+            "options": [
+              { "option_value": "ProbeOptA", "is_default": true },
+              { "option_value": "ProbeOptB", "is_default": false },
+              { "option_value": "ProbeOptC", "is_default": false }
+            ]
+          }
+        ]
+      },
+      "wrapper_used": "flat body, no json_path nesting — describeCapability declared no json_path for this capability (body listed as top-level fields directly), and the flat shape worked on the first attempt. NO wrapper trap here."
+    },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "data": {
+        "id": 106131,
+        "group_id": 3452,
+        "entity_type": "TestCase",
+        "field_type": "dropdown",
+        "field_name": "__mcp-probe-cfdef-20260921",
+        "system_name": "__mcp-probe-cfdef-20260921",
+        "is_required": false,
+        "is_bulk_editable": true,
+        "is_filterable": true,
+        "parent_custom_field_id": null
+      }
+    }
+  },
+  "contract": {
+    "required": ["field_name", "field_type", "is_required", "datasets"],
+    "json_path": null,
+    "declared_missing": [
+      "data.default_value — declared in the 200 schema (nullable string) and explicitly named in the capability's own top-level `returns` enumeration, but absent entirely from the create response (not even present as null)",
+      "data.place_holder_text — same: declared in the 200 schema and named in `returns`, absent entirely from the create response"
+    ],
+    "undeclared_returned": [
+      "data.group_id",
+      "data.system_name",
+      "data.is_bulk_editable",
+      "data.is_filterable",
+      "data.parent_custom_field_id"
+    ]
+  },
+  "notes": "First attempt succeeded (200), no retries needed, attempts[] is empty.\n\nWRAPPER TRAP: not present on this capability. describeCapability declared the body as flat top-level fields (field_name, field_type, entity_type, is_required, datasets, place_holder_text, default_value, levels, parent_custom_field_id) with no json_path wrapper property at all, and invokeCapability accepted the flat body exactly as declared on the first try. No FLAT-vs-wrapped ambiguity to record here — this is one of the capabilities where the docs and the working shape agree.\n\nDESCRIPTOR SHAPE ECHOED: neither of the two previously confirmed descriptor shapes. The create response's `data` is the bare field-definition row — {id, group_id, entity_type, field_type, field_name, system_name, is_required, is_bulk_editable, is_filterable, parent_custom_field_id} — with zero option-value fields present (no options/datasets echoed at all, consistent with the capability's own guidance: 'The response echoes only the stored field attributes — no options, no project links'). It matches neither the field-definition-read option shape {value, name, internal_name, is_default} nor the case-row descriptor shape {id, internal_name, field_name, colour, value_category, name} — it isn't an option descriptor at all, it's the field-definition entity itself, and it is a fourth distinct variant even among field-definition shapes: it also omits default_value and place_holder_text (both null-valued but present) that DO show up when the same field is read back via get_custom_field_definition_v2 (see below). So the create-response shape is a strict subset of the read-response shape, missing two keys the schema declares for it.\n\n*** THE CAMPAIGN'S HEADLINE QUESTION — SETTLED ***\nCreated one dropdown field (id 106131, dataset id 31319) with exactly 3 options (ProbeOptA/B/C) scoped to only the pool project (379335744 / PR-2005), then read it back via get_project_id_custom_fields_v2_v1 (project_id=379335744). The new field's `custom_fields[].option_values` array for id 106131 contains EXACTLY 3 rows — one per option, no duplicates:\n  - {id:146665, option_value:'ProbeOptA', is_default:true, record_status:'active', dataset_id:31319}\n  - {id:146666, option_value:'ProbeOptB', is_default:false, record_status:'active', dataset_id:31319}\n  - {id:146667, option_value:'ProbeOptC', is_default:false, record_status:'active', dataset_id:31319}\nThree distinct sequential option ids, three distinct values, no id-range doubling of any kind. This directly answers the open question: freshly created options are returned EXACTLY ONCE. The duplication seen on priority (8/4), status (10/5) and case_type (22/11) is therefore HISTORICAL DATA specific to those old default-field option sets, NOT a serializer artifact — a serializer bug would have doubled this brand-new field's options too, and it did not.\nBonus finding: these fresh custom-field option_values carry a `record_status` field (value 'active') plus `created_at`/`updated_at`/`dataset_id` — a discriminator that IS present here, on custom-field option rows, even though the prior probe of get_test_runs_form_fields_v1 found no discriminator (entity_type/record_status/count/is_active) anywhere. But this doesn't resolve the default_fields case: this same get_project_id_custom_fields_v2_v1 response's `default_fields.priority/status/case_type[].values` rows (re-observed in this same call, still duplicated 8/4, 10/5, 22/11 exactly as previously recorded) carry NO record_status field at all — only custom_fields rows get it. So record_status exists as a live column for custom-field options but is not surfaced (or does not exist) for the system default-field option rows, meaning it still cannot be used to pick a canonical id among the old duplicated defaults; it only confirms per-row lifecycle tracking exists at the custom-field-option level.\n\nCROSS-CHECK via get_custom_field_definition_v2 readback (custom_fields_id=106131): data = {id:106131, field_name, field_type:'dropdown', system_name, is_required:false, place_holder_text:null, is_bulk_editable:true, is_filterable:true, default_value:null, datasets:[{id:31319, link_to_future_projects:false, linked_project_count:1, linked_projects:[{identifier:'PR-2005', name:'__mcp-capability-fixture__', id:379335744}], linked_to_all_projects:false}], type:'Custom'}. Confirms: (a) the dataset was created and linked to exactly the one intended project, not the whole workspace (linked_to_all_projects:false, linked_project_count:1) — the field creation did NOT trigger the up-to-3000-project fan-out warned about in create_custom_field_v2's notes, because linked_to_all_projects was correctly left false/omitted in the request; (b) datasets[0] carries no options inline here either, matching this capability's own already-PASSed contract (options live on the dataset-options surface, not embedded in this read) — no new drift found on get_custom_field_definition_v2 itself, this read matches its previously-recorded PASS; (c) field_type reads back as canonical 'dropdown' on this admin surface, but as legacy 'field_dropdown' on get_project_id_custom_fields_v2_v1's custom_fields[] row for the same field id — corroborates the canonical-vs-legacy field_type vocabulary split already flagged in create_custom_field_v2's notes, now confirmed to hold for create_custom_field_definition_v2 too.\n\nSTRUCTURAL CONTAINER MISMATCH (system_fields array-vs-object) and the priority/status/case_type duplication on default_fields were both re-observed, unchanged, in the get_project_id_custom_fields_v2_v1 call made for this probe's readback — consistent with the prior DRIFT verdict on that capability, not a new finding, not re-scored here.\n\nCREATED-RESOURCE SUMMARY FOR CLEANUP: custom field definition id 106131 (field_name/system_name '__mcp-probe-cfdef-20260921', field_type dropdown, entity_type TestCase), dataset id 31319, option ids 146665/146666/146667 (ProbeOptA/B/C), linked to project 379335744 (PR-2005) only. delete_custom_field_definition_v2 is destructive and refused by invokeCapability's runtime (confirmed pattern from sibling probes), so this field cannot be cleaned up through this MCP surface — it will need removal out-of-band if the account must be left clean.\n\nVerdict is DRIFT: two schema-declared, returns-enumerated response fields (default_value, place_holder_text) are missing outright from the create response, and five fields not in the declared 200 schema (group_id, system_name, is_bulk_editable, is_filterable, parent_custom_field_id) are returned. No error responses were encountered to compare against (declared_missing/undeclared_returned are scored only against the 200 schema, per instruction not to diff an error body against the success schema)."
+}

@@ -1,0 +1,53 @@
+{
+  "capability": "get_test_plan_execution_trend_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T10:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744}
+    },
+    {
+      "step": 2,
+      "why": "pool project has 29 test plans / 30 test runs but almost nothing executed (one recorded result project-wide); needed a test_plan_id whose plan actually has a linked run with a result, not an empty new plan, so resolved candidates via a list read first",
+      "source": "capability",
+      "capability": "list_test_plans_v1",
+      "produced": {
+        "test_plan_id": 48283,
+        "identifier": "TP-1616",
+        "test_runs_count": {"active": 1, "closed": 0},
+        "test_plan_progress_v2": {"318615": {"count": 1, "result_status": {"field_value": "Untested"}}}
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": {"project_id": 379335744},
+      "query": {"test_plan_id": 48283}
+    },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "data.test_plans_execution_trend_graph": "ARRAY of series objects, each {name: <result-status label string>, data: [[date_string, count_int], ...]}. The inner date/count pairs are POSITIONAL 2-element arrays, not objects.",
+      "observed_example": [{"name": "Untested", "data": [["2026-09-17", 1]]}]
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "exactly one of test_plan_id / test_run_id (query)"],
+    "json_path": "data.test_plans_execution_trend_graph",
+    "declared_missing": [
+      "The declared 200 schema for test_plans_execution_trend_graph is a bare {type: object, description: 'The trend series for the scoped plan or run.'} placeholder with NO properties at all — it does not declare the field as an array, does not declare a 'name'/'data' series shape, and does not declare the inner point shape. Nothing below the top key is specified."
+    ],
+    "undeclared_returned": [
+      "name (series label, e.g. 'Untested' — a result-status name, not documented anywhere in the schema)",
+      "data (per-series array of [date_string, count_int] positional pairs)"
+    ]
+  },
+  "notes": "DECISIVE CHECK: this capability's 200 schema types test_plans_execution_trend_graph as an OBJECT with no properties (an unfalsifiable placeholder), but the live response returns it as an ARRAY of {name, data} series objects — one series per result-status (here just 'Untested', count 1). That is a container mismatch on its own (object declared, array returned). One level deeper, each series' `data` is itself an array of 2-element POSITIONAL tuples [date_string, count] — e.g. ['2026-09-17', 1] — not objects with named date/count fields. This is the same positional-array pattern documented as a live bug in get_closed_test_runs_info_v1 (declares {month,count}, returns ['Mar',0]) and get_issues_count_info_v1 (declares {label,count}, returns ['Oct',0]); it is NOT the get_test_case_count_trend_v1 pattern (genuine keyed maps). Here the schema does not even get the wrong object shape on record — it declares nothing checkable at the point level, only the outer container is falsifiable, and that is wrong too (array vs object). EMPTY-CASE RULE: the probed plan (TP-1616 / id 48283) is one of only two plans in the whole project with any recorded activity (test_runs_count.active=1, one custom-field/status rollup entry); its trend point ['2026-09-17', 1] corresponds to a genuinely populated bucket (count 1, status Untested) matching test_plan_progress_v2 on the plan read, not a zero-padded empty bucket — so the positional-array shape was exercised by real data, not inferred. The other 28 plans in the pool (all '__mcp-probe-plan-*' disposables plus 'probe plan') have test_runs_count {0,0} and would only have produced a genuinely empty [] series, which would not have been checkable — TP-1616/48283 was deliberately chosen instead. Verdict is DRIFT rather than PASS because the declared contract (object, no properties) disagrees with the actual returned shape (array of series, positional point tuples) at both the container and point level."
+}

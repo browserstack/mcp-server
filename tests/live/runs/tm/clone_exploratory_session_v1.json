@@ -1,0 +1,80 @@
+{
+  "capability": "clone_exploratory_session_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:33:05Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "re-read the source session immediately before cloning, since a concurrent probe may be adding logs to it; also need session_log_count to predict sync vs async, and charter to know whether the non-copy claim is testable on this source",
+      "source": "invoked",
+      "capability": "get_exploratory_session",
+      "arguments": { "path_params": { "project_id": 379335744, "session_id": 779 } },
+      "status": 200,
+      "produced": {
+        "session_log_count": 2,
+        "charter": null,
+        "tags": [],
+        "issues": [],
+        "assignee": null,
+        "owner": null,
+        "session_state": "active"
+      }
+    },
+    {
+      "step": 2,
+      "why": "source session id, from the pool/task",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "session_id": 779 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "session_id": 779 },
+        "body": { "name": "__mcp-probe-exploratory-clone-20260921", "copy_tags": false, "copy_issues": false, "copy_session_owner": false }
+      },
+      "status": 201,
+      "error": null,
+      "changed": "none needed — flat body (no exploratory_session wrapper) worked on the first attempt, matching the capability's own guidance. Nested-wrapper form was not tried since flat succeeded immediately."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "session_id": 779 },
+      "body": {
+        "name": "__mcp-probe-exploratory-clone-20260921",
+        "copy_tags": false,
+        "copy_issues": false,
+        "copy_session_owner": false
+      }
+    },
+    "status": 201,
+    "response_keys": ["success", "async", "unique_id", "exploratory_session"],
+    "item_shape": {
+      "exploratory_session": [
+        "attachments", "attachment_relations", "id", "identifier", "test_plan_id",
+        "project_id", "group_id", "title", "description", "timebox_duration", "duration",
+        "session_state", "assignee", "owner", "charter", "created_by", "closed_by",
+        "closed_at", "actual_duration", "record_status", "created_at", "updated_at",
+        "tags", "configurations", "issues", "timeline", "session_log_count", "custom_fields"
+      ]
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "session_id (path)"],
+    "json_path": null,
+    "declared_missing": ["exploratory_session.folder_id"],
+    "undeclared_returned": [
+      "exploratory_session.attachments", "exploratory_session.attachment_relations",
+      "exploratory_session.identifier", "exploratory_session.test_plan_id",
+      "exploratory_session.project_id", "exploratory_session.group_id",
+      "exploratory_session.owner", "exploratory_session.closed_at",
+      "exploratory_session.record_status", "exploratory_session.custom_fields"
+    ]
+  },
+  "notes": "SYNC PATH ONLY, CONFIRMED. Source session 779 had session_log_count=2 (re-read immediately before cloning; it had been 0 at creation per the task brief, so a concurrent probe had indeed added 2 logs by the time this probe ran) — far below the documented 50-log threshold, so this run exercised only the 201/async:false branch (unique_id:null as declared). The ASYNC PATH (>=50 logs, 202/async:true, no session object in the response) was NOT exercised and remains UNVERIFIED. Because the two declared success shapes differ structurally (one returns the full session object, the other returns only success/async/unique_id), a caller cannot tell from the contract alone which shape a given call will produce without first reading session_log_count on the source — which the guidance does say to do, so this is a documented sharp edge rather than an undocumented one.\n\nWRAPPER TRAP: flat body (no exploratory_session wrapper) worked on the first attempt, confirming the guidance's own claim for this direction. No nested-wrapper attempt was needed.\n\nCHARTER NON-COPY CLAIM: UNTESTABLE ON THIS SOURCE. Session 779's own charter was already null (get_exploratory_session read at setup step 1, and confirmed again on the earlier create/read-back per the task brief) before any clone was attempted. The clone's charter also came back null, but that proves nothing beyond 'null in, null out' — it does not confirm the guidance's claim that the clone drops a *non-empty* charter. Not marking this DRIFT or PASS; it is simply not tested by this probe.\n\nOTHER NON-COPY CLAIMS: SAME LIMITATION. Source session 779 had tags:[], issues:[], assignee:null, owner:null before cloning — there was nothing present to fail to copy. copy_tags/copy_issues/copy_session_owner were all sent as false (the default) and the clone came back with tags:[], issues:[], assignee:null, owner:null, which is consistent with the guidance but, like charter, is not a positive confirmation that these flags actually gate copying anything — there was nothing on the source to copy either way. session_state: source was already 'active', so the guidance's claim that 'the clone is always created in the active state, even when the source session is closed' is also UNVERIFIED here (source was never closed, per explicit instruction not to close it).\n\nTHE ACTUAL DRIFT — clone's own inline response under-reports the very logs it just (synchronously) copied. The 201 response's exploratory_session.session_log_count was 0 and .timeline was [], as if no logs had been copied. But the sync-path guidance explicitly promises 'the copy fully built' for <50-log sources, and a same-second follow-up read told a different story: list_exploratory_session_logs on the new session (id 780) returned both of session 779's logs verbatim (content, status, elapsed_time all matching), and a fresh get_exploratory_session on 780 showed session_log_count:2 and a populated timeline (note/45, bug/120) matching the source. So the logs WERE copied synchronously and correctly -- the clone endpoint's own success response is simply stale/wrong about session_log_count and timeline at the moment it responds. A caller trusting the clone's response body literally, without an immediate follow-up read, would wrongly conclude the sync clone dropped all logs. This is the capability's own declared-vs-actual disagreement, independent of the well-known charter/folder non-copy behavior.\n\nCONFIRMED FAMILY DEFECT — folder_id: declared in the 201 schema's exploratory_session properties, absent entirely from the actual response (also absent from the immediate GET re-read). Matches the family-wide 'folder_id declared, never returned' pattern seen elsewhere in this entity.\n\nMINOR — project_id type inconsistency: the clone's own 201 response returned exploratory_session.project_id as a STRING (\"379335744\"), while the plain get_exploratory_session read of the same session id immediately after returned it as an INTEGER (379335744). project_id is undeclared on this capability's contract either way, so this is not a contract violation, but it is a real type inconsistency between the write response and the read response for the same field on the same object.\n\nNo error-envelope or entitlement-gate defect observed on this call — it invoked cleanly on the first attempt, so the bare-{success:false} envelope defect and the 200-for-refusal entitlement pattern were not triggered here.\n\nNew object created: exploratory session id 780 (ES-15), title '__mcp-probe-exploratory-clone-20260921', project 379335744. Source session 779 was re-read but never modified or closed."
+}

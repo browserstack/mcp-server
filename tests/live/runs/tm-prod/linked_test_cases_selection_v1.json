@@ -1,0 +1,91 @@
+{
+  "capability": "linked_test_cases_selection_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:16:45Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": "describeCapability (prod)",
+      "result": "Contract identical to preprod: path_params.issue_type enum [jira-app,azure,asana,linear,clickup,confluence,figma,devrev,gitlab,github,custom,trello]; query.issue_id (string, required), query.project_id (integer, required); 200 shape {success, selection:{select_all, folders, unique_test_case_count}}. No drift in the contract description itself between envs."
+    },
+    {
+      "step": "get_test_run_v2 TR-5401273 (project PR-18723 / 332537)",
+      "result": "Task owner's 'best candidate' run. run_state=done, but test_cases:[] and issues:[] on the run itself. Dead end — the run has no cases mapped into it at all."
+    },
+    {
+      "step": "get_test_cases_for_v1_test_run TR-5401273 with required[fields] including issues,defects",
+      "result": "info.count=0, test_cases=[]. Confirms TR-5401273 has zero cases; there is nothing to be linked to anything. TR-5401273 was a dead end, not merely 'no issues' but 'no cases at all'."
+    },
+    {
+      "step": "get_test_run_v2 TR-5394831 (the other run named in the task background)",
+      "result": "Also test_cases:[] and issues:[]. Second dead-end run."
+    },
+    {
+      "step": "get_test_case_v2 for TC-838571 / TC-838570 / TC-838569 (task hint case ids)",
+      "result": "All three returned issues:[] (empty). Dead end — none of these specific hint cases had a real tracker link, despite belonging to project PR-18723."
+    },
+    {
+      "step": "search_test_results_v1 (account-wide, unfiltered, compact=false)",
+      "result": "3 consecutive attempts returned {success:true, test_results:[], info:null} — per the capability's own documented behavior this means 'the search did not run', not zero matches. Abandoned as a discovery path in favor of a direct project-wide case scan."
+    },
+    {
+      "step": "search_test_results_v1 with issue_id=TES-121, issue_type=jira",
+      "result": "This time info was non-null ({page:1,page_size:30,count:0,...}) confirming the search engine does work when the issue filter is supplied — TES-121 genuinely has 0 results account-wide, consistent with it being an example key with no real ticket."
+    },
+    {
+      "step": "search_project_entities entity=test-cases, project_id=332537, per_page=300, p=1 (project-wide case scan)",
+      "result": "DISCOVERY STEP. Among the 300 rows, found 2 distinct real Jira links: issue_id=DDSP-20813 (issue_type=jira) and issue_id=KAN-14 (issue_type=jira), each carrying a live browserstack.atlassian.net / khunshafarooq2.atlassian.net URL in metadata. Linked test cases: TC-4584351 (integer id 109344980) and TC-2609577 (integer id 73875257), both in folder 9600935."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "issue_type": "jira-app",
+      "issue_id": "TES-121",
+      "project_id": 332537,
+      "evidence": "Baseline: the contract's own documented example key, re-run on prod for side-by-side comparison with the preprod UNVERIFIED result.",
+      "status": 200,
+      "result": "{success:true, selection:{unique_test_case_count:0, select_all:false, folders:{}}} — legitimate empty selection, no ticket named TES-121 exists in this project. Matches preprod's result exactly."
+    },
+    {
+      "n": 2,
+      "issue_type": "jira-app",
+      "issue_id": "DDSP-20813",
+      "project_id": 332537,
+      "evidence": "Real ticket key discovered by scanning project 332537's test cases via search_project_entities and finding a non-empty `issues` array with issue_type=jira and a live Jira URL (https://browserstack.atlassian.net/browse/DDSP-20813).",
+      "status": 200,
+      "result": "{success:true, selection:{unique_test_case_count:2, select_all:false, folders:{\"9600935\":{test_case_select_all:false, deselected_test_cases:[], selected_test_cases:[73875257,109344980]}}}} — POPULATED. Matches the two case ids independently found in the case scan."
+    },
+    {
+      "n": 3,
+      "issue_type": "jira-app",
+      "issue_id": "KAN-14",
+      "project_id": 332537,
+      "evidence": "Second real ticket key found on the same discovery pass, linked to the same two cases plus one more in a different folder. Different Jira instance (khunshafarooq2.atlassian.net) but same issue_type enum value in TM (jira-app/jira).",
+      "status": 200,
+      "result": "{success:true, selection:{unique_test_case_count:3, select_all:false, folders:{\"9600935\":{...,selected_test_cases:[73875257,109344980]}, \"40231630\":{...,selected_test_cases:[93724019]}}}} — POPULATED, spans two folders, confirming the folders map handles multi-folder selections correctly."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {"issue_type": "jira-app"},
+      "query": {"issue_id": "DDSP-20813", "project_id": 332537}
+    },
+    "status": 200,
+    "response_keys": ["success", "selection"],
+    "item_shape": {
+      "selection.select_all": "boolean (false)",
+      "selection.unique_test_case_count": "integer (2) — matches len(selected_test_cases) exactly",
+      "selection.folders": "map of STRING folder_id -> {test_case_select_all: boolean, deselected_test_cases: array, selected_test_cases: array of integer test_case ids}",
+      "notes": "Folder entry shape (test_case_select_all / deselected_test_cases / selected_test_cases) is exactly the object the declared contract says is 'the exact object the link call expects' — this is the first time this shape has actually been observed populated (preprod only ever produced an empty folders:{})."
+    }
+  },
+  "contract": {
+    "required": ["success", "selection.select_all", "selection.folders", "selection.unique_test_case_count"],
+    "json_path": "data.selection (top-level 'selection' key per the declared 200 schema; no data/envelope wrapper on this endpoint)",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Tried 3 distinct issue_type/issue_id combinations against production, all evidence-backed (no blind guesses): (1) TES-121/jira-app — the contract's own documented example key, used purely as an apples-to-apples baseline against the preprod run; (2) DDSP-20813/jira-app and (3) KAN-14/jira-app — both real Jira ticket keys discovered independently by scanning project 332537's test cases with search_project_entities and finding non-empty `issues` arrays (issue_type=jira, live browserstack.atlassian.net / khunshafarooq2.atlassian.net URLs in metadata) rather than guessed. Preprod verdict was UNVERIFIED: the only key tried there (TES-121, the doc's own example) returned a legitimate-but-empty selection because no real Jira integration/ticket existed tied to any fixture case, so the populated folders shape was never exercised. On prod, attempt 1 (TES-121) reproduces that same empty result exactly — expected, since TES-121 is just an example key with no real ticket in this project either. Attempts 2 and 3, using tracker keys with genuine linkage, both returned POPULATED selections: DDSP-20813 -> 2 cases in 1 folder, KAN-14 -> 3 cases across 2 folders. The `unique_test_case_count` matches the actual distinct case count in both cases, and the folder entry shape (test_case_select_all / deselected_test_cases / selected_test_cases integer arrays) is exactly what the contract's guidance promises ('the exact object the link call expects, folder structure and all') — no drift between declared and actual. TR-5401273, the task owner's 'best candidate' run, was a genuine dead end: get_test_run_v2 and get_test_cases_for_v1_test_run both confirm it has ZERO test cases mapped into it at all (not just zero linked issues), so it could never have surfaced a real ticket. The second hinted run, TR-5394831, was equally empty. The three hinted test case ids (TC-838571/838570/838569) were also dead ends — each has issues:[] individually. The real linkage was found instead by a direct project-wide scan of test case rows for non-empty `issues` arrays, which is what ultimately produced the PASS. VERDICT: PASS — genuinely populated selection.folders obtained, and its entry shape matches the declared contract exactly."
+}

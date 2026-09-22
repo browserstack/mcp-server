@@ -1,0 +1,71 @@
+{
+  "capability": "get_test_case_history_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "get_test_case_history_v1 reads ONE history entry by numeric history_id; the pool gives no history id directly, so the plural listing (get_test_case_histories_v1, itself being probed in parallel) is the read that enumerates the ids this route needs. Used TC-54458 (int 1975349, project 379335744) per the pool note that it is more likely to have been edited than the __readonly__-folder cases.",
+      "source": "invoked",
+      "capability": "get_test_case_histories_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "test_case_id": 1975349 } },
+      "status": 200,
+      "produced": "19 history records, page 1 of 1 (info.count 19, next null, plan_restriction false) — confirms TC-54458 has real edit history, not just the create record. Most recent: id 1674611, version_name V19, source 'update', modified_fields ['test_case_steps'], created_at 2026-09-18T12:53:24Z — this record already carried a full `modified` old/new map (it's the first record on the page). Next: id 1674597, version_name V18, same modified_fields, but NO `modified` map in the listing row — only the field-name banner. Oldest: id 1662107, version_name V1, source 'create'. Picked id 1674611 as the primary probe target, and id 1674597 as a second read to test the capability's stated value-add over the listing (see notes)."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_case_id": 1975349, "history_id": 1674611 }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt, no retry needed"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_case_id": 1975349, "history_id": 1674611 }
+    },
+    "status": 200,
+    "response_keys": ["success", "history"],
+    "item_shape": {
+      "history": {
+        "id": 1674611,
+        "entity_id": 1975349,
+        "entity_type": "TestCase",
+        "version_id": "35a9df9b-9c76-481b-b645-2d807f1afae5",
+        "source": "update",
+        "modified_fields": ["test_case_steps"],
+        "project_id": 379335744,
+        "group_id": 3452,
+        "comment": null,
+        "user_id": 6013,
+        "origin_channel": "api",
+        "created_at": "2026-09-18T12:53:24.000Z",
+        "modified": { "test_case_steps": { "old": "[{id,step,order,result,...} x1]", "new": "[{id,step,order,result,...} x1]" } },
+        "user": { "id": 2522, "browserstack_user_id": 6013, "full_name": "ing", "group_id": 2615, "onboarded": 1, "reports_and_notification_enabled": true },
+        "links": { "self": "/api/v1/projects/379335744/test-cases/1975349/histories/1674611" }
+      }
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, positive int)",
+      "test_case_id (path, positive int)",
+      "history_id (path, positive int)"
+    ],
+    "json_path": null,
+    "declared_missing": [
+      "history.version_name (declared nullable string on the history schema; absent entirely — not even null — from this response; the listing row for this same id 1674611 DID carry version_name 'V19', so the field exists server-side and this route simply drops it)",
+      "history.user.email (declared on the user sub-schema; absent from the live user object, same gap seen on other tm user sub-objects this session)"
+    ],
+    "undeclared_returned": [
+      "history.origin_channel (present as \"api\" in the live response; not part of the declared history schema)"
+    ]
+  },
+  "notes": "Route works: 200 on the first attempt, no retries needed, no container mismatch — history sits at the top level next to success exactly as the guidance and schema both promise. Drift is two missing declared fields (version_name, user.email) plus one undeclared extra (origin_channel) — same origin_channel leak the listing's own rows show, so it looks like a shared serializer gap across both routes rather than something unique to this one. modified is declared as a bare {type:object} with only an 'example' — unfalsifiable as a contract; noted but not scored.\n\nSPECIFIC INTEREST — value of this singular route vs the plural listing (get_test_case_histories_v1), tested with two ids: (1) id 1674611 — the newest revision, which happens to be the FIRST record on the listing's page 1. There, the listing already returned the exact same full `modified` old/new map this route returned, so for a page's first row this call adds nothing content-wise, and it actually returns LESS: it drops version_name ('V19') that the listing row had. (2) id 1674597 — the next-newest revision, a non-first row. The listing gave only modified_fields:['test_case_steps'] with no modified map at all; this route returned the full before/after (test_case_steps old id 12371786 -> new id 12371788, same step text, only the step's own id changed). This confirms the capability's own guidance verbatim: 'The listing only populates [modified] for the first record on each page, so this is the call to make whenever you need actual old/new values for a specific revision.' Verdict on the four-capability family: this route is NOT redundant for 29 of every 30 rows (everything but a page's first record) — it is the only way to get old/new field values for those. It IS redundant with the listing for a page's first row specifically, and for that one row it's actually worse (missing version_name). Have not probed get_test_case_histories_v2 or get_test_case_history_diff_v1 here (both out of scope / probed elsewhere); this route's differentiator from the diff capability (get_test_case_history_diff_v1) is presumably that this one returns one full revision's before/after against the field's own old value, while diff likely compares two arbitrary revisions against each other — worth cross-checking against that probe's result when it lands."
+}

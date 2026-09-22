@@ -1,0 +1,53 @@
+{
+  "capability": "get_test_plan_linked_sessions_chart_data_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": "list_test_plans_v1",
+      "arguments": { "project_id": "379335744" },
+      "purpose": "Resolve TP-* identifiers to the integer test_plan_id this capability's path requires.",
+      "result": "Confirmed TP-1621 -> id 48300 (record_status active, test_runs_count {active:0, closed:0}) and TP-1616 -> id 48283 (record_status active, test_runs_count {active:1, closed:0}, sub_plans_count:14, more active plan)."
+    }
+  ],
+  "attempts": [
+    {
+      "attempt": 1,
+      "name": "get_test_plan_linked_sessions_chart_data_v1",
+      "path_params": { "project_id": 379335744, "test_plan_id": 48283 },
+      "outcome": "success",
+      "status": 200,
+      "response_verbatim": {
+        "success": true,
+        "data": {
+          "total_count": 0,
+          "state_distribution": { "active": 0, "closed": 0 },
+          "session_outcomes": {},
+          "trend_data": []
+        }
+      }
+    }
+  ],
+  "probe": {
+    "arguments": { "project_id": 379335744, "test_plan_id": 48283 },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": "data.trend_data is a genuinely empty array (no elements) — point shape (positional array vs keyed object) cannot be observed. data.state_distribution is a zero-padded keyed object ({active:0, closed:0}); data.session_outcomes is a zero-padded empty keyed object ({}); data.total_count is a scalar (0)."
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "test_plan_id (path, integer)"],
+    "json_path": "data",
+    "declared_missing": [],
+    "undeclared_returned": ["data.total_count", "data.state_distribution", "data.state_distribution.active", "data.state_distribution.closed", "data.session_outcomes", "data.trend_data"]
+  },
+  "notes": [
+    "Required params: project_id and test_plan_id, both integer path params, both required. No query params, no paging, no date window (per describeCapability guidance).",
+    "Declared success schema for the payload: `data` is a bare `{type: object}` with NO properties enumerated at all — this is the 'unfalsifiable {type:object}' pattern: any object technically satisfies it, so nothing the API returns inside `data` can be checked against the schema as missing OR extra in a meaningful sense. Every field actually returned (total_count, state_distribution, session_outcomes, trend_data) is technically 'undeclared' only because the schema declares zero properties, not because of a real contract violation.",
+    "THE DECISIVE CHECK for this chart capability could not be resolved. The response IS structured as an object (not an array) at the top of `data`, and one sub-field (state_distribution) IS zero-padded with keyed {active:0, closed:0} rather than positional pairs — that part looks like the 'gets it right' side (cf. get_test_case_count_trend_v1). BUT the field that would actually answer the family's split question — trend_data, which is presumably the time-series chart array — came back as a genuinely EMPTY array ([]), not a zero-padded array of placeholder points. Per instructions, a genuinely empty (non-zero-padded) payload for the decisive field means the positional-vs-object question for trend_data's data points cannot be checked here, so this is marked UNVERIFIED rather than PASS or DRIFT on that specific question.",
+    "Consistent with the sibling probe's finding that 0 exploratory sessions exist in this project (and two others sampled): total_count is 0, session_outcomes is an empty object, and trend_data is an empty array — there is no session data anywhere in the plan (TP-1616 / id 48283, the more active plan with 1 active test run and 14 sub-plans) to populate the chart with real points.",
+    "Only one invocation attempt was needed; it returned 200 on the first try against project 379335744 / plan id 48283 (TP-1616). The __readonly__ plan TP-1621 (id 48300) was resolved via list_test_plans_v1 but not separately invoked, since the first call already succeeded cleanly and a second call against an equally-empty plan would not add information toward the decisive (positional-vs-object) check.",
+    "No error responses were encountered (BLOCKED not applicable); this was a clean 200 on the first attempt, so no error body was diffed against the success schema."
+  ]
+}

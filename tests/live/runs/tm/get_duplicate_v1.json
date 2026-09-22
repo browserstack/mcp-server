@@ -1,0 +1,40 @@
+{
+  "capability": "get_duplicate_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "need a real duplicate_id to invoke get_duplicate_v1 read-only",
+      "source": "invoked",
+      "capability": "list_duplicates_v1",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"page": 1}},
+      "status": 200,
+      "produced": {"success": true, "duplicates": [], "info": {"count": 0, "total_pages": 0}}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "duplicate_id": 1}},
+      "status": 404,
+      "error": "{\"errors\":\"Duplicate not found.\"}",
+      "changed": "list_duplicates_v1 (setup step 1) returned zero suggested pairs (duplicates:[], info.count:0, info.total_pages:0) for project 379335744, so no real duplicate_id existed to pass; probed with a made-up duplicate_id=1 purely to observe the 404 envelope, not as a fix-and-retry cycle"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "duplicate_id": 1}},
+    "status": 404,
+    "response_keys": ["errors"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id", "duplicate_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "UNVERIFIED: could not obtain a real duplicate_id to reach the 200 path of get_duplicate_v1 read-only. list_duplicates_v1 on project 379335744 (setup step 1) returned {success:true, duplicates:[], info:{count:0,total_pages:0}} — per that capability's own guidance this exact empty shape is ambiguous between 'no suggested pairs' and 'group lacks the dedupe feature flag', and checking that distinction would require reading dedupe status / triggering a scan, which is out of scope for a read-only round and explicitly forbidden here. Did not trigger a dedupe run. As a diagnostic-only read (no write), invoked get_duplicate_v1 with a made-up duplicate_id=1 for project 379335744: got 404 {\"errors\":\"Duplicate not found.\"}, which matches the FIRST declared 404 body verbatim ('Duplicate not found.' — no drift observed on this error path, unlike other capabilities probed this session where declared vs actual error envelopes diverged). Since no 200 was observed, declared_missing/undeclared_returned are left empty per instructions (never diff an error body against the success schema). Missing id, read attempted: could not obtain any row from list_duplicates_v1 (project 379335744, all pages — total_pages reported as 0) to source a real duplicate_id for get_duplicate_v1."
+}

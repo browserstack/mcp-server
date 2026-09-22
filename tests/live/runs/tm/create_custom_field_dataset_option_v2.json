@@ -1,0 +1,50 @@
+{
+  "capability": "create_custom_field_dataset_option_v2",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:47:13Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "target dataset for the new option — reused dataset 31320 on custom field 106131, created by the sibling probe (create_custom_field_dataset_v2) minutes earlier and deliberately linked to no projects, to avoid touching dataset 31319 which is linked to PR-2005 and visible to other probes reading that project",
+      "source": "sibling probe (create_custom_field_dataset_v2)",
+      "capability": null,
+      "produced": {
+        "custom_fields_id": 106131,
+        "dataset_id": 31320,
+        "existing_options": [
+          { "id": 146668, "option_value": "__mcp-probe-cfdataset-20260921-A", "is_default": true },
+          { "id": 146669, "option_value": "__mcp-probe-cfdataset-20260921-B", "is_default": false }
+        ]
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "custom_fields_id": 106131, "dataset_id": 31320 },
+      "body": { "option_value": "__mcp-probe-cfoption-20260921", "is_default": true },
+      "wrapper_used": "flat body, no json_path nesting — describeCapability declared body as flat top-level fields (option_value, is_default, parent_option_id) with no wrapper property; flat shape accepted on the first attempt (200).",
+      "deliberate_choice": "is_default:true was sent deliberately, even though 146668 is already the dataset's default, specifically to test the undocumented second-default behavior the task flagged as untested (demote old default vs. two defaults vs. rejected)."
+    },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "data": {
+        "id": 146670,
+        "option_value": "__mcp-probe-cfoption-20260921",
+        "is_default": true,
+        "colour": null,
+        "parent_option_id": null
+      }
+    }
+  },
+  "contract": {
+    "required": ["custom_fields_id", "dataset_id", "option_value", "is_default"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded (200), no retries needed, attempts[] is empty.\n\nWRAPPER TRAP: not present. Flat body worked first try, matching the declared shape exactly.\n\n*** DOES THE PARENT-CAPABILITY DEFECT SPREAD? NO. ***\ncreate_custom_field_dataset_v2's response declares data.options as an array and always returns it as an empty object {}, even though the options it just created are genuinely persisted (confirmed only by a follow-up read). This sibling capability does NOT share that bug: the create response for option 146670 came back with data = {id, option_value, is_default, colour, parent_option_id} exactly as declared — id 146670 populated, option_value echoed verbatim, is_default echoed as sent (true), colour null (nothing was sent for it), parent_option_id null (flat dropdown, not nested). Every declared field present, nothing extra. Contract is a clean PASS, zero declared_missing, zero undeclared_returned. So the write-response-lies-about-its-own-result bug is specific to create_custom_field_dataset_v2 (the multi-option dataset-create call), not a single serializer shared across the whole dataset-option surface — this single-option create call DOES let a caller learn the new option's id directly from the response, which is exactly what update_custom_field_dataset_option_v2 needs.\n\n*** DUPLICATE-OPTION QUESTION — THIRD (AND FOURTH) INDEPENDENT CONFIRMATION ***\nRead dataset 31320's options back two ways after the create:\n  1. list_custom_field_dataset_options_v2(106131, 31320) → 3 rows, ids 146670/146669/146668, each exactly once.\n  2. get_custom_field_dataset_v2(106131, 31320, fetch_options=true) → same 3 rows, each exactly once, this time with the fuller row shape (group_id, project_id, custom_field_id, dataset_id, record_status, created_at, updated_at).\nNo duplication in either read. Combined with the two prior independent creation-path confirmations (field-definition-create and dataset-create), this is now a fourth confirmation via two additional read paths: newly created custom-field options come back exactly once, cleanly. Safe to tell the product team the priority (8/4), status (10/5), case_type (22/11) doubling on the old default fields is historical data, not a live serializer artifact — four independent observations across creation and read paths agree.\n\n*** DISCRIMINATOR — CONFIRMED PRESENT ***\nThe create response itself (data shape: id, option_value, is_default, colour, parent_option_id) does NOT carry record_status/created_at/updated_at/dataset_id — that response shape is fixed and minimal, matching describeCapability's declared 200 exactly. But reading the option back through get_custom_field_dataset_v2(fetch_options=true) shows the full stored row:\n  {id:146670, group_id:3452, project_id:null, custom_field_id:106131, dataset_id:31320, option_value:'__mcp-probe-cfoption-20260921', is_default:true, parent_option_id:null, record_status:'active', created_at:'2026-09-21T13:47:13.000Z', updated_at:'2026-09-21T13:47:13.000Z'}\nSo yes: the new option carries record_status:'active' plus created_at/updated_at/dataset_id, confirmed on the stored row (not on the create response, which is deliberately thin) — consistent with the discriminator already seen on options 146668/146669 and on the sibling field's earlier probe. The old default-field rows (priority/status/case_type) still carry none of this.\n\n*** IS_DEFAULT SEMANTICS — ANSWERED: OLD DEFAULT IS SILENTLY DEMOTED ***\nBefore this probe, dataset 31320's default was option 146668 (is_default:true, updated_at = its creation time 13:34:12). This probe created option 146670 with is_default:true while 146668 was still the default. Reading the dataset back afterward shows:\n  - 146670: is_default:true (the new option, as sent)\n  - 146668: is_default:**false**, updated_at bumped to 13:47:13 (the moment of THIS create call) — its value was mutated as a side effect, even though this call's path/body never named option 146668 at all.\n  - 146669: unaffected, still is_default:false, updated_at unchanged from dataset creation.\nSo on this CREATE path the answer is: the old default is auto-demoted server-side, not left as a second default and not rejected. Nobody ends up with two defaults on this path. This is worth flagging against the sibling update_custom_field_dataset_option_v2's own guidance, which states the OPPOSITE for the UPDATE call: 'Making an option the default does not clear the previous default; on a single-select dropdown clear the old one yourself.' If that guidance is accurate, the two sibling write calls have genuinely different default-demotion semantics — create auto-demotes, update does not — which is itself worth confirming directly when update_custom_field_dataset_option_v2 is probed, rather than assumed to match this call's behavior.\n\n*** UNBLOCKING update_custom_field_dataset_option_v2 ***\nReporting the new option id prominently: **option id = 146670**, on dataset_id = 31320, custom_fields_id = 106131, currently option_value = '__mcp-probe-cfoption-20260921', is_default = true (the current live default of dataset 31320, having demoted 146668). This is a clean single-option target for the update probe: no parent_option_id (flat dropdown, not nested), colour null, not yet touched by any update call.\nOptions are added ONE AT A TIME by this capability — the body is a single option_value/is_default/parent_option_id triple, not an array or a full-set replace (contrast with create_custom_field_dataset_v2, which takes an `options` array at dataset-creation time only). So update_custom_field_dataset_option_v2 necessarily also targets a single option (its own path carries a third id segment beyond custom_fields_id/dataset_id, presumably option_id) — there is no full-set replace semantics anywhere on this surface to worry about; each option is an independently addressable row from creation through update through delete.\n\nCREATED-RESOURCE SUMMARY: option 146670 (__mcp-probe-cfoption-20260921) on dataset 31320 / custom field 106131, is_default:true, currently the dataset's live default. Logged in CLEANUP-LEDGER.md, along with the side-effect demotion of option 146668's is_default flag. delete_custom_field_dataset_option_v2 exists but is destructive-mode and would be refused by the invoke runtime like every other destructive capability probed so far — left in place, and it is in fact needed in place as the update sibling's target.\n\nVerdict is PASS: response matched the declared 200 schema exactly — all five declared keys present with correct values, no undeclared fields, no missing fields. This is a clean contrast with the parent capability's DRIFT verdict, and directly answers the task's central question: the defect does not spread across the whole dataset-option surface, it is specific to create_custom_field_dataset_v2's response serializer."
+}

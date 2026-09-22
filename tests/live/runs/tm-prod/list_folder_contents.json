@@ -1,0 +1,92 @@
+{
+  "capability": "list_folder_contents",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T07:39:54Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": "describeCapability list_folder_contents (product tm)",
+      "why": "Get the declared contract (params, guidance, response schema) before invoking, and confirm whether folders[] and self.contents[] really reuse the identical group_id:integer item schema.",
+      "source": "describeCapability",
+      "capability": "list_folder_contents",
+      "arguments": {"include_responses": "all"},
+      "status": "ok",
+      "produced": "Confirmed: query params accepted are p, detail, nested_sub_folders, case_count, total_count, folder_sort_by only (no per_page/limit). 200 schema declares group_id:integer identically for folders[] items, self, and self.contents[] items. Guidance explicitly states page size is fixed at 300 and only p moves pages; test_cases is always null; self.contents is same-shape-as-folders[] items."
+    },
+    {
+      "step": "invokeCapability list_folder_contents for primary target folder 40231630 (project 332537), p=1",
+      "why": "Real populated folder with 36 direct subfolders — the intended reproduction target for the group_id contradiction and for real-scale count verification.",
+      "source": "invokeCapability",
+      "capability": "list_folder_contents",
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 40231630}, "query": {"p": 1}},
+      "status": 200,
+      "produced": "folders[] (36 items): group_id=1 (integer) on every item. self.group_id=1 (integer). self.contents[] (same 36 items): group_id=\"2\" (string) on every item. self.cases_count=972, self.total_cases_count=1168, self.sub_folders_count=36 — exact match to expected. test_cases=null. info={page:1,page_size:300,count:36,prev:null,next:null}."
+    },
+    {
+      "step": "invokeCapability list_folder_contents for subfolder 40231631 ('LCA', 20 subfolders), p=1",
+      "why": "Second-level cross-check: verify self.group_id consistency against its own entry in the parent's folders[] array, and verify the group_id split reproduces one level deeper with different folder identities.",
+      "source": "invokeCapability",
+      "capability": "list_folder_contents",
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 40231631}, "query": {"p": 1}},
+      "status": 200,
+      "produced": "self.group_id=1 (integer) — matches its own appearance as folders[].group_id=1 in the parent (40231630) call. folders[] (20 children): group_id=1 (integer) on every item. self.contents[] (same 20 children): group_id=\"2\" (string) on every item. Same split pattern reproduces exactly one level deeper."
+    },
+    {
+      "step": "invokeCapability list_folder_contents for 9697326 ('MCP Testing', small root folder), p=1",
+      "why": "Direct-count sanity check for a small root folder with no subfolders.",
+      "source": "invokeCapability",
+      "capability": "list_folder_contents",
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 9697326}, "query": {"p": 1}},
+      "status": 200,
+      "produced": "self.cases_count=3, total_cases_count=3, sub_folders_count=0 — matches expected ~3. folders=[] and self.contents=[] (no subfolders, so no group_id evidence here)."
+    },
+    {
+      "step": "invokeCapability list_folder_contents for 9600935 ('Shivani Demo- Booking.com', large root folder), p=1",
+      "why": "Direct-count sanity check for a large root folder with no subfolders.",
+      "source": "invokeCapability",
+      "capability": "list_folder_contents",
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 9600935}, "query": {"p": 1}},
+      "status": 200,
+      "produced": "self.cases_count=2052, total_cases_count=2052, sub_folders_count=0 — exact match to expected 2,052. folders=[] and self.contents=[] (no subfolders)."
+    }
+  ],
+  "attempts": [
+    {
+      "step": "Probe whether per_page/limit-style paging params are real on folder 40231630",
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 40231630}, "query": {"p": 1, "per_page": 5, "limit": 5}},
+      "status": "error",
+      "error": "unknown query: limit, per_page. accepted: case_count, detail, folder_sort_by, nested_sub_folders, p, total_count",
+      "note": "The capability layer itself rejects unknown query keys before any HTTP call is made, so per_page/limit cannot even be sent. Only the params listed in the declared contract are usable; p is the only real paging control."
+    },
+    {
+      "step": "Opportunistic re-check of preprod secondary findings: nested_sub_folders=true with case_count/total_count on folder 40231630",
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 40231630}, "query": {"p": 1, "nested_sub_folders": "true", "case_count": "true", "total_count": "true"}},
+      "status": 200,
+      "note": "Not a failure — recorded here because it's a secondary/bonus check, not the primary probe call. All three preprod secondary findings reproduced on prod: (1) self.contents is still present recursively (deeply nested contents[].contents[]...) despite guidance saying nested mode strips self.contents; (2) info came back as bare null instead of an object; (3) self.cases_count read 0 instead of the correct direct count (972) — visible at the very end of the self object as \"cases_count\":0, appended after total_cases_count/sub_folders_count/contents/links, suggesting it's overwritten late in serialization. The group_id split (int in folders[]/nested folders[], string \"2\" in every contents[] entry at every nesting depth) reproduced consistently through the whole recursive tree too."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 332537, "folder_id": 40231630}, "query": {"p": 1}},
+    "status": 200,
+    "response_keys": ["folders", "self", "parent_id", "ancestors", "test_cases", "info", "success"],
+    "item_shape": {
+      "folders[]_item": {"id": "integer", "project_id": "integer", "group_id": "integer (observed: 1)", "name": "string", "parent_id": "integer", "is_automation": "boolean", "cases_count": "integer", "total_cases_count": "integer", "sub_folders_count": "integer", "links.self": "string"},
+      "self": {"id": "integer", "project_id": "integer", "group_id": "integer (observed: 1)", "name": "string", "is_automation": "boolean", "cases_count": "integer (972, correct on plain call)", "total_cases_count": "integer (1168)", "sub_folders_count": "integer (36)", "contents": "array", "links.self": "string", "notes": "ABSENT on this call (present on leaf folders 9697326/9600935 as a string)"},
+      "self.contents[]_item": {"id": "integer", "project_id": "integer", "group_id": "STRING (observed: \"2\") — declared as integer, actual type+value differ from the matching folders[] entry (integer 1)", "name": "string", "parent_id": "integer", "is_automation": "boolean", "cases_count": "integer", "total_cases_count": "integer", "sub_folders_count": "integer", "links.self": "string"}
+    }
+  },
+  "contract": {
+    "required": ["project_id", "folder_id"],
+    "json_path": null,
+    "declared_missing": [
+      "self.notes was declared in the 200 schema but absent from the response body entirely (not even null) on non-leaf folders 40231630 and 40231631; present as a string on leaf folders 9697326/9600935.",
+      "On the nested_sub_folders=true path, `info` was returned as bare null instead of the declared object shape ({page, page_size, count, prev, next})."
+    ],
+    "undeclared_returned": [
+      "self.contents[].group_id is returned as a JSON string (\"2\") though the declared schema types group_id as integer for every item shape in this response, including self.contents[] items (same schema block reused).",
+      "On the nested_sub_folders=true path, self.contents is still populated recursively even though the capability's own guidance says nested mode strips self.contents."
+    ]
+  },
+  "notes": "PRIMARY TARGET: project_id=332537, folder_id=40231630 ('Automation', 972 direct / 1168 recursive cases, 36 direct subfolders), plus a second-level drill into subfolder 40231631 ('LCA', 20 further subfolders) and direct-count sanity checks on 9697326 and 9600935. (1) PAGING: the capability's own parameter allowlist (enforced by the tool layer itself, before any HTTP call) is exactly {p, detail, nested_sub_folders, case_count, total_count, folder_sort_by} — per_page and limit are not even accepted (call rejected client-side with 'unknown query: limit, per_page'), confirming the guidance that page_size is a fixed ceiling (observed 300) and only `p` is a real paging control. Folder 40231630's 36 subfolders is well under 300, so a genuine multi-page `next` remains UNVERIFIED on prod too (info.next was null), matching preprod. (2) THE DEDICATED CHECK — group_id contradiction: CONFIRMED, and it is a genuinely different VALUE, not merely a different JSON type wrapping the same number. For folder 40231630's 36 direct subfolders, every single one has group_id=1 (JSON integer) in the top-level folders[] array, but the SAME 36 folders, listed again in self.contents[] of that very same response, all show group_id=\"2\" (JSON string) — integer 1 vs string \"2\", side by side, same call, same folders. This is not folder-specific: drilling one level deeper into subfolder 40231631 (LCA, 20 children) reproduces the identical split — folders[].group_id=1 (int) for all 20 children, self.contents[].group_id=\"2\" (string) for the same 20 children. The recursive nested_sub_folders=true probe shows the pattern holds at every depth of the tree: every folders[]-level entry (root-level or nested inside a parent's own folders[] listing) reports group_id as integer 1, while every entry reached via any .contents[] array (at any nesting depth) reports group_id as the fixed string \"2\", regardless of which of the dozens of distinct folders is being described. Because the string value is uniformly \"2\" for every single distinct folder observed in every .contents[] array (36+20+more, never varying), this looks less like each folder genuinely belonging to two different real groups and more like self.contents[] items having their group_id hardcoded/defaulted to a literal \"2\" during serialization rather than reading the folder's true group — but from the API consumer's perspective the effect is identical either way: for the same folder, folders[].group_id (1, integer) and self.contents[].group_id (\"2\", string) never agree, on type OR value. (3) SELF-CONSISTENCY CHECK: self.group_id IS internally consistent with folders[].group_id — folder 40231630's self.group_id=1 exactly matches how it appears nowhere else (it's a root folder, not listed elsewhere), but subfolder 40231631's self.group_id=1 exactly matches its own entry in ITS PARENT's folders[].group_id=1. So folders[] and self are mutually consistent (both integer, both value 1); only self.contents[] is the outlier, both in type (string) and value (\"2\" vs 1). This directly answers the preprod question: it is NOT a pure serialization type split of the same value — it is genuinely two different values (1 vs 2) presented in two different JSON types, and it reproduces exactly as characterized on preprod, now confirmed on real production data with 36 real subfolders instead of preprod's pool of 7. (4) REAL-SCALE COUNTS on folder 40231630's self: cases_count=972 (expected 972, exact match), total_cases_count=1168 (expected 1168, exact match), sub_folders_count=36 (expected 36, exact match) — no drift here. Sanity checks: 9697326 self.cases_count=3 (expected ~3, match); 9600935 self.cases_count=2052 (expected 2052, exact match). (5) test_cases: confirmed ALWAYS null across every call made in this probe (plain, and nested_sub_folders=true with case_count/total_count set), matching the capability's own guidance and the preprod finding. (6) VERDICT vs PREPROD: the preprod DRIFT reproduces exactly on prod, now with stronger real-data evidence (36 real subfolders vs preprod's pool of 7, and confirmed one level deeper too). Preprod's two lower-priority secondary findings also reproduced when opportunistically re-checked: nested_sub_folders=true still returns self.contents recursively (contradicting its own guidance that it should be stripped), info comes back as bare null instead of an object on that path, and self.cases_count reads 0 instead of the correct direct count (972) on that same nested-mode call. Overall verdict: DRIFT, driven primarily by the group_id contradiction (integer 1 in folders[] vs string \"2\" in self.contents[] for identical folders, same call), which is drift by itself regardless of the secondary nested-mode findings."
+}

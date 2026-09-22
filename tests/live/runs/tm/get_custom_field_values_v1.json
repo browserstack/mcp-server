@@ -1,0 +1,137 @@
+{
+  "capability": "get_custom_field_values_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:27:25Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Enumerate the pool project's own TestCase custom fields to see what is actually linked there.",
+      "source": "pool",
+      "capability": "get_project_id_custom_fields_v2_v1",
+      "arguments": {"project_id": 379335744},
+      "status": 200,
+      "produced": {"custom_fields": [{"id": 106126, "field_type": "field_string", "entity_type": "TestCase", "option_values": [], "field_values": []}]}
+    },
+    {
+      "step": 2,
+      "why": "Broaden the search workspace-wide: find TestCase dropdown fields (candidates likely to carry configured option values).",
+      "source": "invoked",
+      "capability": "list_workspace_fields_v2",
+      "arguments": {"entity_type": "TestCase", "field_source": "custom", "field_type": "dropdown", "p": 1},
+      "status": 200,
+      "produced": {"count": 6, "ids": [105920, 105915, 105911, 105898, 104648, 103927], "note": "field 105915 is the pool's known field (dropdown_field_pnw5i3); 103927 'Template Platform' has linked_projects_count 912"}
+    },
+    {
+      "step": 3,
+      "why": "Same search for TestResult entity_type dropdown fields.",
+      "source": "invoked",
+      "capability": "list_workspace_fields_v2",
+      "arguments": {"entity_type": "TestResult", "field_source": "custom", "field_type": "dropdown", "p": 1},
+      "status": 200,
+      "produced": {"count": 10, "ids": [105912, 105730, 105706, 105665, 105663, 105600, 105492, 105490, 103558, 103556]}
+    },
+    {
+      "step": 4,
+      "why": "Check whether TestPlan has any custom fields at all workspace-wide.",
+      "source": "invoked",
+      "capability": "list_workspace_fields_v2",
+      "arguments": {"entity_type": "TestPlan", "field_source": "custom", "field_type": "dropdown", "p": 1},
+      "status": 200,
+      "produced": {"count": 0}
+    },
+    {
+      "step": 5,
+      "why": "Check whether ExploratorySession has any custom fields at all workspace-wide.",
+      "source": "invoked",
+      "capability": "list_workspace_fields_v2",
+      "arguments": {"entity_type": "ExploratorySession", "field_source": "custom", "field_type": "dropdown", "p": 1},
+      "status": 200,
+      "produced": {"count": 0}
+    },
+    {
+      "step": 6,
+      "why": "Check for TestCase multi_dropdown fields as an alternate populated-item-shape candidate.",
+      "source": "invoked",
+      "capability": "list_workspace_fields_v2",
+      "arguments": {"entity_type": "TestCase", "field_source": "custom", "field_type": "multi_dropdown", "p": 1},
+      "status": 200,
+      "produced": {"count": 3, "ids": [105921, 105914, 105899]}
+    },
+    {
+      "step": 7,
+      "why": "Check for TestCase user-type custom fields (values would be project users, almost certainly non-empty).",
+      "source": "invoked",
+      "capability": "list_workspace_fields_v2",
+      "arguments": {"entity_type": "TestCase", "field_source": "custom", "field_type": "user", "p": 1},
+      "status": 200,
+      "produced": {"count": 0, "note": "no user-type custom fields exist for TestCase in this workspace"}
+    },
+    {
+      "step": 8,
+      "why": "Exploratory call to the capability under test: check field 103927 (Template Platform, linked to 912 projects) for values in the pool project.",
+      "source": "invoked",
+      "capability": "get_custom_field_values_v1",
+      "arguments": {"project_id": 379335744, "entity_type": "test-case", "field_id": "103927"},
+      "status": 200,
+      "produced": {"field_type": "field_dropdown", "values": []}
+    },
+    {
+      "step": 9,
+      "why": "Exploratory call: check field 105920 (Severity_...) for values.",
+      "source": "invoked",
+      "capability": "get_custom_field_values_v1",
+      "arguments": {"project_id": 379335744, "entity_type": "test-case", "field_id": "105920"},
+      "status": 200,
+      "produced": {"field_type": "field_dropdown", "values": []}
+    },
+    {
+      "step": 10,
+      "why": "Exploratory call: check fields 105911, 105898, 104648, 105914 (multi_dropdown) for values.",
+      "source": "invoked",
+      "capability": "get_custom_field_values_v1",
+      "arguments": {"project_id": 379335744, "entity_type": "test-case", "field_id": "105911 | 105898 | 104648 | 105914"},
+      "status": 200,
+      "produced": {"note": "all four returned values: [] with field_type correctly resolved (field_dropdown / field_multi_dropdown)"}
+    },
+    {
+      "step": 11,
+      "why": "Exploratory call: check TestResult fields 105912 and 103556 for values.",
+      "source": "invoked",
+      "capability": "get_custom_field_values_v1",
+      "arguments": {"project_id": 379335744, "entity_type": "test-result", "field_id": "105912 | 103556"},
+      "status": 200,
+      "produced": {"note": "both returned values: [] with field_type: field_dropdown"}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"project_id": 379335744, "entity_type": "test-plan", "field_id": "105915"},
+      "status": 400,
+      "error": "{\"success\":false,\"error\":\"Something went wrong\"}",
+      "changed": "entity_type mismatch probe (field 105915 belongs to TestCase, not TestPlan) — not a fix/retry of the main probe, a deliberate enum-value check"
+    },
+    {
+      "n": 2,
+      "arguments": {"project_id": 379335744, "entity_type": "exploratory-session", "field_id": "105915"},
+      "status": 400,
+      "error": "{\"success\":false,\"error\":\"Something went wrong\"}",
+      "changed": "entity_type mismatch probe (field 105915 belongs to TestCase, not ExploratorySession) — same deliberate check as attempt 1"
+    }
+  ],
+  "probe": {
+    "arguments": {"project_id": 379335744, "entity_type": "test-case", "field_id": "105915"},
+    "status": 200,
+    "response_keys": ["105915", "info", "success"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id", "entity_type", "field_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "PASS-shaped structural check only, NOT a clean PASS: the canonical probe (project 379335744 / test-case / field 105915) returned 200 with the exact declared dynamic-key container ({\"105915\":{field_type,values}, info, success}) — no structural container mismatch, matching the get_custom_field_dataset_v2 failure mode did NOT recur here. field_type came back correctly as the legacy spelling 'field_dropdown' as declared. BUT values was [] on every one of 9 distinct dropdown/multi_dropdown fields tried across TestCase and TestResult entity_type, in the pool project and across the workspace's broadest-reach field (103927 'Template Platform', linked to 912 projects, dataset_count 1) — none had a single configured option value anywhere reachable. Per the EMPTY-CASE RULE this means the item shape (the individual value/option object) was NEVER exercised, so the 'undeclared option-descriptor fields' watch item (value_category, valueDetails, colour, entity_type) could NOT be checked here — UNVERIFIED for that specific sub-question, not ruled out. (Note: those exact fields DID appear as undeclared extras on a *different* capability's response in this same session — get_project_id_custom_fields_v2_v1's default_fields.automation_state carried value_category, and default_fields.status carried colour — which corroborates the pattern but is not evidence for THIS capability's contract.) REAL DRIFT FOUND: the declared 400 error schema is {success:false, error:{code,message,details}} (an object), but the actual 400 body for a field/entity_type mismatch is {success:false, error:\"Something went wrong\"} — error is a plain STRING, not an object with code/message/details. Reality matches the capability's own PROSE guidance verbatim ('returns 400 {success:false, error:'Something went wrong'}') — the structured JSON schema is the side that is wrong, not the prose. All four declared entity_type enum values route correctly (no 404 for any of them): test-case and test-result were exercised successfully end-to-end (200, correct field_type resolution); test-plan and exploratory-session have zero custom fields anywhere in the workspace, but the route still accepts them and returns the documented 400 'Something went wrong' for a non-matching field rather than a 404 — so all four enum values 'work' at the routing level, consistent with the declared enum. No project-linkage vs entity-type-mismatch distinction could be drawn: an unlinked field and a wrong-entity-type field appear to behave differently (unlinked-but-right-entity-type -> 200 with empty values; wrong-entity-type -> 400) which is itself worth noting for anyone relying on a 400 to mean 'field does not exist' — it can also mean 'field exists but is the wrong entity_type', not just 'field id invalid'."
+}

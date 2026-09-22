@@ -1,0 +1,59 @@
+{
+  "capability": "close_test_run_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:43:15Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "baseline read of the target run before closing, to compare against the write response and the post-close read-back",
+      "source": "invoked",
+      "capability": "get_test_run_by_integer_id_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": 17578623 } },
+      "status": 200,
+      "produced": { "active_state": "active", "run_state": "new_run", "uuid": 17578623, "closed_at": null, "closed_by": null }
+    },
+    {
+      "step": 2,
+      "why": "baseline project-wide active/closed counts, to confirm the count moves and the active total drops by exactly one after closing",
+      "source": "invoked",
+      "capability": "get_test_runs_v1",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "count": { "active": 33, "closed": 0 } }
+    },
+    {
+      "step": 3,
+      "why": "run and project ids came from the task assignment, not the fixture pool: project 379335744 (PR-2005), run TR-9111 / uuid 17578623, an orphaned run created as a side effect of clone_test_plan_v1 and since unlinked from its plan",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "test_run_id": "TR-9111", "uuid": 17578623 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_run_id": "TR-9111" },
+      "body": {}
+    },
+    "status": 200,
+    "response_keys": ["data.success", "data.testrun", "data.project", "skipped_test_case_ids"],
+    "item_shape": {
+      "data.testrun": [
+        "active_state", "run_state", "assignee", "created_at", "description", "environment",
+        "id", "identifier", "uuid", "is_automation", "overall_progress", "overall_progress_by_status_id",
+        "name", "owner", "project_id", "tags", "test_cases_count", "updated_at", "test_plans",
+        "is_dynamic", "attachments", "links", "configurations", "metadata", "assignee_imported",
+        "created_by", "updated_by", "closed_at", "closed_by"
+      ]
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "test_run_id (path)"],
+    "json_path": "data.testrun (no body at all - the transition to run_state:closed is fixed and ignores any payload sent)",
+    "declared_missing": ["type", "self_ui_link", "observability_url"],
+    "undeclared_returned": ["attachments", "created_by", "updated_by"]
+  },
+  "notes": "Closed TR-9111 (uuid 17578623, project 379335744 / PR-2005) as instructed - an orphaned run left over from a clone_test_plan_v1 side effect, unlinked from its plan, holding 1 case. Did NOT touch TR-9110, TR-9120, TR-9075, TR-9061 or TR-9062 as instructed.\n\nFIRST CLOSED RUN IN THIS PROJECT. Before this probe, get_test_runs_v1's count object had read {active: 33, closed: 0} on every single check across this whole campaign. After closing: {active: 32, closed: 1} - confirmed the count object moves correctly and the active total drops by exactly one, verified by re-reading get_test_runs_v1 rather than trusting the close response. TR-9111 also correctly disappeared from that active listing's rows (page 1 no longer includes it), matching the documented behaviour that a closed run drops out of the default listing.\n\nTHE THREE PREVIOUSLY-UNVERIFIED CLOSED-RUN CAPABILITIES NOW HAVE REAL DATA - all three converted from UNVERIFIED to real evidence:\n- get_closed_test_runs: now returns one real row for TR-9111 (info.count: 1, count: {active:32, closed:1}), confirming the flat {success, test_runs, info, count} shape and the row shape it declares (id, uuid, identifier, name, overall_progress, overall_progress_by_status_id, build_meta, etc). BUT this capability's own closed_at and closed_by came back null on this row, even though the run genuinely has both populated (confirmed via get_test_run_by_integer_id_v1 read-back: closed_at '2026-09-22T05:43:15.505Z', closed_by a full user object). This is a second, independent capability that fails to surface closed_at/closed_by correctly on a real closed run - worth its own follow-up, not folded into this file's contract{} since it belongs to a different capability's index entry.\n- get_closed_test_runs_info_v1 (monthly closed-run count chart): returned real, non-zero data for the first time - data: [[\"Oct\",0],[\"Nov\",0],...,[\"Sep\",1]], empty_data: false. Shape matches the declared positional [label, count] pairs exactly, with the current month (Sep) correctly showing count 1.\n- get_closed_test_runs_split_v1 (closed runs per month, split by result status): also returned real data for the first time - data: [{name:\"Untested\", data:[0,0,...,1], result_status:{id:318615, internal_name:\"untested\", ...}}], date_list: [\"Oct\",...,\"Sep\"], empty_data: false. Shape matches declared (one series object per status, values positionally aligned to date_list). The split landed under 'Untested' because the run's one case is still untested - it is split by the case's current result status, not by anything about the close event itself.\n\nDOES CLOSING LOCK THE RUN? No. Ran the harmless follow-up write (edit_test_run, renaming TR-9111 to '...- closed-run edit probe', resending run_state:closed since it is mandatory on every edit call). It returned 200 and the rename was REAL, not a no-op under a 200 - confirmed by reading the run back afterward (get_test_run_by_integer_id_v1): the new name persisted, run_state/active_state stayed closed, closed_at/closed_by were unchanged. Owner was already null before this edit (the run had no owner from creation), so no owner-clearing side effect was newly observed here - that known edit_test_run behaviour (owner cleared when omitted) simply didn't have anything to clear in this case.\n\nSELF-MISREPORTING ON THE WRITE ITSELF (the reason for the DRIFT verdict): close_test_run_v1's own 200 got two of its own fields wrong, both caught by reading the run back immediately after with get_test_run_by_integer_id_v1 rather than trusting the write response:\n  - uuid: the close response's data.testrun.uuid came back as 359844. The run's real uuid, both before and after closing (confirmed by two separate reads), is 17578623. 359844 does not match this run at all - a completely wrong number, not a stale echo.\n  - closed_by: the close response's data.testrun.closed_by came back null. The immediate read-back shows closed_by fully populated with the closing user's object ({id:2522, browserstack_user_id:6013, email:'probe-user@example.invalid', full_name:'ing', group_id:2615, onboarded:1}). closed_at, by contrast, WAS populated on the write response, though at a timestamp 2 seconds later (05:43:17.718Z) than the real closed_at the read-back shows (05:43:15.505Z) - the write response's closed_at looks like it echoes updated_at rather than the actual close-snapshot timestamp.\n\nOTHER CONTRACT DRIFT: project_id on data.testrun is declared as a string in the schema but is returned as a bare JSON integer (379335744) - the same serializer mistake this campaign has already documented on get_test_runs_v1, so it is not confined to that one read endpoint. is_dynamic (boolean false) and overall_progress (the full 7-key zero/one object) were BOTH returned correctly and match the declared shape - so of the three fields this campaign has been tracking across capabilities, this write path gets 2 of 3 right and project_id wrong, rather than all three wrong or all three right. type and self_ui_link remain declared and never returned on this test-run capability, same as every other one probed so far; observability_url is also declared (both in the summary returns list and it appears reliably on read endpoints for this same run) but is absent from close_test_run_v1's own testrun object. attachments, created_by and updated_by are returned but not declared anywhere in the schema.\n\nrun_state/active_state moved to closed/closed exactly as documented; no drift there."
+}

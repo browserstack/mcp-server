@@ -1,0 +1,61 @@
+{
+  "capability": "resolve_duplicate_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:38:15Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "establish whether dedupe has ever run for this project before trusting an empty duplicates listing",
+      "source": "invoked",
+      "capability": "get_dedupe_status_v1",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": { "status": "NOT_ENABLED", "message": "No dedupe job found for this project" }
+    },
+    {
+      "step": 2,
+      "why": "confirm the listing is actually empty (not just page 1 of many) and get any suggested-pair id to resolve",
+      "source": "invoked",
+      "capability": "list_duplicates_v1",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": { "duplicates": [], "info": { "count": 0, "total_pages": 0 } }
+    },
+    {
+      "step": 3,
+      "why": "pool has no duplicate-pair ids and none of the probe-created cases (TC-54484..87/89, TC-54490/91, TC-54502/03/04) appear in any listing, because dedupe never ran on this project to generate suggestions in the first place",
+      "source": "pool",
+      "capability": null,
+      "produced": { "note": "no duplicate_id available anywhere in this project" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "duplicate_id": 999999999, "merge_action": "archive", "archive_testcase_id": 1985018 },
+        "user_permission": "granted",
+        "change_summary": "Probe resolve_duplicate_v1's error contract: no suggested duplicate pairs exist in this project, so a deliberately out-of-range duplicate_id was used to confirm pair-lookup-first 404 behavior without risk to any real test case."
+      },
+      "status": 404,
+      "error": "{\"errors\":\"Duplicate not found.\"}",
+      "changed": "Nothing changed after this — there is no real duplicate_id to retry with. This was a diagnostic probe of the error path, not a retry toward a working payload; no second or third attempt was made because the blocker is the missing prerequisite (no suggested pair), not a malformed request."
+    }
+  ],
+  "probe": {
+    "arguments": null,
+    "status": null,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id (path)", "duplicate_id (body)", "merge_action (body, 'merge'|'archive')", "source_testcase_id + target_testcase_id (body, required iff merge_action='merge')", "archive_testcase_id (body, required iff merge_action='archive')"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "PREREQUISITE FINDING (the actual result of this probe): resolve_duplicate_v1 cannot be exercised on its success path in project 379335744 (PR-2005) because no duplicate pair exists here in ANY state, not just not in `suggested`. get_dedupe_status_v1 returns {status:'NOT_ENABLED', message:'No dedupe job found for this project'} — the dedupe pipeline has never run for this project at all, which is stronger than 'pairs exist but got resolved already'. list_duplicates_v1 independently confirms an empty page ({duplicates:[], info:{count:0,total_pages:0}}), consistent with the NOT_ENABLED state (per that capability's own guidance, an empty listing is ambiguous between 'feature off' and 'ran and found nothing' — the status call resolves the ambiguity here in favor of 'feature off/never run'). Per list_duplicates_v1's own guidance, 'there is no way to create a suggestion or trigger a scan through this API' — so this is not a payload problem, a permissions problem, or a timing problem; it is a hard structural block. No amount of retrying or rebuilding the payload fixes it, so per the campaign's own criterion this is UNVERIFIED, not BLOCKED (the index's declared contract is not shown to be wrong — it simply cannot be tested here) and not a guess.\n\nDOES THIS UNBLOCK get_duplicate_source_test_case_v1? No, and from the other direction than expected. That capability needs a `merged` pair; resolve_duplicate_v1 is plausibly the write that produces one, but only if a `suggested` pair exists to resolve first — and none does, anywhere in this project. Both reads (get_duplicate_source_test_case_v1's need for a merged pair, and resolve_duplicate_v1's need for a suggested pair) trace back to the SAME root blocker: dedupe has never run for PR-2005, so the pipeline that manufactures `suggested` pairs never fired. This is a prerequisite gap one level upstream of the previously-recorded finding, not a resolution of it. Whether a project WITH dedupe enabled and a real suggested pair would let resolve_duplicate_v1 create a merged pair (and thereby unblock the source-snapshot read) remains untested and untestable from here.\n\nERROR-CONTRACT CHECK (partial, does not require a real pair): a resolve attempt with an out-of-range duplicate_id (999999999) returned exactly the declared 404 shape, {errors:'Duplicate not found.'} (plural key, matching the description precisely) — this one corner of the contract is confirmed correct, for whatever that is worth against a synthetic id. This does NOT verify the 200 success path, the merge/archive body validation order, the 422 'Test case not found in duplicates' path, the 409 migration-pause path, or the 403 tc_delete-permission path — none of those could be reached without a real suggested pair.\n\nDESTRUCTIVE-IN-EFFECT (self-reported by the index, NOT independently verified here): describeCapability's own guidance states plainly that `merge_action:'merge'` archives source_testcase_id (tags it 'Archived as Duplicate', posts a merge comment on the target, snapshots the source) and `merge_action:'archive'` archives archive_testcase_id outright — in both cases a test case is removed from active view as a side effect of a capability classed `write`, not `destructive`. If that self-report is accurate, this is exactly the pattern flagged for `unlink_test_runs_from_test_plan`: a non-destructive-classed write that produces a destructive-shaped effect (a case disappearing from folders/listings) and so is never intercepted by the runtime gate that blocks the whole destructive tier. I could NOT confirm this by observation — no live invocation reached the success path — so this is flagged as an open concern for the product team to confirm, not a verified finding. Recommend a follow-up probe once a project with dedupe enabled and an in-project probe-created suggested pair (never one touching __readonly__ 764093 / TC-54455 / TC-54456 / TC-54458 (1975349)) becomes available, verifying by reading BOTH cases back afterward (get_test_case + folder listing, not the write response, which the contract itself says is just {success:true} and echoes nothing about the affected cases).\n\nRESOLVE vs DISCARD: resolve_duplicate_v1 takes duplicate_id in the BODY and posts to the collection path; discard_duplicate_v1 takes duplicate_id as a PATH segment on a distinct path. Discard is the 'not a duplicate' verdict — touches neither test case, just moves the pair to `discarded` (permanent, no un-discard) and needs only tc_write. Resolve is the 'yes, act on it' verdict — needs the heavier tc_delete permission, and always ends with the pair `merged` regardless of whether merge_action was 'merge' or 'archive' (the field name 'merge_action' is used for both, which is itself a naming overload worth flagging: an 'archive' action still sets the pair's terminal status to 'merged', not to some 'archived' pair-status). Error envelopes also differ: resolve uses `errors` (plural) on 404, discard uses `error` (singular) on 404 — one more instance of the inconsistent error-envelope drift already tracked (3/11 correct) across this surface.\n\nENTITLEMENT/other gates not exercised: the 403 tc_delete-permission gate and the 409 migration-pause gate were not (and could not be) triggered without a real pair.\n\nENV: live preprod, project 379335744 / PR-2005. Nothing was resolved, merged, archived, or otherwise mutated against any real test case — the one write call made targeted a nonexistent duplicate_id specifically so it would fail at the pair-lookup step, before any test-case id (real or otherwise) could be touched."
+}

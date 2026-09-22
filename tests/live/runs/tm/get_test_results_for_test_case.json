@@ -1,0 +1,105 @@
+{
+  "capability": "get_test_results_for_test_case",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the populated pool subject",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    },
+    {
+      "step": 2,
+      "why": "the run holding the 14 recorded results (TR-9062, integer-or-TR- form both accepted per this route's pattern)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "test_run_id": "TR-9062" }
+    },
+    {
+      "step": 3,
+      "why": "this v1 route takes the numeric internal case id, unlike v2's TC- identifier",
+      "source": "pool",
+      "capability": null,
+      "produced": { "test_case_id": 1975349 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "project_id": 379335744, "test_run_id": "TR-9062", "test_case_id": 1975349 },
+      "status": 200,
+      "error": null,
+      "changed": null
+    }
+  ],
+  "probe": {
+    "arguments": { "project_id": 379335744, "test_run_id": "TR-9062", "test_case_id": 1975349 },
+    "status": 200,
+    "response_keys": ["success", "test-results", "info", "unique_issues"],
+    "item_shape": {
+      "count_returned": 14,
+      "newest_item": {
+        "id": 2150413868,
+        "updated_by": { "id": 2522, "browserstack_user_id": 6013, "full_name": "ing", "email": "probe-user@example.invalid", "group_id": 2615, "onboarded": 1 },
+        "author": { "id": 2522, "browserstack_user_id": 6013, "email": "probe-user@example.invalid", "full_name": "ing", "group_id": 2615, "onboarded": 1 },
+        "backtrace": null,
+        "created_at": "2026-09-18T12:53:07.000Z",
+        "description": "Probe write from capability-registry live-probe suite: recording a passed outcome on TC-54458 in TR-9062 to verify the result entity end-to-end (create_test_results_for_test_run_v2).",
+        "error_description": null,
+        "expanded": null,
+        "failure_type": null,
+        "finished_at": null,
+        "log_type": null,
+        "started_at": null,
+        "status": "passed",
+        "result_status": { "id": 318637, "field_value": "Passed", "internal_name": "passed", "field_name": "status", "colour": "#059669", "value_category": "completed" },
+        "time_elapsed": null,
+        "updated_at": "2026-09-18T12:53:07.732Z",
+        "attachments": [],
+        "created_by_imported": null,
+        "issues": [],
+        "links": { "self": "/api/v1/projects/379335744/test-results/2150413868", "custom_fields": "/api/v1/projects/379335744/test-results/2150413868/custom-fields" },
+        "custom_fields": [],
+        "test_run_step_result": null
+      },
+      "target_item_note": "Result id 2150387456 (the oldest of the 14, status Passed) is present in this response with the same shape as every other row -- checked field-by-field, no shape difference correlated with recency.",
+      "field_by_field": {
+        "id": "matches -- integer, present on all 14",
+        "author": "matches -- full user object, present on all 14",
+        "backtrace": "matches -- null on all 14 (no failures in this run)",
+        "created_at": "matches -- date-time string",
+        "description": "matches -- string, present",
+        "error_description": "matches -- null on all 14",
+        "expanded": "matches -- null",
+        "failure_type": "matches -- null (no failures)",
+        "finished_at": "matches -- null on all 14 (never populated for these manual Passed entries)",
+        "log_type": "matches -- null",
+        "started_at": "matches -- null on all 14",
+        "status": "matches -- string, 'passed' on all 14",
+        "result_status": "matches FULLY -- all 5 declared-required siblings (id, field_value, internal_name, field_name, colour) present on every one of the 14 rows, plus optional value_category. Unlike v2, nothing is dropped.",
+        "configuration_id": "DRIFT -- declared (nullable integer, example 16) but the key is entirely ABSENT from every one of the 14 items, not merely null.",
+        "time_elapsed": "matches -- null on all 14",
+        "updated_at": "matches -- date-time string",
+        "attachments": "matches -- empty array on all 14 (type checked; item shape inside attachments unexercised, no attachments exist here)",
+        "created_by_imported": "matches -- null on all 14",
+        "issues": "matches -- empty array (item shape inside issues unexercised, this run has no linked defects)",
+        "links": "matches -- object with self + custom_fields sub-keys, both populated, as declared",
+        "custom_fields": "DRIFT -- schema declares type object; response is [] (empty array) on all 14 items. Type mismatch on the wire shape, not just an empty-value quibble.",
+        "test_run_step_result": "matches -- null on all 14, consistent with these being case-level (not step-level) results",
+        "updated_by": "UNDECLARED -- a full user object (same shape as author) returned on every item; not present anywhere in the declared item schema."
+      }
+    }
+  },
+  "contract": {
+    "required": ["success", "test-results", "info", "unique_issues"],
+    "json_path": "test-results",
+    "declared_missing": ["test-results[].configuration_id"],
+    "undeclared_returned": ["test-results[].updated_by", "info.truncated"],
+    "type_mismatches": ["test-results[].custom_fields declared type object, returned as array ([]) on all 14 items"]
+  },
+  "notes": "COUNT-VS-ROWS (5-hit pattern, finally checkable on a populated collection): info={page:1,page_size:30,count:14,prev:null,next:null,truncated:false}. count(14) == len(test-results)(14) EXACTLY. page_size(30) > count(14), so no paging was needed or attempted -- this is the one genuinely rich subject in the campaign and its count field is trustworthy. info also carries an undeclared 'truncated:false' key not in the declared info schema (declared required: page/page_size/count/prev/next only).\n\nCONTAINER KEY: guidance explicitly warns 'the list key is test-results with a HYPHEN... this endpoint is the odd one out' -- confirmed correct on the wire; no container-name drift here (unlike the systemic 6-hit pattern elsewhere in the campaign, this capability's own docs already call it out and the API matches).\n\nV1 vs V2 SHARED-DEFECT CHECK (the specific interest for this probe) --\n1. result_status siblings: v1 does NOT share v2's defect. All 14 rows here carry the full result_status object (id, field_value, internal_name, field_name, colour, plus value_category) exactly as v1's own schema declares and requires. v2's contract (re-read live via describeCapability just now) has already been corrected in the index to declare result_status as {field_value} only, with guidance text explicitly stating 'id, internal_name, field_name and colour... are deliberately dropped here and never appear' on v2. So this is a genuine, confirmed SERIALIZER DIFFERENCE between the two endpoints for the same field name and the same underlying result rows -- v1's serializer includes the full status object, v2's does not, and both are (now) accurately documented. A caller needing internal_name/id/colour must use v1, not v2, for the same case/run pair.\n2. custom_fields type: v1 DOES share the underlying API behavior (returns an empty array, not an object) -- confirmed on all 14 items. However, v1's OWN declared schema still says type 'object' (unlike v2's index entry, which was already corrected to declare 'array'/list-of-entries). So v1 currently carries an UNFIXED version of the same defect v2 had; v2's index was patched, v1's was not. This is worth fixing identically to how v2 was fixed (declare custom_fields as an array here too), or confirming the endpoint really should return an object and treating this as an API bug rather than a docs bug.\n\nNEAR-DUPLICATE QUESTION (get_test_results_for_test_case vs get_test_results_for_test_case_v2) -- read both contracts directly, no invocation of v2 performed (describeCapability only):\n- ID FORM: v1 takes project_id as a bare integer, test_case_id as a bare integer (the internal numeric id), and test_run_id as either a bare integer or TR-prefixed string (pattern ^(TR-)?[0-9]+$). v2 requires strict PR-NNN / TR-NNN / TC-NNN identifier strings for all three -- a bare integer either 404s (test_run_id) or fails to resolve (test_case_id, which is looked up by identifier, not the same numeric id v1 uses).\n- ENVELOPE: v1's list key is 'test-results' (hyphen); v2's is 'test_results' (underscore). Both capabilities' own guidance text calls this out explicitly and warns a client written against one reads an empty list against the other. Also: v1 nests the response directly with top-level unique_issues; v2 has no unique_issues key at all.\n- ROW FIELDS: v1 rows are heavier -- full author object, updated_by object (undeclared but present), backtrace, attachments array, links (self + custom_fields hrefs), full result_status, test_run_step_result. v2 rows are deliberately narrower -- created_by is a plain email string (not an object), no attachments key, no backtrace, no links, cut-down result_status ({field_value} only), but v2 adds fields v1 lacks entirely: test_case_id/test_run_id echoed back as identifiers, execution_id, dataset ([] for non-data-driven runs), urls ({self} undeclared sub-key), and step_result (v2's renamed, still-null-here equivalent of v1's test_run_step_result). configuration_id: v1 declares it but never emits the key at all (declared_missing, confirmed on all 14 rows here); v2 emits it explicitly as null (present-but-null) -- a small but real difference in HOW the same declared-nullable field is absent.\n- PAGING: v1's page size is fixed at 30, uncontrollable by the caller (only 'p' is accepted). v2 accepts page_size (or count, which wins if both given) restricted to exactly 30 or 300, giving the caller real control v1 does not offer.\n- PREFERRED/DEPRECATED: neither describeCapability response (v1 here, v2 read live for this comparison) carries any preferred or deprecated marker -- no such field appears in either capability's metadata. The routing tie a prior eval hit is real: the index gives no explicit steer between them, and the actual difference is entity-shape/paging/id-form, not one being newer or sanctioned over the other. An agent choosing between them today has to infer id-form and row-richness needs itself.\n\nOTHER CAMPAIGN WATCHPOINTS, checked on this populated item: attachments=[] (empty on all 14, still unverified populated shape), step/test_run_step_result=null on all 14 (still unverified populated shape, all 14 rows are case-level not step-level), dataset is not a field v1 returns at all (v1 has no dataset key; only v2 does), configuration_id is absent as a key on v1 (see declared_missing above) rather than present-and-null as on v2. None of these populated shapes could be exercised here since this run/case pair has no configuration, no dataset, and no step-level results -- consistent with the rest of the campaign's finding that these remain unverified everywhere probed so far."
+}

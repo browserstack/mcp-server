@@ -1,0 +1,65 @@
+{
+  "capability": "create_shared_step_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:29:40Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Check whether shared steps already exist in project 379335744 before writing anything, to confirm or correct the pool's stale shared_step:null claim.",
+      "source": "invoked",
+      "capability": "get_shared_steps_v1",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": {
+        "data": [
+          { "title": "__probe-shared-step", "id": 27842, "test_case_count": 0, "step_count": 1, "tags": [] }
+        ],
+        "info": { "page": 1, "page_size": 30, "count": 1, "prev": null, "next": null }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": {
+          "title": "__mcp-probe-sharedstep-20260921",
+          "folder_id": 764138,
+          "shared_step_details": [
+            { "order": 1, "step": "Open the login page", "result": "Login page is displayed", "test_data": "user=probe" }
+          ]
+        }
+      },
+      "status": 400,
+      "error": "{\"errors\":{\"message\":\"Target folder not found\"},\"no_toast\":false,\"success\":false}",
+      "changed": "folder_id 764138 is the pool's TEST-CASE __scratch__ folder, not a shared-field folder (contract explicitly calls folder_id a 'Shared-field folder', a separate id namespace per get_shared_components_v1's guidance that 'Shared fields and shared steps are different objects with separate listings and separate id sets'). Dropped folder_id entirely for attempt 2, which the contract explicitly permits ('omit it ... to leave the block at the root (Unassigned)')."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": {
+        "title": "__mcp-probe-sharedstep-20260921",
+        "shared_step_details": [
+          { "order": 1, "step": "Open the login page", "result": "Login page is displayed", "test_data": "user=probe" }
+        ]
+      }
+    },
+    "status": 200,
+    "response_keys": ["data", "success"],
+    "item_shape": {
+      "data": ["title", "id", "test_case_count", "step_count", "created_by", "updated_by", "tags", "shared_step_details"],
+      "shared_step_details[0]": ["id", "step", "result", "test_data", "order"]
+    }
+  },
+  "contract": {
+    "required": ["title", "shared_step_details"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["data.tags"]
+  },
+  "notes": "(1) Existing shared steps: the pool's stale note that this project had shared_step:null is WRONG and is corrected here — get_shared_steps_v1 on project 379335744 returned one pre-existing shared step ('__probe-shared-step', id 27842, 0 test cases, 1 step) before this probe ran at all. (2) json_path/flat vs nested: describeCapability declares NO json_path wrapper for this capability at all — guidance says outright 'The body is flat — title, folder_id, tags and shared_step_details sit at the top level with no wrapper.' A flat body is what invokeCapability accepted (attempt 2, 200 OK); no nested/wrapped form was ever needed or tried, so the usual json_path trap did not manifest here — the contract told the truth about flatness. (3) Steps-container finding: shared_step_details is declared as an ARRAY both in the request-body contract and in the success response schema (schema.data.shared_step_details.type == 'array', item objects requiring id/step/result/order), and the actual create response returned it as an array of one object with id 76580, step, result, test_data, order all present. Declared array, returned array — fully consistent. This does NOT reproduce the known test_case_steps object-vs-array cross-reader drift; on this write path the steps container is not mis-declared, so that defect is confirmed NOT present in this shared serializer path (or at minimum, is not the same bug affecting this specific field). (4) Entitlement/error observations: no entitlement-gate-as-200 was seen — both the failure and the success came back on the correct HTTP status codes (400 and 200 respectively), never a 200 wrapping success:false. However there IS an error-envelope drift: attempt 1's 400 body was {errors:{message:'Target folder not found'}, no_toast:false, success:false} — plural 'errors' (not 'error'), no 'code' field, an undocumented 'no_toast' field, and none of it matches the capability's own declared 400 schema of {success, error:{code, message, details}}. This is the DRIFT driving the verdict, alongside the undeclared 'tags' field on the success response (present in the actual create response but absent from the declared 200 schema's data properties, even though 'tags' is a documented request-body input). (5) Created shared step: id 27846, title '__mcp-probe-sharedstep-20260921', left at folder root (Unassigned) since the pool's __scratch__ folder id (764138) is not valid in the shared-step folder namespace — flag this for cleanup/deletion."
+}

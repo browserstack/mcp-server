@@ -1,0 +1,100 @@
+{
+  "capability": "create_exploratory_session_log",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:32:42Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm the declared call shape, required fields and wrapper guidance before invoking — this family (sibling create_exploratory_session, create_test_plan_v1) has been caught with json_path guidance lying in both directions, so the flat-vs-nested question had to be checked, not assumed.",
+      "source": "describeCapability",
+      "capability": "create_exploratory_session_log",
+      "status": "n/a (describe, not invoke)",
+      "produced": {
+        "path_params_required": ["project_id", "session_id"],
+        "body_fields_all_optional": true,
+        "mode": "write",
+        "guidance_claim": "\"Send the fields flat. The `session_log` wrapper is added for you from each field's json_path... sending your own is rejected before the call as an unknown body key.\" (this time the guidance matched live behaviour — see attempts)"
+      }
+    },
+    {
+      "step": 2,
+      "why": "Read the session back after both logs were created, to check session_log_count increments correctly and to finally exercise item shape for a non-empty log collection — session 779 had 0 logs before this probe, so its item shape was previously unverifiable.",
+      "source": "invoked",
+      "capability": "get_exploratory_session",
+      "arguments": { "path_params": { "project_id": 379335744, "session_id": 779 } },
+      "status": 200,
+      "produced": {
+        "session_log_count": 2,
+        "matches_rows_created": true,
+        "timeline_array_length": 2,
+        "timeline_item_shape_actual": "{status, elapsed_time, created_by{id,email,full_name,group_id}} — NO `action`, NO `timestamp` field",
+        "timeline_item_shape_declared_by_get_exploratory_session": "{created_by, action, timestamp} — a lifecycle-event shape, not a log-content shape",
+        "flag": "CROSS-CAPABILITY DRIFT (belongs to get_exploratory_session, not this capability's own contract, but recorded here since this is the first probe able to see it): the declared `timeline` item schema on get_exploratory_session describes lifecycle events (action/timestamp), but the actual timeline rows returned once logs exist are log summaries (status/elapsed_time) with no `action` or `timestamp` at all. Also: `actual_duration` came back 165 (non-null) while `session_state` was still \"active\" and the session was never closed — declared as 'set on close'. Neither of these is folded into this capability's own declared_missing/undeclared_returned below since they belong to get_exploratory_session's contract, but flagging prominently per instructions since 779 previously had 0 logs and these were both UNVERIFIED until now."
+      }
+    },
+    {
+      "step": 3,
+      "why": "Cross-check log creation against the project-level exploratory summary report, to see whether session_log_count / row counts agree with an independent aggregation path (family has 5 confirmed count-vs-rows disagreement hits elsewhere).",
+      "source": "invoked",
+      "capability": "get_exploratory_session_summary_v1",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "mode": "session_selection", "session_ids": "779" } },
+      "status": 200,
+      "produced": {
+        "data.sessions[0].summary": { "bug": 1, "note": 1 },
+        "data.outcomes.bugs_found": 1,
+        "agrees_with_session_log_count_2_and_2_rows": true,
+        "note": "No count-vs-rows disagreement found here — this is a 6th data point AGREEING, not a 6th confirmed hit. data.top_testers was empty ([]) despite created_by being populated on both logs — untested further, out of scope for this capability."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "session_id": 779 },
+        "body": { "content": "<p>Tapped checkout — spinner appeared but no order was created.</p>", "status": "bug", "elapsed_time": 120 },
+        "user_permission": "granted",
+        "change_summary": "Probe create_exploratory_session_log: create one log entry (status=bug) on exploratory session 779 in project 379335744 (PR-2005), live preprod."
+      },
+      "status": 201,
+      "response_verbatim": { "ok": true, "completed": true, "http_response": { "status": 201, "body": { "success": true, "session_log": { "id": 543, "session_id": 779, "project_id": 379335744, "group_id": 3452, "content": "<p>Tapped checkout — spinner appeared but no order was created.</p>", "status": "bug", "elapsed_time": 120, "created_by": { "id": 2522, "email": "probe-user@example.invalid", "full_name": "ing", "group_id": 2615 }, "created_at": "2026-09-21T13:32:27.000Z", "updated_at": "2026-09-21T13:32:27.000Z", "defects": [], "attachment_relations": [] } } } },
+      "note": "Flat body (no `session_log` wrapper) worked on the FIRST try, confirming describeCapability's guidance verbatim — no wrapper trap on this capability. content came back byte-identical (no anchor/image stripping applicable, plain text-in-tags). LOG ID CREATED: 543 — designated for the delete probe (safe to destroy, no defects attached)."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "session_id": 779 },
+        "body": { "content": "<p>Verified login flow on mobile Safari — no issues observed.</p>", "status": "note", "elapsed_time": 45, "defects": [{ "issue_id": "TM-1234", "issue_type": "Bug" }] },
+        "user_permission": "granted",
+        "change_summary": "Probe create_exploratory_session_log: create a second log entry (status=note, with a defect link) on exploratory session 779 in project 379335744 (PR-2005), live preprod, to exercise a different status enum value and the defects field."
+      },
+      "status": 201,
+      "response_verbatim": { "ok": true, "completed": true, "http_response": { "status": 201, "body": { "success": true, "session_log": { "id": 544, "session_id": 779, "project_id": 379335744, "group_id": 3452, "content": "<p>Verified login flow on mobile Safari — no issues observed.</p>", "status": "note", "elapsed_time": 45, "created_by": { "id": 2522, "email": "probe-user@example.invalid", "full_name": "ing", "group_id": 2615 }, "created_at": "2026-09-21T13:32:42.000Z", "updated_at": "2026-09-21T13:32:42.000Z", "defects": [{ "id": 849732, "issue_id": "TM-1234", "issue_type": "Bug", "created_at": "2026-09-21T13:32:42.000Z" }], "attachment_relations": [] } } } },
+      "note": "Second status enum value (`note`, vs. `bug` in attempt 1) — both accepted, both persisted correctly per the read-back in setup step 2. Defect link (TM-1234) appeared IMMEDIATELY and fully-formed in the 201 response (id 849732, created_at set) — this CONTRADICTS the capability's own guidance ('Defect linking is applied asynchronously after the 201, so the log echoed back may not show the links yet'); at least in this run linking was synchronous, not async. Minor guidance inaccuracy, not a contract defect (the field was still correct, just present sooner than documented). LOG ID CREATED: 544 — designated for the update probe (has a defect attached and richer content, worth confirming it still survives an update pass)."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "session_id": 779 },
+      "body": { "content": "<p>Tapped checkout — spinner appeared but no order was created.</p>", "status": "bug", "elapsed_time": 120 }
+    },
+    "status": 201,
+    "response_keys": ["success", "session_log"],
+    "item_shape": "session_log: {id, session_id, project_id, group_id, content, status, elapsed_time, created_by{id,email,full_name,group_id}, defects[{issue_id,issue_type,id,created_at}], attachment_relations[], created_at, updated_at} — item shape now genuinely exercised across TWO created rows (543, 544) plus a read-back (get_exploratory_session's session_log_count=2 and timeline rows), not just an empty-collection guess."
+  },
+  "contract": {
+    "required": ["project_id (path)", "session_id (path)"],
+    "json_path": "Flat body works exactly as declared — invokeCapability builds /session_log/* itself from each field's json_path (content, status, elapsed_time, defects). No wrapper trap here: guidance and live behaviour agreed on the very first attempt (log 543). Every body field is genuinely optional per guidance, consistent with both successful creates sending only a subset (neither attempt sent `defects` in attempt 1; attempt 2 omitted nothing but also succeeded).",
+    "declared_missing": "session_log.hashed_id — listed in the capability's own `returns` summary array but completely absent (not null, not present) from BOTH create responses (543, 544). Shallowest missing path: session_log.hashed_id.",
+    "undeclared_returned": [
+      "session_log.project_id (e.g. 379335744) — not in the 201 schema's `properties` nor in the `returns` summary",
+      "session_log.group_id (e.g. 3452) — same, undeclared anywhere",
+      "session_log.defects[].id (e.g. 849732) — declared defects item schema only requires/declares {issue_id, issue_type}",
+      "session_log.defects[].created_at — same, undeclared on the defects item schema",
+      "session_log.attachment_relations — present in the `returns` summary list but ABSENT from the fully-expanded 201 schema's `properties` object (schema/returns-summary internal inconsistency, not a live-vs-declared drift, but worth noting since it means the schema block alone under-documents the response)"
+    ]
+  },
+  "notes": "VERDICT: DRIFT. create_exploratory_session_log works correctly end to end on the first attempt with a flat body — no wrapper trap this time, guidance and reality agreed (contrast with create_test_plan_v1 in this same family, where guidance demanded nesting and was wrong). 1/1 attempts succeeded for each of the two logs created (2 total invocations, 0 failures, well under the 3-attempt cap).\n\n**CREATED LOG IDS (prerequisite for update_exploratory_session_log and delete_exploratory_session_log, both still unprobed):**\n  - LOG ID 543 — session_id 779, project_id 379335744. status=bug, elapsed_time=120s, content='Tapped checkout — spinner appeared but no order was created.', no defects. Plain/simple — DESIGNATED FOR THE DELETE PROBE (safe to destroy).\n  - LOG ID 544 — session_id 779, project_id 379335744. status=note, elapsed_time=45s, content='Verified login flow on mobile Safari — no issues observed.', defects=[{issue_id:'TM-1234', issue_type:'Bug', id:849732}]. Has a linked defect and richer content — DESIGNATED FOR THE UPDATE PROBE (should survive; confirming it after an update pass also re-validates the async-defect-linking guidance claim in attempt 2's note).\n  - Both logs must be addressed with the SAME session_id (779) they were created under, per this capability's own guidance ('a log id from one session is not addressable under another') — carry {project_id:379335744, session_id:779, id:543|544} into both downstream probes.\n\n**Session-state requirement for log creation:** none observed beyond the session existing and being writable. Session 779 was 'active' (never closed, per the brief's explicit instruction) for both creates and both succeeded normally — closed-session behavior for this capability remains UNVERIFIED (untested by design, since closing 779 is out of scope for this probe and must run last). No evidence either way on whether a closed session accepts new logs.\n\n**Item-shape verification (the actual point of creating two logs, not just satisfying a minimum):** get_exploratory_session_summary_v1 in session_selection mode independently confirmed the two logs via its own aggregation path — sessions[0].summary={bug:1, note:1}, outcomes.bugs_found=1 — agreeing exactly with what was created; count-vs-rows agreement here (0 disagreement, not a 6th hit in the family's 5-hit pattern). get_exploratory_session's session_log_count correctly incremented 0→2 after both creates, matching created rows exactly.\n\n**Cross-capability finding surfaced for the first time (session 779 previously had 0 logs, making this unverifiable before now):** get_exploratory_session's `timeline` array — declared as lifecycle events {created_by, action, timestamp} — actually returns LOG-SHAPED rows {status, elapsed_time, created_by} once logs exist, with `action` and `timestamp` both entirely absent from every timeline item. This belongs to get_exploratory_session's own contract file, not this one, but is reported prominently per instructions since this probe is the first one able to see a non-empty timeline. Separately, `actual_duration` on the session read-back came back 165 (non-null) while `session_state` stayed 'active' (session never closed) — contradicts get_exploratory_session's own declared description ('Final recorded duration... set on close'). Neither finding is folded into this capability's declared_missing/undeclared_returned above since both belong to a different capability's contract.\n\n**Error envelope / entitlement-gate / container-mismatch defects:** none observed in this probe — both attempts succeeded 201 on the first try, so the family's known bare-{success:false} error-envelope defect and the 200-wearing-a-refusal entitlement pattern were not exercised (no failure occurred to check against). Container shape matches declared exactly: response nested under `session_log` at the top level alongside `success`, no `data` wrapper — no container mismatch.\n\n**Minor guidance inaccuracy (not a contract defect):** the capability's own guidance states defect linking is applied asynchronously and 'the log echoed back may not show the links yet' — in this run (attempt 2, log 544) the defect link (TM-1234) was fully present, with its own `id` and `created_at`, in the immediate 201 response. Either the async window is shorter than the guidance implies, or linking is not actually async for this path — worth a note for whoever probes update_exploratory_session_log/delete_exploratory_session_log next, since they may rely on this timing."
+}

@@ -1,0 +1,40 @@
+{
+  "capability": "get_issues_count_info_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:09:47Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the path_params.project_id (integer form, not the PR-NNN identifier)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "query": { "q[created_at]": "all_time" }
+    },
+    "status": 200,
+    "response_keys": ["data", "empty_data"],
+    "item_shape": {
+      "type": "2-element positional array",
+      "example": ["Oct", 0],
+      "note": "each entry is [label, count] as a JSON array, not a {label, count} object"
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [],
+    "shape_mismatch": [
+      "The declared 200 schema types `data` as an array of objects with required keys `label` (string) and `count` (integer). The actual response returns `data` as an array of 2-element positional arrays, e.g. [\"Oct\", 0], with no `label`/`count` keys at all. This matches the capability's own guidance text ('Each entry in data is a positional pair ... not a {label, count} object') but contradicts the formal JSON schema attached to the 200 response in describeCapability."
+    ]
+  },
+  "notes": "First attempt succeeded (200), no retries needed. Payload: path_params.project_id=379335744 (integer, per contract requirement — PR-2005 would 404 per guidance), query q[created_at]=all_time (a documented value that is honoured for created_at, chosen to guarantee a window wide enough to include 2026-09 and beyond). Response: empty_data=true with 12 monthly buckets (Oct..Sep), all counts padded to 0 — consistent with guidance that empty_data is the 'nothing to plot' flag and the series is zero-padded. IMPORTANT: despite empty_data=true and all counts being 0, this is NOT an empty-array case under the empty-case rule — data itself is a non-empty 12-element array, and every element is a fully populated [label, count] pair (count=0 is a real, present value, not a missing/null field). So the item shape (positional array vs. declared object) was genuinely exercised and is verifiable, not unverified. The DRIFT verdict rests on that verified shape mismatch between the JSON schema (object with label/count keys) and the actual wire format (positional array), not on the zero counts themselves. No other params were sent (q[owner], q[closed_at], filter_details) since the pool has no issue-linking fixture data to exercise them, and the guidance's 'filter trap' (any q key without explicit q[created_at] silently narrowing to 1 year via closed_at) was avoided by sending q[created_at] explicitly as documented."
+}

@@ -1,0 +1,63 @@
+{
+  "capability": "list_exploratory_session_logs",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "need a real session_id to invoke list_exploratory_session_logs read-only",
+      "source": "invoked",
+      "capability": "list_exploratory_sessions",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"q[session_state]": "active", "p": 1}},
+      "status": 200,
+      "produced": {"success": true, "exploratory_sessions": [], "info": {"page": 1, "page_size": 30, "count": 0, "prev": null, "next": null}, "count": {"active": 0, "closed": 0}}
+    },
+    {
+      "step": 2,
+      "why": "active listing defaults q[session_state] to 'active' and hides closed sessions, so also checked closed explicitly before concluding none exist",
+      "source": "invoked",
+      "capability": "list_exploratory_sessions",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"q[session_state]": "closed", "p": 1}},
+      "status": 200,
+      "produced": {"success": true, "exploratory_sessions": [], "info": {"page": 1, "page_size": 30, "count": 0, "prev": null, "next": null}, "count": {"active": 0, "closed": 0}}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "session_id": 999999999}, "query": {"p": 1}},
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "list_exploratory_sessions (setup steps 1-2) returned zero rows for project 379335744 in both active and closed states (count.active:0, count.closed:0, info.count:0 both times), so no real session_id was obtainable; probed with a fabricated session_id=999999999 to observe the 404 envelope only, not as a fix-and-retry cycle"
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744, "session_id": 1}, "query": {"p": 1}},
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "repeated with a second fabricated session_id (1, an id extremely likely to have existed historically if this entity has any age) to check whether the bare {success:false} 404 was specific to the first id chosen; identical body and status, so the error shape is stable across fabricated ids, not an artifact of one specific id"
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": 379335744, "session_id": 999999999}, "query": {"p": 0}},
+      "status": null,
+      "error": "{\"ok\":false,\"error\":\"'p' must be at least 1\"}",
+      "changed": "swapped the invalid-param axis instead of the id: p=0 against the same fabricated session_id. This never reached the product's declared 400 handler at all -- it was rejected by the MCP invocation layer itself (plain string error, no HTTP status, no success/error envelope), a layer above the capability's own declared error schema"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "session_id": 999999999}, "query": {"p": 1}},
+    "status": 404,
+    "response_keys": ["success"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id (path_param)", "session_id (path_param)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "UNVERIFIED: could not obtain a real session_id to reach the 200 path of list_exploratory_session_logs. list_exploratory_sessions on project 379335744 (setup steps 1-2) returned exploratory_sessions:[] for BOTH q[session_state]=active and q[session_state]=closed, with count:{active:0,closed:0} and info.count:0 on both calls -- this is failure mode (a): no session exists in this project to obtain an id from, not (b) an id existing but being unusable by this capability. This matches the task brief's own note that a sibling already found 0 exploratory sessions in project 379335744/PR-2005 and in two other sampled projects. No session or log was created (read-only probe per instructions). Per the task's 'still worth doing' fallback, invoked list_exploratory_session_logs with a fabricated session_id against project 379335744, in 3 attempts: (1) session_id=999999999, p=1 -> 404 exactly {\"success\":false}, no `error` object at all; (2) session_id=1, p=1 -> identical 404 {\"success\":false}, confirming the bare envelope is stable across different fabricated ids, not specific to one; (3) session_id=999999999, p=0 -> a completely different failure altogether: {\"ok\":false,\"error\":\"'p' must be at least 1\"}, with no HTTP status and none of {success,error{code,message,details}} -- this never reached the capability's own declared 400 handler, it was stopped by the MCP invocation layer's own param validation before making the upstream call. So across 3 attempts this capability's declared error contract was falsifiable twice and matched neither time: the declared 404 schema promises {success:false, error:{code,message,details}} but reality is a bare {success:false} with no error object (a real prose-vs-schema-adjacent gap, though describeCapability carries no free-text prose contradicting the schema here the way get_exploratory_session's did -- this one is simply schema-vs-reality with no prose to arbitrate it), and the declared 400 shape was never actually exercised because p=0 was intercepted upstream of the product entirely. Since no 200 was ever observed, declared_missing/undeclared_returned are left empty per instructions (never diff an error body against the success schema) -- both mismatches are called out here in notes only. SIBLING-OVERLAP QUESTION (list_exploratory_session_logs vs list_exploratory_session_defects): could not be settled empirically -- no 200 response was ever reached, so no log row's `defects` field shape could be observed live. From the declared contract alone, though, the overlap IS labelled, clearly: describeCapability's guidance for this capability states verbatim 'Each log's `defects` are the issue links on that log. The session-level defects listing is a different, broader set -- read that one for everything linked to the session.', and the declared 200 schema shows each session_logs[] row carrying its own `defects: [{issue_id, issue_type}]` array. So per the DECLARED contract, the sibling relationship the task asked about is real and is explicitly named on this side: this capability's per-row `defects` is the log-scoped subset, and list_exploratory_session_defects is described (by this capability's own guidance) as the broader, session+log union with entity_type/entity_id to distinguish rows -- meaning a caller who only needs a specific log's linked issues can read them directly off this listing's `session_logs[].defects` without a second call to list_exploratory_session_defects, and only needs the defects capability when they want the session-wide union or need entity_type disambiguation. This is a case where the contracts DO make the overlap clear -- at least from this capability's side -- unlike the 'unlabelled overlap' pattern the task called out as a tracked problem elsewhere. Also noted for the record (not a fresh finding this run, already flagged in describeCapability's own guidance): declared 200 schema's per-row `status` enum is [pass, fail, bug, retest, block, note] and omits 'skipped', while the q[status] filter's allowlist explicitly includes 'skipped' as a real status -- an enum-vs-filter contract gap that would need a real row to confirm end-to-end but is visible directly in the declared contract without invoking anything. page_size on this capability is a fixed 50 (per max_page_size and the 200 schema's info.page_size example), distinct from list_exploratory_sessions' fixed page_size of 30 on the same product -- both share the p-not-page / per_page-ignored pattern, but the fixed size itself differs per entity, so it should not be assumed uniform across siblings."
+}

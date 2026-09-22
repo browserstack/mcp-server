@@ -109,7 +109,7 @@
       "next_run_at": null,
       "is_scheduled": false,
       "created_at": "2026-09-18T04:32:35Z",
-      "owner": { "email": "ing@bsstag.com", "full_name": "ing" },
+      "owner": { "email": "probe-user@example.invalid", "full_name": "ing" },
       "mail_to": { "users": [], "external_mails": [] },
       "report_filters": {},
       "dynamic_filters": null,

@@ -1,0 +1,40 @@
+{
+  "capability": "get_test_runs_form_fields_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T09:10:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the form-fields read (path param only; no run/group/config setup needed)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "query": { "all": true } },
+    "status": 200,
+    "response_keys": ["custom_fields", "default_fields", "success"],
+    "item_shape": {
+      "custom_fields": [],
+      "default_fields.status": {
+        "total_count": 8,
+        "links": { "self": "/api/v1/projects/379335744/test-case/status" },
+        "values[0]": { "internal_name": "passed", "is_default": 0, "colour": "#059669", "value_category": "completed", "value": 318610, "name": "Passed" },
+        "values[5]_untested": { "internal_name": "untested", "is_default": 1, "colour": "#E5E7EB", "value": 318615, "name": "Untested" }
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "default_fields.status.values[].value_category — not in the declared item schema (required: internal_name, is_default, colour, value, name); present on 7 of 8 rows (passed, failed, blocked, retest, skipped, in_progress, unknown all carry value_category:'completed') and ABSENT on the 8th ('untested', the is_default:1 row) — looks like a real semantic marker (terminal/completed vs. the default open state) that the schema simply never documented, not noise."
+    ]
+  },
+  "notes": "First attempt succeeded (200) with all=true; no retries needed. Also note per guidance: this capability's name/path say 'test runs' but its own description and guidance say it actually serves TEST RESULT form fields (status + custom result fields), confirmed by the response itself (default_fields.status is the test-case/status status list, links.self='/api/v1/projects/.../test-case/status') — the naming mismatch is real but is a naming/intent issue, not a contract drift, so it doesn't affect the verdict.\n\n(1) CONTAINER TYPE — does NOT reproduce the sibling's finding. default_fields is declared 'type: object' (guidance: 'object keyed by field name, today just status') and the actual response returns exactly that: {status: {...}}. custom_fields is declared 'type: array' and the actual response returns an array (empty: []). Both declared containers match actual containers here — no array-vs-object mismatch on this capability, unlike get_project_id_custom_fields_v2_v1's system_fields (declared array, actual object). This capability has no 'system_fields' key at all, so that specific prose-vs-schema conflict doesn't apply.\n\n(2) DUPLICATE OPTION IDS — UNVERIFIED here, not resolved either way. The pool project (379335744/PR-2005) has zero custom result fields configured (custom_fields: [] even with all=true), so there are no custom dropdown options to inspect for duplication at all. The only option-like rows available are default_fields.status.values, and those show NO duplication: 8 rows, 8 distinct internal_names, 8 distinct value ids (318610-318616, then 2158093 for 'unknown' — note this last id is far outside the otherwise-contiguous 3186xx block, which is at least consistent with the 'upper block' pattern seen elsewhere, though for a non-duplicated row so it doesn't bear directly on canonicality). Since this capability exposes no duplicated options in this pool, it cannot confirm or refute the sibling's open question. On the requested discriminator search specifically: no entity_type, no record_status, no per-option count, and no is_active anywhere in default_fields.status rows (the only entity_type in this whole response is the FIELD-level entity_type inside custom_fields items, e.g. 'TestCase' — a per-field discriminator, not a per-option one, and custom_fields is empty here so even that couldn't be exercised). So this capability adds no new discriminator toward settling which duplicate-id copy is canonical.\n\n(3) DESCRIPTOR SERIALIZER — a genuine hybrid, leaning field-definition. default_fields.status.values items carry {internal_name, is_default, colour, value, name} — i.e. exactly the field-definition serializer's {value, name, internal_name, is_default} core, PLUS 'colour' (declared) and 'value_category' (undeclared) grafted on. It has neither 'id' nor 'field_name', so it is NOT the case-row descriptor shape ({id, internal_name, field_name, colour, value_category, name}) despite sharing colour and value_category with it. Notably this is a new data point versus the sibling capability: there, status carried colour but not value_category, and automation_state carried value_category but not colour — the two extras never co-occurred on the same field. Here, on this capability's status field, BOTH colour and value_category co-occur on the same rows (7 of 8), and colour here is a real hex code (#059669 etc.) rather than the sibling's placeholder-looking colour=internal_name string ('active'/'draft'). So: base shape = field-definition serializer; contamination = both case-row extras at once, which is a stronger/different mixing than previously observed.\n\nCOUNT-VS-ROWS: default_fields.status.total_count=8 matches values.length=8 exactly — no discrepancy here (unlike the capability noted elsewhere where count disagreed with rows at a duplicate boundary; there is no duplication in this row set to trigger that mechanism).\n\nAll declared required top-level keys (success, default_fields) and all declared required status-item keys are present; no declared_missing. Verdict is DRIFT solely on the undeclared value_category field in default_fields.status.values items — everything else (containers, required fields, custom_fields shape though empty) matches the declared 200 schema."
+}

@@ -20,7 +20,7 @@
         "status": "Active",
         "case_type": "Other",
         "automation_status": "not_automated",
-        "owner": "ing@bsstag.com",
+        "owner": "probe-user@example.invalid",
         "tags": ["mcp-probe"],
         "template": "test_case_steps",
         "folder_id": 764828,

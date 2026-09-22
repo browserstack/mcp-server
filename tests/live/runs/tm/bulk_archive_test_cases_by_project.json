@@ -1,0 +1,75 @@
+{
+  "capability": "bulk_archive_test_cases_by_project",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "targets: the four expendable __probe-bin-* cases already proven archivable/restorable by an earlier incidental probe (bulk_retrieve_test_cases)",
+      "source": "pool",
+      "capability": null,
+      "produced": {
+        "project_id": 379335744,
+        "project_identifier": "PR-2005",
+        "ids": [1983896, 1983897, 1983898, 1983899],
+        "identifiers": ["TC-54464", "TC-54465", "TC-54466", "TC-54467"],
+        "folder_id": 764138,
+        "folder_name": "__scratch__"
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "test_case": { "ids": [1983896, 1983897, 1983898, 1983899], "de_selected_ids": [], "select_all": false } }
+      },
+      "status": null,
+      "error": "unknown body: test_case. accepted: de_selected_ids, folder_id, ids, include_subfolders_tc, p, q, select_all. test_case is a wrapper this surface builds for you from each field's json_path — send the fields directly instead of nesting them",
+      "changed": "rejected client-side before any request reached the live API (same pattern documented on sibling bulk capabilities: json_path declares a `test_case` wrapper for ids/de_selected_ids/select_all, but the wrapped form must never be sent manually — the invocation surface builds it for you from a FLAT body). Re-sent with ids/de_selected_ids/select_all at top level."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "ids": [1983896, 1983897, 1983898, 1983899], "de_selected_ids": [], "select_all": false }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "succeeded — flat body confirmed as the working shape"
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "ids": [1983896, 999999999], "de_selected_ids": [], "select_all": false }
+      },
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "not a retry — a deliberate partial-failure characterization probe, mixing one already-archived valid id (1983896, harmless since it was already archived by attempt 2 and gets restored at the end regardless) with one nonexistent id (999999999). Result: a bare 404 {success:false} with no message, atomic (nothing further changed) — the same shape independently seen on the sibling bulk_retrieve_test_cases probe when it mixed 4 valid + 1 nonexistent id. This is one of the four distinct partial-failure behaviours now observed across sibling bulk capabilities (the other three being: silent 200 half-success ×2, clean 400, 404 {error:...} with no success key, and 502 — see notes)."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": { "ids": [1983896, 1983897, 1983898, 1983899], "de_selected_ids": [], "select_all": false }
+    },
+    "status": 200,
+    "response_keys": ["success", "folders"],
+    "item_shape": { "id": 764138, "name": "__scratch__", "parent_id": null, "ui_position": 0 }
+  },
+  "contract": {
+    "required": ["project_id (path)", "ids", "de_selected_ids", "select_all"],
+    "json_path": {
+      "ids": "/test_case/ids",
+      "de_selected_ids": "/test_case/de_selected_ids",
+      "select_all": "/test_case/select_all"
+    },
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "DANGER CONFIRMED, NOT EXERCISED: describeCapability shows this endpoint DOES carry a project-wide/select-all mode — body params `select_all` (bool), `de_selected_ids` (exclusion list), `folder_id`, and `q` (a full V2SearchQueryRequest scope object, sibling of the id fields, with the contract's own warning that an unrecognised key in `q` is SILENTLY DROPPED rather than rejected — a typo there would silently widen the target set to the whole unfiltered scope). Per instructions, only the explicit-id-list path was exercised: `select_all: false`, an exact `ids` array, `de_selected_ids: []`, no `q`/`folder_id`. The project-wide/select-all path was never invoked.\n\nWrapper confirmed: json_path nests ids/de_selected_ids/select_all under a `test_case` object, but sending that wrapper manually is rejected client-side (attempt 1) with an explicit error naming the accepted flat keys; the surface builds the `test_case` wrapper for you from a flat body (attempt 2 succeeded). This is the exact same pattern documented on sibling bulk capabilities (e.g. create_root_folder_v1's `folder` wrapper) — confirmed to hold here too.\n\n200 response matches the declared schema exactly ({success, folders}); no declared_missing, no undeclared top-level keys. One non-contractual observation: the `folders` map's items here carry only {id, name, parent_id, ui_position} — no `cases_count` — even though sibling folder reads (get_folder_tree_v1, get_root_folders_v1) return cases_count on the same folder. The schema only declares `folders` as a bare object with no sub-shape, so this isn't drift, just worth flagging: this capability's write-response `folders` block is a breadcrumb/identity echo, not a case-count report — read back via get_folder_tree_v1 if you need the count. This matches what the sibling bulk_retrieve_test_cases run (tests/live/runs/tm/bulk_retrieve_test_cases.json) independently found for its own {success, folders} response, and its own guidance text explicitly (and here, inconsistently with the actual body) still calls folders 'folder case counts' — the same probably-copy-pasted guidance overstatement likely applies to this capability's guidance too, though this capability declares no guidance text at all currently, only 'Archiving hides cases from the working set without deleting them; they can be retrieved again.'\n\nPartial failure (one nonexistent id in the batch): bare 404 {success:false}, no message, atomic — nothing in the batch changes. Independently reproduced by the sibling bulk_retrieve_test_cases probe with a similarly-shaped mixed batch, so this is a consistent behaviour across the archive/retrieve pair, not a fluke. This is one of (per the task brief) four distinct partial-failure behaviours seen across six sibling bulk routes: silent 200 half-success ×2, clean 400, bare 404 {success:false} ×2 (this capability + bulk_retrieve_test_cases), 404 {error:...} with no success key, and 502.\n\nFolder count integrity: get_folder_tree_v1 read before vs after this probe (archive four ids, then restore via bulk_retrieve_test_cases) shows __scratch__ (764138) cases_count unchanged at 23 once the round trip completed — consistent with the sibling probe's observation that the same folder's cases_count moved 23 -> 19 -> 23 across an archive/restore cycle, i.e. archived cases are excluded from cases_count and restoring puts them back. Confirmed accurate for this capability's own archive call, not just inferred from the sibling.\n\nWorth recording explicitly, per the task brief: bulk_archive_test_plans_v1 (the analogous test-PLAN archive capability) is BLOCKED — 404 {\"success\":false,\"errors\":\"Feature not available\"}, gated off by a group feature flag. Test-CASE archiving (this capability) is not gated the same way and works cleanly. Two sibling archive capabilities, same product, one flag-gated off (plans) and one fully functional (cases).\n\nRestore verified by read, not from the write response: get_test_cases_v1 (all_folders=true) after the restore call shows all four ids (1983896-1983899 / TC-54464..TC-54467) present again in folder 764138 with no archived indicator, and get_folder_tree_v1 confirms __scratch__ back at cases_count 23. __readonly__ (764093, cases_count 2) and the rest of the project (32 total cases visible, including the evidence case TC-54458/1975349) were never touched — only the four __probe-bin-* ids were ever named in any request body across this whole probe."
+}

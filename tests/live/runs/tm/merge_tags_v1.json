@@ -1,0 +1,115 @@
+{
+  "capability": "merge_tags_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:13:30Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "A previous merge_tags_v1 attempt was interrupted mid-outage; two sibling probes running at the same time reported failure but had in fact committed writes. Read the full test_case tag vocabulary for PR-2005 BEFORE touching anything, to check whether an earlier attempt already created or merged a __mcp-probe-mergetag-* tag that this run would need to reuse or work around.",
+      "source": "invoked",
+      "capability": "list_tags_v3",
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "query": { "entity_type": "test_case", "per_page": 100, "p": 1 }
+      },
+      "status": 200,
+      "produced": {
+        "note": "search query param silently ignored (see contract notes) - full unfiltered list returned regardless. Paged p=1..3 (count 211 at the time) and confirmed by full-text scan of every tag name: NO tag matching __mcp-probe-mergetag-* existed yet. The only pre-existing probe-owned tags visible were __mcp-probe-tag-20260918a-renamed (id 541004, usage_count 1) and mcp-probe (id 541006, usage_count 47) - both out of scope per the brief (must not merge pre-existing tags). Baseline is clean: the earlier interrupted attempt left no mergetag residue for entity_type=test_case."
+      }
+    },
+    {
+      "step": 2,
+      "why": "Locate the free case TC-54486's internal id and folder_id (needed as path params for tagging), while avoiding TC-54484/54485/54487/54489/54490/54491 which concurrent probes are using.",
+      "source": "invoked",
+      "capability": "get_test_cases_v1",
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "query": { "all_folders": "true", "per_page": 100, "p": 1, "sort_by": "name-DESC", "required[fields]": "name" }
+      },
+      "status": 200,
+      "produced": {
+        "TC-54486": { "id": 1985020, "test_case_folder_id": 764138, "name": "__mcp-probe-bulkcase-20260921-2", "tags_before": [] }
+      }
+    },
+    {
+      "step": 3,
+      "why": "Create two fresh, probe-owned tags and attach BOTH to TC-54486 in one edit, so the merge under test operates only on tags this run created (never a pre-existing tag, per the brief).",
+      "source": "invoked",
+      "capability": "edit_test_case_partial_v1",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985020 },
+        "body": { "tags": ["__mcp-probe-mergetag-20260922-a", "__mcp-probe-mergetag-20260922-b"] }
+      },
+      "status": 200,
+      "produced": { "success": true }
+    },
+    {
+      "step": 4,
+      "why": "Independent read to confirm both tags were actually created (not just acknowledged) and to capture their ids for the merge body, since merge_tags_v1 takes ids, not names, and every project-level tag listing returns names/ids together only here.",
+      "source": "invoked",
+      "capability": "list_tags_v3",
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "query": { "entity_type": "test_case", "per_page": 100, "p": 1 }
+      },
+      "status": 200,
+      "produced": {
+        "tag_count_before_a_b": 211,
+        "tag_count_after_a_b": 213,
+        "__mcp-probe-mergetag-20260922-a": { "id": 541125, "usage_count": 1, "created_by": 6013 },
+        "__mcp-probe-mergetag-20260922-b": { "id": 541126, "usage_count": 1, "created_by": 6013 },
+        "baseline_confirmed": "count went up by exactly 2 (211 -> 213), both new tags carry created_by:6013 (this session) and usage_count:1, and TC-54486 is their only usage. Pre-merge baseline: TC-54486 carries BOTH __mcp-probe-mergetag-20260922-a (id 541125) and __mcp-probe-mergetag-20260922-b (id 541126)."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "source_id": 541126, "target_id": 541125, "entity_type": "test_case" }
+      },
+      "status": 400,
+      "error": "{\"type\":\"invalid\",\"message\":\"source_ids is required.\"}",
+      "changed": "First attempt used the body field exactly as declared by describeCapability (source_id, singular integer). The backing service rejected it, naming a field ('source_ids') that the declared contract does not mention at all."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "source_ids": [541126], "target_id": 541125, "entity_type": "test_case" }
+      },
+      "status": null,
+      "error": "\"unknown body: source_ids. accepted: entity_type, source_id, target_id\"",
+      "changed": "Tried sending the field name the backend actually asked for ('source_ids', as an array). This never reached the server - the MCP invokeCapability layer itself rejected it client-side because 'source_ids' is not in the tool's declared schema (only entity_type, source_id, target_id are accepted). So the correctly-named field cannot be sent through this tool at all."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "source_id": [541126], "target_id": 541125, "entity_type": "test_case" }
+      },
+      "status": 400,
+      "error": "{\"type\":\"invalid\",\"message\":\"source_ids is required.\"}",
+      "changed": "Last try within the 3-attempt budget: kept the declared/accepted key name 'source_id' (so the MCP wrapper would forward it) but sent an array value instead of an integer, hoping the wrapper serializes 'source_id' to 'source_ids' on the wire when given an array. Identical 400 to attempt 1 - the wrapper forwards the key literally as 'source_id' regardless of value type/shape, and the backend does not recognize that key under any value shape. Budget exhausted; stopped here rather than retrying further, per the 3-attempt cap."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": { "source_id": 541126, "target_id": 541125, "entity_type": "test_case" }
+    },
+    "status": 400,
+    "response_keys": ["type", "message"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["source_id", "target_id", "entity_type"],
+    "json_path": null,
+    "declared_missing": ["source_ids (the field name the backing service actually requires) is entirely absent from the declared contract"],
+    "undeclared_returned": []
+  },
+  "notes": "VERDICT: BLOCKED, at the shallowest possible point - the declared request contract does not describe a body the backing service will accept, and the MCP tool's own schema validation prevents sending the body the service actually wants. Never diffed against the declared success schema because no 200 was ever reached; this is a request-shape defect, not a response defect.\n\nWHAT HAPPENED: describeCapability declares exactly one source-tag field, 'source_id' (integer, singular) - 'the tag that LOSES'. Every call using that exact declared field, with the exact declared type (integer, attempt 1) and even coerced to an array (attempt 3), was rejected by the backing service with 400 {\"type\":\"invalid\",\"message\":\"source_ids is required.\"}. The backend's own error message names the field it wants: 'source_ids', plural. When attempt 2 tried sending that literal field name as an array (the shape 'source_ids: [541126]' its own error message implies), the request never left the client - the invokeCapability tool rejected it before any HTTP call, because its schema (taken from describeCapability) only whitelists 'entity_type, source_id, target_id' as body keys. So: the declared contract's field name for the losing tag is wrong (should be plural, and very likely accepts multiple source tags at once - a materially different capability shape than 'merge exactly one tag into another'), and the MCP layer's strict enforcement of that wrong declared name makes the correct call unreachable through this tool. This is not a preprod outage or a v1/v2 hang: list_tags_v3 and edit_test_case_partial_v1 both succeeded cleanly against the same project immediately before and after these attempts, and none of the three failures carry the 'the product could not be reached'/status:0 signature - all three are real, addressable 400s or client-side rejections.\n\nWHAT THIS MEANS FOR THE CAPABILITY'S ACTUAL SHAPE: the backend error message 'source_ids is required' (plural) strongly suggests merge_tags_v1's real backing route takes a LIST of source tag ids to merge into one target, not a single source_id as documented - i.e. bulk-merge-many-into-one, not merge-one-into-one. This could not be confirmed further within the 3-attempt budget/tool constraints, but it is the most likely explanation and should route to whoever owns the capability-index entry: rename source_id -> source_ids (array) in the declared contract, and re-test whether entity_type validation, the admin-gate-skipped-outside-prod note, and the 'no envelope, raw passthrough' response-shape guidance still hold once the correct field name is used.\n\nMERGE SEMANTICS QUESTION (does the tag disappear / do cases get repointed / duplicate-vs-single-tag on a case that carried both) - UNVERIFIED. The merge itself never executed, so none of the three questions in the task brief (does the losing tag disappear entirely, do cases carrying it get repointed at the winner, does a case carrying both end up with one tag or a duplicate) could be answered. TC-54486 (1985020) currently still carries BOTH __mcp-probe-mergetag-20260922-a (id 541125, target/would-be-survivor) and __mcp-probe-mergetag-20260922-b (id 541126, source/would-be-loser) - unmerged. Both tags remain live in the project's test_case tag vocabulary (usage_count 1 each) for whoever picks this back up once the contract is fixed, or for a follow-up probe using the corrected 'source_ids' field name (assuming a future MCP-layer redeploy widens the accepted body keys to match).\n\nCLEANUP LEDGER: created __mcp-probe-mergetag-20260922-a (tag id 541125) and __mcp-probe-mergetag-20260922-b (tag id 541126), both attached only to TC-54486 (internal id 1985020, folder 764138, PR-2005/project 379335744). No merge occurred; both tags survive independently, no duplicate-tag state was created (there was never a successful merge to create one), and no other case, run, plan, or shared step was touched by this probe.\n\nSIDE FINDING (list_tags_v3, unrelated to the blocked write but discovered while establishing the setup baseline): the declared 'search' query parameter does not filter at all. Calling list_tags_v3 with query.search='__mcp-probe-mergetag' returned the full, unfiltered 211-tag list (identical count and identical page-1 contents to an unfiltered call) rather than narrowing to matching names - confirmed by paging p=1..3 with and without the search term and comparing counts/contents. Also: the declared 200 schema promises a top-level 'tags' array; the actual key returned on every call in this session was 'tag_objects', not 'tags' - a renamed-field response drift on the one read capability that did work, noted here since it was encountered en route to the blocked write and is not yet filed elsewhere for this capability."
+}

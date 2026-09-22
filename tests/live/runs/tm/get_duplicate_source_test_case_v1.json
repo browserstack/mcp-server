@@ -1,0 +1,40 @@
+{
+  "capability": "get_duplicate_source_test_case_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:30:37Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "need a real duplicate id (a suggested pair) to look for one to promote to a merged-pair id",
+      "source": "invoked",
+      "capability": "list_duplicates_v1",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"page": 1}},
+      "status": 200,
+      "produced": {"success": true, "duplicates": [], "info": {"count": 0, "total_pages": 0}}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "duplicate_id": 999999999}},
+      "status": 404,
+      "error": "{\"success\":false,\"error\":\"Duplicate not found.\"}",
+      "changed": "probed the declared 'unknown or unmerged pair' 404 envelope with a made-up id, since no real id was obtainable; not a real fix-and-retry sequence"
+    }
+  ],
+  "probe": {
+    "arguments": {},
+    "status": null,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "duplicate_id (path, integer)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "UNVERIFIED: no duplicate id could be obtained. list_duplicates_v1 on project 379335744 (the only pool project) returned {duplicates: [], info: {count:0, total_pages:0}} — per that capability's own guidance this is ambiguous between 'dedupe feature off' and 'genuinely clean project' and cannot be disambiguated without invoking the dedupe-status read, which was out of scope here. Beyond that: even a nonempty list_duplicates_v1 result would not have sufficed. describeCapability on get_duplicate_source_test_case_v1 states explicitly it only works for a pair whose status is 'merged' ('the exact opposite of the read/resolve/discard calls, which work only while a pair is suggested'); list_duplicates_v1 only ever returns pairs still in 'suggested' status ('Once a pair is merged, archived or discarded it leaves this listing permanently'). So there is no read-only path from list_duplicates_v1 to a usable duplicate_id for this capability — the only way to mint a merged-pair id is to actually run a merge (a write/destructive action), which this round explicitly forbids, and which the task also separately forbids triggering a dedupe run for. Read attempted: list_duplicates_v1 (project 379335744, page 1) — empty. Id that could not be obtained: any duplicate_id in status 'merged' for project 379335744 (pool folder 764093 / TC-54455 / TC-54456 gave no route to one either, since none of the pool capabilities create or expose a merged pair). One attempt was made against a fabricated id (999999999) purely to sanity-check the declared 404 error envelope for 'unknown or unmerged pair' — it matched exactly: {success:false, error:'Duplicate not found.'} with no `data` key, as declared. This is NOT evidence toward PASS/DRIFT since no 200 was ever observed; declared_missing/undeclared_returned are left empty per instructions (no 200 seen). CONTRACT COMPARISON vs get_duplicate_v1 (both read-only, both take {project_id, duplicate_id} on nearly the same path): the two descriptions ARE clearly distinguishing here, so this is not one of the unlabeled near-duplicate pairs. get_duplicate_v1 reads a currently 'suggested' pair — both full test cases side by side (title, description, folder, owner, ai_score, reason, duplicate_type), unwrapped at the top level as `duplicate`, intended for a human deciding how to resolve it; it 404s ({errors: 'Duplicate not found.'} or {errors:'Test case not found.'}, key 'errors' plural) once the pair has already been resolved. get_duplicate_source_test_case_v1 reads a pair that has ALREADY been merged — it returns not the live pair but the frozen pre-merge snapshot of the test case that was folded away, wrapped under `data.test_case`, with its own field set captured at merge time (steps, attachments with freshly-signed short-lived URLs, template) rather than reflecting the live test case; its 404 envelopes use the singular key 'error' and come in two shapes distinguished by presence of `data` (missing-snapshot vs unknown/unmerged). So the pair is not actually ambiguous/near-duplicate in the tracked-problem sense: one is 'inspect a live suggestion', the other is 'recover what a merge overwrote' — disjoint statuses (suggested vs merged), disjoint envelopes (top-level `duplicate` vs `data.test_case`), disjoint error key casing (`errors` vs `error`)."
+}

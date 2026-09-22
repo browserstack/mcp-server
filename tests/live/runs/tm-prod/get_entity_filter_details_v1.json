@@ -1,0 +1,102 @@
+{
+  "capability": "get_entity_filter_details_v1",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:55:32Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": "describeCapability(get_entity_filter_details_v1, product=tm)",
+      "result": "entity path_param enum declared as [\"test-cases\",\"trtc\",\"test-runs\"], with the description itself noting 'test-plans is allowed by the route but rejected by the handler with 400'. Declared 200 schema requires id/field_value/internal_name/field_name/colour on every priority/status/case_type item, and declares folders as {folder_tree[], folders[]} with items shaped {id,project_id,group_id,name,is_automation,sub_folders_count,links,cases_count,total_cases_count} — identical to the preprod declared contract."
+    },
+    {
+      "step": "get_system_field_values_v1(project_id=332537, field_name=status|priority|case_type)",
+      "result": "Resolved real ids for project 332537: status Active=9319, In Review=9321; priority High=9262, Critical=9263; case_type Acceptance=9375, Functional=9379."
+    },
+    {
+      "step": "get_project_users_v2_v1(project_id=332537)",
+      "result": "Resolved caller's own TM user id via myself: 87158 (Operator), used as owner id."
+    },
+    {
+      "step": "list_test_case_tags_v1(project_id=332537)",
+      "result": "Resolved real tag vocabulary; used \"sprint1\",\"auth\" as q[test_case_tags]."
+    },
+    {
+      "step": "describeEntity(product=tm, entity=project) / describeEntity(product=tm, entity=filter) / searchCapability(product=tm, entity=filter, query=\"filter\")",
+      "result": "See notes — open issue A."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": {"project_id": 332537, "entity": "test-cases"},
+        "query": {
+          "q[status]": "9319,9321",
+          "q[priority]": "9262,9263",
+          "q[case_type]": "9375,9379",
+          "q[folder_ids]": "9697326",
+          "q[owner]": "87158",
+          "q[test_case_tags]": "[\"sprint1\",\"auth\"]"
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "read-only, nothing changed"
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": {"project_id": 332537, "entity": "test-plans"},
+        "query": {"q[status]": "9319"}
+      },
+      "status": null,
+      "error": "{\"ok\":false,\"error\":\"'entity' must be one of: test-cases, trtc, test-runs\"}",
+      "changed": "blocked client-side by invokeCapability before any HTTP call — see open issue B"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {"project_id": 332537, "entity": "test-cases"},
+      "query": {
+        "q[status]": "9319,9321",
+        "q[priority]": "9262,9263",
+        "q[case_type]": "9375,9379",
+        "q[folder_ids]": "9697326",
+        "q[owner]": "87158",
+        "q[test_case_tags]": "[\"sprint1\",\"auth\"]"
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "filter_details"],
+    "item_shape": {
+      "filter_details.priority[0]": {"id": 9262, "entity_type": "TestCase", "field_name": "priority", "field_value": "High", "internal_name": "high"},
+      "filter_details.status[0]": {"id": 9319, "entity_type": "TestCase", "field_name": "status", "field_value": "Active", "internal_name": "active"},
+      "filter_details.case_type[0]": {"id": 9375, "entity_type": "TestCase", "field_name": "category", "field_value": "Acceptance", "internal_name": "acceptance"},
+      "filter_details.owner[0]": {"id": 87158, "browserstack_user_id": 8654251, "full_name": "Operator", "email": "operator@example.invalid", "group_id": 1, "onboarded": 1, "reports_and_notification_enabled": false},
+      "filter_details.test_case_tags": ["sprint1", "auth"],
+      "filter_details.automation_status": null,
+      "filter_details.created_at": null,
+      "filter_details.updated_at": null,
+      "filter_details.custom_fields": {},
+      "filter_details.folders.folder_tree[0]": {"id": 9697326, "parent_id": null, "sub_folders_count": 0, "name": "MCP Testing", "folder_path": "/9697326/", "selected_all": true, "ancestors": [], "project_id": 332537, "contents": []},
+      "filter_details.folders.folders[0]": {"id": 9697326, "parent_id": null, "sub_folders_count": 0, "name": "MCP Testing", "folder_path": "/9697326/", "selected_all": true, "ancestors": [], "project_id": 332537},
+      "filter_details.folders_top_level_extra_keys": ["select_all_parent_ids", "partial_selected_parent_ids", "only_selected_parent_ids", "only_child_selected_parent_ids"]
+    }
+  },
+  "contract": {
+    "required": ["success", "filter_details"],
+    "json_path": "filter_details",
+    "declared_missing": [
+      "colour — declared REQUIRED on every priority/status/case_type item; actually absent from all six real items returned (priority High/Critical, status Active/In Review, case_type Acceptance/Functional). Reproduces preprod finding (1) exactly on prod."
+    ],
+    "undeclared_returned": [
+      "entity_type — present on every priority/status/case_type item ({\"entity_type\":\"TestCase\", ...}); not in the declared item schema. Reproduces preprod finding (2) exactly.",
+      "folders.folder_tree[] items shaped {id,parent_id,sub_folders_count,name,folder_path,selected_all,ancestors,project_id,contents} — totally different from the declared {id,project_id,group_id,name,is_automation,sub_folders_count,links,cases_count,total_cases_count}. Reproduces preprod finding (3): only id/sub_folders_count/name/project_id survive from the declared shape; group_id, is_automation, links, cases_count, total_cases_count are declared-but-absent, while parent_id, folder_path, selected_all, ancestors, contents are undeclared-but-present.",
+      "folders.folders[] (flat list) same structural mismatch as folder_tree, minus the 'contents' key.",
+      "folders top-level: select_all_parent_ids, partial_selected_parent_ids, only_selected_parent_ids, only_child_selected_parent_ids — 4 undeclared keys, exactly as preprod found.",
+      "automation_status: null, created_at: null, updated_at: null, custom_fields: {} — all four returned even though NONE were requested in q[...], contradicting the capability's own guidance ('It returns only the keys you actually passed under q ... send nothing and you get {success:true, filter_details:{}}'). Reproduces preprod finding (4) exactly."
+    ]
+  },
+  "notes": "PREPROD vs PROD — side by side for all 4 drifts:\n(1) colour declared-required-but-missing: PREPROD reproduced on real priority/status/case_type items. PROD: reproduced identically — none of the 6 real items (priority 9262/9263, status 9319/9321, case_type 9375/9379) for project 332537 carry a `colour` key, despite it being declared required in both preprod's and prod's describeCapability schema for this capability.\n(2) undeclared entity_type: PREPROD found it on every priority/status/case_type item. PROD: reproduced identically — every item in filter_details.priority/status/case_type carries `\"entity_type\":\"TestCase\"`, which is not in the declared response schema.\n(3) folders structural mismatch: PREPROD found the declared {folder_tree[],folders[]} items shaped {id,project_id,group_id,name,is_automation,sub_folders_count,links,cases_count,total_cases_count} do not match the actual {id,parent_id,sub_folders_count,name,folder_path,selected_all,ancestors,contents} shape, plus 4 undeclared top-level keys (select_all_parent_ids etc). PROD: reproduced identically on folder 9697326 (\"MCP Testing\") — folder_tree/folders items have parent_id, folder_path, selected_all, ancestors (contents only on folder_tree) instead of group_id/is_automation/links/cases_count/total_cases_count, and the same 4 extra top-level keys (select_all_parent_ids, partial_selected_parent_ids, only_selected_parent_ids, only_child_selected_parent_ids) are present.\n(4) unrequested keys returned anyway: PREPROD found automation_status/created_at/updated_at/custom_fields returned as null/{} even when not requested. PROD: reproduced identically — the probe request sent only q[status], q[priority], q[case_type], q[folder_ids], q[owner], q[test_case_tags], yet the response still includes automation_status:null, created_at:null, updated_at:null, custom_fields:{} — none of which were requested, directly contradicting the capability's own guidance that only requested keys are present.\nAll 4 preprod DRIFT findings reproduce on prod, on real populated data (project 332537 'Demo Project 1', folder 9697326 'MCP Testing', real status/priority/case_type/owner/tag ids).\n\n=== OPEN ISSUE A — entity classification (filter vs project) ===\nVerified on prod: describeEntity(product=tm, entity=\"project\") lists `get_entity_filter_details_v1` in its `capabilities` array alongside get_project_by_integer_id_v1, get_project_settings, list_projects_v1, etc. — confirmed FILED UNDER entity=project.\ndescribeEntity(product=tm, entity=\"filter\") lists exactly 5 capabilities in its `capabilities` array: create_filter, delete_filter, get_filter, list_filters, update_filter. get_entity_filter_details_v1 is NOT among them.\nsearchCapability(product=tm, entity=\"filter\", query=\"filter\") returned total_matched=5, and those 5 results were exactly the same filter CRUD set (create_filter, get_filter, update_filter, list_filters, delete_filter) — get_entity_filter_details_v1 did not appear.\nCONCLUSION: this reproduces on prod exactly as on preprod, and is expected to — it is a registry/index property (entity classification), not a live-API behavior, so it cannot differ by environment. get_entity_filter_details_v1 is UNREACHABLE via an entity=filter-scoped search on prod, and IS filed under entity=project, despite its own intent text describing it as pure filter-id hydration (\"turn priority/status/case-type/custom-field ids, folder ids and user ids into names, colours and folder paths so a saved filter can be rendered\"). This is a registry misclassification, confirmed identical on both environments.\n\n=== OPEN ISSUE B — entity enum blocks test-plans: client-side vs server 4xx ===\nCalled invokeCapability(name=get_entity_filter_details_v1, product=tm, path_params={project_id:332537, entity:\"test-plans\"}, query={\"q[status]\":\"9319\"}).\nEXACT RESULT: `{\"ok\":false,\"error\":\"'entity' must be one of: test-cases, trtc, test-runs\"}` — no `http_response` key at all, no HTTP status code, no server-shaped error envelope (the capability's own declared error envelopes are `{success:false,error:{code,message,details}}`; this response has neither `success` nor that structure).\nCONCLUSION: this is a CLIENT-SIDE rejection produced by the invokeCapability tool's own JSON-schema validation of the `entity` path_param enum — it never reaches the API server. This is distinct from, and happens BEFORE, the handler-level 400 that the preprod finding described (the handler itself also rejects entity=test-plans with a genuine 400, per describeCapability's own guidance: \"'test-plans' passes the route constraint but is not in the handler's map and returns 400 — the route and the handler disagree\"). On prod, that server-side 400 is UNREACHABLE through this MCP surface because the client-side enum check fires first and short-circuits the call — the same double-block (schema-level AND handler-level) confirmed on preprod is confirmed here too, with the schema-level block being the one that actually fires when going through invokeCapability."
+}

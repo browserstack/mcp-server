@@ -1,0 +1,42 @@
+{
+  "capability": "get_test_plan_by_integer_id_v1",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T11:03:39Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "route takes the INTEGER plan id; need to resolve TP-1621 (__readonly__ plan) to its integer id via the project's plan listing",
+      "source": "invoked",
+      "capability": "list_test_plans_v1",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"p": 1}},
+      "status": 200,
+      "produced": {"identifier": "TP-1621", "id": 48300}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48300}},
+      "status": 200,
+      "error": "",
+      "changed": ""
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48300}},
+    "status": 200,
+    "response_keys": ["success", "test_plan"],
+    "item_shape": {
+      "test_plan": ["id", "identifier", "name", "description", "plan_status", "active_state", "start_date", "end_date", "owner", "assignee", "created_by", "completed_by", "tags", "issues", "attachments", "custom_fields", "parent_plan_id", "sub_plans_count", "test_runs_count", "total_test_runs_count", "test_plan_progress", "test_plan_progress_v2", "test_results_trend", "test_results_trend_v2", "record_status", "review_status", "project_id", "created_at", "updated_at", "links"]
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "test_plan_id (path, integer)"],
+    "json_path": null,
+    "declared_missing": ["test_plan.parent_plan", "test_plan.reviewers"],
+    "undeclared_returned": ["test_plan.test_plan_progress", "test_plan.test_results_trend"]
+  },
+  "notes": "PASS on function: single attempt, 200, correct shape, owner/assignee present as declared. DRIFT on contract completeness: response includes test_plan.test_plan_progress and test_plan.test_results_trend, neither of which is listed in the capability's declared `returns` array (both are mentioned only in prose guidance, which says test_plan_progress is always {} and the real rollup is test_plan_progress_v2 — guidance is accurate, but the formal returns/schema enumeration omits both fields; a schema consumer relying only on `returns` would not know these keys exist). declared_missing (parent_plan, reviewers) are NOT contract violations: this is a top-level plan (parent_plan is sub-plan-only per guidance) with no review workflow configured (reviewers is conditional per guidance) — both absences are the documented, expected behavior, listed here only because the task requires the shallowest missing path. Also observed: test_plan_progress_v2 and test_results_trend_v2 came back as literal null (not {} / not an object) for this 0-test-run plan; the describeCapability 200 schema for this route does not type-expand these fields at all (only test_plan.identifier/name are given nested types), so this is not verifiable as a declared-type mismatch, just a live observation worth flagging for anyone assuming these are always objects.\n\nSPECIFIC INTEREST — owner claim: CONFIRMED, holds live. get_test_plan_by_integer_id_v1 declares `owner` (and `assignee`, `created_by`, `completed_by`) in its `returns` list and the live 200 response for TP-1621 (integer id 48300) actually contains \"owner\": 2522 and a resolved \"assignee\" object. get_test_plan_v2's declared `returns` list has NO `owner` (and no `assignee`) — confirmed by re-reading its full expanded schema, which enumerates test_plan's properties in detail (identifier, name, description, active_state, tags, issues, test_runs_count, test_runs, sub_plans_count, parent_plan_id, start_date, end_date, created_at, project_id, links, urls) with no owner field anywhere. Live invocation of get_test_plan_v2 for the SAME plan (PR-2005/TP-1621) returned 200 with a test_plan object that indeed has no owner and no assignee key at all. So the routing eval's justification is correct on both counts: v1 (by integer id) returns owner, v2 does not — verified live, not just from contracts. If a caller asks 'who owns this plan', v2 alone cannot answer it; v1 is the right (currently only) capability that surfaces owner directly on a single-plan read."
+}

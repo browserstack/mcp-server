@@ -45,7 +45,7 @@ Conversely, three fields are **returned but absent from the nested schema**: `fi
 
 ## Drift 3 — `assignee` declared an object, returned a string
 
-Declared as an object; actually returned as the plain email string `"ing@bsstag.com"`. A typed client deserialising it as an object breaks.
+Declared as an object; actually returned as the plain email string `"probe-user@example.invalid"`. A typed client deserialising it as an object breaks.
 
 This is the fourth instance in the suite of a declared type not matching reality, after `is_dynamic` (bool vs int across endpoints), `cases_count` (`null` vs `0`), and `projectVisibilityBanner` (`null` vs object).
 

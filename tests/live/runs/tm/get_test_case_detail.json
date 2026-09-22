@@ -1,0 +1,86 @@
+{
+  "capability": "get_test_case_detail",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T11:13:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "pool project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "pool __readonly__ folder and its two seeded cases, to probe the empty-case path first",
+      "source": "pool",
+      "capability": null,
+      "produced": { "folder_id": 764093, "TC-54455": 1971631, "TC-54456": 1971632, "known_attachment_id": 1102622 }
+    },
+    {
+      "step": 3,
+      "why": "the pool's __readonly__ cases have no recorded results anywhere in the project, and the prompt's specific-interest questions (issues array, 'fullest read') need a case that actually has executions to be a fair test. TC-54458/TR-9062 was named as holding the project's one known recorded result, but its integer id and current folder were not given, so it had to be located read-only.",
+      "source": "invoked",
+      "capability": "search_project_entities_v2",
+      "arguments": { "path_params": { "project_id": 379335744, "entity": "test-cases" }, "body": { "query": "TC-54458", "p": 1, "per_page": 5 } },
+      "status": 200,
+      "produced": { "TC-54458_integer_id": 1975349, "TC-54458_folder_id": 764828, "folder_name": "__mcp-probe-movetarget-2026-09-18T04-31-51Z (under __scratch__)" }
+    },
+    {
+      "step": 4,
+      "why": "cross-check: confirm TC-54458 actually has recorded results in TR-9062 (including the named id 2150387456) before trusting or distrusting what get_test_case_detail reports for it",
+      "source": "invoked",
+      "capability": "get_test_results_for_test_case_v2",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062", "test_case_id": "TC-54458" } },
+      "status": 200,
+      "produced": { "test_results_count": 14, "includes_id_2150387456": true, "all_result_issues_empty": true }
+    },
+    {
+      "step": 5,
+      "why": "the near-duplicate question (does the detail read genuinely add runs/results/issue metadata over get_test_case_by_integer_id_v1) needed a direct side-by-side on the same case",
+      "source": "invoked",
+      "capability": "get_test_case_by_integer_id_v1",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764828, "test_case_id": 1975349 } },
+      "status": 200,
+      "produced": { "same_test_run_results_count": 0, "same_issues": [], "same_comments_count": 14, "no_testcase_template": true, "no_duplicates_tc_count": true, "no_top_level_linked_issues_or_is_archived": true }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 764828, "test_case_id": 1975349 },
+      "query": { "include": "folder_path", "hasDuplicates": true }
+    },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "data.test_case.attachments[0] (undeclared field entirely)": ["id", "name", "content_type", "key", "product_id", "byte_size", "checksum", "url", "download_url", "size"],
+      "data.test_case.test_case_steps[0] (declared as a single OBJECT, actually an array of this)": ["id", "hashed_id", "project_id", "test_case_id", "test_recording_id", "order", "step", "result", "test_data", "created_at", "updated_at", "shared_step_detail_id", "shared_step_id", "title", "feature", "background", "scenario", "sharedStep"],
+      "data.test_case.issues[]": "UNVERIFIED — empty on every case probed in this project (readonly cases and the one case with 14 real results); no case anywhere in PR-2005 has a linked tracker ticket, so the populated item shape was never exercised"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "folder_id", "test_case_id"],
+    "json_path": "data.test_case",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "data.test_case.is_shared",
+      "data.test_case.attachments (array — present with real data, and explicitly promised by the capability's own intent text, but absent from the declared 200 schema)",
+      "data.test_case.automation_state (whole object: id, internal_name, field_name, colour, value_category, name — schema only declares the separate `automation_status` {name,value} pair)",
+      "data.test_case.folder (always null in every response seen)",
+      "data.test_case.test_run_results_count",
+      "data.test_case.test_run_results_issues_count",
+      "data.test_case.test_case_dataset",
+      "data.test_case.duplicates_tc_count (mentioned only in guidance prose, never in the formal schema; populated only when hasDuplicates=true is sent, otherwise null)",
+      "data.test_case.testcase_template (mentioned only in guidance prose, never in the formal schema; a large nested object)",
+      "data.test_case.template_step_type",
+      "data.test_case.template_id",
+      "data.test_case.template_name",
+      "data.test_case.folder_path (present only when include=folder_path is sent; documented in the query param description, not in the response schema)",
+      "value_category nested inside case_type / priority / status objects (schema declares only {id, internal_name, field_name, colour, name} for each; value_category is undeclared on all three, not just on automation_state as a general house rule might suggest)"
+    ]
+  },
+  "notes": "TYPE-LEVEL DRIFT: the schema declares `data.test_case.test_case_steps` as a single OBJECT ({background, feature, hashed_id, id, order, ..., step, result, ...}). Live, it is always an ARRAY of objects with that same per-step shape (verified non-empty on TC-54458, empty [] on the two __readonly__ cases). A client coded against the declared object shape breaks on the very first non-empty case.\n\nCOUNT DRIFT (the important one): `test_run_results_count` / `test_run_results_issues_count` read 0 and `issues` reads [] for TC-54458 even though that case genuinely has 14 recorded results in TR-9062 (confirmed via get_test_results_for_test_case_v2, including the named result id 2150387456). This is NOT an artifact of the empty-case pool — TC-54458 is a real, populated case reached independently via search_project_entities_v2 — so the counts are simply wrong/stale on this read, not just untested. Guidance says the default (no `exclude`) mode does the 'heavier aggregation' for counts; live, it doesn't deliver on that for this case.\n\nSPECIFIC-INTEREST Q1 (issues / tracker tickets routing claim): `issues` IS declared in the 200 schema at `data.test_case.issues` (type array, item shape `{type:object}` — unfalsifiable, no keys specified) and IS returned live as an array on every call, so the model's stated premise ('describeCapability confirmed its response carries an issues array') is factually correct. But the array was empty in all three cases probed, including the one case in the project with real results, because no test case in PR-2005 has any tracker ticket linked at all — so the populated item shape (what a ticket-linkage row actually looks like) is UNVERIFIED, not confirmed, from this side. The purpose-built alternative, test_case_results_v1 (entity=issue, path requires an explicit issue_type like 'jira-app'), is more scoped to exactly this question and its own docs are explicit about that scope ('Get a test case's linked tracker tickets' / 'linked tickets are on the issues field'); get_test_case_detail's issues field is real but is one of ~35 fields on a much heavier read, several of which (attachments, testcase_template) are entirely undeclared. Routing to get_test_case_detail for 'which tracker tickets are linked' works today only because both surface the same (here, empty) `issues` field — the routing choice is defensible on the declared-schema evidence alone, but not verified as correct because ticket-linkage could never be exercised live in this pool.\n\nSPECIFIC-INTEREST Q2 ('open TC-1042 and show me everything'): get_test_case_detail is the fullest SINGLE-CASE METADATA read — it alone adds testcase_template (full field/template layout), duplicates_tc_count, optional folder_path, and top-level linked_issues + is_archived, none of which get_test_case_by_integer_id_v1 returns. But it is not a complete 'everything' read for runs/results: by default it gives only counts (and here, wrong ones), not the actual result rows — its own guidance says to follow up with the paginated runs-results endpoints for the real rows, which this probe had to do (get_test_results_for_test_case_v2) to find the 14 results this read reported as 0. So 'fullest' is true for case metadata/steps/attachments/template, false for an actual full picture of execution history.\n\nNEAR-DUPLICATE CHECK (get_test_case_by_integer_id_v1): ran the identical case (1975349 / TC-54458) through both reads side by side. get_test_case_by_integer_id_v1's own guidance says 'This returns the case record only. For its linked runs, results and issue metadata use the detail read instead' — but the by-integer-id response ALREADY carries test_run_results_count (0), test_run_results_issues_count (0), issues ([]) and comments_count (14), identical to the detail read's values. So that specific guidance sentence overstates what the detail read uniquely adds. The detail read's genuine, verified-unique additions over the by-integer-id read are: testcase_template, duplicates_tc_count, optional folder_path, and the top-level linked_issues + is_archived keys outside the test_case object — not 'runs, results and issue metadata' as literally worded. The pair is documented (each side references the other), but the by-integer-id side's claim about what it's missing is itself inaccurate and should be corrected to name the fields actually withheld.\n\nAttachment cross-check: attachment id 1102622 (name 'probe.txt', 42 bytes) is confirmed present in `data.test_case.attachments` on TC-54455 (project 379335744 / folder 764093 / case 1971631), alongside three other attachments (1102619, 1102620, 1102621) — matches the stated known fact.\n\nOTHER: `listTestCases` (the native MCP tool, not a capability) failed with HTTP 401 against all three TM regional hosts on every attempt during this probe; unrelated to get_test_case_detail's own contract, worked around via the search_project_entities_v2 capability instead. Query params `include=folder_path` and `hasDuplicates=true` both behave exactly as documented (folder_path appended, duplicates_tc_count flips from null to a resolved integer)."
+}

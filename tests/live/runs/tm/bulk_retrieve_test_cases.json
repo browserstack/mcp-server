@@ -1,0 +1,92 @@
+{
+  "capability": "bulk_retrieve_test_cases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:30:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "baseline: is the project's archive already populated, as the task assumed?",
+      "source": "invoked",
+      "capability": "get_archived_test_cases",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"p": 1}},
+      "status": 200,
+      "produced": {"test_cases": [], "info": {"count": 0}}
+    },
+    {
+      "step": 2,
+      "why": "baseline: is the project's bin already populated with the named target ids?",
+      "source": "invoked",
+      "capability": "list_binned_test_cases_v1",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"p": 1, "limit": 50}},
+      "status": 200,
+      "produced": {"total": 8, "identifiers": ["TC-54468","TC-54469","TC-54470","TC-54471","TC-54472","TC-54473","TC-54474","TC-54475"], "note": "a DIFFERENT, pre-existing __probe-bin-* batch — none of TC-54464..TC-54467 are in it"}
+    },
+    {
+      "step": 3,
+      "why": "confirm the actual live state of the four named targets (TC-54464..TC-54467 / 1983896-1983899), since neither the archive nor the bin listing contained them",
+      "source": "invoked",
+      "capability": "get_test_case_v2",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_case_id": "TC-54464..TC-54467 (4 calls)"}},
+      "status": 200,
+      "produced": {"all_four": {"status": "Active", "folder_id": 764138, "folder_name": "__scratch__"}, "finding": "all four targets were plain LIVE cases, neither archived nor binned — the task's premise ('an earlier campaign' left them archived/binned) did not hold in this environment"}
+    },
+    {
+      "step": 4,
+      "why": "create the precondition this capability actually needs (an archived case), using the sibling bulk-archive write, since the targets were live",
+      "source": "invoked",
+      "capability": "bulk_archive_test_cases_by_project",
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"ids": [1983896, 1983897, 1983898, 1983899], "de_selected_ids": [], "select_all": false}},
+      "status": 200,
+      "produced": {"success": true, "folders": {"764138": [{"id": 764138, "name": "__scratch__"}]}}
+    },
+    {
+      "step": 5,
+      "why": "verify the archive write actually landed (never trust the write response) before probing the restore",
+      "source": "invoked",
+      "capability": "get_archived_test_cases",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"p": 1}},
+      "status": 200,
+      "produced": {"count": 4, "identifiers": ["TC-54464","TC-54465","TC-54466","TC-54467"], "all_folder_ids": 764138}
+    },
+    {
+      "step": 6,
+      "why": "baseline folder case count, to check cases_count accuracy after the restore",
+      "source": "invoked",
+      "capability": "get_folder_tree_v1",
+      "arguments": {"path_params": {"project_id": 379335744}},
+      "status": 200,
+      "produced": {"folder_764138_cases_count": 19, "note": "was 23 before the setup archive in step 4 (4 fewer while archived), confirming archived cases are excluded from folder cases_count"}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"ids": [1983896, 1983897, 1983898, 1983899, 999999999], "de_selected_ids": [], "select_all": false}},
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "nothing — verified via attempt 2 immediately after (same 4 valid ids alone succeeded and actually restored the cases, proving attempt 1 restored nothing)"
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"ids": [1983896, 1983897, 1983898, 1983899], "de_selected_ids": [], "select_all": false}},
+      "status": 200,
+      "error": null,
+      "changed": "all 4 targets un-archived, restored to their original folder 764138"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}, "body": {"ids": [1983896, 1983897, 1983898, 1983899], "de_selected_ids": [], "select_all": false}},
+    "status": 200,
+    "response_keys": ["success", "folders"],
+    "item_shape": ["id", "name", "parent_id", "ui_position"]
+  },
+  "contract": {
+    "required": ["project_id (path)", "ids OR select_all (body, sent FLAT, not nested under test_case despite the declared json_path)"],
+    "json_path": "/test_case/ids, /test_case/de_selected_ids, /test_case/select_all, /test_case/folders are declared as nested under a test_case wrapper, but the live body is flat — ids/de_selected_ids/select_all go at the TOP LEVEL. Sending an explicit test_case wrapper (mirroring the archive sibling's own rejection of the same shape) is refused client-side as an unknown body key; only the flat form was ever accepted.",
+    "declared_missing": [],
+    "undeclared_returned": ["HTTP 404 {success:false} with an empty body (no error object, no message) — not one of the five declared response codes (200/400/401/403/422/500). This is the status a selection containing even one nonexistent id returns; it is NOT the documented bare-400 'empty selection' case (the selection was non-empty and 4/5 ids were valid), so it is a genuinely undeclared failure mode, not an instance of an existing one."]
+  },
+  "notes": "WHAT THIS ACTUALLY DOES: bulk_retrieve_test_cases is the un-archive — it restores cases OUT OF THE PROJECT ARCHIVE (is_archived:true), not out of the recycle bin, and not a read/fetch of any kind despite 'retrieve' sounding like one. This is confirmed by describeCapability's own intent text ('the undo for a bulk archive') and by this probe's behavior: it did nothing until the targets were actually archived, and after that single write it un-archived them exactly. That makes this the THIRD instance in this campaign of a name that invites the wrong mental model — after bulk_assign_test_cases_to_test_run (assigns owners, cannot add cases to a run) and undo_remove_folder (a dead alias for delete) — and the second one specifically where a plain-read-sounding name ('retrieve') turns out to be a write.\n\nSETUP MISMATCH WORTH FLAGGING: the task described TC-54464..TC-54467 (1983896-1983899) as already archived/binned from an earlier campaign. Neither get_archived_test_cases nor list_binned_test_cases_v1 showed them — all four were confirmed via get_test_case_v2 to be plain live/Active cases in folder 764138. To actually exercise the capability under test, this probe archived them itself via the sibling bulk_archive_test_cases_by_project (verified before/after with get_archived_test_cases), then restored them with bulk_retrieve_test_cases. This is a deliberate, necessary setup step on the same expendable cases named in the task, not scope creep — no other case was touched.\n\nCORE BEHAVIOR — VERIFIED BY READ-BACK, NOT THE WRITE RESPONSE: attempt 2 (the 4 valid ids alone) returned 200 {success:true, folders:{...}} exactly as declared: folder case counts, not the restored cases. Reading back independently: (1) get_test_case_v2 on all 4 identifiers now returns 200 status:Active (previously 404 'No matching records found' while archived); (2) get_archived_test_cases on the project now returns 0 rows (was 4 immediately after the archive setup step); (3) get_folder_tree_v1 shows folder 764138's cases_count back at 23 (was 19 while the 4 were archived, 23 again after restore) — folder cases_count is accurate on both the archive and the restore side of this cycle.\n\nWHERE A RESTORED CASE LANDS: back in its ORIGINAL folder, not root and not somewhere new. All 4 cases' folder_id was 764138 before archiving and 764138 again after the restore (get_test_case_v2 confirms this per-case). The original folder (__scratch__) still existed throughout, so the 'folder no longer exists' edge case was not exercised in this probe — that remains untested.\n\nOPTION-ID FIDELITY (checked against the bulk_copy_test_cases precedent, where copying silently rewrites option ids to the project-default lower block): NOT REPRODUCED HERE. get_test_case_detail on TC-54464 (1983896) after restore shows case_type id 318599, priority id 318591, status id 318605 — IDENTICAL to the ids recorded on the same case while it sat in the archive listing before the restore call. Archive/restore does not rewrite these system-field option ids. Caveat: none of the four probe cases had any CUSTOM dropdown field populated (custom_fields: [] throughout), so this only confirms fidelity for the built-in case_type/priority/status fields, not for custom-field dropdown option ids — that narrower question is untested, not passed.\n\nTWO-READER AGREEMENT CHECK (get_archived_test_cases vs list_binned_test_cases_v1): no disagreement found. Before the restore, get_archived_test_cases correctly listed all 4 while list_binned_test_cases_v1 correctly showed none of them (it lists a completely separate, pre-existing batch of 8 __probe-bin-* cases, TC-54468 through TC-54475, unaffected throughout this entire probe). After the restore both readers correctly show 0 for these 4 targets. Archive and bin are genuinely separate stores here and the two readers were consistent about that at every step of this probe — unlike other capabilities in this campaign where two readers of nominally the same state have disagreed.\n\nPARTIAL-FAILURE / NONEXISTENT-ID BEHAVIOR (the specific ask: one bad id alongside valid ones): attempt 1 sent all 4 valid archived ids plus one nonexistent id (999999999) and got a BARE 404 {success:false} — no error object, no message, and the whole batch failed (verified: none of the 4 valid cases were restored — the immediately-following attempt 2 with only the 4 valid ids still succeeded and changed state, which would have failed had they already been restored... actually more precisely, the pre-attempt-1 state was unchanged: get_archived_test_cases before attempt 1 had already shown all 4 archived, and it was attempt 2 that produced the restore, so attempt 1 provably restored zero cases). This is a THIRD, previously uncatalogued failure mode for this class of route (the task's running tally was: silent 200 half-success x2, bare 404 x2 [for empty/no-match selections], 502 x1) — here the bare 404 is triggered not by an empty selection but by a NON-EMPTY selection where one member id does not resolve in the forced archive scope, and it is not one of the five declared response codes (200/400/401/403/422/500) at all. Net effect: unlike bulk_copy_test_cases and some siblings which silently proceed with only the valid subset, bulk_retrieve_test_cases fails the ENTIRE batch (all-or-nothing) when any id in the selection is bad — the safer failure mode of the two, but undeclared and unsignaled beyond the bare status code.\n\nUNTESTED (noted rather than guessed): the plan-gated 200 {success:false, error:...} refusal (this workspace is evidently on a paid plan, since real restores succeeded); the >300-case async {success:true, async:true, unique_id} path (only 4 cases were in scope); the 'original folder no longer exists' restore-target edge case; the 'TestCases in progress with another operation' concurrent-op 400.\n\nCLEANUP: no new objects were created by this probe. The only state change is that TC-54464/65/66/67 (1983896-1983899) were archived and then restored back to their original folder 764138 — net state is IDENTICAL to before this probe ran (same folder, same status Active, same option ids). __readonly__ 764093, TC-54455, TC-54456, and TC-54458 (1975349) were never referenced by any call in this probe."
+}

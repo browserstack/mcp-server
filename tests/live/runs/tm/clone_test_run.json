@@ -1,0 +1,53 @@
+{
+  "capability": "clone_test_run",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:29:46Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": "baseline for source TR-9110 (project 379335744 / PR-2005), taken from the task brief and tests/live/CLEANUP-LEDGER.md's `edit_test_run` section rather than a fresh live read immediately before cloning",
+      "result": "uuid 17577900, owner 3741 (as last restored), 5 cases (TC-54455/56/58/85/86), two with recorded results: TC-54485 -> result Passed, mapping_id 2150424062; TC-54486 -> result Blocked, mapping_id 2150424064. No live pre-clone read of TR-9110 was performed by this probe; the post-clone reads below serve as the only live cross-check, and they show TR-9110 had already drifted from this baseline by the time this probe ran (see notes)."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" },
+        "body": { "name": "__mcp-probe-runclone-20260922", "copy_all_cases": true, "copy_tags": true, "copy_tc_assignee": true, "copy_issues": true }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "none needed — flat body (no test_run wrapper), matching spec field names directly, succeeded on the first attempt."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" },
+      "body": { "name": "__mcp-probe-runclone-20260922", "copy_all_cases": true, "copy_tags": true, "copy_tc_assignee": true, "copy_issues": true }
+    },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "data": ["success", "test_run"],
+      "data.test_run": [
+        "active_state", "run_state", "assignee", "created_at", "description", "environment",
+        "id", "identifier", "uuid", "is_automation", "overall_progress",
+        "overall_progress_by_status_id", "name", "owner", "project_id", "tags",
+        "test_cases_count", "updated_at", "test_plans", "is_dynamic", "attachments", "links",
+        "configurations", "metadata", "assignee_imported"
+      ]
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "test_run_id (path)"],
+    "json_path": null,
+    "declared_missing": [
+      "data.test_run.created_by", "data.test_run.observability_url",
+      "data.test_run.type", "data.test_run.self_ui_link"
+    ],
+    "undeclared_returned": []
+  },
+  "notes": "HEADLINE — RESULTS DO NOT CARRY OVER, CONFIRMED DEFINITIVELY. New run TR-9120 (uuid 17578918) was read back two ways, neither trusting the clone's own inline response: get_test_runs_v1 shows TR-9120's overall_progress_by_status_id as a single bucket, {318615 (untested): count 5} — no passed/blocked buckets at all; get_test_cases_for_v1_test_run(TR-9120) shows all 5 rows with latest_status:'untested' and result_status.internal_name:'untested', including the two cases that carry real results on the source (TC-54485 -> mapping_id 2150424068, untested; TC-54486 -> mapping_id 2150424070, untested). Source TR-9110 in the same moment still shows TC-54485 as 'passed' and TC-54486 as 'blocked'. So the clone reset every case to untested and did NOT copy TC-54485's Passed or TC-54486's Blocked result — this is correct, desirable behavior for a 're-execute the same scope' clone, not a defect.\n\nDO NOT TRUST THE CLONE'S OWN RESPONSE — CONFIRMED AGAIN, SAME FAMILY AS clone_exploratory_session_v1. The 200 response returned inline by this very call reported test_cases_count:0, overall_progress all-zero ({untested:0,passed:0,...}), and overall_progress_by_status_id:{} — as if the clone were still empty. But get_test_runs_v1(TR-9120), read moments later, shows test_cases_count:5 and overall_progress_by_status_id:{318615:{count:5}}, and get_test_cases_for_v1_test_run(TR-9120) shows the 5 correct case identifiers already present (TC-54455, TC-54456, TC-54458, TC-54485, TC-54486 — exactly the source's case set). The case rows' own created_at (2026-09-22T05:29:46.685Z) is about 0.2s after the new run's created_at (05:29:46.500Z), so population was effectively synchronous — the clone's own response body is simply wrong/stale about what it had already finished doing, not slow. Unlike copy_folder, this capability declares no 'async' key at all in its response, so a caller has no signal that the inline numbers might be stale.\n\nTHREE-FIELD SERIALIZER — CLONE MATCHES create_test_run_v1 (CORRECT), NOT get_test_runs_v1/edit_test_run. In this call's own 200 body: project_id is the STRING \"379335744\" (correct), is_dynamic is the BOOLEAN false (correct), overall_progress is a real object with all seven status keys, zeroed (correct shape). Cross-checked against get_test_runs_v1 read of the SAME new run (TR-9120) moments later: project_id came back as a bare INTEGER 379335744 (wrong — declared string), is_dynamic came back as the INTEGER 0 (wrong — declared boolean), and overall_progress came back as null (wrong — declared object; not even an empty/zeroed object, actually null). The same three defects reproduce on TR-9110 itself in the same read. So clone_test_run's own write-response serializer is correct and consistent with create_test_run_v1; get_test_runs_v1 remains wrong on all three fields, now additionally confirmed to return outright null for overall_progress rather than a zeroed object, which is a slightly stronger defect than 'zeroed but present' would have been.\n\nWHICH FIELDS CARRIED OVER (source TR-9110 vs clone TR-9120), tested against the emptiness-precedent standard from clone_test_plan_v1/clone_exploratory_session_v1: cases COPIED — confirmed non-trivially, 0-would-be-default -> 5, matching the source's exact case set; copy_all_cases:true is required for this per guidance (declared and consistent). results NOT COPIED — confirmed non-trivially, 2 non-untested source results -> 0 non-untested clone results (see headline above). owner: source read as null at clone time (already drifted from the CLEANUP-LEDGER's last-restored value of 3741, before this probe ever touched it — see next paragraph) -> clone owner also null. UNTESTABLE, matching-emptiness only. tags: source tags:[] (despite copy_tags:true requested) -> clone tags:[]. UNTESTABLE. configurations: source []-> clone []. UNTESTABLE (guidance says configurations are never carried regardless of flags, but this source had none to test that claim against). run_state: source 'new_run' -> clone 'new_run'. Guidance claims the clone always forces new_run regardless of source state, but source was already new_run, so the actual override behavior remains UNVERIFIED (would need a source in in_progress/done/closed to test). active_state: source 'active' -> clone 'active', same limitation, UNVERIFIED for a closed source. issues (copy_issues:true requested): all 5 source cases carry issues:[] -> clone cases issues:[] too. UNTESTABLE. copy_tc_assignee (requested true): the per-run test_assignee field is null on every row of BOTH source and clone — the assignee object visible on each case row is the test case's own global assignee (inherited identically regardless of any run-level flag, since it lives on the test case entity, not the run mapping), so copy_tc_assignee had nothing to prove itself against here either.\n\nSOURCE TR-9110 — SUBSTANTIALLY UNCHANGED BY THIS PROBE, BUT SHOWS UNRELATED DRIFT FROM CONCURRENT ACTIVITY. Aggregate state is intact: get_test_runs_v1 still shows TR-9110 with test_cases_count:5 and overall_progress_by_status_id split 1 passed / 1 blocked / 3 untested, matching the documented baseline exactly. However, get_test_cases_for_v1_test_run(TR-9110) returned 6 rows, not 5: TC-54485 now appears TWICE, both 'passed', at brand-new mapping_ids 2150424076 and 2150424077 (created_at 2026-09-22T05:30:31Z — after this probe's own clone call at 05:29:46Z), and the mapping_id cited in the task brief for TC-54485 (2150424062) no longer exists at all. TC-54486's mapping_id (2150424064, blocked) is unchanged and matches the brief exactly. TR-9110's owner also now reads null, not the 3741 recorded as restored in CLEANUP-LEDGER.md's `edit_test_run` section. This probe made exactly one write call all session — the clone itself — which by its own documented contract only creates a NEW run and has no path back into the source; a GET-only re-read cannot have caused a new mapping_id or cleared an owner. This is attributed to another capability probe writing to TR-9110 concurrently in this shared fixture project during the same window (consistent with the task brief's own warning that mapping_id 'was just proven unstable, shifting to the latest result's id after a write'), not to clone_test_run. Flagging for CLEANUP-LEDGER coordination rather than scoring it against this capability.\n\nCONTRACT: all declared fields present and correctly shaped except four, all missing outright rather than null: created_by and observability_url (both explicitly listed in this capability's own 'returns' summary, absent from the actual body), plus type and self_ui_link (present in the full JSON-schema properties but not in the summary list; both extend the already-documented family-wide 'declared on every test-run capability, returned by none so far' gap to clone_test_run too). No undeclared fields were returned — everything present is a declared field, correctly typed, at the top level of data.test_run.\n\nNEW RUN CREATED: TR-9120 / uuid 17578918, name '__mcp-probe-runclone-20260922', project 379335744 (PR-2005), 5 cases (TC-54455/56/58/85/86) all untested, owner null, tags [], configurations [], test_plans [], run_state new_run, active_state active. TR-9075, TR-9061, TR-9062 (14-result evidence run) and TR-9111 were never referenced by this probe."
+}

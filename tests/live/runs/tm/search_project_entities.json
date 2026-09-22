@@ -1,0 +1,95 @@
+{
+  "capability": "search_project_entities",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope — integer project id required by the {project_id} path segment",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    },
+    {
+      "step": 2,
+      "why": "folder scope to guarantee matching rows (avoid the empty-case trap) — the __readonly__ folder is confirmed to hold TC-54455/TC-54456",
+      "source": "pool",
+      "capability": null,
+      "produced": { "folder_id": 764093 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "entity": "test-cases" },
+      "query": { "q[folder_ids]": "764093", "per_page": 10, "filter_details": "true" }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "folders", "info", "filter_details"],
+    "item_shape": {
+      "id": "integer",
+      "identifier": "string (e.g. TC-54455)",
+      "name": "string",
+      "project_id": "integer",
+      "test_case_folder_id": "integer",
+      "case_type": "object {id, internal_name, field_name, colour, value_category, valueDetails[], name}",
+      "priority": "object (same shape as case_type)",
+      "status": "object (same shape as case_type, plus colour string)",
+      "automation_state": "object {id, internal_name, field_name, colour, value_category, valueDetails[], name} — NOT in declared schema",
+      "automation_status": "object {name, value}",
+      "assignee": "object (user)",
+      "creator_details": "object (user)",
+      "updator_details": "object|null",
+      "owner": "integer",
+      "is_automation": "boolean",
+      "is_shared": "boolean — undeclared",
+      "steps": "array",
+      "tags": "array",
+      "custom_fields": "array",
+      "attachments": "array of {id,name,content_type,key,product_id,byte_size,checksum,size} — undeclared",
+      "template": "string",
+      "template_id": "integer — undeclared",
+      "template_name": "string — undeclared",
+      "template_step_type": "string — undeclared",
+      "step_count": "integer — undeclared",
+      "estimated_duration_seconds": "null — undeclared",
+      "test_run_results_count": "null — undeclared",
+      "test_run_results_issues_count": "null — undeclared",
+      "test_case_dataset": "object {} — undeclared",
+      "links": "object {self, detail, folder}",
+      "metadata": "object {lcnc_build_map, ai_prompt}",
+      "comments_count": "MISSING — declared in schema, absent from actual row"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer, >=1, digits only — a PR-NNN identifier 404s)",
+      "entity (path, enum: test-cases | test-runs | trtc | test-plans)"
+    ],
+    "json_path": null,
+    "declared_missing": [
+      "test_cases[].comments_count"
+    ],
+    "undeclared_returned": [
+      "test_cases[].automation_state",
+      "test_cases[].is_shared",
+      "test_cases[].estimated_duration_seconds",
+      "test_cases[].attachments",
+      "test_cases[].template_id",
+      "test_cases[].template_name",
+      "test_cases[].template_step_type",
+      "test_cases[].step_count",
+      "test_cases[].test_run_results_count",
+      "test_cases[].test_run_results_issues_count",
+      "test_cases[].test_case_dataset",
+      "test_cases[].case_type.value_category",
+      "test_cases[].case_type.valueDetails",
+      "test_cases[].priority.value_category / valueDetails",
+      "test_cases[].status.value_category / valueDetails",
+      "folders — TYPE MISMATCH: declared as an array of {id, project_id, group_id, name, is_automation, sub_folders_count, links, cases_count, total_cases_count}; actual response is an OBJECT keyed by folder_id whose value is an array of trimmed objects {id, name, parent_id, ui_position} (no project_id/group_id/is_automation/sub_folders_count/links/cases_count/total_cases_count; adds parent_id, ui_position)"
+    ]
+  },
+  "notes": "First attempt PASSED (200) — no retries needed. Used q[folder_ids]=764093 (the __readonly__ pool folder) rather than free-text q[query], since guidance warns special characters are stripped before matching and identifiers like 'TC-54455' were not a safe bet for a text match; folder scoping deterministically hit the two known fixture cases (TC-54455 'probe case A', TC-54456 'probe case B') and exercised the full item shape, including nested case_type/priority/status/automation_state option objects and an attachments array on one row. Verdict is DRIFT, not PASS, because of two real contract mismatches: (1) every row declares comments_count but no row actually returns it (declared_missing), and (2) `folders` is declared as a flat array of rich folder objects but is actually returned as a map keyed by folder id whose values are a different, trimmer shape — a structural type mismatch (array vs object), not just extra/missing fields. There is also a long tail of undeclared-but-returned item fields (automation_state as a full option object, attachments, template_id/name/step_type, step_count, is_shared, the two test_run_results_* nulls, test_case_dataset, and value_category/valueDetails nested inside case_type/priority/status) — none of these break usage but the declared schema undercounts what the row actually contains. describeCapability for v1 never surfaced a `json_path` key on any parameter (despite include_responses=all and the entity being marked shape:'discovered'), so contract.json_path is null here — that's a v1-only gap, not an omission on my part. On the v1-vs-v2 question: I also pulled the v2 contract (search_project_entities_v2, POST body) purely to compare — no invoke against it, staying read-only and in-scope. Beyond GET-vs-POST, v2 is a materially richer filter language, not just the same filters moved into a body for length reasons: it adds `match` (a per-field boolean-operator map — all/any/none — for combining a field's own values), `empty` (is-unset filters keyed by system_fields/custom_fields), first-class `custom_fields` value matching, direct `ids` fetch, `is_archived`, `issue_type`/`issue_ids`, `last_executed_by`, and an absolute `date_range` in epoch-ms (v1's created_at/updated_at only take the relative <n>_<unit> token or 'all_time'). v1's flat q[...] bracket params cannot express boolean composition (AND/OR/NONE across a single field's multiple values) or is-empty checks at all — that's the real separation, not just query-string-length avoidance. Every v2 body field also carries an explicit json_path (/q/<name> or /required/<name>), which v1 params never do. So the routing-eval finding that they're 'near-indistinguishable' holds for the common filter surface (folder/status/priority/case_type/owner/tags/automation_state/created_at/updated_at all exist on both with equivalent semantics), but diverges once `match`/`empty`/`custom_fields`/`ids`/`is_archived` are needed — those only exist on v2."
+}

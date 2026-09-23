@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  nodeUpgradeNotice,
-  withNodeUpgradeNotice,
-} from "../../src/lib/node-version-notice";
+import { nodeUpgradeNotice } from "../../src/lib/node-version-notice";
 
 describe("nodeUpgradeNotice", () => {
   it.each(["18.19.0", "20.9.0", "21.7.3"])(
@@ -19,25 +16,4 @@ describe("nodeUpgradeNotice", () => {
       expect(nodeUpgradeNotice(v)).toBe("");
     },
   );
-});
-
-describe("withNodeUpgradeNotice", () => {
-  const result = { content: [{ type: "text", text: "original" }] };
-
-  it("appends the notice when one applies (payload stays at content[0])", () => {
-    const out = withNodeUpgradeNotice(result, "⚠️ upgrade");
-    expect(out.content).toHaveLength(2);
-    expect(out.content[0]).toEqual({ type: "text", text: "original" });
-    expect(out.content[1]).toEqual({ type: "text", text: "⚠️ upgrade" });
-  });
-
-  it("returns the result unchanged when the notice is empty (Node >= 22)", () => {
-    const out = withNodeUpgradeNotice(result, "");
-    expect(out).toBe(result);
-  });
-
-  it("is a no-op on malformed results", () => {
-    const bad = {} as any;
-    expect(withNodeUpgradeNotice(bad, "⚠️ upgrade")).toBe(bad);
-  });
 });

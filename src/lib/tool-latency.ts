@@ -5,13 +5,7 @@ const WRAPPED = Symbol.for("browserstack.mcp.latencyWrapped");
 
 type AnyHandler = (...args: unknown[]) => unknown;
 
-/**
- * Wraps every registered tool handler in `withToolCall`, so each call writes exactly
- * one MCPInstrumentation row when it settles (success, duration_ms, outcome, error
- * fields). The tools' own entry and catch-block `trackMCP` calls fold into that row.
- * Transparent (result passed through, throws rethrown), idempotent, skips task-style
- * (non-function) handlers.
- */
+/** Wraps every function handler in `withToolCall`. Idempotent; skips task-style handlers. */
 export function instrumentToolLatency(
   tools: Record<string, RegisteredTool>,
   getClientInfo: () => ClientInfo,

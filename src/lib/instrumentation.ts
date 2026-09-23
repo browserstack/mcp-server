@@ -53,8 +53,7 @@ function httpStatusOf(error: unknown): number | undefined {
   const e = error as { response?: { status?: unknown }; status?: unknown };
   const direct = e?.response?.status ?? e?.status;
   if (typeof direct === "number") return direct;
-  // Plain Errors from utils carry the status only in the message:
-  //   "Request failed with status code 404", "Failed to fetch from …: 404 Not Found"
+  // Errors from utils carry the status only in the message ("…: 404 Not Found").
   const message = error instanceof Error ? error.message : String(error ?? "");
   const m = message.match(
     /status code (\d{3})|: (\d{3}) [A-Z]|\bHTTP (\d{3})\b/,
@@ -63,7 +62,7 @@ function httpStatusOf(error: unknown): number | undefined {
   return found ? Number(found) : undefined;
 }
 
-/** Bucket a thrown error into a fixed set of causes, so failures group by class. */
+/** Fixed set of causes, so failures group by class instead of by message text. */
 export function classifyError(error: unknown): ErrorClass {
   const e = error as { code?: unknown; name?: unknown; issues?: unknown };
   if (typeof e?.code === "string") {
@@ -128,10 +127,7 @@ function sendEvent(event: MCPEventPayload, config?: any): void {
     .catch(() => {});
 }
 
-/**
- * State of one tool call while its handler runs. Lives in AsyncLocalStorage, so it is
- * request-scoped: concurrent calls in the multi-tenant remote wrapper never share it.
- */
+/** Per-call state; AsyncLocalStorage keeps concurrent (multi-tenant) calls apart. */
 interface CallContext {
   toolName: string;
   clientInfo: ClientInfo;
@@ -142,12 +138,9 @@ interface CallContext {
 const callContext = new AsyncLocalStorage<CallContext>();
 
 /**
- * Records a tool invocation or failure.
- *
- * Inside an instrumented call (see `withToolCall`) nothing is sent: the entry call and
- * the catch-block call fold into the single row written when the handler settles.
- * Outside one (the `started` heartbeat, tools a host registers without wrapping) it
- * behaves as before and posts a row immediately.
+ * Inside `withToolCall` this only records into the call's context; the single row is
+ * written when the handler settles. Outside one (`started` heartbeat, unwrapped host
+ * tools) it posts a row immediately, as before.
  */
 export function trackMCP(
   toolName: string,
@@ -191,10 +184,8 @@ function isErrorResult(result: unknown): boolean {
 }
 
 /**
- * Runs a tool handler and writes exactly one MCPInstrumentation row when it settles:
- * `success` (false when the handler reported or threw an error), `duration_ms`,
- * `outcome` (ok / error_result / threw) and the error fields on failures.
- * Telemetry never affects the call: the result is passed through, throws are rethrown.
+ * Runs a tool handler and writes one MCPInstrumentation row when it settles: success,
+ * duration_ms, outcome (ok / error_result / threw), error fields on failure.
  */
 export async function withToolCall<T>(
   toolName: string,
@@ -220,7 +211,7 @@ export async function withToolCall<T>(
         const live = getClientInfo();
         if (live?.name) clientInfo = live;
       } catch {
-        // client info is optional
+        /* client info is optional */
       }
       const event: MCPEventPayload = {
         event_type: "MCPInstrumentation",
@@ -234,7 +225,7 @@ export async function withToolCall<T>(
       };
       sendEvent(event, ctx.config ?? config);
     } catch {
-      // Telemetry must never affect the tool call.
+      /* telemetry must never affect the call */
     }
   }
 }

@@ -73,6 +73,9 @@
         "guidance": [
           "projectId from here is required by listLoadTests and createLoadTest.",
           "To find a project by name, pass search=<name> so the server matches it in one call — do NOT page the whole project list to find one. Paging every project is the single largest source of redundant calls on this surface.",
+          "NEVER call this repeatedly with limit=1: it returns the same first project every time and makes no progress. To find one project use search=<name>; to browse, make ONE call with a larger limit and page with cursor only if the user wants more.",
+          "search is group-scoped and may match projects in more than one project space; when it returns several, disambiguate by the projectId on each row — do not assume the first.",
+          "You already have this turn's results — reuse them; do not re-issue an identical call you already made.",
           "Only enumerate with cursor + limit when the user actually wants the full list; nextCursor is opaque."
         ],
         "returns": [

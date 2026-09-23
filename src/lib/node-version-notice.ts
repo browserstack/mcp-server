@@ -21,6 +21,6 @@ export function withNodeUpgradeNotice<T extends CallToolResult>(
   if (!notice || !result || !Array.isArray(result.content)) return result;
   return {
     ...result,
-    content: [{ type: "text", text: notice }, ...result.content],
+    content: [...result.content, { type: "text", text: notice }],
   };
 }

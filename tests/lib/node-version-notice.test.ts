@@ -24,11 +24,11 @@ describe("nodeUpgradeNotice", () => {
 describe("withNodeUpgradeNotice", () => {
   const result = { content: [{ type: "text", text: "original" }] };
 
-  it("prepends the notice when one applies", () => {
+  it("appends the notice when one applies (payload stays at content[0])", () => {
     const out = withNodeUpgradeNotice(result, "⚠️ upgrade");
     expect(out.content).toHaveLength(2);
-    expect(out.content[0]).toEqual({ type: "text", text: "⚠️ upgrade" });
-    expect(out.content[1]).toEqual({ type: "text", text: "original" });
+    expect(out.content[0]).toEqual({ type: "text", text: "original" });
+    expect(out.content[1]).toEqual({ type: "text", text: "⚠️ upgrade" });
   });
 
   it("returns the result unchanged when the notice is empty (Node >= 22)", () => {

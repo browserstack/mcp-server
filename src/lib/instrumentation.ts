@@ -6,6 +6,16 @@ const packageJson = require("../../package.json");
 import { apiClient } from "./apiClient.js";
 import globalConfig from "../config.js";
 
+/**
+ * Extra fields a caller may attach to its own row (the capability registry records what
+ * it invoked and how the product answered). Values are scalars so every field stays one
+ * queryable column; nothing here is free text written by a user.
+ */
+export type MCPEventExtras = Record<
+  string,
+  string | number | boolean | undefined
+>;
+
 interface MCPEventPayload {
   event_type: string;
   event_properties: {
@@ -16,7 +26,7 @@ interface MCPEventPayload {
     error_message?: string;
     error_type?: string;
     is_remote?: boolean;
-  };
+  } & MCPEventExtras;
 }
 
 export function trackMCP(
@@ -24,6 +34,7 @@ export function trackMCP(
   clientInfo: { name?: string; version?: string },
   error?: unknown,
   config?: any,
+  extras?: MCPEventExtras,
 ): void {
   const instrumentationEndpoint = "https://api.browserstack.com/sdk/v1/event";
   const isSuccess = !error;
@@ -46,6 +57,9 @@ export function trackMCP(
       mcp_client: mcpClient,
       success: isSuccess,
       is_remote: globalConfig.REMOTE_MCP,
+      // Undefined entries are dropped by JSON.stringify, so an absent extra is an
+      // absent column rather than a null one.
+      ...(extras ?? {}),
     },
   };
 

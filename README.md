@@ -43,7 +43,7 @@ Click on the buttons below to install MCP in your respective IDE:
 
 > **Note:** The hosted Remote MCP server (`mcp.browserstack.com`) is now fully stateless over Streamable HTTP — any Streamable-HTTP client (Claude, Cursor, VS Code, ChatGPT) connects with no configuration change.
 
-#### Note : Ensure you are using Node version >= `18.0` 
+#### Note : Ensure you are using Node version >= `20.9` 
 - Check your node version using `node --version`. Recommended version: `v22.15.0` (LTS)
 - To Upgrade Node :
 - 1. On macOS `(Homebrew) - brew update && brew upgrade node  or if using (nvm) - nvm install 22.15.0 && nvm use 22.15.0 && nvm alias default 22.15.0`
@@ -158,7 +158,7 @@ Generate test cases from PRDs, convert manual tests to low-code automation, and 
 ## 🛠️ Installation
 
 ### 📋 Prerequisites for MCP Setup
-#### Note : Ensure you are using Node version >= `18.0` 
+#### Note : Ensure you are using Node version >= `20.9` 
 - Check your node version using `node --version`. Recommended version: `v22.15.0` (LTS)
    
 ### **One Click MCP Setup**
@@ -178,7 +178,7 @@ Click on the buttons below to install MCP in your respective IDE:
 
    - Once you have an account (and purchased appropriate plan), note down your `username` and `access_key` from [Account Settings](https://www.browserstack.com/accounts/profile/details).
 
-2. #### Note : Ensure you are using Node version >= `18.0` 
+2. #### Note : Ensure you are using Node version >= `20.9` 
     - Check your node version using `node --version`. Recommended version: `v22.15.0` (LTS)
    
 

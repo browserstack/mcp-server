@@ -22,6 +22,7 @@ import { BrowserStackConfig } from "./lib/types.js";
 import addRCATools from "./tools/rca-agent.js";
 import addAskBrowserStackAITool from "./tools/ask-browserstack/register.js";
 import { instrumentToolLatency } from "./lib/tool-latency.js";
+import { nodeUpgradeNotice } from "./lib/node-version-notice.js";
 
 /**
  * Wrapper class for BrowserStack MCP Server
@@ -37,10 +38,13 @@ export class BrowserStackMcpServer {
       packageJson.version,
     );
 
-    this.server = new McpServer({
-      name: "BrowserStack MCP Server",
-      version: packageJson.version,
-    });
+    this.server = new McpServer(
+      {
+        name: "BrowserStack MCP Server",
+        version: packageJson.version,
+      },
+      { instructions: nodeUpgradeNotice() || undefined },
+    );
 
     setupOnInitialized(this.server, this.config);
     this.registerTools();

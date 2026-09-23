@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 // Keep the tool off the network so we exercise the response path, not the API.
 vi.mock("../../src/lib/instrumentation", () => ({ trackMCP: vi.fn() }));
@@ -18,42 +18,54 @@ import { BrowserStackMcpServer } from "../../src/server-factory";
 
 const NOTICE_MARKER = "Node version > 21.x.x";
 
-describe("e2e: Node upgrade notice rides on a real tools/call round-trip", () => {
-  it("appends the notice below Node 22 and omits it on Node >= 22", async () => {
-    const major = Number(process.versions.node.split(".")[0]) || 0;
+// process.versions.node is read-only; override per-case then restore so both
+// the wrapped (<22) and unchanged (>=22) registration paths run deterministically
+// regardless of the host Node version.
+const realNode = process.versions.node;
+const setNode = (v: string) =>
+  Object.defineProperty(process.versions, "node", {
+    value: v,
+    configurable: true,
+  });
 
-    const config: any = {
-      "browserstack-username": "u",
-      "browserstack-access-key": "k",
-    };
-    const bs = new BrowserStackMcpServer(config);
+async function callListTestCases(): Promise<Array<{ text?: string }>> {
+  const config: any = {
+    "browserstack-username": "u",
+    "browserstack-access-key": "k",
+  };
+  const bs = new BrowserStackMcpServer(config); // applies wrapper based on faked node
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  const client = new Client(
+    { name: "e2e", version: "1.0.0" },
+    { capabilities: {} },
+  );
+  await Promise.all([
+    client.connect(clientT),
+    bs.getInstance().connect(serverT),
+  ]);
+  const res: any = await client.callTool({
+    name: "listTestCases",
+    arguments: { project_identifier: "PR-1" },
+  });
+  await client.close();
+  return res.content ?? [];
+}
 
-    const [clientT, serverT] = InMemoryTransport.createLinkedPair();
-    const client = new Client(
-      { name: "e2e", version: "1.0.0" },
-      { capabilities: {} },
-    );
-    await Promise.all([
-      client.connect(clientT),
-      bs.getInstance().connect(serverT),
-    ]);
+describe("e2e: Node upgrade notice on a real tools/call round-trip", () => {
+  afterEach(() => setNode(realNode));
 
-    const res: any = await client.callTool({
-      name: "listTestCases",
-      arguments: { project_identifier: "PR-1" },
-    });
-
-    const blocks: any[] = res.content ?? [];
+  it("appends the notice as the last block on simulated Node < 22", async () => {
+    setNode("18.20.8");
+    const blocks = await callListTestCases();
     const joined = blocks.map((c) => c.text ?? "").join("\n");
+    expect(joined).toContain(NOTICE_MARKER);
+    expect(blocks[blocks.length - 1].text).toContain(NOTICE_MARKER); // payload stays first
+  });
 
-    if (major < 22) {
-      expect(joined).toContain(NOTICE_MARKER);
-      // payload stays first; the notice is appended last
-      expect(blocks[blocks.length - 1].text).toContain(NOTICE_MARKER);
-    } else {
-      expect(joined).not.toContain(NOTICE_MARKER);
-    }
-
-    await client.close();
+  it("omits the notice on simulated Node >= 22", async () => {
+    setNode("22.18.0");
+    const blocks = await callListTestCases();
+    const joined = blocks.map((c) => c.text ?? "").join("\n");
+    expect(joined).not.toContain(NOTICE_MARKER);
   });
 });

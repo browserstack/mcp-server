@@ -13,16 +13,6 @@ export type ClientInfo = { name?: string; version?: string };
 
 export type ToolOutcome = "ok" | "error_result" | "threw";
 
-export type ErrorClass =
-  | "auth_error"
-  | "not_found"
-  | "rate_limited"
-  | "validation"
-  | "timeout"
-  | "network"
-  | "server_error"
-  | "unknown";
-
 interface MCPEventPayload {
   event_type: string;
   event_properties: {
@@ -33,59 +23,10 @@ interface MCPEventPayload {
     success?: boolean;
     error_message?: string;
     error_type?: string;
-    error_class?: ErrorClass;
     is_remote?: boolean;
     duration_ms?: number;
     outcome?: ToolOutcome;
   };
-}
-
-const TIMEOUT_CODES = new Set(["ECONNABORTED", "ETIMEDOUT"]);
-const NETWORK_CODES = new Set([
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "ENOTFOUND",
-  "EAI_AGAIN",
-  "EPIPE",
-]);
-
-function httpStatusOf(error: unknown): number | undefined {
-  const e = error as { response?: { status?: unknown }; status?: unknown };
-  const direct = e?.response?.status ?? e?.status;
-  if (typeof direct === "number") return direct;
-  // Errors from utils carry the status only in the message ("…: 404 Not Found").
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  const m = message.match(
-    /status code (\d{3})|: (\d{3}) [A-Z]|\bHTTP (\d{3})\b/,
-  );
-  const found = m && (m[1] || m[2] || m[3]);
-  return found ? Number(found) : undefined;
-}
-
-/** Fixed set of causes, so failures group by class instead of by message text. */
-export function classifyError(error: unknown): ErrorClass {
-  const e = error as { code?: unknown; name?: unknown; issues?: unknown };
-  if (typeof e?.code === "string") {
-    if (TIMEOUT_CODES.has(e.code)) return "timeout";
-    if (NETWORK_CODES.has(e.code)) return "network";
-  }
-  if (e?.name === "ZodError" || Array.isArray(e?.issues)) return "validation";
-
-  const status = httpStatusOf(error);
-  if (status === 401 || status === 403) return "auth_error";
-  if (status === 404) return "not_found";
-  if (status === 429) return "rate_limited";
-  if (status === 408 || status === 504) return "timeout";
-  if (status === 400 || status === 422) return "validation";
-  if (status !== undefined && status >= 500) return "server_error";
-
-  const message = (
-    error instanceof Error ? error.message : String(error ?? "")
-  ).toLowerCase();
-  if (/timed? ?out/.test(message)) return "timeout";
-  if (/not enabled for|unauthori[sz]ed|forbidden/.test(message))
-    return "auth_error";
-  return "unknown";
 }
 
 function baseProperties(toolName: string, clientInfo: ClientInfo) {
@@ -102,7 +43,6 @@ function errorProperties(error: unknown) {
   return {
     error_message: error instanceof Error ? error.message : String(error),
     error_type: error instanceof Error ? error.constructor.name : "Unknown",
-    error_class: classifyError(error),
   };
 }
 

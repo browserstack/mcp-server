@@ -87,7 +87,6 @@ describe("instrumentToolLatency: one row per call", () => {
       tool_name: "fetchBuildInsights",
       success: false,
       outcome: "error_result",
-      error_class: "not_found",
       error_type: "Error",
     });
     expect(rows()[0].error_message).toContain("404 Not Found");
@@ -114,7 +113,6 @@ describe("instrumentToolLatency: one row per call", () => {
     expect(rows()[0]).toMatchObject({
       success: false,
       outcome: "threw",
-      error_class: "network",
     });
   });
 

@@ -75,7 +75,6 @@ describe("withToolCall", () => {
     expect(rows()[0]).toMatchObject({
       success: false,
       outcome: "error_result",
-      error_class: "auth_error",
       error_message: "Request failed with status code 401",
     });
   });
@@ -119,7 +118,7 @@ describe("trackMCP outside an instrumented call", () => {
     expect(rows()[0]).not.toHaveProperty("outcome");
   });
 
-  it("still posts the failure row immediately, with error_class", () => {
+  it("still posts the failure row immediately", () => {
     trackMCP(
       "uploadAsset",
       clientInfo,
@@ -128,7 +127,6 @@ describe("trackMCP outside an instrumented call", () => {
     );
     expect(rows()[0]).toMatchObject({
       success: false,
-      error_class: "server_error",
       error_type: "Error",
     });
   });

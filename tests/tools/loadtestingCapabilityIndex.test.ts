@@ -68,6 +68,10 @@ describe("loadtesting capability index — resolution contract", () => {
   const queryNames = (n: string) =>
     (byName(n)?.query || []).map((q: any) => q.name);
 
+  it("listLoadTestProjects resolves a project by name via search", () => {
+    expect(queryNames("listLoadTestProjects")).toContain("search");
+  });
+
   it("listLoadTests resolves a test by name via search", () => {
     expect(queryNames("listLoadTests")).toContain("search");
   });

@@ -72,7 +72,8 @@
         "intent": "List the caller's load-testing projects, most recently active first — use this to find a projectId or answer 'what projects do I have?'",
         "guidance": [
           "projectId from here is required by listLoadTests and createLoadTest.",
-          "Page with cursor + limit; nextCursor is opaque."
+          "To find a project by name, pass search=<name> so the server matches it in one call — do NOT page the whole project list to find one. Paging every project is the single largest source of redundant calls on this surface.",
+          "Only enumerate with cursor + limit when the user actually wants the full list; nextCursor is opaque."
         ],
         "returns": [
           "projects",

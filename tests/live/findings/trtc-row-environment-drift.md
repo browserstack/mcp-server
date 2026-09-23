@@ -1,16 +1,21 @@
-# The test-case and run rows differ between preprod and production
+# The test-case and run rows differ between WORKSPACES, not between environments
 
 - **Product:** tm
 - **Capability:** `get_test_cases_for_v1_test_run` (and `bulk_assign_test_cases_to_test_run`,
   which returns the same row)
-- **Environments:** **both** — that is the finding
+- **Scope:** per WORKSPACE. Originally recorded as preprod-vs-production; a third account proves that is wrong (see the correction below).
 - **Status:** **BLOCKED** — for the product team. The index now describes the drift; nothing on
   the index side can resolve it. Filed as BLOCKED rather than DRIFT because the disagreement is
-  between the environments, not between the contract and reality.
+  between WORKSPACES, not between the contract and reality.
+
+> **Read the correction at the bottom first.** The sections below were written when only one
+> account per environment had been sampled and describe the split as preprod-vs-production. A
+> third account disproved that: the axis is the workspace. The measurements are accurate; the
+> axis named in them is not.
 
 ## The shape
 
-One row, two field sets, decided by environment:
+One row, two field sets — originally attributed to the environment (see the correction):
 
 | field | preprod | production |
 | --- | --- | --- |
@@ -68,3 +73,31 @@ file is the record of what it looked like mid-flight.
 
 A field's absence is only evidence about the environment it was absent from. Presence generalises;
 absence does not.
+
+## CORRECTION 2026-09-23 — this is not an environment split
+
+This file originally said production returns `review_status`/`reviewers` while preprod returns
+`execution_eligible`, and framed the difference as preprod vs prod. **That framing is wrong.**
+
+A second PRODUCTION account (project 4067615) was tested on 2026-09-23 and
+behaves like **preprod**, not like the other production account:
+
+| | preprod fixture | prod acct A (332537) | prod acct B (4067615) |
+| --- | --- | --- | --- |
+| `execution_eligible` | present | absent | **present** |
+| `review_status` / `reviewers` | absent | present | **absent** |
+
+Two production accounts, opposite field sets. So the driver is the **workspace** — almost
+certainly a feature flag on the review-approve capability — not the deployment. The original
+conclusion happened to fit because only one production account had been sampled.
+
+**What this changes:** the capability is not waiting on preprod and production converging. It is
+waiting on a per-workspace flag, which means any given caller sees a stable shape and two callers
+on different workspaces see different ones. The index declares the union and names the split,
+which remains the right call — but the reason given for it was wrong, and a reader planning
+around "it will settle when the environments converge" would have been misled.
+
+**Standing lesson, sharpened.** The earlier version of this file already carried "a field's
+absence is only evidence about the environment it was absent from". One account per environment
+was still too small a sample to name the axis. Absence tells you about the *account you sampled*,
+not the environment it happens to live in.

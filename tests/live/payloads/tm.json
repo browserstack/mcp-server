@@ -2452,6 +2452,53 @@
         },
         "body": {}
       }
+    },
+    "create_shared_component_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "title": "__mcp-probe-sharedcomponent-{{RUNID}}",
+          "field_type": "background",
+          "tags": [
+            "probe"
+          ],
+          "shared_step_details": [
+            {
+              "order": 1,
+              "step": "Given a shared precondition",
+              "result": "r",
+              "test_data": "d"
+            }
+          ]
+        }
+      }
+    },
+    "update_shared_component_v1": {
+      "verdict": "PASS",
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744,
+          "shared_component_id": 27890
+        },
+        "body": {
+          "title": "__mcp-probe-sharedcomponent-upd-{{RUNID}}",
+          "field_type": "background",
+          "tags": [
+            "probe"
+          ],
+          "shared_step_details": [
+            {
+              "order": 1,
+              "step": "Given a shared precondition",
+              "result": "r",
+              "test_data": "d"
+            }
+          ]
+        }
+      }
     }
   },
   "not_replayable": {

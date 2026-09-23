@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.32",
+  "version": "1.37",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -951,7 +951,7 @@
             "name": "status",
             "type": "integer",
             "json_path": "/test_case/status",
-            "description": "Numeric status option id — NOT the display name. Resolve it from the project's system field values first."
+            "description": "Numeric status option id. CUSTOM STATUS VALUES ARE FULLY SUPPORTED - send the id and they write correctly. A display NAME IS NOT RESOLVED on this field, and the failure is SILENT AND DESTRUCTIVE: sending a string returns 200 and sets status to NULL, wiping whatever the case had. That happens even for a name that exists - `\"No\"` nulls the field just as `\"Inactive\"` does. Contrast `priority` and `case_type` on the same call, which DO resolve names. Resolve the id first with get_system_field_values_v1 (field_name=status); its options are under `status.values[]` with the id in `value`, and custom options are the ones with no `colour`."
           },
           {
             "name": "tags",
@@ -1076,6 +1076,7 @@
           }
         },
         "guidance": [
+          "STATUS TAKES AN ID, NOT A NAME - and a name silently nulls it. Verified on production 2026-09-23: custom status ids write and read back correctly, while the string form returns 200 and leaves status null. `priority` and `case_type` accept either on this same call, which makes status easy to get wrong. If a custom state 'is not valid', check you sent the id.",
           "ALWAYS send `test_case.custom_fields`, `{}` when you are changing none. Omitting the key dereferences a nil hash and returns 500 — this is the single most common failure on this route.",
           "priority, status, case_type and automation_state must be NUMERIC option ids here. The single-case edit accepts a display name for some of them; this path does not, and a name is written through as a broken id rather than rejected.",
           "`tags` REPLACES the whole tag list on every selected case. Read the existing tags and send the union if you mean to add. The same is true of `issues`, which is sent as `[]` when you omit it.",
@@ -1269,6 +1270,7 @@
           }
         },
         "guidance": [
+          "STATUS TAKES AN ID, NOT A NAME - and a name silently nulls it. Verified on production 2026-09-23: custom status ids write and read back correctly, while the string form returns 200 and leaves status null. `priority` and `case_type` accept either on this same call, which makes status easy to get wrong. If a custom state 'is not valid', check you sent the id.",
           "The selection is `mapping_ids` — the run's per-case mapping ids from the run's test-case listing. These are NOT test case ids and NOT TC-NNN identifiers; passing case ids here silently matches nothing.",
           "The whole body is FLAT — there is no `test_case` wrapper on this route, unlike the project-wide bulk test-case capabilities, which all nest under a `test_case` wrapper.",
           "Two ways to name a status: `status_id` (numeric, authoritative) or `status` (display name, resolved server-side). When the name cannot be resolved the mark proceeds and keeps the existing status, so prefer the id.",
@@ -5358,7 +5360,7 @@
           {
             "name": "description_fields",
             "type": "array",
-            "description": "Ordered fields placed in the template's description section. Resolve real field ids first — an invented id is rejected upstream. Omitting this creates a template with an empty description section.",
+            "description": "Ordered fields placed in the template's description section. Each entry is `{id, order, is_mandatory, is_system}` where `id` is the SYSTEM FIELD id (or custom field id with is_system false) - NOT the template-field mapping id that a template read returns under `id`. Reading a template and posting its entries back unchanged fails: the read's `id` is the mapping row, and the field id is in `system_field_id`.",
             "fields": [
               {
                 "name": "id",
@@ -5381,7 +5383,7 @@
           {
             "name": "properties_fields",
             "type": "array",
-            "description": "Ordered fields placed in the template's properties section. Unlike an update, a create does NOT auto-add the Review & Approve system fields — the template gets exactly the ids you send.",
+            "description": "Ordered fields placed in the template's properties section. Unlike an update, a create does NOT auto-add the Review & Approve system fields — the template gets exactly the ids you send. Each entry is `{id, order, is_mandatory, is_system}` where `id` is the SYSTEM FIELD id (or custom field id with is_system false) - NOT the template-field mapping id that a template read returns under `id`. Reading a template and posting its entries back unchanged fails: the read's `id` is the mapping row, and the field id is in `system_field_id`.",
             "fields": [
               {
                 "name": "id",
@@ -5402,7 +5404,7 @@
           {
             "name": "linked_projects",
             "type": "object",
-            "description": "Projects the template is linked to at creation. Omit it and the server defaults every flag to false with no projects, so the template exists but is offered in no project until it is linked.",
+            "description": "Object, and the server's own error echo names the keys: `{link_projects:[<project_id>,...], linked_to_all_projects:<bool>, link_to_future_projects:<bool>}`. Note `link_projects` and `link_to_future_projects`, not project_ids / future_projects_applicable - the latter are what the RESPONSE uses, so the request and response spell the same two concepts differently. Omit the object entirely and the template is created linked to nothing.",
             "fields": [
               {
                 "name": "link_to_future_projects",
@@ -5431,11 +5433,14 @@
         ],
         "intent": "Create a new test-case template — define which description and property fields a test case gets and, optionally, which projects it applies to.",
         "guidance": [
+          "NON-REMOVABLE SYSTEM FIELDS 17 AND 18 MUST BE INCLUDED or the create fails with 400 `templateFieldValidationError: Non-removable System fields not present in template.` These are the Review & Approve pair. You cannot discover them by reading an existing template: get_template_v2 DROPS them from its response (`field_count` 16 vs 14 entries returned, on every template including one just created with all 16), so a read-then-clone round trip always fails. Add {id:17,...} and {id:18,...} to properties_fields explicitly.",
+          "Each entry is `{id, order, is_mandatory, is_system}` where `id` is the SYSTEM FIELD id (or custom field id with is_system false) - NOT the template-field mapping id that a template read returns under `id`. Reading a template and posting its entries back unchanged fails: the read's `id` is the mapping row, and the field id is in `system_field_id`.",
+          "Object, and the server's own error echo names the keys: `{link_projects:[<project_id>,...], linked_to_all_projects:<bool>, link_to_future_projects:<bool>}`. Note `link_projects` and `link_to_future_projects`, not project_ids / future_projects_applicable - the latter are what the RESPONSE uses, so the request and response spell the same two concepts differently. Omit the object entirely and the template is created linked to nothing.",
           "Paid plans only. On a free plan the gate answers with HTTP 200 and a body of success:false / 'This Feature is only for paid customers'. Check the success flag, not the status code, before reporting the template as created.",
-          "Field ids cannot be guessed. Resolve the workspace's system fields and custom-field definitions first and mark is_system true for built-in fields.",
           "Nothing is validated locally — name, field ids and project ids all go straight upstream, so a malformed body surfaces as a 400 with a single message rather than a per-field error list.",
           "A create does not auto-inject the Review & Approve system fields, but a later update of properties_fields will. The two calls therefore do not behave the same way on the same field list.",
-          "The 201 body carries the full template including its fields — read it rather than re-fetching, and keep the returned id."
+          "The 201 body carries the full template including its fields — read it rather than re-fetching, and keep the returned id.",
+          "Verified working on PRODUCTION 2026-09-23: 201 with the full template echoed, linked to the named project. The earlier 403 'This action is not permitted for the user' was a permission gap on the credential used, NOT the paid-plan gate the older note claimed."
         ],
         "returns": [
           "success",
@@ -8005,7 +8010,7 @@
             "type": "integer",
             "example": 496,
             "json_path": "/test_case/status",
-            "description": "Numeric status option id. A display NAME is not resolved on this path — it is written through as the id."
+            "description": "Numeric status option id. CUSTOM STATUS VALUES ARE FULLY SUPPORTED - send the id and they write correctly. A display NAME IS NOT RESOLVED on this field, and the failure is SILENT AND DESTRUCTIVE: sending a string returns 200 and sets status to NULL, wiping whatever the case had. That happens even for a name that exists - `\"No\"` nulls the field just as `\"Inactive\"` does. Contrast `priority` and `case_type` on the same call, which DO resolve names. Resolve the id first with get_system_field_values_v1 (field_name=status); its options are under `status.values[]` with the id in `value`, and custom options are the ones with no `colour`."
           },
           {
             "name": "steps",
@@ -8144,6 +8149,7 @@
           }
         },
         "guidance": [
+          "STATUS TAKES AN ID, NOT A NAME - and a name silently nulls it. Verified on production 2026-09-23: custom status ids write and read back correctly, while the string form returns 200 and leaves status null. `priority` and `case_type` accept either on this same call, which makes status easy to get wrong. If a custom state 'is not valid', check you sent the id.",
           "The response is `{success: true}` and NOTHING ELSE. It does not return the updated case, so re-read the case if you need to confirm or show the new values. (The POST .../edit sibling does return `data.test_case`.)",
           "Only the keys present in `test_case` are applied — this is the partial-update path. The POST .../edit on the same case rebuilds more of the record, including resetting `review_status`.",
           "Send the fields flat. The `test_case` wrapper is added for you from each field's json_path, and sending your own `test_case` object is rejected before the call as an unknown body key.",
@@ -8292,7 +8298,7 @@
             "name": "status",
             "type": "integer",
             "json_path": "/test_case/status",
-            "description": "Numeric status option id. A display NAME is not resolved on this path — it is written through as the id."
+            "description": "Numeric status option id. CUSTOM STATUS VALUES ARE FULLY SUPPORTED - send the id and they write correctly. A display NAME IS NOT RESOLVED on this field, and the failure is SILENT AND DESTRUCTIVE: sending a string returns 200 and sets status to NULL, wiping whatever the case had. That happens even for a name that exists - `\"No\"` nulls the field just as `\"Inactive\"` does. Contrast `priority` and `case_type` on the same call, which DO resolve names. Resolve the id first with get_system_field_values_v1 (field_name=status); its options are under `status.values[]` with the id in `value`, and custom options are the ones with no `colour`."
           },
           {
             "name": "tags",
@@ -8399,6 +8405,7 @@
           }
         },
         "guidance": [
+          "STATUS TAKES AN ID, NOT A NAME - and a name silently nulls it. Verified on production 2026-09-23: custom status ids write and read back correctly, while the string form returns 200 and leaves status null. `priority` and `case_type` accept either on this same call, which makes status easy to get wrong. If a custom state 'is not valid', check you sent the id.",
           "This is the FULL edit path, not a patch: `review_status` is recomputed on every call (omitted, it falls back to the project's review-approve default), and `template` defaults to `test_case_text` when you omit it, which discards any `test_case_steps` you sent. Send the case's current template unless you mean to change it.",
           "For a targeted single-field change prefer the PATCH .../edit-v2 sibling, which applies only the keys you send.",
           "Send the fields flat. The `test_case` wrapper is added for you from each field's json_path, and sending your own `test_case` object is rejected before the call as an unknown body key.",
@@ -15340,19 +15347,10 @@
           "success",
           "defects",
           "info",
-          "id",
           "issue_id",
           "issue_type",
-          "issue_status",
-          "priority",
-          "record_status",
-          "entity_type",
-          "entity_id",
-          "entity_uuid",
-          "project_id",
-          "metadata",
-          "created_at",
-          "updated_at"
+          "jira_id",
+          "created_at"
         ],
         "max_page_size": 30,
         "paginated": true,
@@ -15377,12 +15375,12 @@
           }
         },
         "guidance": [
-          "This is the session-wide view: rows carry entity_type and entity_id, so the list can include both links made on the session itself and links made on individual log entries. Read entity_type to tell them apart; read a log's own `defects` if you only want that log's.",
-          "Rows are full issue-link records, not just {issue_id, issue_type}. Each also carries id, issue_status, priority, record_status, entity_type, entity_id, project_id, created_at, updated_at and a free-form metadata object (ticket url, title, category) — the fields a caller normally needs to render a defect.",
-          "Paging uses `p`, NOT `page`. A `p` that is not a positive integer is rejected globally as 400 {success:false, error:'Invalid Params'}.",
-          "`per_page` is accepted and ignored — the page size is fixed at 30. Walk `p` until a page comes back short.",
-          "There are no filters on this endpoint: no status, tracker or date narrowing. Filter client-side.",
-          "Defect links written by the session or log write calls are applied asynchronously, so a defect linked a moment ago may not be here yet — retry rather than concluding the link failed.",
+          "ONLY LOG-LEVEL DEFECTS APPEAR HERE. A defect linked on a session LOG shows up immediately; an issue linked on the SESSION itself (the `issues` array on create/update_exploratory_session) NEVER appears, though it persists and is readable from the session's own detail. Verified on production 2026-09-23 with both linked to one session: the log defect listed on the first read, the session issue never listed at all.",
+          "The row is FOUR fields - {issue_id, issue_type, jira_id, created_at}. It is NOT the full issue-link record: no id, entity_type, entity_id, entity_uuid, issue_status, priority, record_status, project_id, metadata or updated_at, all of which an earlier version of this contract promised.",
+          "Paging uses `p`, NOT `page`. A `p` that is not a positive integer is rejected as 400 {success:false, error:'Invalid Params'}.",
+          "`per_page` is accepted and ignored - the page size is fixed at 30. Walk `p` until a page comes back short.",
+          "No filters: no status, tracker or date narrowing. Filter client-side.",
+          "There is no project-wide defect listing in this index. 'What defects exist in this project' means listing sessions and issuing one request per session.",
           "Everything is at the top level: defects, info. There is no `data` envelope.",
           "An unknown session_id returns a bare {success:false} with 404 and no message."
         ]
@@ -17936,6 +17934,15 @@
         ],
         "query": [
           {
+            "name": "q[tags][]",
+            "type": "array",
+            "example": [
+              "2FA",
+              "delivery"
+            ],
+            "description": "Tag filter. Send it as a REPEATED BRACKETED parameter - `q[tags][]=2FA&q[tags][]=delivery` - one entry per tag name. Multiple tags are OR'd: a case matching any of them is returned. Verified on production 2026-09-23 against ground truth (12 of 280 cases tagged `2FA` -> the filter returns exactly those 12; two tags -> exactly the 22 in the union). DO NOT use `q[test_case_tags]`: it is accepted, returns 200, and is SILENTLY IGNORED - the full unfiltered set comes back looking like a successful search. A bare `q[tags]` carrying a JSON string matches nothing (0 rows), and `q[tags]` with some other shapes 500s."
+          },
+          {
             "name": "q[query]",
             "type": "string",
             "example": "login",
@@ -17994,12 +18001,6 @@
             "type": "string",
             "example": "3700",
             "description": "Comma-separated TM user ids; translated to BrowserStack ids server-side because reviews are stored against the BrowserStack id."
-          },
-          {
-            "name": "q[test_case_tags]",
-            "type": "string",
-            "example": "[\"regression\",\"smoke\"]",
-            "description": "Tag filter. Must be a JSON-ENCODED STRING containing an array of tag names, not a bare comma list and not a real array. `q[tags]` is not a recognised key here and is dropped."
           },
           {
             "name": "q[created_at]",
@@ -18156,6 +18157,7 @@
           }
         },
         "guidance": [
+          "TAG FILTERING USES `q[tags][]`, REPEATED ONCE PER TAG. The previously documented `q[test_case_tags]` does not filter at all - it returns 200 and the complete unfiltered list, which reads as 'no tag filtering available'. Corrected 2026-09-23 after measuring both against ground truth on production.",
           "Four entity values route here: test-cases, test-runs, trtc (the test cases inside one test run) and test-plans. Anything else — 'reports' included — does not match the route constraint and is a 404 before the API is reached.",
           "entity=test-plans is accepted by the route and by the controller but has no implementation behind it: it always renders {test_plans: [], info: null} with a 200. It is a dead branch, not an empty result — use the test-plan listing capabilities instead.",
           "entity=trtc additionally requires a `test_run_id` query param. Without it the run filter is built from 0 and you get an empty page rather than an error.",
@@ -18431,6 +18433,7 @@
         ],
         "intent": "Search for entities within a project (v2 - POST with body)",
         "guidance": [
+          "Tag and status filtering WORK here. Send `tags` (and `status`) as ordinary body fields - their json_path maps them under `q`, which is the shape the server wants. Verified through bind on production 2026-09-23: tags:['2FA'] returns exactly the 12 tagged cases out of 280.",
           "The general way to find cases by attribute. Ask for a large page when collecting ids to feed into another call, so the follow-up gets the whole set rather than the first page."
         ],
         "shape": "discovered",
@@ -20771,6 +20774,7 @@
         ],
         "intent": "Rename a template, enable or disable it, make it the workspace default, or replace its description and property field layout.",
         "guidance": [
+          "A name-only PATCH works and returns a bare {success:true} - unlike the create, the update does NOT echo the template back, so re-read it if you need the result. Verified on production 2026-09-23.",
           "Sparse update: only the keys actually present in the body are touched, everything else keeps its current value. Sending an empty body is accepted and changes nothing.",
           "Field arrays REPLACE, they do not merge. Templates have no version history in this product, so the previous layout cannot be restored — read the template, edit the returned arrays, and send them back whole.",
           "Editing the field layout changes the fields shown on every test case using this template, in every linked project. Establish how many projects are affected before writing.",
@@ -28601,6 +28605,256 @@
             "$response": "InternalServerError"
           }
         }
+      },
+      {
+        "name": "create_shared_component_v1",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/shared-components",
+        "mode": "write",
+        "entity": "shared_field",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric id of the project the shared field belongs to."
+          }
+        ],
+        "body": [
+          {
+            "name": "title",
+            "type": "string",
+            "required": true,
+            "description": "Name of the block, shown in the Shared Fields list."
+          },
+          {
+            "name": "field_type",
+            "type": "string",
+            "values": [
+              "step",
+              "background",
+              "precondition"
+            ],
+            "example": "background",
+            "description": "Which kind to create. OMITTING IT SILENTLY CREATES A `step` - it is not rejected, so a caller meaning to add a background or a precondition and forgetting this key gets a shared step instead, with no error to notice."
+          },
+          {
+            "name": "shared_step_details",
+            "type": "array",
+            "required": true,
+            "description": "The ordered rows making up the block. REQUIRED. Each row MUST carry `order`. Omitting it is the single easiest way to fail this call, and the failure is opaque: every malformed body - missing order, unknown keys, an empty object, no body at all - comes back as the same `400 {success:false, message:\"Validation Error\"}` with no indication of which field was wrong.",
+            "fields": [
+              {
+                "name": "order",
+                "type": "integer",
+                "required": true,
+                "description": "1-based position. Required on every row."
+              },
+              {
+                "name": "step",
+                "type": "string",
+                "description": "The step text, the Gherkin background line, or the precondition text depending on field_type."
+              },
+              {
+                "name": "result",
+                "type": "string",
+                "description": "Expected result; send an empty string when the kind has no result."
+              },
+              {
+                "name": "test_data",
+                "type": "string",
+                "description": "Additional data for the row."
+              }
+            ]
+          },
+          {
+            "name": "tags",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Plain tag name strings on the block itself."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "nullable": true,
+            "description": "Collection to file it under. Omit or send null for the Unassigned root."
+          }
+        ],
+        "intent": "Create a reusable shared field - a step sequence, a Gherkin background block, or a precondition - that many test cases can then reference.",
+        "returns": [
+          "success",
+          "data",
+          "id",
+          "title",
+          "field_type",
+          "test_case_count",
+          "step_count",
+          "tags",
+          "folder_id",
+          "created_by",
+          "updated_by",
+          "shared_step_details"
+        ],
+        "responses": {
+          "200": {
+            "$response": "SharedComponentWriteResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        },
+        "guidance": [
+          "ONE CAPABILITY, THREE WORKFLOWS. `field_type` is the only difference between creating a shared step, a Gherkin background and a precondition - they are the same record and the same endpoint, not three features.",
+          "Each row MUST carry `order`. Omitting it is the single easiest way to fail this call, and the failure is opaque: every malformed body - missing order, unknown keys, an empty object, no body at all - comes back as the same `400 {success:false, message:\"Validation Error\"}` with no indication of which field was wrong.",
+          "`field_type` defaults to `step`. There is no error for omitting it, so a create meant as a background or precondition succeeds as the wrong kind. Send it explicitly every time.",
+          "Sibling of create_shared_step_v1 on /shared-steps, which creates the same record but cannot set `field_type`. Use this route when the kind matters.",
+          "The response echoes `shared_step_details` with each row's assigned id; the LISTING returns only `step_count`. Read the echo if you need row ids.",
+          "Verified on preprod 2026-09-22: all three field_type values create successfully and list back under the matching field_type filter."
+        ]
+      },
+      {
+        "name": "update_shared_component_v1",
+        "method": "PATCH",
+        "path": "/api/v1/projects/{project_id}/shared-components/{shared_component_id}",
+        "mode": "write",
+        "entity": "shared_field",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "description": "Numeric id of the project."
+          },
+          {
+            "name": "shared_component_id",
+            "type": "integer",
+            "required": true,
+            "description": "Id of the shared field to change, from get_shared_components_v1."
+          }
+        ],
+        "body": [
+          {
+            "name": "title",
+            "type": "string",
+            "required": true,
+            "description": "Name of the block. REQUIRED ON EVERY CALL even when you are only changing rows - sending rows alone is a 400."
+          },
+          {
+            "name": "field_type",
+            "type": "string",
+            "values": [
+              "step",
+              "background",
+              "precondition"
+            ],
+            "description": "Which kind the block is. Send its existing value unless you intend to change it."
+          },
+          {
+            "name": "shared_step_details",
+            "type": "array",
+            "required": true,
+            "description": "The FULL replacement row list, not a patch - rows you leave out are removed. REQUIRED ON EVERY CALL even when you are only renaming: sending `title` alone is a 400. Each row MUST carry `order`. Omitting it is the single easiest way to fail this call, and the failure is opaque: every malformed body - missing order, unknown keys, an empty object, no body at all - comes back as the same `400 {success:false, message:\"Validation Error\"}` with no indication of which field was wrong.",
+            "fields": [
+              {
+                "name": "order",
+                "type": "integer",
+                "required": true,
+                "description": "1-based position. Required on every row."
+              },
+              {
+                "name": "step",
+                "type": "string",
+                "description": "The step text, the Gherkin background line, or the precondition text depending on field_type."
+              },
+              {
+                "name": "result",
+                "type": "string",
+                "description": "Expected result; send an empty string when the kind has no result."
+              },
+              {
+                "name": "test_data",
+                "type": "string",
+                "description": "Additional data for the row."
+              }
+            ]
+          },
+          {
+            "name": "tags",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Plain tag name strings; the list you send replaces the block's tags."
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "nullable": true,
+            "description": "Collection to move it into."
+          }
+        ],
+        "intent": "Change an existing shared field - its title, rows, tags or collection - with the edit propagating to every test case that references it.",
+        "returns": [
+          "success",
+          "data",
+          "id",
+          "title",
+          "field_type",
+          "test_case_count",
+          "step_count",
+          "tags",
+          "folder_id",
+          "created_by",
+          "updated_by",
+          "shared_step_details"
+        ],
+        "responses": {
+          "200": {
+            "$response": "SharedComponentWriteResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "422": {
+            "$response": "UnprocessableEntity"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        },
+        "guidance": [
+          "BOTH `title` AND `shared_step_details` ARE REQUIRED ON EVERY CALL. Verified on preprod 2026-09-22: title alone -> 400, rows alone -> 400, both together -> 200. There is no partial update here despite the PATCH verb.",
+          "`shared_step_details` REPLACES the row list. Read the block first and send back every row you want to keep, each with its `order`.",
+          "Each row MUST carry `order`. Omitting it is the single easiest way to fail this call, and the failure is opaque: every malformed body - missing order, unknown keys, an empty object, no body at all - comes back as the same `400 {success:false, message:\"Validation Error\"}` with no indication of which field was wrong.",
+          "The edit propagates to every test case referencing the block - `test_case_count` tells you how many that is before you change it.",
+          "Sibling of update_shared_step_v1 on /shared-steps, which edits the same record but cannot set `field_type`."
+        ]
       }
     ],
     "schemas": {
@@ -33807,30 +34061,31 @@
       },
       "SharedComponent": {
         "type": "object",
-        "description": "A shared field (called a shared component by the API) as it appears in a project listing.",
-        "required": [
-          "id",
-          "title",
-          "field_type"
-        ],
+        "description": "A shared field: a reusable content block held under Shared Fields and referenced from many test cases. The same record backs all three kinds - step sequence, Gherkin background and precondition - distinguished by `field_type`. These are the fields every route returns, including the LISTING.\n",
         "properties": {
           "id": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Shared-field id, from the same id space as the shared-steps endpoints."
           },
           "title": {
             "type": "string"
           },
           "field_type": {
             "type": "string",
-            "description": "step, background or precondition."
-          },
-          "step_count": {
-            "type": "integer",
-            "description": "Number of steps inside this shared field."
+            "values": [
+              "step",
+              "background",
+              "precondition"
+            ],
+            "description": "Which kind of shared field this is. Defaults to `step` when the create omits it.",
+            "example": "background"
           },
           "test_case_count": {
             "type": "integer",
-            "description": "Number of test cases embedding it - the blast radius of any change."
+            "description": "How many test cases reference this block."
+          },
+          "step_count": {
+            "type": "integer"
           },
           "tags": {
             "type": "array",
@@ -33840,8 +34095,7 @@
           },
           "created_by": {
             "type": "object",
-            "description": "Null when the author's user record can no longer be resolved.",
-            "nullable": true,
+            "description": "Reduced user reference - id and full_name only, not the wider User shape other TM serializers return.",
             "properties": {
               "id": {
                 "type": "integer"
@@ -33853,7 +34107,6 @@
           },
           "updated_by": {
             "type": "object",
-            "nullable": true,
             "properties": {
               "id": {
                 "type": "integer"
@@ -42967,6 +43220,48 @@
             }
           }
         }
+      },
+      "SharedComponentDetail": {
+        "type": "object",
+        "description": "The shared field as echoed by a CREATE or UPDATE: the listed fields plus its collection and its actual rows. The LISTING returns neither - it gives `step_count` instead of the rows, and does not carry `folder_id` at all.\n",
+        "allOf": [
+          {
+            "$schema": "SharedComponent"
+          }
+        ],
+        "properties": {
+          "folder_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Collection it is filed under; null for the Unassigned root."
+          },
+          "shared_step_details": {
+            "type": "array",
+            "description": "The ordered rows. Returned by the create and update echoes; the LISTING omits it and gives `step_count` instead.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "step": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "test_data": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "order": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "responses": {
@@ -46900,62 +47195,26 @@
             },
             "defects": {
               "type": "array",
+              "description": "Defect links raised on this session's LOG ENTRIES. Session-level `issues` do NOT appear here.",
               "items": {
                 "type": "object",
-                "description": "An issue-tracker link record.",
                 "properties": {
-                  "id": {
-                    "type": "integer",
-                    "description": "Id of the link record itself, not of the ticket."
-                  },
                   "issue_id": {
                     "type": "string",
-                    "description": "Ticket key in the external tracker.",
-                    "example": "PROJ-123"
+                    "description": "Identifier in the external tracker.",
+                    "example": "PROBE-2"
                   },
                   "issue_type": {
                     "type": "string",
-                    "description": "Tracker the ticket lives in (e.g. jira, zoho).",
+                    "description": "Tracker type.",
                     "example": "jira"
                   },
-                  "issue_status": {
+                  "jira_id": {
                     "type": "string",
-                    "nullable": true
-                  },
-                  "priority": {
-                    "type": "string",
-                    "nullable": true
-                  },
-                  "record_status": {
-                    "type": "string",
-                    "nullable": true
-                  },
-                  "entity_type": {
-                    "type": "string",
-                    "description": "What the ticket is linked to — ExploratorySession for a session-level link, ExploratorySessionLog for a link made on one log entry.",
-                    "example": "ExploratorySessionLog"
-                  },
-                  "entity_id": {
-                    "type": "integer",
-                    "description": "Id of the session or log the link belongs to, interpreted per entity_type."
-                  },
-                  "entity_uuid": {
-                    "type": "string",
-                    "nullable": true
-                  },
-                  "project_id": {
-                    "type": "integer"
-                  },
-                  "metadata": {
-                    "type": "object",
                     "nullable": true,
-                    "description": "Free-form tracker metadata captured at link time — ticket url, title, display_category, issue_category."
+                    "description": "Repeat of issue_id for jira links."
                   },
                   "created_at": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "updated_at": {
                     "type": "string",
                     "format": "date-time"
                   }
@@ -48333,6 +48592,21 @@
             },
             "test_plan": {
               "$schema": "TestPlanV2Detail"
+            }
+          }
+        }
+      },
+      "SharedComponentWriteResponse": {
+        "description": "The saved shared field, echoed back under `data`.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "data": {
+              "$schema": "SharedComponentDetail"
             }
           }
         }
@@ -49825,6 +50099,6 @@
         ]
       }
     },
-    "version": "1.32"
+    "version": "1.37"
   }
 }

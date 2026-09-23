@@ -52,3 +52,34 @@ This overlaps with a separate and worse pattern found in batch 6, where two `tes
 - **Preprod only.** A production environment might expose retrieval paths this one does not.
 - **No backend source or logs** were consulted. The architecture described above comes from the capabilities' own contracts plus observed responses, not from reading the service.
 - `generate_test_case_automation_v1` is listed for the coverage gap only; it is separately **BLOCKED** because it crashes on every input, which is a distinct defect documented in its own finding.
+
+## `send_report_email_now_v1` — a PASS that cannot mean what a PASS usually means
+
+Added 2026-09-22 after probing it on preprod with the operator's explicit approval.
+
+The call is contract-correct: `200 {success: true, message: "Report generation started. Email
+will be sent shortly."}`, declared and actual agreeing exactly. It is recorded PASS on that
+basis.
+
+But the PASS covers the request contract and the 200 envelope **only**. It does not — and
+through this surface cannot — establish that any mail was generated or delivered:
+
+- the 200 means **enqueued**, not sent, and the message says so in as many words
+- there is **no job id** in the response
+- there is **no status endpoint** anywhere in the index to poll
+- generation or delivery can fail afterwards with nothing observable to the caller
+
+So this capability sits in the same family as `initiate_export` and `export_test_run_csv_v1`:
+the product accepts the work and then goes quiet. It differs from them in one way that makes it
+worse rather than better — **the side effect is external and irreversible.** The other two
+produce an artifact nobody can fetch; this one puts a real attachment in a real inbox, at
+arbitrary addresses, and is not permission-gated. A caller cannot confirm success, cannot
+retract a mis-addressed send, and cannot tell a silent failure from a silent success.
+
+Probed safely: a throwaway report was created in the campaign's own fixture
+(`__mcp-probe-email-report-*`, id 10442) so the attachment carried fixture data rather than
+anyone else's, and the single recipient was an address the operator owns.
+
+**What the product team should add:** a job id on the 200 and a status endpoint, the same ask as
+the rest of this finding. For this capability specifically, that is the difference between
+"we think we emailed your customer" and knowing.

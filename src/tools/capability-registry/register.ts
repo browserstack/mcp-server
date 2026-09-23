@@ -36,6 +36,7 @@ import {
 import { invoke } from "./resolve.js";
 import {
   ambiguousProducts,
+  isBrowseQuery,
   searchCapabilities,
   singular,
   terms,
@@ -311,11 +312,21 @@ export function addCapabilityRegistryTools(
       "It does NOT carry parameters or response shapes. Once you have picked one, call " +
       "describeCapability for its full contract, then invokeCapability. Fetching the " +
       "contract only for the one you chose is the difference between ~1k and ~8.6k tokens " +
-      "a search. Results are ranked and capped, and `truncated` says when more matched.",
+      "a search. Results are ranked and capped. " +
+      "TO SEE EVERYTHING rather than search, pass query='*' — that lists the product " +
+      "(honouring `entity` and `mode`) in a stable order instead of ranking it, which is " +
+      "what you want when the task is 'what can this product do' rather than a lookup. " +
+      "TO PAGE, send `offset`: every response carries `offset` and, when more matched, " +
+      "`next_offset` — resend the SAME query with that value. `next_offset` is absent on " +
+      "the last page, so walk until it stops rather than comparing counts.",
     {
       query: z
         .string()
-        .describe("What you are trying to do, in plain language."),
+        .describe(
+          "What you are trying to do, in plain language. Pass '*' (or 'all') to BROWSE " +
+            "instead of search: every capability in the product, in a stable order, " +
+            "paginated — use it when you want to see the surface rather than find one thing.",
+        ),
       entity: z
         .string()
         .optional()
@@ -354,6 +365,13 @@ export function addCapabilityRegistryTools(
         .optional()
         .describe("Restrict to reads or writes. Omit to let the query decide."),
       limit: z.number().optional().describe("Max results (default 8)."),
+      offset: z
+        .number()
+        .optional()
+        .describe(
+          "Skip this many results — send the `next_offset` from the previous response " +
+            "with the SAME query to get the next page. Omit for the first page.",
+        ),
     },
     {
       title: "Search Capabilities",
@@ -362,7 +380,7 @@ export function addCapabilityRegistryTools(
       idempotentHint: true,
       openWorldHint: false,
     },
-    async ({ query, entity, product, product_choice, mode, limit }) => {
+    async ({ query, entity, product, product_choice, mode, limit, offset }) => {
       track("searchCapability");
 
       // THE GATE. Nothing here can tell whether a human was asked — same as the write
@@ -374,7 +392,15 @@ export function addCapabilityRegistryTools(
       // both products claim. 27 of the 198 eval queries, against 135 if constituent words
       // counted. `entity` is an explicit narrowing, so a caller that named one has already
       // been specific enough and is not asked again.
-      if (product_choice !== "user_confirmed" && !entity) {
+      // The ambiguity gate asks the USER which product a word belongs to. A browse query
+      // contains no word to be ambiguous about — `*` names nothing — so there is nothing
+      // to ask, and asking anyway would block the one query whose whole purpose is to
+      // show what a product contains.
+      if (
+        product_choice !== "user_confirmed" &&
+        !entity &&
+        !isBrowseQuery(query)
+      ) {
         const ambiguity = ambiguousProducts(registry.index.products, query);
         if (ambiguity.products.length > 1) {
           // EVERYTHING NEEDED TO ASK, IN THE REFUSAL. Telling the agent to go and call
@@ -434,6 +460,7 @@ export function addCapabilityRegistryTools(
           product,
           mode: mode as Mode | undefined,
           limit,
+          offset,
         },
       );
       return ok({

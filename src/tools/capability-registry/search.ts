@@ -118,6 +118,18 @@ const PLURAL_INTENT = new Set([
  * camelCase is split before lowercasing, so `testRunId`, `test_run_id` and `test run id`
  * all tokenize alike.
  */
+/**
+ * Is this the browse wildcard rather than a search?
+ *
+ * Accepts `*` and `all` — both are what a caller reaches for when the intent is "show me
+ * everything", and treating only one of them as the wildcard means the other silently
+ * becomes a bad search. Whitespace is tolerated so a pasted value still works.
+ */
+export function isBrowseQuery(query?: string): boolean {
+  const q = (query || "").trim().toLowerCase();
+  return q === "*" || q === "all";
+}
+
 export function terms(text: string | undefined): string[] {
   return [
     ...(text || "")
@@ -482,6 +494,18 @@ export interface SearchResult {
   truncated: boolean;
   total_matched: number;
   /**
+   * Where this page started, and where the next one begins.
+   *
+   * `truncated` has always said more matched than fit; nothing said how to reach it, so
+   * the only way past the first page was to raise `limit` and re-read everything already
+   * seen. `next_offset` is absent on the last page, which is what makes "walk until it
+   * stops" terminate without the caller comparing counts.
+   */
+  offset: number;
+  next_offset?: number;
+  /** True when the query was the browse wildcard rather than a search. */
+  browse?: boolean;
+  /**
    * The best pre-penalty term score, and whether it is weak enough to doubt.
    *
    * A vocabulary miss does NOT look like a miss from the outside: "make a new bucket for my
@@ -690,9 +714,53 @@ export function searchCapabilities(
     product?: string;
     mode?: Mode;
     limit?: number;
+    offset?: number;
   } = {},
 ): SearchResult {
   const limit = options.limit && options.limit > 0 ? options.limit : 8;
+  const offset =
+    options.offset && options.offset > 0 ? Math.floor(options.offset) : 0;
+
+  // BROWSE MODE: `*` lists the product instead of searching it.
+  //
+  // Scoring keeps only capabilities with matched > 0, so there was no query that returned
+  // everything — an agent that wanted to see what exists had to guess words until the
+  // shortlist looked complete, and could never tell when it was. `*` skips scoring
+  // entirely and pages the filtered set in a STABLE order (name, then path), because a
+  // ranked order is not a safe thing to paginate: ranking is query-dependent and ties
+  // break arbitrarily, so page 2 of a ranked list can repeat or skip rows. Browse is
+  // ordered by identity, so offset means the same thing on every call.
+  if (isBrowseQuery(query)) {
+    const all = Object.entries(products)
+      .filter(([name]) => !options.product || name === options.product)
+      .flatMap(([name, bundle]) =>
+        bundle.capabilities
+          .filter(
+            (capability) =>
+              (!options.entity || capability.entity === options.entity) &&
+              (!options.mode || capability.mode === options.mode),
+          )
+          .map((capability) => ({ product: name, capability })),
+      )
+      .sort(
+        (a, b) =>
+          (a.capability.name || "").localeCompare(b.capability.name || "") ||
+          a.capability.path.localeCompare(b.capability.path),
+      );
+    const page = all.slice(offset, offset + limit);
+    const end = offset + page.length;
+    return {
+      hits: page,
+      truncated: end < all.length,
+      total_matched: all.length,
+      top_matched: 0,
+      coverage: 1,
+      weak: false,
+      offset,
+      ...(end < all.length ? { next_offset: end } : {}),
+      browse: true,
+    };
+  }
   // Forms are computed once per query, not per capability: 173 capabilities x 6 haystacks
   // would otherwise rebuild the same handful of strings a thousand times.
   const wanted = terms(query).map(termForms);
@@ -773,12 +841,14 @@ export function searchCapabilities(
   // products and across `product`/`entity` narrowing — which the raw score is not.
   const perfect = weights.reduce((sum, w) => sum + IDENTITY_WEIGHT * w, 0);
   const coverage = perfect > 0 ? topMatched / perfect : 1;
+  const page = scored.slice(offset, offset + limit);
+  const end = offset + page.length;
   return {
-    hits: scored
-      .slice(0, limit)
-      .map(({ product, capability }) => ({ product, capability })),
-    truncated: scored.length > limit,
+    hits: page.map(({ product, capability }) => ({ product, capability })),
+    truncated: end < scored.length,
     total_matched: scored.length,
+    offset,
+    ...(end < scored.length ? { next_offset: end } : {}),
     top_matched: topMatched,
     coverage,
     weak: wanted.length > 0 && perfect > 0 && coverage < WEAK_COVERAGE,

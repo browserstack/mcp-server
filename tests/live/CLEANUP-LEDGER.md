@@ -352,3 +352,24 @@ Also on preprod, from the create_template_v2 shape probing: several `__mcp-probe
 all of which returned 400 and created nothing.
 
 Not cleanable through this surface (destructive tier refused before binding). Safe to delete by hand.
+
+## Preprod residue — 2026-09-22 (send_report_email_now_v1 probe)
+
+| id | title | why |
+| --- | --- | --- |
+| report 10442 | `__mcp-probe-email-report-20260922-194636` | created solely so the email probe had a report of its own to send, rather than mailing someone else's report data |
+
+One email was sent, to the operator's own address only, with a single `pdf` attachment.
+Not cleanable through this surface (the destructive tier is refused before binding).
+
+## Production residue — 2026-09-23 (template probe, second prod credential)
+
+Workspace-level, created while verifying `create_template_v2`:
+
+| id | name | linked to |
+| --- | --- | --- |
+| 1088008 | `__mcp-probe-template-renamed-104210` (created as `__mcp-probe-template-20260923-104130-17-18`) | project 4067615 |
+
+A workspace template is visible to anyone authoring test cases in a linked project, so unlike
+the other residue in this file this one is worth removing promptly. It cannot be deleted through
+this surface — `delete_template_v2` is `mode: destructive` and refused before binding.

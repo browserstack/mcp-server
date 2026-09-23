@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import logger from "../logger.js";
 import { getBrowserStackAuth } from "./get-auth.js";
 import { createRequire } from "module";
@@ -34,7 +35,6 @@ interface MCPEventPayload {
     error_type?: string;
     error_class?: ErrorClass;
     is_remote?: boolean;
-    phase?: "completed";
     duration_ms?: number;
     outcome?: ToolOutcome;
   };
@@ -99,6 +99,14 @@ function baseProperties(toolName: string, clientInfo: ClientInfo) {
   };
 }
 
+function errorProperties(error: unknown) {
+  return {
+    error_message: error instanceof Error ? error.message : String(error),
+    error_type: error instanceof Error ? error.constructor.name : "Unknown",
+    error_class: classifyError(error),
+  };
+}
+
 function sendEvent(event: MCPEventPayload, config?: any): void {
   let authHeader: string | undefined;
   if (config) {
@@ -120,16 +128,41 @@ function sendEvent(event: MCPEventPayload, config?: any): void {
     .catch(() => {});
 }
 
-/** Per-invocation row: fired at tool entry (success) and from the catch block (failure). */
+/**
+ * State of one tool call while its handler runs. Lives in AsyncLocalStorage, so it is
+ * request-scoped: concurrent calls in the multi-tenant remote wrapper never share it.
+ */
+interface CallContext {
+  toolName: string;
+  clientInfo: ClientInfo;
+  config?: any;
+  error?: unknown;
+}
+
+const callContext = new AsyncLocalStorage<CallContext>();
+
+/**
+ * Records a tool invocation or failure.
+ *
+ * Inside an instrumented call (see `withToolCall`) nothing is sent: the entry call and
+ * the catch-block call fold into the single row written when the handler settles.
+ * Outside one (the `started` heartbeat, tools a host registers without wrapping) it
+ * behaves as before and posts a row immediately.
+ */
 export function trackMCP(
   toolName: string,
   clientInfo: ClientInfo,
   error?: unknown,
   config?: any,
 ): void {
-  const isSuccess = !error;
+  const ctx = callContext.getStore();
+  if (ctx) {
+    if (clientInfo?.name && !ctx.clientInfo?.name) ctx.clientInfo = clientInfo;
+    if (config && !ctx.config) ctx.config = config;
+    if (error) ctx.error = error;
+    return;
+  }
 
-  // Log client information
   if (clientInfo?.name) {
     logger.info(
       `Client connected: ${clientInfo.name} (version: ${clientInfo.version})`,
@@ -142,42 +175,66 @@ export function trackMCP(
     event_type: "MCPInstrumentation",
     event_properties: {
       ...baseProperties(toolName, clientInfo),
-      success: isSuccess,
+      success: !error,
+      ...(error ? errorProperties(error) : {}),
     },
   };
-
-  // Add error details if applicable
-  if (error) {
-    event.event_properties.error_message =
-      error instanceof Error ? error.message : String(error);
-    event.event_properties.error_type =
-      error instanceof Error ? error.constructor.name : "Unknown";
-    event.event_properties.error_class = classifyError(error);
-  }
-
   sendEvent(event, config);
 }
 
+function isErrorResult(result: unknown): boolean {
+  return (
+    typeof result === "object" &&
+    result !== null &&
+    (result as { isError?: unknown }).isError === true
+  );
+}
+
 /**
- * Per-completion row, written after the handler settles, with duration and
- * outcome. Same event_type as the entry row because the Rails endpoint
- * allowlists event types; `phase: "completed"` and the absence of `success`
- * keep it out of existing success/failure counts.
+ * Runs a tool handler and writes exactly one MCPInstrumentation row when it settles:
+ * `success` (false when the handler reported or threw an error), `duration_ms`,
+ * `outcome` (ok / error_result / threw) and the error fields on failures.
+ * Telemetry never affects the call: the result is passed through, throws are rethrown.
  */
-export function trackMCPCompleted(
+export async function withToolCall<T>(
   toolName: string,
-  clientInfo: ClientInfo,
-  completion: { durationMs: number; outcome: ToolOutcome },
-  config?: any,
-): void {
-  const event: MCPEventPayload = {
-    event_type: "MCPInstrumentation",
-    event_properties: {
-      ...baseProperties(toolName, clientInfo),
-      phase: "completed",
-      duration_ms: Math.max(0, Math.round(completion.durationMs)),
-      outcome: completion.outcome,
-    },
-  };
-  sendEvent(event, config);
+  getClientInfo: () => ClientInfo,
+  config: any,
+  fn: () => Promise<T> | T,
+): Promise<T> {
+  const ctx: CallContext = { toolName, clientInfo: {}, config };
+  const startedAt = performance.now();
+  let outcome: ToolOutcome = "ok";
+  try {
+    const result = await callContext.run(ctx, fn);
+    if (isErrorResult(result)) outcome = "error_result";
+    return result;
+  } catch (error) {
+    outcome = "threw";
+    ctx.error ??= error;
+    throw error;
+  } finally {
+    try {
+      let clientInfo = ctx.clientInfo;
+      try {
+        const live = getClientInfo();
+        if (live?.name) clientInfo = live;
+      } catch {
+        // client info is optional
+      }
+      const event: MCPEventPayload = {
+        event_type: "MCPInstrumentation",
+        event_properties: {
+          ...baseProperties(toolName, clientInfo),
+          success: ctx.error === undefined && outcome !== "threw",
+          duration_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+          outcome,
+          ...(ctx.error !== undefined ? errorProperties(ctx.error) : {}),
+        },
+      };
+      sendEvent(event, ctx.config ?? config);
+    } catch {
+      // Telemetry must never affect the tool call.
+    }
+  }
 }

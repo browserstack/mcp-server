@@ -437,9 +437,23 @@ describe("deferred — the two-call shape", () => {
     expect(result.run_id).toBe("run-1");
     expect(result.perm_id).toBe(ASK.perm_id);
     expect(result.applied_before_stop).toBe(false);
-    // The answer must TELL the model to come back — the whole flow depends on it.
-    expect(String(result.answer)).toContain("run-1");
-    expect(String(result.answer)).toContain("call askBrowserStackAI again");
+    // The answer must tell the model to ASK A HUMAN — not merely to come back. The
+    // first version explained the transport instead, and the measured result was the
+    // model approving on the user's behalf in the same turn.
+    expect(String(result.answer)).toContain("A HUMAN MUST APPROVE THIS");
+    expect(String(result.answer)).toContain("Do NOT decide on their behalf");
+    // Points at a structured affordance WITHOUT naming one: the tool differs per
+    // client, and a name here would be wrong everywhere else and would rot.
+    expect(String(result.answer)).toContain("structured question");
+    expect(String(result.answer)).not.toMatch(/AskUserQuestion|Claude Code|elicit/i);
+    // `next_step` carries the arguments, so "I did not know what to send" is not a
+    // reason to improvise.
+    expect(result.next_step?.call).toBe("askBrowserStackAI");
+    expect(result.next_step?.params).toMatchObject({
+      product: "tm", run_id: "run-1", perm_id: ASK.perm_id,
+    });
+    expect(result.next_step?.params.decision).toContain("the user's answer");
+    expect(result.next_step?.instruction).toContain("AFTER the user has answered");
   });
 
   it("a read-only task still costs one call, not two", async () => {

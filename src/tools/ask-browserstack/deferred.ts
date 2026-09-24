@@ -94,17 +94,28 @@ export function parkedResult(
 }
 
 /** CONTRACT §5's shape, for a run that is parked rather than finished. */
-export function needsApprovalResult(runId: string, ask: ParkedAsk): AskResult {
+export function needsApprovalResult(
+  runId: string,
+  ask: ParkedAsk,
+  product: string,
+): AskResult {
   return {
     // NOT ok, and not an error either: nothing was applied and nothing failed. A caller
     // that branches on `ok` alone must not read a parked run as a finished one.
     ok: false,
     status: "needs_approval",
+    // Addressed to the MODEL, and imperative, because the model is what reads it and
+    // the one thing that must happen next is not something it can do by itself.
     answer:
-      `BrowserStack needs approval before it can continue: ${ask.description}. ` +
-      `Ask the user whether to allow it, then call askBrowserStackAI again with ` +
-      `run_id "${runId}" and their decision. Nothing has been changed yet, and ` +
-      `nothing will be unless you come back.`,
+      `A HUMAN MUST APPROVE THIS BEFORE IT CAN CONTINUE. BrowserStack AI stopped at: ` +
+      `${ask.description}. Nothing has been changed yet.\n\n` +
+      `Put this to the user and WAIT for their answer. If you have a way to ask them a ` +
+      `structured question or show a confirmation — any prompt, question or approval ` +
+      `affordance your client offers — use that; otherwise ask plainly in your reply. ` +
+      `Quote what is being done either way.\n\n` +
+      `Do NOT decide on their behalf, and do not treat "it is what they asked for" as ` +
+      `approval: they are being asked to confirm this specific change, which is a ` +
+      `different question. Once they have answered, follow \`next_step\`.`,
     approvals: [],
     approvals_source: "atlas",
     elicitations: [],
@@ -113,14 +124,31 @@ export function needsApprovalResult(runId: string, ask: ParkedAsk): AskResult {
     permission_relay: {
       used: true,
       reason: "",
-      detail:
-        "This deployment cannot hold a prompt open mid-run, so it returned the " +
-        "pending approval instead. Answer it with a second call carrying `run_id` " +
-        "and `decision`.",
+      // Terse on purpose: the actionable half lives in `next_step`, and an explanation
+      // of the transport here is what the model read instead of the instruction.
+      detail: "Approval is pending a human answer; see `next_step`.",
     },
     atlas_response: null,
     run_id: runId,
     perm_id: ask.perm_id,
+    next_step: {
+      instruction:
+        // Deliberately names no tool and no client. The affordance differs everywhere
+        // — a structured question, a confirmation dialog, an approval prompt, or
+        // nothing at all — and naming one would be wrong on every other client and
+        // would rot as clients change. Describe the ACT, let the model pick the means.
+        "AFTER the user has answered — not before — call askBrowserStackAI again " +
+        "with exactly these params, setting `decision` to what THEY said. If they " +
+        'declined, send "deny": that is a valid answer and stops the task cleanly. ' +
+        "If they have not answered yet, do not call anything.",
+      call: "askBrowserStackAI",
+      params: {
+        product,
+        run_id: runId,
+        perm_id: ask.perm_id,
+        decision: "allow | deny — the user's answer, not your own judgement",
+      },
+    },
   };
 }
 
@@ -143,7 +171,7 @@ export async function runDeferred(
       "askBrowserStackAI: run parked awaiting approval (run=%s)",
       parked.runId,
     );
-    return needsApprovalResult(parked.runId, parked.ask);
+    return needsApprovalResult(parked.runId, parked.ask, product);
   }
   // No ask: an ordinary result, passed through the same builder the streaming path
   // uses so an entitlement refusal, a 401 and a plain failure all read identically
@@ -197,7 +225,7 @@ export async function runResumed(
       atlas_response: null,
       error:
         `The decision could not be delivered (HTTP ${status}). The run may have ` +
-        `expired — BrowserStack stops waiting after five minutes — or it may already ` +
+        `expired — BrowserStack AI stops waiting after five minutes — or it may already ` +
         `have been answered. Nothing was changed by this call. Start the task again ` +
         `if it still needs doing.`,
     };
@@ -240,7 +268,7 @@ export async function runResumed(
       "askBrowserStackAI: run parked again after a decision (run=%s)",
       runId,
     );
-    return needsApprovalResult(runId, nextAsk);
+    return needsApprovalResult(runId, nextAsk, product);
   }
   return buildResult(
     { status: resultStatus, body: result },

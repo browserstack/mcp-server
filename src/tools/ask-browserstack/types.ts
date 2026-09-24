@@ -246,6 +246,24 @@ export interface AskResult {
   run_id?: string;
   perm_id?: string;
   /**
+   * Deferred only: what the caller must do next, and with what.
+   *
+   * Carried as its own field rather than buried in prose because the model reads this
+   * result and decides what to do from it. The first version explained the TRANSPORT
+   * ("this deployment cannot hold a prompt open…") which is true and useless: it told
+   * the model how the plumbing works, not that a person has to answer. Measured
+   * consequence — the model read the ask, judged it matched the user's request, and
+   * answered `allow` itself in the same turn without asking anyone.
+   *
+   * This cannot MAKE a model ask; nothing in the protocol can, which is the standing
+   * argument for elicitation. It removes the excuse.
+   */
+  next_step?: {
+    instruction: string;
+    call: string;
+    params: Record<string, string>;
+  };
+  /**
    * Why the call failed, when it did.
    *
    * Ours when egress never completed; otherwise Atlas's own `error` string, which its

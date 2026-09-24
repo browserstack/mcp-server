@@ -81,4 +81,11 @@ describe("loadtesting capability index — resolution contract", () => {
     expect(q).toContain("sinceIso");
     expect(q).toContain("untilIso");
   });
+
+  it("createLoadTest declares the name maxLength and the hybrid children[] param", () => {
+    const create = byName("createLoadTest");
+    const nameField = (create.body || []).find((f: any) => f.name === "name");
+    expect(nameField.maxLength).toBe(255);
+    expect((create.body || []).some((f: any) => f.name === "children")).toBe(true);
+  });
 });

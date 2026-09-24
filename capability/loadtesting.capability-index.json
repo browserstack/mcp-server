@@ -938,7 +938,8 @@
             "name": "name",
             "type": "string",
             "required": true,
-            "description": "Test name."
+            "maxLength": 255,
+            "description": "Test name. Max 255 characters — truncate before sending; a longer name is rejected with a 400."
           },
           {
             "name": "testType",
@@ -1026,7 +1027,10 @@
           "Only THREE things must be known before creating, and each is taken from the user's request when they've stated it — ask ONLY for the ones still missing, and ask about nothing else: (1) testType — plu (protocol / API load), blu (real-browser load) or hybrid (both); (2) framework — k6 / jmeter / gatling / locust for plu, playwright / selenium / webdriverio / nightwatch for blu; (3) the script — a built-in sample (scriptRef:{source:'sample'}; for Selenium also pass scriptRef.subType) OR the user's own script via the pendingScriptUpload flow. Do not guess a framework/testType, but do not re-ask for one the user already gave.",
           "There is no clone capability. To duplicate a test, getLoadTest the source and copy its full config into this create — vuRamp/vus, durationSec, loadGeneratorLocations and slaThresholds included; nothing is inherited from the source, so anything you omit is dropped.",
           "DEFAULTS apply ONLY after the three mandatory fields (testType, framework, script) are known — they never substitute for a missing one of those. Everything BEYOND those three — do not ask about it; apply the default unless the user explicitly specifies otherwise: loadProfile='constant', config.vus=1, config.durationSec=30, region us-east-1 (omit loadGeneratorLocations so the backend defaults it), and NO advanced features (do not enable log capture, response capture, artifacts, thresholds, etc.). Send config.vus=1 + config.durationSec=30 with no vuRamp for the default constant profile.",
-          "Only when the user explicitly asks for a different load shape, set config.loadProfile: 'ramping' (config.vuRamp: array of {vus, durationSec} stages; ramp up/down is inferred from adjacent VU deltas), 'iterations' (PLU only — config.iterations = fixed run count, plus config.vus), or 'throughput' (PLU and only JMeter/Gatling/locust/k6 — config.targetRps + config.maxVus + config.durationSec). A stage's own 'type' is NOT honored — every stage persists as a hold."
+          "Only when the user explicitly asks for a different load shape, set config.loadProfile: 'ramping' (config.vuRamp: array of {vus, durationSec} stages; ramp up/down is inferred from adjacent VU deltas), 'iterations' (PLU only — config.iterations = fixed run count, plus config.vus), or 'throughput' (PLU and only JMeter/Gatling/locust/k6 — config.targetRps + config.maxVus + config.durationSec). A stage's own 'type' is NOT honored — every stage persists as a hold.",
+          "testType='hybrid' REQUIRES children[] with the PLU leg (top-level is the BLU leg). NEVER call create with testType='hybrid' and no children[] — it is rejected 'hybrid testType requires children[]'. If you don't yet have both legs' framework+script, ASK for them first; do not submit a hybrid without children to 'see what happens'.",
+          "On a 400, FIX the payload per the error message and only then resend — NEVER resubmit an unchanged payload (add children[] for hybrid, shorten name to <=255, supply testType+framework). Do not call getLoadTest after a FAILED create; there is nothing to fetch. Repeatedly retrying the same rejected body is the main source of wasted create calls.",
+          "Always send idempotencyKey, and reuse the SAME key across retries of one logical create, so a late success can't create a duplicate test."
         ],
         "returns": [
           "testId",

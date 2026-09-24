@@ -65,6 +65,19 @@ export class Config {
     public readonly ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY: boolean,
     public readonly ASK_BROWSERSTACK_ATLAS_URL: string | undefined,
     public readonly ASK_BROWSERSTACK_AUTH_TOKEN_URL: string | undefined,
+    /**
+     * Which relay transport to use, overriding what the deployment implies.
+     *
+     * `relayMode` otherwise derives this from `REMOTE_MCP`, which conflates two
+     * different questions: "am I the hosted process" and "can I hold a connection open
+     * across a human". Only the second decides the transport, and they come apart the
+     * moment anyone wants to exercise the deferred, two-call flow from a local stdio
+     * install — `REMOTE_MCP=true` cannot do it, because this entrypoint exits on that
+     * flag by design (the hosted deployment runs remote-mcp-server instead).
+     *
+     * "deferred" | "elicit". Anything else is ignored.
+     */
+    public readonly ASK_BROWSERSTACK_RELAY_TRANSPORT: string | undefined,
   ) {}
 }
 
@@ -98,6 +111,8 @@ const config = new Config(
     process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL.trim().length > 0
     ? process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL
     : undefined,
+  (process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT || "").trim().toLowerCase() ||
+    undefined,
 );
 
 export default config;

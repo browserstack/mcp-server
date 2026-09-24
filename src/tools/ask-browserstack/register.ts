@@ -411,7 +411,14 @@ export function relayMode(server: McpServer): RelayMode {
   // elicitation can be answered there depends on the host keeping one server alive per
   // session — see `allowRemoteRelay`. Verified working against the hosted Streamable
   // HTTP server once it does (browserstack/remote-mcp-server#96).
-  if (appConfig.REMOTE_MCP) {
+  // An explicit transport wins over whatever the deployment implies. `REMOTE_MCP`
+  // cannot select `deferred` from a local stdio install — that flag makes this
+  // entrypoint exit, because the hosted deployment runs remote-mcp-server instead — so
+  // without this there is no way to exercise the two-call flow anywhere it can be
+  // watched. "elicit" forces the other direction for the same reason.
+  const forced = appConfig.ASK_BROWSERSTACK_RELAY_TRANSPORT;
+  if (forced === "deferred") return "deferred";
+  if (forced !== "elicit" && appConfig.REMOTE_MCP) {
     // DEFERRED, not elicitation, and not because elicitation would be worse here — it
     // would be better. It is what makes this process stateful: a suspended
     // `elicitation/create` pins an McpServer in one pod's heap until the answer

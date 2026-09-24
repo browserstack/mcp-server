@@ -564,8 +564,9 @@
         ],
         "intent": "Get the AI insight (summary, root cause, recommendations) for a completed run — use this for 'why did this run regress or fail?'",
         "guidance": [
+          "This is the canonical answer to a 'summarize this run' / 'give me a summary' request: return ONLY these AI insight summary points and stop. Do NOT also call getLoadTestRunReport or append KPIs / web vitals / transactions unless the user explicitly asks for them.",
           "Only meaningful after the run is terminal; a running job returns an in_progress state, not a report.",
-          "May return 503 if the insight backend is unavailable — retry later."
+          "May return 503 if the insight backend is unavailable — retry later. If no insight exists for the run, fall back to a brief status + headline KPIs from getLoadTestRunReport, not the full report."
         ],
         "returns": [
           "state",
@@ -681,7 +682,8 @@
           "groupBy and errorCategory narrow the payload; byteCap hard-caps the response (max 256 KB).",
           "metrics accepts dotted names or @ aliases; see getLoadTestMetricsManifest for what applies to this test type.",
           "Answer a scoped question with the narrowest slice instead of the whole report: one metric → metrics=; error breakdown → errorCategory= (or slaOnly=true); a time window → sinceIso/untilIso; slowest transaction → detail=per-txn with groupBy=transaction and topN.",
-          "One call with the right params returns everything for that question — do not re-fetch the same run with the same params. Fetch the full report (view=full / detail=full) only when the user explicitly asks for the raw or complete report."
+          "One call with the right params returns everything for that question — do not re-fetch the same run with the same params. Fetch the full report (view=full / detail=full) only when the user explicitly asks for the raw or complete report.",
+          "A plain 'summarize this run' / 'give me a summary' request is answered by getLoadTestInsightSummary, NOT this endpoint. Only call this when the user asks for specific KPIs, SLA verdicts, web vitals, transactions, or the raw/complete report."
         ],
         "returns": [
           "runId",

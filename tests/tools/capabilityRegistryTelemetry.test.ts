@@ -83,6 +83,38 @@ describe("capability registry telemetry", () => {
     expect(last.success).toBe(true);
   });
 
+  it("writes exactly ONE row per completed invoke", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        text: async () => JSON.stringify({ success: true }),
+      }),
+    );
+    const server = await buildServer();
+
+    await call(server, "invokeCapability", {
+      name: "get_archived_test_cases",
+      product: "tm",
+      path_params: { project_id: 1 },
+    });
+
+    const recorded = await rowsFor("invokeCapability");
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      capability: "get_archived_test_cases",
+      upstream_ok: true,
+      upstream_status: 200,
+    });
+  });
+
+  it("writes exactly ONE row when a call is refused before the network", async () => {
+    const server = await buildServer();
+    await call(server, "invokeCapability", { product: "tm" });
+    expect(await rowsFor("invokeCapability")).toHaveLength(1);
+  });
+
   it("keeps success true but marks upstream_ok false when the product rejects the call", async () => {
     vi.stubGlobal(
       "fetch",
@@ -123,7 +155,10 @@ describe("capability registry telemetry", () => {
   });
 
   it.each([
-    [{ name: "no_such_capability_at_all", product: "tm" }, "unknown_capability"],
+    [
+      { name: "no_such_capability_at_all", product: "tm" },
+      "unknown_capability",
+    ],
     [
       { name: "get_archived_test_cases", product: "tm", path_params: {} },
       "missing_parameter",

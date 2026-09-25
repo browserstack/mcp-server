@@ -837,7 +837,6 @@ export function addCapabilityRegistryTools(
           capability_mode: capability.mode,
           product,
         };
-        track("invokeCapability", identity);
         const args: GroupedArguments = {
           path_params: input.path_params,
           query: input.query,
@@ -894,9 +893,9 @@ export function addCapabilityRegistryTools(
           transport,
           registry.index.products[product]?.auth,
         );
-        // The PRODUCT's verdict, not ours: invoke() returns a 4xx/5xx rather than throwing,
-        // so `success` stays true and these two fields carry whether the call worked.
-        // Status 0 is the transport's value for "could not be reached".
+        // The one row for a completed invoke. invoke() returns a 4xx/5xx rather than
+        // throwing, so `success` keeps its tool-level meaning and these two fields carry
+        // whether the product call worked. Status 0 means it could not be reached.
         track("invokeCapability", {
           ...identity,
           upstream_ok: result.ok,

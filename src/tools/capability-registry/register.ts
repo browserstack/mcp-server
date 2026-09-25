@@ -22,10 +22,11 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import logger from "../../logger.js";
-import { trackMCP } from "../../lib/instrumentation.js";
+import { MCPEventExtras, trackMCP } from "../../lib/instrumentation.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { GroupedArguments } from "./bind.js";
 import { indexPaths, isEnabled, resolveBaseUrl } from "./config.js";
+import { redact } from "./redact.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
 import {
   CapabilityRegistry,
@@ -201,12 +202,59 @@ export function addCapabilityRegistryTools(
   const tools: Record<string, RegisteredTool> = {};
 
   /** Instrumentation in the house style, and never fatal to the call it wraps. */
-  const track = (name: string) => {
+  const track = (name: string, extras?: MCPEventExtras) => {
     try {
-      trackMCP(name, server.server.getClientVersion()!, undefined, config);
+      trackMCP(
+        name,
+        server.server.getClientVersion()!,
+        undefined,
+        config,
+        extras,
+      );
     } catch {
       // Telemetry must not decide whether a tool call succeeds.
     }
+  };
+
+  /**
+   * A refusal or a failure, recorded and returned in one step.
+   *
+   * Every error path here returns through `failed()`, which produced no telemetry at all:
+   * BigQuery showed zero registry failures across 1,069 calls in 30 days. `refusal_reason`
+   * distinguishes what we refused before any network call from what the product rejected.
+   */
+  /**
+   * An InvocationError's reason, from the prefix the registry itself writes. These are our
+   * own messages from bind.ts / index-loader.ts, not a product's prose.
+   */
+  const invocationReason = (message: string): string => {
+    if (message.startsWith("unknown_capability:")) return "unknown_capability";
+    if (message.startsWith("missing required parameter"))
+      return "missing_parameter";
+    if (/^'[^']+' must be /.test(message)) return "bad_parameter_type";
+    if (message.includes("no base URL is configured")) return "no_base_url";
+    return "invocation_error";
+  };
+
+  const refuse = (
+    tool: string,
+    reason: string,
+    message: string,
+    extra?: Record<string, unknown>,
+    extras?: MCPEventExtras,
+  ): CallToolResult => {
+    try {
+      trackMCP(
+        tool,
+        server.server.getClientVersion()!,
+        new Error(message),
+        config,
+        { refusal_reason: reason, ...(extras ?? {}) },
+      );
+    } catch {
+      // Telemetry must not decide whether a tool call succeeds.
+    }
+    return failed(message, extra);
   };
 
   tools.listProducts = server.tool(
@@ -293,7 +341,14 @@ export function addCapabilityRegistryTools(
     async ({ product, entity }) => {
       track("describeEntity");
       const bundle = registry.index.products[product];
-      if (!bundle) return failed(`unknown product '${product}'`);
+      if (!bundle)
+        return refuse(
+          "describeEntity",
+          "unknown_product",
+          `unknown product '${product}'`,
+          undefined,
+          { product },
+        );
       const doc = bundle.entities[entity];
       if (!doc) {
         return failed(
@@ -394,8 +449,6 @@ export function addCapabilityRegistryTools(
       openWorldHint: false,
     },
     async ({ query, entity, product, product_choice, mode, limit, offset }) => {
-      track("searchCapability");
-
       // THE GATE. Nothing here can tell whether a human was asked — same as the write
       // gate, which also takes the caller's word. What it can do is refuse to answer a
       // question that is genuinely the user's, so that answering it anyway takes a
@@ -446,7 +499,9 @@ export function addCapabilityRegistryTools(
               ...(senses.length ? { shared_terms: senses } : {}),
             };
           });
-          return failed(
+          return refuse(
+            "searchCapability",
+            "product_ambiguous",
             `'${query}' could mean ${ambiguity.products.join(" or ")} — ` +
               `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
               `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. ` +
@@ -461,6 +516,7 @@ export function addCapabilityRegistryTools(
                 options,
               },
             },
+            { product: ambiguity.products.join("+") },
           );
         }
       }
@@ -476,6 +532,19 @@ export function addCapabilityRegistryTools(
           offset,
         },
       );
+      // Whether the search FOUND anything useful: zero results, or a weak match (the
+      // caller's words are not the product's), is a miss worth counting even though the
+      // call succeeded.
+      track("searchCapability", {
+        product,
+        entity,
+        search_query: redact(query),
+        results_returned: hits.length,
+        total_matched: rest.total_matched,
+        truncated: rest.truncated,
+        weak_match: weak,
+        coverage: Math.round(rest.coverage * 100) / 100,
+      });
       return ok({
         // NO build_id. It is provenance — for our logs and for cache busting — and
         // resolution must never depend on it, which is exactly why no caller has anything
@@ -596,12 +665,13 @@ export function addCapabilityRegistryTools(
       openWorldHint: false,
     },
     async (input): Promise<CallToolResult> => {
-      track("describeCapability");
       try {
         // The same two handles as invokeCapability, resolved the same way, so a name that
         // describes is a name that invokes. Divergence here would be its own bug class.
         if (!input.name && !(input.method && input.path)) {
-          return failed(
+          return refuse(
+            "describeCapability",
+            "no_handle",
             "pass `name` — or, for a capability returned without one, both `method` and " +
               "`path`, exactly as searchCapability returned them",
           );
@@ -614,6 +684,13 @@ export function addCapabilityRegistryTools(
               input.product,
             );
 
+        track("describeCapability", {
+          capability: capability.name,
+          capability_method: capability.method,
+          capability_path: capability.path,
+          capability_mode: capability.mode,
+          product: owner,
+        });
         const selection = (input.include_responses ||
           "success") as ResponseSelection;
         const responses = resolveResponses(
@@ -646,12 +723,21 @@ export function addCapabilityRegistryTools(
           ...(responses ? { responses } : {}),
         });
       } catch (error) {
-        if (error instanceof InvocationError) return failed(error.message);
+        if (error instanceof InvocationError)
+          return refuse(
+            "describeCapability",
+            invocationReason(error.message),
+            error.message,
+          );
         logger.error(
           "describeCapability failed: %s",
           error instanceof Error ? error.message : String(error),
         );
-        return failed("that capability could not be described");
+        return refuse(
+          "describeCapability",
+          "unexpected_error",
+          "that capability could not be described",
+        );
       }
     },
   );
@@ -730,13 +816,14 @@ export function addCapabilityRegistryTools(
       openWorldHint: false,
     },
     async (input): Promise<CallToolResult> => {
-      track("invokeCapability");
       try {
         // Either handle resolves to the same capability. `name` wins when both are sent,
         // rather than cross-checking them: a caller pasting a stale path alongside a good
         // name should still reach the right operation, which is the point of naming.
         if (!input.name && !(input.method && input.path)) {
-          return failed(
+          return refuse(
+            "invokeCapability",
+            "no_handle",
             "pass `name` — or, for a capability returned without one, both `method` and " +
               "`path`, exactly as searchCapability returned them",
           );
@@ -751,6 +838,18 @@ export function addCapabilityRegistryTools(
         /** What to call it in errors — the handle the caller actually used. */
         const handle =
           capability.name || `${capability.method} ${capability.path}`;
+        /**
+         * What was asked for. Recorded after resolution, not at entry, because only here is
+         * it known. `capability` is absent for a product that publishes no names
+         * (loadtesting), where method+path are the handle.
+         */
+        const identity: MCPEventExtras = {
+          capability: capability.name,
+          capability_method: capability.method,
+          capability_path: capability.path,
+          capability_mode: capability.mode,
+          product,
+        };
         const args: GroupedArguments = {
           path_params: input.path_params,
           query: input.query,
@@ -759,8 +858,12 @@ export function addCapabilityRegistryTools(
 
         if (capability.mode === "destructive") {
           // Refused before binding, so consent is never sought for something that cannot run.
-          return failed(
+          return refuse(
+            "invokeCapability",
+            "destructive_blocked",
             `${handle} is a destructive operation and is not available through this surface`,
+            undefined,
+            identity,
           );
         }
 
@@ -775,13 +878,23 @@ export function addCapabilityRegistryTools(
           if (permission !== "granted") {
             // Catches the careless path, not the adversarial one: the model fills this field
             // in, so it is an audit record and a speed bump, never authorisation.
-            return failed(
+            return refuse(
+              "invokeCapability",
+              "permission_not_granted",
               "refused: this endpoint changes data — ask the user to confirm, then retry " +
                 "with user_permission='granted' and a change_summary",
+              undefined,
+              identity,
             );
           }
           if (!(input.change_summary || "").trim()) {
-            return failed("change_summary is required: state what will change");
+            return refuse(
+              "invokeCapability",
+              "change_summary_missing",
+              "change_summary is required: state what will change",
+              undefined,
+              identity,
+            );
           }
         }
 
@@ -793,14 +906,32 @@ export function addCapabilityRegistryTools(
           transport,
           registry.index.products[product]?.auth,
         );
+        // The one row for a completed invoke. invoke() returns a 4xx/5xx rather than
+        // throwing, so `success` keeps its tool-level meaning and these two fields carry
+        // whether the product call worked. Status 0 means it could not be reached.
+        track("invokeCapability", {
+          ...identity,
+          upstream_ok: result.ok,
+          upstream_status: result.http_response.status,
+          change_summary: redact(input.change_summary),
+        });
         return ok(result);
       } catch (error) {
-        if (error instanceof InvocationError) return failed(error.message);
+        if (error instanceof InvocationError)
+          return refuse(
+            "invokeCapability",
+            invocationReason(error.message),
+            error.message,
+          );
         logger.error(
           "invokeCapability failed: %s",
           error instanceof Error ? error.message : String(error),
         );
-        return failed("that capability could not be invoked");
+        return refuse(
+          "invokeCapability",
+          "unexpected_error",
+          "that capability could not be invoked",
+        );
       }
     },
   );

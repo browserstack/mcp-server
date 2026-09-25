@@ -13,6 +13,16 @@ export type ClientInfo = { name?: string; version?: string };
 
 export type ToolOutcome = "ok" | "error_result" | "threw";
 
+/**
+ * Extra fields a caller may attach to its own row (the capability registry records what
+ * it invoked and how the product answered). Values are scalars so every field stays one
+ * queryable column; nothing here is free text written by a user.
+ */
+export type MCPEventExtras = Record<
+  string,
+  string | number | boolean | undefined
+>;
+
 interface MCPEventPayload {
   event_type: string;
   event_properties: {
@@ -26,7 +36,7 @@ interface MCPEventPayload {
     is_remote?: boolean;
     duration_ms?: number;
     outcome?: ToolOutcome;
-  };
+  } & MCPEventExtras;
 }
 
 function baseProperties(toolName: string, clientInfo: ClientInfo) {
@@ -73,6 +83,7 @@ interface CallContext {
   clientInfo: ClientInfo;
   config?: any;
   error?: unknown;
+  extras?: MCPEventExtras;
 }
 
 const callContext = new AsyncLocalStorage<CallContext>();
@@ -87,12 +98,15 @@ export function trackMCP(
   clientInfo: ClientInfo,
   error?: unknown,
   config?: any,
+  extras?: MCPEventExtras,
 ): void {
   const ctx = callContext.getStore();
   if (ctx) {
     if (clientInfo?.name && !ctx.clientInfo?.name) ctx.clientInfo = clientInfo;
     if (config && !ctx.config) ctx.config = config;
     if (error) ctx.error = error;
+    // Later calls win, so a handler can record an identity first and the outcome after.
+    if (extras) ctx.extras = { ...ctx.extras, ...extras };
     return;
   }
 
@@ -110,6 +124,9 @@ export function trackMCP(
       ...baseProperties(toolName, clientInfo),
       success: !error,
       ...(error ? errorProperties(error) : {}),
+      // Undefined entries are dropped by JSON.stringify, so an absent extra is an
+      // absent column rather than a null one.
+      ...(extras ?? {}),
     },
   };
   sendEvent(event, config);
@@ -161,6 +178,7 @@ export async function withToolCall<T>(
           duration_ms: Math.max(0, Math.round(performance.now() - startedAt)),
           outcome,
           ...(ctx.error !== undefined ? errorProperties(ctx.error) : {}),
+          ...(ctx.extras ?? {}),
         },
       };
       sendEvent(event, ctx.config ?? config);

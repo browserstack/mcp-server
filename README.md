@@ -296,7 +296,7 @@ Select the “Installed” tab. Click the “Configure MCP Servers” button at 
 
 ### 💡 List of BrowserStack MCP Tools
 
-As of now we support 46 tools.
+As of now we support 51 tools.
 
 > **Remote MCP note:** Tools marked _(not available in Remote MCP)_ rely on local file/process state and are disabled in the multi-tenant [Remote MCP Server](#-remote-mcp-server). They are available in the local (npx) setup.
 
@@ -656,6 +656,59 @@ As of now we support 46 tools.
 
   ```text
   Find all payment test cases in project Shopping App and add the 'regression' tag to them
+  ```
+
+
+---
+
+## 🧭 Capability Registry (Test Management)
+
+Five generic tools that reach **198 Test Management endpoints** from a prebuilt index, instead of one hand-written tool per endpoint. Use them when the task needs something the named tools above do not cover — shared steps, templates, custom fields, exploratory sessions, review workflows, bulk edits, reports and so on.
+
+The flow is always the same: **find it, read its contract, then call it.**
+
+```text
+searchCapability  →  describeCapability  →  invokeCapability
+```
+
+Two things worth knowing before you start:
+
+- **`searchCapability` needs a product.** Call `listProducts` first if the task does not name one — asking is cheaper than guessing, and the tool will refuse a query that two products could both answer.
+- **Writes ask first.** Anything that changes data needs your confirmation, and deletes are not reachable at all: they are withheld from this surface rather than refused after the fact, so they never appear in search results.
+
+ 47. `listProducts` — List the products this surface can reach, what each one does, and what every entity in it means. **Start here** when you do not already know which product the task belongs to.
+  **Prompt example**
+
+  ```text
+  What can you reach in BrowserStack Test Management?
+  ```
+
+ 48. `describeEntity` — Describe one entity: what it is, what identifies it, what it relates to, and the vocabulary the product uses for it. Read this before filtering or writing, because ids and field values usually have to be resolved first.
+  **Prompt example**
+
+  ```text
+  What is a shared step in Test Management, and how is it identified?
+  ```
+
+ 49. `searchCapability` — Find endpoints by plain language within one product. Returns a shortlist, not the whole catalogue. Pass `query: "*"` to browse everything, with `offset` to page through it.
+  **Prompt example**
+
+  ```text
+  Find a way to move test cases between folders in bulk in project PR-53617
+  ```
+
+ 50. `describeCapability` — The full contract for one capability: required parameters, body shape including any nesting, what the response actually returns, and the traps specific to that endpoint. Read this before invoking anything you have not called before.
+  **Prompt example**
+
+  ```text
+  Show me exactly what I need to send to create a shared step
+  ```
+
+ 51. `invokeCapability` — Call the endpoint. Writes require explicit confirmation and a summary of what will change; destructive operations are not available through this surface.
+  **Prompt example**
+
+  ```text
+  Add the 'regression' tag to every test case in the Checkout folder of PR-53617
   ```
 
 

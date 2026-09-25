@@ -1,0 +1,794 @@
+{
+  "schema_version": 1,
+  "version": "1.0",
+  "build_id": "fixture_synthetic",
+  "secondproduct": {
+    "summary": "Second product fixture \u2014 a synthetic widget catalogue, present only so the cross-product tests have two products to tell apart. Not a real BrowserStack product.",
+    "auth": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "Api-Token"
+    },
+    "base_url": "https://second-product.example.com",
+    "capabilities": [
+      {
+        "name": "list_widgets",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/widgets",
+        "mode": "read",
+        "entity": "widget",
+        "intent": "List the widgets in a catalogue",
+        "returns": [
+          "success",
+          "widgets",
+          "info",
+          "id",
+          "name",
+          "state"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ],
+        "query": [
+          {
+            "name": "page",
+            "type": "integer",
+            "description": "1-based page number."
+          },
+          {
+            "name": "per_page",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Rows per page."
+          }
+        ]
+      },
+      {
+        "name": "get_widget",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/widgets/{widget_id}",
+        "mode": "read",
+        "entity": "widget",
+        "intent": "Read one widget by id",
+        "returns": [
+          "success",
+          "widget",
+          "id",
+          "name",
+          "state",
+          "gadget_id"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          },
+          {
+            "name": "widget_id",
+            "type": "integer",
+            "required": true,
+            "example": 77,
+            "description": "Widget id."
+          }
+        ]
+      },
+      {
+        "name": "create_widget",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/widgets",
+        "mode": "write",
+        "entity": "widget",
+        "intent": "Create a widget in a catalogue",
+        "returns": [
+          "success",
+          "widget",
+          "id",
+          "name"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "description": "Widget name."
+          },
+          {
+            "name": "state",
+            "type": "string",
+            "values": [
+              "idle",
+              "spinning"
+            ],
+            "description": "Starting state."
+          }
+        ]
+      },
+      {
+        "name": "list_gadgets",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/gadgets",
+        "mode": "read",
+        "entity": "gadget",
+        "intent": "List the gadgets in a catalogue",
+        "returns": [
+          "success",
+          "gadgets",
+          "info",
+          "id",
+          "label"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ]
+      },
+      {
+        "name": "get_gadget",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/gadgets/{gadget_id}",
+        "mode": "read",
+        "entity": "gadget",
+        "intent": "Read one gadget by id",
+        "returns": [
+          "success",
+          "gadget",
+          "id",
+          "label",
+          "sprocket_count"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          },
+          {
+            "name": "gadget_id",
+            "type": "integer",
+            "required": true,
+            "example": 12,
+            "description": "Gadget id."
+          }
+        ]
+      },
+      {
+        "name": "create_gadget",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/gadgets",
+        "mode": "write",
+        "entity": "gadget",
+        "intent": "Create a gadget in a catalogue",
+        "returns": [
+          "success",
+          "gadget",
+          "id",
+          "label"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ],
+        "body": [
+          {
+            "name": "label",
+            "type": "string",
+            "required": true,
+            "description": "Gadget label."
+          }
+        ]
+      },
+      {
+        "name": "list_sprockets",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/sprockets",
+        "mode": "read",
+        "entity": "sprocket",
+        "intent": "List the sprockets fitted to a catalogue's gadgets",
+        "returns": [
+          "success",
+          "sprockets",
+          "info",
+          "id",
+          "teeth"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ]
+      },
+      {
+        "name": "get_sprocket",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/sprockets/{sprocket_id}",
+        "mode": "read",
+        "entity": "sprocket",
+        "intent": "Read one sprocket by id",
+        "returns": [
+          "success",
+          "sprocket",
+          "id",
+          "teeth",
+          "pitch"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          },
+          {
+            "name": "sprocket_id",
+            "type": "integer",
+            "required": true,
+            "example": 9,
+            "description": "Sprocket id."
+          }
+        ]
+      },
+      {
+        "name": "list_blueprints",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/blueprints",
+        "mode": "read",
+        "entity": "blueprint",
+        "intent": "List the blueprints a catalogue holds",
+        "returns": [
+          "success",
+          "blueprints",
+          "info",
+          "id",
+          "title"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ]
+      },
+      {
+        "name": "get_blueprint",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/blueprints/{blueprint_id}",
+        "mode": "read",
+        "entity": "blueprint",
+        "intent": "Read one blueprint by id",
+        "returns": [
+          "success",
+          "blueprint",
+          "id",
+          "title",
+          "revision_label"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          },
+          {
+            "name": "blueprint_id",
+            "type": "integer",
+            "required": true,
+            "example": 4,
+            "description": "Blueprint id."
+          }
+        ]
+      },
+      {
+        "name": "get_pipeline_status",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/pipeline/status",
+        "mode": "read",
+        "entity": "pipeline",
+        "intent": "Read the current state of a catalogue's assembly pipeline",
+        "returns": [
+          "success",
+          "state",
+          "queued",
+          "moving"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ]
+      },
+      {
+        "name": "list_channels",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/channels",
+        "mode": "read",
+        "entity": "channel",
+        "intent": "List the broadcast channels a catalogue publishes on",
+        "returns": [
+          "success",
+          "channels",
+          "info",
+          "id",
+          "handle"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ]
+      },
+      {
+        "name": "get_quota",
+        "method": "GET",
+        "path": "/api/v1/quota",
+        "mode": "read",
+        "entity": "quota",
+        "intent": "Read the account's assembly allowance and what is left of it",
+        "returns": [
+          "success",
+          "allowance",
+          "used",
+          "remaining"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        }
+      },
+      {
+        "name": "list_tokens",
+        "method": "GET",
+        "path": "/api/v1/tokens",
+        "mode": "read",
+        "entity": "token",
+        "intent": "List the passkeys issued to this account",
+        "returns": [
+          "success",
+          "tokens",
+          "info",
+          "id",
+          "label"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        }
+      },
+      {
+        "name": "list_projects",
+        "method": "GET",
+        "path": "/api/v1/projects",
+        "mode": "read",
+        "entity": "project",
+        "intent": "List the catalogues this account can reach",
+        "returns": [
+          "success",
+          "projects",
+          "info",
+          "id",
+          "name"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        }
+      },
+      {
+        "name": "get_project",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}",
+        "mode": "read",
+        "entity": "project",
+        "intent": "Read one catalogue by id",
+        "returns": [
+          "success",
+          "project",
+          "id",
+          "name",
+          "widget_count"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ]
+      },
+      {
+        "name": "list_runs",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/runs",
+        "mode": "read",
+        "entity": "run",
+        "intent": "List the assembly runs a catalogue has started",
+        "returns": [
+          "success",
+          "runs",
+          "info",
+          "id",
+          "state"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ]
+      },
+      {
+        "name": "get_run",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/runs/{run_id}",
+        "mode": "read",
+        "entity": "run",
+        "intent": "Read one assembly run by id",
+        "returns": [
+          "success",
+          "run",
+          "id",
+          "state",
+          "started_at"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          },
+          {
+            "name": "run_id",
+            "type": "integer",
+            "required": true,
+            "example": 31,
+            "description": "Run id."
+          }
+        ]
+      },
+      {
+        "name": "list_reports",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/reports",
+        "mode": "read",
+        "entity": "report",
+        "intent": "List the assembly reports a catalogue has produced",
+        "returns": [
+          "success",
+          "reports",
+          "info",
+          "id",
+          "title"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          }
+        ]
+      },
+      {
+        "name": "get_report",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/reports/{report_id}",
+        "mode": "read",
+        "entity": "report",
+        "intent": "Read one assembly report by id",
+        "returns": [
+          "success",
+          "report",
+          "id",
+          "title",
+          "generated_at"
+        ],
+        "responses": {
+          "200": {
+            "$response": "Ok"
+          }
+        },
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 1234,
+            "description": "Which catalogue the record belongs to."
+          },
+          {
+            "name": "report_id",
+            "type": "integer",
+            "required": true,
+            "example": 8,
+            "description": "Report id."
+          }
+        ]
+      }
+    ],
+    "entities": {
+      "project": {
+        "title": "Catalogue",
+        "aliases": [
+          "catalogue",
+          "namespace"
+        ],
+        "capabilities": [
+          "get_project",
+          "list_projects"
+        ],
+        "id_convention": "project_id is an integer, discovered from the matching list capability."
+      },
+      "widget": {
+        "title": "Widget",
+        "aliases": [
+          "gizmo",
+          "doodad"
+        ],
+        "capabilities": [
+          "create_widget",
+          "get_widget",
+          "list_widgets"
+        ],
+        "id_convention": "widget_id is an integer, discovered from the matching list capability."
+      },
+      "gadget": {
+        "title": "Gadget",
+        "aliases": [
+          "contraption"
+        ],
+        "capabilities": [
+          "create_gadget",
+          "get_gadget",
+          "list_gadgets"
+        ],
+        "id_convention": "gadget_id is an integer, discovered from the matching list capability."
+      },
+      "sprocket": {
+        "title": "Sprocket",
+        "aliases": [
+          "cog"
+        ],
+        "capabilities": [
+          "get_sprocket",
+          "list_sprockets"
+        ],
+        "id_convention": "sprocket_id is an integer, discovered from the matching list capability."
+      },
+      "blueprint": {
+        "title": "Blueprint",
+        "aliases": [
+          "schematic"
+        ],
+        "capabilities": [
+          "get_blueprint",
+          "list_blueprints"
+        ],
+        "id_convention": "blueprint_id is an integer, discovered from the matching list capability."
+      },
+      "pipeline": {
+        "title": "Pipeline",
+        "aliases": [
+          "conveyor"
+        ],
+        "capabilities": [
+          "get_pipeline_status"
+        ],
+        "id_convention": "pipeline_id is an integer, discovered from the matching list capability."
+      },
+      "channel": {
+        "title": "Channel",
+        "aliases": [
+          "broadcast-lane"
+        ],
+        "capabilities": [
+          "list_channels"
+        ],
+        "id_convention": "channel_id is an integer, discovered from the matching list capability."
+      },
+      "quota": {
+        "title": "Allowance",
+        "aliases": [
+          "allowance"
+        ],
+        "capabilities": [
+          "get_quota"
+        ],
+        "id_convention": "quota_id is an integer, discovered from the matching list capability."
+      },
+      "token": {
+        "title": "Passkey",
+        "aliases": [
+          "passkey"
+        ],
+        "capabilities": [
+          "list_tokens"
+        ],
+        "id_convention": "token_id is an integer, discovered from the matching list capability."
+      },
+      "run": {
+        "title": "Assembly Run",
+        "aliases": [
+          "runs"
+        ],
+        "capabilities": [
+          "get_run",
+          "list_runs"
+        ],
+        "id_convention": "run_id is an integer, discovered from the matching list capability."
+      },
+      "report": {
+        "title": "Assembly Report",
+        "aliases": [
+          "reports"
+        ],
+        "capabilities": [
+          "get_report",
+          "list_reports"
+        ],
+        "id_convention": "report_id is an integer, discovered from the matching list capability."
+      }
+    },
+    "responses": {
+      "Ok": {
+        "description": "Success envelope.",
+        "schema": {
+          "$schema": "Envelope"
+        }
+      }
+    },
+    "schemas": {
+      "Envelope": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "description": "Payload."
+          }
+        }
+      }
+    }
+  }
+}

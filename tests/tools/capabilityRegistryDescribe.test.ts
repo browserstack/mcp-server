@@ -1,0 +1,202 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fileURLToPath } from "node:url";
+
+const FIXTURE = fileURLToPath(
+  new URL("../fixtures/capability/tm.capability-index.json", import.meta.url),
+);
+const CONFIG = {
+  "browserstack-username": "u",
+  "browserstack-access-key": "k",
+} as any;
+
+describe("searchCapability is a shortlist, describeCapability is the contract", () => {
+  beforeEach(() => {
+    process.env.CAPABILITY_REGISTRY_INDEX = FIXTURE;
+    process.env.CAPABILITY_REGISTRY_BASE_URL_TM = "https://tm.example";
+    vi.resetModules();
+  });
+  afterEach(() => {
+    delete process.env.CAPABILITY_REGISTRY_INDEX;
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_TM;
+  });
+
+  async function tools() {
+    const { BrowserStackMcpServer } =
+      await import("../../src/server-factory.js");
+    return new BrowserStackMcpServer(CONFIG).getTools() as any;
+  }
+  const body = async (result: any) => JSON.parse(result.content[0].text);
+
+  it("omits from search everything needed only for the one capability chosen", async () => {
+    const t = await tools();
+    const found = await body(
+      await t.searchCapability.handler(
+        { query: "create a test run" },
+        {} as any,
+      ),
+    );
+    for (const row of found.capabilities) {
+      // The 86% that moved: parameters and response shapes.
+      expect(row.path_params, row.name).toBeUndefined();
+      expect(row.query, row.name).toBeUndefined();
+      expect(row.body, row.name).toBeUndefined();
+      expect(row.responses, row.name).toBeUndefined();
+      expect(row.returns, row.name).toBeUndefined();
+    }
+  });
+
+  it("keeps in search exactly what choosing requires", async () => {
+    const t = await tools();
+    const found = await body(
+      await t.searchCapability.handler(
+        { query: "create a test run" },
+        {} as any,
+      ),
+    );
+    const top = found.capabilities[0];
+    // NOT PINNED TO ONE OF THE TWINS. This asserted `create_test_run_by_integer_id` and now gets
+    // `create_test_run` — the two share POST projects/{}/test-runs and are textually
+    // indistinguishable, so which one leads is a publishing decision, not something this
+    // test should arbitrate. Whether the right row wins is the eval set's job; this test
+    // is about the SHAPE of a row, so it asserts that the winner is a run-creating write
+    // and then checks every field on it.
+    // Either variant may win; since the rename they differ by id form, not by API
+    // version. A pattern because this test is about the SHAPE of a row.
+    expect(top.name).toMatch(/^create_test_run(_by_integer_id)?$/);
+    expect(top.entity).toBe("test_run");
+    expect(top.mode).toBe("write");
+    expect(top.intent).toBeTruthy();
+    // guidance is what tells the caller which of two plausible rows is the right one.
+    expect(Array.isArray(top.guidance)).toBe(true);
+
+    // NO ROUTE. A named capability is addressed by its name — that is the premise the
+    // registry rests on, and publishing the route beside the name contradicts it while
+    // costing context on every row. The fallback survives for a product that ships
+    // unnamed capabilities, and is emitted only for rows that need it: today, none.
+    expect(top.method).toBeUndefined();
+    expect(top.path).toBeUndefined();
+
+    // NO PRODUCT. It rode on every row while results could span products. `product` is
+    // now a required argument, so every row is the product the caller named.
+    expect(top.product).toBeUndefined();
+
+    // The whole row, so a field cannot creep back unnoticed.
+    expect(Object.keys(top).sort()).toEqual([
+      "entity",
+      "guidance",
+      "intent",
+      "mode",
+      "name",
+    ]);
+  });
+
+  it("returns the full contract for the capability picked", async () => {
+    const t = await tools();
+    const described = await body(
+      await t.describeCapability.handler(
+        { name: "create_test_run_by_integer_id" },
+        {} as any,
+      ),
+    );
+    expect(described.name).toBe("create_test_run_by_integer_id");
+    expect(described.product).toBe("tm");
+    expect(described.path_params?.length).toBeGreaterThan(0);
+    expect(described.body?.length).toBeGreaterThan(0);
+    expect(Object.keys(described.responses)).toContain("200");
+    // Nothing left for the caller to resolve.
+    expect(JSON.stringify(described)).not.toContain('"$schema"');
+    expect(JSON.stringify(described)).not.toContain('"$response"');
+  });
+
+  it("is cheaper end to end than the single fat call it replaces", async () => {
+    const t = await tools();
+    const search = await t.searchCapability.handler(
+      { query: "create a test run" },
+      {} as any,
+    );
+    const describe = await t.describeCapability.handler(
+      { name: "create_test_run_by_integer_id" },
+      {} as any,
+    );
+    const shortlist = search.content[0].text.length;
+    const contract = describe.content[0].text.length;
+
+    // The saving is the seven contracts never fetched. Even describing every result would
+    // cost about what the fat search did — the break-even is past the page size.
+    expect(shortlist + contract).toBeLessThan(shortlist + 8 * contract);
+    expect(shortlist).toBeLessThan(contract * 3);
+  });
+
+  it("still ACCEPTS method and path as a handle, without echoing them back", async () => {
+    // The input fallback is for a product that publishes no capability names. It stays,
+    // because a product could ship that way tomorrow.
+    const t = await tools();
+    const described = await body(
+      await t.describeCapability.handler(
+        { method: "GET", path: "/api/v1/projects/basic" },
+        {} as any,
+      ),
+    );
+    // It resolved — the contract came back, with the parameters the caller must supply.
+    expect(described.name).toBe("get_projects_basic");
+    expect(described.query?.length).toBeGreaterThan(0);
+
+    // But the ROUTE is not in the answer. This capability has a name, so that name is
+    // how it is invoked; returning the route as well invites the caller to hold the half
+    // that breaks when a path changes. `path_params` still says what to supply — the
+    // caller just never sees the template they go into.
+    expect(described.method).toBeUndefined();
+    expect(described.path).toBeUndefined();
+  });
+
+  it("resolves by the same handles as invokeCapability, so a described name is callable", async () => {
+    const t = await tools();
+    const missing = await body(
+      await t.describeCapability.handler({}, {} as any),
+    );
+    expect(missing.error).toMatch(/pass `name`/);
+
+    const unknown = await body(
+      await t.describeCapability.handler(
+        { name: "no_such_capability" },
+        {} as any,
+      ),
+    );
+    expect(unknown.error).toMatch(/unknown_capability/);
+  });
+
+  it("expands the error shapes only when asked", async () => {
+    const t = await tools();
+    const dflt = await body(
+      await t.describeCapability.handler(
+        { name: "create_test_run_by_integer_id" },
+        {} as any,
+      ),
+    );
+    const all = await body(
+      await t.describeCapability.handler(
+        { name: "create_test_run_by_integer_id", include_responses: "all" },
+        {} as any,
+      ),
+    );
+    expect(Object.keys(dflt.responses)).toEqual(["200"]);
+    expect(Object.keys(all.responses).length).toBeGreaterThan(1);
+  });
+
+  it("publishes the constraints a caller must obey before calling", async () => {
+    // The whole point of describing before invoking: the limits arrive with the contract,
+    // not from a rejected request.
+    const t = await tools();
+    const described = await body(
+      await t.describeCapability.handler(
+        { name: "bulk_delete_test_results" },
+        {} as any,
+      ),
+    );
+    const constrained = [
+      ...(described.body ?? []),
+      ...(described.query ?? []),
+    ].filter((p: any) => p.minItems !== undefined || p.maxItems !== undefined);
+    expect(constrained.length).toBeGreaterThan(0);
+  });
+});

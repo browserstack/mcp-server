@@ -139,15 +139,18 @@ export async function getTestPlan(
         { type: "text", text: header + runsBlock },
         {
           type: "text",
-          text: JSON.stringify(
-            {
-              test_plan: plan,
-              linked_test_runs: runs,
-              status_summary: statusSummary,
-              total_test_cases: totalCases,
-            },
-            null,
-            2,
+          text: wrapUntrusted(
+            "test plan (structured data)",
+            JSON.stringify(
+              {
+                test_plan: plan,
+                linked_test_runs: runs,
+                status_summary: statusSummary,
+                total_test_cases: totalCases,
+              },
+              null,
+              2,
+            ),
           ),
         },
       ],

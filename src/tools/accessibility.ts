@@ -436,7 +436,7 @@ export default function addAccessibilityTools(
 
   tools.accessibilityExpert = server.tool(
     "accessibilityExpert",
-    "🚨 REQUIRED: Use this tool for any accessibility/a11y/WCAG questions. Do NOT answer accessibility questions directly - always use this tool.",
+    "Answer accessibility, a11y, and WCAG questions using BrowserStack's accessibility knowledge base.",
     {
       query: z
         .string()

@@ -138,7 +138,7 @@ export default function addTfaRcaCollaborationTools(
 
   tools.tfaRcaTurn = server.tool(
     TOOL_NAME,
-    "Submit one collaborative RCA turn for a test run to the TFA agent, then poll in-call for a result. Omit threadId on the first turn for a test run — this starts a new investigation thread; every following turn on that same test MUST pass back the threadId from the previous response, since a test run should have only one active thread at a time. Returns status RESOLVED (terminal, includes root_cause/related_prs), NEEDS_INFO (fulfill the asks and submit the next turn with the same threadId), or PENDING (still working — poll it with getTfaTurnResult using the returned turnId; do NOT call tfaRcaTurn again for the same turn, that submits a duplicate).",
+    "Submit one collaborative RCA turn for a test run to the TFA agent, then poll in-call for a result. Omit threadId on the first turn for a test run — this starts a new investigation thread; every following turn on that same test passes back the threadId from the previous response, since a test run has only one active thread at a time. Returns status RESOLVED (terminal, includes root_cause/related_prs), NEEDS_INFO (fulfill the asks and submit the next turn with the same threadId), or PENDING (still working — poll it with getTfaTurnResult using the returned turnId; calling tfaRcaTurn again for the same turn submits a duplicate).",
     TFA_RCA_TURN_PARAMS,
     async (args, context) => {
       try {

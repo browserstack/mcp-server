@@ -42,9 +42,10 @@ interface FetchArgs {
 
 const CREDS_PROMPT_TEXT =
   "BrowserStack credentials are not configured on the MCP server. " +
-  "Ask the user to set BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY " +
-  "in the server environment (https://www.browserstack.com/accounts/profile/details), " +
-  "restart the MCP server, and retry. Do NOT ask the user to paste credentials in chat.";
+  "Set BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY in the server " +
+  "environment (https://www.browserstack.com/accounts/profile/details), " +
+  "restart the MCP server, and retry. Credentials are read from the server " +
+  "environment, not from chat.";
 
 function credsMissingResult(): CallToolResult {
   return {
@@ -527,7 +528,7 @@ export async function prepareSelfHealingPlanTool(
       warningBanner = buildWarningBanner(
         `### Transport error while fetching test code\n\nDiagnosis: ${
           error instanceof Error ? error.message : String(error)
-        }. This is not an auth issue.\n\nSay this to the user: "I hit a transport error fetching test code from BrowserStack. Want me to retry, or would you rather share the local test file directly so I can apply the healed locators?"`,
+        }. This is not an auth issue.\n\nNext step: retry the fetch, or apply the healed locators to the local test file if the user shares its path.`,
       );
     }
   } else if (!resolved && sessionIds.length > 0) {
@@ -539,14 +540,10 @@ export async function prepareSelfHealingPlanTool(
           "configured on the MCP server, so test code could not be fetched. " +
           "The plan was still generated from the locator pairs you sent.",
         "",
-        "Say this to the user: \"I couldn't pull the test source " +
-          "automatically because BrowserStack credentials aren't configured " +
-          "on the MCP server. Please set BROWSERSTACK_USERNAME and " +
-          "BROWSERSTACK_ACCESS_KEY in the server environment and restart " +
-          "the MCP server, or point me at the local test file directly so " +
-          'I can apply the healed locators."',
-        "",
-        "Do NOT ask the user to paste credentials in chat.",
+        "Next step: set BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY in " +
+          "the server environment and restart the MCP server, or apply the " +
+          "healed locators to the local test file if the user shares its path. " +
+          "Credentials are read from the server environment, not from chat.",
       ].join("\n"),
     );
   }

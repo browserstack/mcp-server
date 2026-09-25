@@ -181,21 +181,14 @@ export function describeTestCodeFetchIssues(
         `### Non-SDK build — session(s): ${ids}`,
         "",
         "Diagnosis: BrowserStack's test-code API returned HTTP 200 with rows " +
-          "where `code` and `filename` are null. This is the KNOWN signature " +
-          "of a BrowserStack run that was NOT instrumented with the " +
-          "BrowserStack SDK / Observability. The API literally has no source " +
-          "code to return for these sessions — this is by design.",
+          "where `code` and `filename` are null. This is the signature of a " +
+          "BrowserStack run that was not instrumented with the BrowserStack " +
+          "SDK / Observability, so the API has no source code to return for " +
+          "these sessions. Credentials are not involved; this is not an auth " +
+          "failure or a session problem.",
         "",
-        "DO NOT tell the user any of the following (all are wrong for this " +
-          "status): 'credentials issue', 'credentials or session issue', " +
-          "'could not fetch from the API due to auth', '401', 'unauthorized'. " +
-          "The credentials are fine; the build just isn't SDK-enabled.",
-        "",
-        "Say this (or very close to it) to the user, then wait for their reply:",
-        '  "This is a non-SDK BrowserStack build, so the test-code API has ' +
-          "no source to return for it (this is expected, not a credentials " +
-          "problem). Can you tell me the local file path where these tests live? " +
-          "Once I have the file, I'll apply the healed locators listed in the plan.\"",
+        "Next step: the healed locators can be applied once the user shares " +
+          "the local file path where these tests live.",
       ].join("\n"),
     );
   }
@@ -208,23 +201,16 @@ export function describeTestCodeFetchIssues(
         `### Unauthorized (HTTP 401) — session(s): ${ids}`,
         "",
         "Diagnosis: BrowserStack's test-code API rejected the credentials " +
-          "(HTTP 401). This IS an authentication problem for this specific " +
-          "API — the healing report endpoint and test-code endpoint use the " +
+          "(HTTP 401). This is an authentication problem for this specific " +
+          "API. The healing report endpoint and test-code endpoint use the " +
           "same BrowserStack auth, so if the report fetch above succeeded " +
-          "with the same creds, suspect that the access key configured on " +
-          "the MCP server was rotated.",
+          "with the same creds, the access key configured on the MCP server " +
+          "was likely rotated.",
         "",
-        "DO NOT say 'credentials or session issue' (that hides the real cause). " +
-          "Name the 401 explicitly and offer the user a choice. Do NOT ask " +
-          "the user to paste a BrowserStack username or access key in chat — " +
-          "the MCP server reads credentials from its own environment.",
-        "",
-        "Say this (or very close to it) to the user, then wait for their reply:",
-        '  "The BrowserStack test-code API returned 401 Unauthorized for ' +
-          `session(s) ${ids}. Would you like to: (a) update the BrowserStack ` +
-          "username and access key on the MCP server (BROWSERSTACK_USERNAME / " +
-          "BROWSERSTACK_ACCESS_KEY) and restart it, or (b) skip the API and " +
-          'point me at the local test file so I can apply the healed locators there?"',
+        "Next step: either update BROWSERSTACK_USERNAME / " +
+          "BROWSERSTACK_ACCESS_KEY on the MCP server and restart it, or apply " +
+          "the healed locators to the local test file if the user shares its " +
+          "path. Credentials are read from the server environment, not from chat.",
       ].join("\n"),
     );
   }
@@ -239,16 +225,10 @@ export function describeTestCodeFetchIssues(
         "Diagnosis: BrowserStack's test-code API accepted the credentials " +
           "but denied access to the session's source (HTTP 403). Typically " +
           "the user does not own this session, or the account does not have " +
-          "Observability enabled.",
+          "Observability enabled. The credentials themselves were accepted.",
         "",
-        "Do NOT blame the credentials broadly — say 'access denied for this " +
-          "session' and move on.",
-        "",
-        "Say this (or very close to it) to the user:",
-        `  "BrowserStack denied access (HTTP 403) to session(s) ${ids}. ` +
-          "This usually means the account does not own these sessions or " +
-          "does not have Observability enabled. Can you either share the " +
-          'local test file path, or confirm which account these sessions belong to?"',
+        "Next step: confirm which account owns these sessions, or apply the " +
+          "healed locators to the local test file if the user shares its path.",
       ].join("\n"),
     );
   }
@@ -261,14 +241,11 @@ export function describeTestCodeFetchIssues(
         `### Not found (HTTP 404) — session(s): ${ids}`,
         "",
         "Diagnosis: BrowserStack returned HTTP 404 — the session id is most " +
-          "likely wrong, or the session has been purged.",
+          "likely wrong, or the session has been purged. Credentials are not " +
+          "involved.",
         "",
-        "Do NOT say 'credentials'. Ask the user to verify the id.",
-        "",
-        "Say this (or very close to it) to the user:",
-        `  "I couldn't find session(s) ${ids} on BrowserStack (HTTP 404). ` +
-          "Can you double-check the session id(s), or share the local test " +
-          'file directly so I can apply the healed locators?"',
+        "Next step: verify the session id(s), or apply the healed locators to " +
+          "the local test file if the user shares its path.",
       ].join("\n"),
     );
   }
@@ -284,9 +261,8 @@ export function describeTestCodeFetchIssues(
           "no test code was captured (e.g. a raw Selenium session not linked " +
           "to a test framework).",
         "",
-        "Say this (or very close to it) to the user:",
-        `  "BrowserStack has no test code recorded for session(s) ${ids}. ` +
-          'Can you point me at the local test file where these locators live?"',
+        "Next step: the healed locators can be applied once the user shares " +
+          "the local test file where these locators live.",
       ].join("\n"),
     );
   }
@@ -304,10 +280,8 @@ export function describeTestCodeFetchIssues(
         `Diagnosis: network/transport failure — ${details}. This is not an ` +
           "auth issue.",
         "",
-        "Say this (or very close to it) to the user:",
-        `  "I hit a transport error fetching test code from BrowserStack ` +
-          `(${details}). Want me to retry, or would you prefer to share the ` +
-          'local test file directly?"',
+        "Next step: retry the fetch, or apply the healed locators to the " +
+          "local test file if the user shares its path.",
       ].join("\n"),
     );
   }

@@ -79,7 +79,7 @@ describe("fetchSelfHealSelectorTool input validation", () => {
     expect(text).toMatch(/BrowserStack credentials are not configured/);
     expect(text).toMatch(/BROWSERSTACK_USERNAME/);
     expect(text).toMatch(/BROWSERSTACK_ACCESS_KEY/);
-    expect(text).toMatch(/Do NOT ask the user to paste/);
+    expect(text).toMatch(/not from chat/);
   });
 });
 
@@ -272,7 +272,7 @@ describe("prepareSelfHealingPlanTool", () => {
 });
 
 describe("describeTestCodeFetchIssues", () => {
-  it("flags a non-SDK build with an explicit 'not a credentials issue' directive and a ready-to-say phrasing", () => {
+  it("describes a non-SDK build as a missing-source case, not a credentials issue", () => {
     const note = describeTestCodeFetchIssues([
       {
         sessionId: "s-non-sdk",
@@ -290,14 +290,15 @@ describe("describeTestCodeFetchIssues", () => {
     ]);
     expect(note).toContain("### Non-SDK build");
     expect(note).toContain("s-non-sdk");
-    expect(note).toMatch(/DO NOT tell the user/);
-    expect(note).toMatch(/credentials or session issue/);
-    expect(note).toMatch(/Say this.*to the user/);
-    expect(note).toMatch(/non-SDK BrowserStack build/);
+    expect(note).toMatch(/not instrumented with the BrowserStack SDK/);
+    expect(note).toMatch(/Credentials are not involved/);
+    expect(note).toMatch(/local file path/);
     expect(note).not.toMatch(/Unauthorized/);
+    expect(note).not.toMatch(/Say this/);
+    expect(note).not.toMatch(/DO NOT/);
   });
 
-  it("names the 401 explicitly and gives the user a choice", () => {
+  it("names the 401 explicitly and states both recovery options", () => {
     const note = describeTestCodeFetchIssues([
       {
         sessionId: "s-401",
@@ -308,11 +309,12 @@ describe("describeTestCodeFetchIssues", () => {
     ]);
     expect(note).toContain("### Unauthorized (HTTP 401)");
     expect(note).toContain("s-401");
-    expect(note).toMatch(/Name the 401 explicitly/);
+    expect(note).toMatch(/HTTP 401/);
     expect(note).toMatch(/BROWSERSTACK_USERNAME/);
     expect(note).toMatch(/BROWSERSTACK_ACCESS_KEY/);
     expect(note).toMatch(/local test file/);
-    expect(note).toMatch(/Do NOT ask the user to paste/);
+    expect(note).toMatch(/not from chat/);
+    expect(note).not.toMatch(/Say this/);
   });
 
   it("groups sessions by status and emits one note per status", () => {

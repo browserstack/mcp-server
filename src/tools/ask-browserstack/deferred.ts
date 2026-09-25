@@ -23,19 +23,9 @@
 
 import logger from "../../logger.js";
 
-import {
-  DeferredTransport,
-  decisionUrl,
-  parseAsk,
-} from "./stream.js";
+import { DeferredTransport, decisionUrl, parseAsk } from "./stream.js";
 import { buildResult } from "./relay.js";
-import {
-  AgentRequest,
-  ApprovalRecord,
-  AskResult,
-  PermissionAsk,
-  RelayMode,
-} from "./types.js";
+import { AgentRequest, AskResult, PermissionAsk, RelayMode } from "./types.js";
 
 /** What a parked run needs the caller to send back. */
 export interface ParkedAsk {

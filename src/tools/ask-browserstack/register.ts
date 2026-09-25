@@ -60,10 +60,7 @@ import {
   fetchDeferredTransport,
   parseAsk,
 } from "./stream.js";
-import type {
-  AgentStreamTransport,
-  DeferredTransport,
-} from "./stream.js";
+import type { AgentStreamTransport, DeferredTransport } from "./stream.js";
 import {
   incompleteResume,
   parkedResult,
@@ -380,13 +377,22 @@ async function runStreamed(
     // approvals entry, so only the wire decision is missing.
     let decision: PermissionDecision;
     try {
-      decision = await relayOneAsk(server, pending, approvals, relatedRequestId);
+      decision = await relayOneAsk(
+        server,
+        pending,
+        approvals,
+        relatedRequestId,
+      );
     } catch (error) {
       logger.warn(
         "askBrowserStackAI: elicitation failed, denying explicitly: %s",
         error instanceof Error ? error.message : String(error),
       );
-      decision = { perm_id: pending.perm_id, decision: "deny", reason: "error" };
+      decision = {
+        perm_id: pending.perm_id,
+        decision: "deny",
+        reason: "error",
+      };
     }
 
     const response = await postTransport(decisionUrl(url, runId), headers, {

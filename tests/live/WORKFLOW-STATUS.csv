@@ -1,0 +1,112 @@
+workflow,product_area,workflow_entity,status,capabilities_total,capabilities_blocking,blocking_capabilities,blocking_buckets,all_capabilities
+Create a shared field,,,WORKING,2,0,,,create_shared_component; create_shared_step
+Update a shared field,,,WORKING,2,0,,,update_shared_component; update_shared_step
+Read dashboard data,Dashboards,Dashboard,WORKING,8,0,,,export_dashboard_analytics; get_active_test_runs_info; get_automation_stats; get_closed_test_runs_info; get_closed_test_runs_split; get_issues_count_info; get_test_case_count_trend; get_test_case_type_split
+Read widget data,Dashboards,Widget,WORKING,4,0,,,get_active_test_runs_info; get_automation_stats; get_issues_count_info; get_test_case_count_trend
+Create a dataset,Datasets,Dataset,WORKING,1,0,,,create_dataset
+Delete a dataset,Datasets,Dataset,WORKING,1,0,,,delete_dataset
+Find datasets,Datasets,Dataset,WORKING,3,0,,,get_dataset; list_dataset_linked_test_cases; list_datasets
+Import a dataset from a file,Datasets,Dataset,WORKING,1,0,,,import_dataset_csv
+Update a dataset,Datasets,Dataset,WORKING,1,0,,,update_dataset
+Add a session log,Exploratory Sessions,Session Log,WORKING,1,0,,,create_exploratory_session_log
+Create an exploratory session,Exploratory Sessions,Session,WORKING,3,0,,,clone_exploratory_session; create_exploratory_session; list_exploratory_session_form_fields
+Delete a session log,Exploratory Sessions,Session Log,WORKING,1,0,,,delete_exploratory_session_log
+Delete an exploratory session,Exploratory Sessions,Session,WORKING,1,0,,,delete_exploratory_session
+Find exploratory sessions,Exploratory Sessions,Session,WORKING,1,0,,,list_exploratory_sessions
+Get an exploratory session,Exploratory Sessions,Session,WORKING,3,0,,,get_exploratory_session; list_exploratory_session_defects; list_exploratory_session_logs
+List session logs,Exploratory Sessions,Session Log,WORKING,1,0,,,list_exploratory_session_logs
+Update a session log,Exploratory Sessions,Session Log,WORKING,1,0,,,update_exploratory_session_log
+Update an exploratory session,Exploratory Sessions,Session,WORKING,2,0,,,close_exploratory_session; update_exploratory_session
+Search across the workspace,Platform,Search,WORKING,3,0,,,search_all_projects; search_project_entities; search_project_entities_by_filter
+Read project insights,Project Insights,Insights,WORKING,5,0,,,get_active_test_runs_info; get_automation_stats; get_closed_test_runs_info; get_issues_count_info; get_test_case_count_trend
+Create a project,Projects,Project,WORKING,1,0,,,create_project
+List projects,Projects,Project,WORKING,3,0,,,get_projects_basic; get_projects_minify; list_projects
+List users,Projects,User,WORKING,4,0,,,list_group_users; list_project_users; list_users; search_project_users
+Update a project,Projects,Project,WORKING,1,0,,,edit_project
+Create a report,Reports,Report,WORKING,3,0,,,create_report_by_integer_id; create_report; get_selected_report_testcases
+Download a report,Reports,Report,PARTIAL,2,1,get_report_attachment_url,unreachable-by-construction,download_report; get_report_attachment_url
+Find reports,Reports,Report,WORKING,2,0,,,list_reports; list_schedules
+Get a report,Reports,Report,PARTIAL,6,1,get_user_workload_drilldown,prerequisite-unobtainable,get_exploratory_session_summary; get_report_detail; get_report_section; get_report_summary_by_type; get_report; get_user_workload_drilldown
+Remove a report schedule,Reports,Report,WORKING,1,0,,,delete_report_schedule
+Schedule a report,Reports,Report,WORKING,2,0,,,create_report_by_integer_id; send_report_email_now
+Update a report,Reports,Report,WORKING,1,0,,,update_report
+Configure review and approval,Settings,Review Config,WORKING,1,0,,,update_project_settings
+Create a custom field,Settings,Custom Field,WORKING,4,0,,,create_custom_field_dataset_option; create_custom_field_dataset; create_custom_field_definition; create_custom_field
+List configurations,Settings,Configuration,WORKING,2,0,,,list_configurations; list_configuration_groups
+List custom fields,Settings,Custom Field,WORKING,9,0,,,get_custom_field_dataset; get_custom_field_definition; get_custom_field_values; get_project_form_fields; get_system_field_values; get_test_results_custom_fields; list_custom_field_dataset_options; list_custom_fields; list_workspace_fields
+List items in the bin,Settings,Bin,WORKING,2,0,,,count_binned_test_cases; list_binned_test_cases
+List tags,Settings,Tag,PARTIAL,5,1,list_tags,product-5xx,get_test_case_tags; list_tags; list_test_case_tags; search_group_tags; search_test_case_tags
+Merge or rename a tag,Settings,Tag,PARTIAL,2,1,merge_tags,index-defect,merge_tags; update_tag
+Read project settings,Settings,Project Setting,WORKING,1,0,,,get_project_settings
+Set project visibility,Settings,Project,WORKING,2,0,,,edit_project; get_project_by_integer_id
+Update a custom field,Settings,Custom Field,WORKING,7,0,,,create_custom_field_dataset_option; delete_custom_field_dataset_option; get_custom_field; update_custom_field_dataset_option; update_custom_field_dataset_project_mapping; update_custom_field_definition; update_custom_field
+Update a project setting,Settings,Project Setting,WORKING,2,0,,,get_project_settings; update_project_settings
+Delete a shared field,Shared Fields,Shared Field,WORKING,1,0,,,delete_shared_step
+Find shared fields,Shared Fields,Shared Field,WORKING,3,0,,,list_shared_components; get_shared_step; get_shared_steps
+Add a comment,Test Cases,Comment,WORKING,2,0,,,create_test_case_comment; create_test_run_test_case_comment
+Approve a test case,Test Cases,Test Case,WORKING,1,0,,,apply_test_case_review_verdict
+Attach a file,Test Cases,Attachment,PARTIAL,2,1,link_attachments_to_test_case,product-5xx,upload_generic_attachments; link_attachments_to_test_case
+Bind a dataset to a test case,Test Cases,Dataset,WORKING,4,0,,,create_dataset; edit_test_case_partial; list_dataset_linked_test_cases; get_dataset_variables
+Bulk clone test cases,Test Cases,Test Case,WORKING,1,0,,,bulk_copy_test_cases
+Bulk copy test cases,Test Cases,Test Case,WORKING,1,0,,,bulk_copy_test_cases
+Bulk delete test cases,Test Cases,Test Case,WORKING,1,0,,,bulk_delete_test_cases
+Bulk submit test cases for review,Test Cases,Test Case,WORKING,1,0,,,submit_test_cases_for_review
+Check an asynchronous job,Test Cases,Job,WORKING,1,0,,,get_dedupe_status
+Clone a test case,Test Cases,Test Case,WORKING,1,0,,,bulk_copy_test_cases
+Copy a folder,Test Cases,Folder,WORKING,1,0,,,copy_folder
+Copy a test case,Test Cases,Test Case,WORKING,1,0,,,bulk_copy_test_cases
+Create a folder,Test Cases,Folder,WORKING,4,0,,,create_folder; create_root_folder; create_sub_folder; list_root_folders
+Create a saved view,Test Cases,Saved View,WORKING,1,0,,,create_filter
+Create a tag,Test Cases,Tag,BLOCKED,1,1,verify_test_case_tags,product-5xx,verify_test_case_tags
+Create a test case,Test Cases,Test Case,WORKING,6,0,,,create_test_case_by_integer_id; create_test_case; create_test_cases; list_root_folders; get_system_field_values; list_templates
+Create a test case template,Test Cases,Template,WORKING,1,0,,,create_template
+Delete a folder,Test Cases,Folder,WORKING,2,0,,,delete_folder_and_contents; get_folder_remove_summary
+Delete a saved view,Test Cases,Saved View,WORKING,1,0,,,delete_filter
+Export test cases to a file,Test Cases,Test Case,BLOCKED,2,2,initiate_export; validate_bdd_export_selection,async-unobservable; product-rejects-valid-input,initiate_export; validate_bdd_export_selection
+Find duplicate test cases,Test Cases,Test Case,PARTIAL,6,3,discard_duplicate; get_duplicate_source_test_case; resolve_duplicate,unreachable-by-construction; unsafe-without-disposable-fixture,discard_duplicate; get_duplicate_source_test_case; get_duplicate; list_duplicates; resolve_duplicate; search_duplicates
+Find test cases,Test Cases,Test Case,PARTIAL,8,1,search_test_cases_by_folder,deprecated-dead,list_archived_test_cases; list_entity_filter_details; list_test_cases; list_folder_contents; list_folder_test_cases; search_project_entities; search_project_entities_by_filter; search_test_cases_by_folder
+Generate low code automation for a test case,Test Cases,Test Case,PARTIAL,2,1,generate_test_case_automation,async-unobservable,generate_test_case_automation; get_lcnc_user_test_config
+Generate test cases from a requirement document,Test Cases,Test Case,WORKING,2,0,,,create_bulk_test_cases; upload_ai_attachments
+Get a test case,Test Cases,Test Case,WORKING,3,0,,,get_test_case_by_integer_id; get_test_case_detail; get_test_case
+Link a requirement,Test Cases,Requirement,WORKING,2,0,,,link_entities_to_jira_issue; get_linked_test_case_selection
+List attachments,Test Cases,Attachment,PARTIAL,3,1,list_test_case_attachments,product-5xx,list_folder_attachments; list_test_case_attachments; list_entity_attachments
+List comments,Test Cases,Comment,WORKING,2,0,,,list_test_case_comments; list_test_run_test_case_comments
+List folders,Test Cases,Folder,WORKING,3,0,,,get_folder_tree; list_root_folders; list_folder_contents
+List saved views,Test Cases,Saved View,PARTIAL,2,1,get_filter,unsafe-to-invoke,get_filter; list_filters
+List test case templates,Test Cases,Template,WORKING,3,0,,,get_template; list_templates; list_test_case_templates
+List test case versions,Test Cases,Test Case,WORKING,4,0,,,list_test_case_histories; get_test_case_histories; get_test_case_history_diff; get_test_case_history
+Move a folder,Test Cases,Folder,WORKING,2,0,,,move_folder_by_integer_id; move_folder
+Move a test case,Test Cases,Test Case,WORKING,1,0,,,move_test_case
+Read test results,Test Cases,Test Result,WORKING,3,0,,,list_test_results_for_test_case_by_integer_id; list_test_results_for_test_case; search_test_results
+Reject a test case,Test Cases,Test Case,WORKING,1,0,,,apply_test_case_review_verdict
+Restore a test case version,Test Cases,Test Case,WORKING,1,0,,,restore_history
+Set folder display order,Test Cases,Folder,WORKING,2,0,,,reorder_folders; reorder_test_cases_by_folder
+Submit a test case for review,Test Cases,Test Case,WORKING,1,0,,,submit_test_cases_for_review
+Update a folder,Test Cases,Folder,WORKING,2,0,,,rename_folder_by_integer_id; rename_folder
+Update a saved view,Test Cases,Saved View,WORKING,1,0,,,update_filter
+Update a test case,Test Cases,Test Case,WORKING,2,0,,,edit_test_case; update_test_case
+Update a test case template,Test Cases,Template,WORKING,1,0,,,update_template
+Clone a test plan,Test Plans,Test Plan,WORKING,1,0,,,clone_test_plan
+Create a test plan,Test Plans,Test Plan,WORKING,3,0,,,create_sub_test_plan; create_test_plan_by_integer_id; create_test_plan
+Delete a test plan,Test Plans,Test Plan,WORKING,1,0,,,delete_test_plan
+Find test plans,Test Plans,Test Plan,WORKING,5,0,,,get_archived_test_plan_count; list_entity_filter_details; list_archived_test_plans; list_test_plans_by_integer_id; list_test_plans
+Get a test plan,Test Plans,Test Plan,WORKING,6,0,,,get_test_plan_by_integer_id; get_test_plan_execution_trend; get_test_plan_linked_sessions_chart_data; list_test_plan_test_runs_by_integer_id; list_test_plan_test_runs; get_test_plan
+Unlink a run from a test plan,Test Plans,Test Plan,WORKING,1,0,,,unlink_test_runs_from_test_plan
+Update a test plan,Test Plans,Test Plan,WORKING,2,0,,,update_test_plan_by_integer_id; update_test_plan
+Add test cases to a run,Test Runs,Test Run,WORKING,2,0,,,bulk_set_test_case_assignee_in_run; bulk_update_test_run_test_cases
+Assign a run,Test Runs,Test Run,WORKING,2,0,,,assign_test_run_owner; assign_test_run_test_cases
+Bulk delete test results,Test Runs,Test Result,WORKING,1,0,,,bulk_delete_test_results
+Clone a test run,Test Runs,Test Run,WORKING,2,0,,,clone_test_run_by_integer_id; clone_test_run
+Create a test run,Test Runs,Test Run,WORKING,5,0,,,count_run_selection; create_test_run_by_integer_id; create_test_run; list_configurations; get_test_runs_form_fields
+Delete a test result,Test Runs,Test Result,WORKING,1,0,,,delete_test_result
+Export a test run,Test Runs,Test Run,BLOCKED,1,1,export_test_run_csv,async-unobservable,export_test_run_csv
+Find test runs,Test Runs,Test Run,WORKING,5,0,,,list_closed_test_runs; list_entity_filter_details; list_test_runs_selection; list_test_runs_by_integer_id; list_test_runs
+Find tests inside a run,Test Runs,Test Run,PARTIAL,4,1,list_test_run_test_cases_by_integer_id,workspace-disagreement,bulk_edit_test_cases_in_test_run; list_test_run_test_cases_by_integer_id; get_test_run_detail; list_test_run_test_cases
+Get a test run,Test Runs,Test Run,WORKING,4,0,,,get_test_run_by_integer_id; get_test_run_detail; get_test_run_progress; get_test_run
+Link a run to a saved filter,Test Runs,Test Run,PARTIAL,3,1,get_filter,unsafe-to-invoke,get_filter; list_filters; update_test_run
+Link a run to a test plan,Test Runs,Test Plan,WORKING,3,0,,,list_test_plan_test_runs_by_integer_id; list_test_runs; update_test_plan
+List linked requirements,Test Runs,Requirement,BLOCKED,1,1,get_test_case_linked_issues,2xx-for-refusal,get_test_case_linked_issues
+Log a test result,Test Runs,Test Result,PARTIAL,4,1,update_latest_test_result_for_test_case,product-5xx,create_step_result; create_test_result_for_test_case; create_test_results_for_test_run; update_latest_test_result_for_test_case
+Set run configurations,Test Runs,Test Run,WORKING,2,0,,,bulk_update_test_run_test_cases; update_test_run
+Unlink a requirement,Test Runs,Requirement,WORKING,2,0,,,unlink_test_case; unlink_test_run
+Update a test run,Test Runs,Test Run,WORKING,3,0,,,edit_test_run; replace_test_run; update_test_run

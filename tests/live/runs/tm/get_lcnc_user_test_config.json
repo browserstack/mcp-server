@@ -1,0 +1,25 @@
+{
+  "capability": "get_lcnc_user_test_config",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-17T10:40:02Z",
+  "verdict": "PASS",
+  "setup": [],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 } },
+    "status": 200,
+    "response_keys": ["status", "body"],
+    "item_shape": {
+      "status": 200,
+      "body": { "preTestConfig": {} }
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["body.preTestConfig"]
+  },
+  "notes": "describeCapability declares only path_params.project_id (integer, required) — no query or body params. The 200 response contract is deliberately thin: it promises just the wrapper {status, body}, explicitly disclaiming any fixed shape for body's contents ('Field set may vary; see the discovered shape' / 'Test Management does not define, validate or reshape those fields'). Used the fixture pool's v1 integer project id (379335744) directly per the path (/api/v1/projects/{project_id}/lcnc/user-test-config) — no v2 identifier fallback needed since it succeeded on the first attempt, so the PR-2005 form was never tried. No setup calls were required: this reads a per-caller project-level config, not anything under a folder/case/plan/run, so the __readonly__ pool assets were not touched. Invocation succeeded first try (HTTP 200, echoed upstream status 200) and returned body = {\"preTestConfig\": {}} — i.e. the LCNC config IS present as a non-null, non-empty-collection object (it has the key 'preTestConfig'), it is simply empty/unconfigured for this fixture project. Because the contract declares nothing about body's internal fields (by design), there is no declared item shape to fail against, and the wrapper fields it does declare (status, body) are both present and correctly typed — hence PASS rather than UNVERIFIED (the response is not an empty collection that hides an undiscoverable item shape; it's a normal object whose one observed key happens to be empty, consistent with 'LCNC not set up for this project'). 'preTestConfig' itself counts as undeclared_returned since the contract names no specific body fields at all."
+}

@@ -1,0 +1,71 @@
+{
+  "capability": "list_project_users",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:20:01Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope required by the path param, even though the contract's own guidance says the endpoint is group-scoped and does not actually filter by it",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded on first attempt using the fixture's v1 integer project id, no query params"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 } },
+    "status": 200,
+    "response_keys": ["users", "myself", "success", "info"],
+    "item_shape": {
+      "users[]": {
+        "id": "integer (TM user id)",
+        "browserstack_user_id": "integer (BrowserStack account id, distinct from id)",
+        "full_name": "string",
+        "email": "string",
+        "group_id": "integer (all rows share group_id 2615)",
+        "onboarded": "integer, observed 0 or 1 (not boolean)",
+        "reports_and_notification_enabled": "boolean"
+      },
+      "myself": {
+        "id": 2522,
+        "full_name": "ing",
+        "email": "probe-user@example.invalid",
+        "reports_and_notification_enabled": true
+      },
+      "info": {
+        "page": 1,
+        "page_size": 30,
+        "count": 12,
+        "prev": null,
+        "next": null
+      },
+      "illustrative_row": {
+        "id": 2522,
+        "browserstack_user_id": 6013,
+        "full_name": "ing",
+        "email": "probe-user@example.invalid",
+        "group_id": 2615,
+        "onboarded": 1,
+        "reports_and_notification_enabled": true,
+        "note": "this is the fixture's own service account, also the caller (myself.id == 2522)"
+      }
+    }
+  },
+  "contract": {
+    "required": ["success", "users", "myself", "info"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Scoping confirmed empirically, matching what the contract's own guidance already claims: despite the path param being project_id, the response is GROUP-scoped, not project-scoped - it returned all 12 active users of group 2615 (same set/shape as the sibling capability list_group_users, which takes no project id at all, and as list_users which also requires project_id but doesn't filter by it). project_id 379335744 only had to be a project the caller can see; nothing in the response ties back to that project. This is the third user-listing capability with this pattern (alongside list_users and list_group_users) - the routing eval's difficulty telling them apart is well-founded since all three return the identical group-wide user set from a project-scoped-looking path/params. users list was non-empty (12 rows) so the item shape and myself shape were both verifiable, not an empty-case UNVERIFIED situation. Declared 200 schema (success, users[], myself, info) matched the actual response exactly in both directions - no declared_missing, no undeclared_returned. Only the default query (no q, no p) was exercised; the q/q[email]/q[id]/p variants described in the contract were not separately probed since the base contract shape was already fully confirmed by the default call and further variants would be redundant for a PASS verdict."
+}

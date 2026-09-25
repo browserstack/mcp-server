@@ -1,0 +1,97 @@
+{
+  "capability": "get_test_run_by_integer_id",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T12:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "resolve the INTEGER run id this route needs — the pool only names TR-NNN strings (plus TR-9061's uuid as a hint); list_test_runs_by_integer_id carries the integer as `uuid` on each row per its own guidance",
+      "source": "list_test_runs_by_integer_id",
+      "capability": "list_test_runs_by_integer_id",
+      "produced": {
+        "TR-9061": { "uuid": 17574995, "test_plans": [{ "identifier": "TP-1616" }] },
+        "TR-9062": { "uuid": 17575382 },
+        "TR-9075": { "uuid": 17576237 }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": 17574995 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt (TR-9061, uuid resolved in setup)"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": 17574995 }, "query": { "minify": "true" } },
+      "status": null,
+      "error": "{\"ok\":false,\"error\":\"unknown query: minify. accepted: none\"}",
+      "changed": "SPECIFIC INTEREST check: does this v1 read have a minify/projection param like the BLOCKED get_test_run? No — this capability declares zero query params, and the invoke gateway rejects any unknown query key client-side, before a live HTTP request is even made. Not a 500, not a live-route behavior at all — dropped the query and reissued plain for the rest of the probe."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 1, "test_run_id": 17574995 } },
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "Deliberate scoping check (per the standing skepticism after get_test_case_by_integer_id's folder-scoping claim was falsified): does a real test_run_id under the WRONG project_id silently succeed, or 404 as declared? Result: clean 404, matching the declared contract. Reissued with the correct project_id (379335744) for the primary probe above."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "test_run_id": 17574995 } },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "id": "string (declared) — \"TR-9061\", the TR-NNN display identifier",
+      "identifier": "string (declared) — \"TR-9061\", identical to id",
+      "uuid": "integer (declared) — 17574995, matches the value resolved via list_test_runs_by_integer_id and the value given in the task pool",
+      "name": "string (declared) — \"MCP capability probe fixture run (link_entities_to_jira_issue)\"",
+      "active_state": "string, UNDECLARED — \"active\"",
+      "run_state": "string, UNDECLARED — \"new_run\"",
+      "assignee": "null, UNDECLARED (TR-9061 has no assignee; shape for a populated assignee not observed on this capability)",
+      "created_at": "string date-time, UNDECLARED",
+      "updated_at": "string date-time, UNDECLARED",
+      "description": "string (empty), UNDECLARED",
+      "environment": "null, UNDECLARED",
+      "is_automation": "boolean, UNDECLARED — false",
+      "is_dynamic": "boolean, UNDECLARED — false (present at top level here, unlike get_test_run where it only appears nested at filter_test_cases.is_dynamic)",
+      "overall_progress": "object, UNDECLARED but well-formed — {untested:1,passed:0,retest:0,failed:0,blocked:0,skipped:0,in_progress:0}: all seven lowercase keys always present. Notably this matches list_test_runs_by_integer_id's declared shape for the SAME field name, and is NOT broken the way get_test_run's overall_progress was (v2 returned a sparse single capitalized key, e.g. {\"Untested\":4})",
+      "overall_progress_by_status_id": "object, UNDECLARED — keyed by status id, {result_status:{...}}",
+      "owner": "null, UNDECLARED",
+      "project_id": "integer, UNDECLARED — 379335744",
+      "tags": "array (empty), UNDECLARED",
+      "test_cases_count": "integer, UNDECLARED — 1",
+      "test_plans": "array, UNDECLARED — one full test-plan object: {id:48283 (INTEGER, not the string get_test_run's nested test_plan.id returned), identifier:\"TP-1616\", name, plan_status, group_id, project_id, user_id, completed_by, record_status, archived_at, created_at, updated_at, start_date, end_date, parent_plan_id, sub_plans_count, owner, review_status, review_sent_date}. Uses the PLURAL field name (matches list_test_runs_by_integer_id), unlike get_test_run which substitutes a singular `test_plan` object with a STRING id",
+      "attachments": "array (empty), UNDECLARED",
+      "links": "object, UNDECLARED — {} (empty; no self/detail keys populated for this run)",
+      "configurations": "array (empty), UNDECLARED",
+      "metadata": "object, UNDECLARED — {test_plan_error:\"PLAN_LINKED\"}",
+      "assignee_imported": "null, UNDECLARED",
+      "created_by": "object, UNDECLARED — {id, browserstack_user_id, email, full_name, group_id, onboarded}",
+      "updated_by": "object, UNDECLARED — same shape as created_by",
+      "closed_at": "null, UNDECLARED",
+      "closed_by": "null, UNDECLARED",
+      "issues": "array (empty), UNDECLARED",
+      "test_result_issues": "array (empty), UNDECLARED",
+      "observability_id": "integer, UNDECLARED — 17574995 (equals uuid)",
+      "observability_url": "string, UNDECLARED"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "test_run_id (path, integer)"],
+    "json_path": "data.test_run",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "active_state", "run_state", "assignee", "created_at", "updated_at", "description",
+      "environment", "is_automation", "is_dynamic", "overall_progress",
+      "overall_progress_by_status_id", "owner", "project_id", "tags", "test_cases_count",
+      "test_plans", "attachments", "links", "configurations", "metadata",
+      "assignee_imported", "created_by", "updated_by", "closed_at", "closed_by", "issues",
+      "test_result_issues", "observability_id", "observability_url"
+    ]
+  },
+  "notes": "PASS: all four declared fields (id, identifier, uuid, name) are present, correctly typed, and match the declared examples' shape exactly — id and identifier both come back as the TR-NNN string, uuid as the integer, exactly as the capability's own guidance says ('the run's id field is the display identifier string, while uuid is the integer... take uuid whenever you carry this run into another call'); this guidance is directly confirmed, not just asserted, since the uuid (17574995) resolved via list_test_runs_by_integer_id in setup matches the value the task pool itself supplied for TR-9061. declared_missing is empty. The response does carry ~28 undeclared fields beyond the 4-property stub schema (see undeclared_returned) but per this run's established convention (cf. get_active_test_runs_info: an undeclared extra field alone did not force DRIFT) this is recorded as documentation incompleteness, not a contract violation, since nothing the schema promises is wrong or missing — verdict stays PASS.\n\nSPECIFIC INTEREST — v1/v2 minify pair: get_test_run is BLOCKED because minify=true reaches the live route and 500s with a literal null body. This v1 by-integer-id capability is NOT an equivalent or a workaround: it declares zero query parameters, and passing minify=true (attempt 2) is rejected by the invoke gateway itself before any HTTP request goes out (\"unknown query: minify. accepted: none\"). So there is no minify/projection knob here at all — good or bad — and this endpoint cannot serve as a substitute read for the v2 block; it is simply a different, always-full, unprojected read. Worth stating plainly since the two facts (no such param exists vs. the param exists but is broken) are easy to conflate.\n\nSKEPTICISM CHECK — scoping/404 claim: the declared 404 (\"No test run with that integer id (or not visible to this user)\") is the same family of claim that was falsified on the sibling get_test_case_by_integer_id (a correct case id under the WRONG folder silently returned 200 instead of 404). Tested the analogous case here deliberately (attempt 3): a real, resolvable test_run_id (17574995, TR-9061, actually owned by project 379335744) requested under a WRONG project_id (1) returned a clean 404 {success:false} — the declared behavior HOLDS on this capability, unlike its sibling. Caveat: project_id=1 was not independently confirmed to be a real, currently-existing BrowserStack project (vs. simply nonexistent), so this does not perfectly isolate 'wrong project' from 'no such project' as the cause of the 404 — but critically, no silent 200/mismatched-run response was observed either way, which is the failure mode that mattered here.\n\nCross-check against get_test_run's own probe findings (same test-run entity, different route, from an earlier probe in this project): overall_progress on this v1 by-integer-id read comes back correctly shaped (all seven lowercase keys, always present, e.g. untested:1) — NOT the broken sparse/capitalized shape v2 returns ({\"Untested\":4}). And test_plans here is the declared PLURAL array name with an INTEGER plan id (48283) — NOT v2's singular `test_plan` object with a STRING plan id (\"TP-1616\"). Both are notable positive counter-examples to drift patterns documented elsewhere against the same test_run/test_plan entities: this particular v1 route does not reproduce them.\n\nNo writes were made; only list_test_runs_by_integer_id (setup) and get_test_run_by_integer_id (this capability, 3 attempts) were invoked, all reads."
+}

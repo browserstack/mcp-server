@@ -1,0 +1,77 @@
+{
+  "capability": "create_custom_field_dataset",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:34:12Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "target field for the new dataset — reused the field a sibling probe minutes ago created via create_custom_field_definition, rather than minting a new one",
+      "source": "sibling probe (create_custom_field_definition)",
+      "capability": null,
+      "produced": { "custom_fields_id": 106131, "field_type": "dropdown", "entity_type": "TestCase" }
+    },
+    {
+      "step": 2,
+      "why": "read the field's existing dataset first, per this capability's own guidance ('a project can belong to only one dataset per field... read the field's existing datasets first') — needed to know which project(s) were already claimed before choosing what to link on the new dataset",
+      "source": "get_custom_field_dataset",
+      "capability": "get_custom_field_dataset",
+      "produced": {
+        "dataset_id": 31319,
+        "linked_projects": [{ "id": 379335744, "identifier": "PR-2005" }],
+        "linked_project_count": 1,
+        "options_count": 3
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "custom_fields_id": 106131 },
+      "body": {
+        "options": [
+          { "option_value": "__mcp-probe-cfdataset-20260921-A", "is_default": true },
+          { "option_value": "__mcp-probe-cfdataset-20260921-B", "is_default": false }
+        ],
+        "link_to_future_projects": false
+      },
+      "wrapper_used": "flat body, no json_path nesting — describeCapability declared body as flat top-level fields (linked_projects, link_to_future_projects, options) with no wrapper property, and the flat shape was accepted on the first attempt (200). WRAPPER TRAP not present here: flat matches declared shape and matches what worked.",
+      "deliberate_omission": "linked_projects was left out entirely (not sent as []) so the new dataset would not attempt to claim project 379335744, which dataset 31319 already owns for this field — per the capability's own guidance, doing so fails upstream with an unhelpful masked 400. Omitting it produces a dataset with linked_projects:[] and linked_project_count:0 — created but invisible in every project, which is the documented consequence of a dataset with no linked projects."
+    },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "data": {
+        "id": 31320,
+        "custom_field_id": 106131,
+        "group_id": 3452,
+        "future_projects_applicable": 0,
+        "record_status": "active",
+        "created_at": "2026-09-21T13:34:12.000Z",
+        "datasetProjects": [],
+        "options": {},
+        "linked_projects": [],
+        "linked_project_count": 0,
+        "link_to_future_projects": false,
+        "linked_to_all_projects": false
+      }
+    }
+  },
+  "contract": {
+    "required": ["custom_fields_id"],
+    "json_path": null,
+    "declared_missing": [
+      "data.options — declared as an array of option objects (items: object); the create response returns it as an empty object {} instead, and does not echo the two options submitted in the request body at all. This is not a serializer bug: a follow-up get_custom_field_dataset(dataset_id=31320, fetch_options=true) confirms both options were in fact created and stored (ids 146668/146669) — the create endpoint's response simply never reflects them, regardless of what was sent."
+    ],
+    "undeclared_returned": [
+      "data.custom_field_id",
+      "data.group_id",
+      "data.future_projects_applicable",
+      "data.record_status",
+      "data.created_at",
+      "data.datasetProjects — a second, differently-named copy of the same content as linked_projects (both empty here since no projects were linked; on the sibling dataset 31319 both datasetProjects and linked_projects independently carry the identical single PR-2005 row)"
+    ]
+  },
+  "notes": "First attempt succeeded (200), no retries needed, attempts[] is empty.\n\nWRAPPER TRAP: not present. Flat body worked first try, matching the declared shape exactly — same pattern as create_custom_field_definition's sibling probe.\n\n*** THE CENTRAL QUESTION: standalone reusable option-set, or does it duplicate what the definition call already does? ***\nNot redundant — this is the mechanism for giving ONE field MULTIPLE datasets, each with its own option set and its own project scope. Evidence: field 106131 now carries two independent datasets — 31319 (ProbeOptA/B/C, linked to PR-2005/379335744, created as a side effect of create_custom_field_definition) and 31320 (this probe's two new options, linked to nothing). Both share custom_field_id:106131 but have disjoint option ids (146665-7 vs 146668-9) and disjoint project scope. That is exactly the shape the capability's own guidance describes: 'the way to give one field different dropdown values in different projects.' The definition call's side-effect dataset is just the FIRST dataset of a field, created inline for convenience; this capability is how you add the second, third, etc. — e.g. a 'Severity' field that offers {P0,P1,P2} in one project group and {Critical,High,Low} in another, same field id, two datasets. So the three dataset-surface capabilities are coherent, not redundant: create_custom_field_dataset mints an additional dataset+options, update_custom_field_dataset_project_mapping (unprobed) presumably manages which projects point at which of a field's several datasets, and create_custom_field_dataset_option presumably adds options to an existing dataset without minting a new one. Confirmed this dataset is NOT floating: it carries custom_field_id:106131 explicitly in every read, so it is always addressable back to its owning field even while unlinked to any project.\n\nLINKING WAS DELIBERATELY SKIPPED: dataset 31319 already owns project 379335744/PR-2005 for this same field. The capability's own guidance warns that a project already claimed by one dataset of a field fails upstream on a second dataset with an unhelpful masked 400 ('The API request is invalid or improperly formed', no indication of the real cause). Rather than spend an attempt confirming that exact failure mode (out of scope for this probe), linked_projects was simply omitted — the resulting dataset was created successfully but is invisible in every project (linked_projects:[], linked_project_count:0, datasetProjects:[]), which matches this capability's own guidance verbatim ('A field with no dataset, or a dataset with no linked projects, is invisible in every project even though the definition exists'). This is a plausible, not certain, explanation for the collision behavior — it was not directly tested this round.\n\n*** OPTION DUPLICATION — SECOND INDEPENDENT CONFIRMATION ***\nCreated 2 brand-new options (__mcp-probe-cfdataset-20260921-A/B) through this different code path (dataset create, not field-definition create) and read them back via get_custom_field_dataset(fetch_options=true). Result: exactly 2 rows, ids 146668 and 146669, one each, no duplicates:\n  - {id:146668, option_value:'...-A', is_default:true, dataset_id:31320, record_status:'active'}\n  - {id:146669, option_value:'...-B', is_default:false, dataset_id:31320, record_status:'active'}\nThis is a second, independent code path (dataset-create rather than field-definition-create) landing on the same result as the sibling probe: freshly created options read back EXACTLY ONCE each. Combined with the field-definition probe's identical finding, this makes it safe to hand to the product team that the priority (8/4), status (10/5), and case_type (22/11) doubling is historical data specific to those old default-field option rows, not a live serializer bug — two independently-created, independently-read option sets through two different creation endpoints both came back clean.\n\nrecord_status DISCRIMINATOR: confirmed present on this path too. Both new options (146668/146669) carry record_status:'active' plus created_at/updated_at/dataset_id, exactly like the sibling probe's field-106131 options. The old default-field option rows (priority/status/case_type) still carry none of this on re-observation via get_custom_field_dataset's neighboring dataset 31319 read (that dataset's options 146665-7 do carry record_status:'active' — they too are custom-field-level rows, not default-field rows — so record_status appears to be universal for the custom_field_option table, just absent from whatever backs the legacy default_fields option rows).\n\nDATASET ID FOR FOLLOW-ON PROBE — REPORTING PROMINENTLY: **dataset_id = 31320**, custom_fields_id = 106131. This is the dataset `update_custom_field_dataset_project_mapping` should be probed against — it currently has zero linked projects, making it a clean target to test linking/unlinking without colliding with dataset 31319's existing PR-2005 link.\n\nDELETE PATH FOR DATASETS: exists at the spec level — `delete_custom_field_dataset` is a real, well-documented capability (path_params custom_fields_id + dataset_id, guidance covers irreversibility and cascade to stored values). But its declared mode is `destructive`, and invokeCapability refuses destructive capabilities outright by policy. Confirmed by direct attempt against dataset 31320: refused verbatim — \"delete_custom_field_dataset is a destructive operation and is not available through this surface\" (not a 4xx/5xx from the product API — a refusal at the invoke-runtime layer, before any request is sent). So despite this create capability's own guidance claiming the dataset is 'additive and reversible by deleting the dataset,' that reversibility is not actually reachable through this MCP surface — same non-cleanable pattern already seen with delete_custom_field_definition on field 106131 itself. Dataset 31320 (and options 146668/146669) is left in place; logged in CLEANUP-LEDGER.md.\n\nCREATED-RESOURCE SUMMARY: dataset id 31320 on custom field 106131, options 146668 (__mcp-probe-cfdataset-20260921-A, is_default:true) and 146669 (__mcp-probe-cfdataset-20260921-B, is_default:false), zero linked projects. Cannot be cleaned up through this MCP surface (delete is destructive-mode and refused).\n\nVerdict is DRIFT: the declared 200 schema's `data.options` (type array) is never populated on the create response — it comes back as an empty object regardless of what options were submitted, even though those options are genuinely created and readable through the sibling get capability. Five further undeclared fields are returned (custom_field_id, group_id, future_projects_applicable, record_status, created_at, and a duplicate-content datasetProjects array alongside the declared linked_projects). No error responses were encountered to compare against, so declared_missing/undeclared_returned are scored only against the 200 schema, per instruction."
+}

@@ -1,0 +1,84 @@
+{
+  "capability": "validate_bdd_export_selection",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:18:53Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": "listTestCaseTemplates(name='BDD') on project 332537",
+      "result": "template_id=502 'Test Case BDD' (system, step_type=test_case_bdd, enabled). Also template_id=669326 'my bdd' (custom, step_type=test_case_steps — NOT the BDD step type despite the name)."
+    },
+    {
+      "step": "listTestCaseTemplates() unfiltered on project 332537 (58 templates total)",
+      "result": "Exactly one template has step_type=test_case_bdd: template_id=502 'Test Case BDD' (system, is_default=false). Every other template (including 'my bdd' id=669326 and 'Behaviour Driven Development' id=771887) is step_type=test_case_steps. Confirms 502 is the only id that can satisfy the validator's BDD filter — different numeric id from preprod's 1664, same name/role."
+    },
+    {
+      "step": "describeCapability(validate_bdd_export_selection, include_responses=all)",
+      "result": "Contract unchanged from preprod: path_params {project_id: integer required}; body flat fields ids/select_all/de_selected_ids/folders/q/folder_id under declared json_path /test_case/*; returns {success, message} for both 200 pass and 400 fail; guidance repeats the >300-case misleading-message cap and the silent-drop-of-non-BDD-cases behavior."
+    },
+    {
+      "step": "listFolders(PR-18723, parent_id=9600935)",
+      "result": "No sub-folders. Folder 9600935 ('Shivani Demo- Booking.com') is a flat 2052-case folder."
+    },
+    {
+      "step": "listFolders(PR-18723, parent_id=40231630) and recursive descent into every returned sub-folder (40231631/'LCA' with 20 children, 48039337/'tests'→'ui'→'specs'→'android'→2 spec sub-folders, 48146172/'Role'→'New Role', 48146174/'Transaction'→'Net Banking', 48146176/'Application'→'Search'→'Search functionality'+'Search results', plus two more nesting levels under LCA)",
+      "result": "Full folder tree under 40231630 enumerated: 55 leaf/near-leaf folders with cases, 196 test cases total. All content is AI-generated demo/tutorial material (e-commerce, hotel-booking, chat-app scenario folders)."
+    }
+  ],
+  "attempts": [
+    {
+      "description": "Exhaustive scan of folder 7617941 ('Test Management Demo') via search_project_entities_by_filter(folder_id=7617941), all pages",
+      "cases_scanned": 10,
+      "template_ids_found": ["2 (Test Case Steps)"],
+      "bdd_cases_found": 0
+    },
+    {
+      "description": "Exhaustive scan of folder 9600935 ('Shivani Demo- Booking.com') via search_project_entities_by_filter(folder_id=9600935), pages 1-21 at per_page=100 (info.count=2052)",
+      "cases_scanned": 2052,
+      "template_ids_found": ["2 (Test Case Steps)", "null (legacy/imported rows)"],
+      "bdd_cases_found": 0
+    },
+    {
+      "description": "Exhaustive scan of the entire folder tree under 40231630 via search_project_entities_by_filter(folder_ids=[55 folder ids collected from the tree], p=1..2, per_page=100; info.count=196)",
+      "cases_scanned": 196,
+      "template_ids_found": ["2 (Test Case Steps)", "656127 (Custom Template)", "656682 (CT 2)"],
+      "bdd_cases_found": 0
+    },
+    {
+      "description": "Project-wide spread sample via list_test_cases(project_id=332537, all_folders=true) at pages 1, 20, 40, 60, 80, 100, 120, 140, 163(last) with per_page=100 — spans the full id range from the oldest to the newest case, confirming info.count=16267 matches the fixture description",
+      "cases_scanned": 867,
+      "template_ids_found": ["2 (Test Case Steps)", "656127 (Custom Template)", "null"],
+      "bdd_cases_found": 0
+    },
+    {
+      "description": "Confirmed project_id path validation still rejects the PR-NNN form client-side",
+      "call": "invokeCapability(validate_bdd_export_selection, path_params={project_id:'PR-18723'}, body={ids:[32747791]})",
+      "result": "MCP-level rejection: \"'project_id' must be a number\" — matches declared contract, request never reached the API."
+    },
+    {
+      "description": "Failure-branch reconfirmation with real non-BDD production cases (template_id=2, 'Test Case Steps') from project 332537",
+      "call": "invokeCapability(validate_bdd_export_selection, path_params={project_id:332537}, body={ids:[32747791,32747562,32747539]})",
+      "http_status": 400,
+      "response_body": {"success": false, "message": "No BDD Test Case(s) selected."},
+      "note": "Same clean, contract-matching 400 as preprod. Not evidence for or against the success-branch shape."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {"project_id": 332537},
+      "body": {"ids": [32747791, 32747562, 32747539]}
+    },
+    "status": 400,
+    "response_keys": ["success", "message"],
+    "item_shape": "N/A — this is the 400 no-BDD-cases failure branch (which matches its declared shape exactly). The 200 success:true branch was never observed on production: no naturally-occurring BDD-template (template_id=502, step_type=test_case_bdd) test case was found in the ~3,125 cases directly checked (2,052 + 196 + 10 exhaustive, plus 867 project-wide spread sample), so no selection of real BDD cases could be built to exercise it."
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "one of ids/select_all/folders (body)"],
+    "json_path": "/test_case/ids, /test_case/select_all, /test_case/de_selected_ids, /test_case/folders (declared paths; flat body fields confirmed working, same as preprod)",
+    "declared_missing": [],
+    "undeclared_returned": [],
+    "note": "declared_missing/undeclared_returned are both empty because the success (200) branch could not be exercised on this account — there is nothing to diff the declared {success,message} success schema against. This is not the same as a pass: per the verdict rules, a 400-only result is not evidence either way for the success shape."
+  },
+  "notes": "BDD template on prod: template_id=502, name 'Test Case BDD', step_type=test_case_bdd, system template — confirmed as the ONLY template among all 58 templates in project 332537 with step_type=test_case_bdd (verified via an unfiltered listTestCaseTemplates call). Different numeric id from preprod's 1664 but same role/name, so template resolution itself is not drift — it's per-account, as expected. A custom template literally named 'my bdd' (id=669326) and another named 'Behaviour Driven Development' (id=771887) both exist but are step_type=test_case_steps, so they are NOT BDD-templated cases for this validator's purposes and were excluded from the search target.\n\nScopes searched (4, matching/exceeding the task's 3-4 minimum): (1) folder 7617941 'Test Management Demo' — 10 cases, exhaustive, 0 BDD. (2) folder 9600935 'Shivani Demo- Booking.com' — 2,052 cases, exhaustive across all 21 pages, 0 BDD. (3) the entire subtree under folder 40231630 (55 folders discovered by recursive listFolders descent, including the 20-folder 'LCA' branch and the 'tests/ui/specs/android' automation-import branch) — 196 cases, exhaustive, 0 BDD. (4) a project-wide spread sample via list_test_cases(all_folders=true) at pages 1/20/40/60/80/100/120/140/163(last), i.e. 9 samples of 100 rows spanning the full 16,267-case id range end to end — 867 cases, 0 BDD. Total directly inspected: ~3,125 of 16,267 cases (~19%), with 0 BDD-template cases found anywhere. Case-type distribution seen: template_id 2 (Test Case Steps, by far the most common), null (legacy/imported rows), 656127 (Custom Template), 656682 (CT 2) — never 502.\n\nPreprod side-by-side: preprod stayed UNVERIFIED because every case in its fixture pool used template 1164 ('Test Case Steps'), so every real selection resolved to zero BDD cases; the success branch was only ever exercised there by specially seeding one BDD case (explicitly out of scope for read-only prod work here). Prod result: the same gap persists — despite being a much larger, longer-lived project (16,267 cases across 294 root folders) that plausibly could have organically picked up BDD-template usage, it has not. No user or team in this account has authored a case with the 'Test Case BDD' template. The failure branch was re-confirmed on prod with real non-BDD cases (TC-838571/TC-838570/TC-838569, i.e. ids 32747791/32747562/32747539): HTTP 400, {success:false, message:'No BDD Test Case(s) selected.'} — byte-for-byte the same shape/message as preprod, and it matches the declared 400 schema exactly. The PR-NNN path-param rejection was also reconfirmed (client-side, before the request reaches the API).\n\nBecause prod also has zero naturally-occurring BDD cases in every scope checked, the success (200, success:true) response shape — and specifically whether it returns more than just {success,message} (e.g. comparison detail) — remains genuinely unverified on both preprod and prod without seeding, which this task explicitly disallows. Verdict is UNVERIFIED, not PASS-on-the-failure-branch and not DRIFT, per the stated verdict rules: a 400 alone is not evidence either way for the success shape."
+}

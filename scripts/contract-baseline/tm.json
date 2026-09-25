@@ -1,0 +1,142 @@
+{
+  "empty_2xx": [
+    "list_test_case_templates",
+    "merge_tags"
+  ],
+  "index": "capability/tm.capability-index.json",
+  "no_2xx": [
+    "generate_test_case_automation"
+  ],
+  "unbacked": {
+    "apply_test_case_review_verdict": [
+      "review_status",
+      "reviewers"
+    ],
+    "close_test_run": [
+      "active_state",
+      "assignee",
+      "closed_at",
+      "closed_by",
+      "configurations",
+      "created_at",
+      "description",
+      "id",
+      "identifier",
+      "is_automation",
+      "is_dynamic",
+      "links",
+      "name",
+      "observability_url",
+      "overall_progress_by_status_id",
+      "owner",
+      "project_id",
+      "run_state",
+      "skipped_test_case_ids",
+      "success",
+      "tags",
+      "test_cases_count",
+      "test_plans",
+      "updated_at",
+      "uuid"
+    ],
+    "create_dataset": [
+      "metadata",
+      "tags"
+    ],
+    "create_exploratory_session_log": [
+      "hashed_id"
+    ],
+    "create_project": [
+      "permissions",
+      "user_role"
+    ],
+    "create_root_folder": [
+      "cases_count",
+      "group_id",
+      "id",
+      "is_automation",
+      "name",
+      "notes",
+      "parent_id",
+      "project_id",
+      "sub_folders_count",
+      "success",
+      "total_cases_count"
+    ],
+    "create_shared_step": [
+      "tags"
+    ],
+    "create_sub_folder": [
+      "cases_count",
+      "group_id",
+      "id",
+      "is_automation",
+      "name",
+      "notes",
+      "parent_id",
+      "project_id",
+      "sub_folders_count",
+      "success",
+      "total_cases_count"
+    ],
+    "delete_folder_and_contents": [
+      "cases_count",
+      "group_id",
+      "id",
+      "is_automation",
+      "links",
+      "name",
+      "parent_id",
+      "project_id",
+      "sub_folders_count",
+      "total_cases_count"
+    ],
+    "list_test_results_for_test_case_by_integer_id": [
+      "custom_fields_count"
+    ],
+    "list_activity_events": [
+      "actor_id",
+      "actor_name"
+    ],
+    "list_exploratory_session_logs": [
+      "hashed_id"
+    ],
+    "search_group_tags": [
+      "name",
+      "tag_objects"
+    ],
+    "search_test_cases_by_folder": [
+      "id",
+      "identifier",
+      "name"
+    ],
+    "submit_test_cases_for_review": [
+      "review_sent_date",
+      "review_status",
+      "reviewers"
+    ],
+    "get_test_case_linked_issues": [
+      "test_run_results"
+    ],
+    "delete_folder_and_subtree": [
+      "cases_count",
+      "group_id",
+      "id",
+      "is_automation",
+      "links",
+      "name",
+      "parent_id",
+      "project_id",
+      "sub_folders_count",
+      "total_cases_count"
+    ],
+    "update_latest_test_result_for_test_case": [
+      "custom_fields_count"
+    ],
+    "update_shared_step": [
+      "id",
+      "success",
+      "title"
+    ]
+  }
+}

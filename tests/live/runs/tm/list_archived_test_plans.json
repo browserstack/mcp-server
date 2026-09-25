@@ -1,0 +1,45 @@
+{
+  "capability": "list_archived_test_plans",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 404,
+      "error": "{\"success\":false,\"errors\":\"Feature not available\"}",
+      "changed": ""
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+      "status": 404,
+      "error": "{\"success\":false,\"errors\":\"Feature not available\"}",
+      "changed": "added explicit query.p=1 to rule out a paging/param cause; result unchanged"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+    "status": 404,
+    "response_keys": ["success", "errors"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Both attempts returned the documented 404 { success: false, errors: 'Feature not available' } — per describeCapability guidance this means the group's test-plan-archive flag is OFF for this project/environment, not that nothing is archived. The 200 success schema (bare test_plans array + info envelope, no count field) is therefore completely unexercised: could not confirm container shape, item fields, or pagination behaviour. This is a harder failure than the empty-case rule (no plan archived) — here the listing endpoint itself is gated off, so even an empty-array PASS/UNVERIFIED distinction is unreachable. Did not attempt a 3rd call since the blocker is a group-level feature flag, not a parameter issue, and a 3rd retry with different query params would not change the outcome. The 404 error envelope itself matches its own declared schema exactly (top-level 'errors' string, distinct from the generic {error:{code,message,details}} envelope used for 400/401/403/500 on this same capability) — no error-envelope drift observed for this response. Sibling capability get_archived_test_plan_count is being probed in parallel for the same project and is expected to hit the same feature-flag gate from the count side — if it also returns 404 'Feature not available', that corroborates this result rather than resolving it; if it instead returns 200, that would itself be a discrepancy between the two capabilities' feature-gating worth flagging."
+}

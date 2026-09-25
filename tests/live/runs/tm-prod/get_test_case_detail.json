@@ -1,0 +1,79 @@
+{
+  "capability": "get_test_case_detail",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": true,
+  "setup": [
+    "describeCapability(get_test_case_detail) - confirmed contract: required path_params project_id/folder_id/test_case_id, 200 schema at data.test_case, test_case_steps declared as an OBJECT.",
+    "searchCapability(tm, 'list test cases and results inside a test run') to find a run-listing capability.",
+    "describeCapability(list_test_run_test_cases_by_integer_id) and describeCapability(list_test_results_for_test_case_by_integer_id) for contracts.",
+    "invokeCapability(list_test_run_test_cases_by_integer_id, project_id=332537, test_run_id=TR-4827350) -> 2 case rows: TC-5508207 (id 126144964, result_status Failed) and TC-5472086 (id 125494645, result_status Passed). Matches the fixture's '1 Passed + 1 Failed, 2 results total'.",
+    "invokeCapability(list_test_run_test_cases_by_integer_id, project_id=332537, test_run_id=TR-3866741) -> 16 case rows, ALL showing latest_status='untested' and result_status='Untested' (folder 7772651 'prd'). This disagrees with the fixture ('21 results total, 1 Blocked') - the fixture data appears stale for this run as of probe time.",
+    "invokeCapability(list_test_results_for_test_case_by_integer_id, project_id=332537, test_run_id=TR-4827350, test_case_id=126144964) -> count=1, status Failed. Independent confirmation.",
+    "invokeCapability(list_test_results_for_test_case_by_integer_id, project_id=332537, test_run_id=TR-4827350, test_case_id=125494645) -> count=1, status Passed. Independent confirmation.",
+    "invokeCapability(list_test_results_for_test_case, project_id=PR-18723, test_run_id=TR-4827350, test_case_id=TC-5508207) -> count=1, Failed. Cross-checked with a second, differently-implemented read capability.",
+    "invokeCapability(list_test_results_for_test_case, project_id=PR-18723, test_run_id=TR-4827350, test_case_id=TC-5472086) -> count=1, Passed. Cross-checked.",
+    "invokeCapability(list_test_results_for_test_case_by_integer_id, project_id=332537, test_run_id=TR-3866741, test_case_id=<each of the 16 case ids from TR-3866741>) -> all returned count=0. Consistent with the run's own case-grid showing 'untested' for all 16.",
+    "invokeCapability(get_test_run_progress, project_id=332537, test_run_id=TR-3866741 and =3866741) -> both 404 'Test Run ID is invalid' (the run-progress endpoint could not resolve the same TR- identifier that the case-listing endpoint resolved fine; internal test_run_id for TR-3866741 is 61078641 per the case rows).",
+    "invokeCapability(search_test_results, compact=false, no filters) -> success:true but test_results:[] and info:null, i.e. the account-wide search silently failed per its own documented behavior; not usable as a cross-check here.",
+    "invokeCapability(get_test_case_detail) on TC-5508207 (id 126144964, folder 40231630), TC-5472086 (id 125494645, folder 40231630), TC-1041803 (id 38648438, folder 7772651, from TR-3866741), and TC-838571 (id 32747791, folder 9697326 'MCP Testing', include=folder_path)."
+  ],
+  "attempts": [
+    "All 4 get_test_case_detail probe calls returned HTTP 200 with data.success=true.",
+    "Each response was ~1.0-1.06MB, mostly from the undeclared `testcase_template` field (~1.05-1.14MB of that per response) - noted as an efficiency concern, not correctness."
+  ],
+  "probe": {
+    "arguments": {
+      "primary": {"project_id": 332537, "folder_id": 40231630, "test_case_id": 126144964},
+      "also_tried": [
+        {"project_id": 332537, "folder_id": 40231630, "test_case_id": 125494645},
+        {"project_id": 332537, "folder_id": 7772651, "test_case_id": 38648438},
+        {"project_id": 332537, "folder_id": 9697326, "test_case_id": 32747791, "include": "folder_path"}
+      ]
+    },
+    "status": 200,
+    "response_keys": ["success", "test_case", "pagy", "linked_issues", "is_archived"],
+    "item_shape": {
+      "test_case_steps": "array of step objects (id, step, order, title, result, ... ), never the declared single object",
+      "steps": "always [] even when test_case_steps is non-empty",
+      "test_run_results_count": "integer, but WRONG on verified data (see prod_vs_preprod below)",
+      "test_run_results_issues_count": "0 on all 4 probed cases",
+      "issues": "[] on all 4 probed cases",
+      "field_name": "present and populated on case_type/priority/status/automation_state"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "folder_id", "test_case_id"],
+    "json_path": "data.test_case",
+    "declared_missing": [
+      "using_fallback_template - never appeared in any of the 4 probed responses despite being called out in guidance prose."
+    ],
+    "undeclared_returned": [
+      "is_shared", "attachments[]", "automation_state (full descriptor, distinct from the declared automation_status:{name,value})",
+      "folder (always null in all 4 probes)", "test_run_results_count", "test_run_results_issues_count",
+      "test_case_dataset", "duplicates_tc_count", "testcase_template (huge, ~1MB+)",
+      "template_step_type", "template_id", "template_name", "folder_path (only with include=folder_path)",
+      "estimated_duration_seconds (real value; declared `estimate` field is always null as guidance says)",
+      "reviewers (array, empty on all probed cases) and review_status (string, e.g. 'pending') - NOT called out in the preprod undeclared-field list; new additional undeclared fields observed on prod."
+    ]
+  },
+  "prod_vs_preprod": {
+    "count_drift_check": {
+      "case_used": "TC-5508207 (id 126144964) and TC-5472086 (id 125494645), both in TR-4827350, folder 40231630",
+      "real_result_count": 1,
+      "test_run_results_count_returned": 2,
+      "test_run_results_issues_count_returned": 0,
+      "issues_array_length": 0,
+      "verdict_on_this_specific_check": "wrong-other-way",
+      "threshold_hypothesis_note": "Real per-case result count for BOTH cases, independently confirmed via two separate read capabilities (list_test_results_for_test_case_by_integer_id v1 AND v2), is exactly 1. get_test_case_detail reported test_run_results_count=2 for BOTH cases - the identical wrong number, and it exactly equals TR-4827350's combined total (1 Failed + 1 Passed = 2). This strongly suggests the counter is scoped to the wrong entity (the whole run, or some case-agnostic aggregate) rather than genuinely counting results for the specific test case - a SCOPE bug, not a volume-threshold bug: the drift appears already at N=1 real result, which argues against the preprod hypothesis that counts only break above some large N. A second data point (TC-1041803, id 38648438, in TR-3866741/folder 7772651) showed test_run_results_count=1 even though that same run's own case-grid (list_test_run_test_cases_by_integer_id) reports this exact case as never-executed ('untested'/'Untested') in that run, and list_test_results_for_test_case_by_integer_id confirmed 0 results for that case in that run - another instance of the count field disagreeing with the case's real per-run execution state, again in the OVER-count direction rather than preprod's zero-out direction."
+    },
+    "test_case_steps_type": "Declared as a single OBJECT in the schema; actual response is ALWAYS an ARRAY of step objects on prod too - confirmed non-empty (5, 5, 11 items on three different cases) and empty ([]) on a case with no steps (TC-838571). Exactly reproduces the preprod type-level drift.",
+    "steps_sibling_field": "The sibling `steps` array (declared, distinct from test_case_steps) stayed [] on every probed case, INCLUDING the ones where test_case_steps carried 5-11 real step objects - reproduces the preprod finding that `steps` never actually gets populated.",
+    "field_name_present": true,
+    "summary": "The preprod DRIFT reproduces on production, but the count-drift half reproduces as a DIFFERENT failure mode than what was seen on preprod, not an identical repro. On preprod, test_run_results_count/issues_count/issues read 0/0/[] for a case independently verified to have 14 real results (a zero-out/under-count). On prod, the same fields are also independently verifiable as WRONG - but they read a non-zero, INFLATED number (2) that matches the run's combined total rather than the individual case's real count (1) - on two separate cases in the same run, and a further disagreement (1 reported vs. 0 real-in-that-run) on a third case in a different run. So on both environments the count fields are untrustworthy against verified real data, but the direction/shape of the wrongness differs (preprod: floor-to-zero; prod: appears to leak the run/aggregate total into the per-case field), and prod shows the drift is present even at tiny result counts (N=1), which argues against a pure large-N threshold explanation. The test_case_steps type-level drift (object declared, array always returned) and the steps-stays-empty finding reproduce exactly and verbatim on production. field_name is present and populated on case_type/priority/status/automation_state, matching preprod."
+  },
+  "notes": "TR-3866741, as referenced in the fixture ('21 results total, 1 Blocked'), currently shows 0 executed results across all 16 of its listed test cases in production (all 'untested') - the fixture data for this run appears to have drifted/reset since it was recorded, independent of the capability under test; this was cross-checked with both list_test_run_test_cases_by_integer_id and list_test_results_for_test_case_by_integer_id before concluding it wasn't a probing error. Separately, get_test_run_progress 404'd on both the TR-3866741 identifier and its bare numeric run id, while list_test_run_test_cases_by_integer_id resolved the TR- identifier fine for the same run - a minor cross-capability inconsistency noted in passing, not part of this capability's contract. testcase_template bloats every response to ~1-1.1MB, which is an efficiency/token-cost concern worth flagging to the product team even though it's not a contract violation per se."
+}

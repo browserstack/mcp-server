@@ -1,0 +1,75 @@
+{
+  "capability": "create_report_by_integer_id",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:34:14.395Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the report",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "verify the project's existing-report count and timestamps before creating (the pool file claims 1 report; task flagged this as a known-stale fact to verify by reading rather than assuming)",
+      "source": "invoked",
+      "capability": "list_schedules",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": {
+        "total_report_count": 3,
+        "scheduled_report_count": 0,
+        "pre_existing_reports": [
+          { "id": 10391, "identifier": "SC-491", "title": "__mcp-probe-report-2026-09-18T12-53-04-908Z", "created_at": "2026-09-18T12:53:05.140Z", "frequency": null },
+          { "id": 10390, "identifier": "SC-490", "title": "__probe-report-1789735950810", "created_at": "2026-09-18T12:52:31.165Z", "frequency": null },
+          { "id": 10374, "identifier": "SC-489", "title": "__mcp-probe-report-2026-09-18T04:32:18Z", "created_at": "2026-09-18T04:32:35.703Z", "frequency": null }
+        ]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": {
+          "project_id": 379335744,
+          "report_type": "Test Run Summary",
+          "report_timeframe": "last_one_week",
+          "report_creation_mode": "custom_report",
+          "title": "__mcp-probe-report-20260921",
+          "description": "MCP live probe of create_report_by_integer_id capability"
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt with a flat (unnested) body: required fields (report_type, report_timeframe, report_creation_mode, project_id) plus title/description all sent as top-level body keys, no report/wrapper object, no mail_to/frequency/frequency_details (deliberately left unscheduled and unsent to avoid any email path)."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": {
+        "project_id": 379335744,
+        "report_type": "Test Run Summary",
+        "report_timeframe": "last_one_week",
+        "report_creation_mode": "custom_report",
+        "title": "__mcp-probe-report-20260921",
+        "description": "MCP live probe of create_report_by_integer_id capability"
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "data", "project"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["report_type", "report_timeframe", "report_creation_mode", "project_id (body, alias projectId) or project_id in path"],
+    "json_path": "flat — worked on the first attempt. The core create fields (report_type, report_timeframe, report_creation_mode, project_id, title, description) are top-level body keys, not nested under a wrapper object. Optional filter/schedule fields declare their own json_path nesting (e.g. report_filters.*, dynamic_filters.test_run, mail_to.users, frequency_details.time) but none of those were exercised in this probe since no filters/scheduling were sent.",
+    "declared_missing": ["data.mail_to"],
+    "undeclared_returned": ["data.updated_at", "data.project_ids", "data.included_projects", "data.is_dynamic", "data.grain", "data.slack_notification", "data.slack_notification_supported"]
+  },
+  "notes": "Created report id=10393, identifier=SC-492, title '__mcp-probe-report-20260921', created_at 2026-09-21T13:34:14.395Z, in project 379335744 (PR-2005). DECLARED-MISSING (DRIFT): the 200 schema marks data.mail_to as required, but it is absent from the actual response entirely (not null, not present) — shallowest missing path is data.mail_to. UNDECLARED-RETURNED: seven extra keys on data (see contract.undeclared_returned) that the schema never mentions, including project_ids/included_projects (a second, array-shaped project representation alongside the declared singular project_id) and three schedule/slack-adjacent fields. None of these break usage but the schema is visibly behind the live response shape. SCHEDULE-VS-REPORT IDENTITY (for delete_report_schedule / update_report / download_report / send_report_email_now): this report was created deliberately UNSCHEDULED — no frequency, frequency_details or mail_to were sent, matching guidance that a report is scheduled iff both frequency and frequency_details are present. The response confirms: frequency=null, frequency_details=null, next_run_at=null, and no mail_to key. There is NO separate 'schedule' object or id anywhere in this response or in list_schedules — a report and its schedule are the SAME record; id=10393 / identifier=SC-492 is the only id that exists, and scheduling is just a set of fields (frequency/frequency_details/next_run_at/mail_to) on that same report row. This means delete_report_schedule almost certainly does not delete a distinct entity — there is nothing with its own id for it to target beyond the report id itself; it most likely clears/nulls the schedule fields on the report record (unverified — not probed here, left to that capability's own probe run). This also means a created report cannot be 'cleaned up' via delete_report_schedule; only a genuine delete/destructive report capability (not present in this index under an obvious name) or leaving it in __mcp-capability-fixture__ as residue (as the three pre-existing reports already are) would apply. EMAIL PATH: deliberately unexercised. No users/external_mails/frequency/frequency_details were sent, so mail_to was never populated and no email was sent or could have been sent (guidance: mail_to is only persisted for a scheduled report, and this one is not scheduled). send_report_email_now should be probed as its own capability with that decision made explicitly by whoever runs it. COUNT-VS-ROWS: list_schedules returned total_report_count=3 and exactly 3 rows in data — no disagreement, and this also corrects the pool file's stale claim of 1 pre-existing report (there were 3, all created 2026-09-18, before this probe's new report 10393 / SC-492 created 2026-09-21T13:34:14.395Z). Verdict is DRIFT rather than PASS solely due to the missing declared-required data.mail_to field; everything else about the create behaved as documented (200 not 201, data holds the definition only with no report_data, project echoed as a full object)."
+}

@@ -1,0 +1,49 @@
+{
+  "capability": "initiate_export",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm no export-status / download / poll capability exists for the test_case entity before invoking, so the initiating response is not mistaken for a verified result. Searched read-mode capabilities scoped to entity test_case for anything resembling export status, download or job tracking.",
+      "source": "invoked",
+      "capability": "searchCapability(entity=test_case, mode=read, query=\"check export job status progress fetch exported file test case\")",
+      "arguments": { "product": "tm", "entity": "test_case", "mode": "read" },
+      "status": 200,
+      "produced": {
+        "matches": ["validate_bdd_export_selection", "get_system_field_values", "list_binned_test_cases", "list_archived_test_cases", "get_test_case", "list_folder_test_cases", "get_test_case_by_integer_id", "get_test_case_detail", "list_test_cases", "search_test_cases_by_folder"],
+        "conclusion": "none of the 12 matched capabilities poll, fetch or report status for a test_case export job; only report-entity exports (download_report, get_report/get_report_attachment_url) have any such companion, and those are a different entity/route family."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "entity_type": "test-cases", "file_type": "csv" },
+        "body": { "ids": [1971631, 1971632] }
+      },
+      "status": null,
+      "error": "\"'project_id' must be a number\"",
+      "changed": "Rejected client-side before any request reached the server. Confirms the contract's stated requirement literally: project_id is the v1 NUMERIC id, not the v2 PR-NNN identifier this product's other capabilities often accept. Switched to the numeric fixture id 379335744 for the real call."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "entity_type": "test-cases", "file_type": "csv" },
+      "body": { "ids": [1971631, 1971632] }
+    },
+    "status": 200,
+    "response_keys": ["success", "export_id"],
+    "item_shape": { "success": true, "export_id": 11936 }
+  },
+  "contract": {
+    "required": ["project_id", "entity_type", "file_type"],
+    "json_path": "declared as /test_case/ids (and /metadata/merge_into_single_file, /metadata/common_feature, /metadata/common_background) but the working call shape is FLAT — ids sent as a top-level body field, not nested under a test_case or metadata wrapper. Sending it flat as declared-by-name (not by json_path) is what succeeded.",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Scope/id-form established from the contract before calling: entity_type is a closed path-param enum with exactly one value, [\"test-cases\"] (dashboard-analytics export is a different capability entirely and hitting this route with anything else for entity_type would 404/misbehave per guidance). file_type is a closed path-param enum [\"csv\",\"bdd\"] — csv was chosen deliberately since the two __readonly__ fixture cases (TC-54455/TC-54456) are not confirmed BDD-template cases, and the contract warns bdd silently filters non-BDD cases to an empty file with no error. project_id is explicitly documented as the v1 NUMERIC id, not the PR-NNN v2 identifier; verified this by deliberately attempting PR-2005 first (attempt 1), which was rejected client-side (\"'project_id' must be a number\") before reaching the server, then using the numeric fixture id 379335744 for the real call. Async/cost: this is a fire-and-forget background job — the response only ever carries {success, export_id}; a 200 means the job was ACCEPTED, not that the export succeeded, and the contract states there is no status/polling capability and the file itself is never retrievable through this API family (must be collected from the exports list in the Test Management UI). Confirmed no such capability exists by searching read-mode test_case capabilities for status/download/poll (setup step 1) — none found. No email/notification: the body schema for this capability has no recipient/mail field of any kind (unlike download_report's sibling send-email-now path), so nothing was or could be emailed by this call. Scoped as narrowly as the contract allows — explicit numeric ids for exactly the two __readonly__ fixture cases (TC-54455 int 1971631, TC-54456 int 1971632), not select_all and not the whole project; export reads these cases only and does not modify them, consistent with the fixture note that exporting FROM __readonly__ is fine. Invoked exactly once (single write): response was {\"success\":true,\"export_id\":11936}, matching the declared 200 schema's required fields exactly (success:boolean, export_id:integer) with no extra keys and none missing. Verdict is UNVERIFIED rather than PASS because, as the contract itself documents and the setup search confirmed, the actual effect — whether the background job succeeded and produced a real file — cannot be checked through any capability in this index; export_id 11936 is a correlation token only, redeemable solely in the product UI, which is outside this transport's reach."
+}

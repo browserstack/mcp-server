@@ -1,0 +1,81 @@
+{
+  "capability": "list_folder_test_cases",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": true,
+  "setup": [
+    "describeCapability list_folder_test_cases (product tm, include_responses=all) — confirmed contract.",
+    "project_id 332537 (PR-18723) used for all calls."
+  ],
+  "attempts": [
+    {
+      "step": "Baseline sanity — folder 9697326 (\"MCP Testing\"), no extra query params",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 9697326 }, "query": {} },
+      "status": 200,
+      "result": "All 3 known cases returned: TC-838571 (id 32747791), TC-838570 (id 32747562), TC-838569 (id 32747539). info={page:1,page_size:30,count:3,prev:null,next:null} — count matches rows exactly."
+    },
+    {
+      "step": "Folder 40231630 (\"Automation\"), direct children only, per_page=100",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 40231630 }, "query": { "per_page": 100 } },
+      "status": 200,
+      "result": "info={page:1,page_size:100,count:972,prev:null,next:2}. 100 rows returned on page 1 (equals page_size, as expected under pagination). Folder has 972 direct-child cases; the rest of the 1,168 recursive total live in its 36 subfolders."
+    },
+    {
+      "step": "Folder 40231630, recursive (include_subfolders_tc=true), per_page=100",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 40231630 }, "query": { "per_page": 100, "include_subfolders_tc": "true" } },
+      "status": 200,
+      "result": "info={page:1,page_size:100,count:1168,prev:null,next:2}. 100 rows on page 1 — matches page_size, no desync. count=1168 matches the known true recursive total exactly. `folders` block present (folder id -> ancestor-chain array), as documented."
+    },
+    {
+      "step": "Folder 7772651 (\"prd\"), third data point, per_page=100",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 7772651 }, "query": { "per_page": 100 } },
+      "status": 200,
+      "result": "info={page:1,page_size:100,count:16,prev:null,next:null}. All 16 rows returned in one page (count == rows, fits under page_size)."
+    }
+  ],
+  "probe": {
+    "arguments": { "project_id": 332537, "folder_id": 40231630, "include_subfolders_tc": "true", "per_page": 100 },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "info", "folders"],
+    "item_shape": {
+      "test_case_steps": "[] (empty array) on every row, including rows with step_count 1-11 and template test_case_steps / test_case_bdd — declared as a nested OBJECT in the schema",
+      "status": "null on every row observed (219/219 across all 4 calls)",
+      "case_type": "null on every row observed (219/219 across all 4 calls)",
+      "undeclared_present": ["automation_state", "priority.value_category (present, null)", "is_shared", "estimated_duration_seconds", "template_step_type", "template_id", "template_name", "step_count", "test_run_results_count", "test_run_results_issues_count", "test_case_dataset", "reviewers", "review_status", "duplicates_tc_count", "creator_details", "updator_details"]
+    }
+  },
+  "contract": {
+    "required": ["project_id", "folder_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "automation_state (whole descriptor object; schema only documents automation_status:{name,value})",
+      "priority.value_category",
+      "is_shared",
+      "estimated_duration_seconds",
+      "template_step_type",
+      "template_id",
+      "template_name",
+      "step_count",
+      "test_run_results_count",
+      "test_run_results_issues_count",
+      "test_case_dataset",
+      "reviewers",
+      "review_status",
+      "duplicates_tc_count",
+      "creator_details",
+      "updator_details"
+    ]
+  },
+  "prod_vs_preprod": {
+    "folder_40231630_direct": { "info_count": 972, "rows_returned": 100 },
+    "folder_40231630_recursive": { "info_count": 1168, "rows_returned": 100, "matches_1168": true, "count_vs_rows_desync": false },
+    "test_case_steps_type": "declared: nested object; actual: empty array [] on every one of 219 rows sampled across 4 folders/modes in prod, including rows with real step_count values (1-11) and template=test_case_steps/test_case_bdd — so this is a genuine content-losing type mismatch, not just an empty-collection artifact",
+    "field_name_on_status_or_case_type": "unverified (null in every row across all 4 prod probes, 219 rows total — same as preprod; this project also has no custom status/case_type values set, so the {field_name,...} object shape remains unconfirmed live)",
+    "summary": "Preprod DRIFT reproduces on production. The count-vs-rows/pagination mechanics are actually sound at scale: on the 1,168-case recursive stress test, info.count correctly reported 1,168 (matching the known true total) while a single page correctly returned page_size (100) rows with next=2 to continue — no desync, unlike the sibling list_test_plans_by_integer_id defect. The real, confirmed drift is test_case_steps: declared as a nested object, but production returned an empty array on all 219 sampled rows, including many rows whose step_count (1-11) and template (test_case_steps/test_case_bdd) prove they DO have real step content that the response is silently omitting/misrepresenting. All undeclared-but-returned fields from the preprod probe reproduced verbatim in prod. status/case_type stayed null everywhere probed, so their declared {field_name,...} shape remains unverified rather than confirmed or refuted."
+  },
+  "notes": "Read-only probe against a real project (PR-18723 / 332537); nothing written or mutated. Large responses (100-row pages) were saved to disk by the tool harness and post-processed with regex/counts rather than loaded whole into context, due to the 190KB+ payload sizes on folder 40231630."
+}

@@ -1,0 +1,64 @@
+{
+  "capability": "list_root_folders",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [],
+  "probe": {
+    "arguments": [
+      {
+        "step": "no query params (bare project_id)",
+        "path_params": { "project_id": 332537 },
+        "query": {},
+        "status": 200,
+        "result": "info.page=1, info.page_size=30, info.count=294, info.next=2. Upstream default page size 30 used."
+      },
+      {
+        "step": "per_page only, no p",
+        "path_params": { "project_id": 332537 },
+        "query": { "per_page": 3 },
+        "status": 200,
+        "result": "IDENTICAL to bare call: info.page=1, info.page_size=30, info.count=294. per_page=3 silently had zero effect."
+      },
+      {
+        "step": "p=1 + per_page=3",
+        "path_params": { "project_id": 332537 },
+        "query": { "p": 1, "per_page": 3 },
+        "status": 200,
+        "result": "info.page=1, info.page_size=3, info.count=294, info.next=2. Exactly 3 folder rows returned. per_page honored once p is present."
+      },
+      {
+        "step": "p=1 + per_page=100",
+        "path_params": { "project_id": 332537 },
+        "query": { "p": 1, "per_page": 100 },
+        "status": 200,
+        "result": "info.page=1, info.page_size=100, info.count=294, info.next=2. Exactly 100 folder rows returned, matching declared max_page_size=100."
+      }
+    ],
+    "arguments_representative": { "project_id": 332537, "p": 1, "per_page": 100 },
+    "status": 200,
+    "response_keys": ["folders", "info"],
+    "item_shape": {
+      "id": "integer",
+      "project_id": "integer",
+      "group_id": "integer (plain JSON int, e.g. 1, on every row checked including folders 40231630, 7617941, 9600935, 9697326)",
+      "name": "string",
+      "notes": "string, HTML-escaped, PRESENT on most rows (including empty string \"\" on many, and non-empty on some e.g. 7617941, 9600935) — NOT a key in the declared 200 JSON schema's folders[] item, though it IS listed in the capability's prose `returns` array",
+      "is_automation": "boolean",
+      "cases_count": "integer",
+      "total_cases_count": "integer",
+      "sub_folders_count": "integer",
+      "links": { "self": "string" },
+      "parent_id": "ABSENT on every root folder row observed — key not present at all, not even as null, despite being listed in the prose `returns` array and despite guidance text claiming 'parent_id is null on root folders'"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": null,
+    "declared_missing": ["parent_id (promised in prose `returns` list and in guidance text, never present on any root-folder row, not even as null)"],
+    "undeclared_returned": ["notes (present on live folder rows; absent from the declared 200 JSON schema's folders[] item properties, though present in the capability's separate prose `returns` list)"]
+  },
+  "notes": "Ran against real production project 332537 (PR-18723), 294 root folders / 16,267 cases, using only mcp__browserstack-capability-prod__* tools, read-only.\n\n(1) per_page paging: describeCapability's own query-param docs for `p` and `per_page` ALREADY document this exact quirk on prod: 'Paging is conditional on p... Sending only per_page does nothing at all: the handler never builds page parameters unless p is present, so you silently get the upstream default page size.' I reproduced this directly: project_id=332537 with per_page=3 and no p returned info={page:1, page_size:30, count:294, next:2} — byte-for-byte identical in shape to the bare call with no query params at all (also page_size:30). So per_page alone is silently ignored, confirming the note in list_binned_test_cases.json's findings ('asked for 3, got 30' — the actual number is 30, not some other fixed default). Once p is supplied, per_page IS honored precisely: p=1&per_page=3 returned exactly 3 rows (page_size:3), and p=1&per_page=100 returned exactly 100 rows (page_size:100), matching the declared max_page_size of 100. Verdict on this specific item: NOT contract drift — the capability's own docs now correctly warn about this exact behavior — but it remains a real footgun for any caller who sends per_page without p and silently gets a different page size than requested.\n\n(2) group_id type: confirmed as a plain JSON integer (e.g. 1) on every row inspected across all four calls, including on folders 40231630, 7617941, 9600935, and 9697326. No string-typed group_id was observed anywhere in this larger, real dataset. This matches the preprod finding — no drift here.\n\n(3) Field-list drift: the undeclared `notes` field REPRODUCES on prod, appearing on the majority of root-folder rows (both empty string and non-empty HTML-escaped content, e.g. folder 7617941 notes='<p>test test tst </p>', folder 9600935 has a very long HTML notes blob). Critically, `notes` is NOT a property in the declared 200 response JSON schema for folders[] items (schema only lists id, project_id, group_id, name, is_automation, sub_folders_count, links, cases_count, total_cases_count) — even though the capability's separate prose `returns` array does mention `notes`. So the machine-checkable schema is still wrong/incomplete relative to live data, even though the free-text `returns` list happens to also mention it. Meanwhile `parent_id` remains completely ABSENT from every root-folder row across all four calls — not even present as a null key — despite being listed in both the prose `returns` array AND the guidance text ('parent_id is null on root folders'), which implies the key should at least exist with a null value. This is real, reproducible declared-vs-actual drift on real populated production data.\n\n(4) Real-scale counts: folder 40231630 ('Automation') showed cases_count=972, total_cases_count=1168, sub_folders_count=36 — an EXACT match to the expected 972/1168/36 across all four calls it appeared in. Folder 9697326 ('MCP Testing') showed cases_count=3, total_cases_count=3, sub_folders_count=0 — matches the expected ~3. Folder 9600935 ('Shivani Demo- Booking.com') showed cases_count=2052, total_cases_count=2052, sub_folders_count=0 — matches the expected ~2052. All three real-scale count expectations are confirmed exactly.\n\n(5) Total root-folder count: info.count=294 on every call (bare, per_page-only, p=1&per_page=3, p=1&per_page=100) — corroborates the expected 294 root folders for this project.\n\n(6) Preprod-vs-prod verdict comparison: the preprod DRIFT verdict REPRODUCES on prod — the undeclared `notes` field and the declared-but-absent `parent_id` field are both confirmed on real, populated production data, which is a stronger and more convincing repro than preprod's tiny 2-folder pool could ever provide (here `notes` appears on ~20+ of the 30-100 rows sampled, with realistic and even pathological content, e.g. a folder name that is itself ~150 characters of garbled text, and a notes field with thousands of repeated characters). group_id-as-integer also reproduces (non-drift, consistent). NEW findings preprod's tiny pool could not have surfaced: (a) describeCapability's docs on prod now precisely and correctly explain the per_page/p interaction — this is either a doc fix that happened between the preprod and prod checks, or the prod and preprod capability specs simply differ in documentation completeness; either way, per_page is not silently drifting from its OWN declared contract on prod, only from what a naive caller might assume from the field name alone; (b) at real scale (100-row pages), the `notes` field's HTML escaping and length are far more visible as a real operational hazard (very long strings, HTML entities like &lt;p&gt;, &lt;/span&gt;) than anything the preprod pool could show; (c) confirmed the exact upstream default page size (30) — this was previously untested in the preprod run and only asserted second-hand in another capability's notes."
+}

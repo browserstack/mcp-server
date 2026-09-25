@@ -1,0 +1,44 @@
+{
+  "capability": "upload_generic_attachments",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T00:00:00.000Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the path param",
+      "source": "pool/task",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": {}
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — no `attachments` file field exists in this capability's schema to attempt a payload on. describeCapability declares zero body/query parameters at all; the real input is `attachments` read as an array of uploaded FILES from a multipart form, which invokeCapability's JSON-only path_params/query/body surface has no way to express. This single call exists to confirm the guidance's documented no-op behavior against the live API rather than take it on faith. No second attempt was made: there is no declared field to vary, and inventing an undeclared key would test a guess, not the contract."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": {}
+    },
+    "status": 200,
+    "response_keys": ["generic_attachment"],
+    "item_shape": "n/a — 200 body was {generic_attachment: []}, an empty array; no item to shape-check, and per instruction an error/no-op body is never diffed against the declared success item schema (id/name/url/download_url/content_type/size)"
+  },
+  "contract": {
+    "required": ["project_id (path, integer)"],
+    "json_path": "none declared — describeCapability returns no body/query parameters at all for this capability; the only input the contract needs (the file bytes) has no field to carry it",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "MECHANISM: describeCapability's contract for upload_generic_attachments declares exactly one input, the path param project_id. There is no body parameter, no query parameter, and no field of any kind for file content — the endpoint's real input is `attachments` read as an array of uploaded FILES from a multipart/form-data request, and invokeCapability is JSON-only (path_params/query/body). There is no key to put a base64 blob, a byte stream, or a file reference into, because none is declared. This is the identical structural wall already confirmed on import_dataset_csv (see tests/live/findings/multipart-capabilities-unreachable.md).\n\nFLAGGED STATUS: unlike import_dataset_csv (which carries a machine/human-visible 'QUARANTINE CANDIDATE' marker), this capability is not quarantine-tagged, but its guidance IS explicit and unambiguous: 'NOT INVOCABLE through this interface. The handler reads attachments as an array of uploaded FILES from a multipart form and streams their bytes to storage; a file cannot be expressed as a JSON argument, which is why this record carries no body parameter at all.' So this is a flagged-but-not-quarantine-marked unreachable capability — better than an unflagged trap, worse than import_dataset_csv's explicit quarantine tag, since nothing here would make searchCapability down-rank or exclude it.\n\nBEHAVIOR IS WORSE THAN import_dataset_csv's, NOT THE SAME: import_dataset_csv fails loudly with 400 {error:'No file uploaded'} when called with no file. This capability does NOT fail — one live invocation (project_id only, empty body) returned 200 {generic_attachment: []}, exactly as guidance predicts: 'Worse than an error: with no files the handler takes the empty path and answers 200 with generic_attachment: []. A call from here looks like it succeeded and uploads nothing.' Confirmed verbatim. This is a materially worse failure shape for an agent to hit blind: a 400 clearly signals 'you did this wrong'; a 200 with an empty array looks like a legitimate zero-file batch, i.e. success, and an agent not reading the array length carefully could report an upload as done when nothing was stored.\n\nNo second or third attempt was made — with zero declared fields for the file there is no alternative payload shape to try, and the one call already reproduced the documented mechanism exactly. Nothing was written (an empty array is the whole response; no blob was created, nothing to read back or clean up). TC-54455/54456/54458 and the __readonly__ folder (764093) were never referenced. delete_test_case_attachment was not invoked, per standing instruction."
+}

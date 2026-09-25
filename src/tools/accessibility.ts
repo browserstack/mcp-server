@@ -442,6 +442,13 @@ export default function addAccessibilityTools(
           "Any accessibility, a11y, WCAG, or web accessibility question",
         ),
     },
+    {
+      title: "Accessibility Expert",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       return await executeAccessibilityRAG(args, server, config);
     },
@@ -461,6 +468,13 @@ export default function addAccessibilityTools(
         .boolean()
         .optional()
         .describe("Enable advanced accessibility rules in the scan settings"),
+    },
+    {
+      title: "Start Accessibility Scan",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
     },
     async (args, context) => {
       return await executeAccessibilityScan(args, context, server, config);
@@ -498,6 +512,13 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe("CSS selector for submit button (required for form auth)"),
+    },
+    {
+      title: "Create Accessibility Auth Config",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
     },
     async (args) => {
       try {
@@ -558,6 +579,13 @@ export default function addAccessibilityTools(
     {
       configId: z.number().describe("ID of the auth configuration to retrieve"),
     },
+    {
+      title: "Get Accessibility Auth Config",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       return await executeGetAuthConfig(args, server, config);
     },
@@ -577,6 +605,13 @@ export default function addAccessibilityTools(
         .number()
         .optional()
         .describe("Character offset for pagination (default: 0)"),
+    },
+    {
+      title: "Fetch Accessibility Issues",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
     },
     async (args) => {
       return await executeFetchAccessibilityIssues(args, server, config);

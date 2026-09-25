@@ -1,0 +1,131 @@
+{
+  "capability": "get_test_case_by_integer_id",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": true,
+  "setup": [
+    {
+      "step": 1,
+      "why": "fixed prod fixtures supplied by caller — folder 9697326 'MCP Testing' under project 332537 (PR-18723), containing TC-838571/TC-838570/TC-838569",
+      "source": "user-provided fixture",
+      "capability": null,
+      "produced": {
+        "project_id": 332537,
+        "folder_id": 9697326,
+        "test_case_ids": [32747791, 32747562, 32747539],
+        "identifiers": ["TC-838571", "TC-838570", "TC-838569"]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 9697326, "test_case_id": 32747791 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt, contract's declared path_params shape (project_id, folder_id, test_case_id, all integers) matched directly"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 9697326, "test_case_id": 32747562 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — follow-up probe on TC-838570 to widen the steps/test_case_steps sample"
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 9697326, "test_case_id": 32747539 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — follow-up probe on TC-838569 to widen the steps/test_case_steps sample"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "folder_id": 9697326, "test_case_id": 32747791 } },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "id": "integer (32747791)",
+      "identifier": "string TC-NNN (\"TC-838571\")",
+      "name": "string (case title — field is `name`, NOT `title`; here \"MCP\")",
+      "assignee": "object {id, browserstack_user_id, full_name, email, group_id, onboarded, reports_and_notification_enabled}",
+      "creator_details": "object (same user shape as assignee)",
+      "updator_details": "object (same user shape) — populated on prod, unlike preprod trace where it was null",
+      "created_at": "string (date-time)",
+      "updated_at": "string (date-time) — populated here, was null in preprod trace",
+      "reviewers": "array (empty) — NOT present in the preprod trace's item_shape at all",
+      "review_status": "string (\"pending\") — NOT present in the preprod trace's item_shape at all",
+      "case_type": "object {id, internal_name, field_name, colour, value_category, name}",
+      "priority": "object {id, internal_name, field_name, colour, value_category, name}",
+      "status": "object {id, internal_name, field_name, colour, value_category, name}",
+      "automation_state": "object {id, internal_name, field_name, colour, value_category, name}",
+      "is_shared": "boolean",
+      "case_type_imported": "string (empty)",
+      "description": null,
+      "custom_fields": "array (non-empty on prod fixture — one field_boolean custom field object)",
+      "estimate": null,
+      "estimated_duration_seconds": null,
+      "expected_result": null,
+      "is_automation": "boolean",
+      "links": "object {self, detail, folder}",
+      "history_count": "integer",
+      "owner": "integer",
+      "preconditions": "string (empty) — was null in preprod trace",
+      "owner_imported": "string (empty)",
+      "attachments": "array (empty)",
+      "priority_imported": "string (empty)",
+      "project_id": "integer",
+      "status_imported": "string (empty)",
+      "steps": "array (empty on all 3 sampled prod cases)",
+      "tags": "array (empty)",
+      "template": "string (\"test_case_text\")",
+      "template_step_type": "string (\"test_case_text\")",
+      "template_id": null,
+      "template_name": null,
+      "test_case_folder_id": "integer",
+      "test_case_steps": "array (empty on all 3 sampled prod cases) — NOT declared in the formal schema at all (schema only names identifier/id/title)",
+      "lcnc_build_map": "object {resource_path, status}",
+      "automation_status": "object {name, value}",
+      "test_run_results_count": "integer (0)",
+      "test_run_results_issues_count": "integer (0)",
+      "issues": "array (empty)",
+      "comments_count": "integer (0)",
+      "metadata": "object {lcnc_build_map, ai_prompt}",
+      "test_case_dataset": "object (empty)"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer)",
+      "folder_id (path, integer)",
+      "test_case_id (path, integer)"
+    ],
+    "json_path": "data.test_case",
+    "declared_missing": [
+      "data.test_case.title — describeCapability on prod still declares `title` (example \"Login with valid credentials\") as one of only 3 properties under data.test_case. The live prod response has no `title` key at all; the real field is `name` (confirmed \"MCP\" / \"User Register form\" across all 3 sampled cases), exactly matching the guidance prose (\"the field is called `name`, not `title`\"). Schema is stale/wrong on prod, identically to preprod."
+    ],
+    "undeclared_returned": [
+      "assignee", "creator_details", "updator_details", "created_at", "updated_at",
+      "reviewers", "review_status", "case_type", "priority", "status", "automation_state",
+      "is_shared", "case_type_imported", "description", "custom_fields",
+      "estimated_duration_seconds", "expected_result", "is_automation", "links", "name",
+      "history_count", "owner", "preconditions", "owner_imported", "attachments",
+      "priority_imported", "project_id", "status_imported", "steps", "tags", "template",
+      "template_step_type", "template_id", "template_name", "test_case_folder_id",
+      "test_case_steps", "lcnc_build_map", "automation_status", "test_run_results_count",
+      "test_run_results_issues_count", "issues", "comments_count", "metadata",
+      "test_case_dataset",
+      "(47 fields total under data.test_case on this prod payload vs a declared schema of 3 properties: identifier, id, title/name. reviewers and review_status are undeclared fields present on prod that were absent from the preprod trace's own item_shape — either not observed there or genuinely env-specific; not itself evidence of a contract problem beyond the same 3-vs-N stub gap.)"
+    ]
+  },
+  "prod_vs_preprod": {
+    "summary": "DRIFT reproduces exactly. describeCapability's declared 200 schema on prod is byte-for-byte the same stub as preprod: only identifier/id/title under data.test_case, with `title` still present and still wrong. Invoking against 3 real prod cases (TC-838571, TC-838570, TC-838569) each returned 200 with the correct case in the data.test_case envelope, ~47 real fields, no `title` key, and the true field `name` populated (\"MCP\", \"MCP\", \"User Register form\"). Functionally the capability works (PASS on function); the contract-vs-reality gap is identical in kind and scale to preprod, so verdict is DRIFT, matching preprod.",
+    "test_case_steps_type": "Not declared at all in the formal 200 schema (schema only names identifier/id/title, no test_case_steps key exists to compare a declared type against). Actual value on all 3 sampled prod cases is an array (empty []), same as observed on preprod. No 'declared object vs actual array' mismatch was found because there is no declared type to contradict — it is simply undeclared, and its actual runtime type is array, matching preprod's own array observation.",
+    "steps_sibling_field": "Empty ([]) on all 3 sampled prod cases (TC-838571, TC-838570, TC-838569). All 3 fixture cases use template=\"test_case_text\" (a plain-text case template, not a step-based one), which plausibly explains empty steps/test_case_steps as expected behavior for this template rather than a defect. UNVERIFIED whether steps/test_case_steps populate for a step-based template case — no such case existed among the given fixtures (folder 9697326 only contained these 3 text-template cases), so this could not be confirmed or refuted on prod.",
+    "field_name_present": true
+  },
+  "notes": "Full reproduction of the preprod DRIFT verdict on production, using real project 332537 (PR-18723), folder 9697326 ('MCP Testing'), across all 3 available fixture cases (TC-838571 id 32747791, TC-838570 id 32747562, TC-838569 id 32747539). Contract: describeCapability returned an identical declared-200 schema to preprod — 3 properties (identifier, id, title) under data.test_case, no test_case_steps entry, no json_path field on the tool output itself (recorded here as data.test_case per the envelope guidance and observed response shape). Function: PASS — each invoke returned 200 with the exact requested case (ids and identifiers matched 1:1), inside a flat {success, test_case} envelope under data, as declared. Schema-vs-reality: DRIFT, reproducing preprod precisely — `title` is declared but does not exist in any of the 3 real payloads; the real title field is `name`. ~44-47 undeclared fields returned beyond the 3 declared ones (count varies slightly by case due to custom_fields population and reviewers/review_status presence). case_type/priority/status/automation_state all carry a populated `field_name` (category/priority/status/automation_state respectively) on every one of the 3 prod cases, confirming preprod's field_name-present finding holds on prod. test_case_steps is undeclared (not merely mis-typed) and is an empty array at runtime on all 3 samples, consistent with preprod; the sibling `steps` field is likewise an empty array on all 3, but since every available fixture case uses the plain-text template (not a step-based template), whether steps/test_case_steps would be non-empty on a step-based case is UNVERIFIED — no such case was present in the given folder to test against.\n\nAdditional minor observation not present in the preprod trace: this prod response includes `reviewers` (empty array) and `review_status` (\"pending\") fields that the preprod item_shape did not record at all, and has updator_details/updated_at/preconditions populated (non-null) where the preprod sample had them null/empty — differences attributable to per-case field population (this case has actually been updated/reviewed) rather than any environment-level schema difference. These do not change the verdict; they're additional undeclared fields on the same already-massively-undeclared payload."
+}

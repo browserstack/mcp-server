@@ -1,0 +1,100 @@
+{
+  "capability": "assign_test_run_owner",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:34:25Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Resolve a real, valid TM user id to assign as owner (workspace-scope user list, read-only).",
+      "source": "invoked",
+      "capability": "list_group_users",
+      "arguments": { "query": { "p": 1 } },
+      "status": 200,
+      "produced": {
+        "users_returned": 10,
+        "chosen_owner": { "id": 3741, "browserstack_user_id": 13450, "full_name": "User C", "email": "user-c@example.invalid" },
+        "note": "Deliberately chose a user (id 3741) never previously used as owner on any other TR-90xx fixture run in this project, so the post-write reads could not be a false-positive coincidence against pre-existing data."
+      }
+    },
+    {
+      "step": 2,
+      "why": "Baseline read of TR-9110 BEFORE the write, to confirm it genuinely starts with no owner (per task description) and to capture the pre-write shape for comparison.",
+      "source": "invoked",
+      "capability": "list_test_runs_by_integer_id",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1, "ignore_run_type": "true" } },
+      "status": 200,
+      "produced": {
+        "row_for_TR-9110": { "id": "TR-9110", "uuid": 17577900, "owner": null, "assignee": null },
+        "list_wide_null_owner_check": "17 of this page's 30 rows have owner:null / assignee:null (incl. TR-9110, TR-9062, TR-9061) despite the schema declaring both non-nullable - matches the task's flagged list_test_runs_by_integer_id list-serializer defect and is NOT specific to TR-9110."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" },
+        "body": { "owner": 3741 }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded on the first attempt. Sent `owner` FLAT (not nested under `test_run`), per the capability's own guidance that the json_path (/test_run/owner) wrapper is applied server-side and a hand-nested body is rejected. Guidance was CORRECT here - no nested-wrapper retry was needed."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_run_id": "17577900" },
+        "body": { "owner": 3741 }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "Deliberate second invocation (idempotent - same owner, same run) to test the ID-FORM TRAP the task flagged: swapped the path test_run_id from the TR-9110 prefixed string to the bare integer uuid (17577900). Also succeeded 200 on first try. Both forms work - the declared path pattern `^(TR-)?[0-9]+$` is accurate and NOT a trap for this capability."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" },
+      "body": { "owner": 3741 }
+    },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "data_keys_returned": ["success", "testrun", "project"],
+      "skipped_test_case_ids_present": false,
+      "testrun_keys_returned": [
+        "active_state", "run_state", "assignee", "created_at", "description", "environment", "id", "identifier",
+        "uuid", "is_automation", "overall_progress", "overall_progress_by_status_id", "name", "owner", "project_id",
+        "tags", "test_cases_count", "updated_at", "test_plans", "is_dynamic", "attachments", "links", "configurations",
+        "metadata", "assignee_imported", "created_by", "updated_by", "closed_at", "closed_by", "issues",
+        "test_result_issues", "observability_id", "observability_url"
+      ],
+      "owner_returned": 3741,
+      "assignee_returned": { "id": 3741, "browserstack_user_id": 13450, "email": "user-c@example.invalid", "full_name": "User C", "group_id": 2615, "onboarded": 1 },
+      "envelope_key": "data.testrun (NO underscore) - matches declared write-envelope key, distinct from data.test_run used by plain reads. CORRECT.",
+      "type_field": "declared in the response schema (example \"TestRun\"), never present in either write response body.",
+      "self_ui_link_field": "declared in the response schema, never present in either write response body."
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer)",
+      "test_run_id (path, string, pattern ^(TR-)?[0-9]+$) - ID-FORM CHECK: both \"TR-9110\" (attempt 1) and bare \"17577900\" (attempt 2) returned clean 200s. Declared pattern is accurate; this capability genuinely accepts EITHER form, unlike the list_test_runs_by_integer_id/list_test_runs/get_test_run_by_integer_id id-form mess the task warned about.",
+      "owner (body, integer, json_path /test_run/owner) - WRAPPER TRAP CHECK: sent FLAT (not nested under test_run) on both attempts, both succeeded first try. The capability's own guidance (\"send owner flat, the test_run wrapper is added for you\") was CORRECT and NOT a lie in this direction. No nested-wrapper attempt was necessary or made.",
+      "user id form for owner: TM user `id` (e.g. 3741, from list_group_users), NOT browserstack_user_id (13450) and NOT email. Confirmed by round-trip: sending TM id 3741 came back as both testrun.owner=3741 and testrun.assignee.id=3741 on the write response, and independently on both post-write reads."
+    ],
+    "json_path": "/test_run/owner declared on the input side but invokeCapability wants it FLAT at the top level of body - confirmed twice, matches guidance exactly.",
+    "declared_missing": [
+      "skipped_test_case_ids (top-level sibling of `data` - the tool's own 200 description explicitly promises this key is ADDED to the write response envelope, 'always [] on the build-backed flow'. Genuinely absent from BOTH write responses, top-level or nested, even though nothing was skipped by this write. This is the SHALLOWEST missing path and the primary contract defect.)",
+      "data.testrun.type (declared, example \"TestRun\", never returned)",
+      "data.testrun.self_ui_link (declared, never returned)"
+    ],
+    "undeclared_returned": [
+      "data.testrun.attachments", "data.testrun.created_by", "data.testrun.updated_by",
+      "data.testrun.closed_at", "data.testrun.closed_by", "data.testrun.issues",
+      "data.testrun.test_result_issues", "data.testrun.observability_id"
+    ]
+  },
+  "notes": "REAL LIVE CONTRACT IS NOT CLEAN, despite this being the capability CI used to prove the contract gate catches a synthetic phantom field (phantom_field_from_a_half_fix). That synthetic test only proves the gate flags an ADDED fake field; it says nothing about the genuine baseline, which independently has real drift: a top-level field (skipped_test_case_ids) the tool description explicitly promises is missing on every success response, two declared testrun fields (type, self_ui_link) never render, and eight undeclared fields (attachments, created_by, updated_by, closed_at, closed_by, issues, test_result_issues, observability_id) are returned but never declared. VERIFIED IT ACTUALLY STUCK: read back via two independent readers post-write - get_test_run_by_integer_id (single-run read, declares only id/identifier/name/uuid but actually also returns the full detail incl. owner=3741/assignee.id=3741) and list_test_runs_by_integer_id (list read, the one with the known 15-17/30 null-owner list-serializer bug). BOTH readers show owner=3741 and assignee={id:3741,...} for TR-9110, not null. This distinguishes the two candidate explanations the task raised: a newly-assigned owner reading back null would mean either 'write silently failed' or 'list serializer drops the field' - here it read back POPULATED on both readers, so this write neither failed nor got swallowed by the list-serializer null bug; the bug only affects rows this probe did not touch (confirmed separately in setup.step 2's baseline: TR-9110 itself, and TR-9062/TR-9061, were among the null rows BEFORE this write). ID FORM: no trap found - both \"TR-9110\" and bare integer \"17577900\" work, matching the declared path pattern exactly (contrast with get_test_run_by_integer_id which hard-requires the integer, and list_test_runs which carries no integer id at all). USER ID FORM: TM user id (not browserstack_user_id, not email) - confirmed via list_group_users round-trip. WRAPPER TRAP: guidance was accurate in this direction - flat body is genuinely correct, no nested test_run wrapper needed; only one of the two guidance directions the task warned about (flat vs nested) was even in play for this capability, and it held up. ENTITLEMENT GATES: not encountered - both writes returned clean 200 {success:true}, no 200-with-success:false seen. ERROR ENVELOPE: not independently verified against live responses - both attempts succeeded on the first try, so no 4xx/5xx body was observed to compare against the declared (3-of-11-correct) error shapes; this remains unverified by this probe rather than confirmed either way. Target run TR-9110 (project PR-2005/379335744) is now left with owner=3741 (User C) as a side effect of this probe - TR-9075, TR-9061 and TR-9062 were never touched."
+}

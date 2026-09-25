@@ -202,6 +202,13 @@ export default function registerGetFailureLogs(
         )
         .describe("The types of logs to fetch."),
     },
+    {
+      title: "Get Failure Logs",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(

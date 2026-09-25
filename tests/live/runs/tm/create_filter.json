@@ -1,0 +1,71 @@
+{
+  "capability": "create_filter",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:30:22Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": {
+          "name": "__mcp-probe-filter-20260921",
+          "entity": "testcase",
+          "is_project_level": false,
+          "filters": { "priority": ["P1"] }
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded on first attempt, flat body form as documented in guidance, no nested/wrapper trap encountered"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": {
+        "name": "__mcp-probe-filter-20260921",
+        "entity": "testcase",
+        "is_project_level": false,
+        "filters": { "priority": ["P1"] }
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "keys": [
+        "created_at",
+        "updated_at",
+        "record_status",
+        "id",
+        "project_id",
+        "entity_type",
+        "name",
+        "owner_id",
+        "is_project_level",
+        "filters",
+        "group_id"
+      ],
+      "created_filter": {
+        "id": 542,
+        "name": "__mcp-probe-filter-20260921",
+        "entity_type": "testcase",
+        "project_id": "379335744",
+        "is_project_level": false,
+        "filters": { "priority": ["P1"] },
+        "owner_id": 6013,
+        "group_id": 3452,
+        "record_status": "active"
+      }
+    }
+  },
+  "contract": {
+    "required": ["name", "entity", "filters"],
+    "json_path": null,
+    "declared_missing": ["data.owner"],
+    "undeclared_returned": ["data.owner_id", "data.record_status", "data.group_id"]
+  },
+  "notes": "BODY SHAPE / WRAPPER TRAP: does not apply here — describeCapability's guidance explicitly states 'The body is flat — there is no wrapper object' and this was accurate on the first try. No json_path nesting is declared for create_filter (unlike some sibling filter-adjacent capabilities), and the flat form {name, entity, is_project_level, filters} worked immediately against path_params.project_id. Only 1 of the 3-attempt budget was used.\n\nENTITY ENUM EXPERIMENT (separate from the 3-attempt budget, run before the successful create): the declared request-body `entity` enum is [testcase, testplan, testrun, exploratory_session, test_plan_test_case]. I deliberately invoked create_filter with entity='test-plans' (a hyphenated variant, chosen to mirror the pattern already seen on list_entity_filter_details's path-side enum and search_group_tags' entity_type enum). Result: CLIENT-SIDE rejection by invokeCapability itself — the tool returned {\"ok\":false,\"error\":\"'entity' must be one of: testcase, testplan, testrun, exploratory_session, test_plan_test_case\"} with no HTTP request ever going out (no status code, no server response). This is the fourth sighting of the MCP layer's own enum validation being strictly closed and pre-empting any chance to observe whether the underlying tm API itself would accept or reject an unlisted entity spelling. Unlike list_entity_filter_details, create_filter's own contract does not claim the underlying route accepts anything broader than its declared enum, so I cannot say whether this is 'our registry narrower than the API' or 'our registry exactly matches the API' here — only that the MCP tool enforces its declared enum strictly before any call is attempted, which is defensible but means this capability's true server-side acceptance of alternate entity spellings (hyphenated, singular test_plan, etc.) is UNTESTABLE through invokeCapability.\n\nCRITERIA/FILTERS FIELD FALSIFIABILITY: the `filters` field is declared as `{\"type\":\"object\",\"description\":\"Filter criteria object containing the actual filter conditions\"}` with zero properties listed — a bare, unfalsifiable blob, exactly the pattern flagged in the task brief. However, unlike a truly empty blob, the guidance block attached to it is NOT empty: it states filters is 'the same filter object the entity search takes' (so its shape is defined elsewhere, just not repeated here), that `{}` is silently treated as absent and causes a downstream 400 'Filters cannot be empty', and that conditions referencing nonexistent custom fields are accepted at write time but silently pruned on first read. I sent a plausible minimal testcase-shaped criteria value, `{\"priority\": [\"P1\"]}`, which the server accepted verbatim and echoed back unchanged in `data.filters` — so at least this one concrete shape is confirmed to round-trip correctly, even though the contract itself declares no properties to check it against. Net: the *declared* schema is unfalsifiable (no properties to violate), but behaviorally the field is not a total black box — the guidance text makes several checkable claims, of which the round-trip-verbatim claim held for the one shape I tried; the {} -> 400 and silent-custom-field-pruning claims were not separately tested here since testing them would require additional writes/reads beyond the 1-attempt budget I actually used.\n\nENTITLEMENT / ERROR ENVELOPE WATCH: none of the 3 declared error paths (400/401/403/422/500) were exercised — the primary create succeeded outright on attempt 1, and the entity-enum experiment never reached the server (client-side rejection, no HTTP response body to compare against the declared error envelope). No 200-with-success:false was observed; the success response had `success:true` cleanly. So there is nothing to report against the declared error-envelope shapes for this capability from this probe session — this is a gap in coverage, not a finding of accuracy or drift on the error paths.\n\nRESPONSE DRIFT (why verdict is DRIFT, not PASS): comparing the actual 200 body against describeCapability's declared success schema for create_filter:\n  1. Declared field `data.owner` (integer, 'User ID of the creator') is ABSENT from the actual response; in its place is `data.owner_id` (6013) — a renamed field, not a missing one, but the contract's own name does not match reality.\n  2. Two entirely undeclared fields are present and populated on every create: `data.record_status` (\"active\") and `data.group_id` (3452). Neither appears anywhere in the declared 200 schema.\n  3. Type drift: `data.project_id` is declared `type: integer` but the actual value returned is the STRING \"379335744\" (quoted), not a JSON number. path_params.project_id was sent as an integer (379335744) and the response echoes it back as a string.\n  4. Minor internal contract inconsistency (not response drift, but worth flagging): the REQUEST-side `entity` enum lists 5 values (testcase, testplan, testrun, exploratory_session, test_plan_test_case), but the declared 200 RESPONSE schema's `data.entity_type` enum only lists 3 (testcase, testplan, testrun) — exploratory_session and test_plan_test_case are legal to send but the contract does not say what entity_type value they'd echo back as. Not tested here since the successful create used `testcase`, which is in both enums.\n\nENTITY GROUPING COHERENCE (filter entity): create_filter behaves exactly like what you'd expect a CRUD-on-a-saved-view capability to behave like — it is scoped to a project, takes a name + entity + filters payload, is not RBAC-gated per the guidance ('anyone with product access to the project can create a project-level view'), and returns a filter object with its own `id`/`group_id` identity independent of any test-case/test-run/test-plan record. Nothing about its actual behavior ties it more naturally to `testcase`, `testrun`, or any other single record-entity — it is a first-class object in its own right (a saved query), which is exactly what `filter` as an entity grouping is for. This makes create_filter's own placement under `filter` coherent and unremarkable. The awkwardness flagged for list_entity_filter_details living under `project` instead of `filter` is a genuinely separate problem: that capability *resolves* a filter reference into full criteria (a read/lookup operation keyed by an entity+id pair), which arguably makes it filter-adjacent by function even though its response happens to describe project-scoped entities. Having the filter CRUD family (create/list/get/update/delete filter) cleanly under `filter`, while a filter-resolution helper sits under `project`, does NOT by itself mean `filter` as a grouping is incoherent -- create_filter, at least, sits exactly where its behavior says it should. The inconsistency is specifically about list_entity_filter_details's placement, not about whether `filter` as a category holds together for the capabilities actually inside it."
+}

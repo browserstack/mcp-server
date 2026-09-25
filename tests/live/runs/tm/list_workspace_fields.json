@@ -1,0 +1,88 @@
+{
+  "capability": "list_workspace_fields",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:26:02Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "None needed — endpoint is workspace-scoped (no project/path params in its contract at all; the pool's project id 379335744/PR-2005 doesn't apply here). Confirmed by describeCapability: only query params, no path_params section.",
+      "source": "pool",
+      "capability": null,
+      "produced": {}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "query": { "field_source": "all", "p": 1 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt, no retry needed"
+    }
+  ],
+  "probe": {
+    "arguments": { "query": { "field_source": "all", "p": 1 } },
+    "status": 200,
+    "response_keys": ["success", "data", "info"],
+    "item_shape": {
+      "data[system row, TestCase, page 1 only]": {
+        "field_name": "Priority",
+        "system_name": "priority",
+        "field_type": "dropdown",
+        "type": "System",
+        "field_values": ["Critical", "High", "Low", "Medium", "P0", "P1", "P2"],
+        "linked_to_all_projects": true,
+        "is_system_field": true,
+        "dataset_count": 0,
+        "note": "no `id` key on system rows, exactly as guidance says; no `entity_type` key either (schema doesn't mark it required per-item, so this is not a violation)"
+      },
+      "data[custom row]": {
+        "id": 105915,
+        "field_name": "dropdown_field_pnw5i3",
+        "field_type": "dropdown",
+        "entity_type": "TestCase",
+        "system_name": "dropdown_field_pnw5i3",
+        "place_holder_text": "Sample Placeholder for dropdown",
+        "linked_projects_count": 1,
+        "dataset_count": 1,
+        "is_system_field": false,
+        "type": "Custom",
+        "field_values": [],
+        "linked_to_all_projects": false
+      },
+      "info[when result spans >1 page — field_source=all/custom, count=34/31]": {
+        "count": 34,
+        "page": 1,
+        "page_size": 10,
+        "prev": null,
+        "next": 2
+      },
+      "info[when result fits one page — field_source=system, count=3]": {
+        "count": 3,
+        "page": 1,
+        "page_size": 3,
+        "total_pages": 1
+      },
+      "info[zero-result page — entity_type=TestPlan, count=0]": {
+        "count": 0,
+        "page": 1,
+        "page_size": 10,
+        "prev": null,
+        "next": null
+      }
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": [
+      "info.total_pages — absent on every response where the result spans more than one page (i.e. whenever info.prev/info.next are present); only appears when the whole result fits on page 1"
+    ],
+    "undeclared_returned": [
+      "info.prev, info.next — present whenever the result spans more than one page, or even on a legitimate zero-count query (entity_type=TestPlan); absent (replaced by total_pages) only in the single-page case. Neither key is in the declared `info` schema nor in the capability's `returns` list."
+    ]
+  },
+  "notes": "DRIFT is confined to the shape of `info`, not `data` — the outer {data, info} container itself matches the declared 200 schema exactly (no bare-array-vs-container mismatch here, unlike get_custom_field_dataset). But `info` actually has two mutually exclusive real shapes depending on whether the result needs more than one page: {count,page,page_size,total_pages} when it fits on page 1, or {count,page,page_size,prev,next} when it doesn't — never all five keys together, and the declared schema only documents the first shape. This directly falsifies the capability's own guidance text, which says in as many words 'there is no prev/next' — confirmed false by every field_source=all/custom call made here (both count=34 and count=31 cases) and even by a zero-result page (entity_type=TestPlan, count=0, still returns prev/next instead of total_pages). A caller coded strictly against the declared schema (reading info.total_pages to decide whether to page further) would get `undefined` on any multi-page result and have to fall back to checking info.next instead.\n\nWATCH-FOR checklist, explicitly:\n- Structural container mismatch (bare array vs {data,info}): does NOT apply at the outer level — outer shape matches declared exactly. It resurfaces one level deeper, inside `info`, as described above.\n- Undeclared option-descriptor fields (value_category, valueDetails, colour, entity_type): NOT observed on this endpoint. System-row `field_values` here are plain strings (e.g. \"Critical\", \"P0\"), not option-descriptor objects — this listing doesn't expose option metadata, so the pattern seen on other capabilities in this product doesn't surface here. `entity_type` itself IS a declared, present key on custom rows (absent on system rows, which is allowed since it's not per-item-required).\n- Prose vs schema disagreement: confirmed, see above (the 'no prev/next' guidance claim vs actual responses).\n- field_source coverage: all three declared values behave exactly as documented. system → single page, total_pages present, no custom fields (3 rows for TestCase, 1 row for TestResult, both matching each entity's actual system-field set). custom → skips system fields entirely; field_source=custom + entity_type=TestCase(default) + p=1 returned exactly the 31 custom fields with dataset_count that the sibling probe (pool note) reported, confirming this is the SAME authoritative listing referenced there. all → merges both, system rows first on page 1 only, confirmed. An invalid field_source ('bogus') was rejected before any http_response came back (error: \"'field_source' must be one of: system, custom, all\", no status/body) — this looks like client-side param validation rather than a live 400 from the API, so it could not be verified against the declared 400 schema; treated as informational only, not counted as a probe attempt.\n- Entity-type coverage beyond TestCase: confirmed — this endpoint is NOT TestCase-only. entity_type=TestResult returned live data: system field 'Test Run Status' (dataset_count 2) plus 9 of 25 total custom TestResult fields on page 1 (root_cause/root_causes fields, a plain string field), all correctly stamped entity_type:'TestResult'. entity_type=TestPlan returned an empty result (count 0, no error) — plausible (no fields configured for that entity yet) but the guidance only documents the empty-without-error case for entity_type=TestCaseStep (tied to a specific 'step-custom-fields' flag); it says nothing about TestPlan silently coming back empty, so a caller can't tell from the response alone whether that means 'nothing configured' or 'entity type unsupported here.' Since this endpoint is exactly the one the pool description flags as potentially authoritative for system-field option shapes across the product, this matters: it confirms system rows for status/priority/case_type/Test-Run-Status are declared with field_values as flat string arrays (not option objects), consistent across TestCase and TestResult entity types.\n\nMinor, non-blocking observations: (1) system_name is populated (non-null) on every custom row too, equal to the field's own slug — the schema's description ties its example values (priority/case_type/status/automation_state) to system rows only, which reads as system-exclusive even though the field is correctly declared nullable and nothing forbids a non-null value on custom rows; not a violation, just an under-specified description. (2) info.page_size in the response reflects the actual row count on that page (e.g. 3 when only 3 system rows exist for TestCase, TestResult's single-page system query would behave the same), not always the fixed cap of 10 that the guidance emphasizes ('page size is fixed at 10... only p is read') — that guidance is about the request-side control, not a promise that the response's page_size field is always literally 10, so this is not a contract violation, just worth noting for anyone assuming page_size==10 always."
+}

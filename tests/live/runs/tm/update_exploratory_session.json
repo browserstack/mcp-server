@@ -1,0 +1,31 @@
+{
+  "capability": "update_exploratory_session",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:29:30Z",
+  "verdict": "DRIFT",
+  "setup": [
+    "Target: exploratory session id=779 (identifier ES-14, display only), project_id=379335744 (PR-2005), created minutes earlier by the create_exploratory_session probe with session_state=active, 0 logs, no owner/assignee/tags/issues, charter already null (create dropped it), title '__mcp-probe-exploratory-20260921'."
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "session_id": 779}, "body": {"title": "__mcp-probe-exploratory-20260921", "charter": "Probe charter: verifying update_exploratory_session persists this field (was dropped on create)."}},
+      "status": 200,
+      "result": "Success on first try. Body sent FLAT (no `exploratory_session` wrapper) — matches describeCapability's guidance verbatim for this capability ('Send the fields flat... sending your own [wrapper] is rejected'). No nested form was tried since flat worked immediately; per the WRAPPER TRAP warning this guidance was verified rather than assumed."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "session_id": 779}, "body": {"title": "__mcp-probe-exploratory-20260921", "charter": "Probe charter: verifying update_exploratory_session persists this field (was dropped on create)."}},
+    "status": 200,
+    "response_keys": ["success", "exploratory_session"],
+    "item_shape": "exploratory_session: {attachments[], attachment_relations[], id, identifier, test_plan_id, project_id, group_id, title, description, timebox_duration, duration, session_state, assignee, owner, charter, created_by{id,email,full_name,group_id}, closed_by, closed_at, actual_duration, record_status, created_at, updated_at, tags[], configurations[], issues[], timeline[], session_log_count, custom_fields[]}"
+  },
+  "contract": {
+    "required": ["project_id", "session_id"],
+    "json_path": "Flat body accepted and applied — invokeCapability builds /exploratory_session/* itself from each field's declared json_path, exactly as describeCapability's guidance says for THIS capability. (Contrast with create_test_plan_by_integer_id in the same campaign, where near-identical guidance text was wrong and nested was rejected — this one's guidance held.)",
+    "declared_missing": ["/exploratory_session/folder_id"],
+    "undeclared_returned": ["attachments", "attachment_relations", "identifier", "test_plan_id", "project_id", "group_id", "owner", "closed_at", "record_status", "custom_fields"]
+  },
+  "notes": "DEFECT #1 CONFIRMED SHARED WITH CREATE — charter is dropped by update too, not just create. Sent charter='Probe charter: verifying update_exploratory_session persists this field (was dropped on create).' (non-empty string) in the update body; the 200 response echoed charter=null, and a follow-up get_exploratory_session(379335744, 779) read-back also showed charter=null. This is the clean, decisive experiment requested: the bug is field-level (charter is dropped by this session family regardless of which write endpoint sets it), not create-only. DEFECT #2 CONFIRMED SHARED WITH CREATE — folder_id is completely ABSENT (not null, key missing) from the update response, same as on create and on get_exploratory_session's read-back of the same session. folder_id is declared in this capability's own 200 response schema (nested exploratory_session.folder_id) and in get_exploratory_session's return list, so this is a shallow declared_missing on both the write and the read side — a caller can never confirm a session's folder placement through this entity's API surface. project_id TYPE: on this update's 200 response project_id came back as an INTEGER (379335744), not a string — differing from create's response (string \"379335744\") and matching get_exploratory_session's read-back (integer). So typing is inconsistent specifically on create, while update and get agree (both integer). updated_at ANOMALY (not scored into the verdict, flagged for awareness): the update response itself echoed updated_at identical to created_at (both 2026-09-21T13:28:53.000Z), i.e. the timestamp did not appear to advance in the response body returned by this very call. A get_exploratory_session read-back moments later showed updated_at had advanced to 13:32:27.000Z — but that same read-back also showed session_log_count=1, actual_duration=120 and a new timeline entry (status='bug') that this update call never sent, meaning a sibling probe (almost certainly the log-creation capability, also targeting session 779 concurrently per the shared-object warning) wrote to the session in between. So the later updated_at bump is confounded by that concurrent write and cannot be pinned on this capability alone — noted as a possible drift but not asserted as confirmed. session_state, session_log_count, tags, configurations, issues, timeline, custom_fields were all left untouched (correctly, since none of those keys were sent and the guidance says omitted collection keys are left alone) — verified no unintended collection replacement occurred. Error envelope was NOT re-tested here (no error path invoked, so nothing was diffed against the success schema) — the family's known bare {success:false} vs declared {success:false,error:{...}} defect was already confirmed once on this exact session via create's deliberate 404 and is assumed to still apply per the campaign-wide 3-of-11 match rate; re-confirming it would have required an extra write-risk call this probe did not judge necessary. Session 779 was left ACTIVE (session_state unchanged, not closed) as instructed, so the other capabilities gated on this session remain unstranded. Title was resent unchanged (same value as before) as a no-op control alongside the charter change, so scalar-patch behavior for title specifically was not independently exercised by this probe — only charter's persistence was decisively tested."
+}

@@ -1,0 +1,97 @@
+{
+  "capability": "list_test_case_histories",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T07:36:43Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": true,
+  "setup": [
+    {
+      "step": 1,
+      "why": "describeCapability for the full contract — path_params, response schema, guidance",
+      "source": "pool",
+      "capability": "list_test_case_histories",
+      "arguments": {},
+      "status": null,
+      "produced": {
+        "path_params": ["project_id (integer, required)", "test_case_id (integer, required)"],
+        "query": ["p (integer, page, default 1, page_size fixed 30)"],
+        "declared_histories_item_keys": ["id", "entity_id", "entity_type", "version_id", "source", "modified_fields", "project_id", "group_id", "comment", "user_id", "created_at", "modified", "version_name", "user{id,browserstack_user_id,full_name,email,group_id,onboarded,reports_and_notification_enabled}", "links.self"],
+        "guidance_highlights": [
+          "Only the FIRST record on each page carries the full `modified` old/new map; others carry only `modified_fields` (names only) and need an individual single-revision read.",
+          "plan_restriction: true means non-Enterprise/Team-Pro caller clamped to last 30 days, with no other marker on the clamp.",
+          "version_name is positional and renumbers as old revisions age out — carry `id` forward, not the label.",
+          "source: 'create' marks the original revision and is skipped by the modified/modified_fields enrichment (no diff to show)."
+        ]
+      }
+    },
+    {
+      "step": 2,
+      "why": "fixed prod fixture supplied by caller — folder 9697326 'MCP Testing' under project 332537 (PR-18723), containing TC-838571/TC-838570/TC-838569, chosen to compare info.count across the three cases",
+      "source": "invoked",
+      "capability": null,
+      "arguments": {},
+      "status": 200,
+      "produced": {
+        "project_id": 332537,
+        "folder_id": 9697326,
+        "test_case_ids": [32747791, 32747562, 32747539],
+        "identifiers": ["TC-838571", "TC-838570", "TC-838569"]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537, "test_case_id": 32747791 }, "query": { "p": 1 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt; info.count=1, single 'create' row only, no edit history"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537, "test_case_id": 32747562 }, "query": { "p": 1 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — info.count=1, single 'create' row only, no edit history"
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 332537, "test_case_id": 32747539 }, "query": { "p": 1 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — info.count=1, single 'create' row only, no edit history"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "test_case_id": 32747791 }, "query": { "p": 1 } },
+    "status": 200,
+    "response_keys": ["histories", "info", "plan_restriction", "success"],
+    "item_shape": {
+      "id": "integer (10867105)",
+      "entity_id": "integer (32747791) — matches test_case_id",
+      "entity_type": "string (\"TestCase\") — matches declared example",
+      "version_id": "string uuid",
+      "source": "string (\"create\")",
+      "modified_fields": "null — NOT an array as declared (declared type is array); null for the create/origin row across all three cases probed",
+      "modified": "absent on this row — consistent with guidance that 'create' rows are skipped by the modified/modified_fields enrichment",
+      "project_id": "integer (332537)",
+      "group_id": "integer (2)",
+      "comment": "null",
+      "user_id": "integer (9556769)",
+      "origin_channel": "null — PRESENT on the row but NOT declared anywhere in the response schema (undeclared_returned)",
+      "created_at": "string date-time (\"2025-04-25T08:09:50.000Z\")",
+      "version_name": "string (\"V1\")",
+      "user": "object {id, browserstack_user_id, full_name, group_id, onboarded, reports_and_notification_enabled} — email KEY IS ABSENT (declared_missing), same shape confirmed identical across all 3 test cases",
+      "links.self": "string (\"/api/v1/projects/332537/test-cases/32747791/histories/10867105\")"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_case_id"],
+    "json_path": null,
+    "declared_missing": ["user.email"],
+    "undeclared_returned": ["origin_channel"]
+  },
+  "notes": "VERDICT: DRIFT — invoked successfully (200s on all 3 cases) but two of the three preprod-declared/actual mismatches reproduce on real prod data.\n\n1) origin_channel (undeclared_returned): REPRODUCES. Present on every one of the 3 history rows fetched (value null in all three, since these are 'create' rows with no channel context), but origin_channel does not appear anywhere in the declared 200 schema for this capability (declareCapability include_responses=all was checked — the histories item schema only lists id/entity_id/entity_type/version_id/source/modified_fields/project_id/group_id/comment/user_id/created_at/modified/version_name/user/links). Same defect as preprod.\n\n2) user.email (declared_missing): REPRODUCES. The response schema declares user.email as a field of the nested user object, but the actual `user` object returned on all 3 rows is {id, browserstack_user_id, full_name, group_id, onboarded, reports_and_notification_enabled} — no `email` key at all (not even null), same gap as preprod.\n\n3) Enrichment rule (first row gets full `modified` map, later rows get modified_fields names only, degrading the first row's convenience): UNABLE TO CONFIRM on prod — could not reproduce or refute. All three fixture cases (TC-838571/-570/-569) each have info.count=1, and that single row is a 'source':'create' row, which per the capability's own guidance is explicitly skipped by the modified/modified_fields enrichment ('it has no diff to fetch'). None of the three cases in folder 9697326 has any post-creation edit on prod — contrary to the task's expectation of 'prior probe residue' with richer edit trails than preprod. This is the valid 'all three are short' outcome called out as acceptable: prod's real fixture here has thinner history than the hand-seeded preprod fixture, not richer. Consequently the specific sub-claims (later rows need a single-entry read for old/new; the first row is denied that convenience unnecessarily) could not be exercised with genuine multi-revision data and are UNVERIFIED here — a case with actual edits (from outside the 3-case fixture) would be needed to check this reproduces, which was out of scope per the task's fixture restriction.\n\n4) Plan-restriction gate: CONFIRMED — this account has FULL (non-gated) history access. plan_restriction=false on all three responses. Strong corroborating evidence beyond just the flag: the only history row on each case dates to 2025-04-25 (~17 months before this 2026-09-22 probe), i.e. far outside any 30-day window — if the account were plan-gated, a gated response would either omit this row entirely or (per the capability's own guidance) show it with no marker distinguishing a truncated result from a genuinely short one. Since the row IS returned and plan_restriction is explicitly false, this confirms unrestricted access, so a short history list for this account is a real signal (rarely-edited case) rather than a plan-gate artifact. Note this also means the finding-3 gap above is NOT a plan-gate artifact — the cases genuinely have no edits since creation.\n\nAdditional minor observation (not one of the 4 asked-for checks, noted for completeness): modified_fields is declared as type 'array' but comes back as JSON null (not []) on the create row in all 3 cases — a minor type-nullability gap alongside the two declared_missing/undeclared_returned defects above."
+}

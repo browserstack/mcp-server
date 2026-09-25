@@ -71,6 +71,13 @@ export default function addObservabilityTools(
           "Name of the project to get failures for. This is the 'projectName' key in the browserstack.yml file. If not sure, ask the user for the project name.",
         ),
     },
+    {
+      title: "Get Failures in Last Run",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(

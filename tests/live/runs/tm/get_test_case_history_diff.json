@@ -1,0 +1,107 @@
+{
+  "capability": "get_test_case_history_diff",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T11:25:00Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "purpose": "Resolve history entry ids for TC-54458 (int 1975349, folder 764828) to get two numeric revision ids to diff.",
+      "call": {
+        "name": "list_test_case_histories",
+        "path_params": { "project_id": 379335744, "test_case_id": 1975349 }
+      },
+      "result": {
+        "status": 200,
+        "count": 19,
+        "outcome": "two_or_more_revisions",
+        "note": "19 revisions (V1..V19). Picked the two most recent, both source=update modifying test_case_steps: V18 id=1674597 (2026-09-18T12:50:47Z, old) and V19 id=1674611 (2026-09-18T12:53:24Z, new). Also tried V1/V2 (ids 1662107 create, 1662108 update) as a second candidate pair."
+      }
+    },
+    {
+      "purpose": "Resolve history entry ids for TC-54455 (int 1971631, __readonly__ 764093) as a second case with multiple revisions.",
+      "call": {
+        "name": "list_test_case_histories",
+        "path_params": { "project_id": 379335744, "test_case_id": 1971631 }
+      },
+      "result": {
+        "status": 200,
+        "count": 5,
+        "outcome": "two_or_more_revisions",
+        "note": "5 revisions (V1..V5). Picked V4 id=1674331 (old) and V5 id=1674333 (new, both modified_fields=[attachments])."
+      }
+    },
+    {
+      "purpose": "Resolve history entry ids for TC-54456 (int 1971632, __readonly__ 764093) for comparison.",
+      "call": {
+        "name": "list_test_case_histories",
+        "path_params": { "project_id": 379335744, "test_case_id": 1971632 }
+      },
+      "result": {
+        "status": 200,
+        "count": 1,
+        "outcome": "exactly_one_revision",
+        "note": "Only V1 (id=1654958, source=create) exists — an entry id exists but there is nothing to diff it against. Not used for the diff probe since it can't satisfy the two-revision minimum; kept only as the (b)-outcome control case."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_case_id": 1975349 },
+        "query": { "versions[]": [1674597, 1674611] }
+      },
+      "note": "TC-54458, V18->V19, both revisions confirmed to exist via setup call above.",
+      "response_status": 404,
+      "response_body_verbatim": { "success": false }
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_case_id": 1975349 },
+        "query": { "versions[]": [1662107, 1662108] }
+      },
+      "note": "TC-54458, V1(create)->V2(update), the earliest available pair, to rule out a recency-specific issue.",
+      "response_status": 404,
+      "response_body_verbatim": { "success": false }
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_case_id": 1971631 },
+        "query": { "versions[]": [1674331, 1674333] }
+      },
+      "note": "Different test case entirely (TC-54455, V4->V5) to rule out a case-specific issue.",
+      "response_status": 404,
+      "response_body_verbatim": { "success": false }
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "integer, required", "test_case_id": "integer, required" },
+      "query": { "versions[]": "array of 2 numeric history record ids, required" }
+    },
+    "status": 404,
+    "response_keys": ["success"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": [
+      { "name": "project_id", "json_path": "$.path_params.project_id", "type": "integer" },
+      { "name": "test_case_id", "json_path": "$.path_params.test_case_id", "type": "integer" },
+      { "name": "versions[]", "json_path": "$.query['versions[]']", "type": "array<integer>", "constraints": "minItems 2, maxItems 2 — two numeric history record ids from list_test_case_histories, old then new" }
+    ],
+    "json_path": "$.diff.test_case_steps.{old,new}, $.diff.status.{old,new}, $.links",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": [
+    "PREREQUISITE OUTCOME: (c) — two or more revisions were reachable and used. TC-54458 (1975349) has 19 revisions and TC-54455 (1971631) has 5; both comfortably clear the two-revision minimum this capability needs. TC-54456 (1971632) is the (b) case for contrast: exactly one revision (V1/create, id 1654958) — an entry id exists but there is nothing to diff it against, and it was correctly excluded from the diff probe rather than force-fed.",
+    "THE CAPABILITY ITSELF NEVER SUCCEEDED: all 3 attempts, spanning two different test cases and both a recent-revision pair and an oldest-revision pair, returned HTTP 404 with body {\"success\": false} and nothing else. No case tried (real, valid, confirmed-to-exist numeric history ids) produced a 200.",
+    "ERROR-ENVELOPE OBSERVATION (not scored into contract, since no 2xx was ever reached — declared_missing/undeclared_returned are correctly left empty per instructions): the describeCapability contract documents a 422 {success:false, message:'Not Allowed'} for the plan gate and a structured {success:false, error:{code, message, details}} envelope for 404/400/401/403/500. What actually came back was a bare {\"success\": false} on a 404 status — matching neither the documented plan-gate shape nor the documented generic-error envelope shape. This strongly suggests the endpoint is either not wired up in this preprod environment, or the account's plan-gate (Enterprise/Team Pro required) is being enforced as an undocumented 404 rather than the documented 422 — either way the live error contract does not match what describeCapability declares.",
+    "VERDICT RATIONALE: BLOCKED rather than UNVERIFIED, because the prerequisite (>=2 revisions, confirmed via list_test_case_histories) was satisfied and real ids were supplied — the block is squarely in the diff endpoint's own behavior (consistent 404 across independent inputs), not in an inability to construct a valid request.",
+    "FAMILY COMPARISON — four capabilities over 'test case history': list_test_case_histories (plural, numeric `id` per row, `modified` populated only on the first row per page, rest get `modified_fields` names-only), get_test_case_histories (plural, PR-/TC- identifiers, positional `version_name` instead of a numeric id, same first-row-only `modified` enrichment), get_test_case_history (single entry, `history_id` from the v1 listing, and per its own guidance 'ALWAYS carries the full modified map' for that one revision, not plan-gated), and this get_test_case_history_diff (single call, two numeric ids, plan-gated, returns a computed field-by-field diff restricted to a fixed comparable set: name/description/preconditions/automation_status/category/status/priority/owner/assignee/folder/tags/issues/custom_fields/test_case_steps/attachments/reviewers/review_status/review_sent_date).",
+    "REDUNDANCY ASSESSMENT: by documentation alone, get_test_case_history already returns the complete before/after `modified` map for any single revision, unconditionally and without a paid-plan gate. A caller who wants revision A vs revision B can call get_test_case_history twice (once per id) and compare — two free calls instead of one paid call. What get_test_case_history_diff adds beyond that is convenience (one call instead of two) and pre-computed type-insensitive comparison (1 vs \"1\" collapsed as unchanged) restricted to the fixed comparable field list — it does not expose any before/after value the single-entry read lacks; if anything the single-entry read is a superset (full snapshot vs a fixed field subset). Given this capability could not be exercised live at all (404 on every attempt), this conclusion rests on documentation comparison only, but it is consistent with the existing six unlabelled near-duplicate pairs already open — this looks like a strong fifth/sixth-style candidate to flag as part of that broader near-duplicate family, since its distinguishing value (single paid call vs two free calls to an already-redundant single-entry read) is thin and, on top of that, appears non-functional in this environment."
+  ]
+}

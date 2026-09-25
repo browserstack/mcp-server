@@ -1,0 +1,106 @@
+{
+  "capability": "list_test_plans_by_integer_id",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "preprod_reference": {
+    "run_file": "tests/live/runs/tm/list_test_plans_by_integer_id.json",
+    "verdict": "DRIFT",
+    "reasons": [
+      "Six row fields (completed_by, test_plan_progress, test_results_trend, test_results_trend_v2, attachments, review_status) returned on every row but absent from the declared `returns` list.",
+      "info.count silently desyncs from len(test_plans) once include_sub_plans=true pulls extra rows into the page — the field keeps reporting the top-level-only total.",
+      "Sub-plan rows (include_sub_plans=true) return null for fields the schema types as non-nullable (plan_status, tags, issues, created_by, owner, assignee, record_status, dates, sub_plans_count, test_plan_progress_v2).",
+      "q:{query:\"...\"} sent as a nested object still 400s: 'Invalid Params: q should be a ActionController::Parameters'."
+    ]
+  },
+  "setup": [
+    { "step": 1, "why": "resolve the real project scope", "source": "user-provided", "capability": null, "produced": { "project_id": 332537, "project_identifier": "PR-18723", "name": "Demo Project 1" } }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1, "q": { "query": "Test Plan" } } },
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"Invalid Params: q should be a ActionController::Parameters\"}",
+      "changed": "retried with q:{tags:[...]} instead of q:{query:...} to see if a different sub-key shape was accepted"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1, "q": { "tags": ["Sprint1"] } } },
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"Invalid Params: q should be a ActionController::Parameters\"}",
+      "changed": "tried bracket-notation query key q[query] instead of a nested q object, to rule out an MCP-transport JSON-stringification issue"
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1, "q[query]": "Test Plan" } },
+      "status": null,
+      "error": "MCP tool schema rejected the call before any HTTP request was made: \"unknown query: q[query]. accepted: filter_details, filter_mapping, ignore_type, include_sub_plans, minify, p, q, sort_by, status\"",
+      "changed": "gave up on q; every reachable shape of the filter is either rejected by the MCP tool's own query-param allowlist (bracket notation) or 400s at the API (nested object, any sub-key)"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1 } },
+    "status": 200,
+    "response_keys": ["success", "test_plans", "info", "count"],
+    "item_shape": {
+      "id": "integer, e.g. 182865",
+      "identifier": "string TP-NNN, e.g. \"TP-4036\"",
+      "name": "string",
+      "description": "string, may contain HTML",
+      "plan_status": "string (new/started/completed)",
+      "active_state": "string",
+      "record_status": "string (\"active\")",
+      "start_date/end_date": "string|null",
+      "owner": "integer",
+      "assignee": "object (resolved user)",
+      "created_by": "object",
+      "tags": "array",
+      "issues": "array (jira/devrev linkage objects)",
+      "custom_fields": "array (empty when none)",
+      "parent_plan_id": "integer|null",
+      "sub_plans_count": "integer",
+      "test_runs_count": "object {active,closed} — scoped to this plan's own runs",
+      "total_test_runs_count": "object {active,closed} — includes sub-plan runs",
+      "test_plan_progress_v2": "object keyed by result_status id, real rollup",
+      "project_id": "integer",
+      "created_at/updated_at": "string",
+      "links": "object {self, test_runs}",
+      "completed_by": "UNDECLARED — null on every row",
+      "test_plan_progress": "UNDECLARED — always {} (empty), separate from test_plan_progress_v2",
+      "test_results_trend": "UNDECLARED — null on every row",
+      "test_results_trend_v2": "UNDECLARED — null on every row, even on plans with real activity in test_plan_progress_v2",
+      "attachments": "UNDECLARED — null on every row",
+      "review_status": "UNDECLARED — \"pending\" on every row",
+      "review_settings": "UNDECLARED — {enabled:false, sub_plan_mode:\"independent\"} on every row"
+    }
+  },
+  "pagination": {
+    "note": "Real 69-plan project (78 active + 21 completed at the whole-project rollup) — paged across 3 real pages, not a synthetic single-page pool like preprod's 15-plan fixture.",
+    "page_1": { "arguments": { "p": 1 }, "info": { "page": 1, "page_size": 30, "count": 69, "prev": null, "next": 2 }, "count": { "active": 78, "completed": 21 }, "test_plans_length": 30 },
+    "page_2": { "arguments": { "p": 2 }, "info": { "page": 2, "page_size": 30, "count": 69, "prev": 1, "next": 3 }, "count": { "active": 78, "completed": 21 }, "test_plans_length": 30 },
+    "page_3": { "arguments": { "p": 3 }, "info": { "page": 3, "page_size": 30, "count": 69, "prev": 2, "next": null }, "count": { "active": 78, "completed": 21 }, "test_plans_length": 9 },
+    "verdict_on_info_count": "PASS on its own terms: info.count=69 is identical and self-consistent across all 3 pages, and 30+30+9=69 exactly matches the real row total. No page-boundary drift, no repeated/duplicate page like the sibling defect mentioned in the task brief.",
+    "verdict_on_top_level_count": "The top-level `count` object ({active:78, completed:21} = 99) does NOT match the 69 browsable top-level plans. This is EXPECTED per the capability's own guidance ('count is a project-wide rollup, not a page total') — not itself a new drift — but the 30-item gap (99-69=30) is suspicious and plausibly explained by hidden sub-plans (confirmed sub_plans_count>0 on several rows, e.g. TP-3341/148987 sub_plans_count=1, TP-2811/102568 sub_plans_count=1) that are excluded from the default listing but presumably counted in the project-wide active/completed rollup.",
+    "include_sub_plans_desync": {
+      "arguments": { "p": 1, "include_sub_plans": "true" },
+      "info": { "page": 1, "page_size": 30, "count": 69, "prev": null, "next": 2 },
+      "test_plans_length": 30,
+      "row_breakdown": "24 top-level TP-* rows + 6 STP-* sub-plan rows = 30 rows on the page",
+      "verdict": "DRIFT — REPRODUCES THE PREPROD FINDING EXACTLY. With sub-plans pulled into the array, info.count stays at 69 — the same top-level-only total as the sub-plan-free listing — even though the paginated dataset now genuinely contains more than 69 items (69 top-level + N sub-plans). info.count does not reflect what is actually being paginated once include_sub_plans=true is set.",
+      "sub_plan_row_nulls": "Confirmed reproduced too: STP-433/147274, STP-327/111870, STP-258/102571, STP-257/102569, STP-235/98988, STP-234/98981 all have plan_status:null, tags:null, issues:null, created_by:null, owner:null, assignee:null, record_status:null, created_at:null, updated_at:null, sub_plans_count:null, test_plan_progress_v2:null — same undeclared-nullability cluster preprod found on its schema-typed-non-nullable fields."
+    },
+    "minify_new_observation": {
+      "arguments": { "p": 1, "include_sub_plans": "true", "minify": "true" },
+      "note": "NOT tested on preprod's run file for this capability — new finding. minify=true does not just slim the row, it NULLS/ZEROES fields that are populated and correct under the default query. Example: plan 182865 (Testing parikshit) shows test_runs_count:{active:1,closed:0} under the default query (it has one real linked run, TR-5217429) but test_runs_count:{active:0,closed:0} under minify=true — a real, non-zero count silently replaced with zero. Also under minify=true: tags becomes null (declared array, was [] under default), issues becomes null (declared array, was [] under default), test_plan_progress_v2 becomes null (declared object, was a populated rollup under default) on every row including top-level (non-sub-plan) plans. This goes beyond the documented 'slim plan rows' framing — minify=true silently discards true data on a live field (test_runs_count), not just omits optional detail."
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["test_plans[].completed_by", "test_plans[].test_plan_progress", "test_plans[].test_results_trend", "test_plans[].test_results_trend_v2", "test_plans[].attachments", "test_plans[].review_status", "test_plans[].review_settings"]
+  },
+  "notes": "PREPROD VERDICT REPRODUCES. Both preprod DRIFT reasons hold on production with real, much larger data (69 real plans vs preprod's 15-item pool, across 3 real pages instead of a forced single page): (1) the same six undeclared fields appear on every row; (2) info.count desyncs from the actual paginated row count once include_sub_plans=true is set — confirmed on a real page mixing 24 top-level + 6 sub-plan rows, where info.count still reports 69 (the top-level-only total). NEW ON PROD (not exercised by preprod's synthetic pool): minify=true silently zeroes/nulls fields that carry real, non-zero data under the default query — most notably test_runs_count, which goes from a correct {active:1,closed:0} to a false {active:0,closed:0} for a plan with a genuinely linked run. This is a materially worse finding than 'minify strips detail' — it makes a real linked-run plan look like it has zero runs. The q filter is unusable through this MCP surface in any shape tried: a nested q object 400s regardless of its sub-key content (query, tags both tried), and bracket-notation query keys (q[query]) are rejected by the MCP tool's own parameter allowlist before any HTTP request is made — so on prod, as on preprod, `q` neither filters nor silently ignores; it hard-fails every reachable shape. Compare to the sibling v2 projects listing on this same account, which silently ignores its filter params instead of erroring — list_test_plans_by_integer_id's failure mode is a harder, more visible failure (400/blocked) rather than a silent no-op, which is arguably the better of two bad options for a caller, but it still means the documented filter surface is not usable as described. Pagination mechanics (p, page_size=30, info envelope) are otherwise clean and internally consistent across 3 real pages: no per_page override exists (not offered in the query schema, none tried) and only p moves the page, matching declared guidance exactly."
+}

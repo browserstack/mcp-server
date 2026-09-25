@@ -1,0 +1,33 @@
+{
+  "capability": "list_closed_test_runs",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "query": { "p": 1 }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_runs", "info", "count"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded (200), so `attempts` is empty. Contract: entity=test_run, mode=read, single required path param project_id (INTEGER, not the PR-NNN identifier). No body/json_path -- the only other input is query param `p` (page number, default 1, fixed page size 30, walk via `info.next`). Declared 200 schema: flat envelope {success, test_runs:[...row], info:{page,page_size,count,prev,next}, count:{active,closed}} -- no `data` wrapper, unlike the single-run write endpoints on this entity. `count` is documented as per-state totals for the WHOLE PROJECT, not this page's size.\n\nInvoked with project_id=379335744 (fixture pool project, PR-2005), p=1. Response: 200, {success:true, test_runs:[], info:{page:1,page_size:30,count:0,prev:null,next:null}, count:{active:30,closed:0}}. This matches the sibling's prior finding for the same project: get_closed_test_runs_split found empty_data:true / data:[] at both 5-year and 10-year closed_at windows, and get_closed_test_runs_info found all-zero monthly buckets at a 6-month window -- three independently-invoked capabilities on the same project agree there are zero closed runs here.\n\nCOUNT-VS-ROWS: info.count=0 (this page) and count.closed=0 (project-wide) agree with the empty test_runs array. This is a zero-vs-zero-vs-zero check and therefore has low power -- it cannot catch a rows/count mismatch that only manifests with non-zero data (e.g. count.closed reporting a nonzero total while rows stay empty, or vice versa); all it confirms is that the three signals are not actively contradicting each other in the degenerate case. count.active=30 does match the pool's documented '30 test runs' for this project, which is at least a non-trivial cross-check of the count object's active-side accuracy.\n\nWORTH ESTABLISHING (bounded check, not a sweep): to distinguish 'this project has no closed runs' from 'this endpoint never returns them', this same capability was additionally invoked read-only against three other project ids visible in this session's existing tm fixture pool (379335189, 59544, 83363) -- projects a sibling probe run had already touched for other capabilities, not a fresh scan. Results: {project_id:379335189, active:31, closed:0}, {project_id:59544, active:101, closed:0}, {project_id:83363, active:205, closed:0}. All three returned test_runs:[] with count.closed:0, same as the fixture project. Combined with the fixture project this is 4 projects and 367 active runs checked, zero closed runs surfaced anywhere. This does NOT establish that closed runs never exist in this account -- only that they were not found among the 4 projects reachable from this session's existing fixture pool; the account has ~1834 projects and only a bounded slice of it was checked, deliberately not swept.\n\nEMPTY-CASE RULE: with zero closed runs, the `test_runs` row shape (id, uuid, identifier, name, run_state, active_state, closed_at, closed_by, overall_progress, configurations, test_plans, build_meta, observability_url, links, etc.) is entirely unexercised -- an empty array proves nothing about whether those per-row fields would actually appear, be typed correctly, or match the declared schema when a real closed run exists. The declared top-level envelope (success/test_runs/info/count) IS confirmed present with correct types and no undeclared keys, and info's pagination fields (page/page_size/count/prev/next) all match the declared shape and values (page_size=30, prev/next=null on a single-page empty result). But the capability's actual purpose -- listing closed runs -- was never observed to happen. Per the strict empty-case rule this is UNVERIFIED, not PASS: no run was closed to force a non-empty case (read-only, and closing a run was explicitly out of scope), so the row/item schema remains an open question until a genuinely closed run turns up somewhere in this account for a future probe to hit."
+}

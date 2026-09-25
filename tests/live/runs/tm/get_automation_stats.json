@@ -1,0 +1,37 @@
+{
+  "capability": "get_automation_stats",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope — integer project id required for the route (PR-NNN identifiers 404 before reaching the API)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 } },
+    "status": 200,
+    "response_keys": ["success", "automated_coverage", "automated_test_cases", "total_test_cases", "manual_test_cases", "empty_data"],
+    "item_shape": {
+      "success": true,
+      "automated_coverage": 0,
+      "automated_test_cases": 0,
+      "total_test_cases": 21,
+      "manual_test_cases": 21,
+      "empty_data": false
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded with no q[] filters passed at all (guidance: 'sending no q at all applies no date bound'). empty_data:false and total_test_cases:21 (matching the fixture pool's known 21 cases), so this is a genuinely exercised, non-empty response — all six declared fields (success, automated_coverage, automated_test_cases, total_test_cases, manual_test_cases, empty_data) came back present with plausible types (0/21/21 consistent with automated_test_cases=0 and manual_test_cases = total - automated as the guidance describes). No undeclared fields, nothing declared-but-missing. The q[created_at]/q[owner]/filter_details query params and the 'filter trap' (owner-without-created_at silently narrowing to 1 year) were not separately exercised since the base call already returned a full, non-empty PASS and the task scope is a single capability probe, not a filter-matrix test."
+}

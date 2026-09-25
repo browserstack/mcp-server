@@ -1,0 +1,33 @@
+{
+  "capability": "update_template",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm, from observed data rather than assertion, that every template on this preprod account is a pre-existing system template shared by the whole account — i.e. that there is no disposable/non-system template that could be safely mutated to obtain a real verdict on update_template.",
+      "source": "invoked",
+      "capability": "list_templates",
+      "arguments": { "query": { "p": 1, "count": 300 } },
+      "status": 200,
+      "produced": {
+        "templates": [
+          { "id": 1164, "name": "Test Case Steps", "is_system": true, "is_default": true, "enabled": true, "field_count": 45, "project_count": 1830 },
+          { "id": 1664, "name": "Test Case BDD", "is_system": true, "is_default": false, "enabled": true, "field_count": 47, "project_count": 1830 }
+        ],
+        "info": { "page": 1, "page_size": 300, "count": 2, "prev": null, "next": null }
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": { "arguments": {}, "status": null, "response_keys": [], "item_shape": {} },
+  "contract": {
+    "required": ["id (path_param)"],
+    "json_path": "none — flat top-level body: name, enabled, is_default, description_fields, properties_fields. All keys optional (sparse update: only keys present in the body are touched; an empty body is accepted and changes nothing). id is the only required value and it is a path parameter, not a body field — a plain integer template id with no prefix, discovered from list_templates/get_template.",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "update_template was NOT invoked in this batch, deliberately and by design — this is not a failure to reach a verdict, it is a safety decision. The task requires documenting the capability's contract without mutating shared state. This preprod account has exactly two test-case templates, both is_system:true, is_default varying (1164 'Test Case Steps', field_count 45, is_default:true, project_count 1830; 1664 'Test Case BDD', field_count 47, is_default:false, project_count 1830), confirmed live via list_templates in setup[1] rather than taken on say-so. Editing either would change the description/property field layout (or name/enabled/is_default state) shown on every test case using that template across all 1830 linked projects for the whole account, with no version history to undo it — an unacceptable way to obtain a verdict. The intended disposable subject (a throwaway non-system template) does not exist and cannot be created: a prior batch found create_template BLOCKED after 6 attempts, including one that mirrored template 1164's complete field census byte-for-byte, all rejected with 'Non-removable System fields not present in template' — a requirement no documented read capability (get_template, list_templates) exposes ids for. Contract per describeCapability: path_param id (required, integer, no prefix); body fields name (string), enabled (boolean — evaluated for truthiness, so the STRING \"false\" enables rather than disables; must send a real JSON boolean), is_default (boolean, displaces the current default), description_fields (array, REPLACES the description section wholesale, not merged — omitted entries are removed), properties_fields (array, REPLACES the properties section wholesale). All body keys are optional; only keys actually present are applied (sparse update), and an empty body 200s with success:true and changes nothing. Declared 200 response is a bare acknowledgement: {success: boolean} only — no template body is returned, so the guidance says to re-read the template (get_template) to confirm the new layout; a free-plan account also gets HTTP 200 with success:false and a paid-feature message rather than a non-200 status, so success must be checked as a flag, not inferred from status code. Independently interesting even without invoking: the contract states verbatim that 'Sending properties_fields re-injects the Review & Approve system fields, and reads filter those same fields out, so a read-modify-write round-trip neither loses them nor can remove them. Do not report them as deleted.' This confirms the hidden-field mechanism first surfaced in the create_template BLOCKED run still holds as documented: update_template auto-injects Review & Approve system fields on write, while get_template (the only read that returns field layout) filters those same fields out of every read, even when stored. This is the leading hypothesis for why create_template cannot succeed — the 'non-removable System fields' its validator demands are plausibly these same Review & Approve fields, whose ids no read capability in this contract surface exposes, so they cannot be discovered and supplied on create. declared_missing/undeclared_returned are left empty deliberately: with nothing invoked there is no live response to diff against the declared schema, and filling either field would be a guess rather than an observation. A proper future verification of update_template would require either (a) create_template being fixed/unblocked first, so a disposable non-system template can be created and safely renamed/enabled/disabled/field-edited and then deleted, or (b) the account being seeded out-of-band (e.g. by BrowserStack support, or a workspace-admin path outside this MCP surface) with at least one non-system template earmarked as disposable, or (c) a documented, sanctioned way to discover and supply the Review & Approve system field ids so a full properties_fields round-trip on a throwaway template could be verified end to end without guessing at hidden ids."
+}

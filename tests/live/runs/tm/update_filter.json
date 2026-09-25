@@ -1,0 +1,66 @@
+{
+  "capability": "update_filter",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:43:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "baseline read of the target filter before any mutation, to have a known-good before-state",
+      "source": "invoked",
+      "capability": "get_filter",
+      "arguments": { "path_params": { "project_id": 379335744, "filter_id": 542 } },
+      "status": 200,
+      "produced": {
+        "id": 542,
+        "entity_type": "testcase",
+        "name": "__mcp-probe-filter-20260921",
+        "is_project_level": false,
+        "filters": { "priority": ["P1"] },
+        "owner_id": 6013,
+        "group_id": 3452,
+        "record_status": "active"
+      }
+    },
+    {
+      "step": 2,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    },
+    {
+      "step": 3,
+      "why": "target filter, created by create_filter minutes earlier and the only saved filter in this project",
+      "source": "pool",
+      "capability": null,
+      "produced": { "filter_id": 542 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744, "filter_id": 542 }, "body": { "name": "__mcp-probe-filter-20260921-renamed" } },
+      "status": null,
+      "error": "missing required parameter(s): entity",
+      "changed": "This was rejected client-side by the MCP tool wrapper before any HTTP request was sent, because entity is declared required. Re-added entity to the body for the next attempt. Confirms the 'required' annotation is enforced, but means the raw API's own 400 behavior for a missing entity was never observed directly."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "filter_id": 542 },
+      "body": { "name": "__mcp-probe-filter-20260921-renamed", "entity": "testcase" }
+    },
+    "status": 200,
+    "response_keys": ["data", "success"],
+    "item_shape": ["id", "project_id", "entity_type", "name", "owner_id", "is_project_level", "filters", "group_id", "record_status", "created_at", "updated_at"]
+  },
+  "contract": {
+    "required": ["project_id", "filter_id", "name", "entity"],
+    "json_path": "data",
+    "declared_missing": ["data.owner"],
+    "undeclared_returned": ["data.owner_id", "data.group_id", "data.record_status"]
+  },
+  "notes": "PUT-vs-PATCH (settled, PATCH-like): sent {name, entity} only, omitting is_project_level and filters -> both survived unchanged on read-back (is_project_level stayed false, filters stayed {priority:[P1]}). A second call sent {name, entity, is_project_level:true} while again omitting filters -> is_project_level flipped to true and filters again survived untouched. This is a genuine partial update for the optional fields: omitting a key leaves it alone rather than resetting it to a default. update_filter is NOT the classic destructive PUT for is_project_level/filters. name and entity remain mandatory on every call per the schema (attempt 1), consistent with the declared contract.\n\nItem 4 CLOSED, and the finding is stronger than the original hypothesis. The request-side entity enum has 5 values; the declared response entity_type enum lists only 3 (testcase, testplan, testrun). Tested all three cases: (a) entity:'exploratory_session' (unlisted in response enum) -> HTTP 200 {success:true}, but entity_type stayed 'testcase' and updated_at did not move at all. (b) entity:'test_plan_test_case' (the other unlisted value) -> identical silent no-op. (c) as a control, entity:'testplan' (a value that IS inside the declared response enum) -> ALSO silently ignored, entity_type still 'testcase', updated_at unchanged. A follow-up call that combined entity:'testcase' with is_project_level:true did persist is_project_level and bump updated_at, proving the endpoint can and does write other fields in the same request while entity stays inert. Conclusion: entity is not actually mutable through update_filter for ANY value, in or out of the declared response enum -- the guidance text 'sending a different one repoints the saved view at another list type' is empirically false. Every attempt returned 200 {success:true} with no hint the field was dropped, which is a quieter and arguably worse failure mode than the entitlement-gate 200 {success:false} pattern called out for this product: here the response actively claims success while silently discarding part of the request.\n\nfilters:{} claim (tested, refuted for this endpoint): sent filters:{} expecting the documented 400 'Filters cannot be empty'. Got 200, filters left completely untouched ({priority:[P1]} survived), matching update_filter's own declared guidance ('filters: {} is dropped as blank') rather than the 400 claim. The 400 behavior, if real, belongs to a different code path (plausibly create_filter's downstream failure after {} is dropped there) -- not to update_filter.\n\nStale custom-field pruning on read (tested, CONFIRMED -- genuine data loss): wrote filters:{priority:['P1'], customFields:{'999999':['stale_value']}} via update_filter -- it persisted verbatim, echoed back intact in the same 200 response. A subsequent get_filter call silently rewrote the stored filter to customFields:{} -- the stale condition is gone. A second get_filter confirms it stays gone (customFields:{} again, updated_at bumped again purely from the read's own write-back). This matches get_filter's declared behavior exactly and is a real, verified, irreversible-via-API data loss triggered by a read.\n\nproject_id type: returned as an integer (379335744) in both get_filter and update_filter responses on this filter, matching the declared type -- no drift here, which is the OPPOSITE of the string-typed project_id drift reported against create_filter. The two endpoints on the same entity disagree with each other, not just with the schema.\n\nInherited from create_filter, reconfirmed here: data.owner is declared (integer) but never appears; the actual key is data.owner_id (a rename, not a removal). data.group_id and data.record_status are always present and never declared anywhere in the response schema.\n\nfilters is declared as a bare {type:object} with no properties, so nothing sent through it can ever register as DRIFT under the written contract -- noted rather than scored, per instructions.\n\nNo 200 {success:false} entitlement-gate response was observed anywhere in this probe; all calls, including the ones that silently did nothing, returned {success:true}.\n\nFilter 542 was left renamed to __mcp-probe-filter-20260921-renamed, is_project_level:true, entity:testcase (unchanged), filters:{priority:['P1'], customFields:{}}. It is our own expendable throwaway filter, per the task; not restored."
+}

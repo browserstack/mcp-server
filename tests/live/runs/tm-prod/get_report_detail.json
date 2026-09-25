@@ -1,0 +1,79 @@
+{
+  "capability": "get_report_detail",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "get_report_detail's report_id path param is an INTEGER; list_reports (the discovery route surfaced to a caller browsing reports) only exposes the SC-NNN identifier, and stripping 'SC-' gives the wrong number (a per-group sequence, not the report's row id). list_schedules is the only capability that returns id (integer) and identifier (SC-NNN) side by side, so it was used to resolve real ids for project 332537/PR-18723.",
+      "source": "invoked",
+      "capability": "list_schedules",
+      "arguments": { "path_params": { "project_id": 332537 }, "query": {} },
+      "status": 200,
+      "produced": {
+        "total_report_count": 1197,
+        "scheduled_report_count": 38,
+        "resolved_pairs_sample": [
+          { "id": 95008, "identifier": "SC-12541", "report_type": "Test Run Summary", "report_timeframe": "last_one_week" },
+          { "id": 94997, "identifier": "SC-12537", "report_type": "Test Plan Summary", "report_timeframe": "last_one_month" },
+          { "id": 94964, "identifier": "SC-12534", "report_type": "Test Case Activity", "report_timeframe": "last_one_week" },
+          { "id": 94963, "identifier": "SC-12533", "report_type": "Test Run Summary", "report_timeframe": "last_one_week" }
+        ]
+      }
+    },
+    {
+      "step": 2,
+      "why": "confirm the id-form trap is real: does list_reports (the v2 listing an agent would naturally reach for) ever expose the integer id, or only SC-NNN?",
+      "source": "invoked",
+      "capability": "list_reports",
+      "arguments": { "path_params": { "project_id": "PR-18723" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "note": "Every row's only id field is the string \"id\": \"SC-12541\" (etc.) — no integer id anywhere in the v2 row. Stripping 'SC-' from 'SC-12541' yields 12541, which is NOT the report's real id (95008, from list_schedules). The gap is large and non-obvious (95008 vs 12541), not an off-by-one a caller might rationalize away.",
+        "total_report_count": 1197
+      }
+    },
+    {
+      "step": 3,
+      "why": "check whether Defects Summary / Defects Detailed Report exist in this project, to test the 'always report_data: null' claim for real (vs. guessing a report type that isn't present)",
+      "source": "invoked",
+      "capability": "list_schedules",
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "q[query]": "Defects" } },
+      "status": 200,
+      "produced": { "total_report_count": 0, "note": "No Defects Summary or Defects Detailed Report exists in this project. q[query] substring-matches report_type/title/owner, so a 0-row result here is a real absence, not a naming miss." }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "report_id": 95008 }, "query": {} },
+    "status": 200,
+    "response_keys": ["data", "report_filters", "is_dynamic", "filters", "dynamic_filters", "report_data", "project"],
+    "item_shape": {
+      "report_data.test_run_data": "{active:17, closed:0, test_cases:139, test_results:141} — populated on the bare call, real non-zero prod data",
+      "report_data.issues_data": "null on bare call",
+      "report_data.test_run_status": "null on bare call",
+      "report_data.test_cases_status": "null on bare call",
+      "report_data.user_result_stats": "[] on bare call",
+      "report_data.issues_by_status": "null on bare call",
+      "report_data.issues_by_priority": "null on bare call",
+      "report_data.time_tracking": "null on bare call",
+      "report_data.estimated_vs_actual": "null on bare call"
+    }
+  },
+  "contract": {
+    "required": ["data", "report_filters", "dynamic_filters", "report_data", "project"],
+    "json_path": "$.report_data",
+    "declared_missing": [
+      "data.mail_to — declared required (type object, required:[users,external_mails]) but the key is entirely absent from data on EVERY get_report_detail response taken in this run (bare, sections=, report_data_only, is_print — both a Test Run Summary and a Test Plan Summary report). This is the exact same field the preprod create_report_by_integer_id/update_report probes found missing from their response.data.",
+      "report_filters.custom_fields / .test_run_ids / .first_test_run — declared required sub-fields, but report_filters comes back as a bare {} for every last_one_week/last_one_month report probed here (report_timeframe not using report_filters). Same behavior preprod's get_report_detail run already documented as tied to timeframe, not new."
+    ],
+    "undeclared_returned": [
+      "data.updated_at, data.project_ids, data.included_projects, data.is_dynamic, data.grain, data.slack_notification, data.slack_notification_supported — the SAME 7 fields flagged in the preprod create_report_by_integer_id/update_report finding as evidence of one shared serializer. Confirmed present, byte-for-byte the same field set, on get_report_detail's read response too. This extends the shared-serializer drift from the write path to this read capability.",
+      "is_dynamic, filters — top-level keys present on every call; listed in this capability's own `returns` summary array but absent from the formal 200 JSON-schema `properties` block (same prose-vs-schema gap noted on preprod).",
+      "report_data.time_tracking_enabled — present only with is_print/sections, not declared anywhere in the schema (same as preprod)."
+    ]
+  },
+  "notes": "PREPROD (tests/live/runs/tm/get_report_detail.json): DRIFT — data.mail_to declared-required-but-absent was not the headline finding there (preprod's file centered on report_data's undeclared drilldown-replacement shape and the is_dynamic/filters prose gap); this prod run additionally nails down the data.mail_to / 7-undeclared-fields pattern and ties it explicitly to the create_report_by_integer_id/update_report shared-serializer finding (tests/live/findings/create_report.md and runs/tm/{create_report_by_integer_id,update_report}.json), which prod now confirms extends to this read capability. PROD RESULT: DRIFT reproduces.\n\n1) ID-FORM TRAP: REAL and confirmed sharply on real prod data. list_reports exposes only 'SC-12541'; stripping the prefix gives 12541, but the true integer id (from list_schedules) is 95008 — a difference of tens of thousands, because SC-NNN is a per-group sequence number unrelated to the row id. A caller who strips the prefix gets a 404 or (worse) a different report entirely if some other report happens to have id 12541 in a different group. Only list_schedules exposes id+identifier together, exactly as preprod's guidance says.\n\n2) BARE vs SECTIONS: confirmed on real, non-trivial prod data. Bare call (report_id 95008, no query): report_data.test_run_data populated ({active:17,closed:0,test_cases:139,test_results:141}); issues_data/test_run_status/test_cases_status/issues_by_status/issues_by_priority/time_tracking/estimated_vs_actual all null. Same call with sections=test_run_data,issues_data,test_run_status,test_cases_status,issues_by_status,issues_by_priority: every named section switched from null to a populated value — issues_data {total:0,...}, test_run_status {New:2,In_Progress:0,Under_Review:0,Rejected:0,Done:153,Closed:0}, test_cases_status a real 56-entry array of this group's configured result statuses (Passed:100, Failed:37, Retest:1, Conditionally Passed:1, rest 0), issues_by_status/issues_by_priority both moved from null to real (empty) arrays []. time_tracking/estimated_vs_actual, NOT named in sections, stayed null. This is exactly the documented 'null means NOT COMPUTED' behavior, verified with real non-zero counts rather than an empty project.\n\n3) report_data_only TRAP: verified true with the literal string 'false'. report_data_only=\"false\" on report_id 95008 returned only the bare report_data object ({test_run_data, issues_data:null, ...}) — no data, no report_filters, no project, no envelope at all. This is truthy-string coercion exactly as documented; it is confirmed real, not merely asserted by the docs.\n\n4) is_print=true: CONFIRMED to actually force all sections, on BOTH report types, and is NOT a silent no-op (unlike update_filter's inert entity / minify). Test Run Summary (95008): is_print=true populated test_run_data, issues_data, test_run_status, test_cases_status (56-entry array), user_result_stats, issues_by_status, issues_by_priority, AND time_tracking ({total_elapsed_seconds:0, cases_with_elapsed:0, cases_in_scope:2}) and estimated_vs_actual ([]) plus the undeclared time_tracking_enabled:false — the last two sections never appear even when sections= names everything except them, so is_print visibly does more than a hand-picked sections list. Test Plan Summary (94997): compared bare (report_data: {test_plans_execution_trend_list: []} — a SINGLE key, everything else absent) against is_print=true (report_data: 12 keys — test_plans_near_completion, overdue_test_plans, test_run_data, test_plans_progress, test_plans_execution_trend_list, test_plans_execution_trend_graph, test_result_user_stats, test_run_requirements, test_result_defects, defects_by_status, defects_by_priority, test_run_status). The values are mostly 0/[] because this Test Plan Summary genuinely has no qualifying test-plan activity in its last_one_month window (test_plans_progress.total_count:0), but the KEY SET size (1 -> 12) is the proof is_print did real work, independent of whether the underlying counts happen to be zero — distinguishing 'is_print is a no-op' from 'is_print computed real zeros' cleanly.\n\n5) Defects Summary / Defects Detailed Report: CONFIRMED ABSENT from this project (list_schedules q[query]=Defects -> total_report_count:0). Per the capability's own guidance these types always read back report_data:null with no data branch at all; that specific null-forever behavior could not be exercised here because no such report exists in this project to read — recorded as an honest absence, not conflated with a wrong section name (which would 400, not silently return null).\n\n6) tr_drilldown 401 — NEW PROD-ONLY FINDING, not present in the preprod run: sections=tr_drilldown&widget_type=active_runs (and widget_type=tcs_by_status) on report 95008, and again on an unrelated second Test Run Summary report (94963, SC-12533), both consistently returned HTTP 401 {\"success\":false} — reproduced 4 times across 2 reports and 2 widget_types, with no other call in this session (bare, sections, is_print, or a DIFFERENT drilldown type) ever 401ing. tc_activity_drilldown on a Test Case Activity report (94964) in the SAME project succeeded normally (200, real paginated rows, total:7/rows.length:7/info:{page:1,page_size:7} all consistent). So drilldowns are not uniformly broken — this is specific to tr_drilldown on Test Run Summary reports in this environment/session. Preprod's get_report_detail run got a clean 200 with 30 rows for the identical sections=tr_drilldown&widget_type=active_runs combination — so this is a genuine PREPROD-VS-PROD BEHAVIORAL DIFFERENCE, not a repeat of a known preprod defect. Cause not diagnosed (could be a permission scope this session/user lacks specifically for tr_drilldown, or a real regression) — reported as an observed, reproducible fact per the shallowest-missing-path rule, without further downstream guessing. COUNT-VS-ROWS / PAGINATION for tr_drilldown could NOT be exercised on prod as a result (BLOCKED for that specific sub-check); the tc_activity_drilldown call that did succeed showed count(total)=7 exactly equal to rows.length=7, consistent, and correctly not something to sum into any other total.\n\n7) SHARED-SERIALIZER CHECK (the 'ALSO CHECK' item): data.mail_to is declared required in get_report_detail's own schema and is absent from data in every single call made here, on two different report types — this is the identical gap create_report_by_integer_id/update_report showed on preprod (data.mail_to required-but-absent). The SAME 7 undeclared fields (updated_at, project_ids, included_projects, is_dynamic, grain, slack_notification, slack_notification_supported) also appear on data here, matching create_report_by_integer_id/update_report's undeclared_returned list exactly. This is strong evidence the shared-serializer problem is not confined to the two write capabilities — it extends to this read capability too, since get_report_detail almost certainly re-serializes the same underlying report record through the same code path. Notably, the SIBLING v2 listing (list_reports) DOES include mail_to on every row ({\"users\":[],\"external_mails\":[]}) — so the field exists and is queryable, it is simply dropped by whatever serializer get_report_detail (and create_report_by_integer_id/update_report) share, which v2's serializer does not share.\n\nCOUNT-VS-ROWS elsewhere: list_schedules info.count (1197) matches total_report_count (1197) exactly, both matching the true number of rows across all pages — no drift there. Drilldown rows (tc_activity_drilldown) were correctly treated as a page of items, not summed.\n\nno write, no email: only read capabilities and list_* discovery reads were invoked. send_report_email_now was never called and no parameter on any of these calls was touched that could plausibly trigger a send (mail_to, frequency, frequency_details were never set — they are absent/null throughout, and this capability has no send-adjacent parameter at all)."
+}

@@ -1,0 +1,46 @@
+{
+  "capability": "get_user_workload_drilldown",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T10:54:53Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "get_user_workload_drilldown needs an integer report_id (path_params) belonging to a report whose stored report_type is 'User Workload Report' (per describeCapability guidance). list_reports's SC-NNN id is explicitly not accepted here; the v1 schedules listing is the call that returns the integer id and report_type side by side on the same record, so it both resolves SC-489's integer id and tells us the report's actual type before invoking.",
+      "source": "invoked",
+      "capability": "list_schedules",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": "3 reports in the project, all report_type 'Test Run Summary': id 10391/SC-491, id 10390/SC-490, id 10374/SC-489. No report of type 'User Workload Report' exists anywhere in this project. SC-489 -> integer report_id 10374, owner.id 2522 (matches the known user 'ing'/probe-user@example.invalid)."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "report_id": 10374 },
+        "body": { "user_id": 2522 }
+      },
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"Drill-down is only available for User Workload Reports\"}",
+      "changed": "n/a — deterministic reject on report_type; report 10374 (SC-489) is a Test Run Summary, not a User Workload Report, and no report of the required type exists in the read-only pool to substitute. No write capability is permitted this round to create one, so no further attempt can change the outcome. Stopped at 1 of 3 allowed attempts."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "report_id": 10374 },
+      "body": { "user_id": 2522 }
+    },
+    "status": 400,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id", "report_id", "user_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "UNVERIFIED, not a failure: this route only operates on a report whose stored report_type is 'User Workload Report' (describeCapability guidance: 'Only works on a report whose stored report_type is User Workload Report. Any other report is 400 Drill-down is only available for User Workload Reports'). The live pool for project 379335744/PR-2005 has exactly 3 reports (SC-489, SC-490, SC-491), all type 'Test Run Summary' — no User Workload Report exists, and this is a READ-ONLY round so none can be created to reach the 200 path. The 400 predicted by the docs was reproduced verbatim on the first attempt against SC-489 (report_id 10374), confirming the guard is live and its message matches exactly. No 200 was observed, so tcs/trs/days item shape, the 403-for-Member-role rule, the 422 user_id validation, and the 'undeclared/missing fields' contract checks are all unverified — only the 400 report-type-guard path was exercised. Error-envelope drift observed (informational, not applied to contract.* since no 200 was ever seen): describeCapability's 400 schema declares a nested envelope {success, error:{code, message, details}}, but the actual body is flat — {success:false, message:'...'} — with no 'error' object and no 'code' field at all. This matches the session's broader pattern of declared error envelopes not matching reality (here: a bare {success,message} where a nested {success,error:{code,message,details}} was declared)."
+}

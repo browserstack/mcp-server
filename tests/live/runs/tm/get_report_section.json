@@ -1,0 +1,61 @@
+{
+  "capability": "get_report_section",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T10:55:09Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "list_reports gives only the SC-NNN identifier; this route needs the integer report_id, which list_reports's own guidance says only list_schedules exposes (id + identifier side by side)",
+      "source": "invoked",
+      "capability": "list_schedules",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"q[query]": "Test Run Summary"}},
+      "status": 200,
+      "produced": {"report_id": 10374, "identifier": "SC-489", "report_type": "Test Run Summary", "report_timeframe": "last_one_week"}
+    },
+    {
+      "step": 2,
+      "why": "confirm SC-489 is the pool's only report and matches the described config (Test Run Summary, last_one_week, empty filters), as instructed",
+      "source": "invoked",
+      "capability": "list_reports",
+      "arguments": {"path_params": {"project_id": "PR-2005"}, "query": {"page_size": 30}},
+      "status": 200,
+      "produced": {"total_report_count": 3, "matching_row": {"id": "SC-489", "report_type": "Test Run Summary", "report_timeframe": "last_one_week", "report_filters": {}}}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "report_id": 10374, "section_name": "not_a_real_section"}},
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"Invalid sections passed\"}",
+      "changed": "deliberate probe of the allow-list rejection path (not a fix-seeking retry) to record the actual error envelope; describeCapability declares no schema at all for 400 (only 401/403/404/500 carry the standard {success,error:{code,message,details}} shape), so this cannot be diffed against a declared 400 shape — recorded verbatim for the record. Actual envelope is flat {success,message}, NOT the nested {success,error:{code,message,details}} shape used elsewhere in this capability's declared 401/403/404/500 responses, so if a 400 schema is ever added it should not simply reuse the standard envelope."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "report_id": 10374, "section_name": "test_run_data"}},
+    "status": 200,
+    "response_keys": ["test_run_data", "issues_data", "test_run_status", "test_cases_status", "user_result_stats", "issues_by_status", "issues_by_priority", "time_tracking", "estimated_vs_actual"],
+    "item_shape": {
+      "test_run_data": {"active": "int", "closed": "int", "test_cases": "int", "test_results": "int"},
+      "issues_data": "null (not computed — this section was not requested)",
+      "test_run_status": "null (not computed)",
+      "test_cases_status": "null (not computed)",
+      "user_result_stats": "[] (empty array — not requested, not computed)",
+      "issues_by_status": "null (not computed)",
+      "issues_by_priority": "null (not computed on this call; see second confirmation call below)",
+      "time_tracking": "null (not computed)",
+      "estimated_vs_actual": "null (not computed)"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "report_id (path, integer)", "section_name (path, string, allow-listed per report_type)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "The entire response body is undeclared: describeCapability's 200 schema is the literal empty object {\"type\":\"object\"} — no properties are declared at all, so every key returned (test_run_data, issues_data, test_run_status, test_cases_status, user_result_stats, issues_by_status, issues_by_priority, time_tracking, estimated_vs_actual, and all nested fields) is technically undeclared."
+    ]
+  },
+  "notes": "KNOWN-UNFALSIFIABLE CONTRACT, CONFIRMED STILL TRUE: describeCapability's declared 200 schema for get_report_section is still the bare literal {\"type\":\"object\"} — no properties, so nothing is declared to disagree with. This cannot register a clean PASS by the response-schema alone; recording the real shape below since the contract declares none.\n\nACTUAL 200 SHAPE (verified live, Test Run Summary / SC-489 / project 379335744): the body is a flat object keyed by EVERY section name valid for the report's type (test_run_data, issues_data, test_run_status, test_cases_status, user_result_stats, issues_by_status, issues_by_priority, time_tracking, estimated_vs_actual for Test Run Summary), regardless of which single section_name was requested in the path. Only the requested section is actually computed; every other key comes back null (or [] for user_result_stats, which defaults to an empty array rather than null). Verified with two calls: requesting section_name=test_run_data returned test_run_data populated ({active:30, closed:0, test_cases:116, test_results:1}) with all eight other keys null/[]; requesting section_name=issues_by_priority on the identical report returned issues_by_priority=[] populated (test_run_data now null, all others unchanged).\n\nPROSE-VS-BEHAVIOR DRIFT (the reason this is scored DRIFT and not UNVERIFIED): describeCapability's own guidance text states the response is \"just the section object keyed by the section name\" (singular) — i.e. a one-key object. The verified live response is instead a fixed multi-key object covering the report type's whole section set, with the unrequested keys nulled out rather than absent. This is a real, provable disagreement between the capability's documented behavior and its actual behavior — independent of, and in addition to, the separate unfalsifiable-schema problem. Either half of the prose could be considered 'wrong': the description undersells the payload (claims one key, ships nine), or the implementation over-returns relative to what report_data_only was documented to produce.\n\nEMPTY-CASE RULE APPLIED: distinguishing 'works, returned empty' from 'shape unverified'. test_run_data is CONFIRMED non-trivially populated with real integers (active:30, closed:0, test_cases:116, test_results:1) — the pool project has some executed data after all, so this is a true positive read, not a masked failure. issues_by_priority came back as [] when it was the requested section — this is the 'endpoint works, returned an empty section' case (a real computed empty result, not null/not-computed), but because it has zero items the ARRAY ITEM SHAPE for issues_by_priority (and by extension any other list-typed section) remains UNVERIFIED — we know the container is an array, not what a populated row looks like. No drilldown section (tr_drilldown, needs widget_type) was probed in this pass; its shape is UNVERIFIED.\n\nCONTAINER TYPES OBSERVED (relevant to the 'declared array, actual map' watch item): within the single Test Run Summary payload, sections mix container types — test_run_data is an object/map, user_result_stats and issues_by_priority are arrays. No declared per-field schema exists to check these against (see unfalsifiable-contract note above), so this is recorded as observed fact only, not as a confirmed container-type drift for THIS capability.\n\nERROR ENVELOPE: an invalid section_name correctly returns 400 with message 'Invalid sections passed', matching the prose guidance's exact wording. The envelope itself is flat {success:false, message:string}, not the nested {success:false, error:{code,message,details}} shape describeCapability declares for this same capability's 401/403/404/500 responses — but describeCapability declares NO schema at all for 400, so this is not a contract violation, just a fact worth recording per this session's running note that declared error shapes have only sometimes matched reality.\n\nSETUP CHAIN CONFIRMS ANOTHER CAPABILITY'S OWN GUIDANCE: list_reports's SC-489 row (report_filters: {}) matches the task's stated pool config exactly (Test Run Summary, last_one_week, empty filters), and list_schedules independently resolved report_id 10374 for the same identifier — no discrepancy between the two listings for this report."
+}

@@ -1,0 +1,83 @@
+{
+  "capability": "bulk_move_test_cases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:15:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project/case scope, per campaign ledger: TC-54487 (1985021) had already been proven movable and was sitting in 765811 (moved there from __scratch__/764138 by a prior, differently-scoped attempt). This probe picks up the untested parts: verify-both-ends, bogus destination, partial failure.",
+      "source": "pool/task",
+      "capability": null,
+      "produced": { "project_id": 379335744, "folder_id_764093": "__readonly__ (never touched)", "folder_id_764138": "__scratch__", "folder_id_764828": "holds TC-54458/1975349, evidence case (never touched)", "folder_id_765811": "holds TC-54487/1985021, TC-54490, TC-54491; has subfolder 765817" }
+    },
+    {
+      "step": 2,
+      "why": "baseline folder-count read of source (765811) and destination-subfolder (765817), taken BEFORE any write, so post-move counts have a real number to diff against instead of trusting the task's stated baseline blind",
+      "source": "invoked",
+      "capability": "list_folder_contents",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 765811 } },
+      "status": 200,
+      "produced": { "765811": { "cases_count": 3, "total_cases_count": 3, "sub_folders_count": 1 }, "765817": { "cases_count": 0, "total_cases_count": 0, "sub_folders_count": 0 } }
+    },
+    {
+      "step": 3,
+      "why": "confirm TC-54487's actual current folder before touching it (belt-and-braces on top of the ledger's claim)",
+      "source": "invoked",
+      "capability": "get_test_case_by_integer_id",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 765811, "test_case_id": 1985021 } },
+      "status": 200,
+      "produced": { "identifier": "TC-54487", "test_case_folder_id": 765811 }
+    },
+    {
+      "step": 4,
+      "why": "first invocation attempt used the nested shape describeCapability's json_path implies (body.test_case.{ids,destination_folder_id}). Rejected client-side by invokeCapability itself, before reaching the API: 'unknown body: test_case ... send the fields directly instead of nesting them'. Corrected to a flat body ({folder_id, ids, destination_folder_id}) for every real attempt below. Worth flagging: describeCapability's json_path notation (/test_case/destination_folder_id etc.) describes the WIRE shape the surface builds for you, not the shape invokeCapability's body argument itself accepts — sending it nested is a guaranteed, immediate 'unknown body' rejection.",
+      "source": "invoked",
+      "capability": "bulk_move_test_cases",
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "folder_id": 765811, "test_case": { "ids": [1985021], "destination_folder_id": 765817 } } },
+      "status": "ok:false (client-side)",
+      "produced": null
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "folder_id": 765811, "ids": [1985021], "destination_folder_id": 765817 } },
+      "status": 200,
+      "error": null,
+      "changed": "Moved TC-54487 (1985021) from folder 765811 into its subfolder 765817. Verified both ends: response's own destination_path_folders showed 765811 cases_count 3->2 (total_cases_count 3, sub_folders_count 1) and 765817 cases_count 0->1 (total_cases_count 1) in the SAME payload; a fresh list_folder_contents(765811) read immediately after independently confirmed the identical numbers (765811 cases_count:2/total_cases_count:4-incl-subfolder/sub_folders_count:1; 765817 cases_count:2/total_cases_count:2 — the extra +1 on 765817 at that later read is explained in notes, it is NOT from this move). A direct re-read of the case (get_test_case_by_integer_id, folder 765817) confirmed test_case_folder_id:765817 and links pointing at /folder/765817/test-cases/1985021."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "folder_id": 765817, "ids": [1985021], "destination_folder_id": 999999999 } },
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"The API request is invalid or improperly formed\"}",
+      "changed": "Nothing moved. Re-read of TC-54487 (folder 765817) immediately after showed the case untouched: same folder (765817), same identifier, same links. This is the highest-value experiment in this probe: create_bulk_test_cases, given the same kind of bogus folder id (999999999), silently discarded it and filed the new case into a fallback 'path' folder anyway (200, no signal). bulk_move_test_cases does NOT do that — a nonexistent destination_folder_id is hard-rejected with a 400 before any case is touched. A move landing cases somewhere the caller never asked for would have been worse than create's behavior; that did not happen here."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "folder_id": 765817, "ids": [1985021, 999999999], "destination_folder_id": 764138 } },
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "One valid id (1985021, TC-54487) paired with one nonexistent id (999999999), destination 764138 (__scratch__). Whole call failed with an undeclared, bare 404 - no message, no partial application. Re-read of TC-54487 immediately after confirmed it was NOT moved: still folder 765817, history_count and updated_at unchanged from the previous read (i.e. this call did not even touch the valid case's record). This is a THIRD distinct partial-failure behavior on record for this campaign: create_bulk_test_cases silently half-succeeds under 200; bulk_set_test_case_assignee_in_run fails the whole call with an undeclared 502; bulk_move_test_cases fails the whole call with an undeclared, bare 404. None of the three declare the status they actually return for this case (400/401/403/422/500 are bulk_move's declared error set - 404 is not among them for THIS body-validation-ish failure, as opposed to the legitimate 404 the capability doc reserves for other conditions)."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "body": { "folder_id": 765811, "ids": [1985021], "destination_folder_id": 765817 } },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "info", "cases_count", "destination_path_folders", "folders"],
+    "item_shape": ["assignee", "creator_details", "created_at", "updator_details", "updated_at", "case_type", "priority", "status", "automation_state", "is_shared", "case_type_imported", "description", "custom_fields", "estimate", "estimated_duration_seconds", "expected_result", "id", "identifier", "is_automation", "links", "name", "history_count", "owner", "preconditions", "owner_imported", "attachments", "priority_imported", "project_id", "status_imported", "steps", "tags", "template", "template_step_type", "template_id", "template_name", "test_case_folder_id", "step_count", "test_case_steps", "lcnc_build_map", "automation_status", "test_run_results_count", "test_run_results_issues_count", "issues", "metadata", "test_case_dataset", "duplicates_tc_count"]
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": "$.source_path_folders",
+    "declared_missing": ["source_path_folders — declared as present 'only when the request scoped a source folder', and this call DID send a source-scoping top-level folder_id (765811); the key was absent from the 200 body entirely, not merely null or empty."],
+    "undeclared_returned": [
+      "folders — a top-level breadcrumb map (folder id -> ancestor-chain array) not in the declared response shape at all. Present on every synchronous 200.",
+      "destination_path_folders[].group_id is a quoted STRING (\"3452\") in the live response; the declared schema types it as an integer. Every other id-shaped field on the same objects (id, project_id, parent_id) came back as a plain JSON integer, and no id/parent_id-as-string was reproduced here (matching the campaign's prior non-reproduction on create_sub_folder) - the drift is narrowly on group_id.",
+      "destination_path_folders[] items also carry notes, identifier, created_at, updated_at, deleted, source, entity_type - none declared in the schema (which only lists id/project_id/group_id/name/is_automation/sub_folders_count/links/cases_count/total_cases_count); conversely the declared links field was absent from every destination_path_folders item actually returned."
+    ]
+  },
+  "notes": "PRIMARY DOC DRIFT: describeCapability's own description of the 200 response says a synchronous move 'renders the refreshed SOURCE listing'. It does not. The test_cases array returned (info.count:29, page_size:30) was the PROJECT-WIDE listing across every folder in project 379335744 (764093:2, 764138:23, 764828:1, 765811:2, 765817:1 - counted directly off each row's test_case_folder_id, summing to 29) not a listing scoped to source folder 765811 alone (which only holds 2 cases post-move). An agent trusting the doc to read only-the-source-folder's-cases out of this response will silently over-read the whole project instead.\n\nHIGH-VALUE EXPERIMENT RESULT (bogus destination_folder_id, attempt 2): unlike create_bulk_test_cases (which silently discarded 999999999 and filed the new case into a fallback folder under a plain 200, no signal), bulk_move_test_cases hard-rejects a nonexistent destination_folder_id with 400 {success:false, message:'The API request is invalid or improperly formed'} and moves nothing. This is the safer of the two behaviors on record - the case stays exactly where it was rather than landing somewhere the caller never asked for.\n\nPARTIAL-FAILURE RESULT (attempt 3): mixing one valid id with one nonexistent id (destination 764138) failed the ENTIRE call with a bare, undeclared 404 {success:false} - no message, no skipped-id signal, no partial application. The valid case (TC-54487) was verified unmoved and untouched (folder, history_count and updated_at unchanged vs. the immediately-prior read). This is a third distinct partial-failure shape for the campaign ledger, alongside create_bulk_test_cases's silent-200-half-success and bulk_set_test_case_assignee_in_run's whole-call 502 - none of the three sibling write capabilities agree on how a batch with one bad id should fail, and none of the three failure statuses (200/502/404) is the one the respective capability declares for this condition.\n\nVERIFIED BOTH ENDS (attempt 1, the base move): this had never been checked anywhere in the campaign before. The move's own response body (destination_path_folders) and an independent list_folder_contents read taken right after it agreed exactly: source 765811 cases_count 3->2 (sub_folders_count unchanged at 1, total_cases_count 3->4 once the +1 on the subfolder is included), destination 765817 cases_count 0->1. Both ends check out; the move is real and the counts are internally consistent.\n\nCONCURRENT-WRITE ANOMALY (does not implicate bulk_move_test_cases): between attempt 1 and the final list_folder_contents(765811) read, folder 765817's cases_count rose again, from 1 to 2, and list_folder_test_cases(765817) showed a SECOND case present - TC-54502 (1985215), name '__mcp-probe-createcases-20260921-1', tags:['mcp-probe'] - which none of this probe's calls ever referenced (this probe only ever touched 1985021 and a fabricated 999999999). Reading that case directly shows created_at:2026-09-22T05:12:06Z, i.e. DURING this session's run window (after attempt 2's read, before attempt 3's), while its updated_at reads 2026-09-21T13:34:53Z - older than its own created_at, itself a small internal inconsistency on that record. Conclusion: some other actor (almost certainly a still-live create_bulk_test_cases probe process from the prior, outage-interrupted campaign attempt, now that preprod v1 is back up) wrote into the SAME destination folder concurrently with this probe. This is flagged for the record and explicitly NOT attributed to bulk_move_test_cases - TC-54487's own folder and audit fields (history_count, updated_at) never moved except during attempt 1, proving this capability did not cause the extra row.\n\nENTITLEMENT/STATUS-0/OUTAGE CHECK: no call in this probe returned status 0 or a 200 {success:false} entitlement gate; all three real attempts returned clean, distinguishable HTTP statuses (200/400/404). No retry-on-outage situation arose.\n\nRESIDUAL STATE at end of probe: TC-54487 (1985021) sits in folder 765817 (moved there in attempt 1; attempts 2 and 3 both no-op'd, confirmed by re-read). It was deliberately left there rather than forced back to 764138, since the failed return-attempt (n=3) was itself the partial-failure experiment and re-trying it purely to restore state risked masking that result; TC-54487 keeps its id and TC-NNN identifier regardless of folder, so this remains trivially reversible."
+}

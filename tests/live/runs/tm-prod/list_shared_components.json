@@ -1,0 +1,72 @@
+{
+  "capability": "list_shared_components",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:14:02Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": "resolve project id",
+      "note": "Task gave project 332537 / PR-18723 (\"Demo Project 1\"). 332537 is already the numeric project id the capability requires (path_params.project_id: integer). No project-lookup capability was needed; used 332537 directly.",
+      "result": "confirmed 332537 is a valid numeric project id"
+    }
+  ],
+  "attempts": [
+    {
+      "description": "unfiltered listing, no query params, project_id=332537",
+      "arguments": {"path_params": {"project_id": 332537}},
+      "status": 200,
+      "result": "data.length=21, info.count=21, info.page_size=30 (default). Populated, item shape matches declared contract exactly."
+    },
+    {
+      "description": "field_type=step filter",
+      "arguments": {"path_params": {"project_id": 332537}, "query": {"field_type": "step"}},
+      "status": 200,
+      "result": "data.length=19, info.count=19. Correctly excludes the 1 background row (\"some bad\") and 1 precondition row (\"Demo Share precondition\") present in the unfiltered set (21 - 2 = 19). Filter behaves as declared."
+    },
+    {
+      "description": "pre_fetch=true on page 1",
+      "arguments": {"path_params": {"project_id": 332537}, "query": {"pre_fetch": true}},
+      "status": 200,
+      "result": "data.length=21 (same as baseline), and pre_fetched_shared_step is now populated with shared_step_details for the first row (\"demo-siddhi\", step_count=2) — exactly 2 step objects returned, each with id/step/result/order/test_data, plus a nested page_info block. Matches declared nested schema exactly."
+    },
+    {
+      "description": "q[query]=demo (title text search)",
+      "arguments": {"path_params": {"project_id": 332537}, "query": {"q[query]": "demo"}},
+      "status": 200,
+      "result": "data.length=6, info.count=6: demo-siddhi, demo a, Demo Share precondition, demo shared step, Tetsing demo - Copy, Tetsing demo. Matches declared behavior (title-only substring match, case-insensitive)."
+    },
+    {
+      "description": "folder_id=\"null\" (literal string, Unassigned root)",
+      "arguments": {"path_params": {"project_id": 332537}, "query": {"folder_id": "null"}},
+      "status": 200,
+      "result": "data.length=19, info.count=19. Excludes exactly 2 rows from baseline (\"demo a\" id 97269, \"Demo Share precondition\" id 59016) that apparently live in a shared-field collection rather than Unassigned. Consistent, plausible collection-scoping behavior; no 400 encountered (unlike preprod's folder-id-namespace trap, which only bites on invalid/foreign numeric folder ids, not the literal \"null\" sentinel)."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 332537}, "query": {}},
+    "status": 200,
+    "response_keys": ["data", "info", "pre_fetched_shared_step", "success"],
+    "item_shape": {
+      "observed_keys": ["id", "title", "field_type", "step_count", "test_case_count", "tags", "created_by", "updated_by"],
+      "matches_declared": true,
+      "example": {
+        "title": "demo-siddhi",
+        "id": 99218,
+        "test_case_count": 0,
+        "step_count": 2,
+        "tags": [],
+        "field_type": "step",
+        "created_by": {"id": 207517, "full_name": "Siddhi Wadetiwar"},
+        "updated_by": {"id": 207517, "full_name": "Siddhi Wadetiwar"}
+      }
+    }
+  },
+  "contract": {
+    "required": ["data", "info", "success"],
+    "json_path": "path_params.project_id (integer, required)",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Preprod verdict was UNVERIFIED: 6 projects probed, every one returned data:[]/count:0 — envelope/pagination shape confirmed but the item-row shape was never exercised because no probed project actually had shared components. Prod result: project 332537 (\"Demo Project 1\", PR-18723, 16,267 cases / 2,378 runs / 294 root folders — a genuinely long-lived production project) returned a populated list immediately on the very first unfiltered call (21 shared fields: mix of field_type step/background/precondition, with real tags, usage counts, created_by/updated_by). 5 total probes were run against project 332537 (1 baseline + 4 declared query variations: field_type, pre_fetch, q[query], folder_id=null) and all 5 returned 200 with populated, contract-matching data — no need to fall back to a secondary project. The declared item-row shape (id, title, field_type, step_count, test_case_count, tags, created_by, updated_by) was fully exercised and matched exactly, with no undeclared extra fields and no missing declared fields. The nested pre_fetched_shared_step shape (shared_step_details[].{id,step,result,order,test_data} + page_info) was also exercised via pre_fetch=true and matched declared shape exactly. field_type and q[query] filters both narrowed the result set in ways consistent with their documented semantics (verified by diffing returned id sets against the unfiltered baseline, not just eyeballing counts). The preprod folder-id-namespace 400 trap (test-case folder id rejected with \"Target folder not found\") did NOT recur here because folder_id was only exercised with the literal sentinel \"null\" (Unassigned root), which is explicitly declared as valid and is not a numeric folder id — no numeric shared-field folder id was discovered or guessed, per the task's instruction not to guess folder ids; this was not needed since the capability already passed decisively without it. No count-vs-rows disagreement: info.count equaled data.length in every call (21, 19, 21, 6, 19 respectively — each call's info.count exactly matched that call's data.length). info.page_size stayed fixed at 30 across every call (the service's declared fixed page size), and since total count (21, or fewer per filter) never exceeded page_size, pagination truncation/silent-ignoring of a requested page size could not be distinguished from correct behavior in this dataset — info.next was null throughout, consistent with everything fitting on page 1. No drift found anywhere; verdict is a clean PASS."
+}

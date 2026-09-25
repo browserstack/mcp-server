@@ -1,0 +1,46 @@
+{
+  "capability": "get_test_plan_execution_trend",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "preprod_reference": {
+    "run_file": "tests/live/runs/tm/get_test_plan_execution_trend.json",
+    "verdict": "DRIFT",
+    "reasons": [
+      "Declared 200 schema types test_plans_execution_trend_graph as a bare {type:object} placeholder with no properties.",
+      "Actual response is an ARRAY of {name, data} series objects — container mismatch (object declared, array returned).",
+      "Each series' data is itself an array of 2-element POSITIONAL tuples [date_string, count], not objects with named fields — same family as get_closed_test_runs_info and get_issues_count_info.",
+      "Exercised on preprod with one real datapoint (['2026-09-17', 1]) on a plan chosen specifically because it was one of only two plans with any activity."
+    ]
+  },
+  "setup": [
+    { "step": 1, "why": "resolve a plan with real, substantial trend history", "source": "invoked", "capability": "list_test_plans_by_integer_id", "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1 } }, "status": 200, "produced": { "test_plan_id": 181340, "identifier": "TP-4011", "test_plan_progress_v2": "982101(Failed):2, 982105(Untested):16430" } },
+    { "step": 2, "why": "also scope by test_run_id, to check the mutually-exclusive alternate scoping path", "source": "pool", "capability": null, "produced": { "test_run_id": 74986280, "note": "TR-5394831, a run with test_cases_count=0" } }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "query": { "test_plan_id": 181340 } },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "data.test_plans_execution_trend_graph": [
+        { "name": "Untested", "data": [["2026-08-11T00:00:00Z", 16432], ["2026-08-12T00:00:00Z", 16431], ["2026-08-21T00:00:00Z", 16430], ["2026-09-08T00:00:00Z", 16430], ["2026-09-09T00:00:00Z", 16430]] },
+        { "name": "Failed", "data": [["2026-08-11T00:00:00Z", 0], ["2026-08-12T00:00:00Z", 1], ["2026-08-21T00:00:00Z", 2], ["2026-09-08T00:00:00Z", 2], ["2026-09-09T00:00:00Z", 2]] }
+      ]
+    }
+  },
+  "secondary_probe_test_run_id_scoping": {
+    "arguments": { "path_params": { "project_id": 332537 }, "query": { "test_run_id": 74986280 } },
+    "status": 200,
+    "result": { "data.test_plans_execution_trend_graph": [{ "name": "Untested", "data": [["1970-01-01", 0]] }] },
+    "note": "Confirms the mutually-exclusive test_run_id scoping path also works and returns the same {name,data[[...]]} shape; on a 0-test-case run it degrades to a single epoch-anchored zero point rather than an empty array or an error — an edge-case worth knowing about but not itself a contract violation (the container/point shape is unchanged)."
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": ["The declared schema for test_plans_execution_trend_graph is a bare {type:object} with no properties — it does not declare an array, a name/data series shape, or the inner point shape. Same gap on prod as on preprod."],
+    "undeclared_returned": ["name (series label, e.g. \"Untested\"/\"Failed\" — a result-status name, undocumented)", "data (per-series array of [date_string, count_int] positional pairs, undocumented)"]
+  },
+  "notes": "PREPROD VERDICT REPRODUCES, and this time with real high-volume production data rather than a single deliberately-chosen datapoint on a mostly-empty fixture. Plan 181340 (Test Plan - 10/08/2026, 16,432 total statuses) returns a real 5-point time series across two named series (Untested, Failed) — both series use the exact same declared-object/actual-array container mismatch and the exact same positional [date,count] point shape preprod found. This is a stronger confirmation than preprod's single-point check: the positional-array bug is not an edge-case artifact of a nearly-empty plan, it is the shape for a genuinely populated, weeks-long trend on a project with 16k+ test cases. The test_run_id-scoped variant (mutually exclusive with test_plan_id) was also exercised and shows the same container/point shape, degrading gracefully to a single epoch-anchored zero point on a 0-case run rather than erroring or returning an empty array — worth noting for anyone consuming this on a fresh/empty run, but not a new defect. No 400 for missing/both ids was tested here (out of scope for this recheck — already documented and not part of the DRIFT verdict being rechecked)."
+}

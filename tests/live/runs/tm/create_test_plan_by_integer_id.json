@@ -1,0 +1,83 @@
+{
+  "capability": "create_test_plan_by_integer_id",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:28:54Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm the declared call shape and required fields before invoking, and cross-check the pool's stated project baseline (PR-2005 / 29 test plans).",
+      "source": "describeCapability",
+      "capability": "create_test_plan_by_integer_id",
+      "status": "n/a (describe, not invoke)",
+      "produced": {
+        "required": ["name (body)", "project_id (path)"],
+        "mode": "write",
+        "guidance_claim": "\"Every field goes inside a `test_plan` object. A flat body is rejected before any field is read.\" (contradicted live — see attempts)"
+      }
+    },
+    {
+      "step": 2,
+      "why": "After all create attempts failed with 500, re-list the project's test plans to confirm no plan was silently created server-side despite the 500 (rule out a leaked/orphan resource) and to confirm the pool's stated baseline count.",
+      "source": "invoked",
+      "capability": "list_test_plans_by_integer_id",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": {
+        "count": { "active": 29, "completed": 0 },
+        "matches_pool_baseline": true,
+        "plan_named___mcp-probe-createplan-20260921_present": false,
+        "conclusion": "No plan was created. The 500s are true failures, not a success-with-bad-response-envelope."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "name": "__mcp-probe-createplan-20260921", "test_runs": [17575382] }
+      },
+      "status": 500,
+      "response_verbatim": { "ok": false, "completed": false, "http_response": { "status": 500, "body": { "status": 500, "error": "Internal Server Error" } } },
+      "note": "Flat body (no test_plan wrapper), test_runs as bare integer uuid array. This is the shape invokeCapability's own body-name validator later confirmed as correct (attempt 2) — so this was a structurally valid request that still 500'd."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "test_plan": { "name": "__mcp-probe-createplan-20260921", "test_runs": [17575382] } }
+      },
+      "status": null,
+      "response_verbatim": { "ok": false, "error": "unknown body: test_plan. accepted: attachments, custom_fields, description, end_date, issues, name, owner, parent_plan_id, plan_status, reviewers, start_date, tags, test_runs. test_plan is a wrapper this surface builds for you from each field's json_path — send the fields directly instead of nesting them" },
+      "note": "Rejected client-side (never reached the live API). CONFIRMS THE JSON_PATH WRAPPER TRAP: describeCapability's json_path values (/test_plan/name, etc.) and its own prose guidance ('Every field goes inside a test_plan object... A flat body is rejected') both say to wrap under `test_plan`. The real call shape is flat, top-level fields — exactly backwards from the guidance text."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "name": "__mcp-probe-createplan-20260921", "test_runs": [17575382] }
+      },
+      "status": 500,
+      "response_verbatim": { "ok": false, "completed": false, "http_response": { "status": 500, "body": { "status": 500, "error": "Internal Server Error" } } },
+      "note": "Identical retry of attempt 1 to rule out a transient blip. Reproducible: same 500, same minimal body shape."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": { "name": "__mcp-probe-createplan-20260921", "test_runs": [17575382] }
+    },
+    "status": 500,
+    "response_keys": ["status", "error"],
+    "item_shape": "n/a — no test_plan object was ever returned; all 3 attempts either failed client-side (unknown body key) or 500'd before any plan-shaped payload came back."
+  },
+  "contract": {
+    "required": ["name"],
+    "json_path": "/test_plan/name (and sibling /test_plan/* for every other body field) — NOT the call shape. Wrapping under test_plan is rejected client-side ('unknown body: test_plan'); the real shape is flat top-level fields, confirmed by the exhaustive accepted-keys list in attempt 2's error.",
+    "declared_missing": "n/a — never reached a 200, so the declared success shape (test_plan.*) could not be exercised at all. Shallowest missing path: the entire /test_plan success payload is missing — the endpoint returns nothing under the declared 200 schema on any of 3 attempts.",
+    "undeclared_returned": "The actual 500 body {\"status\":500,\"error\":\"Internal Server Error\"} does not match ANY of the capability's 6 declared error shapes (400/401/403/404/422/500). The declared 500 shape is {success:false, error:{code, message, details}} (nested object, with success key); the real 500 body has no `success` key at all, and `error` is a bare string, not an object. Undeclared top-level key: `status` (duplicates the HTTP status inside the body)."
+  },
+  "notes": "VERDICT: BLOCKED. create_test_plan_by_integer_id could not create a test plan in 3/3 attempts against tm preprod, project PR-2005 (379335744). Two attempts sent a structurally-valid flat body (confirmed valid by invokeCapability's own accepted-keys error message) and both got a reproducible, undeclared HTTP 500 {status:500, error:'Internal Server Error'} — not one of the 6 documented error shapes. This is a genuine live defect on this route, not a probe-shape mistake: the setup-step re-list of the project (list_test_plans_by_integer_id, count.active=29, matching the pool's stated baseline) confirms no plan was created and none leaked — the 500s are real failures, not success-with-bad-envelope.\n\nJSON_PATH WRAPPER TRAP CONFIRMED (attempt 2): describeCapability's json_path values and its own prose guidance both explicitly instruct wrapping the body under a `test_plan` key ('Every field goes inside a `test_plan` object. A flat body is rejected before any field is read.'). Live behaviour is the opposite: the wrapped body is rejected client-side with 'unknown body: test_plan', and the flat body is the one invokeCapability accepts (it just then 500s server-side). An agent that followed the documented guidance verbatim on its first call would get a client-side rejection; an agent that then 'fixed' it by flattening would hit a 500 with no plan created — this route is unusable via the documented contract as written.\n\nSPECIFIC INTEREST — run-plan linkage at creation: UNVERIFIED, could not be determined. Both flat-body attempts included test_runs:[17575382] (TR-9062's integer uuid, per the contract's own stated form: 'run INTEGER ids (a run's uuid, not its TR-NNN id)'). The body-name validator in attempt 2 confirms `test_runs` IS a recognised field name for this route (it appears in the exhaustive 'accepted:' list), so the integer-uuid form was at minimum accepted at the field-name level — but since every attempt 500'd before any create response came back, it was never possible to confirm (a) whether the integer id form is actually honoured server-side, (b) whether a prefixed 'TR-9062' string would also be accepted, or (c) whether a successful create would reflect the link (test_runs_count / test_plan.test_runs). Given the 3-attempt cap was reached, this could not be isolated further (e.g. retrying without test_runs to see if it is specifically the linkage code path causing the 500, vs. some other server bug). This remains open and worth a dedicated follow-up probe with a fresh attempt budget: if create_test_plan_by_integer_id 500s even with test_runs omitted entirely, the defect is unrelated to run-linking; if it succeeds without test_runs, that would strongly implicate the run-attach code path as the crash source, corroborating the already-known read-side breakage (list_test_runs_by_integer_id never reporting test_plans despite metadata.test_plan_error='PLAN_LINKED' on TR-9061).\n\nENTITLEMENT-GATE PATTERN: NOT OBSERVED here. All three failures were real 500s (or a client-side shape rejection), never a 200 {success:false} — so this capability does not exhibit the '200-wearing-a-refusal' pattern seen elsewhere; the defect here is a distinct one (undeclared 500 envelope on structurally-valid input).\n\nNo plan was created, so there is nothing to clean up. No TP-NNN / integer plan id exists for __mcp-probe-createplan-20260921 under create_test_plan_by_integer_id — sibling v1 plan-route probes (get/update/list-by-id etc.) cannot chain off a plan created by this route and will need their own creation path (e.g. the already-working create_test_plan, which produced TP-1616..TP-1629 in this same project) if they need a live v1-created plan."
+}

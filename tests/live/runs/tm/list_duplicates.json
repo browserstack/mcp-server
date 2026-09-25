@@ -1,0 +1,32 @@
+{
+  "capability": "list_duplicates",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:30:05Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 }
+    },
+    "status": 200,
+    "response_keys": ["success", "duplicates", "info"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": ["last_scan_time"],
+    "undeclared_returned": []
+  },
+  "notes": "Contract: entity=duplicate, mode=read, single required path param project_id (INTEGER). No body/json_path -- this is a GET with only path_params and optional query filters (page, entity_id, duplicates=exact|semantic, owner; entity_type is accepted but ignored). Declared 200 schema: {success: boolean, duplicates: [object...], info: {count, total_pages}}. The capability's own guidance is explicit and pre-emptive about the exact scenario hit here: 'An empty list is ambiguous... This returns 200 with exactly {success:true, duplicates:[], info:{count:0,total_pages:0}} -- indistinguishable from a genuinely clean project.'\n\nInvoked with project_id=379335744 (fixture project, from the pool), no query filters (broadest possible scope: all duplicate types, all owners, page 1). Got exactly that ambiguous 200: {success:true, duplicates:[], info:{count:0,total_pages:0}}. Clean first-try call, no error/retry cycle, so `attempts` is empty.\n\nPer the empty-case rule (decisive here, as flagged): the 21 cases in PR-2005 are mostly probe-generated with distinct names, and this is a read-only round -- no dedupe scan could be triggered to manufacture a pair. The declared item shape for a duplicate row (id, ai_score, reason, duplicate_type, test_cases, identifier, folder_id, folder_path, title, description, owner_id, owner) was never exercised; only the empty-list envelope was confirmed. Verdict is UNVERIFIED, not PASS.\n\nTop-level envelope match: the three properties actually declared in the 200 *schema* (success, duplicates, info incl. count/total_pages) came back exactly as typed -- no drift there. Separately, the capability's `returns` summary (the flatter list of all fields the endpoint can surface) also names `last_scan_time` at the top level, but the 200 schema's own `properties` block does NOT include it, and it was not present in the actual response body either. Guidance explains this: last_scan_time 'is fetched separately and can be null when no scan has completed' -- i.e. it is documented as belonging to a different capability's response, not this one's, so listing it under list_duplicates's `returns` while omitting it from the 200 schema is itself a prose/schema-listing inconsistency in the contract, not a live-API drift. Recorded under declared_missing at the shallowest (top) level since the `returns` field asserts it is a field of this capability's output and the response never carries it.\n\nDedupe-ever-run signal (read-only, per instructions to report this if the list came back empty): list_duplicates's own response carries no last_scan_time or any other scan-history field -- by design, per its guidance, that data lives in a separate dedupe-status capability, not in this one. No other read-only evidence was gathered here (per the task's scope, that capability is being probed in parallel by a sibling); this capability alone cannot distinguish 'dedupe never run' from 'dedupe run, found nothing' from 'feature flag off' for project 379335744."
+}

@@ -1,0 +1,78 @@
+{
+  "capability": "list_test_plans",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T04:58:20Z",
+  "verdict": "PASS",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "379335744" },
+        "query": { "p": 1, "count": 300 }
+      },
+      "status": 0,
+      "error": "'project_id' must match ^PR-\\d+$",
+      "changed": "Client-side (MCP surface) rejection before any request reached the API, confirming the describeCapability note that the v2 route constrains project_id to PR-\\d+ and a bare integer id never reaches the API. Switched to the v2 identifier form PR-2005 for the next attempt."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "query": { "p": 1, "count": 300 }
+      },
+      "status": 0,
+      "error": "the product could not be reached",
+      "changed": "Environment outage signature (status 0, \"the product could not be reached\"), not a capability defect per prior-batch pattern. Retried the identical arguments unchanged."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "query": { "p": 1, "count": 300 }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "Unchanged retry of attempt 2 succeeded, matching the documented preprod intermittency pattern (retry unchanged, succeeds on a later identical attempt)."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005" },
+      "query": { "p": 1, "count": 300 }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_plans", "info"],
+    "item_shape": {
+      "active_state": "active",
+      "description": "",
+      "identifier": "TP-1596",
+      "test_runs_count": { "active": 0, "closed": 0 },
+      "tags": [],
+      "name": "probe plan",
+      "issues": [],
+      "project_id": "PR-2005",
+      "sub_plans_count": 0,
+      "start_date": null,
+      "end_date": null,
+      "created_at": "2026-09-17T08:17:45.000Z",
+      "urls": {
+        "self": "https://test-management-preprod.bsstag.com/projects/379335744/test-plans/48245",
+        "sub_test_plans": "https://test-management-preprod.bsstag.com/api/v2/projects/PR-2005/test-plans/TP-1596/sub-test-plans"
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, PR-\\d+ form)"],
+    "json_path": null,
+    "declared_missing": [
+      "parent_plan_id — declared nullable and documented as present only on a sub-plan; the one returned row is a top-level plan (sub_plans_count present, not a sub-plan), so its absence here matches the contract's own conditional and is NOT counted as drift.",
+      "test_runs and links — contract explicitly says these appear only on the single-plan read, not on the list; correctly absent here, not drift."
+    ],
+    "undeclared_returned": [
+      "urls.self and urls.sub_test_plans — the `urls` field itself is declared (type object, prose description only), but the schema gives it no `properties` block at all, so these two concrete keys are not literally enumerated anywhere in the contract. What we observed matches the prose exactly ('Web-app deep links for a human, plus a sub_test_plans link on top-level plans only.'), so this is a hollow-schema case (caution from the brief) rather than a real disagreement: the contract predicts the right shape in English but does not commit to it in the schema, so a future change to urls' keys would not violate anything written down."
+    ]
+  },
+  "notes": "Total pre-existing test plans on project PR-2005 (int 379335744): 1. Every existing plan id + name: TP-1596 = \"probe plan\" (the known __readonly__ fixture plan; active_state=active, test_runs_count {active:0,closed:0}, sub_plans_count 0, no start/end date, created_at 2026-09-17T08:17:45.000Z). info envelope confirms count=1, next=null, prev=null — this is the full set, not a partial/truncated page. This is the 'before' baseline for the sibling create_test_plan probe: any plan id other than TP-1596 that appears after that probe runs is the newly created one. Conformance: every declared top-level key (success, test_plans, info) and every declared item field with a real schema (identifier, name, description, active_state [enum matched: 'active'], tags, issues, test_runs_count.{active,closed}, sub_plans_count, start_date, end_date, created_at, project_id [PR-NNN string form, not the numeric id — no string/integer type drift here unlike some other batch-2 reads]) matched both type and, where closed, enum. Pagination query param names were used exactly as declared (`p` not `page`, `count` not `page_size`) and the response's info.page_size (300) confirms `count` was honored. Collection was non-empty (count=1) so item shape is verified, not UNVERIFIED. Integer project_id form (379335744) was confirmed rejected client-side per the declared PR-\\d+ path pattern, exactly as the brief predicted. One preprod outage (status 0, 'the product could not be reached') occurred on the first PR-2005 attempt and cleared on an unchanged retry, consistent with the known intermittency pattern — not a capability defect. No 500s encountered."
+}

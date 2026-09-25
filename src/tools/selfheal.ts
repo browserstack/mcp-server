@@ -596,6 +596,13 @@ export default function addSelfHealTools(
         .describe("Build UUID. Fetches the build's self-healing report.")
         .optional(),
     },
+    {
+      title: "Fetch Self-Healed Selectors",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(
@@ -669,6 +676,13 @@ export default function addSelfHealTools(
       sessions: sessionsFieldSchema.describe(
         "Sessions to plan edits for. See tool description for accepted shapes.",
       ),
+    },
+    {
+      title: "Prepare Self-Healing Plan",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
     },
     async (args) => {
       try {

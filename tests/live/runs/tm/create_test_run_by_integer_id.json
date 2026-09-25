@@ -1,0 +1,96 @@
+{
+  "capability": "create_test_run_by_integer_id",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:27:17Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Verify against storage (not the create echo), and directly compare the READ serializer's rendering of the four fields under live suspicion (project_id, is_dynamic, overall_progress, type/self_ui_link/observability_url) against the CREATE serializer's rendering, for the exact same run row.",
+      "source": "invoked",
+      "capability": "list_test_runs_by_integer_id",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": {
+        "count": { "active": 31, "closed": 0 },
+        "new_run_present": true,
+        "row_for_TR-9110": {
+          "project_id": 379335744,
+          "project_id_type": "integer (declared string on this same read's own contract - known list-serializer drift, reconfirmed)",
+          "is_dynamic": 0,
+          "is_dynamic_type": "integer 0 (declared boolean - known list-serializer drift, reconfirmed)",
+          "overall_progress": null,
+          "overall_progress_by_status_id": { "318615": { "count": 3, "result_status": { "field_value": "Untested" } } },
+          "note": "overall_progress is null even on an immediate re-read of the just-created row, while overall_progress_by_status_id for the identical row already holds the real counts - proves the null is a serializer bug, not eventual consistency or missing computation.",
+          "type_present": false,
+          "self_ui_link_present": false,
+          "observability_url_present": true,
+          "observability_url": "https://observability.browserstack.com/builds/e13d1059178c1812ae4d957485ec0a31f1ffa85b",
+          "uuid": 17577900
+        }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": {
+          "run_state": "new_run",
+          "name": "__mcp-probe-createrun-20260921",
+          "test_case_ids": [1971631, 1971632, 1975349]
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded on the first attempt. Sent flat (NOT nested under test_run), applying the standing lesson from create_test_run: json_path (/test_run/<field>) describes server-side re-nesting, not the shape invokeCapability's caller should send. No nested-wrapper attempt was needed."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": {
+        "run_state": "new_run",
+        "name": "__mcp-probe-createrun-20260921",
+        "test_case_ids": [1971631, 1971632, 1975349]
+      }
+    },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "data_keys_returned": ["success", "testrun", "project"],
+      "skipped_test_case_ids_present": false,
+      "testrun_keys_returned": [
+        "active_state", "run_state", "assignee", "created_at", "description", "environment", "id", "identifier",
+        "uuid", "is_automation", "overall_progress", "overall_progress_by_status_id", "name", "owner", "project_id",
+        "tags", "test_cases_count", "updated_at", "test_plans", "is_dynamic", "attachments", "links", "configurations",
+        "metadata", "assignee_imported", "created_by", "updated_by", "closed_at", "closed_by"
+      ],
+      "project_id_type_returned": "string (\"379335744\") - matches declared string. CORRECT, unlike list_test_runs_by_integer_id which returns integer 379335744 for this same row.",
+      "is_dynamic_type_returned": "boolean (false) - matches declared boolean. CORRECT, unlike list_test_runs_by_integer_id which returns integer 0 for this same row.",
+      "overall_progress_returned": "non-null object {untested:3, passed:0, retest:0, failed:0, blocked:0, skipped:0, in_progress:0} - matches declared non-nullable shape. CORRECT, unlike list_test_runs_by_integer_id which returns null for this exact same row on an immediate re-read (see setup.step 1).",
+      "uuid_type_returned": "integer (17577900), a plain incrementing id, not an RFC4122 UUID - but this matches create_test_run_by_integer_id's OWN declared type (integer, example 17), so it is not a drift against THIS endpoint's contract. The misleading field name is a naming choice shared with the read side, not a create-side type bug.",
+      "type_field": "declared in the response schema, never present in the response body. Also absent from list_test_runs_by_integer_id's row for the identical run - vestigial across both serializers, not isolated to one.",
+      "self_ui_link_field": "declared in the response schema, never present in the response body. Also absent from list_test_runs_by_integer_id's row for the identical run - same as above.",
+      "observability_url_field": "declared in create_test_run_by_integer_id's own top-level 'returns' summary, but NEVER present in the create response body. list_test_runs_by_integer_id's row for the SAME run (read immediately after, setup.step 1) DOES return it. This isolates a real create-serializer gap: the value is computed and stored (proven by the read side having it), but the create serializer drops it from the write response.",
+      "test_plans_returned": "[] - no test_plans field was sent in this probe (out of scope for a plain create), so the previously-reported 'test_plans always [] even when PLAN_LINKED' finding from list_test_runs_by_integer_id could not be independently re-tested here."
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path)",
+      "run_state (body, enum: new_run|in_progress|under_review|rejected|done|closed - hard-validated before selection; a bare 'invalid data' 400 means a bad run field, not a bad selection)"
+    ],
+    "json_path": "/test_run/<field> is declared for name, description, owner, is_dynamic, run_state, configurations, test_plans, tags, issues, environment, attachments, metadata, build_group_id; /selection/<field> for select_all, unique_test_case_count, folders. invokeCapability wants all of these FLAT at the top level of body regardless - confirmed on attempt 1: run_state, name and test_case_ids were sent flat and returned 200 on the first try, no nested test_run wrapper was needed or attempted.",
+    "declared_missing": [
+      "type (never returned, also absent from list_test_runs_by_integer_id for the same run)",
+      "self_ui_link (never returned, also absent from list_test_runs_by_integer_id for the same run)",
+      "observability_url (never returned by create, though list_test_runs_by_integer_id returns it for the identical run - create-serializer-specific gap)",
+      "skipped_test_case_ids (top-level sibling of data - the tool's own 200 description explicitly promises this key is ADDED to the response envelope; it is genuinely absent from the actual body)"
+    ],
+    "undeclared_returned": ["attachments", "created_by", "updated_by", "closed_at", "closed_by"]
+  },
+  "notes": "Created run: TR-9110 (uuid 17577900, project PR-2005 / 379335744) - flag for cleanup. WHAT WORKED: path_params {project_id: 379335744}, body FLAT (not wrapped in test_run) = {run_state: 'new_run', name: '__mcp-probe-createrun-20260921', test_case_ids: [1971631, 1971632, 1975349]} - succeeded 200 on the very first attempt, no retries needed. test_case_ids takes bare NUMERIC ids (not TC-NNN strings, unlike v2's test_cases field), matching the pool's numeric ids for TC-54455/TC-54456/TC-54458 given in the task. All 3 cases attached synchronously and visible immediately in overall_progress_by_status_id (3x untested) both in the create echo and the follow-up list read. SPECIFIC-INTEREST FINDINGS (comparing create's response to the confirmed list_test_runs_by_integer_id drift, same entity, same hour, same row): project_id, is_dynamic and overall_progress are ALL typed and populated CORRECTLY in the create response (string, boolean, non-null object respectively) - this isolates all three defects cleanly to list_test_runs_by_integer_id's list serializer; the create/storage path is fine. The overall_progress null-on-list defect is proven to be a pure serializer bug rather than an eventual-consistency gap, because overall_progress_by_status_id (a sibling field) already carries the real counts on the very same freshly-created row when re-read via list_test_runs_by_integer_id seconds later - the underlying data exists, the list serializer just doesn't surface it under the 'overall_progress' key. uuid holds a plain integer on BOTH create and list, but for create this actually matches ITS OWN declared type (integer) - so 'uuid holding an integer' is a naming complaint (misleading key name), not a type-contract violation, at least for this endpoint. type and self_ui_link are declared but never emitted by either the create or the list serializer for this run - this looks like a dead/vestigial declared field shared across the whole entity's surface, not something isolated to one endpoint. observability_url is the one NEW create-specific gap this probe surfaces: declared in create_test_run_by_integer_id's own 'returns' summary, genuinely absent from the create response body, yet present and populated on the very same row when read back via list_test_runs_by_integer_id immediately after - the value is computed at creation time (it embeds the run's own build hash) but the create write-path's serializer drops it before returning, while the read-path serializer includes it. The tool's own 200-response description makes an explicit promise ('ADDS the top-level skipped_test_case_ids sibling the handlers actually render') that the live response does not keep - no skipped_test_case_ids key appeared anywhere in the body, top-level or nested, even though 0 cases were skipped (a legitimate all-succeeded case, so this isn't 'field omitted when empty' - it's just never rendered). Verdict is DRIFT: the write itself behaved exactly as declared (200, enum validated up front, all 3 cases attached, run persisted and independently verified via list_test_runs_by_integer_id), but the response body disagrees with its own declared schema in both directions (4 declared-missing fields including a top-level key the tool description explicitly promises, and 5 undeclared-returned fields: attachments, created_by, updated_by, closed_at, closed_by)."
+}

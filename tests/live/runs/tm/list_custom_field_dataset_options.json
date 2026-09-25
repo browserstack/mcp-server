@@ -1,0 +1,36 @@
+{
+  "capability": "list_custom_field_dataset_options",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:24:57Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "known ids from pool (project PR-2005 / 379335744) — same dataset already confirmed by sibling probe to hold 50 options",
+      "source": "pool",
+      "capability": null,
+      "produced": {"custom_fields_id": 105915, "dataset_id": 31196}
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {"path_params": {"custom_fields_id": 105915, "dataset_id": 31196}, "query": {}},
+    "status": 200,
+    "response_keys": ["success", "data", "info"],
+    "item_shape": {
+      "id": "integer",
+      "option_value": "string",
+      "is_default": "boolean",
+      "colour": "null",
+      "parent_option_id": "null"
+    }
+  },
+  "contract": {
+    "required": ["success", "data", "info"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Row count: page 1 returned 30 rows, info={page:1,page_size:30,count:50,prev:null,next:2} — confirms the same 50-option dataset the sibling probe found. Structural contract matched exactly: no drift.\n\n1) Container shape: this capability declares response.data as a BARE ARRAY of option rows (sibling of `info`, both siblings of `success` — i.e. {success, data:[...], info:{...}}), and that is exactly what it returned: `data` is a flat array of 30 row objects, `info` is a sibling object with page/page_size/count/prev/next all present as declared. No nesting, no undeclared wrapper — unlike get_custom_field_dataset, whose declared `data.options` (bare array) actually returns an object with the real array buried at `data.options.data` plus an undocumented `info` block. This capability's declared and actual shapes agree.\n\n2) Row shape: this capability's rows are {id, option_value, is_default, colour, parent_option_id} (children present only when a parent_option_id triggers a tree rebuild — not triggered here, all null). I did not re-fetch get_custom_field_dataset in this probe, so I can't diff its actual row JSON keys byte-for-byte from here, but per that capability's own contract (as relayed for this comparison) its embedded rows are the same underlying dataset-option records; the sibling's finding described a container mismatch, not a row-shape mismatch, and the row count/ids context (50 options, 30 on page 1) lines up exactly between the two, consistent with both surfacing the same rows. Treat point 2 as UNVERIFIED at the row-field level rather than confirmed identical — would need a live side-by-side to state key names are byte-identical.\n\n3) Pagination block: YES, declared here. `info` with {page, page_size, count, prev, next} is in this capability's declared 200 schema as a required top-level field, and `paginated:true` / `max_page_size:30` are stated in the capability metadata — the opposite of get_custom_field_dataset, where the same info block was reported as returned but undeclared. This is the capability where pagination is a first-class, documented part of the contract.\n\n4) Preference signal: neither capability's contract (this one's guidance/intent, nor what's known of the sibling's) states which to prefer when both exist for the same dataset. This capability's own guidance is suggestive though not a direct comparison statement: \"This is where option ids come from. The dataset read returns options only when asked and without a stable contract; this call always returns them with their ids.\" That reads as an implicit steer toward this capability over get_custom_field_dataset's fetch_options path for any consumer that needs option ids or a stable/paginated contract — but it never names the other capability directly, so it falls short of an explicit 'prefer this' statement."
+}

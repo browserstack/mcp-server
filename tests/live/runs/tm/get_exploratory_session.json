@@ -1,0 +1,78 @@
+{
+  "capability": "get_exploratory_session",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:40:48Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "re-probe requires a real, populated exploratory session; the UNVERIFIED run on this capability (2026-09-21T00:00:00Z) found zero sessions (active or closed) in project 379335744 and could not proceed past a 404 on a fabricated id",
+      "source": "invoked",
+      "capability": "create_exploratory_session (prior probe, not this run)",
+      "arguments": { "not captured by this run — see tests/live/runs/tm/create_exploratory_session.json": true },
+      "status": 201,
+      "produced": { "id": 779, "identifier": "ES-14", "title": "__mcp-probe-exploratory-20260921", "session_state": "active" }
+    },
+    {
+      "step": 2,
+      "why": "2 logs were subsequently added to 779 by a separate write probe, giving this read a non-empty timeline/log collection to inspect for the first time",
+      "source": "invoked",
+      "capability": "create_exploratory_session_log (prior probe, not this run, x2)",
+      "arguments": { "not captured by this run — see tests/live/runs/tm/create_exploratory_session_log.json": true },
+      "status": 201,
+      "produced": { "session_log_count": 2 }
+    },
+    {
+      "step": 3,
+      "why": "clone_exploratory_session was probed against 779, producing a second populated session with its own copy of the 2 logs — used here to check whether the timeline/actual_duration findings on 779 are session-specific or a general shape",
+      "source": "invoked",
+      "capability": "clone_exploratory_session (prior probe, not this run)",
+      "arguments": { "not captured by this run — see tests/live/runs/tm/clone_exploratory_session.json": true },
+      "status": 201,
+      "produced": { "id": 780, "identifier": "ES-15", "title": "__mcp-probe-exploratory-clone-20260921", "session_state": "active" }
+    },
+    {
+      "step": 4,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744, "session_id": 999999999 } },
+      "status": 404,
+      "error": "{\"success\":false}",
+      "changed": "not a fix-and-retry — re-verification of previously recorded error-envelope evidence, kept from the UNVERIFIED run. Body is still a bare {success:false} with no error object, matching the capability's own prose guidance ('a session id that does not exist comes back as a bare {success:false} with the 404 status and no message') and contradicting its declared 404 JSON schema, which promises {success:false, error:{code,message,details}}. This is an error body and is not diffed against the success schema."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "session_id": 779 } },
+    "status": 200,
+    "response_keys": ["success", "exploratory_session"],
+    "item_shape": {
+      "exploratory_session": ["attachments", "attachment_relations", "id", "identifier", "test_plan_id", "project_id", "group_id", "title", "description", "timebox_duration", "duration", "session_state", "assignee", "owner", "charter", "created_by", "closed_by", "closed_at", "actual_duration", "record_status", "created_at", "updated_at", "tags", "configurations", "issues", "timeline", "session_log_count", "custom_fields"],
+      "timeline[0]": ["status", "elapsed_time", "created_by"]
+    },
+    "also_probed": {
+      "session_780": {
+        "path_params": { "project_id": 379335744, "session_id": 780 },
+        "status": 200,
+        "timeline_item_shape": ["status", "elapsed_time", "created_by"],
+        "actual_duration": null,
+        "session_state": "active",
+        "note": "run to check whether the timeline/actual_duration findings on 779 generalise; timeline shape matches 779 exactly, actual_duration does NOT (null here vs 165 on 779) — see notes"
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id", "session_id"],
+    "json_path": "exploratory_session",
+    "declared_missing": ["name", "summary", "folder_id", "test_plan"],
+    "undeclared_returned": ["attachment_relations", "project_id", "group_id", "owner", "record_status"]
+  },
+  "notes": "SUPERSEDES the UNVERIFIED verdict from the earlier run (tests/live/runs/tm/get_exploratory_session.json, probed_at 2026-09-21T00:00:00Z). That verdict was correct at the time — project 379335744/PR-2005 genuinely had 0 active and 0 closed exploratory sessions, so the capability's 200 path was structurally unreachable (failure mode (a), prerequisite unobtainable, confirmed by listing both states). Write probes since then created session 779 (ES-14, active, 2 logs) and its clone 780 (ES-15, active, 2 copied logs), so the prerequisite now exists and the 200 path has been exercised for the first time. Kept the prior UNVERIFIED run's error-envelope evidence (attempt n=1 above) and re-verified it still reproduces identically.\n\nHYPOTHESIS 1 CONFIRMED — timeline is log-shaped, not lifecycle-shaped, once logs exist. Declared schema: timeline[].{created_by, action, timestamp} ('Ordered list of lifecycle events'). Actual, on BOTH 779 and 780: timeline[].{status, elapsed_time, created_by} — action and timestamp are entirely absent from every row on both sessions (not null, not empty string — the keys do not exist), and status/elapsed_time (undeclared) appear instead. This is not a per-session fluke: it reproduces identically on the clone with its own independently-copied log rows. The declared 'lifecycle events' schema for `timeline` appears to be simply wrong for this entity — what's actually returned is the session's log collection under a `timeline` key, in log-shape.\n\nHYPOTHESIS 2 CONFIRMED, but narrower than stated — actual_duration on session 779: 165, non-null, while session_state is 'active' and closed_at is null (never closed). This contradicts the declared field description ('Final recorded duration of the session in minutes (set on close)'). HOWEVER this is not a blanket defect of the read: session 780 (780's own create_exploratory_session_log logs were copied from 779 by the clone, and both sessions carry the same 2 timeline rows with elapsed_time 120 and 45, summing to 165) came back with actual_duration: null while equally active and equally never closed. So actual_duration is not simply 'always populated regardless of close state' — it is non-null specifically on 779 and null on its clone 780, despite both being active with identical log content. The most likely explanation observable from this read alone: 165 = 120 + 45, the exact sum of 779's two elapsed_time values, suggesting actual_duration is being derived from summed log elapsed_time as a side effect of logging rather than being set only by the documented close action — and that this derived value was not (or not yet) recomputed/copied onto the clone. This probe cannot see server-side code, so this is offered as the observed pattern, not a proven mechanism: state plainly that 165 is a coincidence-shaped match to the log sum, not a confirmed causal claim.\n\nFOLDER_ID FAMILY PATTERN CONFIRMED ON THE READ — folder_id is declared in this capability's return list (and in create/update/clone schemas per the sibling clone_exploratory_session finding) but is absent entirely (key missing, not null) from the get_exploratory_session response on both 779 and 780. This closes out the family-wide pattern for the read side: folder_id has now been confirmed absent on create, clone, and get for this entity.\n\nPROJECT_ID TYPE: confirmed INTEGER on this read (379335744) for both 779 and 780, matching the sibling clone finding's report that create/clone return project_id as a STRING (\"379335744\"). This read is consistent and makes the write serializers (create, clone) the inconsistent ones, not this read — as the clone finding already flagged from the write side.\n\nADDITIONAL DECLARED-VS-ACTUAL GAPS on the flat item shape (beyond the two named hypotheses): `name` is declared but the response only has `title` (no `name` key at all); `summary` is declared but absent; `test_plan` (the expanded object) is declared but absent — only `test_plan_id` (null, since neither session is linked to a plan) is present, so the expansion itself is unverified rather than confirmed absent. Undeclared-but-returned: `attachment_relations`, `project_id`, `group_id`, `owner` (separate from `assignee`, both null on both sessions here), and `record_status` (\"active\" on both).\n\nWHAT REMAINS UNVERIFIED, applying the empty-case rule in reverse: `test_plan` (the expanded object, as opposed to `test_plan_id`) — both 779 and 780 have test_plan_id: null, so the shape of a populated `test_plan` object has never been observed and is named here as UNVERIFIED, not passing. `configurations`, `tags`, `issues`, `custom_fields`, `attachments`, `attachment_relations` are all still empty arrays on both sessions — their item shapes remain UNVERIFIED, not confirmed, despite the collections themselves now being reachable. `assignee`, `owner`, `closed_by` are all still null on both sessions — the declared user-reference object shape ({id,email,full_name,group_id}) is only confirmed for `created_by` (populated on both), not for these three.\n\nVerdict is DRIFT rather than PASS: the capability is invokable and returns a well-formed 200, but declared_missing (name, summary, folder_id, test_plan) and undeclared_returned (5 keys) are both non-empty, and the `timeline` item shape is flatly wrong — not a missing/extra field but a different schema entirely from what's declared. Not BLOCKED (it works); not UNVERIFIED (the primary 200 path and both named hypotheses were fully exercised on two independent populated sessions)."
+}

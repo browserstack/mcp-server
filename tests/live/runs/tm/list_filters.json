@@ -1,0 +1,45 @@
+{
+  "capability": "list_filters",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for path_params.project_id",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"p": 1}},
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"Invalid entity type\"}",
+      "changed": "Guidance states `entity` is 'Optional, despite being published as required' and that omitting it returns a mixed list of all entity types. Reality contradicts this: omitting it 400s with 'Invalid entity type'. Retried adding an explicit `entity` value from the declared enum."
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"p": 1, "entity": "testcase"}},
+      "status": 200,
+      "error": "",
+      "changed": "n/a - succeeded"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}, "query": {"p": 1, "entity": "testcase"}},
+    "status": 200,
+    "response_keys": ["data", "info", "success"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "EMPTY-CASE: data=[] for entity=testcase (count 0). Also checked entity=testplan and entity=testrun for the same project — both also returned data=[] with count 0. No saved filters exist anywhere in project 379335744 for any tested entity type, so the item_shape (id, name, entity_type, is_project_level, filters, owner, project_id, created_at, updated_at) is entirely unexercised. Per the empty-case rule this is UNVERIFIED, not PASS — do not create a filter to force it (read-only round, and instructed not to fabricate one regardless). GUIDANCE-VS-REALITY DRIFT: the capability's own guidance describes `entity` as optional ('Optional, despite being published as required: omit it and every entity type comes back in one mixed list'), but omitting it actually 400s with 'Invalid entity type' (attempt 1) rather than returning a mixed list. Either the guidance is stale for this env or the declared-required/optional framing is backwards; either way a caller following the guidance verbatim gets an unexpected 400. Separately, the query enum for `entity` lists exploratory_session and test_plan_test_case, but the 200 response schema's entity_type enum only lists testcase/testplan/testrun — an undeclared value gap between the request-side enum and the response-side enum that could not be exercised here since no rows were ever returned. SIDE TASK (asymmetry with get_filter): CONFIRMED from this capability's own contract. list_filters' guidance explicitly states: 'Unlike reading a single filter, this listing does no custom-field validation and never rewrites anything — use it when you want to inspect filters without altering them.' This directly corroborates the reported get_filter behavior (that reading a single filter re-validates custom-field conditions and permanently rewrites the stored filter, dropping stale ones) by contrast — list_filters is explicitly documented as read-only/non-mutating, while a single-item get_filter reportedly is not. This is a genuine and non-obvious asymmetry between a listing endpoint and its single-item counterpart on the same resource: a caller who assumes 'GET is safe' from having called list_filters would be wrong to assume the same for get_filter. Worth flagging loudly in get_filter's own probe/report since no caller would expect a plain read to mutate stored state."
+}

@@ -1,0 +1,96 @@
+{
+  "capability": "restore_history",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:45:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "resolve real revision ids for TC-54484 (1985018) read-only, and capture the pre-restore history_count baseline",
+      "source": "invoked",
+      "capability": "list_test_case_histories",
+      "arguments": { "path_params": { "project_id": 379335744, "test_case_id": 1985018 } },
+      "status": 200,
+      "produced": {
+        "info.count": 3,
+        "rows": [
+          { "id": 1677349, "version_name": "V3", "source": "update", "modified_fields": ["name"], "created_at": "2026-09-21T13:35:23.000Z" },
+          { "id": 1677348, "version_name": "V2", "source": "update", "modified_fields": ["template", "test_case_steps"], "created_at": "2026-09-21T13:35:00.000Z" },
+          { "id": 1677339, "version_name": "V1", "source": "create", "modified_fields": null, "created_at": "2026-09-21T13:28:21.000Z" }
+        ],
+        "chosen_history_id_for_restore": 1677339
+      }
+    },
+    {
+      "step": 2,
+      "why": "get V2's full per-field modified map (listing only enriches the first/newest row) to confirm what the prior edit_test_case defect actually did to template/steps before restoring past it",
+      "source": "invoked",
+      "capability": "get_test_case_history",
+      "arguments": { "path_params": { "project_id": 379335744, "test_case_id": 1985018, "history_id": 1677348 } },
+      "status": 200,
+      "produced": {
+        "modified.template": { "old": "Test Case Steps", "new": "test_case_steps" },
+        "modified.test_case_steps.old": [{ "id": 12372580, "step": "Open the login page", "result": "Login page is displayed" }],
+        "modified.test_case_steps.new": [{ "id": 12372587, "step": "Navigate to the probe login page (edited)", "result": "Probe login page renders with edited content" }]
+      }
+    },
+    {
+      "step": 3,
+      "why": "pre-restore baseline of the live case via the wide v1 detail read (carries template_id/template_name/using_fallback_template and the resolved system-field option ids, which get_test_case does not)",
+      "source": "invoked",
+      "capability": "get_test_case_detail",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138, "test_case_id": 1985018 } },
+      "status": 200,
+      "produced": {
+        "history_count": 3,
+        "name": "__mcp-probe-createcase-20260921-edited",
+        "template": "test_case_steps",
+        "template_step_type": "test_case_steps",
+        "template_id": 1164,
+        "template_name": null,
+        "using_fallback_template": true,
+        "steps": [],
+        "test_case_steps": [{ "id": 12372587, "step": "Navigate to the probe login page (edited)", "result": "Probe login page renders with edited content" }],
+        "priority.id": 318618,
+        "case_type.id": 318626,
+        "status.id": 318632
+      }
+    },
+    {
+      "step": 4,
+      "why": "cross-check against the v2 read of the same live case at the same moment, surfaced only as a secondary drift note (not scored against restore_history)",
+      "source": "invoked",
+      "capability": "get_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54484" } },
+      "status": 200,
+      "produced": { "template": "test_case_text", "steps": [{ "step": "Navigate to the probe login page (edited)", "result": "Probe login page renders with edited content" }] }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_case_id": 1985018, "history_id": 1677339 },
+        "user_permission": "granted",
+        "change_summary": "Probe restore_history: revert scratch/expendable TC-54484 (1985018) to its V1 creation revision (history_id 1677339) to check whether the restore appends a new revision or truncates history, and whether template/steps/option-ids survive correctly."
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a (first attempt) — body-less write (only path_params), succeeded immediately"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "test_case_id": 1985018, "history_id": 1677339 } },
+    "status": 200,
+    "response_keys": ["success"],
+    "item_shape": { "success": "boolean" }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "test_case_id (path, integer)", "history_id (path, integer)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "CENTRAL QUESTION — APPEND-ONLY, CONFIRMED. history_count went 3 -> 4. Re-reading list_test_case_histories after the restore returns FOUR rows, not three: a new V4 (id 1677912, source 'restore_V1', modified_fields ['template','name','test_case_steps'], created_at 2026-09-22T05:39:16Z) is APPENDED at the top, while V1 (1677339), V2 (1677348) and V3 (1677349) all remain present, unchanged, byte-identical in id/timestamp/content to the pre-restore listing. Restoring to revision N does not truncate anything after N — it writes the restore as an ordinary new edit on top, exactly as the capability's own guidance claims ('the restore is applied as an ordinary edit of the live case, so the pre-restore state remains in the revision trail and can itself be restored'). That guidance is verified true, not just asserted: V3 (the pre-restore state) is still sitting in the trail at id 1677349 and could itself be restored to undo this probe's restore. History is append-only; the restore is itself undoable.\n\nedit_test_case_v1 TEMPLATE DEFECT — CONFIRMED IN-FLIGHT AND THEN CORRECTLY REVERSED BY THE RESTORE. Step 2 above caught the defect red-handed: V2's own modified map shows template going from the proper display value 'Test Case Steps' to the raw internal slug 'test_case_steps' the moment edit_test_case touched this case without specifying template — and the live case sat afterward with template_id:1164 but template_name:null and using_fallback_template:true (a system template silently substituted because the case's own template reference had been corrupted). After restoring to V1: template_name came back as 'Test Case Steps' (no longer null) and using_fallback_template is no longer present in the response at all (i.e. no longer needed) — the restore reapplied V1's original snapshot and correctly un-broke what the earlier edit had broken. So: yes, this confirms the edit_test_case defect (template/template_name/using_fallback_template do get silently corrupted by an edit that omits template), and separately confirms restore_history reverses that corruption correctly when the target revision predates it.\n\nSTEPS — SURVIVE THE ROUND TRIP, BUT WITH NEW IDS (as documented) AND THE test_case.steps=[] SIBLING BUG PERSISTS. Pre-restore test_case_steps held the V2/edited step (id 12372587). Post-restore, test_case_steps holds a step matching V1's original content exactly ('Open the login page' / 'Login page is displayed') but under a brand-new id, 12372597 — precisely what the capability's own guidance predicts ('steps whose ids no longer exist come back with new ids'). No steps were dropped or duplicated. However the sibling top-level `steps` field (distinct from `test_case_steps`) was [] before the restore and is STILL [] after — get_test_case_detail's `steps` key never reflects the real step content on this case either before or after the write, reproducing the systemic test_case.steps=[] drift called out for other capabilities, now also confirmed unaffected (neither fixed nor worsened) by restore_history.\n\nOPTION-ID QUESTION — PRESERVED, NOT REWRITTEN TO THE PROJECT DEFAULT. Before restore: priority.id=318618, case_type.id=318626, status.id=318632 (the upper block). After restore: identical — 318618 / 318626 / 318632, unchanged. The restore's own modified_fields for V4 lists only ['template','name','test_case_steps'] — priority/case_type/status were not touched because V1 and the current state already agreed on them, so this case doesn't exercise a genuine upper-to-lower delta the way bulk_copy_test_cases's cross-project copy does. But the observable behavior answers the question as asked: restore_history does not force system-field option ids to the project's lower default block (318591/318599/318605) the way bulk_copy_test_cases silently does — the upper-block ids simply persist across the restore, exactly as they were in both the snapshot and the live case.\n\nOTHER CONTRACT NOTES: `name` was also correctly reverted ('__mcp-probe-createcase-20260921-edited' -> '__mcp-probe-createcase-20260921'), consistent with 'full OVERWRITE, not merge.' The write response itself was exactly {success:true} as declared — no more, no less; everything above was verified only by reading the case and its history back afterward, never from the write response. origin_channel ('api') again appears on every history row, including the new restore row, despite being undeclared on this route's schema (same systemic gap noted elsewhere in this campaign). user.email is again absent from the history row's user object despite being declared (same systemic gap). One incidental cross-capability discrepancy surfaced in step 4, unrelated to restore_history's own contract: at the same pre-restore instant, get_test_case reported template:'test_case_text' for TC-54484 while get_test_case_detail reported template:'test_case_steps' for the identical live case — flagging for whichever probe covers get_test_case/get_test_case_detail's own contracts, not scored here.\n\nVERDICT: PASS. restore_history's declared contract (200 -> {success:true} only) matched reality exactly on the only attempt needed, and every guidance claim in its own describeCapability entry (full overwrite not merge, steps re-issued with new ids, pre-restore state remains restorable, read the case back to see real effects) was independently verified true against live before/after reads rather than trusted from the write response."
+}

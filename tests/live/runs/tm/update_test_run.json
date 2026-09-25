@@ -1,0 +1,88 @@
+{
+  "capability": "update_test_run",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T07:18:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Capture TR-9062's before-state left by the prior replace_test_run probe, to diff against after our own writes.",
+      "source": "invoked",
+      "capability": "get_test_run",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" } },
+      "status": 200,
+      "produced": {
+        "run_state": "new_run",
+        "assignee": null,
+        "tags": ["replace-probe-tag"],
+        "description": "<p>replace-probe-partial-description</p>",
+        "updated_at": "2026-09-18T06:27:38.743Z",
+        "overall_progress": { "Untested": 5 },
+        "rows": 5
+      }
+    },
+    {
+      "step": 2,
+      "why": "Capture TR-9062's rows before-state (case ids, latest_result_id, duplicate TC-54457 mapping) to diff row-set survival after update.",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" } },
+      "status": 200,
+      "produced": { "count": 5, "identifiers": ["TC-54458", "TC-54457", "TC-54457", "TC-54456", "TC-54455"] }
+    },
+    {
+      "step": 3,
+      "why": "Control read of an untouched fixture run in the same window, so any observed anomaly on TR-9062 can be attributed to update_test_run rather than to preprod flakiness.",
+      "source": "pool",
+      "capability": "get_test_run",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9058" } },
+      "status": 200,
+      "produced": {
+        "run_state": "new_run",
+        "assignee": "probe-user@example.invalid",
+        "updated_at": "2026-09-17T08:17:46.028Z",
+        "overall_progress": { "Untested": 2 },
+        "note": "Unchanged and self-consistent throughout the probe window; used purely as a stability baseline."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "body": { "test_run": { "assignee": "probe-user@example.invalid", "run_state": "in_progress" } } },
+      "status": 0,
+      "error": "unknown body: test_run. accepted: assignee, configuration_map, configurations, description, filter_scope, filter_test_cases, folder_ids, include_all, include_sub_folders, is_automation, issues, name, run_state, shared_test_cases, sub_test_plan_id, tags, test_cases, test_plan_id",
+      "changed": "Contract guidance said 'the body must be wrapped in a test_run object', but the tool itself re-nests flat fields per json_path (as in prior probes). Retried with a flat body, dropping the test_run wrapper."
+    },
+    {
+      "n": 2,
+      "arguments": { "body": { "assignee": "probe-user@example.invalid", "run_state": "in_progress" } },
+      "status": 200,
+      "error": null,
+      "changed": "Accepted. Deliberately omitted tags/description/test_cases/configurations to test sparse-update semantics."
+    },
+    {
+      "n": 3,
+      "arguments": { "body": { "description": "update-probe-second-description", "run_state": "under_review" } },
+      "status": 200,
+      "error": null,
+      "changed": "Second partial write: changed description (plain text, no manual HTML) and run_state; omitted assignee/tags this time to directly confirm the value set in attempt 2 survives omission rather than being cleared."
+    }
+  ],
+  "probe": {
+    "arguments": { "body": { "description": "update-probe-second-description", "run_state": "under_review" } },
+    "status": 200,
+    "response_keys": ["success", "testrun"],
+    "item_shape": {
+      "testrun_keys": ["active_state", "run_state", "created_at", "updated_at", "description", "identifier", "name", "assignee", "project_id", "overall_progress", "tags", "configurations", "filter_test_cases", "issues", "links", "urls"]
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": "/test_run/* (flat top-level body fields; the /test_run/ prefix is json_path bookkeeping, not a wrapper object — a literal test_run-wrapped body 400s)",
+    "declared_missing": ["testrun.id", "testrun.uuid", "testrun.owner", "testrun.is_automation", "testrun.is_dynamic", "testrun.test_plans", "testrun.test_cases_count", "testrun.overall_progress_by_status_id"],
+    "undeclared_returned": ["testrun.filter_test_cases", "testrun.urls", "testrun.links.test_cases", "testrun.issues"]
+  },
+  "notes": "PRIORITY 1 — write-response fidelity (echo vs storage), tested across TWO separate writes: Write 1 set assignee null→'probe-user@example.invalid' and run_state new_run→in_progress. Its 200 body echoed assignee as null (the OLD value, not what was just set), overall_progress as {Untested:4} (storage held 5), and a fresh updated_at of 07:16:59.000Z. A fresh get_test_run immediately after showed assignee='probe-user@example.invalid' (correctly applied in storage), overall_progress={Untested:5}, and updated_at UNCHANGED at 06:27:38.743Z (the write never advanced it). Write 2 set description→'update-probe-second-description' and run_state→under_review (omitting assignee/tags). Its 200 body again echoed overall_progress={Untested:4} vs storage's {Untested:5}, and a fresh updated_at of 07:17:37.000Z vs storage's still-unchanged 06:27:38.743Z; description and run_state were echoed correctly this time (both changed and matched storage). VERDICT ON THE PRIORITY QUESTION: update_test_run exhibits the SAME field-specific dishonesty as its twin replace_test_run — updated_at is fabricated on every successful write and never persists, and overall_progress is echoed off-by-one (4 vs actual 5) on every write regardless of what was touched. The assignee mis-echo in write 1 (stale null instead of the new value) matches the direction of replace's bug (echoing pre-write state). Write 2 couldn't re-test the assignee-lie directly (old value == new value, since assignee was left untouched), but the updated_at/overall_progress lie reproduced identically and independently on both writes, and matches replace_test_run's exact same three fields — this is an entity-wide write-response defect across the test-run update route family (both PATCH and POST paths), not an artifact of one endpoint or of preprod flakiness (the control run TR-9058 stayed static and self-consistent throughout; the anomaly here is a deterministic, reproduced pattern of specific fields, not a null-body/500 style transient). PRIORITY 2 — update vs replace semantics: update_test_run is genuinely SPARSE, confirmed on two independent fields across the two writes: tags ('replace-probe-tag') and description ('<p>replace-probe-partial-description</p>') were both omitted from write 1 and survived unchanged; assignee ('probe-user@example.invalid', just set by write 1) was omitted from write 2 and survived unchanged rather than being cleared. This is the opposite of replace_test_run, which cleared assignee to null on the same kind of omission. The two capabilities are NOT near-duplicates despite the shared route/response shape — 'update' truly means partial-merge, 'replace' truly means clear-on-omission, exactly as each one's own intent text claims. ROW SET: composition was left completely untouched by both writes (neither sent test_cases/folder_ids/configurations), and all 5 rows survived intact, including the accidental TC-54457 duplicate (latest_result_id 2150387252 and 2150387283) — consistent with the documented behaviour ('send neither and the run's composition is left completely untouched') and with replace's earlier union-preserving result on the same run. DESCRIPTION HTML WRAPPING: plain text sent to update_test_run ('update-probe-second-description') came back and persisted with NO <p> wrapping — unlike replace_test_run, which wrapped the same kind of plain input in <p> tags. This is an undocumented behavioural difference between the two twins (update's own contract only says HTML is 'escaped and sanitised', not that plain text is left alone while replace wraps it) — worth flagging as a minor inconsistency in an otherwise shared contract description. is_dynamic: filter_test_cases.is_dynamic came back as boolean (false) in both update_test_run responses and in get_test_run, consistent with the batch-4 finding that this route family agrees with list_test_runs/get_test_run against list_test_plan_test_runs's integer. DRIFT is entity-wide and already known, not new: declared-but-absent (id, uuid, owner, is_automation, top-level is_dynamic, test_plans, test_cases_count, overall_progress_by_status_id) and undeclared-but-returned (filter_test_cases, urls, links.test_cases, issues:[]) both match the standing entity-wide list; assignee declared as an object but returned as a plain string, and overall_progress declared as seven fixed lowercase keys but returned as a sparse capitalised map ({Untested:N}) — both consistent with prior findings, recorded here as confirmed-consistent rather than new. FINAL STATE OF TR-9062 (residue, left as-is per instructions): identifier TR-9062, project PR-2005 (id 17575382), name '__mcp-probe-run-2026-09-18T06-35-00Z', description 'update-probe-second-description' (plain, unwrapped), tags ['replace-probe-tag'], assignee 'probe-user@example.invalid', run_state 'under_review', active_state 'active', configurations [], filter_test_cases.is_dynamic false, created_at 2026-09-18T06:27:38.743Z, updated_at STILL 2026-09-18T06:27:38.743Z (never advanced despite two successful writes), overall_progress {Untested:5} in storage. 5 rows, all untested and unassigned: TC-54458 (2150387254), TC-54457 x2 (2150387252 and 2150387283, the accidental duplicate, preserved), TC-54456 (2150387251), TC-54455 (2150387253). TC-54455/TC-54456 (readonly fixture cases) were never written to directly — only the run-level fields were touched."
+}

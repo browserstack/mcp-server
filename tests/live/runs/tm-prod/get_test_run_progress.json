@@ -1,0 +1,85 @@
+{
+  "capability": "get_test_run_progress",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:14:44Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Ground-truth check before trusting an empty `configurations` array: does TR-5401273 (the `done` run) actually have configurations/cases attached, or is the array genuinely empty? get_test_run's own contract warns that its `configurations` field 'comes back empty on the older run backend whether or not the run has any — that read fails silently there', so an empty array from ANY endpoint needed corroboration before being trusted.",
+      "source": "invoked",
+      "capability": "get_test_run",
+      "arguments": {"path_params": {"project_id": "PR-18723", "test_run_id": "TR-5401273"}, "query": {"minify": "true"}},
+      "status": 200,
+      "produced": {"run_state": "done", "active_state": "active", "configurations": [], "overall_progress": "absent (no case-status summary)"}
+    },
+    {
+      "step": 2,
+      "why": "Corroborate step 1 via an independent read path — the run's own test-case listing — since get_test_run's `configurations` field is documented as unreliable when empty. If the run has 0 mapped test cases, an empty `configurations`/progress array is honest data, not a defect.",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases",
+      "arguments": {"path_params": {"project_id": "PR-18723", "test_run_id": "TR-5401273"}, "query": {"minify": "true", "page_size": 30}},
+      "status": 200,
+      "produced": {"info": {"page": 1, "page_size": 30, "count": 0}, "test_cases": []}
+    },
+    {
+      "step": 3,
+      "why": "Same corroboration for the comparison run TR-5394831 (new_run) — confirms whether the emptiness is fixture-wide or specific to one run.",
+      "source": "invoked",
+      "capability": "get_test_run",
+      "arguments": {"path_params": {"project_id": "PR-18723", "test_run_id": "TR-5394831"}, "query": {"minify": "true"}},
+      "status": 200,
+      "produced": {"run_state": "new_run", "configurations": []}
+    },
+    {
+      "step": 4,
+      "why": "Independent-path corroboration for TR-5394831's test-case count.",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases",
+      "arguments": {"path_params": {"project_id": "PR-18723", "test_run_id": "TR-5394831"}, "query": {"minify": "true", "page_size": 30}},
+      "status": 200,
+      "produced": {"info": {"page": 1, "page_size": 30, "count": 0}, "test_cases": []}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 332537, "test_run_id": "TR-5401273"}, "query": {"p": 1}},
+      "status": 200,
+      "error": null,
+      "changed": "primary probe subject (done run), TR-NNN form, no configuration_id — expected the all-configurations shape. Got 200, clean envelope, `configurations: []`. No 500, no null body."
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 332537, "test_run_id": "TR-5394831"}, "query": {"p": 1}},
+      "status": 200,
+      "error": null,
+      "changed": "comparison run (new_run state), TR-NNN form. Got 200, clean envelope, `configurations: []` — same shape as attempt 1, no 500."
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": 332537, "test_run_id": "75057293"}, "query": {"p": 1}},
+      "status": 200,
+      "error": null,
+      "changed": "retry of the primary probe subject using the plain-integer run-id form instead of TR-NNN, both to test the intermittency question with an independent call and to confirm the integer form is accepted identically to preprod. Got 200, byte-identical body to attempt 1. Still no 500 — 3/3 clean across both id forms and both target runs."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 332537, "test_run_id": "TR-5401273"}, "query": {"p": 1}},
+    "status": 200,
+    "response_keys": ["success", "configurations", "info"],
+    "item_shape": {
+      "configurations": "[] — empty array. NOT exercised: TR-5401273 has 0 test cases mapped (confirmed independently via get_test_run and list_test_run_test_cases, setup steps 1-2), so there is nothing to attach a configuration's progress to. This is the same 'empty for an honest reason' situation as preprod, just now confirmed with ground-truth corroboration rather than assumed.",
+      "info": "{page:1, page_size:30, count:0, prev:null, next:null} — matches declared paging-block shape (page, page_size present; count/prev/next are the backing service's own fields, declared as 'passed through as-is').",
+      "overall_progress_by_status_id (single-config form)": "NOT ATTEMPTED — `configurations` never came back non-empty on either target run, so there was no real `configuration_id` to pass; per the task's own instruction this form is only exercised when `configurations` is non-empty. Manufacturing a fake configuration_id would only exercise the not-found/empty-breakdown path, not the declared item shape, so it was skipped rather than reported as a false probe of the real shape."
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id"],
+    "json_path": "(flat top-level)",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "SIDE-BY-SIDE AS REQUESTED:\n\n(a) NULL-BODY 500 INTERMITTENCY — DOES NOT REPRODUCE ON PROD. 3/3 calls to get_test_run_progress returned clean 200s with well-formed envelopes: TR-5401273 (TR-NNN form), TR-5394831 (TR-NNN form), and TR-5401273 again via the plain-integer form (75057293) as an independent retry. Zero 500s, zero null bodies, across both id forms and both target runs. This is consistent with — and reinforces — the preprod judgement that the null-body 500s were environment intermittency rather than a defect in this capability: if it had been a real parameter- or data-triggered crash, it would be expected to reproduce here too, and it did not. Worth flagging for context: this repo's own findings/get_test_run.md Finding 7 records that a *related* preprod 500 pattern (on the sibling get_test_run, not this capability) was independently retracted after re-test — the broader picture across both capabilities on preprod is 'transient, not reproducible,' and prod's clean 3/3 here is consistent with that broader picture, not just this one capability's isolated 5+ clean retries.\n\n(b) DID THE `done` RUN FINALLY POPULATE `configurations`? — NO, still empty, but now for a CONFIRMED, ground-truthed reason rather than an assumed one. Unlike preprod (where emptiness was simply observed and left unexplained), this probe independently verified via two separate read paths (get_test_run's run header, and list_test_run_test_cases's case listing) that TR-5401273 has ZERO test cases mapped into it at all (`count: 0`), despite being in `run_state: \"done\"\". A run can apparently be marked `done` while holding no cases — 'done' here reflects workflow/lifecycle state, not execution content. The comparison run TR-5394831 is identical: 0 mapped cases, 0 configurations. So neither production fixture run exercises the declared per-item shape (`{id, name, overall_progress_by_status_id: {...}}`) — the item shape (and the single-configuration `overall_progress_by_status_id` breakdown) remains UNVERIFIED on production, for the same class of reason as preprod (no populated data), now with hard confirmation that it is a genuine data-emptiness condition of these two specific fixture runs, not a defect and not the 'older run backend silently drops configurations' failure mode that get_test_run's own contract warns about (that failure mode is specific to get_test_run's `configurations` field, not this capability, and in any case the independent test-case-count corroboration rules it out here — 0 cases really means 0 cases).\n\nCONTRACT SHAPE: the envelope returned (`{success, configurations, info}`) matches the declared all-configurations-form contract exactly on every one of the 3 attempts — no missing required field, no undeclared field. `info` matches the declared paging-block description. No drift found in the part of the contract that could actually be exercised.\n\nVERDICT RATIONALE: per the task's explicit instruction, verdict is UNVERIFIED because `configurations` is still empty even for the `done` run designated as primary subject — the per-configuration item shape and the single-configuration `overall_progress_by_status_id` breakdown were never actually exercised on production, same as preprod. This is not a downgrade from preprod's UNVERIFIED judgement; it is a confirmation of it, now with independently corroborated ground truth (0 mapped test cases) instead of an unexplained empty array, plus resolution of the separate 500-intermittency question in the clean direction (does not reproduce, 3/3). To positively verify the item shape, a different production run with real mapped test cases and configurations would need to be found and probed — TR-5401273 and TR-5394831 as given are not that run.\n\nNo writes were made; all calls were GET reads against the two designated target runs and their read-only detail/case-listing capabilities, within the fixture project (PR-18723 / 332537)."
+}

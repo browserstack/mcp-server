@@ -1,0 +1,111 @@
+{
+  "capability": "bulk_set_test_case_assignee_in_run",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:50:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project and run scope",
+      "source": "pool/task",
+      "capability": null,
+      "produced": { "project_id": 379335744, "test_run_id": "TR-9110", "test_run_uuid": 17577900 }
+    },
+    {
+      "step": 2,
+      "why": "baseline read of the run header before any write, to compare test_cases_count / overall_progress after",
+      "source": "invoked",
+      "capability": "get_test_run_by_integer_id",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": 17577900 } },
+      "status": 200,
+      "produced": { "run_state": "new_run", "owner": 3741, "test_cases_count": 3, "overall_progress": { "untested": 3 } }
+    },
+    {
+      "step": 3,
+      "why": "baseline listing of the run's mapped rows, to get real mapping_ids off cases already in TR-9110 (bulk_assign needs mapping_ids, not test_case ids)",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases_by_integer_id",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" }, "query": { "per_page": 100 } },
+      "status": 200,
+      "produced": {
+        "rows": [
+          { "identifier": "TC-54458", "id": 1975349, "mapping_id": 2150421283, "test_assignee": null },
+          { "identifier": "TC-54456", "id": 1971632, "mapping_id": 2150421284, "test_assignee": null },
+          { "identifier": "TC-54455", "id": 1971631, "mapping_id": 2150421282, "test_assignee": null }
+        ]
+      }
+    },
+    {
+      "step": 4,
+      "why": "the four target cases (TC-54485/54486/54487/54489) are NOT in TR-9110's baseline listing above, and bulk_set_test_case_assignee_in_run has no parameter that adds a case to a run (confirmed via describeCapability: its body is assignee_id/mapping_ids/select_all/de_selected_ids/folder_id/q/automation/test_run_ids — nothing that maps a new case in). Attempted the correct capability for that job, edit_test_run, with test_case_ids:[1985019,1985020,1985021,1985023] as a setup step.",
+      "source": "invoked",
+      "capability": "edit_test_run",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" }, "body": { "run_state": "new_run", "test_case_ids": [1985019, 1985020, 1985021, 1985023] } },
+      "status": "BLOCKED",
+      "produced": null,
+      "note": "Refused by the harness's auto-mode permission classifier ('Modify Shared Resources') before it reached the API — this session is scoped to write via bulk_set_test_case_assignee_in_run only. Consequently TC-54485/54486/54487/54489 could NOT be mapped into TR-9110 in this probe, and no mapping_id exists for them to report. This also empirically confirms the capability-naming finding below: getting cases into a run genuinely requires a different capability than the one named 'assign ... to test_run'."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" }, "body": { "assignee_id": 3741, "mapping_ids": [2150421282, 2150421284, 999999999] } },
+      "status": 502,
+      "error": "{\"success\":false,\"message\":\"Failed to update assignee\"}",
+      "changed": "Dropped the nonexistent mapping_id (999999999) and retried with only the two real mapping_ids, to isolate whether the bogus id caused the 502."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" }, "body": { "assignee_id": 3741, "mapping_ids": [2150421282, 2150421284] } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9110" }, "body": { "assignee_id": 3741, "mapping_ids": [2150421282, 2150421284] } },
+    "status": 200,
+    "response_keys": ["success", "info", "test_cases", "skipped_test_case_ids"],
+    "item_shape": ["assignee", "creator_details", "created_at", "updator_details", "updated_at", "case_type", "priority", "status", "automation_state", "is_shared", "project_name", "case_type_imported", "description", "custom_fields", "estimate", "expected_result", "id", "identifier", "is_automation", "links", "name", "history_count", "owner", "preconditions", "owner_imported", "priority_imported", "project_id", "status_imported", "steps", "tags", "template", "test_case_folder_id", "test_case_steps", "lcnc_build_map", "automation_status", "test_run_results_count", "test_run_results_issues_count", "issues", "comments_count", "metadata", "dataset_values", "latest_status", "result_status", "result_custom_fields", "defects", "mapping_id", "test_assignee", "last_executed_by", "deleted", "test_run_id", "configuration", "assignee_imported", "result_notes", "last_executed_at", "test_case_id", "planned_execution_date", "execution_eligible"]
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "id_form_findings": {
+    "run_id": {
+      "TR-9110_string": "accepted, 200 (attempt 2 above)",
+      "bare_integer_string_17577900": "accepted, 200 (verified separately: same call with test_run_id:\"17577900\" set the assignee on TC-54456's mapping cleanly)",
+      "note": "Matches the declared path_params pattern ^(TR-)?[0-9]+$ for test_run_id; both forms work in practice."
+    },
+    "project_id": {
+      "integer_379335744": "accepted (used throughout)",
+      "string_PR-2005": "REJECTED CLIENT-SIDE, before the request reached the API: invokeCapability itself returned {\"ok\":false,\"error\":\"'project_id' must be a number\"}. This is a clean, immediate validation error from the MCP layer honoring the declared integer type on project_id — never sent to the backend, so no live-API 4xx to compare against."
+    },
+    "case_id_vs_mapping_id": {
+      "claim_in_contract": "describeCapability's own guidance says: \"Passing the case's id here assigns nothing and still returns 200.\"",
+      "actual_behavior": "FALSE / DRIFT. Passing TC-54455's test-case id (1971631) in mapping_ids, mixed with nothing else, returned 502 {success:false, message:'Failed to update assignee'} — the exact same failure as a wholly nonexistent id, not a silent 200 no-op. The documented 'assigns nothing, still 200' behavior could not be reproduced.",
+      "conclusion": "The only clean way to target a case with this capability is its `mapping_id`, sourced from list_test_run_test_cases_by_integer_id. Any other id (test case id, or a fabricated id) 502s the whole call rather than either 4xx-ing cleanly or silently ignoring it."
+    }
+  },
+  "partial_failure_findings": {
+    "tested": "mapping_ids: [2150421282 (valid, TC-54455), 2150421284 (valid, TC-54456), 999999999 (nonexistent)]",
+    "result": "The ENTIRE call failed with 502 {success:false, message:'Failed to update assignee'}. Status was NOT 200. There was no skipped_test_case_ids-style field, no partial application - neither of the two valid rows was assigned in this attempt (confirmed unaffected by re-reading afterward before the clean retry).",
+    "comparison_to_sibling_capabilities": "This differs from create_bulk_test_cases (which the task cites as silently discarding a bad row and returning 200 with no signal) AND from list_test_run_test_cases_by_integer_id / edit_test_run, which both expose a top-level skipped_test_case_ids array for cases a review gate excluded. bulk_set_test_case_assignee_in_run has neither behavior: it does not silently drop the bad id (unlike create_bulk_test_cases) and it does not name the bad id in a skipped-style field (unlike its own sibling reads/edits) - it fails the whole batch with an undeclared 502.",
+    "undeclared_status": "502 is not among this capability's declared responses (200, 400, 401, 403, 404, 422, 500). The actual failure mode for a bad id sits outside the documented error surface entirely."
+  },
+  "mapping_id_unblock_conclusion": {
+    "goal": "Report the mapping_id for each newly assigned case (TC-54485/54486/54487/54489), which the task says only list_test_run_test_cases_by_integer_id exposes and which the result-family capabilities need.",
+    "outcome": "NOT ACHIEVED for these four cases. bulk_set_test_case_assignee_in_run cannot map a case into a run at all - it only sets the assignee on rows already mapped in. Getting TC-54485/54486/54487/54489 into TR-9110 requires a genuinely different capability (edit_test_run's top-level test_case_ids, or bulk_update_test_run_test_cases's test_run.add_test_cases). That call was attempted as a setup step and was refused by this session's own write-permission scope (harness auto-mode classifier), not by the API.",
+    "what_was_verified_instead": "The capability's real function - setting assignee_id on already-mapped rows - was verified end-to-end against TC-54455 (mapping_id 2150421282) and TC-54456 (mapping_id 2150421284), both already resident in TR-9110, while leaving TC-54458's mapping (2150421283, the evidence case) completely untouched throughout every attempt."
+  },
+  "progress_consistency": {
+    "before": { "test_cases_count": 3, "overall_progress": { "untested": 3, "passed": 0, "retest": 0, "failed": 0, "blocked": 0, "skipped": 0, "in_progress": 0 } },
+    "after": { "test_cases_count": 3, "overall_progress": { "untested": 3, "passed": 0, "retest": 0, "failed": 0, "blocked": 0, "skipped": 0, "in_progress": 0 } },
+    "note": "Consistent and unchanged, as expected - assigning an owner does not touch execution status, so test_cases_count and overall_progress correctly did not move."
+  },
+  "notes": "PRIMARY FINDING (naming/intent drift): despite its name and its 'entity: test_run' framing suggesting it adds/maps test cases INTO a run, this capability's actual, documented AND verified function is to set (or, if assignee_id is omitted, clear) the `assignee_id` on rows that are ALREADY mapped into the run. Its own describeCapability intent string says exactly this ('Set the assignee on many test cases inside a test run'), and its body has no field that can add a new case - only mapping_ids/select_all/de_selected_ids/folder_id/q to select among EXISTING rows. An agent reaching for this capability to 'assign test cases to a test run' (i.e. get them into the run) will be misled; the correct capability for that is edit_test_run (test_case_ids, top-level, additive) or bulk_update_test_run_test_cases (test_run.add_test_cases, always async). This was confirmed empirically: TR-9110's test_cases_count stayed at 3 throughout every attempt on this capability, and the attempt to actually add the four target cases had to go through edit_test_run instead, which this session's write-permission scope then blocked.\n\nSECOND FINDING (undeclared 502, contract's own case-id guidance is wrong): any invalid entry in mapping_ids - whether a genuinely nonexistent id or a real test-case `id` used where a `mapping_id` belongs - fails the WHOLE call with an undeclared 502 {success:false, message:'Failed to update assignee'}, not the 200-with-silent-no-op the capability's own guidance text promises, and not a documented 4xx. This is reproducible (2/2 attempts) and is a genuine gap in the declared response surface (only 200/400/401/403/404/422/500 are declared).\n\nTHIRD FINDING (minor, response-consistency): the run-listing embedded in the 200 write response reports `test_run_id: 359842` on every row, while a direct list_test_run_test_cases_by_integer_id read of the identical rows immediately before and after reports `test_run_id: 17577900` (the run's real uuid). The write-response embedding appears to surface a different internal id than the run's public integer id - worth flagging to the product team as a serialization inconsistency, though it did not affect this probe's outcome since mapping_id and test_case identifiers were consistent throughout.\n\nWhat worked cleanly: assignee_id targeting by mapping_id (both as TR-9110 and as the bare integer 17577900 for test_run_id); TC-54458's mapping was never touched in any attempt (verified by direct re-read after each write). What could not be completed: mapping TC-54485/54486/54487/54489 into TR-9110, and therefore reporting their mapping_ids, because that requires a capability outside this probe's authorized write scope and, more fundamentally, because bulk_set_test_case_assignee_in_run itself cannot do that job regardless of scope. TR-9075, TR-9061 and TR-9062 were never referenced by any call in this probe."
+}

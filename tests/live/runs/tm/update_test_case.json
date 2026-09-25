@@ -1,0 +1,164 @@
+{
+  "capability": "update_test_case",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T06:06:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Capture TC-54458's full baseline state before any write, per field, so every change can be recorded and restored.",
+      "source": "pool",
+      "capability": "get_test_case",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_case_id": "TC-54458"}},
+      "status": 200,
+      "produced": {
+        "title": "__mcp-probe-case-2026-09-18T00:00:00Z",
+        "description": null,
+        "preconditions": null,
+        "priority": "Medium",
+        "status": "Active",
+        "case_type": "Other",
+        "automation_status": "not_automated",
+        "owner": "probe-user@example.invalid",
+        "tags": ["mcp-probe"],
+        "template": "test_case_steps",
+        "folder_id": 764828,
+        "steps": [{"step": "Open the login page", "result": "Login page is displayed"}],
+        "custom_fields": [],
+        "attachments": [],
+        "is_shared": false,
+        "identifier": "TC-54458",
+        "created_at": "2026-09-18T05:51:55.000Z",
+        "last_updated_at": "2026-09-18T05:59:11.000Z"
+      }
+    },
+    {
+      "step": 2,
+      "why": "Verify in storage (not just the update echo) that the main update landed, and specifically that sending an empty string for description cleared it rather than being a no-op.",
+      "source": "invoked",
+      "capability": "get_test_case",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_case_id": "TC-54458"}},
+      "status": 200,
+      "produced": {
+        "title": "__mcp-probe-case-2026-09-18T00:00:00Z (probe-update)",
+        "description": null,
+        "priority": "High",
+        "tags": ["mcp-probe", "probe-update"],
+        "steps": [{"step": "Open the login page", "result": "Login page is displayed - updated"}],
+        "created_at": "2026-09-18T05:51:55.000Z"
+      }
+    },
+    {
+      "step": 3,
+      "why": "Verify in storage that the restore call reverted name, priority, tags and step text back to their original values.",
+      "source": "invoked",
+      "capability": "get_test_case",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_case_id": "TC-54458"}},
+      "status": 200,
+      "produced": {
+        "title": "__mcp-probe-case-2026-09-18T00:00:00Z",
+        "priority": "Medium",
+        "tags": ["mcp-probe"],
+        "steps": [{"step": "Open the login page", "result": "Login page is displayed"}],
+        "description": null
+      }
+    },
+    {
+      "step": 4,
+      "why": "Final independent read after the updated_at claim-tests, to confirm neither the rejected past-dated attempt nor the accepted future-dated attempt left any residual change on the case.",
+      "source": "invoked",
+      "capability": "get_test_case",
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_case_id": "TC-54458"}},
+      "status": 200,
+      "produced": {
+        "title": "__mcp-probe-case-2026-09-18T00:00:00Z",
+        "priority": "Medium",
+        "tags": ["mcp-probe"],
+        "steps": [{"step": "Open the login page", "result": "Login page is displayed"}],
+        "created_at": "2026-09-18T05:51:55.000Z",
+        "description": null
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"body": {"is_shared": true}},
+      "status": null,
+      "error": "unknown body: is_shared. accepted: attachment_id, automation_status, background, case_type, created_at, custom_fields, description, estimate, expectation, expected_result, feature, identifier, ids, issue_tracker, issues, name, old_id, owner, preconditions, priority, review_status, reviewers, scenario, send_for_review, status, tags, template, template_id, test_case_dataset, test_case_folder_id, test_case_steps, updated_at",
+      "changed": "Client-side rejection before any HTTP call was made (invokeCapability refused the unknown body key). Dropped is_shared entirely and proceeded with the declared fields for the main update."
+    },
+    {
+      "n": 2,
+      "arguments": {"body": {"name": "__mcp-probe-case-2026-09-18T00:00:00Z (probe-update)", "description": "mcp-probe temporary description", "priority": "High", "tags": ["mcp-probe", "probe-update"], "test_case_steps": [{"step": "Open the login page", "result": "Login page is displayed - updated"}], "old_id": "mcp-probe-old-id-test", "expectation": "mcp-probe expectation test", "created_at": "2020-01-01T00:00:00.000Z", "identifier": "TC-54458"}},
+      "status": 200,
+      "error": null,
+      "changed": "Succeeded on the first try (main update). name/description/priority/tags/test_case_steps all took effect; old_id and expectation were accepted with no error but are not echoed anywhere observable; created_at was silently ignored (case's created_at stayed at its original value); identifier sent as its own current value was a no-op either way."
+    },
+    {
+      "n": 3,
+      "arguments": {"body": {"description": ""}},
+      "status": 200,
+      "error": null,
+      "changed": "Claim-test for empty-string semantics: sending description=\"\" set the stored description to null (a real clear, not a no-op), confirmed by a fresh get_test_case read and by last_updated_at advancing."
+    },
+    {
+      "n": 4,
+      "arguments": {"body": {"updated_at": "2020-01-01T00:00:00.000Z"}},
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"updated_at must be greater than or equal to current time\"}",
+      "changed": "Retried with a future timestamp (>= current time) to see whether a value that passes validation is actually applied."
+    },
+    {
+      "n": 5,
+      "arguments": {"body": {"updated_at": "2026-09-19T00:00:00.000Z"}},
+      "status": 200,
+      "error": null,
+      "changed": "Valid future updated_at was accepted with 200 but never applied: last_updated_at in the response was the server's own current timestamp, not the value sent. No further attempts needed for this claim."
+    },
+    {
+      "n": 6,
+      "arguments": {"body": {"name": "__mcp-probe-case-2026-09-18T00:00:00Z", "priority": "Medium", "tags": ["mcp-probe"], "test_case_steps": [{"step": "Open the login page", "result": "Login page is displayed"}]}},
+      "status": 200,
+      "error": null,
+      "changed": "Restore call: reverted name, priority, tags and the step's result text back to their original values. description was already null (matching the original), so it was left untouched."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": "PR-2005", "test_case_id": "TC-54458"}, "body": {"name": "__mcp-probe-case-2026-09-18T00:00:00Z (probe-update)", "description": "mcp-probe temporary description", "priority": "High", "tags": ["mcp-probe", "probe-update"], "test_case_steps": [{"step": "Open the login page", "result": "Login page is displayed - updated"}], "old_id": "mcp-probe-old-id-test", "expectation": "mcp-probe expectation test", "created_at": "2020-01-01T00:00:00.000Z", "identifier": "TC-54458"}},
+    "status": 200,
+    "response_keys": ["success", "test_case"],
+    "item_shape": {
+      "identifier": "string (TC-54458)",
+      "title": "string",
+      "folder_id": "integer",
+      "priority": "string display value",
+      "status": "string display value",
+      "case_type": "string display value",
+      "automation_status": "string internal name",
+      "owner": "string email",
+      "description": "string|null",
+      "preconditions": "string|null",
+      "template": "string",
+      "is_shared": "boolean",
+      "tags": "array<string>",
+      "issues": "array<object>",
+      "steps": "array<{step,result}>",
+      "custom_fields": "array (empty in this fixture)",
+      "attachments": "array (empty in this fixture)",
+      "created_at": "date-time (unchanged despite created_at in the request body)",
+      "last_updated_at": "date-time",
+      "created_by": "string email",
+      "updated_by": "string email",
+      "urls": "{self}"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "test_case_id (path)"],
+    "json_path": "/test_case/<field> per body field",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Flat body confirmed correct: invokeCapability applies each field's own json_path (/test_case/<field>), so sending fields flat (no test_case wrapper) succeeded with 200 every time. The capability's guidance describing a required 'test_case' wrapper at 400 is describing the underlying HTTP contract that invokeCapability's json_path machinery already satisfies for the caller — not a caller-facing instruction to nest, and it was never actually hit as a rejection here, so it is not scored as drift. \n\nClaim 1 (is_shared): NOT declared as a body param at all -- invokeCapability rejected it client-side verbatim as 'unknown body: is_shared. accepted: <32-field list>' before any HTTP call was made. This means the capability's own guidance text ('is_shared is checked before the write ... and is then discarded, so the value never takes effect. Use the bulk edit to change sharing.') describes server-side behaviour for a field that cannot be sent through this surface at all -- that guidance is unobservable/untestable through update_test_case, a structural limit of this suite rather than a gap in this probe. It is also an internal inconsistency in the authored contract: guidance references a field the declared param list does not carry, consistent with the resolution notes' description of fields added/removed by hand during the twin merge.\n\nClaim 2 (old_id/expectation/attachment_id/ids/issue_tracker/created_at/updated_at): all seven are declared body params (confirmed against the client-side 'accepted:' list). Tested old_id and expectation directly: both accepted with 200 and no error, but neither is echoed by update_test_case's own response nor by get_test_case's read shape -- their effect is genuinely unverifiable through this surface (same structural-limit class as is_shared, but for accepted-not-declared-missing fields rather than an undeclared field). attachment_id was skipped -- no real previously-stored attachment id existed in the fixture and inventing one is out of scope. ids was skipped deliberately: its own description ('ids of other cases this write applies to, for the shared-write path') risks fanning the write out to other cases including the __readonly__ fixtures, which must never be written. issue_tracker was skipped because it is only meaningful paired with issues, which was not sent. created_at was tested with a past date and behaved exactly as the contract claims: no error, no effect (created_at stayed at its original value) -- CONFIRMS the contract for created_at. updated_at, however, DRIFTS from the contract: the contract groups created_at and updated_at together as 'dropped without error when the workspace lacks the entitlement'. In reality updated_at is actively validated server-side -- a past-dated value 400'd with 'updated_at must be greater than or equal to current time' -- and even a valid, future-dated value that passed that check was still never applied (the response's last_updated_at was the server's own current time, not the submitted value). So updated_at is validated-yet-always-discarded, not simply 'dropped without error' like created_at; the contract's claim that the two fields behave the same way is false for updated_at. Additionally, that 400's body was {success:false, message:'...'} with no `error` object at all, disagreeing with this capability's own declared 400 envelope ({success, error:{code,message,details}}) -- a second capability (after the two already on record) failing its declared error envelope, reinforcing the systemic pattern flagged in the standing lessons.\n\nClaim 3 (identifier): contract claims it maps to a third-party identifier only in project-level-id workspaces and is otherwise ignored. Sent identifier=TC-54458 (its own current value) deliberately, to avoid risking the fixture's addressability if the workspace really is in that mode. The response's identifier stayed TC-54458 either way, so this is inconclusive by construction -- genuinely untestable here without risking breaking the fixture, exactly the caveat the contract itself invites; not scored as drift.\n\nClaim 4 (sparse update / empty-string semantics): confirmed omitted fields (status, case_type, automation_status, owner, preconditions, custom_fields, attachments, folder_id, template) kept their stored values across every write in this probe -- sparse-update semantics hold. Empty-string semantics differ by field: description='' actually CLEARS the field to null (verified independently via get_test_case, and last_updated_at advanced, so it was a real write, not a no-op) -- unlike `name`, which the contract says 400s on an empty string rather than clearing. This mirrors the batch-2 finding on update_custom_field that empty strings are a no-op on some fields but a clear on others; here it is a clear.\n\nFields changed on TC-54458 and restoration status: name, description, priority, tags, and one step's result text were changed and ALL were restored to their original values (confirmed by an independent get_test_case read matching the step-1 baseline exactly, aside from last_updated_at which necessarily advances on every write and cannot itself be restored without triggering another advance). old_id/expectation/created_at/updated_at claim-test values never had a durable, verifiable effect on the case (created_at and updated_at both ended up back at their original/natural values with no restore action needed), so no additional restore was required for them. Verified in storage throughout via independent get_test_case reads (setup steps 1-4), never trusting the update response's echo alone. All preprod calls succeeded on the intended try (no status-0 'could not be reached' retries were needed). No 500s were encountered. Verdict is DRIFT: driven primarily by the updated_at contract violation (validated-with-error rather than silently dropped, plus a non-conforming 400 error envelope) and secondarily by the is_shared guidance/declaration inconsistency; the successful update's own response shape (probe.item_shape) matched its declared nested schema exactly, with no undeclared_returned or declared_missing fields on the 200 path itself."
+}

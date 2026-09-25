@@ -1,0 +1,46 @@
+{
+  "capability": "list_test_case_templates",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "route is workspace/admin scoped (/api/v1/admin-v2/settings/templates), not project-scoped — no project or fixture object needed",
+      "source": "pool",
+      "capability": null,
+      "produced": {}
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "query": { "entity_type": "TestCase" }
+    },
+    "status": 200,
+    "response_keys": ["success", "templates"],
+    "item_shape": {
+      "id": 1164,
+      "name": "Test Case Steps",
+      "entity": "TestCase",
+      "enabled": true,
+      "step_type": "test_case_steps",
+      "is_default": true,
+      "is_system": true,
+      "future_projects_applicable": true,
+      "field_count": null,
+      "linked_to_all_projects": null,
+      "project_count": null,
+      "created_at": "2025-05-02T16:13:07.000Z",
+      "updated_at": "2025-05-02T16:13:07.000Z"
+    }
+  },
+  "contract": {
+    "required": ["entity_type"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded (no failed attempts, no setup calls needed). Response returned the two known system templates for this workspace: id 1164 'Test Case Steps' (is_default:true, is_system:true, step_type:test_case_steps) and id 1664 'Test Case BDD' (is_default:false, is_system:true, step_type:test_case_bdd) — matches the confirmed fixture pool exactly. `info` was correctly absent since `paginated` was not sent (contract says info only appears when paginated=true); this is documented conditional behaviour, not a missing field, so not counted as declared_missing. All declared response keys (success, templates[].{id,name,entity,enabled,step_type,is_default,is_system,future_projects_applicable,field_count,linked_to_all_projects,project_count,created_at,updated_at}) were present and populated (field_count/linked_to_all_projects/project_count came back null, which the contract documents as a valid 'not computed' state, not absence).\n\nSPECIFIC INTEREST — list_test_case_templates vs list_templates: the two are NOT interchangeable and the difference is real, not cosmetic. (1) entity_type: list_test_case_templates takes a REQUIRED `entity_type` query param (values TestCase | TestRunResult) — omitting it errors rather than defaulting, per its own guidance ('entity_type is effectively REQUIRED even though it reads as optional... always send it'). list_templates has NO entity_type param at all — the entity is fixed server-side to TestCase only, so it can never list TestRunResult templates. This confirms the routing-eval report: entity_type is exactly what separates them, and only one of the two accepts it. (2) Scope/route: list_test_case_templates hits the workspace/admin-scoped /api/v1/admin-v2/settings/templates route (no project param binds results to a project, though an optional `project` filter narrows by linkage); list_templates's describeCapability output does not show this admin path and instead documents ordinary p/count paging. (3) Pagination mechanics differ: list_test_case_templates pages only when `paginated` is literally the string 'true' (fixed page size 10, `p` otherwise ignored); list_templates pages via `p` + `count` (page size up to 300, `page`/`per_page` are explicitly ignored aliases). (4) Neither capability's contract carries a preferred or deprecated marker in describeCapability's output — no `deprecated`, `preferred`, or superseded-by field appears on either. So beyond entity_type/pagination-shape, nothing in the contracts states one should be chosen over the other; that omission is itself worth flagging to whoever owns capability selection guidance, since two overlapping list-templates capabilities with no preference signal is exactly what causes routing-eval confusion.\n\nCONTRACT DEFECT — the declared 200 schema for list_test_case_templates is still the empty literal `{\"type\":\"object\"}` (see the raw describeCapability output: `\"responses\":{\"200\":{\"description\":\"...\",\"schema\":{\"type\":\"object\"}}}`). The prose `description` string does list the real shape (success, templates[] with the field list), but the machine-checkable `schema` itself declares nothing — no `properties`, no `required`, not even `type: array` on `templates`. This is a live defect independent of what the API actually returned: a 2xx contract that type-checks against literally any object payload cannot be used to validate a response programmatically, and it means the `returns` field of the top-level contract (which does list the real keys) and the nested `responses.200.schema` disagree with each other in the same describeCapability payload. By contrast, list_templates's schema is fully typed (required/properties down to per-field types on templates[] items and info{}), so this is specific to list_test_case_templates, not a systemic issue across both capabilities."
+}

@@ -1,0 +1,72 @@
+{
+  "capability": "discard_duplicate",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Establish the prerequisite FIRST: does project 379335744 (PR-2005) have any duplicate pairs at all, and in what state, before attempting to act on one.",
+      "source": "invoked",
+      "capability": "get_dedupe_status",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": { "status": "NOT_ENABLED", "message": "No dedupe job found for this project" },
+      "meaning": "NOT_ENABLED is synthesised by that capability when NO scan job row exists at all for this project - not 'ran and found nothing'. Per that capability's own guidance this is the one read that disambiguates the two; here it resolves unambiguously to 'dedupe has never run for this project'."
+    },
+    {
+      "step": 2,
+      "why": "Cross-check against the review queue itself, broadest scope (no filters, page 1).",
+      "source": "invoked",
+      "capability": "list_duplicates",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "page": 1 } },
+      "status": 200,
+      "produced": { "success": true, "duplicates": [], "info": { "count": 0, "total_pages": 0 } },
+      "meaning": "Empty, consistent with step 1. On its own this would be ambiguous (feature-off vs genuinely-clean, per the capability's own guidance) - but combined with the NOT_ENABLED status from step 1, the ambiguity is resolved: there is no dedupe job history and no suggested pair for this project, full stop."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "duplicate_id": 999999999 },
+        "body": { "discard_reason": "probe-sanity-check", "user_feedback": "live-probe: confirming error envelope for a nonexistent duplicate id, since no real suggested pair exists in this project (see setup)" }
+      },
+      "status": 400,
+      "error": "{\"error\":\"Invalid JSON data\",\"details\":[\"The property '#/discard_reason' value \\\"probe-sanity-check\\\" did not match one of the following values: incorrect, deliberate, later, other\"]}",
+      "changed": "CONTRACT DRIFT, not a real fix-and-retry: describeCapability states discard_reason is 'Optional and unvalidated - no closed set is enforced, and omitting it stores null.' The live API rejected it with a 400 enforcing a closed enum of exactly 4 values (incorrect, deliberate, later, other). Neither the 400 status nor this body shape appear anywhere in the capability's declared responses (200/401/403/404/409/500 only)."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "duplicate_id": 999999999 },
+        "body": { "discard_reason": "other", "user_feedback": "live-probe: confirming 404 envelope for a nonexistent duplicate id, since no real suggested pair exists in this project (see setup)" }
+      },
+      "status": 404,
+      "error": "{\"success\":false,\"error\":\"Duplicate not found.\"}",
+      "changed": "Retried with a valid enum value discovered from attempt 1's rejection. Got the declared 404 ({success:false, error:'Duplicate not found.'}) exactly as documented for an unknown/already-resolved pair. No real duplicate id was ever obtainable (setup steps 1-2), so this fabricated id was used purely to sanity-check the error envelope, per the same pattern used for get_duplicate_source_test_case in this campaign. Stopped here (2 of 3 allowed attempts) - a third attempt would only repeat this same 404 with no new information."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "duplicate_id": 999999999 },
+      "body": { "discard_reason": "other", "user_feedback": "live-probe: confirming 404 envelope for a nonexistent duplicate id, since no real suggested pair exists in this project (see setup)" }
+    },
+    "status": 404,
+    "response_keys": ["success", "error"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer)",
+      "duplicate_id (path, integer) - unlike resolve_duplicate, which takes the pair id in the body, this capability takes it as a path segment",
+      "discard_reason (body, flat, OPTIONAL per docs) - DRIFT: declared 'unvalidated, no closed set enforced', but live API enforces a closed enum {incorrect, deliberate, later, other} and 400s on anything else",
+      "user_feedback (body, flat) - stored server-side as discard_feedback per guidance; not independently exercised for a value round-trip since no 200 was ever reached"
+    ],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "PREREQUISITE FAILED - VERDICT IS UNVERIFIED, NOT BLOCKED, NOT A SHRUG. get_dedupe_status on project 379335744 (PR-2005) returned {status:'NOT_ENABLED', message:'No dedupe job found for this project'} - a scan has literally never run for this project, so no duplicate pair can exist in ANY status (suggested/merged/archived/discarded). list_duplicates independently confirmed {duplicates:[], info:{count:0,total_pages:0}}. Nothing in this API can create a suggestion or trigger a scan (per list_duplicates's and search_duplicates's own guidance), and this task explicitly forbids guessing at a pair - so the central question this probe exists to answer (does discard destroy the SUGGESTION or the CASE?) could not be tested against a real pair, full stop. This means the probe-created cases named in scope (TC-54484/85/86/87/89, TC-54490/91, TC-54502/03/04) were never touched by this probe - there was no pair to act on, so none of the 'only touch these' guardrail was ever exercised either way.\n\nWHAT DISCARD DISCARDS (per contract, UNVERIFIED live): describeCapability's own guidance is unambiguous in prose - 'This is the not-a-duplicate verdict. Neither test case is touched - nothing is archived, merged, commented on or tagged.' That is the harmless reading (discards the SUGGESTION, not the case) and, unlike bulk_set_test_case_assignee_in_run / delete_folder_and_subtree / bulk_restore_archived_test_cases, the name and the documented behavior actually agree here - there is no name-vs-behavior trap apparent in the spec text. But per this task's own standard ('verify by reading back, never from the write response... six capabilities have now been caught misreporting their own result'), that claim was NEVER independently confirmed against a live discard on a real pair, because no real pair existed to test it against. Flagged as an open item for whichever future probe round finds this project (or another) with an actual suggested pair: read both test_cases in the pair with get_duplicate or get_test_case-style capabilities BEFORE discarding, discard, then re-read both test case ids directly (not via the duplicate surface, which per docs discards the pair from every listing) to confirm they still exist. This probe could not do that step.\n\nDISCARD vs RESOLVE - the distinguishing question the task asked for, answered from contract text (not independently re-verified live beyond the 404/400 envelope checks above): discard_duplicate is a pure dismissal - it needs only tc_write, moves the pair straight to 'discarded', archives nothing, and its stated purpose is exclusively to feed a 'not a duplicate' signal back to the model. resolve_duplicate is the one that can actually make a case disappear - it requires the heavier tc_delete permission (not tc_write), and its 'merge' action archives the source case, tags it 'Archived as Duplicate', posts a merge comment on the survivor and stores a pre-merge snapshot (recoverable only via get_duplicate_source_test_case, itself only reachable for merged pairs); its 'archive' action archives one side outright with no comment or snapshot. Both end with the pair marked 'merged', not 'discarded' - so 'merged' vs 'discarded' terminal status is itself diagnostic of which path a pair went through, if a future probe can read one back. Permission-tier alone (tc_write vs tc_delete) is a meaningful, testable signal that discard is the lighter-weight, non-destructive operation of the two, consistent with the prose - but this probe could not confirm it by outcome, only by declared permission and prose.\n\nGENUINE DRIFT FOUND ANYWAY, WORTH REPORTING LOUDLY: even though the central destructive question is unverified, this probe DID reach a live, reproducible contract defect on the discard_reason parameter. describeCapability states plainly: 'Optional and unvalidated - no closed set is enforced, and omitting it stores null.' Attempt 1 sent an arbitrary string ('probe-sanity-check') and got 400 {error:'Invalid JSON data', details:[\"...did not match one of the following values: incorrect, deliberate, later, other\"]}. That is a hard, enforced enum of exactly 4 values - the opposite of what the spec claims. Compounding it: the 400 status is not declared AT ALL for this capability (describeCapability with include_responses=all lists only 200/401/403/404/409/500), and the 400 body shape ({error: string, details: string[]}) does not even match the 'standard error response format' declared for this capability's own 401/500 ({success:boolean, error:{code, message, details}}) - a THIRD, undeclared error envelope shape for a capability whose 404 already uses a fourth shape ({success:false, error:'Duplicate not found.'}, error as a plain string). This is exactly the kind of error-envelope drift this campaign has been tracking (3 of 11 declared shapes correct going in) - discard_duplicate now contributes one fully undeclared status code plus a parameter-validation claim that is flatly false, on top of whatever the 200 shape drift turns out to be once a real pair is available.\n\nCONCURRENT-PROBE NOTE: per instructions, re-read before acting because a sibling probe is running resolve_duplicate on the same surface. Re-reading (setup steps 1-2, both fresh invokes at the start of this run) showed no pairs and no scan history at all - a concurrent resolve_duplicate run cannot manufacture a pair either (same 'suggested-only' precondition, and nothing in this API creates suggestions), so the absence here is not a race artifact; it is the project's real, stable state for the duration of this probe.\n\nGATE/PERMISSION NOTE: never encountered a 200-with-success:false entitlement gate here since no 200 was ever reached at all (both real invokes were 400 then 404). project 379335744 is otherwise the standard PR-2005 pool project used throughout this campaign; no evidence either way on whether this specific write is subject to the destructive-tier runtime gate, because its mode is declared 'write' (not 'destructive') and it was never invoked against a real pair to see whether a real discard actually goes through.\n\nBOTTOM LINE: capability could not be verified as safe (discards suggestion only) or dangerous (discards the case) because no duplicate pair exists in project 379335744 to test it against - get_dedupe_status returned NOT_ENABLED and list_duplicates returned an empty queue. A separate, confirmed contract defect was found and is reported above (discard_reason enum enforcement contradicts its own 'unvalidated' documentation, plus an entirely undeclared 400 status and a third distinct error envelope shape) - this is real and reproducible, but does not by itself answer the destructive-vs-harmless question this probe was assigned to resolve."
+}

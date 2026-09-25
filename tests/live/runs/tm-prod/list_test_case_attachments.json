@@ -1,0 +1,68 @@
+{
+  "capability": "list_test_case_attachments",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T07:39:53Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": "describeCapability list_test_case_attachments",
+      "note": "guidance[0] verbatim: \"DOES NOT WORK. Returns a bare 500 on any request. The handler calls a collection method on a value that is a plain array on this path, so it raises before serialising. Read a case's attachments through the entity-attachments listing instead.\" Required path params: project_id (integer), folder_id (integer), test_case_id (integer). Declared 200 schema: {success: boolean, attachments: [{id, filename, content_type, byte_size}]}. Declared error envelope for all 4xx/5xx: {success: false, error: {code, message, details}}."
+    },
+    {
+      "step": "search_project_entities_by_filter",
+      "call": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "body": {"folder_id": "9697326", "p": 1, "per_page": 5}},
+      "result": "200, info.count=3 (all 3 cases in this folder returned on one page). All 3 returned test_cases carry a base 'attachments' field (undocumented by search_project_entities_by_filter's own contract but present in every row) that is directly the attachment array — no separate per-case call needed. All 3 had attachments: [] (empty). Exhaustive coverage of this folder: 3/3 checked, 0 with attachments."
+    },
+    {
+      "step": "search_project_entities_by_filter",
+      "call": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "body": {"folder_id": "40231630", "p": 1, "per_page": 100}},
+      "result": "200, info.count=972 (page 1 of a much larger set). 100 cases returned; 81 of the 100 carry a non-empty 'attachments' array directly in the search row (e.g. TC-6228683 / id=137065006 has a PDF attachment 'prd_whatsapp_delete_feature_view.pdf', 66305 bytes; TC-5872767 / id=129941142 has 'zoomrooms_update_prd_v2.pdf', 268247 bytes). 19/100 were empty. Real attachment data confirmed abundant in this folder."
+    },
+    {
+      "step": "search_project_entities_by_filter",
+      "call": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "body": {"folder_id": "9600935", "p": 1, "per_page": 100}},
+      "result": "200, info.count=2052 (page 1 of a much larger set). 100 cases returned; 75 of the 100 carry a non-empty 'attachments' array directly in the search row (e.g. TC-4584352 / id=109344981 has 4 attachments: 'Expedia Datasets PRD.pdf' (117134 bytes) + three PNG screenshots; TC-2609577 / id=73875257 has 'Expedia Datasets PRD.pdf', 117134 bytes). 25/100 were empty. Real attachment data confirmed abundant in this folder too."
+    },
+    {
+      "step": "hunt summary",
+      "note": "Total sampled: 203 cases (3 in folder 9697326, exhaustive; 100 in folder 40231630; 100 in folder 9600935) — well above the 30-50 target. 156 of 203 sampled cases had one or more real, confirmed attachments (PDF specs and PNG screenshots with real filenames, content_types, byte_sizes and checksums). Attachment data for this project is plentiful; this is NOT a data-availability problem. The discovery method used the base 'attachments' array embedded directly in each search_project_entities_by_filter row rather than calling list_entity_attachments per case — cheaper and it also independently confirms attachment content, filenames and sizes exist on these exact cases before testing the broken v1 endpoint against them."
+    }
+  ],
+  "attempts": [
+    {
+      "description": "Case with 1 confirmed real attachment (prd_whatsapp_delete_feature_view.pdf, 66305 bytes) in the large 'Automation' folder",
+      "arguments": {"project_id": 332537, "folder_id": 40231630, "test_case_id": 137065006},
+      "case_identifier": "TC-6228683",
+      "status": 500,
+      "response_body": {"status": 500, "error": "Internal Server Error"}
+    },
+    {
+      "description": "Case with 4 confirmed real attachments (1 PDF + 3 PNG screenshots) in folder 9600935",
+      "arguments": {"project_id": 332537, "folder_id": 9600935, "test_case_id": 109344981},
+      "case_identifier": "TC-4584352",
+      "status": 500,
+      "response_body": {"status": 500, "error": "Internal Server Error"}
+    },
+    {
+      "description": "Case with confirmed EMPTY attachments array (control, from the exhaustively-checked small folder) — tests whether the 500 is data-independent as the guidance claims",
+      "arguments": {"project_id": 332537, "folder_id": 9697326, "test_case_id": 32747791},
+      "case_identifier": "TC-838571",
+      "status": 500,
+      "response_body": {"status": 500, "error": "Internal Server Error"}
+    }
+  ],
+  "probe": {
+    "arguments": {"project_id": 332537, "folder_id": 40231630, "test_case_id": 137065006},
+    "status": 500,
+    "response_keys": ["status", "error"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id", "folder_id", "test_case_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "1) The endpoint is blocked per its own describeCapability guidance, quoted verbatim: \"DOES NOT WORK. Returns a bare 500 on any request. The handler calls a collection method on a value that is a plain array on this path, so it raises before serialising. Read a case's attachments through the entity-attachments listing instead.\" This is a pre-serialization code bug (calling a collection/ActiveRecord method on a plain array), not a data-availability or auth issue, so per the guidance it is expected to fail on literally every request regardless of whether the target case has attachments. 2) Attachment hunt: sampled 203 real cases across three project=332537 folders — exhaustively all 3 cases in folder 9697326 (small), plus 100 of 972 in folder 40231630 ('Automation'), plus 100 of 2052 in folder 9600935. Discovery used the base 'attachments' array that search_project_entities_by_filter embeds directly in each test-case row (undocumented in that capability's own contract but present and populated on every row), which is cheaper than a per-case list_entity_attachments call and gives filename/content_type/byte_size/checksum straight away. Found 156 of 203 sampled cases (77%) with one or more real, confirmed attachments — e.g. TC-6228683 (id 137065006, folder 40231630) has 'prd_whatsapp_delete_feature_view.pdf' at 66305 bytes; TC-4584352 (id 109344981, folder 9600935) has 4 attachments (1 PDF + 3 PNG screenshots). Attachment data is abundant in this project; the earlier folder-level 'attachments always empty' fact does NOT carry over to case-level attachments, exactly as flagged — case-level attachments are real and plentiful here. 3) list_test_case_attachments was called for: (a) the confirmed-4-attachment case TC-4584352, (b) the confirmed-1-attachment case TC-6228683, and (c) a confirmed-EMPTY-attachments case TC-838571 as a control. All three returned an identical bare HTTP 500 body {\"status\":500,\"error\":\"Internal Server Error\"} with zero variation — confirming the failure is universal and data-independent exactly as the guidance describes; it fails identically whether the underlying case has 0, 1, or 4 real attachments. 4) Error envelope shape: on prod the 500 body is still the bare, un-enveloped {\"status\":500,\"error\":\"...\"} form, NOT the structured {success:false, error:{code,message,details}} envelope that describeCapability's own 500 schema declares. This mismatches the capability's declared error contract just as it did on preprod — same defect, same shape, on prod. 5) Conclusion: the preprod BLOCKED verdict reproduces fully on prod. Real attachment data exists and was positively confirmed on the exact cases tested (ruling out 'the case just has nothing to return' as an alternative explanation), yet the endpoint still 500s on every attempt with the same malformed error body as preprod. No behavioral difference between preprod and prod was observed for this capability."
+}

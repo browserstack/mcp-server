@@ -1,0 +1,83 @@
+{
+  "capability": "get_test_plan",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T05:05:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    { "step": 1, "why": "Fixture project identifier for the fixture pool (project __mcp-capability-fixture__)", "source": "pool", "capability": null,
+      "arguments": { "project_id": "PR-2005" }, "status": null, "produced": { "v1_id": 379335744, "v2_identifier": "PR-2005" } },
+    { "step": 2, "why": "Subject plan already created by the sibling create_test_plan probe, reused here read-only", "source": "pool", "capability": null,
+      "arguments": { "test_plan_id": "TP-1616" }, "status": null, "produced": { "numeric_plan_id_from_prior_probe": 48283, "tags_sent_on_create": ["mcp-probe", "disposable"] } },
+    { "step": 3, "why": "Readonly fixture plan TP-1596 used as a second, older record to cross-check field population", "source": "pool", "capability": null,
+      "arguments": { "test_plan_id": "TP-1596" }, "status": null, "produced": {} }
+  ],
+  "attempts": [
+    { "n": 1, "arguments": { "path_params": { "project_id": "PR-2005", "test_plan_id": "TP-1616" } }, "status": 0, "error": "the product could not be reached", "changed": "none — retried unchanged per instructions (preprod intermittent)" },
+    { "n": 2, "arguments": { "path_params": { "project_id": "PR-2005", "test_plan_id": "TP-1616" } }, "status": 0, "error": "the product could not be reached", "changed": "none — retried unchanged again" },
+    { "n": 3, "arguments": { "path_params": { "project_id": "PR-2005", "test_plan_id": "TP-1616" } }, "status": 200, "error": null, "changed": "n/a — third attempt succeeded with identical arguments" }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": "PR-2005", "test_plan_id": "TP-1616" } },
+    "status": 200,
+    "response_keys": ["success", "test_plan"],
+    "item_shape": {
+      "identifier": "string, e.g. 'TP-1616'",
+      "name": "string, '__mcp-probe-plan-2026-09-18T00-00-00Z'",
+      "description": "string, non-empty free text",
+      "active_state": "string enum active|completed, actual 'active'",
+      "tags": "array<string>, ['disposable','mcp-probe'] — order not preserved from create ([mcp-probe,disposable] sent)",
+      "issues": "array, empty",
+      "test_runs_count": "object {active:int,closed:int}, actual {active:0, closed:0}",
+      "test_runs": "array, empty (preview list, empty since count is 0)",
+      "sub_plans_count": "integer, 0",
+      "parent_plan_id": "ABSENT entirely — not present as a key at all, not null",
+      "start_date": "string date-time, '2026-09-18T00:00:00.000Z'",
+      "end_date": "string date-time, '2026-10-18T00:00:00.000Z'",
+      "created_at": "string date-time, '2026-09-18T05:00:22.000Z'",
+      "project_id": "string, 'PR-2005'",
+      "links": "object {self, test_runs} — both API path strings, present alongside non-empty test_runs array condition (guidance says both present/absent together — here test_runs=[] but present, and links present too)",
+      "urls": "object {self, sub_test_plans} — self is a web-app URL 'https://.../projects/379335744/test-plans/48283' (numeric plan id 48283 only recoverable by parsing this URL, no dedicated numeric field); sub_test_plans present because this is a top-level plan",
+      "owner": "NOT PRESENT — no owner key anywhere in the payload"
+    }
+  },
+  "probe_secondary": {
+    "note": "Second plan probed per instructions: TP-1596, the readonly fixture plan (older record, checked whether it populates fields the fresh TP-1616 leaves empty)",
+    "arguments": { "path_params": { "project_id": "PR-2005", "test_plan_id": "TP-1596" } },
+    "status": 200,
+    "test_plan": {
+      "identifier": "TP-1596",
+      "name": "probe plan",
+      "description": "\"\" (empty string, not null/absent)",
+      "active_state": "active",
+      "tags": "[] (empty array, not null/absent)",
+      "issues": "[]",
+      "test_runs_count": "{active:0, closed:0}",
+      "test_runs": "[]",
+      "sub_plans_count": 0,
+      "parent_plan_id": "ABSENT entirely — same as TP-1616, confirms this is not a one-off",
+      "start_date": "null (explicit JSON null, unlike TP-1616 which has a real date)",
+      "end_date": "null (explicit JSON null)",
+      "created_at": "2026-09-17T08:17:45.000Z",
+      "project_id": "PR-2005",
+      "links": "{self, test_runs} same shape as TP-1616",
+      "urls": "{self: '.../test-plans/48245', sub_test_plans} — same shape, different numeric id (48245)",
+      "owner": "NOT PRESENT — confirms no owner field on this older plan either"
+    },
+    "conclusion": "Older fixture plan (created before TP-1616) does not populate parent_plan_id, owner, or any field TP-1616 lacked — both top-level plans behave identically. It DOES show that start_date/end_date correctly go to explicit null (not absent) when never set, whereas tags/issues/test_runs go to empty arrays rather than being omitted — all consistent with the nullable/array declarations in the contract."
+  },
+  "contract": {
+    "required": ["project_id", "test_plan_id"],
+    "json_path": "test_plan",
+    "declared_missing": [
+      "parent_plan_id — listed unconditionally inside the capability's top-level flat `returns` array (alongside identifier, name, etc.), but absent entirely (not null) on BOTH top-level plans probed (TP-1616, TP-1596). The nested per-field schema is more careful ('present only when this plan is a sub-plan', nullable) and is NOT contradicted — the drift is specifically in the flat `returns` summary list overclaiming unconditional presence, same pattern the sibling create_test_plan probe found."
+    ],
+    "undeclared_returned": [
+      "urls.self",
+      "urls.sub_test_plans",
+      "links.self",
+      "links.test_runs"
+    ]
+  },
+  "notes": "Plans probed: TP-1616 (mine, top-level, active, 3rd attempt succeeded after two status-0 'could not be reached' retries — environment flakiness, not a real error) and TP-1596 (readonly fixture, top-level, older, succeeded on the first try). Both are top-level plans; no sub-plan (STP-NNN) was probed since none exists in the fixture pool and none was invented.\n\n1) OWNER FIELD: absent on both reads — no `owner` key anywhere in either payload, and the contract's declared `returns` list does not mention owner either. This matches the create route's contract (owner is always the calling user, never returned) and is consistent, not drift.\n\n2) PARENT_PLAN_ID: absent entirely (not present as a key, not null) on both top-level plans. The capability's flat top-level `returns` array lists `parent_plan_id` unconditionally as if every response carries it, which is inaccurate for top-level plans. However the nested schema description for that field is correctly conditional ('present only when this plan is a sub-plan') and nullable — so the per-field doc is honest, only the flat summary list overclaims. This mirrors exactly what the sibling create_test_plan probe found on the create route's contract. I could not probe an STP-NNN sub-plan (none available in the pool) to confirm parent_plan_id is actually populated there.\n\n3) NUMERIC PLAN ID: only recoverable by parsing `urls.self` (e.g. '.../test-plans/48283' and '.../test-plans/48245') — there is no dedicated numeric id field, confirmed on both plans. Unlike the create route (whose prose falsely claimed the numeric id 'is not in this payload' when it actually was recoverable from urls.self), THIS capability's contract is accurate and upfront about it: the schema explicitly states 'there is no numeric id field — identifier ... is the only id in this payload', which correctly describes the observed behavior. So on this specific point the read contract is better than the create contract — no drift here.\n\n4) URLS (AND LINKS) SUB-KEYS: same unenforced sub-shape pattern the sibling found on list_test_plans — `urls` and `links` are both declared as bare `{type: object}` with a prose description only, no `properties` enumerated in the JSON schema. Actual responses return `urls: {self, sub_test_plans}` and `links: {self, test_runs}` on both plans, matching the prose ('Web-app deep links for a human, plus a sub_test_plans link on top-level plans only' / 'API self / test_runs links') but not matching any enumerated schema shape — these four sub-keys are technically undeclared at the schema-property level even though prose predicts them correctly. Flagged as undeclared_returned above for that reason.\n\nOther observations while exhaustively enumerating: test_runs_count on TP-1616 was {active:0, closed:0} at probe time — unaffected by the concurrent list_test_plan_test_runs sibling probe that may attach TR-9061 later; this is expected drift-over-time per the heads-up, not a contract mismatch, and I did not treat it as such. tags order on TP-1616 ({disposable, mcp-probe}) does not match the create-time send order ({mcp-probe, disposable}) — already known/expected per the sibling's finding, not new drift attributable to this read capability. TP-1596 (older fixture) shows start_date/end_date as explicit JSON null when unset, and tags/issues/test_runs as empty arrays rather than omitted, both consistent with the declared nullable/array types — no drift there. All other declared fields (identifier, name, description, active_state, tags, issues, test_runs_count, test_runs, sub_plans_count, start_date, end_date, created_at, project_id, links, urls) were present with correct types on both plans, and active_state stayed within its closed enum ['active','completed'] (both 'active'). No fields were returned beyond the four urls/links sub-keys noted above, and test_runs being empty on both plans means the {identifier,name} item shape inside test_runs remains UNVERIFIED (empty collection proves nothing about item shape)."
+}

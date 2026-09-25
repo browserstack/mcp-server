@@ -1,0 +1,47 @@
+{
+  "capability": "get_projects_basic",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:08:11Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for identifier lookup",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "query": { "q[identifier]": "PR-2005" } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": { "query": { "q[identifier]": "PR-2005" } },
+    "status": 200,
+    "response_keys": ["success", "projects", "info"],
+    "item_shape": {
+      "name": "string",
+      "id": "integer",
+      "thProjectId": "integer",
+      "description": "string",
+      "import_id": null,
+      "normalisedName": "string",
+      "starred": "boolean",
+      "access_via_secondary_team": "boolean"
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": ["projects[].permissions"],
+    "undeclared_returned": []
+  },
+  "notes": "Query params sent bracket-style (q[identifier]=PR-2005) per the described param names; this matched a single project (the fixture, id 379335744) so the item shape was genuinely exercised — not an empty-collection case. The projects array item is missing the declared `permissions` field (an array of the caller's own rights), which both the 200 schema and the capability's own guidance ('Rows carry permissions ... but no counts') say should be present. Every other declared item field (name, id, thProjectId, description, import_id, normalisedName, starred, access_via_secondary_team) was present and correctly typed, and info (page/page_size/count/prev/next) matched the schema exactly. No undeclared fields were returned. Only q[identifier] and q[query] were exercised as documented (no path_params, no body, no json_path nesting — this capability takes flat query params only)."
+}

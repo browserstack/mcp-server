@@ -1,0 +1,126 @@
+{
+  "capability": "update_dataset",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:45:00.000Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the path param",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "read the dataset's current contents (name, variables with uuids, rows with uuids) before attempting any update — update is a full replace with no version history, so this is the only copy of the prior state",
+      "source": "get_dataset",
+      "capability": "get_dataset",
+      "produced": {
+        "uuid": "de04f15e-b88a-4409-8b9d-eeff038c3109",
+        "name": "__mcp-probe-dataset-20260921",
+        "variables": [
+          { "name": "Browser", "uuid": "295cf5d6-2d04-434e-845d-bd0f8b0a990e" },
+          { "name": "OS", "uuid": "8941c080-e862-47bd-940f-24a805e4842c" }
+        ],
+        "rows": [
+          { "row_data": ["Chrome", "Windows"], "row_number": 1, "uuid": "38827ae2-f56b-42ab-b81a-b7dd03740e9a" },
+          { "row_data": ["Firefox", "MacOS"], "row_number": 2, "uuid": "264bcbd3-f3db-47a2-a4a4-ee54f6c7cb95" }
+        ],
+        "rows_count": 2
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "uuid": "de04f15e-b88a-4409-8b9d-eeff038c3109" },
+        "body": { "name": "__mcp-probe-dataset-20260921-renamed" }
+      },
+      "status": null,
+      "error": "missing required parameter(s): rows, variables",
+      "changed": "PUT-vs-PATCH probe, first half: tried a rename-only body — the shape an agent would naturally send for 'just rename this dataset'. Rejected before the request ever reached the live API: invokeCapability itself enforces describeCapability's declared required-ness (name+variables+rows all required) and refused the call client-side. No live 400 body to record — this is a client-side gate, not a server response."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "uuid": "de04f15e-b88a-4409-8b9d-eeff038c3109" },
+        "body": { "name": "__mcp-probe-dataset-20260921-renamed", "variables": [], "rows": [] }
+      },
+      "status": null,
+      "error": "'variables' must have at least 1 item(s)",
+      "changed": "PUT-vs-PATCH probe, second half: tried satisfying the 'required key present' check with empty arrays, to see whether the gate only checks presence or also enforces minItems. It also enforces minItems:1 on both variables and rows client-side. Between attempts 1 and 2, there is structurally no way to submit an update through this MCP surface that would send zero/omitted variables or rows to the live API — the wrapper's own schema validation, which mirrors describeCapability's declared contract, blocks it before dispatch."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "uuid": "de04f15e-b88a-4409-8b9d-eeff038c3109" },
+        "body": {
+          "name": "__mcp-probe-dataset-20260921-renamed",
+          "variables": [
+            { "name": "Browser", "uuid": "295cf5d6-2d04-434e-845d-bd0f8b0a990e" },
+            { "name": "OS", "uuid": "8941c080-e862-47bd-940f-24a805e4842c" }
+          ],
+          "rows": [
+            { "row_number": 1, "row_data": ["Chrome", "Windows"], "uuid": "38827ae2-f56b-42ab-b81a-b7dd03740e9a" },
+            { "row_number": 2, "row_data": ["Firefox", "MacOS"], "uuid": "264bcbd3-f3db-47a2-a4a4-ee54f6c7cb95" }
+          ]
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "The only shape the tool would let through: a real rename that also carries the existing variables and rows back (with their uuids) exactly as read in setup step 2. Succeeded on first live attempt."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "uuid": "de04f15e-b88a-4409-8b9d-eeff038c3109" },
+      "body": {
+        "name": "__mcp-probe-dataset-20260921-renamed",
+        "variables": [
+          { "name": "Browser", "uuid": "295cf5d6-2d04-434e-845d-bd0f8b0a990e" },
+          { "name": "OS", "uuid": "8941c080-e862-47bd-940f-24a805e4842c" }
+        ],
+        "rows": [
+          { "row_number": 1, "row_data": ["Chrome", "Windows"], "uuid": "38827ae2-f56b-42ab-b81a-b7dd03740e9a" },
+          { "row_number": 2, "row_data": ["Firefox", "MacOS"], "uuid": "264bcbd3-f3db-47a2-a4a4-ee54f6c7cb95" }
+        ]
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "dataset"],
+    "item_shape": {
+      "dataset": {
+        "uuid": "de04f15e-b88a-4409-8b9d-eeff038c3109",
+        "name": "__mcp-probe-dataset-20260921-renamed",
+        "variables": "[ {name, uuid} x2 — SAME uuids as before the update (295cf5d6…, 8941c080…) ]",
+        "rows": "[ {row_data:[string...], row_number, uuid} x2 — SAME uuids as before the update (38827ae2…, 264bcbd3…) ]",
+        "rows_count": 2,
+        "tags": [],
+        "metadata": {},
+        "created_at": "2026-09-21T13:28:33.000Z",
+        "created_by": { "id": 2522, "full_name": "ing", "email": "probe-user@example.invalid", "onboarded": 1, "role": "owner", "reports_and_notification_enabled": true }
+      }
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer)",
+      "uuid (path, string)",
+      "name (body, string, min length 1)",
+      "variables (body, array, min 1, max 40)",
+      "rows (body, array, min 1, max 100)"
+    ],
+    "json_path": "/dataset/name, /dataset/variables, /dataset/rows, /dataset/tags (optional) — sent FLAT at the top level, same as create; invokeCapability builds the dataset wrapper",
+    "declared_missing": [
+      "dataset.created_by.browserstack_user_id (declared on the created_by sub-schema, absent in the live response)",
+      "dataset.created_by.group_id (declared on the created_by sub-schema, absent in the live response)"
+    ],
+    "undeclared_returned": [
+      "dataset.created_by.role (present in the live response — value 'owner' — not part of the declared created_by schema)"
+    ]
+  },
+  "notes": "PUT-vs-PATCH SETTLED — this is a hard guardrail, not just documentation. describeCapability already claims update reuses create's schema (name+variables+rows all required, minItems:1 on both arrays). This probe tried to actually break that: attempt 1 omitted variables/rows entirely (the 'just rename it' body an agent would naturally write), attempt 2 sent them present-but-empty. Both were rejected by invokeCapability itself — 'missing required parameter(s): rows, variables' and then \"'variables' must have at least 1 item(s)\" — before either request reached the live preprod API. So on THIS surface it is structurally impossible to wipe a dataset's variables/rows by omitting them on update: the MCP tool enforces the declared-required contract client-side and a wiping call never gets dispatched. This is a genuinely good finding for anyone worried about the PUT-vs-PATCH trap: the tool's own validation is the safety net, and it held under two different bypass attempts (omit the keys; send them empty). Attempt 3 then did the only thing left — a real rename carrying the existing variables and rows (with their original uuids from the setup read) — and it succeeded first try: name changed to '__mcp-probe-dataset-20260921-renamed', and both variables and rows came back with the SAME uuids as before (295cf5d6.../8941c080... for columns, 38827ae2.../264bcbd3... for rows), not regenerated ones, confirming the store treated them as the same entities rather than a delete+recreate. An independent get_dataset read immediately after (not shown as a separate attempt since it is read-only) returned byte-identical contents, confirming the write actually persisted rather than just echoing the request. NEGATIVE RESULT RE-CONFIRMED ON THE UPDATE PATH: variables came back as an array of {name,uuid} (not a map/object container — no container mismatch, extending the clean result already established on create/get_dataset/get_dataset_variables to a fourth call site), and rows_count (2) agreed with rows.length (2), consistent with the five count-vs-rows hits seen elsewhere in this campaign NOT reproducing here. The one real drift is identical to create and to get_dataset on the same object: created_by is missing declared browserstack_user_id and group_id, and carries an undeclared role field ('owner'). Could not test whether updated_by has the same shape as the task asked — update_dataset's declared 200 schema, and the live response, carry ONLY created_by; there is no updated_by key anywhere in the dataset entity's read or write responses (checked get_dataset too), so the serializer-wide-vs-one-field-list question is unanswerable from this entity's own endpoints; noting it here rather than guessing. BONUS — LINKAGE QUESTION CLOSED (partially): list_dataset_linked_test_cases had no linked cases to show because nothing links to a dataset by uuid through the obvious path. Tried to create a link by binding this dataset's variables/rows onto TC-54485 (test_case_id 1985019, folder 764138) via edit_test_case_partial's test_case_dataset field with is_dataset_modified:true — the call returned 200 {success:true}, but a follow-up get_test_case_detail on the same case shows test_case_dataset:{} (empty — the binding did not persist), and list_dataset_linked_test_cases on this dataset still returns test_cases:[] / count:0. So test_case_dataset on edit_test_case_partial joins the pattern already seen elsewhere in this campaign (expected_result, estimate, metadata) of a field that is accepted and returns 200 but is silently discarded rather than applied — worth flagging as a new instance of that pattern on the test_case entity, distinct from the dataset entity's own metadata-discard behavior. list_dataset_linked_test_cases itself remains UNVERIFIED against a populated case (this campaign did not find a working way to establish that link), but the mechanism that looked like the obvious candidate for doing so is now known not to work. Verdict is DRIFT (not PASS) solely for the recurring created_by mismatch; not BLOCKED because the update route, its request-schema enforcement, and its 200 response are all fully functional and match the declared contract in every other respect, and the PUT-vs-PATCH question — the sharpest test in this entity — resolved cleanly in the safe direction."
+}

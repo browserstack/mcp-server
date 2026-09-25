@@ -1,0 +1,49 @@
+{
+  "capability": "get_system_field_values",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for system-field option lookups",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [
+    { "field_name": "status", "attempt": 1, "status": 200, "result": "success" },
+    { "field_name": "priority", "attempt": 1, "status": 200, "result": "success" },
+    { "field_name": "case_type", "attempt": 1, "status": 200, "result": "success" },
+    { "field_name": "automation_state", "attempt": 1, "status": 200, "result": "success" },
+    { "field_name": "defects", "attempt": 1, "status": 200, "result": "success" }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "field_name": "status | priority | case_type | automation_state | defects" } },
+    "status": 200,
+    "response_keys": ["success", "<field_name>", "info"],
+    "item_shape": {
+      "status.values[0]": { "internal_name": "active", "is_default": 1, "colour": "active", "value": 318605, "name": "Active" },
+      "priority.values[0]": { "internal_name": "critical", "is_default": 0, "value": 318593, "name": "Critical" },
+      "case_type.values[0]": { "internal_name": "acceptance", "is_default": 0, "value": 318594, "name": "Acceptance" },
+      "automation_state.values[0]": { "internal_name": "automated", "is_default": 0, "value_category": "automated", "value": 2509330, "name": "Automated" },
+      "defects.values": []
+    }
+  },
+  "contract": {
+    "required": ["project_id", "field_name"],
+    "json_path": "<field_name>.values[] (e.g. status.values[], priority.values[], case_type.values[])",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "*.values[].internal_name — undeclared on every field_name tested (status/priority/case_type/automation_state); machine slug distinct from display `name`",
+      "*.values[].is_default — undeclared on every field_name tested; BOTH duplicate rows of the default option carry the same is_default:1, so it cannot be used to pick a canonical copy",
+      "status.values[].colour — undeclared, present ONLY on status rows (value equals internal_name, e.g. 'active')",
+      "automation_state.values[].value_category — undeclared, present ONLY on automation_state rows ('automated' | 'manual')",
+      "priority.values[] and case_type.values[] carry NEITHER colour NOR value_category — declared schema (value+name only) is short by 2 fields even on the 'plainest' field types",
+      "info.count disagrees with the number of rows actually returned, on every field_name that has duplicates: status count=13 vs 10 rows returned; priority count=11 vs 8 rows; case_type count=23 vs 22 rows — and this is with info.next:null (page 1 of 1, i.e. the response claims to be the complete list). automation_state (count=5, 5 rows) and defects (count=0, 0 rows) — the only two field_names with no duplication — have count == rows exactly."
+    ]
+  },
+  "notes": "All 5 invokes (status, priority, case_type, automation_state, defects) succeeded on the first attempt, 200, no retries needed.\n\nDECISIVE ANSWER — what a system-field option object actually carries (this endpoint reads field values directly, so it is authoritative over the 5 capabilities that touched status/priority/case_type indirectly this session): the true shape is `{value: int, name: string, internal_name: string, is_default: 0|1}` as the FLOOR for every system field, PLUS a field-specific extra that is NOT a general 'option descriptor' attribute:\n  - status rows additionally carry `colour` (a string equal to `internal_name`, e.g. 'active'/'draft'/'in_review'/'outdated'/'rejected'). priority and case_type do NOT carry colour.\n  - automation_state rows additionally carry `value_category` ('automated' for the one Automated row, 'manual' for the other four). priority, case_type and status do NOT carry value_category.\n  - `entity_type` never appears anywhere in this response, for any field_name. Its appearance in list_entity_filter_details / search_project_entities is added by those layers, not sourced from here.\n  - `colour` being 'declared-and-MISSING on all three' in list_entity_filter_details is now explicable: colour was never a property of priority or case_type to begin with — only status has it. That capability's schema is wrong to declare colour for all three; it should declare colour on status only (and even then, this endpoint's own schema doesn't declare colour at all — see undeclared_returned).\n  - get_project_form_fields's finding ('automation_state rows carry value_category, status rows carry colour, priority/case_type carry neither') is CONFIRMED exactly by this endpoint, at the source. This is consistent, field-name-keyed behaviour, not random cross-endpoint inconsistency.\n  - list_workspace_fields returning system fields as flat STRING arrays is a genuine flattening/drift relative to this source: the canonical shape here is always a structured object array, never bare strings, for every field_name tested.\n  - Every field_name tested returns at least 2 undeclared properties (internal_name, is_default) beyond this capability's own declared schema (value+name only), so THIS capability's own contract is also incomplete, not just the other four.\n\nDUPLICATE-ID QUESTION (separate ask) — reproduced here but NOT settled by this endpoint: status is 10 rows/5 distinct, priority is 8 rows/4 distinct, case_type is 22 rows/11 distinct, on this same project — matching the earlier probe's counts exactly. Every duplicate pair is byte-identical on every field (internal_name, name, is_default, colour where present) except `value` (the id): e.g. status Active = 318605 and 318632; priority Medium = 318591 and 318618; case_type Other = 318599 and 318626. This endpoint exposes no `entity_type`, no `record_status`, and no per-option count anywhere in the response — same gap as the earlier probe — so it CANNOT itself distinguish which copy of a pair is canonical. Cross-referencing with other evidence is inconclusive rather than confirmatory: the pool's known-good setup ids (status 318605, priority 318591, case_type 318599) all sit in the LOWER id block, consistent with 'lower block = canonical' — but get_project_form_fields's own default_fields.case_type.values[0] independently returned value 318626 (the UPPER block) as its 'Other' row, which contradicts a clean 'lower block is canonical' story. Taken together this looks more like both ids in a pair are equally live/interchangeable than like one stale copy sitting alongside one canonical copy — but no field on any capability probed this session, including this one, actually says so. Open question remains genuinely open.\n\ncount-vs-rows: flagged above as undeclared/inconsistent behaviour — info.count over-counts relative to rows returned specifically on the three duplicated fields (by +3, +3, +1 respectively) despite info.next:null claiming a complete single page; the non-duplicated fields (automation_state, defects) have exact count==rows. No declared_missing: the two schema-declared fields (value, name) are present on every single row across all 5 field_names, so nothing declared is missing — the drift is entirely on the undeclared-and-returned side, plus the info.count inconsistency, and the docs' own schema is what's incomplete (not the API behaving inconsistently field-to-field — it's consistent, just underdocumented)."
+}

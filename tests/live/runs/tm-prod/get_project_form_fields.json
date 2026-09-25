@@ -1,0 +1,81 @@
+{
+  "capability": "get_project_form_fields",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T07:37:34Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": true,
+  "setup": [
+    "Fixed production fixture per task: project_id=332537 (PR-18723, ~16,267 test cases, real custom-field/data).",
+    "describeCapability(get_project_form_fields, product=tm, include_responses=all) to get the exact declared contract."
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 332537}},
+    "status": 200,
+    "response_keys": ["success", "custom_fields", "default_fields", "system_fields"],
+    "item_shape": {
+      "custom_fields[*]": "{id, field_type, field_name, entity_type, field_user_name, optional, is_bulk_editable, is_filterable, links{self}, placeholder, is_required, default_value, option_values[], field_values[]} -- matches declared item schema; no nested_dropdown field present in this project so parent_custom_field_id could not be exercised",
+      "default_fields.<field>.values[] (automation_state)": "{internal_name, is_default, value_category, value, name}",
+      "default_fields.<field>.values[] (priority)": "{internal_name, is_default, value, name}",
+      "default_fields.<field>.values[] (status)": "{internal_name, is_default, value, name} plus optional colour key (present on most rows, absent on a few, e.g. the 2024-09-10 timestamp-named options)",
+      "default_fields.<field>.values[] (case_type)": "{internal_name, is_default, value, name}",
+      "default_fields.automation_status.values[]": "{name, value, is_default} -- assembled in-layer, distinct from the four dataset-backed fields: no internal_name key, and value is a string enum (e.g. 'not_automated') instead of a numeric dataset id",
+      "default_fields.<field> container (except automation_status)": "{values[], total_count, links{self}} -- links.self is undeclared",
+      "default_fields.automation_status container": "{values[], total_count} -- no links key, consistent with it being assembled rather than dataset-backed",
+      "system_fields.description_fields[*]": "{id, field_name, field_type, system_name, is_removable}",
+      "system_fields.property_fields[*]": "{id, field_name, field_type, system_name, is_removable}",
+      "system_fields.others": "[] (empty)"
+    }
+  },
+  "contract": {
+    "required": ["success", "custom_fields", "default_fields", "system_fields"],
+    "declared_missing": [],
+    "undeclared_returned": [
+      "system_fields: declared type is a bare ARRAY of {id, field_name, field_type, system_name, is_removable}; actual response returns an OBJECT {description_fields: [...], property_fields: [...], others: []} -- a top-level type mismatch, not just an undeclared field",
+      "default_fields.*.values[] entirely undocumented shape beyond the prose '{values, total_count}' -- actual per-option rows carry internal_name, is_default, value, name (and conditionally value_category / colour)",
+      "default_fields.automation_state.values[].value_category (undeclared)",
+      "default_fields.status.values[].colour (undeclared, and inconsistently present)",
+      "default_fields.<dataset-backed field>.links.self (undeclared)"
+    ]
+  },
+  "prod_vs_preprod": {
+    "system_fields_shape": {
+      "declared_schema": "array of field-descriptor objects",
+      "declared_prose": "'the response is three lists at the top level' (implying custom_fields/default_fields/system_fields are each flat top-level lists)",
+      "actual_prod": "system_fields is an OBJECT {description_fields: [9 rows], property_fields: [10 rows], others: []} -- one object nested inside the top level, containing three lists, not itself a top-level list",
+      "verdict": "REPRODUCES preprod exactly -- contradicts both the declared array schema AND the 'three lists at top level' prose, in the same way preprod did. This remains the only capability in the batch where both prose and schema are wrong for the same field.",
+      "row_shape_note": "the individual rows inside description_fields/property_fields DO match the declared item schema keys {id, field_name, field_type, system_name, is_removable} -- only the outer container type is wrong, not the row shape"
+    },
+    "default_fields_undeclared_shape": {
+      "reproduces": true,
+      "value_category": "present on automation_state.values[] only, exactly as on preprod",
+      "colour": "present on status.values[] only (and only on some rows), exactly as on preprod",
+      "generic_option_shape": "{internal_name, is_default, value, name} confirmed undeclared on all four dataset-backed fields (priority, status, case_type, automation_state), matching preprod",
+      "new_observation_not_in_preprod_notes": "automation_status (the 5th default_fields key, assembled in-layer per capability guidance) has a visibly different, even-less-documented shape: no internal_name, string value instead of numeric id, and no links.self on its container -- worth flagging since it diverges from the other four in a way the preprod baseline didn't call out"
+    },
+    "default_option_doubling": {
+      "checked_fields": ["priority", "status", "case_type", "automation_state", "automation_status"],
+      "is_default_1_counts": {
+        "automation_state": {"default_option": "not_automated (value=18172471)", "occurrences": 1},
+        "priority": {"default_option": "pwo13 (value=550377)", "occurrences": 1},
+        "status": {"default_option": "active (value=9319)", "occurrences": 1},
+        "case_type": {"default_option": "functional (value=9379)", "occurrences": 1},
+        "automation_status": {"default_option": "not_automated (value='not_automated')", "occurrences": 1}
+      },
+      "doubling_reproduces": false,
+      "note": "Every default (is_default:1/true) option appears EXACTLY ONCE for all five default_fields keys -- no systematic default-cloning here, consistent with get_system_field_values's prod finding that the preprod doubling was migration/data residue, not a serializer bug. Organic duplicate NAMES do exist among non-default options in this project's data (e.g. case_type 'frsadas' x3 under distinct ids 17964082/083/092, priority 'd' x2 under 16169219/16169220, status 'Temp state' x5 under distinct ids) -- these are real user-created duplicate values, not counted as the default-cloning phenomenon per the task's instruction."
+    },
+    "descriptor_serializer_variant": {
+      "default_fields_values_variant": "Variant A (field-definition serializer: {value, name, internal_name, is_default}), with undeclared extras layered on top per field: automation_state adds value_category; status adds colour (inconsistently present). priority and case_type are pure Variant A with no extras. automation_status is a further-reduced variant of A ({name, value, is_default} -- missing internal_name, string value not numeric id). No field in default_fields matches Variant B (case-row serializer with id/field_name/colour/value_category/name) -- none of these rows carry an 'id' or 'field_name' key.",
+      "system_fields_row_keys": "description_fields[] and property_fields[] rows are plain field descriptors: {id, field_name, field_type, system_name, is_removable} -- matches the declared item schema for system_fields rows, just nested one level deeper than declared."
+    },
+    "paging": {
+      "declared": "no info/paging envelope for this capability (unpaginated, per describeCapability prose 'no data envelope and no paging')",
+      "actual": "confirmed -- response top level is exactly {success, custom_fields, default_fields, system_fields}, no info/page/count/next keys anywhere at top level or inside default_fields/system_fields containers (default_fields.*.total_count is a plain field count, not a paging envelope, and there is no next/prev)",
+      "verdict": "still true on prod -- no paging envelope exists to check for the get_system_field_values-style page-fill/count-mismatch bug"
+    }
+  },
+  "notes": "This capability reproduces its preprod DRIFT verdict exactly on production project 332537 (real data, 16 custom_fields, 5 default_fields, 19 system_fields rows). (3) system_fields is still an OBJECT {description_fields, property_fields, others} on prod, contradicting both the declared bare-array schema and the 'three lists at top level' prose -- unchanged from preprod. (4) default_fields still carries undeclared value_category (automation_state), colour (status, inconsistently present), and the whole {internal_name, is_default, value, name} per-option shape is undocumented; default (is_default:1) options for priority/status/case_type/automation_state/automation_status each appear EXACTLY ONCE on prod -- the preprod doubling does not reproduce here either, consistent with it having been preprod migration residue rather than a serializer bug (matching the earlier confirmation via get_system_field_values). Organic duplicate names from distinct ids exist in this project's real data but are unrelated to default-cloning and were not counted as such. (5) default_fields[*].values[] match Variant A (field-definition serializer), never Variant B (case-row serializer) -- no row carries id/field_name. automation_status is a further-thinned Variant A (no internal_name, string value). system_fields.description_fields[]/property_fields[] rows are plain field descriptors {id, field_name, field_type, system_name, is_removable}. (6) No paging envelope exists for this capability on prod, confirmed -- so the get_system_field_values-style page-fill/count-mismatch bug does not apply here."
+}

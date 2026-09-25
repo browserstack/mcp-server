@@ -1,0 +1,71 @@
+{
+  "capability": "list_test_plan_test_runs_by_integer_id",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "preprod_reference": {
+    "run_file": "tests/live/runs/tm/list_test_plan_test_runs_by_integer_id.json",
+    "verdict": "DRIFT",
+    "reasons": [
+      "declared_missing: test_runs[].type, test_runs[].self_ui_link — never appear.",
+      "undeclared_returned: attachments/created_by/updated_by/closed_at/closed_by/observability_id/build_meta.",
+      "Type/nullability disagreements: project_id string-vs-int, is_dynamic boolean-vs-int, owner/assignee/overall_progress/assignee_imported non-nullable-vs-null.",
+      "Count-vs-rows: NOT present on preprod (info.count, count and len(rows) all agreed)."
+    ]
+  },
+  "setup": [
+    { "step": 1, "why": "resolve real plans with multiple linked runs, for both single-page and 2-page paging checks", "source": "invoked", "capability": "list_test_plans_by_integer_id", "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1 } }, "status": 200, "produced": { "plan_181340": "TP-4011, test_runs_count.active=2", "plan_67555": "TP-2255 (Test Plan - 26/10/2025-Copy), test_runs_count.active=5" } }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "test_plan_id": 181340 }, "query": { "p": 1 } },
+    "status": 200,
+    "response_keys": ["success", "test_runs", "info", "count"],
+    "item_shape": {
+      "id": "TR-4869913 (string, TR-NNN)",
+      "identifier": "TR-4869913",
+      "uuid": "68756189 (integer)",
+      "name": "string",
+      "run_state": "\"new_run\"",
+      "active_state": "\"active\"",
+      "assignee": "object (resolved user, or null)",
+      "owner": "integer",
+      "project_id": "332537 — BARE INTEGER, not a string. Declared type is string (example \"PR-17\"). REPRODUCES the preprod string-vs-int mismatch.",
+      "is_dynamic": "false — CORRECTLY a boolean on prod. DOES NOT REPRODUCE the preprod is_dynamic boolean-vs-int mismatch (preprod actual was int 0); on prod every sampled row (7 across 2 plans) had a real boolean.",
+      "overall_progress": "null — declared non-nullable object per schema. REPRODUCES the preprod nullable mismatch.",
+      "overall_progress_by_status_id": "object, real rollup keyed by result_status id — matches declared {type:object}",
+      "test_cases_count": "integer",
+      "tags": "[]",
+      "test_plans": "[] — EMPTY on every row sampled (2 rows under plan 181340, 5 under plan 67555, 1 under plan 182865 — see cross-check below), even though every row was fetched BECAUSE it is linked to the plan being queried. The declared row schema types test_plans as an array of {id,name}; it is structurally correct (an array) but never actually carries the very plan that scoped the query. Not flagged in preprod's own analysis of this capability (preprod's declared_missing/undeclared_returned lists for list_test_plan_test_runs_by_integer_id do not mention this field at all) — new observation.",
+      "attachments/created_by/updated_by/closed_at/closed_by": "all null — UNDECLARED, reproduces preprod",
+      "observability_id": "string, duplicates the numeric part of observability_url and equals uuid — UNDECLARED, reproduces preprod",
+      "build_meta": "object {id,name,creationType,buildNormalisedName,build_number} — UNDECLARED, reproduces preprod",
+      "type": "ABSENT — declared_missing, reproduces preprod",
+      "self_ui_link": "ABSENT — declared_missing, reproduces preprod"
+    }
+  },
+  "plan_linkage_cross_check": {
+    "why": "task-specific check: does list_test_plan_test_runs_by_integer_id confirm a run is linked, and does list_test_runs_by_integer_id(include_test_plan=true) agree on the SAME run",
+    "plan_182865": {
+      "name": "Testing parikshit (TP-4036)",
+      "list_test_plan_test_runs_by_integer_id": { "arguments": { "test_plan_id": 182865, "p": 1 }, "result": "1 row: TR-5217429, own row-level test_plans:[] (empty, per the pattern above)", "info": { "count": 1 }, "count": { "active": 1, "closed": 0 } },
+      "get_test_runs_v1_cross_check": "see tests/live/runs/tm-prod/list_test_runs_by_integer_id.json — for this SAME run (TR-5217429 / uuid 72374668), list_test_runs_by_integer_id(include_test_plan=true) DOES return test_plans:[{\"id\":182865,\"name\":\"Testing parikshit\"}] — the two readers AGREE on the linkage (the plan reader confirms membership by list inclusion + count; the general listing shows the actual plan object). This directly CONTRADICTS the preprod-reported systemic behavior (list_test_runs_by_integer_id returns test_plans:[] for every run, confirmed across two probes/two days on preprod). See list_test_runs_by_integer_id.json for the full writeup — this is the single most important cross-capability finding of this batch."
+    }
+  },
+  "pagination": {
+    "plan_181340": { "p1": { "info": { "page": 1, "page_size": 30, "count": 2, "prev": null, "next": null }, "count": { "active": 2, "closed": 0 }, "rows": 2 } },
+    "plan_67555": {
+      "p1": { "info": { "page": 1, "page_size": 30, "count": 5, "prev": null, "next": null }, "count": { "active": 5, "closed": 0 }, "rows": 5 },
+      "p2": { "info": { "page": 2, "page_size": 30, "count": 5, "prev": 1, "next": null }, "count": { "active": 5, "closed": 0 }, "rows": 0 }
+    },
+    "verdict": "Count-vs-rows: clean on prod too, matching preprod. info.count, top-level count, and len(rows) all agree on every call; p=2 beyond the real data correctly returns an empty array rather than repeating page 1 or erroring. No per_page/limit param exists in the query schema (only `p`); not testable, matches preprod's own note that this route has no per_page override."
+  },
+  "contract": {
+    "required": ["project_id", "test_plan_id"],
+    "json_path": null,
+    "declared_missing": ["test_runs[].type", "test_runs[].self_ui_link"],
+    "undeclared_returned": ["test_runs[].attachments", "test_runs[].created_by", "test_runs[].updated_by", "test_runs[].closed_at", "test_runs[].closed_by", "test_runs[].observability_id", "test_runs[].build_meta"]
+  },
+  "notes": "PREPROD VERDICT MOSTLY REPRODUCES, with one narrowing and one new finding. Reproduces: declared_missing (type, self_ui_link), undeclared_returned (7 fields), project_id string-vs-int, overall_progress non-nullable-vs-null, count-vs-rows staying clean. DOES NOT REPRODUCE: is_dynamic came back correctly typed as boolean on every prod row sampled (preprod had it as int 0) — this specific mismatch appears to be preprod-only, narrowing preprod's DRIFT slightly on prod. NEW: this capability's own row-level `test_plans` field is empty on every row across all 3 plans probed (181340, 67555, 182865) — including rows fetched precisely because they belong to the plan being queried — so this capability never actually surfaces the plan linkage on its own rows; membership in the response list (plus the count envelope) is the only signal of linkage this capability gives. That gap is exactly what makes the cross-check with list_test_runs_by_integer_id meaningful (see plan_linkage_cross_check above and list_test_runs_by_integer_id.json): for run TR-5217429/plan 182865, list_test_runs_by_integer_id(include_test_plan=true) DOES correctly populate test_plans with the linked plan, which is the opposite of what preprod's systemic finding predicted for that capability. That result belongs primarily to the list_test_runs_by_integer_id file but is recorded here too because it directly answers this capability's own linkage question."
+}

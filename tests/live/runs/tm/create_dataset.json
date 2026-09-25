@@ -1,0 +1,75 @@
+{
+  "capability": "create_dataset",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:28:33.230Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the path param",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": {
+          "name": "__mcp-probe-dataset-20260921",
+          "variables": [{ "name": "Browser" }, { "name": "OS" }],
+          "rows": [
+            { "row_number": 1, "row_data": ["Chrome", "Windows"] },
+            { "row_number": 2, "row_data": ["Firefox", "MacOS"] }
+          ]
+        }
+      },
+      "status": 201,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt. Sent the body FLAT (name/variables/rows as top-level body keys, no `dataset` wrapper) per describeCapability's explicit guidance ('Send the fields flat. The dataset wrapper is added for you'); did not additionally test a wrapped {dataset:{...}} payload since the guidance was unambiguous, the flat form worked immediately, and a second create with the same name would only have exercised the documented duplicate-name 400, not the wrapper question."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": {
+        "name": "__mcp-probe-dataset-20260921",
+        "variables": [{ "name": "Browser" }, { "name": "OS" }],
+        "rows": [
+          { "row_number": 1, "row_data": ["Chrome", "Windows"] },
+          { "row_number": 2, "row_data": ["Firefox", "MacOS"] }
+        ]
+      }
+    },
+    "status": 201,
+    "response_keys": ["success", "dataset"],
+    "item_shape": {
+      "dataset": {
+        "uuid": "de04f15e-b88a-4409-8b9d-eeff038c3109",
+        "name": "__mcp-probe-dataset-20260921",
+        "variables": "[ {name, uuid} x2 ]",
+        "rows": "[ {row_data:[string...], row_number, uuid} x2 ]",
+        "rows_count": 2,
+        "tags": [],
+        "metadata": {},
+        "created_at": "2026-09-21T13:28:33.230Z",
+        "created_by": { "id": 2522, "full_name": "ing", "email": "probe-user@example.invalid", "onboarded": 1, "role": "owner", "reports_and_notification_enabled": true }
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "name (body)", "variables (body, array, min 1)", "rows (body, array, min 1)"],
+    "json_path": "/dataset/* (name, variables, rows, tags, metadata each hang off a /dataset/... json_path but are sent FLAT at the top level; invokeCapability builds the dataset wrapper itself)",
+    "declared_missing": [
+      "dataset.created_by.browserstack_user_id (declared on the created_by sub-schema, absent in the live response)",
+      "dataset.created_by.group_id (declared on the created_by sub-schema, absent in the live response)"
+    ],
+    "undeclared_returned": [
+      "dataset.created_by.role (present in the live response — value 'owner' — not part of the declared created_by schema)"
+    ]
+  },
+  "notes": "Flat body worked on the first attempt exactly as describeCapability's guidance promised — no wrapper trap here, unlike several other tm write capabilities. Top-level response shape matches the declared 201 contract exactly: dataset at the top level (no data envelope), variables returned as an array of {name,uuid} objects (NOT collapsed to a map — no container mismatch), rows as an array of {row_data,row_number,uuid} objects, rows_count (2) agreeing with rows.length. Sent two variables (Browser, OS) with two rows of real, distinct string values (Chrome/Windows, Firefox/MacOS) specifically to exercise the item shape against real data rather than an empty collection — both variables and rows items came back with exactly the declared fields, so the variables/rows item schemas hold under real data, not just structurally-empty responses. The one drift is the same one already registered for the sibling read capability get_dataset: the nested created_by sub-object is declared with id/browserstack_user_id/full_name/email/group_id/onboarded/reports_and_notification_enabled, but the live response instead has id/full_name/email/onboarded/role/reports_and_notification_enabled — browserstack_user_id and group_id are missing, and an undeclared 'role' field is present. This is a real, reproducible schema disagreement (same shape on both the create response and the immediate get_dataset read-back of the same object, see round-trip below), not a one-off. CREATE-then-READ ROUND TRIP (the strong evidence this task asked for): immediately re-read the created dataset via get_dataset(project_id=379335744, uuid=de04f15e-b88a-4409-8b9d-eeff038c3109) — response was byte-identical in shape to the create response (same variables array of {name,uuid}, same rows array of {row_data,row_number,uuid}, same rows_count:2, same created_by shape/drift). The variables container KEPT its declared array shape on both the write response and the independent read — no serializer defect where create returns one container type and a subsequent read returns another. Also queried get_dataset_variables(project_id=379335744, q[name]='Browser') — the project-wide column listing found exactly this dataset's Browser column, with the declared {uuid,name,dataset:{uuid,name,count_rows}} item shape fully intact (count_rows:2, matching the dataset actually written). So across three call sites (create, get_dataset, get_dataset_variables) all touching the same object, the variables/rows containers are consistently arrays with the declared item shape — the only defect present anywhere in this chain is the created_by sub-object drift, which is real but narrow (prose-only fields, not a container-type or entitlement-gate problem). Verdict is DRIFT rather than PASS specifically because of that created_by mismatch, and rather than BLOCKED because the primary create route, its request schema, and its 201 response are all fully functional and correctly documented in every other respect."
+}

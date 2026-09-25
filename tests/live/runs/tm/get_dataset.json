@@ -1,0 +1,61 @@
+{
+  "capability": "get_dataset",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "get_dataset needs a real dataset uuid (project_id + uuid path params); the pool provides no dataset uuid, and the list endpoint is the only read that enumerates them for a project.",
+      "source": "invoked",
+      "capability": "list_datasets",
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": "1 dataset on page 1 of 1: uuid 92d4a614-57d3-4201-8ffc-3f3c9faf9747, name '__probe-dataset-1789734836192', rows_count 2, test_cases_count 0. info.next null (no further pages). Picked this uuid — it is the project's only dataset, not the custom-field dataset id 31196 called out as off-limits."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "uuid": "92d4a614-57d3-4201-8ffc-3f3c9faf9747" }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt, no retry needed"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "uuid": "92d4a614-57d3-4201-8ffc-3f3c9faf9747" }
+    },
+    "status": 200,
+    "response_keys": ["success", "dataset"],
+    "item_shape": {
+      "dataset": {
+        "uuid": "92d4a614-57d3-4201-8ffc-3f3c9faf9747",
+        "name": "__probe-dataset-1789734836192",
+        "variables": "[ {name, uuid} x2 ]",
+        "rows": "[ {row_data:[string...], row_number, uuid} x2 ]",
+        "rows_count": 2,
+        "tags": [],
+        "metadata": {},
+        "created_at": "2026-09-18T12:33:56.000Z",
+        "created_by": { "id": 2522, "full_name": "ing", "email": "probe-user@example.invalid", "onboarded": 1, "role": "owner", "reports_and_notification_enabled": true }
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, positive int)", "uuid (path, string)"],
+    "json_path": null,
+    "declared_missing": [
+      "dataset.created_by.browserstack_user_id (declared on the created_by sub-schema, absent in the live response)",
+      "dataset.created_by.group_id (declared on the created_by sub-schema, absent in the live response)"
+    ],
+    "undeclared_returned": [
+      "dataset.created_by.role (present in the live response, not part of the declared created_by schema)"
+    ]
+  },
+  "notes": "Top-level shape matches the declared contract exactly as the guidance promises: dataset is at the top level (no data envelope), and variables/rows/rows_count/tags/metadata/created_at all came back with the declared shapes — variables as [{name,uuid}], rows as [{row_data,row_number,uuid}], rows_count (2) agreeing with rows.length. No structural container mismatch at the top level. The drift is confined to the nested created_by object: the declared schema lists id, browserstack_user_id, full_name, email, group_id, onboarded, reports_and_notification_enabled, but the live response instead has id, full_name, email, onboarded, role, reports_and_notification_enabled — browserstack_user_id and group_id are missing, and an undeclared 'role' field ('owner') is present instead. This is a minor/prose-only drift (marked DRIFT rather than BLOCKED since the primary 2xx contract and route both work correctly) but is a real, reproducible schema disagreement on the created_by sub-object, not a one-off. Single attempt succeeded (200) for both the setup list_datasets call and the get_dataset probe; no retries needed. Dataset uuid was resolved from the project's own datasets via list_datasets (read-only), per the read-only-round and empty-case-rule instructions — did not use or need the custom-field dataset id 31196, which is a different resource type on a different route family entirely."
+}

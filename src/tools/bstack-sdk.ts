@@ -16,6 +16,13 @@ export function registerRunBrowserStackTestsTool(
     "setupBrowserStackAutomateTests",
     RUN_ON_BROWSERSTACK_DESCRIPTION,
     RunTestsOnBrowserStackParamsShape,
+    {
+      title: "Set Up Automate Tests",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(

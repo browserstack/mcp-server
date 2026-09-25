@@ -1,0 +1,175 @@
+{
+  "capability": "list_folder_attachments",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:14:28Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Fetched the full contract on the PROD MCP server (describeCapability) before invoking, rather than reusing the preprod contract. Confirmed identical to preprod: GET, mode read, path_params {project_id, folder_id} (both integer, required), no query/body params declared at all (accepted: none), no json_path nesting. Declared 200 shape {success, attachments:[{id, name, content_type, key, product_id, byte_size, checksum, url, download_url}]}, with guidance text noting each item ALSO nominally carries a formatted 'size' string not listed in schema properties. Guidance explicitly warns: folder attachments are a separate collection from test-case attachments, an empty result is not evidence of no attachments elsewhere, and the endpoint does not look inside subfolders (must walk the tree).",
+      "source": "invoked",
+      "capability": "describeCapability",
+      "arguments": { "name": "list_folder_attachments", "product": "tm", "include_responses": "all" },
+      "status": 200,
+      "produced": { "path_params": ["project_id", "folder_id"], "query": [], "json_path": null, "declared_error_envelope": "{success:false, error:{code,message,details}}" }
+    },
+    {
+      "step": 2,
+      "why": "folder 7617941 'Test Management Demo' - task-flagged as having 'notes text' suggesting real human use. Direct folder only (does not recurse into subfolders per the contract's own guidance).",
+      "source": "pool",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 7617941 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 3,
+      "why": "Listed subfolders of 7617941 to find its 2 children, since attachments live on a specific folder and are not inherited - discovered 7617966 'Test management demo - sub folder' (2 cases) and 7620811 'test' (2 cases).",
+      "source": "invoked",
+      "capability": "listFolders",
+      "arguments": { "project_identifier": "PR-18723", "parent_id": 7617941 },
+      "status": 200,
+      "produced": { "subfolder_ids": [7617966, 7620811] }
+    },
+    {
+      "step": 4,
+      "why": "folder 7617966 'Test management demo - sub folder', child of the flagged folder 7617941.",
+      "source": "invoked",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 7617966 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 5,
+      "why": "folder 7620811 'test', the other child of 7617941.",
+      "source": "invoked",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 7620811 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 6,
+      "why": "folder 9600935 - task-flagged as having 'notes text' (2,052 cases recursive, largest of the flagged pool).",
+      "source": "pool",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 9600935 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 7,
+      "why": "folder 9697326 'MCP Testing' (3 cases) - small, plausible manual-probe residue folder.",
+      "source": "pool",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 9697326 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 8,
+      "why": "folder 40231630 'Automation' (1,168 cases recursive, 36 subfolders) - best shot at volume per the task brief.",
+      "source": "pool",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 40231630 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 9,
+      "why": "Listed the 36 direct subfolders of 40231630 to pick specific ones to try, since the direct folder was empty.",
+      "source": "invoked",
+      "capability": "listFolders",
+      "arguments": { "project_identifier": "PR-18723", "parent_id": 40231630 },
+      "status": 200,
+      "produced": { "subfolder_count": 36, "sample_ids": [40231631, 41155670, 41155673, 44663353, 44663354, 48146172, 48146176] }
+    },
+    {
+      "step": 10,
+      "why": "folder 41155673 'Photo and Media Upload Functionality and Metadata Handling' (9 cases) - name suggests test cases about uploading photos/media, a plausible correlate for real attached files.",
+      "source": "invoked",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 41155673 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 11,
+      "why": "folder 44663354 'Functional' (9 cases) - one of the larger flat subfolders under Automation.",
+      "source": "invoked",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 44663354 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 12,
+      "why": "folder 41155670 'Security Vulnerability Detection and Prevention' (6 cases) - another populated subfolder under Automation.",
+      "source": "invoked",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 41155670 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 13,
+      "why": "folder 44663353 'Security' (6 cases) - another populated subfolder under Automation, distinct branch from step 12.",
+      "source": "invoked",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 44663353 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 14,
+      "why": "Listed subfolders of 40231631 'LCA' (20 sub-folders under it) and of 48146172 'Role' / 48146176 'Application' to reach deeper into the Automation tree.",
+      "source": "invoked",
+      "capability": "listFolders",
+      "arguments": { "project_identifier": "PR-18723", "parent_id": "40231631 | 48146172 | 48146176" },
+      "status": 200,
+      "produced": { "discovered_ids": [40232054, 48146173, 48146177] }
+    },
+    {
+      "step": 15,
+      "why": "folder 40232054 'Untitled test' (12 cases) - the single largest leaf folder found anywhere in the tree, under LCA.",
+      "source": "invoked",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 40232054 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    },
+    {
+      "step": 16,
+      "why": "folder 48146173 'New Role' (6 cases), reached via Automation > Role > New Role.",
+      "source": "invoked",
+      "capability": "list_folder_attachments",
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 48146173 } },
+      "status": 200,
+      "produced": { "attachments_count": 0 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537, "folder_id": 40231630 }, "query": { "per_page": 1 } },
+      "status": "error",
+      "error": "\"unknown query: per_page. accepted: none\"",
+      "changed": "Confirms the contract's 'no query params' declaration is enforced strictly server-side, not silently ignored - an undeclared query param is rejected outright rather than dropped. So the 'per_page silently ignored' failure mode this campaign watches for does not apply here: this capability takes no query params at all, and the surface actively refuses one rather than swallowing it."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "folder_id": 40231630 } },
+    "status": 200,
+    "response_keys": ["success", "attachments"],
+    "item_shape": "Still unverified - every one of the 12 distinct folders tried (spanning the full flagged pool plus 8 discovered via listFolders, across 4 separate branches of the tree including the 1,168-case 'Automation' subtree) returned {success:true, attachments:[]}. No populated attachments array was found anywhere, so the declared item shape (id, name, content_type, key, product_id, byte_size, checksum, url, download_url, plus the undeclared-in-schema 'size' string the guidance text promises) was never exercised against real data. No count-vs-rows disagreement observed since there is no separate count field to disagree with rows - the only signal is the array's own length, and it was 0 everywhere."
+  },
+  "contract": {
+    "required": ["project_id", "folder_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Folders tried: 12 distinct ids across 4 branches of the project tree - 7617941 (pool, flagged 'notes text'), 7617966 + 7620811 (invoked, its 2 children), 9600935 (pool, flagged 'notes text', 2,052 cases), 9697326 (pool, 'MCP Testing'), 40231630 (pool, 'Automation', 1,168 cases recursive/36 subfolders), 41155673 (invoked, 'Photo and Media Upload...' - picked for name relevance to real attachments), 44663354 'Functional', 41155670 'Security Vulnerability...', 44663353 'Security' (invoked, populated Automation subfolders), 40232054 'Untitled test' (invoked, 12 cases, largest leaf folder found in the whole tree), 48146173 'New Role' (invoked, reached via Automation > Role > New Role). All 12 returned an identical, well-formed {success:true, attachments:[]} - HTTP 200, matching wrapper shape, zero items every time. Preprod verdict was UNVERIFIED for the same reason: both fixture folders (__readonly__ and __scratch__) returned empty attachments arrays, and preprod had no invocable upload path to seed one, so the item shape was never exercised there either. Prod does NOT change the picture: despite hunting across a real, old, large production project (16,267 cases, 2,378 runs, 294 root folders) - including both folders the task owner specifically flagged as having real human 'notes text', the single densest subtree in the project (Automation, 1,168 cases / 36 subfolders, several levels deep), and a folder whose name ('Photo and Media Upload Functionality and Metadata Handling') is thematically the most likely candidate for genuine file attachments - not one folder anywhere in the sample had anything on its own attachments shelf. This is consistent with the guidance's own warning that folder-level attachments are a distinct, rarely-used collection separate from (and unrelated to) attachments on the test cases inside those folders; the 'notes text' the task owner saw on 7617941/9600935 is very likely folder description/case content, not evidence of a file attached to the folder object itself. Verdict stays UNVERIFIED on prod, same as preprod, for the same structural reason (empty collection, not a broken endpoint) - the wrapper contract (success/attachments keys, 200 status) is confirmed correct on every call, but the item schema inside attachments remains unexercised. Per-page/pagination check: this capability declares zero query parameters (not just an unused per_page) - passing per_page=1 was rejected outright with 'unknown query: per_page. accepted: none' rather than being silently dropped, so there is no silent-ignore or count-vs-rows-disagreement risk to report; the surface validates query params strictly and there is no count field in the response to disagree with array length in the first place."
+}

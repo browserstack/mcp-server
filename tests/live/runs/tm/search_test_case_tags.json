@@ -1,0 +1,45 @@
+{
+  "capability": "search_test_case_tags",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "q": "mcp-probe" } },
+      "status": 200,
+      "error": "",
+      "changed": ""
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "query": { "q": "mcp-probe" } },
+    "status": 200,
+    "response_keys": ["tags", "tag_objects", "info"],
+    "item_shape": {
+      "tags": ["mcp-probe", "__mcp-probe-tag-20260918a-renamed"],
+      "tag_objects": [
+        { "name": "mcp-probe", "created_at": "2026-09-18T05:00:22.000Z" },
+        { "name": "__mcp-probe-tag-20260918a-renamed", "created_at": "2026-09-18T04:31:35.000Z" }
+      ],
+      "info": { "page": 1, "page_size": 30, "count": 2, "prev": null, "next": null }
+    }
+  },
+  "contract": {
+    "required": ["tags", "tag_objects", "info"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "q='mcp-probe' matched on first attempt (200), no retries needed. Response is a bare object {tags, tag_objects, info} exactly as declared — no container mismatch. tag_objects omits the optional usage_count field but that's schema-legal (not required). Note: the returned 'mcp-probe' match set includes '__mcp-probe-tag-20260918a-renamed', i.e. the known tag __mcp-probe-tag-20260918a was renamed server-side at some point after seeding — the literal tag name from the pool no longer exists verbatim, but the substring 'mcp-probe' still matched it, confirming this is a substring/partial-name search, not an exact-match lookup. SPECIFIC INTEREST — sibling list_test_case_tags 500s when its q filter is used: (1) Searching here does NOT 500 the same way — search_test_case_tags returned a clean 200 with correctly matching tags for the same kind of q term. (2) This capability is a separate, dedicated single-purpose search endpoint (paginated:false, only reads q, no p/page_size plumbing at all) rather than a list endpoint that tries to bolt a q filter onto its paginated branch. Functionally it returns the same fields (tags, tag_objects, info) that list_test_case_tags returns, so for the specific use case of searching tag names in a project it IS a viable, working substitute for the broken q filter on list_test_case_tags — callers needing tag-name search can call search_test_case_tags instead. The one gap: it cannot page (always first page, max 100 items per its own doc) so it is not a substitute for list_test_case_tags's un-filtered paginated walk of the full vocabulary — only for the search/filter use case that method's q param is broken for."
+}

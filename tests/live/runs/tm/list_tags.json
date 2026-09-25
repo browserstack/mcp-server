@@ -1,0 +1,103 @@
+{
+  "capability": "list_tags",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T04:31:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "list_tags is project-scoped (project_id path param) and the fixture project __mcp-capability-fixture__ returned an empty tag collection for every readable entity_type. Tags are described as account-scoped shared state, and the hand-off requires a total account tag count, so the workspace-wide tag vocabulary was pulled through a sibling read capability instead.",
+      "source": "invoked",
+      "capability": "search_group_tags",
+      "arguments": { "path_params": { "entity_type": "test_case" }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "count_this_page": 30, "info": { "page": 1, "page_size": 30, "count": 31, "next": 2 } }
+    },
+    {
+      "step": 2,
+      "why": "Page 2 of the workspace-wide test_case tag vocabulary, to get the full list.",
+      "source": "invoked",
+      "capability": "search_group_tags",
+      "arguments": { "path_params": { "entity_type": "test_case" }, "query": { "p": 2 } },
+      "status": 200,
+      "produced": { "count_this_page": 30, "info": { "page": 2, "page_size": 30, "count": 31, "next": null } }
+    },
+    {
+      "step": 3,
+      "why": "Workspace-wide test_run tag vocabulary, page 1, for the same account-wide baseline (search_group_tags only supports test_case and test_run entity_types).",
+      "source": "invoked",
+      "capability": "search_group_tags",
+      "arguments": { "path_params": { "entity_type": "test_run" }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "count_this_page": 30, "info": { "page": 1, "page_size": 30, "count": 31, "next": 2 } }
+    },
+    {
+      "step": 4,
+      "why": "Page 2 of the workspace-wide test_run tag vocabulary.",
+      "source": "invoked",
+      "capability": "search_group_tags",
+      "arguments": { "path_params": { "entity_type": "test_run" }, "query": { "p": 2 } },
+      "status": 200,
+      "produced": { "count_this_page": 30, "info": { "page": 2, "page_size": 30, "count": 31, "next": null } }
+    },
+    {
+      "step": 5,
+      "why": "Searched for a tag-creation capability to determine whether a disposable tag could be made at all for this probe or the sibling rename probe.",
+      "source": "invoked",
+      "capability": "searchCapability(query='create a new tag or add a tag to a test case', mode=write)",
+      "arguments": {},
+      "status": 200,
+      "produced": { "found": ["merge_tags (merges two EXISTING tags by id)", "update_tag (renames an EXISTING tag by id)"], "no_create_tag_capability": true }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "query": { "entity_type": "test_case", "per_page": 100, "p": 1 } },
+      "status": null,
+      "error": "'project_id' must be a number",
+      "changed": "Contract declares project_id as an integer path param. The v2/v3 identifier form (PR-2005) is rejected client-side before the request is even sent; switched to the v1 integer id 379335744, which the contract expects and which worked."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "entity_type": "test_recording", "per_page": 100, "p": 1 } },
+      "status": 400,
+      "error": "Error message: the server returns an error\nHTTP status code: 500\nResponse body: {\"type\":\"server_error\",\"message\":\"Internal Server Error\"}",
+      "changed": "test_recording is one of the five entity_type enum values the contract declares as valid. Retried the identical request once to rule out the preprod outage mentioned in the task."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "entity_type": "test_recording", "per_page": 100, "p": 1 } },
+      "status": 400,
+      "error": "Error message: the server returns an error\nHTTP status code: 500\nResponse body: {\"type\":\"server_error\",\"message\":\"Internal Server Error\"}",
+      "changed": "Identical failure on retry (same ETag on the error body both times) - not the transient outage, this is a persistent backend crash for entity_type=test_recording specifically. Treated as a contract-drift finding rather than an input mistake and moved on; recorded under contract below."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "query": { "entity_type": "test_case", "per_page": 100, "p": 1 } },
+    "status": 200,
+    "response_keys": ["tags", "info"],
+    "item_shape": {},
+    "additional_calls_same_project": [
+      { "entity_type": "test_run", "status": 200, "body": { "tags": [], "info": { "page": 1, "page_size": 100, "count": 0, "prev": null, "next": null } } },
+      { "entity_type": "test_plan", "status": 200, "body": { "tags": [], "info": { "page": 1, "page_size": 100, "count": 0, "prev": null, "next": null } } },
+      { "entity_type": "shared_step", "status": 200, "body": { "tags": [], "info": { "page": 1, "page_size": 100, "count": 0, "prev": null, "next": null } } },
+      { "entity_type": "test_recording", "status": 500, "body": "Internal Server Error (see attempts 2-3)" }
+    ],
+    "note": "Every readable entity_type for project __mcp-capability-fixture__ (379335744) returned an empty tags array with count:0. The 'other project-id form' (PR-2005) was tried and rejected client-side (see attempts). No unscoped call is possible - project_id is a required path param, there is no route that omits it. per_page was already sent at the declared ceiling (100), and paging further is moot since count is 0."
+  },
+  "contract": {
+    "required": ["project_id (integer, path)", "entity_type (string enum: test_case|test_run|test_plan|test_recording|shared_step, query)"],
+    "json_path": "none - this is a GET request with path_param + query only, no request body",
+    "declared_missing": [
+      "Per-tag 'id' and 'name' fields (listed in the capability's 'returns' hint) could not be verified against any real item - every entity_type that returned 200 for this project had an empty tags array. This is UNVERIFIED, not confirmed-missing."
+    ],
+    "undeclared_returned": [
+      "The formal 200 response schema is a bare {\"type\": \"object\"} with NO properties declared at all - stricter than the 'thin passthrough {status, body}' case flagged in prior batches; here literally nothing is formally typed.",
+      "Everything actually returned - top-level 'tags' and 'info', and info's sub-fields 'page', 'page_size', 'count', 'prev', 'next' - is therefore technically undeclared against the formal schema, even though the capability's separate 'returns' hint list (['tags','info','id','name']) loosely anticipates 'tags' and 'info' at the top level.",
+      "'page' as an alternate spelling of 'p' is documented in the request contract but never exercised (p was always used)."
+    ]
+  },
+  "notes": "TOTAL TAG COUNT (account/workspace-wide): search_group_tags (a sibling group-scoped read capability, invoked only as a prerequisite - see setup[]) only covers entity_types test_case and test_run. Walking both to exhaustion (2 pages each, page_size fixed at 30) returned 60 distinct test_case tags and 60 distinct test_run tags = 120 tags total across those two vocabularies. CAVEAT: search_group_tags' own info.count field reported 31 on every page for both entity_types, which contradicts the actual row counts (30+30=60 each) - that field is not reliable and the sibling probe should not trust it for sizing; trust the actual returned rows instead. test_plan, test_recording and shared_step tag vocabularies have NO group-wide listing capability found in this surface, so their account-wide totals are unknown; within the fixture project (__mcp-capability-fixture__, 379335744) both test_plan and shared_step show 0 tags via list_tags, and test_recording could not be read at all (persistent 500, see attempts 2-3).\n\nPRE-EXISTING TAGS (before this suite ran) - full baseline for the sibling update_tag probe:\ntest_case tags (60, id/name): 506760/2FA, 494322/AI Generated, 535639/AI Generated Details, 506787/Apply, 506836/Authentication, 506849/Bet, 506855/Booking, 506887/Call, 506850/Check, 506837/Code, 506784/Confirm, 506880/Create, 506854/Filter, 506786/Live, 506853/Map, 506761/NTP, 506783/Place, 506736/Price, 506886/SET, 506862/Setup, 506788/Successful, 506771/TOTP, 539272/Tag-0w5ew0, 539271/Tag-aavn9i, 540264/Tag-c2t99h, 506848/Test, 506757/Testing, 506753/Time, 506741/UI, 506885/Update, 506752/Updates, 506782/Validate, 506781/Verify, 506785/Wallet, 537006/abc, 506828/access, 506775/accurate, 506790/add-on, 78143/admin, 540276/all-folders-test, 511592/amit, 94662/android, 537866/api, 537848/approval, 537871/artifacts, 78141/auth, 506770/automatic, 540256/automation, 540265/automation-a, 537867/back-compat, 506815/backend, 540266/bulk-move-v2-a, 540263/bulk_share_api_test, 506791/cancellation, 537837/chat, 112799/chrome, 506806/clearing, 506863/cloud, 537872/compaction, 506772/complete.\ntest_run tags (60, id/name): 513460/0878ced916b9e10f598a702476211840f5fd5fe4, 107803/0a4aea94978b776d1e87220aa470919ebb93a785, 337581/111e4e0b3fbf374e3473d2d847a02ff71bd07da0, 107750/12659193b1b969f1fc4283bc24c10f9c099d3abd, 513827/20f5acc0b8bfef6cfd8635a644ba6e73c0208964, 108993/33a21a230fa27a722ef96538897ddc90c71d4839, 109192/3b7ca855c217c383af3d331507ef8fb6d5838332, 513829/3d3394878e47db2228eb9f5ef1b8eacba890848e, 109019/555713b78a3b6fedba8164273cd2d2943d0c3a8d, 513825/5de0b15377cd95f146f277e57d3ff06752af4c46, 513447/652dbcdd4fec3418b1ee3fb62d34df4806e5db83, 109441/780195b9017dd66446bb19d14c699c1f0fea68e8, 109193/888a934513afcd7f1ffb62ae26bc1bad46560c97, 491466/9e48af1352141ac4aa851a984557f60c30aacbf0, 78599/@TCID_TC-45616, 100574/API, 99325/Abc3, 309538/Alphabet, 99150/Behave, 367736/E2E, 105414/Gobe, 105906/JS, 107085/Java, 113023/Large_Logs_Simple_Thread_1, 113022/Large_Logs_Thread_1, 110125/P0, 107086/Python, 110124/Regression, 107087/SQL, 99326/Some2, 112739/Thread_1, 112741/Thread_10, 123087/Thread_1_ComprehensiveLogs, 112746/Thread_2, 112747/Thread_3, 112743/Thread_4, 112740/Thread_5, 112742/Thread_6, 112745/Thread_7, 112744/Thread_8, 112748/Thread_9, 367764/UNIT, 367737/Unit, 153719/Win_10x64, 491465/ab15f014785ecb45758537296691c183fd61b845, 112240/allure, 529826/alpha, 528038/bad-pr-causation, 529827/beta, 494918/browser, 110998/build, 107714/ccef75fc3b023829c6409219ef153132ea54c5fc, 112799/chrome, 111827/d34b95833ec4eb601908dcc79648398e2e480e3e, 112800/desktop, 109352/f1a89a4e463a589e1b31fba1f4af77c4eefe9577, 540919/flaky, 540920/flaky-test-level, 94418/junit, 75784/junit_upload.\nProject-scoped (__mcp-capability-fixture__ / 379335744) via list_tags itself: test_case=0, test_run=0, test_plan=0, shared_step=0, test_recording=undetermined (persistent 500).\n\nFIXTURE-CREATED TAGS: none of the 120 tags above contain the literal strings '__mcp-capability-fixture__' or 'probe'. A handful look auto-generated/disposable but PRE-DATE this session and are not attributable to it: Tag-0w5ew0 / Tag-aavn9i / Tag-c2t99h (test_case - look like randomly-suffixed placeholder names from some other automated suite), all-folders-test, automation-a, bulk-move-v2-a, bulk_share_api_test, back-compat, compaction (test_case), and flaky, flaky-test-level, bad-pr-causation, alpha, beta (test_run). None of these were created by this probe run; this whole listing IS the 'before' baseline the sibling update_tag probe should diff against. The sibling should NOT rename any tag on either list above without checking usage_count/impact first, since none of them are known-disposable.\n\nCAN A TAG BE CREATED? No standalone create-tag capability exists in the searched surface (searchCapability with mode=write over 'create a new tag or add a tag to a test case' surfaced only merge_tags and update_tag, both of which require an EXISTING tag id). Tags appear creatable only as a side effect of writing a previously-unused string into the `tags` field of a test case (update_test_case / edit_test_case / bulk_replace_test_case_fields[_v2] / create_test_case) or a test run (edit_test_run). This confirms the task's hypothesis: a disposable tag can only be produced indirectly, by tagging an entity, not created directly.\n\nVERDICT RATIONALE: list_tags itself is UNVERIFIED, not PASS/DRIFT - every entity_type readable in the fixture project returned an empty collection (count:0), so the per-item shape (id, name) promised by the capability's 'returns' hint could never be checked against a real payload. Separately, even a populated response would only yield a hollow PASS: the formal 200 schema is a contentless {\"type\":\"object\"} with zero declared properties, so nothing about the response shape is actually pinned down by the contract - see contract.undeclared_returned. And entity_type=test_recording, a value the enum declares as valid, crashes the backend with a persistent 500 (reproduced twice) - a real, reportable drift/bug independent of the empty-collection issue, even though it doesn't change the overall UNVERIFIED verdict for the entity_types that did answer."
+}

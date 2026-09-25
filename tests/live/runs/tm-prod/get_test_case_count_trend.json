@@ -1,0 +1,43 @@
+{
+  "capability": "get_test_case_count_trend",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 332537 },
+        "query": { "q[created_at]": "all_time" }
+      },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 332537 },
+      "query": { "q[created_at]": "all_time" }
+    },
+    "status": 200,
+    "response_keys": ["data", "empty_data", "order"],
+    "item_shape": {
+      "data": "object, keyed BY CASE TYPE NAME (e.g. Functional, Performance, Other, Security, Acceptance, Accessibility, Usability, Compatibility, ..., Automated, Manual, Total) — NOT an array, and NOT positional. Matches schema.",
+      "data.<Type>.graphData": "object keyed by 3-letter month abbreviation (Jan..Dec) -> integer count. NOT a positional array. Matches schema.",
+      "data.<Type>.field": "string, present on every real case-type/automation-state entry (e.g. 'case_type', 'automation_state') EXCEPT Total, which omits it entirely",
+      "data.<Type>.value": "array of strings on real entries (e.g. [\"9379\"]); on Total it is [null] instead",
+      "order": "array of the same keys as data, giving display sequence",
+      "empty_data": "boolean, false here (16k+ real cases)"
+    }
+  },
+  "contract": {
+    "required": ["data", "empty_data", "order"],
+    "json_path": "data.<Type>.field (nested required, per schema: data.<Type> requires [graphData, field, value])",
+    "declared_missing": ["data.Total.field"],
+    "undeclared_returned": []
+  },
+  "notes": "PREPROD ASSUMPTION CHECK: the task briefing's framing ('positional-array bug') does NOT apply to this capability. describeCapability's declared schema explicitly types data as an object map (properties keyed by case-type name, e.g. Accessibility, Functional, Acceptance, ... Automated, Manual, Total) and each entry's graphData as an object keyed by 3-letter month abbreviations (Jun..May) -- never an array. This is unlike the sibling capabilities get_issues_count_info / get_closed_test_runs_info, which declare positional arrays but actually return objects (a schema-vs-reality contradiction). Here schema and guidance both correctly describe the object/map shape, and prod's live response on project 332537 (16,267 cases) confirms it exactly: data is a map of ~45 case-type/automation-state keys (real types plus several stray custom types with all-zero series, e.g. '8may-1', 'analytical', 'dummy_test'), each with graphData as a month-keyed object (Oct..Sep, real non-trivial counts e.g. Functional Sep=16445, Manual Sep=26476, Total Sep=26594), and order lists the same ~45 keys. So: object-map shape is CONFIRMED on prod with real volume, not positional-array -- no drift on that axis.\n\nTHE ACTUAL DRIFT: schema declares 'field' as required for every entry under data (required: [graphData, field, value] on each data.<Type> object, no exception carved out for Total). The live prod response's Total entry is {graphData: {...}, value: [null]} -- it omits 'field' entirely, exactly as preprod found. Total.value is [null] (not an array of strings) on prod too, same as preprod, though per the shallowest-missing-path convention only the missing 'field' key is flagged as the reportable contract violation. Guidance says 'Total is a sibling key... the CSV exporter special-cases it' but the schema's required-list is never relaxed for it, so this is a genuine declared-vs-actual mismatch, now reproduced with real data volume (16,267 cases, 12-month trailing window Oct-Sep, all real integer counts) instead of preprod's ~21-case near-empty fixture. Verdict: DRIFT, driven solely by data.Total missing the required 'field' key (and Total.value's null-in-array typing); the map/graphData shape itself is a PASS against schema."
+}

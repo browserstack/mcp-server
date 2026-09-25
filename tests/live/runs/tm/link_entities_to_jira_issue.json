@@ -1,0 +1,49 @@
+{
+  "capability": "link_entities_to_jira_issue",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-17T10:43:37Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Need an entity to link that lives entirely in __scratch__ (764138), since __readonly__ contents must not be written to. Chose entity_type 'test-case'->'test-run' path via a fresh case + run rather than assembling an undocumented 'selection' object by hand (get_linked_test_case_selection returns folders:{} for any issue_id in this account per the sibling probe, so there was no real selection object to pass through).",
+      "source": "invoked",
+      "capability": "create_test_cases",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764138 },
+        "body": { "test_case": { "name": "MCP capability probe fixture case (link_entities_to_jira_issue)", "test_case_folder_id": "764138", "description": "Scratch fixture created solely to support probing link_entities_to_jira_issue" } }
+      },
+      "status": 200,
+      "produced": { "id": 1972036, "identifier": "TC-54457", "test_case_folder_id": 764138 }
+    },
+    {
+      "step": 2,
+      "why": "Create a test run in __scratch__ containing the new case, so entity_type 'test-run' + entity_ids (a plain integer array) could be used — the best-documented, least ambiguous body shape on this capability.",
+      "source": "invoked",
+      "capability": "create_test_run_by_integer_id",
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "run_state": "new_run", "name": "MCP capability probe fixture run (link_entities_to_jira_issue)", "test_case_ids": [1972036] }
+      },
+      "status": 200,
+      "produced": { "id": "TR-9061", "identifier": "TR-9061", "uuid": 17574995, "test_cases_count": 1 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "body": { "issue_id": "TES-121", "project_id": "379335744", "entity_type": "test-run", "entity_ids": [17574995] }
+    },
+    "status": 200,
+    "response_keys": ["success", "message", "async"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["issue_id", "project_id", "entity_type", "entity_ids (if entity_type=test-run)", "selection (if entity_type=test-case)"],
+    "json_path": "none declared — body is flat (issue_id, project_id, entity_type, entity_ids|selection, shared_selection, build_ids all at top level; no wrapper object like the test_run/* nesting seen on other TM write capabilities)",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "First attempt succeeded (no retries needed). Verdict is PASS: the declared 200 shape is {success, message, async} and the actual response matched exactly ({\"success\":true,\"message\":\"test-runs linked successfully\",\"async\":false}), with no extra or missing keys. The flat (unwrapped) body shape the contract declares is also correct as written — sending issue_id/project_id/entity_type/entity_ids at the top level worked on the first try, so no nesting drift was found here (unlike the risk called out in the task).\n\nCRITICAL CAVEAT on issue_id: no real Jira ticket key exists anywhere in this account (confirmed by two sibling probes: get_linked_test_case_selection returns an empty selection for any issue_id, and every fixture case has issues:[]). Per the task's explicit allowance, I used the capability contract's own example value 'TES-121' (from its own body-field description) rather than inventing anything, and I am flagging that choice here as instructed. Because the handler is documented to never validate issue_id against the tracker (\"A typo produces a link to a ticket that does not exist, with a 200 and a success message\"), this call cannot by itself prove a live Jira integration exists on this account — it only proves the storage/response contract behaves as declared. Treat 'TES-121' as a provisional/unverified ticket key, not a confirmed real one.\n\nDid I manage to create a real link? YES, in the sense that matters for the two follow-up probes: I verified via get_test_run_detail (project_id=379335744, test_run_id=TR-9061) that the run now carries a persisted issues[] entry: {id:848917, issue_id:'TES-121', jira_id:'TES-121', issue_type:'jira', entity_type:'Build', entity_id:17574995, record_status:'active'}. So a genuine row now exists in TM's link store referencing test run TR-9061 (uuid 17574995) — this satisfies the prerequisite for unlink_test_run (call it against TR-9061 / uuid 17574995, issue_id 'TES-121', project_id '379335744' or 379335744 as that capability's contract dictates). No test-case link was created (unlink_test_case's prerequisite is NOT satisfied) — if that probe needs one, it will need its own case+selection setup, since I only exercised the test-run path here to avoid the undocumented selection-object shape.\n\nScratch objects left behind for later probes: test case TC-54457 (id 1972036) and test run TR-9061 (uuid 17574995), both newly created in project PR-2005 / folder __scratch__ (764138). TR-9061 is now linked to Jira key 'TES-121'."
+}

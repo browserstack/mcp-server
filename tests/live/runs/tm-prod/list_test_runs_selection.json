@@ -1,0 +1,111 @@
+{
+  "capability": "list_test_runs_selection",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    { "step": 1, "why": "Fixture project supplied by caller: 332537 (PR-18723), 16,267 cases / 2,378 runs. Needed a real folder with a subfolder to test recursion.", "source": "pool", "capability": null, "arguments": {}, "status": null, "produced": { "project_id": 332537 } },
+    { "step": 2, "why": "List root folders to find a candidate with cases and a subfolder.", "source": "invoked", "capability": "list_root_folders", "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1, "per_page": 50 } }, "status": 200, "produced": { "chosen_folder": { "id": 7772651, "name": "prd", "cases_count": 16, "total_cases_count": 27, "sub_folders_count": 1 } } },
+    { "step": 3, "why": "Resolve the 'prd' folder's subfolder id and its own case counts, to set up a direct-vs-recursive comparison.", "source": "invoked", "capability": "list_folder_contents", "arguments": { "path_params": { "project_id": 332537, "folder_id": 7772651 } }, "status": 200, "produced": { "parent_folder": { "id": 7772651, "cases_count": 16, "total_cases_count": 27 }, "subfolder": { "id": 56005310, "name": "Test Management Demo", "cases_count": 8, "total_cases_count": 11, "sub_folders_count": 2 } } }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "select_all": false, "folders": { "7772651": { "test_case_select_all": true, "selected_test_cases": [], "deselected_test_cases": [] } }, "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded first try. Flat top-level body keys (no 'selection' wrapper) were accepted directly, matching the preprod gotcha exactly. Primary probe, scoped to folder 7772651 ('prd')."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "select_all": false, "folders": { "7772651": { "test_case_select_all": true }, "56005310": { "test_case_select_all": true } }, "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — cross-check, not a retry. Added the direct subfolder (56005310) explicitly to the folders map to test whether the parent alone would have recursed."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "select_all": true, "count": 10, "p": 1 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — cross-check. Project-wide select_all, page 1 of a paginated result, to check count-vs-rows behaviour under paging."
+    },
+    {
+      "n": 4,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "select_all": true, "count": 10, "p": 2 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — cross-check. Page 2 of the same query, to confirm info.count stays consistent across pages."
+    },
+    {
+      "n": 5,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "select_all": false, "folders": { "7772651": { "test_case_select_all": true } }, "count": 50, "minify": true } },
+      "status": null,
+      "error": "unknown body: minify. accepted: count, folders, p, q, select_all, shared_selection, show, unique_test_case_count",
+      "changed": "Rejected by the MCP invoke surface's own parameter guard, not the live API (no HTTP status) — minify is not an accepted body key at all for this capability."
+    },
+    {
+      "n": 6,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "select_all": true, "q": { "issue_ids": [999999999] }, "folders": { "7772651": { "test_case_select_all": true } }, "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — exploratory. Reproduced preprod's unexplained 'second, leaner shape' (12 fields) on prod. select_all=true + folders + q={issue_ids} all present."
+    },
+    {
+      "n": 7,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "select_all": true, "q": { "issue_ids": [999999999] }, "count": 10 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — isolation step. Matches preprod's exact attempt-7 setup (select_all=true + q.issue_ids, no folders key). Lean shape reproduced again; count=16261 (full project, unfiltered) — the bogus issue id was silently ignored, not applied or rejected."
+    },
+    {
+      "n": 8,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "select_all": false, "folders": { "7772651": { "test_case_select_all": true } }, "q": { "search": "authentication" }, "show": "all", "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — exploratory probe of q.search. Rich shape (not lean) was returned this time, and ALL 16 rows (not just name/identifier matches for 'authentication') came back in `selected` — confirms q.search does not narrow/filter and is not the recognized free-text key, matching preprod's finding."
+    },
+    {
+      "n": 9,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "select_all": false, "folders": { "7772651": { "test_case_select_all": true } }, "q": { "issue_ids": [999999999] }, "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — root-cause isolation beyond what preprod established. select_all=false + folders (no project-wide select_all) + q={issue_ids} STILL produced the lean shape. This isolates the trigger precisely: presence of q.issue_ids (regardless of select_all/folders combination) flips the response to the lean 12-field shape; q.search does not. Not chased further per task scope, but root-caused further than preprod could."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "body": { "select_all": false, "folders": { "7772651": { "test_case_select_all": true, "selected_test_cases": [], "deselected_test_cases": [] } }, "count": 50 } },
+    "status": 200,
+    "response_keys": ["success", "info", "test_cases", "selected"],
+    "item_shape": {
+      "rich_shape_fields": ["id", "identifier", "third_party_identifier", "name", "preconditions", "expected_result", "type", "folder_structure", "description", "source", "source_entity_id", "owner", "folder_id", "group_id", "template", "template_id", "import_id", "project_id", "updated_by", "created_by", "created_at", "updated_at", "automation_status", "automation_id", "archived_at", "trashed_at", "is_shared", "metadata", "is_project_level", "review_status", "review_sent_date", "estimated_duration_seconds"],
+      "lean_shape_fields": ["id", "name", "folder_id", "identifier", "third_party_identifier", "project_id", "automation_status", "template", "owner", "priority_id", "is_shared", "custom_fields"],
+      "note": "Rich shape (attempts 1,2,8) is the default. Lean shape (attempts 6,7,9) appears whenever q.issue_ids is present, regardless of select_all/folders combination — isolated on prod beyond what preprod could establish. automation_status is a bare string ('not_automated', 'automated', etc.) in BOTH shapes, never the declared {name,value} object."
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": "select_all -> /selection/select_all, unique_test_case_count -> /selection/unique_test_case_count, folders -> /selection/folders. As on preprod, this describes internal server-side nesting only — the MCP invoke surface rejects a literal 'selection' wrapper and wants select_all, folders, show, q, count, p, shared_selection, unique_test_case_count as FLAT top-level body keys. Confirmed identical to preprod: flat body worked on the very first attempt, no wrapper needed or accepted.",
+    "declared_missing": [
+      "test_cases[].assignee", "test_cases[].creator_details", "test_cases[].updator_details",
+      "test_cases[].case_type", "test_cases[].priority", "test_cases[].status",
+      "test_cases[].case_type_imported", "test_cases[].custom_fields (present only in the LEAN shape, absent from the RICH shape)", "test_cases[].estimate",
+      "test_cases[].is_automation", "test_cases[].links", "test_cases[].history_count",
+      "test_cases[].owner_imported", "test_cases[].priority_imported", "test_cases[].status_imported",
+      "test_cases[].steps", "test_cases[].tags", "test_cases[].test_case_folder_id",
+      "test_cases[].test_case_steps", "test_cases[].lcnc_build_map", "test_cases[].issues",
+      "test_cases[].comments_count", "test_cases[].automation_status (declared as {name,value} object, actual is a bare string e.g. 'not_automated' — confirmed in both response shapes)"
+    ],
+    "undeclared_returned": [
+      "test_cases[].third_party_identifier", "test_cases[].type", "test_cases[].folder_structure",
+      "test_cases[].source", "test_cases[].source_entity_id", "test_cases[].folder_id",
+      "test_cases[].group_id", "test_cases[].template_id", "test_cases[].import_id",
+      "test_cases[].updated_by", "test_cases[].created_by", "test_cases[].automation_id",
+      "test_cases[].archived_at", "test_cases[].trashed_at", "test_cases[].is_shared",
+      "test_cases[].is_project_level", "test_cases[].review_status", "test_cases[].review_sent_date",
+      "test_cases[].estimated_duration_seconds", "test_cases[].priority_id (lean-shape only, an integer id, not the declared priority object)"
+    ]
+  },
+  "notes": "RECHECK OF PREPROD DRIFT — ALL FIVE FINDINGS REPRODUCE ON PROD, PLUS THE MINIFY AND COUNT-VS-ROWS CHECKS. Verdict stands: DRIFT.\n\n(1) BODY-SHAPE GOTCHA — CONFIRMED, IDENTICAL: The invoke surface's json_path implies a nested `selection` wrapper, but flat top-level body keys (select_all, folders, count, q, show, p, shared_selection, unique_test_case_count) were accepted on the very first attempt against prod, with no nested-wrapper rejection ever tried or needed (preprod's attempt-1 rejection was reproduced separately via the minify test, which used the exact same 'unknown body: <key>. accepted: count, folders, p, q, select_all, shared_selection, show, unique_test_case_count' error format). Same client-side quirk on both environments, confirmed rather than assumed.\n\n(2) ITEM SHAPE DRIFT — CONFIRMED, IDENTICAL: prod's actual test_cases[] rows exactly match preprod's flat, leaner-than-declared shape: folder_id (not test_case_folder_id), automation_status as a bare string (not {name,value}), no priority/status/case_type sub-objects, no tags/issues/custom_fields/steps in the default (rich) shape. Given the size and specificity of the mismatch (identical field-for-field on both environments), this is a genuine, stable contract drift — the declared schema describes a different, richer test-case-detail endpoint's response, not this selection endpoint's actual serializer.\n\n(3) UNDOCUMENTED NON-RECURSIVE FOLDER SELECTION — CONFIRMED: selecting folder 7772651 ('prd', 16 direct / 27 total cases) with test_case_select_all=true returned exactly 16 rows (info.count=16, len(test_cases)=16) — the direct cases only. The 11 cases in subfolder 56005310 were excluded. Adding 56005310 explicitly to the folders map raised the count to 24 (16+8, the subfolder's own DIRECT count — not its total_cases_count of 11, since 56005310 itself has 2 further un-enumerated subfolders). This is the same non-recursive, 'you must enumerate every subfolder id yourself' behavior found on preprod, and nothing in guidance states it on either environment.\n\n(4) COUNT-VS-ROWS — CLEAN, CONFIRMED ON MULTIPLE CALLS: every single-page call had info.count == len(test_cases): 16/16 (folder alone), 24/24 (folder+subfolder), 16/16 (folder + q.issue_ids), 16/16 (folder + q.search + show=all). For the two-page paginated check (select_all=true project-wide, count=10, p=1 then p=2), info.count stayed consistent across both pages at 16261 (the project's true selectable-case total; the fixture's stated 16,267 is close but not identical — likely a small number of archived/trashed cases excluded from selection, not itself a drift finding), and each page correctly returned page_size=10 rows. No desync found anywhere on prod, matching preprod's clean result for this check.\n\n(5) RESPONSE SHAPE INSTABILITY — CONFIRMED AND ROOT-CAUSED FURTHER THAN PREPROD: the lean 12-field shape reproduced on prod under the same select_all=true + q={issue_ids:[...]} combination preprod used. Going further: prod testing isolated the actual trigger — presence of `q.issue_ids` alone (independent of select_all vs folders/select_all=false) flips the shape to lean; a parallel call with `q.search` instead of `q.issue_ids` kept the RICH shape. So the trigger is specifically the `issue_ids` key inside `q`, not select_all or the shared/folders combination as preprod suspected. In all issue_ids cases, the filter was also silently ignored (a bogus issue id neither narrowed nor errored) — same as preprod.\n\nMINIFY: NOT a declared param (absent from describeCapability's body list), and empirically confirmed — passing minify:true was rejected outright by the invoke surface itself with 'unknown body: minify. accepted: count, folders, p, q, select_all, shared_selection, show, unique_test_case_count'. This is neither the no-op, key-dropping, nor value-corrupting minify behaviour seen elsewhere in this API family — it is a hard reject before the request ever reaches the live TM API. Conclusion: no minify param for this capability, on either environment.\n\nOVERALL: this is a genuine recheck-confirmed DRIFT, not a flake. The transport-level body-shape quirk (finding 1) is a client/invoke-surface characteristic, not itself API drift. The real drift is entirely in the test_cases[] item schema (finding 2) plus the two undocumented behaviors (non-recursive folder selection, and the q.issue_ids-triggered shape switch). Nothing about prod contradicts what preprod found; prod adds one clarification (finding 5's exact trigger) that preprod could not pin down."
+}

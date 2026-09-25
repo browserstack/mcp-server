@@ -1,0 +1,203 @@
+{
+  "capability": "search_group_tags",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "none needed — group-scoped: the only path param is entity_type, no project_id/group_id accepted, group resolved from the authenticated session (group holding project 332537 / PR-18723, Demo Project 1)",
+      "source": "pool",
+      "capability": null,
+      "produced": {}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 1}},
+      "status": 200,
+      "error": null,
+      "changed": "initial payload, page 1 of the declared entity_type=test_case vocabulary"
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 2}},
+      "status": 200,
+      "error": null,
+      "changed": "paged forward to check info.next/count against actual continuation"
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 3}},
+      "status": 200,
+      "error": null,
+      "changed": "kept paging past the page where info.next first went (falsely) null, per task instruction to page until empty rather than trust next/count"
+    },
+    {
+      "n": 4,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 4}},
+      "status": 200,
+      "error": null,
+      "changed": "continued sequential paging"
+    },
+    {
+      "n": 5,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 5}},
+      "status": 200,
+      "error": null,
+      "changed": "continued sequential paging"
+    },
+    {
+      "n": 6,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 6}},
+      "status": 200,
+      "error": null,
+      "changed": "continued sequential paging"
+    },
+    {
+      "n": 7,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 7}},
+      "status": 200,
+      "error": null,
+      "changed": "continued sequential paging"
+    },
+    {
+      "n": 8,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 8}},
+      "status": 200,
+      "error": null,
+      "changed": "continued sequential paging — 8 consecutive pages (240 distinct tags) confirmed, all full 30-row pages, all still reporting info.count=31 and info.next=null from page 2 onward"
+    },
+    {
+      "n": 9,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 15}},
+      "status": 200,
+      "error": null,
+      "changed": "jumped ahead to sample deep pages rather than walk every page one by one, to characterize behavior at real prod scale"
+    },
+    {
+      "n": 10,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 30}},
+      "status": 200,
+      "error": null,
+      "changed": "sampled page 30 — still a full, distinct 30-row page, info.count still 31, info.next still null"
+    },
+    {
+      "n": 11,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 100}},
+      "status": 200,
+      "error": null,
+      "changed": "sampled page 100 — still populated (3000th row), same lying info block"
+    },
+    {
+      "n": 12,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 1000}},
+      "status": 500,
+      "error": "{\"success\":false,\"message\":\"Something went wrong. Please try again later.\"}",
+      "changed": "probed a very deep page to find the vocabulary's real end; this one triggered a genuine server-side 500 (has http_response.status=500 and a body) rather than an empty page — noted separately, not used as the end-of-data signal"
+    },
+    {
+      "n": 13,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 300}},
+      "status": 200,
+      "error": null,
+      "changed": "narrowed the search for the real last page between 100 (populated) and 1000 (500 error) — still populated"
+    },
+    {
+      "n": 14,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 600}},
+      "status": 200,
+      "error": null,
+      "changed": "first empty page found: tags=[], info.count=0 (not 31) — establishes that info.count is not a fixed constant, it varies with page contents"
+    },
+    {
+      "n": 15,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 450}},
+      "status": 200,
+      "error": null,
+      "changed": "binary search toward the real boundary — still empty"
+    },
+    {
+      "n": 16,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 370}},
+      "status": 200,
+      "error": null,
+      "changed": "binary search — still empty"
+    },
+    {
+      "n": 17,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 330}},
+      "status": 200,
+      "error": null,
+      "changed": "binary search — populated again, full 30 rows, count=31"
+    },
+    {
+      "n": 18,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 350}},
+      "status": 200,
+      "error": null,
+      "changed": "binary search — still populated"
+    },
+    {
+      "n": 19,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 360}},
+      "status": 200,
+      "error": null,
+      "changed": "binary search — empty"
+    },
+    {
+      "n": 20,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 355}},
+      "status": 200,
+      "error": null,
+      "changed": "binary search — still populated, full 30 rows"
+    },
+    {
+      "n": 21,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 358}},
+      "status": 200,
+      "error": null,
+      "changed": "binary search — empty"
+    },
+    {
+      "n": 22,
+      "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 357}},
+      "status": 200,
+      "error": null,
+      "changed": "found the true last page: exactly 1 tag returned, and here info.count reports 1 (matching the true row count of this page), not 31 — pins down the real vocabulary size at 356*30 + 1 = 10,681 distinct tags"
+    },
+    {
+      "n": 23,
+      "arguments": {"path_params": {"entity_type": "test_run"}, "query": {"p": 1}},
+      "status": 200,
+      "error": null,
+      "changed": "swapped entity_type to the other declared enum value to confirm it still works live"
+    },
+    {
+      "n": 24,
+      "arguments": {"path_params": {"entity_type": "test_plan"}, "query": {"p": 1}},
+      "status": null,
+      "error": "{\"ok\":false,\"error\":\"'entity_type' must be one of: test_case, test_run\"}",
+      "changed": "tried an undeclared entity_type value to test describeCapability's guidance claim that entity_type is 'not validated against a list here — an unrecognised value is forwarded to the backing service rather than rejected'. Result carried no http_response field at all — no status code, no server body — confirming this is a client-side, pre-flight rejection by invokeCapability itself, contrasted directly against attempt 12 (p=1000) in this same run, which DID reach the server and came back as a real http_response with status:500 and a body. The two attempts side by side unambiguously demonstrate the difference between 'never left the client' (this one) and 'a genuine server round trip' (attempt 12)."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"entity_type": "test_case"}, "query": {"p": 1}},
+    "status": 200,
+    "response_keys": ["tags", "info"],
+    "item_shape": {"tags[]": {"id": "integer", "name": "string"}, "info": {"page": "integer", "page_size": "integer", "count": "integer", "prev": "integer|null", "next": "integer|null"}}
+  },
+  "contract": {
+    "required": ["entity_type (path, declared enum test_case|test_run)"],
+    "json_path": null,
+    "declared_missing": [
+      "tag_objects — declared required in the 200 schema; NEVER present in any of the 24 live responses observed in this run (entity_type=test_case across ~15 sampled pages from p=1 to p=357, and entity_type=test_run at p=1). Every successful body had exactly the keys ['tags','info']."
+    ],
+    "undeclared_returned": [
+      "tags[].id — the declared 200 schema types `tags` as a plain array of strings ('Simple array of tag names (for backward compatibility)'); every live response instead returned `tags` as an array of {id, name} objects, on both entity_type values, at every page sampled including the very first (p=1) and very last (p=357) real pages."
+    ]
+  },
+  "notes": "All 4 preprod findings were checked against real prod-scale data (test_case entity_type actually holds 10,681 distinct tags, not the 104 estimated in the task fixture note, and not the 31 that info.count claims — the fixture's 104 estimate was itself far off from reality).\n\n1) tag_objects MISSING — REPRODUCES. Never appeared in any response body across 24 attempts (entity_type=test_case sampled at p=1,2,3,4,5,6,7,8,15,30,100,300,330,350,355,357, plus entity_type=test_run at p=1). Response keys are consistently only ['tags','info'].\n\n2) tags[].id instead of plain strings — REPRODUCES. Every single page returned `tags` as an array of {id, name} objects (e.g. {\"id\":37159150,\"name\":\"     \"}), never plain strings, on both test_case and test_run, at the first page and the true last page alike. The declared schema (array of strings) and its own description ('for backward compatibility') are both wrong.\n\n3) ENUM BOUNDARY — THE KEY DISTINCTION, settled unambiguously. Trying entity_type='test_plan' (attempt 24) returns `{\"ok\":false,\"error\":\"'entity_type' must be one of: test_case, test_run\"}` with NO `http_response` field whatsoever — no status code, no response body from any server. This is a CLIENT-SIDE, PRE-FLIGHT REJECTION by invokeCapability itself: the request never left the MCP client, no HTTP round trip occurred. This is directly and cleanly contrasted, in the same run, against attempt 12 (p=1000 on the valid entity_type=test_case), which DID reach the backend and came back as `http_response: {status: 500, body: {success:false, message:'Something went wrong. Please try again later.'}}` — a genuine server-side response with a real status code and a real body. Side by side these two attempts prove the difference: the entity_type enum rejection has zero characteristics of a server 4xx (no status, no body, no http_response envelope at all) and every characteristic of a registry-layer validator running before any request is dispatched. describeCapability's guidance text ('not validated against a list here — an unrecognised value is forwarded to the backing service rather than rejected') is FALSE on prod, exactly as it was found false on preprod. Verdict: this is a registry/documentation bug, not a backend behavior — the registry enum validation is real and narrower than the guidance claims it to be. Either loosen/remove the client-side enum check to match the documented pass-through behavior, or (more likely correct, since the check is arguably a useful guardrail) fix the guidance text to say the value IS validated client-side against ['test_case','test_run'] and rejected before any HTTP call, rather than forwarded.\n\n4) count/next UNRELIABLE — REPRODUCES, and is far more thoroughly characterized on prod's real 10,681-tag vocabulary than the 60-tag preprod sample could show. Walked page 1 through page 8 sequentially (240 distinct, zero overlap, correct ascending sort throughout), then sampled pages 15, 30, 100, 300, 330, 350, 355, 357, plus binary-searched the true end. Findings:\n  - info.count reports 31 on every single full (30-row) page observed, from page 1 all the way through page 356 — never once reflecting the true total (10,681).\n  - info.count is NOT a fixed constant, contrary to a naive reading of preprod's result: on the true last page (357, exactly 1 tag), count correctly reports 1; on pages past the end (358, 360, 370, 450, 600), count correctly reports 0. This suggests '31' is an artifact of a page_size+1 probe-row pattern (30 displayed + 1 sentinel used to decide next), leaking into a field mislabeled as a total, rather than a hardcoded '31'.\n  - info.next is correct ONLY on page 1 (correctly returns 2). From page 2 through page 356 — every one of which has more data after it — info.next incorrectly reports null, as if the list had ended at page 1. It only becomes truthfully null again at page 357 (the real last page) by coincidence, not because the bug was fixed.\n  - True vocabulary size for entity_type=test_case: 356 full pages of 30 + 1 final page of 1 = 10,681 distinct tags, confirmed via binary search for the boundary (populated at p=355, empty at p=358, exactly 1 row at p=357). This is two orders of magnitude larger than the 104 the task fixture note stated, and vastly larger than the 31 info.count ever reports.\n  - A very deep page (p=1000) returns a genuine server-side 500 rather than an empty page — a separate, real backend error, noted here but not folded into the DRIFT verdict on pagination metadata since it's a distinct issue (the backend apparently cannot cheaply determine 'past the end' for very large offsets and falls over, rather than returning an empty page cleanly).\n\nWhat still holds true from the docs: page size fixed at 30 (confirmed on every full page); entity_type's two declared values (test_case, test_run) both work live with plausible, clearly-different-looking vocabularies; ids returned alongside names are usable-looking integers; no permission/RBAC friction encountered."
+}

@@ -1,0 +1,79 @@
+{
+  "capability": "list_test_results_for_test_case_by_integer_id",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Reused the known prod fixture from the task brief: project 332537 / PR-18723, TR-4827350 (2 mapped cases, both with real logged results) and TR-3866741 (21 mapped cases, 1 with a real logged result on TC-1041809/38648454)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 332537, "test_run_id": ["TR-4827350", "TR-3866741"], "test_case_ids": [126144964, 125494645, 38648454] }
+    },
+    {
+      "step": 2,
+      "why": "TC-1041809/TR-3866741 came back with an EMPTY test-results list (200, count 0) rather than the expected Blocked result -- re-verified the run's live case grid to see whether the fixture had gone stale since it was written",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases_by_integer_id",
+      "arguments": { "project_id": 332537, "test_run_id": "TR-3866741", "p": 1, "per_page": 30 },
+      "status": 200,
+      "produced": { "note": "info.count is now 16 (not 21), all 16 rows are latest_status:untested, and TC-1041809 / case id 38648454 is NOT among them at all -- it has been unmapped from this run since the fixture was written (earlier today, per tm-prod/list_test_results_for_test_case.json which read a Blocked result off this exact case/run pair). This is FIXTURE STALENESS, not a capability defect: the endpoint's 200-with-empty-list response for an unmapped case is the documented 'never executed in this run' behavior, working as declared. Note: list_closed_test_runs still reports this run's overall_progress_by_status_id as {Blocked:1, Untested:20} across a cached test_cases_count of 21 -- that stale aggregate vs. the live 16-row grid is a separate, out-of-scope discrepancy, not chased further here." }
+    },
+    {
+      "step": 3,
+      "why": "Replaced the stale third row with a genuinely populated closed run, to keep three independent real result samples (and to keep hunting for populated attachments/step_result/dataset per the task)",
+      "source": "invoked",
+      "capability": "list_closed_test_runs",
+      "arguments": { "project_id": 332537, "p": 1 },
+      "status": 200,
+      "produced": { "note": "TR-1236825 (uuid 28076063): overall_progress_by_status_id shows 28 Passed across 28 cases -- confirmed live via list_test_run_test_cases_by_integer_id (info.count:28, all latest_status:passed). Also checked TR-1806940 (declared 1 Blocked case in list_closed_test_runs) as a second Blocked candidate -- its live case grid is now EMPTY (info.count:0), same staleness pattern as TR-3866741, so it was dropped as a candidate rather than substituted." }
+    }
+  ],
+  "attempts": [
+    { "n": 1, "arguments": { "project_id": 332537, "test_run_id": "TR-4827350", "test_case_id": 126144964, "p": 1 }, "status": 200, "notes": "TC-5508207, Failed -- succeeded first try" },
+    { "n": 2, "arguments": { "project_id": 332537, "test_run_id": "TR-4827350", "test_case_id": 125494645, "p": 1 }, "status": 200, "notes": "TC-5472086, Passed" },
+    { "n": 3, "arguments": { "project_id": 332537, "test_run_id": "TR-3866741", "test_case_id": 38648454, "p": 1 }, "status": 200, "notes": "TC-1041809 -- 200, test-results:[], count:0. Case no longer mapped into this run (see setup step 2) -- stale fixture, not a capability failure." },
+    { "n": 4, "arguments": { "project_id": 332537, "test_run_id": "TR-1236825", "test_case_id": 37046413, "p": 1 }, "status": 200, "notes": "TC-973763, Passed -- substitute third row" },
+    { "n": 5, "arguments": { "project_id": 332537, "test_run_id": "TR-1236825", "test_case_id": 37046404, "p": 1 }, "status": 200, "notes": "TC-973754, Passed -- fourth row, extra sample for the attachments/step_result/dataset hunt" },
+    { "n": 6, "arguments": { "project_id": 332537, "test_run_id": "TR-1806940", "test_case_id": 37072283, "p": 1 }, "status": 404, "notes": "Wrong id passed (run uuid instead of case id) -- immediately superseded by discovering via list_test_run_test_cases_by_integer_id that this run's case grid is empty (0 cases), so no retry was made against a real case id here" }
+  ],
+  "probe": {
+    "arguments": { "project_id": 332537, "test_run_id": "TR-4827350", "test_case_id": 126144964, "p": 1 },
+    "status": 200,
+    "response_keys": ["success", "test-results", "info", "unique_issues"],
+    "item_shape": {
+      "returned_item_TC-5508207_Failed": {
+        "id": 2187459590,
+        "updated_by": null,
+        "author": { "id": 305420, "browserstack_user_id": 10836602, "email": "user-b@example.invalid", "full_name": "User B", "group_id": 1, "onboarded": 1 },
+        "created_at": "2026-08-10T10:11:05.000Z",
+        "description": "<p>env was incorrect</p>",
+        "status": null,
+        "result_status": { "id": 982101, "field_value": "Failed", "internal_name": "failed", "field_name": "status", "colour": "#F87171", "value_category": "completed" },
+        "attachments": [],
+        "issues": [],
+        "custom_fields": [],
+        "test_run_step_result": null
+      }
+    },
+    "field_by_field": {
+      "id/author/created_at/description/links": "matches -- present, typed as declared, on all 4 sampled rows (2x TR-4827350, 2x TR-1236825)",
+      "configuration_id": "DRIFT REPRODUCES -- declared nullable integer, key entirely ABSENT from all 4 sampled rows, same as preprod (not present-and-null, just missing).",
+      "custom_fields": "DRIFT REPRODUCES -- declared type object, returned [] (empty array) on all 4 rows, same as preprod.",
+      "updated_by": "UNDECLARED KEY REPRODUCES, VALUE DIFFERS -- the key is present (undeclared) on all 4 prod rows exactly as on preprod, but its VALUE is null on every prod row sampled here, whereas preprod's finding describes it as a full populated user object (same shape as author) on all 14 of its sampled rows. Read together with the setup notes this looks like a DATA-STATE difference (preprod's fixture rows had been re-submitted/edited via a PATCH-latest probe, populating updated_by; these prod rows were single-submission and never edited) rather than a serializer difference -- but it means a caller cannot assume updated_by is populated just because the key exists, on either environment.",
+      "info.truncated": "DOES NOT REPRODUCE -- preprod's info block carried an undeclared truncated:false key. All 4 prod calls returned info as exactly {page, page_size, count, prev, next} with NO truncated key at all -- matches the declared info schema precisely, no undeclared field here on prod.",
+      "result_status": "CONFIRMED (not a drift) -- v1's full result_status object (id, field_value, internal_name, field_name, colour, plus value_category) reproduces exactly on prod, on all 4 rows sampled (Failed x1, Passed x3). This independently confirms the v1 half of the v1-vs-v2 result_status asymmetry that tm-prod/list_test_results_for_test_case.json already confirmed from the v2 side on these same underlying rows -- v2 stays cut down to {field_value} while v1 keeps the full object, on prod exactly as on preprod.",
+      "attachments/test_run_step_result": "matches structurally -- [] and null respectively on all 4 rows; POPULATED shape remains unverified (see notes)."
+    }
+  },
+  "contract": {
+    "required": ["success", "test-results", "info", "unique_issues"],
+    "json_path": "test-results",
+    "declared_missing": ["test-results[].configuration_id"],
+    "undeclared_returned": ["test-results[].updated_by"],
+    "type_mismatches": ["test-results[].custom_fields declared type object, returned as array ([]) on all 4 items"]
+  },
+  "notes": "VERDICT: DRIFT. Two of the preprod defects reproduce exactly on prod; one reproduces partially (key present, value differs from what preprod described); one does not reproduce at all.\n\nPER-FIELD PREPROD vs PROD COMPARISON --\n1. configuration_id (declared nullable integer, key absent): REPRODUCES. Confirmed absent as a key on all 4 sampled prod rows (TC-5508207 Failed, TC-5472086 Passed, TC-973763 Passed, TC-973754 Passed), same as all 14 preprod rows. Same behavior, both environments.\n2. custom_fields (declared object, returns []): REPRODUCES. [] on all 4 prod rows, same as all 14 preprod rows. v1's schema is still uncorrected on this field even though v2's sibling entry was already fixed to declare an array -- this recheck confirms the v1 fix proposed in the preprod finding still applies on prod.\n3. updated_by (undeclared key present): KEY PRESENCE REPRODUCES, VALUE DOES NOT. Present on all 4 prod rows (undeclared, as on preprod) but null on every one, versus preprod's description of a fully populated user object on all 14 of its rows. Most likely a data-state difference (preprod's fixture had been re-submitted/edited; these prod rows are pristine single-submission results) rather than a genuine environment-level serializer difference, but it was not possible to force an edit here (read-only probe) to confirm that theory directly. Recommend the index note this as 'present but only populated once a result has been edited after creation' rather than assuming it is always a full object.\n4. info.truncated (undeclared key present on preprod): DOES NOT REPRODUCE on prod. All 4 prod info blocks came back as exactly {page, page_size, count, prev, next} -- no truncated key at all. This is a genuine environment difference worth flagging: either preprod's serializer adds a field prod's does not, or this is itself unstable/version-dependent. Since the declared info schema never required truncated in the first place, prod's behavior here actually matches the DECLARED contract more closely than preprod's did.\n5. result_status full object (confirmed-good, not a drift): REPRODUCES. All 4 prod rows carry the complete object (id, field_value, internal_name, field_name, colour, value_category) exactly as declared and as seen on preprod -- v1 does not share v2's cut-down-to-field_value defect, on either environment. This independently corroborates, from the v1 side, what tests/live/runs/tm-prod/list_test_results_for_test_case.json already confirmed from the v2 side on these same TR-4827350 rows.\n\nFIXTURE STALENESS (worth flagging for whoever maintains PROD-FIXTURE.md) -- TC-1041809/TR-3866741 (the Blocked example) and the alternate TR-1806940 Blocked candidate have both drifted since being recorded: TC-1041809 is no longer mapped into TR-3866741 at all (its case grid now shows 16 untested cases, none of them TC-1041809), and TR-1806940's case grid is now completely empty (0 cases) despite list_closed_test_runs still reporting a cached 1-Blocked/21-total and 1-Blocked/1-total respectively for these two runs. This is a pre-existing cached-aggregate-vs-live-grid discrepancy, out of scope for this capability, not investigated further. TR-1236825 (28 Passed cases) was used as a live, stable substitute and produced a consistent 4th and 5th data point.\n\nATTACHMENTS / STEP_RESULT / DATASET HUNT -- genuinely attempted, nothing populated found. Checked all 4 real results reachable in this probe (TR-4827350 x2, TR-1236825 x2) plus confirmed both Blocked candidates (TR-3866741, TR-1806940) no longer have any mapped/executed cases to check. attachments:[] and test_run_step_result:null on every row sampled; v1 has no dataset key at all (only v2 exposes dataset, and it too has never been seen populated across the whole campaign). Consistent with the rest of the campaign (preprod and prod, v1 and v2): these fields remain UNVERIFIED IN THEIR POPULATED FORM everywhere probed so far, including this recheck. Not claiming a populated shape that was not observed.\n\nPAGINATION -- could not exercise p=2 anywhere: every call returned info.count:1 (or 0 for the stale row), matching len(test-results) exactly in every case, and next was always null. This capability is scoped to one case within one run, so at most one logged execution per call is structurally expected here -- same conclusion the v2 prod recheck reached. No case with more than one recorded attempt in the same run was found to exercise real paging.\n\nNo writes were made anywhere in this probe; only GET reads against project 332537, all within the designated read-only prod retest scope."
+}

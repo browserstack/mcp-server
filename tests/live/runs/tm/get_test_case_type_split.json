@@ -1,0 +1,49 @@
+{
+  "capability": "get_test_case_type_split",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:20:32Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope (INTEGER id required by route; PR-2005 identifier would 404 at routing)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "query": { "q[created_at]": "all_time" }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded on first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "query": { "q[created_at]": "all_time" }
+    },
+    "status": 200,
+    "response_keys": ["data", "empty_data"],
+    "item_shape": {
+      "name": "string",
+      "y": "integer",
+      "value": "integer",
+      "field": "string"
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Response shape matches the declared schema exactly: data is a plain array of OBJECTS ({name,y,value,field}), not 2-element positional arrays like some sibling dashboard-analytics reads (e.g. [\"Mar\",0]). No status/type-descriptor object (like result_status in get_active_test_runs_info) is returned here at all, so there is no value_category/colour/entity_type to check for this endpoint - that pattern simply does not apply to this capability's response shape.\n\nEMPTY-CASE RULE: the prompt's expectation of a 'SINGLE-KEY split' from the 21 all-'Other' fixture cases did NOT hold - the API returned all 11 configured case types (22 rows total, see below), most with y:0 and one ('Other') with y:21. So the response is a dense map over the group's configured case-type set, not a sparse single-key map; nothing here needed inferring from a single key, so the strict empty-case caution doesn't bite this run.\n\nGENUINE DRIFT FOUND: describeCapability's own guidance states 'Each row carries both y and value; they are the same count under two names (y is the chart's series value)'. That is false against the live data: y holds the actual case count (0 or 21), while value holds a large, distinct, sequential-looking integer (318594-318631) that is clearly some internal case_type-field-config id, not a duplicate count. This is a documentation/contract-guidance drift, not a JSON-schema-shape drift (the schema itself only declares both as `integer` with no equality constraint, so structurally nothing is 'missing' or 'undeclared') - hence verdict DRIFT rather than PASS, called out per the empty-case rule's instruction to judge against what the contract actually declares while still surfacing real mismatches.\n\nSecondary anomaly (reported, not scored): every case-type name appears TWICE in the array (two 'Acceptance' rows, two 'Other' rows, etc.) with disjoint value-id ranges (318594-318604 vs 318621-318631) but only one of the two 'Other' rows carries the nonzero y:21 count. This looks like a duplicated case_type field configuration on this fixture project/group rather than a capability bug, but it means a naive consumer keying on `name` alone would need to sum or otherwise reconcile duplicate rows."
+}

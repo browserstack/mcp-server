@@ -1,0 +1,48 @@
+{
+  "capability": "list_folder_contents",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T10:54:16Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Use pre-existing pool folders to exercise both the has-subfolders and zero-subfolders branches; no write capability available (read-only round).",
+      "source": "pool",
+      "capability": null,
+      "produced": {
+        "project_id": 379335744,
+        "readonly_folder_id": 764093,
+        "scratch_folder_id": 764138,
+        "nested_folder_id": 764828,
+        "deep_nested_folder_id": 764827
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764138}, "query": {"p": 1}},
+      "status": 200,
+      "error": "",
+      "changed": ""
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764138}, "query": {"p": 1}},
+    "status": 200,
+    "response_keys": ["folders", "self", "parent_id", "ancestors", "test_cases", "info", "success"],
+    "item_shape": {
+      "folders[]": "id:int, project_id:int, group_id:int, name:string, is_automation:bool, sub_folders_count:int, cases_count:int, total_cases_count:int, links.self:string",
+      "self": "id:int, project_id:int, group_id:int, name:string, parent_id:int|null(absent when self is root? no - present, null observed as top-level parent_id not self.parent_id), notes:string(HTML-escaped, only present when non-empty), is_automation:bool, cases_count:int, total_cases_count:int, sub_folders_count:int, contents[]:same shape as folders[] items but group_id observed as STRING with a DIFFERENT value than the matching folders[] entry, links.self:string",
+      "info": "page:int, page_size:int(fixed 300), count:int, prev:int|null, next:int|null - same 5 keys present on every branch tested (0 subfolders, 7 subfolders); no total_pages key ever observed"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "folder_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "PAGINATION CHECK: exercised both reachable branches — __scratch__/764138 (7 direct subfolders) and __readonly__/764093 (0 subfolders). Both returned the identical info envelope shape declared in the schema: {page, page_size, count, prev, next}, all 5 keys always present, prev/next null in both cases (count 7 and 0 respectively, both far under the fixed page_size=300 ceiling). No total_pages key was ever observed, and no second, prev/next-only shape was seen — this capability does NOT show the two-mutually-exclusive-info-shapes defect found on the sibling capability, at least for single-page results. IMPORTANT CAVEAT: the pool's largest folder has only 7 subfolders, far short of the 300-per-page ceiling, so a genuine next-page response (info.next != null) was NOT reachable and the multi-page branch is UNVERIFIED, not confirmed — cannot rule out a shape change once pagination actually kicks in.\n\nCONFIRMED per sibling guidance: `test_cases` is ALWAYS null (observed null on every call: plain, detail=true, nested_sub_folders=true). CONFIRMED: `folders` holds immediate children only (matches `self.contents` for a one-level call; deep folder 764827 under 764828 never appears in the top-level `folders` array of the 764138 call).\n\nDRIFT FOUND (reproduced on all 3 default-mode calls, both pool folders): `self.contents[].group_id` is returned as a STRING (e.g. \"3452\") whose value DIFFERS from the value in the top-level `folders[].group_id` for the exact same folder object (returned as an INTEGER matching self.group_id, e.g. 2615). The declared schema types group_id as integer for both `folders[]` and `self.contents[]` items (same item schema is reused). So `self.contents[].group_id` violates the declared type (string vs integer) AND appears to carry a stale/wrong group id relative to the folder's actual group (2615, confirmed via self.group_id and folders[].group_id). This is reproducible, not a one-off.\n\nID TYPE CHECK: unlike get_folder_tree, this capability returns `id` as an integer (not a quoted string) consistently everywhere (folders[], self, self.contents[], nested contents[]), and `parent_id` is also an integer everywhere it appears. No id/parent_id type inconsistency found here — this capability does NOT reproduce that sibling defect.\n\nADDITIONAL OBSERVATIONS (secondary params, not part of the core default-path verdict but recorded since discovered): (1) detail=true on a root folder (764138, whose own parent_id is null) returned `ancestors: []` (empty array) rather than the documented null-vs-breadcrumb dichotomy being demonstrated with actual ancestor entries — consistent with 'root folder has no ancestors' but not a full confirmation of populated-breadcrumb behavior since no non-root pool folder was available to test with a deep chain from the root. (2) nested_sub_folders=true CONTRADICTS its own guidance: guidance states 'self.contents is stripped from the response' when nested_sub_folders takes effect, but the actual response still included `self.contents`, fully populated and even recursively nested one level deeper (folder 764828's `contents` held its child 764827). (3) On the nested_sub_folders=true call, `info` came back as a bare `null` instead of the declared object — a second, separate contract violation from the group_id one, only present when nested_sub_folders is used (default/plain calls always returned the full info object). (4) On the same nested_sub_folders=true call, `self.cases_count` was 0, contradicting the 18 direct cases confirmed for folder 764138 on every plain call — value changes depending on mode for the identical folder, a real behavioral inconsistency, not just a shape issue. (5) case_count=true / total_count=true (declared as 'read only on nested_sub_folders path') produced no visible additional fields — cases_count was already present regardless, and no per-branch total-count field appeared; their effect could not be positively confirmed. These four nested-mode observations are secondary/bonus findings outside the plain single-level contract this run targeted, but are recorded verbatim since they surfaced during probing. Folder notes are HTML-escaped as documented (__scratch__ notes: '&lt;p&gt;write probes create their own objects in here&lt;/p&gt;'); the `notes` key is simply absent (not present as null) on __readonly__/764093, which has no notes set."
+}

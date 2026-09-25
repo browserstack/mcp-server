@@ -1,0 +1,53 @@
+{
+  "capability": "get_report_section",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "same id-form trap as get_report_detail: this route also needs the integer report_id, only list_schedules exposes it alongside the SC-NNN identifier list_reports shows",
+      "source": "invoked",
+      "capability": "list_schedules",
+      "arguments": { "path_params": { "project_id": 332537 }, "query": {} },
+      "status": 200,
+      "produced": { "resolved": { "project_id": 332537, "report_id": 95008, "identifier": "SC-12541", "report_type": "Test Run Summary", "report_timeframe": "last_one_week" } }
+    },
+    {
+      "step": 2,
+      "why": "confirm list_reports never exposes the integer id for this same report, closing the id-form trap check for this capability too",
+      "source": "invoked",
+      "capability": "list_reports",
+      "arguments": { "path_params": { "project_id": "PR-18723" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": { "matching_row": { "id": "SC-12541", "report_type": "Test Run Summary" }, "note": "Only the string 'SC-12541' is present; stripping the prefix gives 12541, not the real integer id 95008." }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "report_id": 95008, "section_name": "test_run_data" }, "query": {} },
+    "status": 200,
+    "response_keys": ["test_run_data", "issues_data", "test_run_status", "test_cases_status", "user_result_stats", "issues_by_status", "issues_by_priority", "time_tracking", "estimated_vs_actual"],
+    "item_shape": {
+      "test_run_data": "{active:17, closed:0, test_cases:139, test_results:141} — the requested section, populated with real non-zero data",
+      "issues_data": "null (not requested)",
+      "test_run_status": "null (not requested)",
+      "test_cases_status": "null (not requested)",
+      "user_result_stats": "[] (not requested)",
+      "issues_by_status": "null (not requested)",
+      "issues_by_priority": "null (not requested)",
+      "time_tracking": "null (not requested)",
+      "estimated_vs_actual": "null (not requested)"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "report_id (path, integer)", "section_name (path, string, allow-listed per report_type)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "The declared 200 schema is the literal empty object {\"type\":\"object\"} — no properties at all, so every key returned (test_run_data, issues_data, test_run_status, test_cases_status, user_result_stats, issues_by_status, issues_by_priority, time_tracking, estimated_vs_actual and all nested fields) is technically undeclared. Same unfalsifiable-schema condition already recorded on preprod."
+    ]
+  },
+  "notes": "PREPROD (tests/live/runs/tm/get_report_section.json): DRIFT — declared 200 schema is a bare {\"type\":\"object\"} (unfalsifiable), and the capability's own prose ('just the section object keyed by the section name' — implying a one-key response) disagrees with the actual multi-key response (every valid section for the report type comes back as a key, with unrequested ones null/[]). PROD RESULT: both parts of that DRIFT reproduce exactly.\n\nACTUAL 200 SHAPE (real prod data, Test Run Summary / SC-12541 / id 95008 / project 332537-PR-18723): requesting section_name=test_run_data returns a flat object with ALL nine section keys valid for Test Run Summary (test_run_data, issues_data, test_run_status, test_cases_status, user_result_stats, issues_by_status, issues_by_priority, time_tracking, estimated_vs_actual), with only the requested key computed (test_run_data: {active:17,closed:0,test_cases:139,test_results:141}, real non-zero) and every other key null (or [] for user_result_stats). Cross-checked with a second call requesting section_name=issues_by_priority on the same report: issues_by_priority came back as [] (populated-empty, a real computed empty result) while test_run_data flipped back to null in that response — confirming the multi-key-with-nulls shape is consistent and section-driven, not report-driven.\n\nPROSE-VS-BEHAVIOR DRIFT (why this is DRIFT, not merely 'unfalsifiable schema, unable to say'): the guidance text states the response is 'the bare widget payload ... just the section object keyed by the section name' (singular). The verified live response is a fixed nine-key object for the report type's whole allow-list, with unrequested keys nulled rather than omitted. Identical disagreement to what preprod showed — this is not preprod/prod-specific drift, it is a genuine, reproducible documentation-vs-behavior gap present in both environments.\n\nID-FORM TRAP: reproduces exactly as on get_report_detail — list_reports exposes only 'SC-12541'; the integer id (95008) is only available via list_schedules. Confirmed real for this capability too, on real production ids (95008 vs a naively-stripped 12541 — not a near-miss, a completely different number).\n\ntr_drilldown 401 (cross-reference to get_report_detail's run file, same finding applies here): section_name=tr_drilldown&widget_type=active_runs on the same report (95008) returned HTTP 401 {\"success\":false} via get_report_section as well — same failure as via get_report_detail's sections= param, confirming the 401 is tied to the tr_drilldown widget itself (likely a permission gap specific to that drilldown in this environment), not to one particular route. Could not exercise the paginated-rows / count-vs-rows check for tr_drilldown on prod as a result — recorded as BLOCKED for that specific sub-check, shallowest failing path only, no downstream guessing about widget_type=closed_runs etc. Non-tr_drilldown drill-downs were not independently re-tested through this route (already confirmed reachable via get_report_detail's tc_activity_drilldown call in the sibling run file), so this capability's own coverage of a WORKING drilldown/pagination path is UNVERIFIED here specifically, though the underlying drilldown mechanism is known to work in this project via the sibling capability.\n\nSHARED-SERIALIZER CHECK: not directly applicable — this capability's 200 body IS report_data (report_data_only forced on per its own guidance), so it never carries a `data` envelope with mail_to/project_ids/etc. to check against the create_report_by_integer_id/update_report pattern. No drift to report here beyond what get_report_detail already established for the shared serializer.\n\nNo write, no email: only read/list_schedules/list_reports capabilities invoked; no parameter that could trigger a send was ever set."
+}

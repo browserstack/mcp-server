@@ -1,0 +1,47 @@
+{
+  "capability": "get_dataset",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": true,
+  "setup": [
+    {
+      "why": "Resolve real dataset uuids in project 332537 (fixture project, ~16,267 test cases) to get independent call sites for get_dataset.",
+      "capability": "list_datasets",
+      "arguments": {"path_params": {"project_id": 332537}, "query": {"p": 1}},
+      "status": 200,
+      "produced": "106 datasets total (info.count=106, page_size=30, next=2). Picked 5 datasets spanning different creators, sizes, and AI-generated vs manual origin: Login (3 rows), User Registration Data (13 rows), test dataset (2 rows), a 'Dataset AI Generated' set (12 rows), and another AI-generated set from a different creator (7 rows)."
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {"project_id": 332537, "uuid": "<one of 5 uuids checked>"},
+    "status": 200,
+    "response_keys": ["success", "dataset"],
+    "item_shape": {
+      "dataset": "{uuid, name, variables, rows, rows_count, tags, metadata, created_at, created_by}",
+      "variables[]": "{name, uuid}",
+      "rows[]": "{row_data, row_number, uuid}",
+      "created_by": "{id, full_name, email, onboarded, role, reports_and_notification_enabled}"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "uuid (path, string)"],
+    "declared_missing": ["created_by.browserstack_user_id (declared, absent on every dataset checked)", "created_by.group_id (declared, absent on every dataset checked)"],
+    "undeclared_returned": ["created_by.role (undeclared, present on every dataset checked, values observed: 'user', 'admin')"]
+  },
+  "prod_vs_preprod": {
+    "per_dataset": {
+      "83b376a4-86cd-4763-9c32-6143f094379c": {"name": "Login", "rows_count": 3, "created_by_keys": ["id", "full_name", "email", "onboarded", "role", "reports_and_notification_enabled"], "role_value": "user"},
+      "ba43f2ab-102b-4123-b141-22df07041ad5": {"name": "User Registration Data", "rows_count": 13, "created_by_keys": ["id", "full_name", "email", "onboarded", "role", "reports_and_notification_enabled"], "role_value": "user"},
+      "9e87b40d-bbec-442a-a3f5-f710fc411eac": {"name": "test dataset", "rows_count": 2, "created_by_keys": ["id", "full_name", "email", "onboarded", "role", "reports_and_notification_enabled"], "role_value": "admin"},
+      "7bab5db9-9945-44b7-b9f8-0d06e696c386": {"name": "Multi-Message Deletion & Selection Method Interplay [...]", "rows_count": 12, "created_by_keys": ["id", "full_name", "email", "onboarded", "role", "reports_and_notification_enabled"], "role_value": "user"},
+      "81999f54-bac0-48a1-9c01-5dfec438a040": {"name": "User Status and Performance Requirements [...]", "rows_count": 7, "created_by_keys": ["id", "full_name", "email", "onboarded", "role", "reports_and_notification_enabled"], "role_value": "admin"}
+    },
+    "variables_shape_consistent": true,
+    "rows_shape_consistent": true
+  },
+  "notes": "Settle point 1 (declared contract): describeCapability confirms the declared created_by sub-schema is exactly {id, browserstack_user_id, full_name, email, group_id, onboarded, reports_and_notification_enabled}; variables[] is declared as {name, uuid}; rows[] is declared as {row_data (array of strings), row_number, uuid}. Top-level response is {success, dataset} with dataset holding uuid/name/variables/rows/rows_count/tags/metadata/created_at/created_by directly -- no envelope, matching the guidance text verbatim. Settle point 2: across all 5 datasets checked in project 332537, created_by.browserstack_user_id and created_by.group_id remain declared-but-absent, and an undeclared created_by.role field (values 'user' or 'admin', tracking each creator's actual project role) is present every time -- exact reproduction of the preprod drift, with zero variance across creators (7 distinct users represented: Yashvi Satam, Kriti Baindail, Parikshit Thatte, Saatwik Pareek, Bharat Pandey). Settle point 3: variables shape ({name, uuid}, no extra/missing keys) held cleanly across all 5 datasets -- confirms the preprod clean-negative on real prod data with more call sites (5 vs preprod's 4) and more variety (2-13 rows, 2-5 columns, manual and AI-generated origin). rows shape ({row_data, row_number, uuid}) also held cleanly across all 5 -- row_data is consistently an array of strings matching the declared item type, including edge-case values (empty strings, SQL-injection test strings, very long strings, non-ASCII names) with no shape deviation. Settle point 4: N/A confirmed -- variables items are {name, uuid} and rows items are {row_data, row_number, uuid}; neither matches variant A {value,name,internal_name,is_default} nor variant B {id,internal_name,field_name,colour,value_category,name}. This capability returns dataset schema/data, not option or value descriptors. Settle point 5: get_dataset's 200 response is a single {success, dataset} object with no info/paging envelope on any of the 5 calls -- confirmed no paging container on this capability itself. Secondary observation (list_datasets setup call only, not the primary finding for get_dataset): list_datasets page 1 returned info={page:1, page_size:30, count:106, prev:null, next:2} with exactly 30 dataset rows in the array -- rows_returned matches page_size cleanly on this page, no info/rows under-fill observed here (unlike the pattern seen on get_system_field_values); not pursued further as it is out of scope for get_dataset's primary contract. Project 332537 had far more than one dataset available (106 total across the paginated list), so the multi-site check drew from a genuinely diverse pool rather than being limited by fixture scarcity. Overall: this capability's verdict on prod is DRIFT, reproducing preprod's exact drift (created_by field mismatch) with no new drift surfaced and no attenuation -- the finding is not preprod-data-specific, it is a consistent contract/implementation mismatch in the created_by resolver."
+}

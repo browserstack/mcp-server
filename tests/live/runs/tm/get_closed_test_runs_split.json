@@ -1,0 +1,33 @@
+{
+  "capability": "get_closed_test_runs_split",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:09:33Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "query": { "q[created_at]": "all_time", "q[closed_at]": "5_year" }
+    },
+    "status": 200,
+    "response_keys": ["data", "date_list", "empty_data"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Contract: entity=project, mode=read, single required path param project_id (INTEGER, not the PR-NNN identifier). No body/json_path — arguments go entirely in query. Query params: q[created_at] and q[closed_at] (relative-window tokens like '3_month'), q[owner], filter_details. Guidance documents a filter trap: q[closed_at] is the meaningful key but is only honoured when q[created_at] is absent or 'all_time' (created_at otherwise wins), and sending any other q key without an explicit q[created_at] silently defaults closed_at to a rewritten '1_year' window. Declared 200 schema: {data: [{name, data: [int...], result_status: {id, field_value, internal_name, field_name, colour}}], date_list: [string...], empty_data: boolean}. Each series in `data` aligns positionally with `date_list`; the numbers carry no month key of their own.\n\nInvoked with project_id=379335744 (the fixture project, from the pool), q[created_at]=all_time (so closed_at is honoured, per guidance) and q[closed_at]=5_year, which produced date_list buckets H2 2021..H2 2026 (half-year buckets), correctly spanning 2026-09. Response was 200 with empty_data:true and data:[] -- zero closed test runs found for this project in that window. Widened to q[closed_at]=10_year as a second, non-erroring check (buckets H2 2016..H2 2026, still spanning 2026-09) and got the identical empty result, ruling out a too-narrow window as the cause: the fixture project (379335744 / PR-2005) appears to have no CLOSED test runs at all in preprod, regardless of window width. Both calls were clean 200s -- no error/retry cycle was needed, so `attempts` is empty; the second call is recorded here as evidence rather than as a fix-and-retry.\n\nPer the empty-case rule: an empty data array and empty_data:true prove nothing about the declared item shape (`name`, per-period `data` counts, `result_status` object with id/field_value/internal_name/field_name/colour) -- that shape was never exercised. The declared 200 envelope itself (data/date_list/empty_data keys) IS confirmed present and correctly typed, but the per-status split this capability exists to test (status-keyed series varying with the data) was not observed. Verdict is UNVERIFIED, not PASS: prerequisites (at least one CLOSED test run on the fixture project, within a window covering its close date) were unavailable, and this is a read-only round so no run could be closed to create one. To move this to PASS or DRIFT, a run on project 379335744 needs an existing CLOSED status with a closed_at date inside a queried window -- none was found across a 5-year and a 10-year lookback."
+}

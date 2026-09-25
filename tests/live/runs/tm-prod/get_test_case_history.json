@@ -1,0 +1,89 @@
+{
+  "capability": "get_test_case_history",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": true,
+  "setup": [
+    {
+      "step": 1,
+      "why": "enumerate real numeric history_ids for a case with a rich revision trail, to feed this capability's history_id path param",
+      "source": "invoked",
+      "capability": "list_test_case_histories",
+      "arguments": { "path_params": { "project_id": 332537, "test_case_id": 32747791 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": {
+        "note": "The three prescribed fixture cases (TC-838571/32747791, TC-838570/32747562, TC-838569/32747539 in folder 9697326) each have exactly ONE history row (source: create, count: 1) — no real edit trail at all, contrary to the task's premise that prod would be richer than preprod's hand-seeded cases. Verified for all three before substituting.",
+        "TC-838571_32747791": { "count": 1, "history_ids": [10867105] },
+        "TC-838570_32747562": { "count": 1, "history_ids": [10866738] },
+        "TC-838569_32747539": { "count": 1, "history_ids": [10866691] }
+      }
+    },
+    {
+      "step": 2,
+      "why": "since the three prescribed fixture cases had no real edit trail, searched project 332537 for a test case with genuine multi-revision history (read-only project-wide scan via list_test_cases, then checked candidates' histories)",
+      "source": "invoked",
+      "capability": "list_test_case_histories",
+      "arguments": { "path_params": { "project_id": 332537, "test_case_id": 30883570 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": {
+        "chosen_case": "TC-829017 (integer id 30883570), folder 9273241 'payment flow' — genuine prod test case with organic edit history, NOT campaign-created, read-only throughout",
+        "count": 4,
+        "rows_newest_first": [
+          { "id": 139972066, "version_name": "V4", "modified_fields": ["automation_status"], "has_modified_in_listing": true, "created_at": "2026-09-15T18:07:10.000Z" },
+          { "id": 139971741, "version_name": "V3", "modified_fields": ["test_case_steps"], "has_modified_in_listing": false, "created_at": "2026-09-15T18:06:06.000Z" },
+          { "id": 7321851, "version_name": "V2", "modified_fields": ["template", "preconditions", "test_case_steps"], "has_modified_in_listing": false, "created_at": "2025-04-15T10:46:14.000Z" },
+          { "id": 7321757, "version_name": "V1", "modified_fields": null, "has_modified_in_listing": false, "created_at": "2025-04-15T10:46:06.000Z" }
+        ]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537, "test_case_id": 30883570, "history_id": 139972066 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — first/newest (page-1 row, V4) history read, succeeded on first attempt"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537, "test_case_id": 30883570, "history_id": 7321851 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — non-first (V2) history read, succeeded on first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "test_case_id": 30883570, "history_id": 139972066 } },
+    "status": 200,
+    "response_keys": ["success", "history"],
+    "item_shape": {
+      "history.id": "integer (139972066)",
+      "history.entity_id": "integer (30883570)",
+      "history.entity_type": "string (\"TestCase\")",
+      "history.version_id": "string uuid",
+      "history.source": "string (\"update\")",
+      "history.modified_fields": "array of strings (e.g. [\"automation_status\"])",
+      "history.modified": "object — full old/new map, always present on this route (matches contract note)",
+      "history.project_id": "integer",
+      "history.group_id": "integer",
+      "history.comment": null,
+      "history.user_id": "integer",
+      "history.created_at": "string date-time",
+      "history.user": "object {id, browserstack_user_id, full_name, group_id, onboarded, reports_and_notification_enabled} — NO email key",
+      "history.links.self": "string",
+      "history.origin_channel": "string (\"ui\" on this record; \"null\" on an older 2025-04 record) — NOT in declared schema",
+      "history.version_name": "ABSENT — not even null; declared nullable string on the schema but entirely missing from the single-entry object"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_case_id", "history_id"],
+    "json_path": "history",
+    "declared_missing": ["history.version_name", "history.user.email"],
+    "undeclared_returned": ["history.origin_channel"]
+  },
+  "notes": "All four preprod findings for get_test_case_history REPRODUCE on prod (verdict: DRIFT), confirmed against real production data.\n\n1) version_name — REPRODUCES. Diffed the exact same history_id both ways: in the list_test_case_histories LISTING (project 332537, test_case 30883570, p=1), history_id 139972066 carries \"version_name\":\"V4\" and history_id 7321851 carries \"version_name\":\"V2\". Calling get_test_case_history for those SAME two history_ids returns a history object with no version_name key at all (not null — absent) in both cases. The schema declares version_name as a nullable string on the single-read response, so this is a genuine declared-vs-actual gap, and it is the specific 'listing carries it for the same id, single-read drops it' pattern called out from preprod.\n\n2) user.email — REPRODUCES. The schema's nested `user` sub-schema declares an `email` field. Both single-reads (history_id 139972066 and 7321851) return a `user` object with id/browserstack_user_id/full_name/group_id/onboarded/reports_and_notification_enabled but no `email` key. Same gap as on the listing capability.\n\n3) origin_channel — REPRODUCES as 'present but undeclared', though the concrete value differs from preprod. Preprod's single-read showed `origin_channel: \"api\"`; on this prod record (history_id 139972066, an update made via the web UI) it is `origin_channel: \"ui\"`, and on an older 2025-04 record (history_id 7321851) it is `null`. In all cases the field is returned and is absent from the declared schema (declared_missing list for the `history` object has no origin_channel property) — undeclared_returned confirmed, value is channel-dependent (api vs ui) rather than a fixed string.\n\n4) Redundancy/enrichment pattern — REPRODUCES exactly. For the FIRST/newest row on the page (history_id 139972066, V4): the list_test_case_histories listing already returned the full `modified` map for `automation_status` (old/new) inline — this route's own guidance says the listing only enriches the first record per page, and that held true here. Fetching the single-entry read for that same first row added no new field data and was strictly worse: it dropped `version_name` (finding #1) while gaining nothing. For a NON-first row (history_id 7321851, V2, third of four): the listing gave only `modified_fields: [\"template\",\"preconditions\",\"test_case_steps\"]` — field names with no values. The single-read for that id returned the full old/new `modified` map, including the complete 8-step `test_case_steps` array (old: null, new: [8 step objects]) and the full `preconditions` text. That is exactly the valuable case for this route.\n\nDeviation from the prescribed setup, and why: the task named TC-838571/TC-838570/TC-838569 (folder 9697326) as the source for 'richest trail' — but list_test_case_histories against all three (recorded in setup step 1) showed each has exactly ONE history row (a bare 'create', count=1, no edits ever recorded). None of the three folder-9697326 cases could supply a first-row-vs-non-first-row comparison because none has a second row. To honestly test finding #4 (and to re-confirm #1–#3 against a genuinely multi-revision record, since a single 'create' row has no modified_fields/modified to compare), I searched project 332537 read-only (list_test_cases project-wide, then list_test_case_histories on a few candidates) and found TC-829017 (integer id 30883570, folder 'payment flow') with 4 real revisions spanning 2025-04-15 to 2026-09-15. This is an ordinary prod demo-project test case, not one created by this campaign; only read capabilities were invoked against it, nothing was modified. All four preprod findings were verified against it and reproduced."
+}

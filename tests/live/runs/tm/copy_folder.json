@@ -1,0 +1,75 @@
+{
+  "capability": "copy_folder",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:35:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "check the current state of parent folder 765811 before writing — task warned a concurrent probe might be renaming it",
+      "source": "invoked",
+      "capability": "list_folder_contents",
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 765811}},
+      "status": 200,
+      "produced": {
+        "self": {"name": "__mcp-probe-renamefolder-20260922", "cases_count": 2, "total_cases_count": 4, "sub_folders_count": 1},
+        "note": "folder 765811 HAS been renamed since the task brief was written (was presumably named differently before) — confirms the warned concurrent rename probe touched it. Structure otherwise as expected: one subfolder, 765817, cases_count 2 / total_cases_count 2."
+      }
+    },
+    {
+      "step": 2,
+      "why": "list the two cases inside 765817 (the folder to be copied) before touching anything",
+      "source": "invoked",
+      "capability": "list_folder_test_cases",
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 765817}},
+      "status": 200,
+      "produced": {"rows": ["TC-54502 (1985215)", "TC-54487 (1985021)"], "both_rows_priority_id": 318591}
+    },
+    {
+      "step": 3,
+      "why": "read TC-54502's full detail to check what option ids it actually carries, per explicit instruction to verify this before treating any copy as a fidelity test",
+      "source": "invoked",
+      "capability": "get_test_case_detail",
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 765817, "test_case_id": 1985215}},
+      "status": 200,
+      "produced": {
+        "identifier": "TC-54502",
+        "case_type": {"id": 318599, "name": "Other"}, "priority": {"id": 318591, "name": "Medium"}, "status": {"id": 318605, "name": "Active"},
+        "template_id": 1164, "template_name": "Test Case Steps", "template_step_type": "test_case_steps",
+        "custom_fields": [], "tags": ["mcp-probe"],
+        "test_case_steps": [{"id": 12372594, "hashed_id": "f990d43e3e067321791c4296ca03c74b219ce7ea", "order": 1, "step": "Open the login page", "result": "Login page is displayed", "shared_step_id": null, "shared_step_detail_id": null}],
+        "conclusion": "TC-54502 already carries the project's LOWER/DEFAULT block (318591/318599/318605) on all three option fields — exactly as the task warned, since it is itself a copy (of TC-54489, per bulk_copy_test_cases' own findings). Its sibling TC-54487 in the same folder shows priority.id 318591 too (from the list view). Neither case in folder 765817 carries the upper block (318618/318626/318632). This folder CANNOT be used to test the option-id silent-rewrite bug — see verdict notes."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"source_folder_id": 765817, "destination_folder_id": 765811}},
+      "status": 202,
+      "error": null,
+      "changed": "Queued and completed near-instantly: new folder 765883 ('copy-of-__mcp-probe-subfolder-20260921') created under 765811, holding two new cases — TC-54503 (1985216, copy of TC-54502) and TC-54504 (1985217, copy of TC-54487). Verified via list_folder_contents + list_folder_test_cases + get_test_case_detail immediately after."
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"source_folder_id": 765817, "destination_folder_id": 999999999}},
+      "status": 404,
+      "error": "{\"error\":\"Source or destination folder not found\"}",
+      "changed": "n/a — hard rejection, bare error body with no `success` key, exactly as describeCapability's own guidance predicted. Verified via a follow-up list_folder_contents on 765811: sub_folders_count still 2 (765817, 765883), no third folder appeared — nothing was written."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}, "body": {"source_folder_id": 765817, "destination_folder_id": 765811}},
+    "status": 202,
+    "response_keys": ["success", "async", "unique_id", "message"],
+    "item_shape": "n/a — response is a flat status object (no folder_id field either, since it is only present when async=false, which never happens on this route)"
+  },
+  "contract": {
+    "required": ["project_id (path)", "source_folder_id (body)"],
+    "json_path": "Body is flat as declared: source_folder_id / destination_folder_id / destination_project_id / copy_to_root are all top-level, no nested wrapper. copy_folder has no `name` field at all, so the shared false 'folder wrapper required' description flagged elsewhere (create_root_folder and its sibling) does not apply to this capability — nothing to check here.",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "VERDICT DRIFT, on a narrow point: the 202 body has exactly the four declared keys (success, async, unique_id, message) with no missing or undeclared fields — but `unique_id` is declared with format:'uuid' (the schema's own example has dashes: '6a206593-865c-...') while the live value returned here, '9528c8cb88ba41ccbf00e6670fcde699', is 32 hex characters with NO dashes — not RFC-4122 UUID text. Everything else about the success contract matches exactly.\n\nHEADLINE QUESTION (does copying a folder reproduce the option-id silent-rewrite bug found in bulk_copy_test_cases): COULD NOT BE TESTED. TC-54502, the only case in folder 765817 that carries non-null case_type/status values, already sits on the project's lower/default block (case_type 318599, priority 318591, status 318605) before this probe touched it — it is itself a prior copy (of TC-54489), so it entered this probe already defaulted. Its copy TC-54503 (1985216) came out with the identical lower-block ids (318599/318591/318605). That is NOT evidence of correct preservation, because the source and the project default were already identical — a silent rewrite-to-default and a genuine no-op preservation are indistinguishable here. Per the explicit instruction not to report 'preserved' when the source was already at the default: this run reports NO VERDICT on option-id fidelity for the folder-copy path. A real test needs a source case carrying the upper block (318618/318626/318632) inside the copied folder, which folder 765817 does not have.\n\nWhat WAS comparable to the case-copy findings: (1) steps got a brand-new row id with no aliasing — source step 12372594 vs copy step 12372595, both with shared_step_id/shared_step_detail_id null — same pattern as bulk_copy_test_cases. (2) template_id/template_name/template_step_type were fully preserved on the copy (1164 / 'Test Case Steps' / 'test_case_steps', identical to the source) — same as bulk_copy_test_cases, no template-reset bug here either. (3) tags preserved verbatim (['mcp-probe']) on the one case that had any (TC-54502 -> TC-54503); TC-54487/TC-54504 had none on either side, so nothing to compare there. custom_fields was [] on every case involved — not tested either way.\n\nSync vs queued: the response declares async:true with a message ('Folder copy operation queued successfully') and no way to poll — exactly as described. In practice the copy was already fully visible (new folder + both new cases readable via a plain GET) within a couple of seconds of the 202 response, i.e. it behaves as near-synchronous in this environment despite the declared-async contract; the response itself gives no signal of when it will actually be done, so a caller cannot rely on this and must poll by re-reading, per guidance.\n\nCounts (asked for explicitly): VERIFIED ACCURATE both sides. Source folder 765817: cases_count/total_cases_count stayed 2/2 after the copy (unaffected, correctly). Destination parent 765811: sub_folders_count went 1 -> 2, total_cases_count went 4 -> 6 (2 direct + 2 in 765817 + 2 in new 765883 = 6, reconciles exactly). New folder 765883: cases_count/total_cases_count came back 2/2, matching the source folder's own counts exactly.\n\nName-clash handling: not exercised (765811 had no existing folder literally named 'copy-of-__mcp-probe-subfolder-20260921' before this run), so the copy landed as plain 'copy-of-<name>' on the first try, consistent with the declared behaviour; the copy-of-2-, copy-of-3- fallback chain was not triggered and is unverified by this probe.\n\nFAILURE EXPERIMENT (nonexistent destination_folder_id, 999999999): a FOURTH distinct answer to the bad-id question the task raised. Not a silent 200 half-success (create_bulk_test_cases's pattern), not a 400 (bulk_move_test_cases / bulk_copy_test_cases' pattern), and not a 502 — copy_folder answers with a bare 404 {\"error\":\"Source or destination folder not found\"}, no `success` key at all, exactly matching describeCapability's own guidance text word for word. Verified clean via a follow-up read: 765811 still shows exactly 2 subfolders (765817, 765883) and no partial artifact was created.\n\n`data.project` embedding: NOT PRESENT. The 202 response body is exactly {success, async, unique_id, message} — no project object at all, so the leaky-vs-clean question (create_root_folder vs create_project) does not arise for this capability; there is nothing to compare.\n\nNEW FOLDER AND CASES CREATED BY THIS RUN (for the cleanup ledger): folder 765883 ('copy-of-__mcp-probe-subfolder-20260921', child of 765811, project 379335744) containing two new test cases — TC-54503 (integer id 1985216, copy of TC-54502) and TC-54504 (integer id 1985217, copy of TC-54487). The failed experiment (attempt 2, nonexistent destination) created nothing. __readonly__ 764093 and folder 764828 (holding evidence case TC-54458 / 1975349) were never referenced by any call in this probe."
+}

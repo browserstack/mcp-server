@@ -1,6 +1,6 @@
 {
   "name": "@browserstack/mcp-server",
-  "version": "1.2.36",
+  "version": "1.5.0",
   "description": "BrowserStack's Official MCP Server",
   "mcpName": "io.github.browserstack/mcp-server",
   "main": "dist/index.js",
@@ -15,13 +15,19 @@
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "check:contract": "python3 scripts/check-contract.py capability/tm.capability-index.json --baseline scripts/contract-baseline/tm.json --quiet",
+    "eval:index": "tsx scripts/eval-index.mts",
+    "seed:live": "tsx scripts/seed-live.mts",
+    "plan:tests": "tsx scripts/plan-capability-tests.mts",
+    "replay:live": "tsx scripts/replay-live.mts"
   },
   "bin": {
     "browserstack-mcp-server": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "capability"
   ],
   "keywords": [
     "mcp",

@@ -1,0 +1,116 @@
+{
+  "capability": "search_project_entities_by_filter",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:55:53Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": true,
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope from fixture brief",
+      "produced": { "project_id": 332537, "project_identifier": "PR-18723" }
+    },
+    {
+      "step": 2,
+      "why": "large folder (1,168 cases recursively, 36 subfolders per brief) for a real pagination/count stress test",
+      "produced": { "folder_id": 40231630, "folder_name": "Automation" }
+    }
+  ],
+  "attempts": [
+    {
+      "attempt": 1,
+      "purpose": "canonical probe — flat body per preprod lesson",
+      "arguments": {
+        "path_params": { "project_id": 332537, "entity": "test-cases" },
+        "body": { "folder_id": "40231630", "p": 1, "per_page": 5 }
+      },
+      "status": 200,
+      "result": "SUCCESS — 5 rows returned, info.count=972, next=2. Recorded below as the main probe."
+    },
+    {
+      "attempt": 2,
+      "purpose": "body-wrapping footgun re-check — wrap fields in `query`",
+      "arguments": {
+        "path_params": { "project_id": 332537, "entity": "test-cases" },
+        "body": { "query": { "folder_id": "40231630" }, "p": 1, "per_page": 5 }
+      },
+      "status": 200,
+      "result": "SILENT NO-OP CONFIRMED — success:true, test_cases:[], folders:{}, info.count:0, prev:null, next:null. No error; reads exactly like 'no matching rows' despite 972 real matches for the equivalent flat query. Reproduces the preprod footgun exactly."
+    },
+    {
+      "attempt": 3,
+      "purpose": "pagination sanity walk",
+      "arguments": {
+        "path_params": { "project_id": 332537, "entity": "test-cases" },
+        "body": { "folder_id": "40231630", "p": 2, "per_page": 5 }
+      },
+      "status": 200,
+      "result": "SUCCESS — page=2, page_size=5, count=972 (stable across pages), prev=1, next=3. 5 new distinct case ids (136254725-728, 137065005), zero overlap with page 1's ids (138574661, 138498600, 137260629, 137065006/7). Pagination via p/per_page behaves sanely: no skips, no duplicates, offset advances correctly."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 332537, "entity": "test-cases" },
+      "body": { "folder_id": "40231630", "p": 1, "per_page": 5 }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "folders", "info", "filter_details"],
+    "item_shape": {
+      "id": "integer",
+      "identifier": "string (e.g. TC-6268089)",
+      "name": "string",
+      "project_id": "integer",
+      "test_case_folder_id": "integer",
+      "case_type": "object {id, internal_name, field_name, colour, value_category, valueDetails[], name} — field_name present and populated (e.g. 'category') — undeclared (schema has no test_cases property at all)",
+      "priority": "object, same shape as case_type — field_name='priority' present — undeclared",
+      "status": "object, same shape as case_type plus colour string — field_name='status' present — undeclared",
+      "automation_state": "object {id, internal_name, field_name, colour, value_category, valueDetails[], name} — field_name='automation_state' present — undeclared",
+      "automation_status": "object {name, value} — undeclared",
+      "assignee / creator_details / updator_details": "object (user) or null — undeclared",
+      "owner": "integer — undeclared",
+      "steps": "array (empty in every sampled row) — undeclared",
+      "test_case_steps": "array (empty in every sampled row, e.g. []) — undeclared; no evidence in this response of an object-shaped declaration to contradict, since the success schema declares nothing for test_cases at all",
+      "step_count": "integer — undeclared",
+      "tags / custom_fields / attachments / issues": "arrays — undeclared",
+      "template / template_id / template_name / template_step_type": "undeclared",
+      "test_case_dataset": "object {} — undeclared",
+      "links": "object {self, detail, folder} — undeclared",
+      "metadata": "object {lcnc_build_map, ai_prompt} — undeclared",
+      "comments_count": "ABSENT from every row, same as preprod and same as v1 — not scoreable as declared-vs-actual since v2 declares nothing for test_cases",
+      "folders (sibling of test_cases)": "OBJECT keyed by folder_id, each value a 1-ELEMENT ARRAY: {\"40231630\":[{\"id\":40231630,\"name\":\"Automation\",\"parent_id\":null,\"ui_position\":0}]} — confirmed identical shape to preprod, entirely undeclared"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer)",
+      "entity (path, enum: test-cases | trtc | test-runs | test-plans)"
+    ],
+    "json_path": "describeCapability still declares every body field as /q/<name> — confirmed this is spec-internal wiring, not a client envelope: sending fields flat at the top level is correct (works), and wrapping them in a literal `query` object silently no-ops (confirmed on prod, attempt 2). Did not re-attempt the literal `q` wrapper (preprod already showed it is rejected client-side by the MCP surface before reaching the API; no reason to expect prod differs since that rejection happens before any request is sent).",
+    "declared_missing": [
+      "None in the strict sense — the declared 200 schema on prod has NO properties for test_cases, folders, or filter_details (only success and info), identical to preprod. Nothing is declared, so nothing can be 'missing' from the declaration."
+    ],
+    "undeclared_returned": [
+      "test_cases[] — entire array and all ~40 row fields undeclared",
+      "test_cases[].case_type / priority / status / automation_state — full option objects with field_name, value_category, valueDetails[]",
+      "test_cases[].automation_status, is_shared, is_automation, steps, test_case_steps, step_count",
+      "test_cases[].attachments[], issues[], metadata, test_case_dataset, links",
+      "folders — entire object undeclared; object keyed by folder_id with each value wrapped in a 1-element array",
+      "filter_details — undeclared, returned empty ({}) in every successful call"
+    ]
+  },
+  "prod_vs_preprod": {
+    "count_vs_rows_folder_40231630": {
+      "info_count": 972,
+      "rows_returned_page1": 5,
+      "rows_returned_page2": 5,
+      "note": "info.count=972 is stable across pages 1 and 2 and pagination advances cleanly (distinct ids per page, prev/next correct). However 972 does NOT match the brief's stated recursive total of 1,168 cases across the folder + its 36 subfolders. This strongly suggests folder_id filtering here is NON-recursive — it returns only cases filed directly in folder 40231630, not cases in its subfolders — which is a real and undeclared recursion-semantics gap (the capability gives no parameter to request recursive vs. non-recursive counting, and the schema says nothing about it either way)."
+    },
+    "folders_field_shape": "object-keyed, array-wrapped values — confirmed exactly matching preprod: {\"40231630\":[{\"id\":40231630,\"name\":\"Automation\",\"parent_id\":null,\"ui_position\":0}]}. Same bug pattern as sibling v1 (object instead of array) plus v2's extra 1-element-array wrapper around each value.",
+    "field_name_present": true,
+    "test_case_steps_type": "Returned as an array ([]) in every sampled row, with a sibling `steps` field also an array. Not returned by the declared schema at all (success schema declares only success/info), so there is no declared object shape on prod to contradict — this cannot be scored as an object-declared-vs-array-actual mismatch here; it is simply an undeclared array field.",
+    "summary": "Preprod DRIFT fully reproduces on production with real, larger-scale data. The 200 status and declared info{page,page_size,count,prev,next} pagination envelope match exactly and behave sanely under a real multi-page walk (5 rows/page, correct offsets, no skips/dupes). But the declared success schema still says nothing at all about test_cases[], folders, or filter_details — the entire substantive ~40-field-per-row payload is undeclared, identical to preprod. The folders field reproduces its exact preprod shape (object keyed by folder_id, each value wrapped in a 1-element array) — same bug as v1 with the extra array-wrap. field_name is present and populated on case_type/priority/status/automation_state, confirmed on every row. The query-wrapping footgun reproduces exactly: wrapping filter fields in `query` returns a clean 200 with an empty result set (count:0) rather than an error, which is indistinguishable from a genuine 'no matches' response. One new finding beyond the preprod probe: info.count (972) diverges from the folder's stated recursive total (1,168), indicating folder_id filtering is non-recursive — a real, undeclared semantics gap worth flagging separately from the schema-completeness DRIFT."
+  },
+  "notes": "Overall verdict DRIFT, matching preprod, for the same core reason: the declared 200 schema for search_project_entities_by_filter only ever declares `success` and `info` — it makes zero claims about test_cases[], folders, or filter_details, which together constitute the entire useful payload. This was verified at real scale on production (972-case folder, 2-page walk) rather than preprod's 2-row fixture, and every preprod finding reproduced byte-for-byte in shape: the folders object-keyed/array-wrapped structure, field_name presence on option objects, the comments_count gap (present in data absence, absent in contract claims either way), and the query-wrapping silent no-op. Additionally surfaced on prod (not visible at preprod's 2-row scale): info.count for a folder_id filter does not include subfolder cases (972 vs. the folder's true recursive total of 1,168 per the fixture brief), indicating folder_id is non-recursive — undeclared and unstated in the capability's guidance or parameter description."
+}

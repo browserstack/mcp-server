@@ -1,0 +1,94 @@
+{
+  "capability": "list_test_runs_selection",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T12:05:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    { "step": 1, "why": "Fixture pool ids supplied by caller: project 379335744 (PR-2005), readonly folder 764093 (known 2 cases: TC-54455/1971631, TC-54456/1971632), scratch folder 764138 (known 18 direct / 19 recursive across 7 subfolders)", "source": "pool", "capability": null, "produced": { "project_id": 379335744, "readonly_folder": 764093, "scratch_folder": 764138 } }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "selection": { "select_all": false, "folders": { "764093": { "test_case_select_all": true, "selected_test_cases": [], "deselected_test_cases": [] } } }, "count": 50 } },
+      "status": null,
+      "error": "unknown body: selection. accepted: count, folders, p, q, select_all, shared_selection, show, unique_test_case_count. selection is a wrapper this surface builds for you from each field's json_path — send the fields directly instead of nesting them",
+      "changed": "Rejected by the MCP invoke surface itself (not the live API — no HTTP status), because select_all/folders were nested under a 'selection' wrapper mirroring the json_path shown in describeCapability (/selection/select_all, /selection/folders). Re-sent as flat top-level body keys for attempt 2, matching the same fix required by the sibling capability count_run_selection in this same session."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "select_all": false, "folders": { "764093": { "test_case_select_all": true, "selected_test_cases": [], "deselected_test_cases": [] } }, "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded. Primary probe, scoped to __readonly__ folder 764093."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "select_all": false, "folders": { "764138": { "test_case_select_all": true, "selected_test_cases": [], "deselected_test_cases": [] } }, "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — cross-check, not a retry. Scoped to __scratch__ folder 764138 alone (no subfolder ids), to test whether test_case_select_all resolves the folder recursively."
+    },
+    {
+      "n": 4,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "select_all": false, "folders": { "764138": { "test_case_select_all": true }, "764828": { "test_case_select_all": true } }, "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — cross-check. Added subfolder 764828 explicitly to the folders map alongside 764138, to confirm the 19th (recursive) case lives there and is only picked up when named directly."
+    },
+    {
+      "n": 5,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "select_all": true, "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — cross-check. Whole-project select_all, to confirm the full 21-case pool and see all folders in the flat result set."
+    },
+    {
+      "n": 6,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "select_all": false, "folders": { "764093": { "test_case_select_all": true } }, "q": { "search": "probe case A" }, "show": "all", "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — exploratory probe of `q`'s undocumented key shape, to test whether list_test_runs_selection can act as a text/issue filter."
+    },
+    {
+      "n": 7,
+      "arguments": { "path_params": { "project_id": 379335744 }, "body": { "select_all": true, "q": { "issue_ids": [999999] }, "count": 50 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — exploratory probe of whether `q` accepts an issue/ticket filter (a bogus issue id, to see if it narrows or errors)."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "body": { "select_all": false, "folders": { "764093": { "test_case_select_all": true, "selected_test_cases": [], "deselected_test_cases": [] } }, "count": 50 } },
+    "status": 200,
+    "response_keys": ["success", "info", "test_cases", "selected"],
+    "item_shape": {
+      "rich_shape_fields": ["id", "identifier", "third_party_identifier", "name", "preconditions", "expected_result", "type", "folder_structure", "description", "source", "source_entity_id", "owner", "folder_id", "group_id", "template", "template_id", "import_id", "project_id", "updated_by", "created_by", "created_at", "updated_at", "automation_status", "automation_id", "archived_at", "trashed_at", "is_shared", "metadata", "is_project_level", "review_status", "review_sent_date", "estimated_duration_seconds"],
+      "note": "This is the shape returned on attempts 2/3/4/5/6 (plain folder/select_all calls, with or without q={'search':...} + show='all'). A SECOND, leaner shape was observed on attempt 7 only (select_all=true with q={'issue_ids':[...]}): id, name, folder_id, identifier, third_party_identifier, project_id, automation_status, template, owner, priority_id, is_shared, custom_fields — 12 fields, missing created_at/updated_at/description/preconditions/expected_result/etc. Could not isolate the exact trigger for the shape switch (it is not simply 'q present', since attempt 6 also had q and kept the rich shape); flagged as unexplained response-shape instability rather than a root-caused finding."
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": "select_all -> /selection/select_all, unique_test_case_count -> /selection/unique_test_case_count, folders -> /selection/folders. These describe how the backend nests the body internally, NOT the shape the MCP invoke surface accepts: sending a literal 'selection' wrapper object is rejected ('unknown body: selection...'). The invoke surface wants select_all, folders, show, q, count, p, shared_selection, unique_test_case_count all as FLAT top-level body keys. Guidance also calls 'selection' (i.e. select_all/folders together) 'effectively mandatory', but neither is schema-marked required — only project_id (path) is.",
+    "declared_missing": [
+      "test_cases[].assignee", "test_cases[].creator_details", "test_cases[].updator_details",
+      "test_cases[].case_type", "test_cases[].priority", "test_cases[].status",
+      "test_cases[].case_type_imported", "test_cases[].custom_fields", "test_cases[].estimate",
+      "test_cases[].is_automation", "test_cases[].links", "test_cases[].history_count",
+      "test_cases[].owner_imported", "test_cases[].priority_imported", "test_cases[].status_imported",
+      "test_cases[].steps", "test_cases[].tags", "test_cases[].test_case_folder_id",
+      "test_cases[].test_case_steps", "test_cases[].lcnc_build_map", "test_cases[].issues",
+      "test_cases[].comments_count", "test_cases[].automation_status (declared as {name,value} object, actual is a bare string e.g. 'not_automated')"
+    ],
+    "undeclared_returned": [
+      "test_cases[].third_party_identifier", "test_cases[].type", "test_cases[].folder_structure",
+      "test_cases[].source", "test_cases[].source_entity_id", "test_cases[].folder_id",
+      "test_cases[].group_id", "test_cases[].template_id", "test_cases[].import_id",
+      "test_cases[].updated_by", "test_cases[].created_by", "test_cases[].automation_id",
+      "test_cases[].archived_at", "test_cases[].trashed_at", "test_cases[].is_shared",
+      "test_cases[].is_project_level", "test_cases[].review_status", "test_cases[].review_sent_date",
+      "test_cases[].estimated_duration_seconds"
+    ]
+  },
+  "notes": "TOP-LEVEL CONTRACT IS CORRECT. success/info/test_cases/selected are all present exactly as declared, with no envelope wrapper — matches guidance point 'The response is flat — {success, info, test_cases, selected}'. selected=null in default (filtered) mode and an array in show='all' mode, exactly as guidance point 4 describes. The DRIFT is entirely inside test_cases[]: the declared item schema (rich nested objects for assignee/creator_details/case_type/priority/status, plus tags/issues/custom_fields/steps/links/comments_count/history_count) describes essentially a DIFFERENT, richer 'test case detail' object than what this endpoint actually returns. The real item is a flat record with different field names entirely (folder_id not test_case_folder_id, automation_status as a bare string not an object, no priority/status/case_type sub-objects, no tags/issues/custom_fields at all). Given the size of the mismatch, this reads like the response schema was copied from a different (detail-view) test-case endpoint rather than authored against this selection endpoint's actual serializer.\n\nCOUNT-VS-ROWS: CLEAN across every call made — info.count always equalled len(test_cases): 2/2 (folder 764093), 18/18 (folder 764138 alone), 19/19 (764138 + subfolder 764828 named explicitly), 21/21 (project-wide select_all). No desync found here, unlike the four other capabilities flagged this session.\n\nRECURSION IS UNDOCUMENTED AND OFF BY DEFAULT: selecting folder 764138 with test_case_select_all=true returns only its 18 DIRECT cases. The 19th (recursive) case lives in subfolder 764828 and is only included once 764828 is added as its own key in the `folders` map (confirmed: {764138:{...}, 764828:{...}} => count 19). Nothing in the guidance or schema states that folder selection is non-recursive, or that a caller must enumerate every subfolder id itself to preview what a recursive run-create would actually pull in — a real risk for an agent that trusts 'test_case_select_all' to mean 'the whole subtree'.\n\nISSUE FILTER: NOT SUPPORTED. Passing q={'issue_ids':[999999]} (a bogus id) against a project-wide select_all returned the full, unfiltered 21-case set with no error (attempt 7) — the key was silently ignored rather than rejected or applied. Separately, q={'search':'probe case A'} against the 2-case readonly folder with show='all' returned BOTH cases as members of `selected` (attempt 6), i.e. it did not narrow to the one case whose name actually matches — suggesting 'search' isn't the recognized free-text key either, or filtering silently no-ops for unrecognized q shapes. The `q` param is declared only as {type:object} with no property schema (an unfalsifiable declaration per this session's running list), and guidance's plain-English gloss ('a search string... matched against case name and identifier') never says what key that string goes under. Net: this capability cannot answer 'which cases would this ticket pull in' — confirming, from this side too, that the routing eval was right to reject count_run_selection for the same query. Neither the count- nor list-producing member of this pair takes an issue/ticket filter.\n\ncount_run_selection_v1 PAIRING: NOT a documented pair, matching the pattern this session is tracking. The only cross-reference is one-way and narrow: list_test_runs_selection's own `shared_selection` field description says 'Accepted by the parameter filter but NOT read by this action — cases shared in from other projects are not resolved here. Use the count endpoint if you need shared selections accounted for' — it never names count_run_selection explicitly, and it's scoped to the shared_selection edge case only, not framed as a general preview-then-list workflow. Cross-checked against tests/live/runs/tm/count_run_selection.json from this same session: its guidance contains ZERO mention of list_test_runs_selection or any list/preview capability at all. So unlike the archived-plans and binned-cases pairs (which reportedly cross-reference each other explicitly, both directions), this is another unlabelled near-duplicate: same selection input shape (select_all/folders/shared_selection), overlapping purpose (count_run_selection returns {success,count}; this one returns the actual rows plus its own info.count), but no real documented pairing for a routing agent to discover from either side.\n\nERROR ENVELOPE: attempt 1's failure never reached the live TM API — it was caught by the MCP invoke surface's own parameter guard, which returns a flat {ok:false, error:'<string>'} shape, structurally different from the declared 400/401/404/500 API error schema ({success:false, error:{code, message, details}}). No genuine live 4xx/5xx was triggered in this probe (every real API call returned 200), so declared-vs-actual error-envelope drift could not be checked here one way or the other — flagging the transport-vs-API distinction only, not diffing an error body against the success schema."
+}

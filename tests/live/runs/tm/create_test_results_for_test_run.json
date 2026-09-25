@@ -1,0 +1,129 @@
+{
+  "capability": "create_test_results_for_test_run",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T07:44:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Baseline read before writing: confirm TC-54458's result history in TR-9062 is genuinely empty before claiming the write created the first row.",
+      "source": "invoked",
+      "capability": "list_test_results_for_test_case",
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062", "test_case_id": "TC-54458" }
+      },
+      "status": 200,
+      "produced": { "test_results": [], "info": { "page": 1, "page_size": 30, "count": 0 } }
+    },
+    {
+      "step": 2,
+      "why": "Baseline read of the run's case grid: confirm TC-54458's row is 'untested' with latest_result_id=2150387254 (the pool-supplied mapping id) before the write, so the post-write diff is meaningful.",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases",
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+        "query": { "identifier": "TC-54458" }
+      },
+      "status": 200,
+      "produced": {
+        "latest_status": "untested",
+        "latest_result_id": 2150387254,
+        "identifier": "TC-54458",
+        "project_id": "PR-2005",
+        "source_project_id": "PR-2005"
+      }
+    },
+    {
+      "step": 3,
+      "why": "Verification read #1 after the write: does the case's result history now contain the row created by create_test_results_for_test_run?",
+      "source": "invoked",
+      "capability": "list_test_results_for_test_case",
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062", "test_case_id": "TC-54458" }
+      },
+      "status": 200,
+      "produced": {
+        "test_results_count": 1,
+        "row": {
+          "id": 2150387456,
+          "created_by": "probe-user@example.invalid",
+          "test_case_id": "TC-54458",
+          "test_run_id": "TR-9062",
+          "result_status": { "field_value": "Passed" },
+          "issues": [],
+          "custom_fields": [],
+          "step_result": null,
+          "configuration_id": null,
+          "execution_id": "ab5c1e3c40fc614f2020a9ba4dd1a8e4c075bba8fe0336a4f30646030b6f6d43",
+          "dataset": []
+        }
+      }
+    },
+    {
+      "step": 4,
+      "why": "Verification read #2 after the write: did TC-54458's run-row latest_status actually move off 'untested', and does latest_result_id now point at the new result?",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases",
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+        "query": { "identifier": "TC-54458" }
+      },
+      "status": 200,
+      "produced": {
+        "latest_status": "passed",
+        "latest_result_id": 2150387456,
+        "identifier": "TC-54458"
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+        "body": {
+          "test_case_id": "TC-54458",
+          "status": "Passed",
+          "description": "Probe write from capability-registry live-probe suite: recording a passed outcome on TC-54458 in TR-9062 to verify the result entity end-to-end (create_test_results_for_test_run)."
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "N/A -- built exactly as declared: single-form shape (test_case_id at top level, status as a flat field with its own json_path /test_result/status, letting invokeCapability re-nest it), status sent as the display-case NAME ('Passed') per the contract's own guidance that v1's numeric status_id is NOT accepted here. Succeeded on the first real attempt, no wrapper, no retry needed."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+      "body": {
+        "test_case_id": "TC-54458",
+        "status": "Passed",
+        "description": "Probe write from capability-registry live-probe suite: recording a passed outcome on TC-54458 in TR-9062 to verify the result entity end-to-end (create_test_results_for_test_run)."
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "test-result"],
+    "item_shape": {
+      "success": "true (top level -- matches declared property, even though the description frames it mainly around the bulk-form PARTIAL case)",
+      "test-result.id": "2150387456 -- integer, the new result's id",
+      "test-result.created_at": "2026-09-18T07:44:42.000Z",
+      "test-result.updated_at": "2026-09-18T07:44:42.000Z",
+      "test-result.description": "exact echo of sent description",
+      "test-result.status": "'Passed' -- string, exact echo of sent value, DISPLAY CASE (not the lowercase internal token v1's top-level status field uses)",
+      "test-result.issues": "[] (empty array, not sent)",
+      "test-result.urls.self": "deep link ending /test-runs/TR-9062/1975349/2150387254 -- note this trailing segment is the OLD mapping id (2150387254), not the new result id (2150387456); the URL identifies the run-row, not the result row",
+      "test-result.test_run_test_case_step_details": "absent entirely -- consistent with the schema's own note that this key is present only when the submission carried step_results (it did not)"
+    }
+  },
+  "contract": {
+    "required": [
+      "exactly one target: test_case_id | execution_id | shared_test_case_ids (top level, single form)",
+      "status (top level, /test_result/status) OR step_results -- one of the two is required"
+    ],
+    "json_path": "Every test_result field (status, description, issues, issue_tracker, elapsed_time, custom_fields, step_results) is declared one level under /test_result/<field>, but the target (test_case_id/execution_id/shared_test_case_ids) and configuration_id are declared at the TOP level, not under /test_result/. Body was sent FLAT under the field's own declared name (test_case_id, status, description all at top level) and invokeCapability applied the /test_result/ re-nesting itself for status/description -- exactly per the standing lesson. A nested {test_result: {...}} wrapper was never attempted since nothing in the guidance asked for one, and the flat form worked on the first try.",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "WRITE SUCCEEDED AND WAS VERIFIED IN STORAGE, TWICE OVER -- this is the first capability in seven batches to actually create a result. New result id 2150387456, on TR-9062 / TC-54458 (numeric case 1975349, mapping/latest_result_id row that was 2150387254 pre-write). Both verification reads confirm it: list_test_results_for_test_case now returns test_results=[<one row, id 2150387456>] where it returned [] on every prior probe in this suite; list_test_run_test_cases's TC-54458 row now shows latest_status='passed' (was 'untested') and latest_result_id=2150387456 (was 2150387254). This also unblocks list_test_results_for_test_case's own prior UNVERIFIED verdict -- it now has a real row to enumerate (see below). No other rows were touched: only one write call was made, targeting only TC-54458's mapping; TC-54457, TC-54455, TC-54456 and the other three runs (TR-9058/9061/9063) were never referenced in any argument.\n\n1) V1 VS V2 CONTRACT COMPARISON (create_test_result_for_test_case vs create_test_results_for_test_run) -- they DISAGREE on multiple fronts, same class of defect as the test_plan/test_run/custom_fields drifts already found in this suite:\n   - STATUS INPUT: v1 takes status_id, an INTEGER you must first resolve from a status name to an id (no name accepted). v2 takes status, a STRING NAME as configured for the project ('Passed'/'Failed'/'Untested') -- v2's own guidance explicitly says 'v1's numeric status_id is NOT accepted here.' Two structurally incompatible input types for what a caller would reasonably think is the same field.\n   - STATUS OUTPUT: v1's create response returns BOTH forms at once on one object -- a top-level `status` as a LOWERCASE INTERNAL TOKEN (declared example 'passed') AND a full `result_status` object {id, field_value ('Failed', display case), internal_name ('failed'), field_name:'status', colour}. v2's create response (empirically confirmed here) returns ONLY `status` as the DISPLAY-CASE token directly ('Passed') -- no result_status object at all on the write response. So v1 exposes the double-vocabulary split within a single response object; v2's write response is single-vocabulary (display case) -- but see finding 2 below, the split reappears elsewhere for v2's own data.\n   - ISSUES SHAPE: direct contradiction. v1's issues entries are OBJECTS {issue_id, issue_type} (a bare string is silently dropped, no error). v2's issues entries are plain STRING keys (e.g. ['JIRA-12']), paired with a separate issue_tracker object for typing. Same conceptual field, opposite shapes -- exactly the 'same-entity contract disagreement' pattern flagged for get_/list_custom_fields and the test_plan/test_run families.\n   - RESPONSE ENVELOPE: v1 wraps in `data` (data.success, data.test-result, data.unique_issues), HTTP 201. v2's single-form response puts test-result at the TOP level (no data envelope), HTTP 200 (v2's own guidance states this explicitly; confirmed empirically here -- our call returned HTTP 200).\n   - PATH/TARGET IDS: v1 takes project_id as a plain INTEGER and test_case_id as an INTERNAL INTEGER id, with test_run_id accepting either TR-NNN or bare integer. v2 requires project_id and test_run_id as PR-NNN/TR-NNN STRINGS (bare integers 404 -- this is exactly the danger the task brief warned about, where a bare integer run id resolved to an unrelated real record on a sibling capability) and targets the case via test_case_id as the TC-NNN STRING IDENTIFIER, not an internal integer. The two 'twin' endpoints use incompatible id domains for what looks like the same run/case.\n   - MAPPING DISAMBIGUATION GAP: v1 accepts a top-level mapping_id to target one specific run/case mapping row. v2 has NO mapping_id parameter at all -- only test_case_id / execution_id / shared_test_case_ids. TC-54457 in this same run has TWO mapping rows (2150387252 and 2150387283, 'duplicate mapping' per the fixture notes); v2 offers no declared way to choose between them if you needed to record a result against one specific duplicate, where v1 could. Not exercised here (TC-54457 was explicitly out of scope for this probe), but it is a real capability gap between the twins worth flagging.\n   - HTTP success code: v1=201, v2=200 (both confirmed against the live contract text; v2's 200 also confirmed empirically).\n\n2) OUTCOME VOCABULARY -- CONFIRMED EXACTLY, WITH A NEW WRINKLE:\n   - ACCEPTED (write input, empirically confirmed): 'Passed' -- the project-configured DISPLAY-CASE name. This is exactly what the task's framing of the contract expected ('status: Passed/Failed/Untested').\n   - Did NOT additionally test a lowercase token ('passed'/'pass') as an input, by deliberate choice: the task instructed recording ONE result on this row, and every submission to this endpoint ADDS a new permanent history entry that cannot be deleted (per the task's own 'deletes are refused' framing and this endpoint's own guidance that it never replaces, only adds). Sending a second probe status to test lowercase acceptance would have left a second permanent residue entry beyond the one explicitly authorised. The contract's own text ('Status is a NAME configured for the project... An unconfigured name fails... with INVALID_STATUS_VALUE') implies lowercase would only work if the project happened to configure a status literally spelled lowercase, which is not the general case -- but this is inference from the contract, not an empirical result, and is flagged here as an open question rather than a confirmed answer.\n   - RETURNED, write response (test-result.status): 'Passed' -- display case, exact echo of the input token.\n   - RETURNED, list_test_results_for_test_case (result_status.field_value): 'Passed' -- display case. Same vocabulary as the write echo.\n   - RETURNED, list_test_run_test_cases (latest_status): 'passed' -- LOWERCASE internal token. This matches that capability's OWN declared example ('untested / passed / failed'), so it is not a drift against ITS contract -- but it reconfirms, in a THIRD way, the systemic 'outcome exposed twice/thrice, inconsistently' pattern search_test_results already found. Here the split is spread across two DIFFERENT capabilities (list_test_results_for_test_case shows display case; list_test_run_test_cases shows lowercase) rather than co-located oddly on one row as in that sibling's finding -- a caller building a search/filter on 'passed' vs 'Passed' has to know which of three read paths they are using.\n\n3) FIELD-BY-FIELD ENUMERATION of the stored result from list_test_results_for_test_case, against ITS OWN declared item shape (id, created_at, updated_at, created_by, description, test_case_id, test_run_id, result_status{id,field_value,internal_name,field_name,colour}(all required), issues, custom_fields(object), step_result, configuration_id, execution_id, dataset, urls):\n   - id: 2150387456 -- integer, matches declared type. MATCH.\n   - created_at / updated_at: both ISO timestamps present. MATCH.\n   - created_by: 'probe-user@example.invalid' -- string. MATCH.\n   - description: exact echo of sent text. MATCH.\n   - test_case_id: 'TC-54458' -- matches declared TC- identifier format. MATCH.\n   - test_run_id: 'TR-9062' -- matches declared TR- identifier format. MATCH.\n   - result_status: {\"field_value\":\"Passed\"} ONLY. DRIFT -- the schema declares result_status as an object with FOUR REQUIRED sub-fields besides field_value (id, internal_name, field_name, colour) plus entity_type; only field_value came back. declared_missing: result_status.id, result_status.internal_name, result_status.field_name, result_status.colour (all four declared 'required' in the nested schema).\n   - issues: [] -- array, matches declared type (empty since none were sent). MATCH.\n   - custom_fields: [] -- DRIFT: declared TYPE is object, actual returned TYPE is array (empty array literal, not empty object). A caller doing Object.keys(custom_fields) gets [] either way, but anything relying on the JSON Schema type (e.g. strict validation, or a language binding that distinguishes {} from []) breaks.\n   - step_result: null -- matches declared nullable, correct since no step_results were sent. MATCH.\n   - configuration_id: null -- matches declared nullable, correct since none was sent. MATCH.\n   - execution_id: a long hex-looking string (not null) -- TYPE matches declared (string, nullable), but this is semantically odd for what the task and both create-capability contracts describe as a plain manual-case result (execution_id is documented elsewhere as the automation-execution target, an ALTERNATIVE to test_case_id, not something that should appear on a manual test_case_id submission). Recorded as an observation, not a schema-type drift, since the declared type (nullable string) is technically satisfied -- but it is undeclared BEHAVIOR (a case-id submission unexpectedly acquiring a server-generated execution_id) worth a maintainer's attention.\n   - dataset: [] -- matches declared array, empty since non-data-driven. MATCH.\n   - urls.self: deep link object -- matches declared object shape. MATCH.\n\nVERDICT RATIONALE: the capability under test, create_test_results_for_test_run, did exactly what its own contract declares -- flat body, display-case status name accepted, HTTP 200, test-result object matching its declared schema field-for-field with nothing missing and nothing extra (see contract.declared_missing=[] / undeclared_returned=[] above). Marked DRIFT anyway, per the task's explicit instruction that 'any declared field absent, or any undeclared field returned, means DRIFT -- even if severity is low,' because the mandated verification step (enumerating the stored result from list_test_results_for_test_case against its own declared item shape) surfaced two concrete disagreements on that sibling capability: result_status missing four of its five declared-required sub-fields, and custom_fields returned as an array where the schema declares an object. Severity: LOW for both -- neither breaks a caller reading field_value/an empty collection in practice, but both are genuine declared-vs-actual mismatches surfaced by this probe's required verification pass, and are reported rather than buried per the task's explicit instruction."
+}

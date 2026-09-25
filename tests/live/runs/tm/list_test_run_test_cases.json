@@ -1,0 +1,69 @@
+{
+  "capability": "list_test_run_test_cases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T06:28:10Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+        "query": { "page_size": 30 }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "none needed — succeeded on first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+      "query": { "page_size": 30 }
+    },
+    "status": 200,
+    "response_keys": ["success", "info", "test_cases"],
+    "item_shape": {
+      "case_type": "string",
+      "priority": "string",
+      "status": "string",
+      "description": "string|null",
+      "identifier": "string (e.g. TC-54458)",
+      "name": "string",
+      "project_id": "string (PR-2005)",
+      "is_shared": "boolean — UNDECLARED",
+      "source_project_id": "string (PR-2005)",
+      "source_project_name": "string — UNDECLARED",
+      "latest_status": "string (untested)",
+      "latest_result_id": "integer — matches fixture table exactly for all 4 rows",
+      "assignee": "null",
+      "folder_path": "array<integer>",
+      "configuration_id": "null",
+      "execution_id": "string (long hex hash) — UNDECLARED",
+      "dataset": "array (empty)",
+      "created_at": "ISO 8601 string — UNDECLARED",
+      "last_updated_at": "ISO 8601 string — UNDECLARED",
+      "created_by": "string (email) — UNDECLARED",
+      "updated_by": "null — UNDECLARED",
+      "urls": "object { self: string } — UNDECLARED (entire key, not just sub-keys)"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id"],
+    "json_path": "$.body.test_cases[*]",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "test_cases[].is_shared",
+      "test_cases[].source_project_name",
+      "test_cases[].execution_id",
+      "test_cases[].created_at",
+      "test_cases[].last_updated_at",
+      "test_cases[].created_by",
+      "test_cases[].updated_by",
+      "test_cases[].urls",
+      "test_cases[].urls.self"
+    ]
+  },
+  "notes": "Verdict is DRIFT purely on undeclared_returned (8 fields/sub-fields per row: is_shared, source_project_name, execution_id, created_at, last_updated_at, created_by, updated_by, urls.self) — declared_missing is empty, every one of the 14 declared row properties (identifier, name, description, priority, status, case_type, latest_status, latest_result_id, assignee, folder_path, configuration_id, dataset, project_id, source_project_id) is present and correctly typed across all 4 rows. Severity: LOW — the undeclared fields are additive metadata (audit trail, URL), nothing declared is missing or mistyped, but per the standing rule any undeclared field returned is DRIFT regardless of severity, so this is not softened to PASS.\n\nCheck 1 — row addressing (MOST IMPORTANT, for assign_test_run_test_cases / bulk_update_test_run_test_cases): CONFIRMED, and this CORRECTS/REFINES the create-probe's finding. `latest_result_id` is a top-level, DECLARED, directly-returned integer field on every row here — it is NOT something you must recover by parsing `urls.self`. All four returned values match the fixture table exactly: TC-54457->2150387252, TC-54458->2150387254, TC-54455->2150387253, TC-54456->2150387251. The contract's own guidance text says so explicitly: 'Use latest_result_id from a row when you need to fetch or amend that case's recorded result.' So: the id the assign/bulk-update siblings need is `latest_result_id` (integer), obtainable directly from this endpoint's row without any URL-parsing detour — the create probe's 'recoverable only from urls.self' applies to the *create* response, not this read. This endpoint also independently returns `urls.self` (undeclared) which redundantly encodes the same id as the URL's last path segment, e.g. '.../test-runs//1975349/2150387254' for TC-54458 (numeric case id 1975349, then latest_result_id 2150387254) — so urls.self is a fallback/confirmation path, not the primary one. Oddity: every urls.self has a DOUBLE SLASH before the numeric case id ('test-runs//1975349') — the run-id segment of the URL is empty. This is consistent with check 2 below (no run id exists to place there) and further evidence there is no addressable run id, numeric or otherwise, anywhere in this system's URL scheme either.\n\nCheck 2 — numeric/uuid run id: NONE. The response contains no run-level id field of any kind — no numeric or UUID run id anywhere in top-level success/info/test_cases, and no run id embedded in urls.self (that segment is empty, producing the double-slash noted above). Confirms the create probe's finding: the v2 surface exposes the run only via its human identifier (TR-9062 in the path); nothing internally addresses the run itself.\n\nCheck 3 — filter_test_cases.is_dynamic: NOT APPLICABLE / NO DATA POINT. This capability's response has no `filter_test_cases` object at all (it is a case-listing endpoint, not a run/plan-listing endpoint), so it cannot contribute a 4th data point on the is_dynamic type-drift question. That comparison needs list_test_runs / update_test_run / list_test_plan_test_runs, none of which this probe touched.\n\nCheck 4 — row shape vs standalone test case: REDUCED/DIFFERENT PROJECTION, exactly as the contract itself declares ('AS MAPPED INTO A TEST RUN — a case-plus-configuration row, not the project-level test case record'). It carries run-context fields a standalone case would not (latest_status, latest_result_id, configuration_id, execution_id, dataset, folder_path as an id array) and omits others a standalone case record would likely carry (no template, no automation_status, no custom fields, no tags on this row). No 'declares-but-never-emits phantom field' problem like batch 4 found on list_test_plan_test_runs's test_plan field was observed here — everything declared was emitted.\n\nCheck 5 — never-executed vs no-result: NOT distinguished by a dedicated field, and notably `latest_result_id` is NON-NULL for all four rows even though all four are 'untested' with no execution history — i.e. the system pre-creates a result row (and its id) at case-to-run mapping time, before any actual run/execution happens. The only signal for 'never executed' is `latest_status == \"untested\"`; there is no separate null-vs-populated latest_result_id signal, no last-executed timestamp, and no execution-count field. This matters for the bulk-update sibling: latest_result_id is guaranteed present and stable for untested rows too, so it can address every row unconditionally without a 'does this row even have a result yet' branch — but the sibling cannot use result-id-nullness to detect never-executed; it must key off latest_status instead.\n\nFlat/nested contract disagreement: the capability's flat `returns` array omits `description` even though the nested per-field schema declares it AND the response returns it (non-null on TC-54457, null on the other three) — trusted the nested schema per standing lesson; not counted as drift since nested schema+response agree.\n\nurls anomaly beyond the standing 'bare {type:object}' pattern: here `urls` isn't even declared as a bare object — it is completely absent from the declared contract, worse than the recurring 'declared bare, returns real sub-keys' pattern seen elsewhere.\n\nEnvelope: 200 body matches the declared success envelope structurally (success/info/test_cases, info has exactly page/page_size/count/prev/next) — no 4xx/5xx encountered, so the systemic error-envelope issue could not be exercised here.\n\nNo preprod status-0 flakiness encountered; single attempt succeeded. No writes performed; TR-9062 and its four rows were only read."
+}

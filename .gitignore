@@ -7,3 +7,6 @@ tests.md
 .npmrc
 .vscode/
 .env
+tests/live/.id-pool.json
+tests/live/capability-test-plan.csv
+__pycache__/

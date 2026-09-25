@@ -1,0 +1,156 @@
+{
+  "capability": "reorder_test_cases_by_folder",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:35:41Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "task",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "target folder for this probe, both cases probe-created and expendable",
+      "source": "task",
+      "capability": null,
+      "produced": { "folder_id": 765883, "folder_name": "copy-of-__mcp-probe-subfolder-20260921", "cases": ["TC-54503 (1985216)", "TC-54504 (1985217)"] }
+    },
+    {
+      "step": 3,
+      "why": "re-read the target folder's own record IMMEDIATELY before acting, because a concurrent probe may be moving this same folder — checking parent_id and cases_count for any sign of that move having already landed",
+      "source": "invoked",
+      "capability": "list_folder_contents",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 765883 } },
+      "status": 200,
+      "produced": {
+        "parent_id": null,
+        "cases_count": 2,
+        "total_cases_count": 2,
+        "sub_folders_count": 0,
+        "note": "folder was at root (parent_id null) at probe start, not nested under anything despite its 'subfolder' name — no sign of an in-flight move at this instant. Re-checked again after all writes (see attempts) and parent_id was still null and cases_count still 2 throughout the whole probe: no concurrent move was observed to land during this session."
+      }
+    },
+    {
+      "step": 4,
+      "why": "baseline read of the folder's test-case order before any write, to establish the manual order to mutate and later restore",
+      "source": "invoked",
+      "capability": "list_folder_test_cases",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 765883 } },
+      "status": 200,
+      "produced": { "order": ["TC-54503 (1985216)", "TC-54504 (1985217)"], "cases_count": 2 }
+    },
+    {
+      "step": 5,
+      "why": "fetch a case id from a DIFFERENT folder (765817, the task's alternative folder) to use as a foreign-folder id in the destructive-shaped tests",
+      "source": "invoked",
+      "capability": "list_folder_test_cases",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 765817 } },
+      "status": 200,
+      "produced": { "folder_765817_cases": ["TC-54502 (1985215)", "TC-54487 (1985021)"] }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "why": "well-formed-looking first attempt: swap both cases in one call, omitting both anchors (per guidance, omitting top_test_case means top of page and omitting bottom_test_case means bottom of page — with only 2 cases in the folder this should mean 'the whole page')",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 765883 },
+        "body": { "test_cases": [1985217, 1985216], "page": 1 }
+      },
+      "status": 400,
+      "error_verbatim": "{\"errors\":\"Atleast one of top_test_case or bottom_test_case must be present\"}",
+      "note": "Neither top_test_case nor bottom_test_case is marked required in the declared contract (both are plain optional body fields), but the API rejects omitting both. This is an UNDECLARED requiredness constraint: at least one anchor is mandatory in practice, contradicting the schema. It also means a folder's entire case list can never be reordered in one call by specifying only the new sequence — an anchor into the existing list is always required, which is awkward on a 2-case folder where the only possible anchor IS one of the two cases being reordered."
+    },
+    {
+      "n": 2,
+      "why": "retry with one anchor supplied: move TC-54504 (1985217) to sit above TC-54503 (1985216), swapping their order",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 765883 },
+        "body": { "test_cases": [1985217], "bottom_test_case": "1985216", "page": 1 }
+      },
+      "status": 200,
+      "note": "Succeeded. Write response's own test_cases array came back in the new order [1985217, 1985216]. Verified independently by list_folder_test_cases read-back immediately after (see probe below) — read-back matched the write response exactly."
+    },
+    {
+      "n": 3,
+      "why": "destructive-shaped test: anchor against a case from a DIFFERENT folder (TC-54502 / 1985215, native to folder 765817) while sending only one native case in test_cases and omitting the folder's other native case (1985217) entirely from the request",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 765883 },
+        "body": { "test_cases": [1985216], "bottom_test_case": "1985215", "page": 1 }
+      },
+      "status": 400,
+      "error_verbatim": "{\"errors\":\"Atleast one of top or bottom test case should be active and should have a valid order value\"}",
+      "note": "Different error message than attempt 1's (both are 400 under the same bare {errors: <string>} envelope). Confirms the API validates that an anchor must belong to (be 'active' / have an order value in) the target folder — a cross-folder anchor is cleanly rejected, not silently honored. No reparenting risk from anchors."
+    },
+    {
+      "n": 4,
+      "why": "destructive-shaped test: include the FOREIGN case (1985215, native to folder 765817) directly inside test_cases (the moved-block list itself), alongside a valid native case, anchored on the folder's other valid native case",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 765883 },
+        "body": { "test_cases": [1985216, 1985215], "bottom_test_case": "1985217", "page": 1 }
+      },
+      "status": 200,
+      "note": "Succeeded, HTTP 200 {success:true}. The foreign id (1985215) does NOT appear anywhere in the response's test_cases array (still exactly 2 rows: 1985216, 1985217) — it was silently dropped from the move list rather than rejecting the call or reparenting the case. Verified by reading BOTH folders back independently: folder 765883 still holds exactly its 2 native cases in the new order, and folder 765817 (the foreign case's home) still holds its original 2 cases unchanged — no reparenting occurred. This silent-drop is undeclared behavior (nothing in the contract says invalid/foreign ids in `test_cases` are filtered rather than erroring)."
+    },
+    {
+      "n": 5,
+      "why": "destructive-shaped test: include a NONEXISTENT case id (999999999) inside test_cases alongside one valid id, anchored on the folder's other valid case",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 765883 },
+        "body": { "test_cases": [1985217, 999999999], "bottom_test_case": "1985216", "page": 1 }
+      },
+      "status": 200,
+      "note": "Succeeded, HTTP 200 {success:true}. The nonexistent id was silently dropped; the move proceeded using only the valid id (1985217), landing it above 1985216. This is the 'silent 200 half-success' bucket the task flagged as one of several distinct nonexistent-id behaviors seen across this product's routes (others give clean 400, bare 404 {success:false}, 404 {error:...} with no success key, or 502) — reorder_test_cases_by_folder's answer is: silently drop the bad id and honor the rest, 200 all the way, with nothing in the response indicating anything was dropped."
+    },
+    {
+      "n": 6,
+      "why": "cleanup / restore original manual order, and deliberately create a manual-order-vs-alphabetical-order mismatch to test whether sort_by masks manual order on read",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 765883 },
+        "body": { "test_cases": [1985216], "bottom_test_case": "1985217", "page": 1 }
+      },
+      "status": 200,
+      "note": "Succeeded. Folder restored to its original order [TC-54503 (1985216), TC-54504 (1985217)], confirmed by independent read-back."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 765883 },
+      "body": { "test_cases": [1985217], "bottom_test_case": "1985216", "page": 1 }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_cases"],
+    "item_shape": {
+      "test_cases[]": "same wide v1 case row shape as list_folder_test_cases/list_test_cases, with no position/order/sequence field — order is expressed ONLY by array sequence, both in this write's own response and in the independent read-back that followed and matched it exactly",
+      "test_cases[].automation_state, .is_shared, .estimated_duration_seconds, .template_id, .template_name, .template_step_type, .step_count, .test_run_results_count, .test_run_results_issues_count, .test_case_dataset": "all present on every row of every write response observed, none declared in the 200 schema",
+      "test_cases[].comments_count": "declared but not independently reconfirmed distinct from the top-level miss below (see contract.declared_missing)",
+      "top-level 'info'": "declared as a returned key ('Additional metadata about the reorder operation') but ABSENT from every 200 response body observed in this probe — the body was exactly {success, test_cases}, nothing else"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path)",
+      "folder_id (path)",
+      "test_cases (body, array, required — declared)",
+      "top_test_case OR bottom_test_case (body — UNDECLARED requirement: schema marks both individually optional, but omitting both is a 400 'Atleast one of top_test_case or bottom_test_case must be present'; the anchor actually supplied must also belong to the target folder, or it's a 400 'Atleast one of top or bottom test case should be active and should have a valid order value')"
+    ],
+    "json_path": {
+      "top_test_case": "/re_order/top_test_case",
+      "bottom_test_case": "/re_order/bottom_test_case",
+      "page": "/re_order/page",
+      "test_cases": "/re_order/test_cases"
+    },
+    "declared_missing": [
+      "info (top-level) — declared as a returned key on every 200, but absent from every successful response body in this probe (shallowest miss; not pursued deeper into test_cases[] once this top-level key was already confirmed missing)"
+    ],
+    "undeclared_returned": [
+      "test_cases[].automation_state, .is_shared, .estimated_duration_seconds, .template_id, .template_name, .template_step_type, .step_count, .test_run_results_count, .test_run_results_issues_count, .test_case_dataset — present on every row, none declared",
+      "error envelope shape: declared 400/404/500 all say {success:false, error:{code,message,details}}; every actual error in this probe was {errors:\"<plain string>\"} — no success key, no error object, no code. (The capability's own guidance text already flags this pattern in prose; this probe reconfirms it against the ACTUAL declared JSON schema, which still shows the generic envelope and was never corrected to match.)"
+    ]
+  },
+  "notes": "IS ORDER OBSERVABLE AT ALL? Yes, but only IMPLICITLY. No test-case row — on this write's own response, on list_folder_test_cases, or on list_test_cases — carries any position/order/sequence field. The only field named 'order' anywhere in any of these schemas is test_case_steps[].order, which is the order of STEPS inside one case, unrelated to folder position. Manual folder order is visible only as array sequence on a folder-scoped, unsorted read (list_folder_test_cases with no sort_by). Verdict is therefore NOT UNVERIFIED — array-sequence is a real, working observable, and I independently reconfirmed it via read-back (never trusting the write response alone) across every attempt in this probe: the write response's order matched the subsequent list_folder_test_cases read every single time.\n\nDOES AN EXPLICIT SORT OVERRIDE MANUAL ORDER, AND CAN THE CALLER STILL SEE IT AFTERWARDS? Tested directly: with the folder in manual order [TC-54503 (1985216), TC-54504 (1985217)] (createcases, then bulkcase — alphabetically 'b' < 'c', so alphabetical and manual order intentionally disagreed), calling list_folder_test_cases with sort_by=name-ASC&required[fields]=name returned [TC-54504 (1985217), TC-54503 (1985216)] — the ALPHABETICAL order, not the manual one. Answer: yes, an explicit sort_by fully overrides and masks manual order on this read, and there is no separate field anywhere in the row that discloses the underlying manual position once a sort is applied — the only way to see manual order is to omit sort_by entirely. Combined with the already-known finding that list_test_cases sorts by priority NAME alphabetically rather than by severity, and that sort_by+required[fields] combinations 422 unless the sorted column is included, this product's folder/case readers treat 'order' as a display concern with no persistent, sort-independent way to surface manual position to a caller who wants both a sort AND the manual sequence in the same call.\n\nPARTIAL-LIST BEHAVIOUR (the destructive-shaped question). Sent test_cases containing only ONE of the folder's two cases in the successful probe call itself (attempt n=2: test_cases=[1985217] only, with bottom_test_case='1985216' supplying the second case purely as an anchor, not as part of the moved list) and again in attempt n=6. In both cases the OMITTED case (referenced only as an anchor, never inside test_cases) kept its position correctly and was never removed, appended elsewhere, or altered beyond the expected shift from the other case moving past it — confirmed by read-back showing cases_count unchanged at 2 and both TC-54503/TC-54504 present throughout. Because this folder holds only 2 cases and the API requires at least one anchor (see attempt n=1), it was not possible to omit the second case from the request ENTIRELY (with zero reference, not even as anchor) — the folder's small size forces every reorder call to name both cases in some role. Within that constraint, this route does NOT show edit_test_run.test_case_ids' destructive full-replace behavior: unmentioned-as-a-mover cases are left alone, not detached. This is a genuinely different (safer) shape from that precedent.\n\nDIFFERENT-FOLDER CASE ID (reparenting risk). Tested two ways: (1) as the anchor (attempt n=3) — cleanly rejected, 400, 'must be active and have a valid order value', no side effect; (2) inside the test_cases move-list itself alongside a valid native case (attempt n=4) — succeeded 200, but the foreign id was silently DROPPED from the moved block; verified by reading back BOTH folders that the foreign case (TC-54502 / 1985215) never left folder 765817 and never appeared in folder 765883. No reparenting defect found on this capability — unlike some other routes in this product, a foreign-folder id here is either rejected (as anchor) or silently ignored (inside the move list), never actioned.\n\nNONEXISTENT CASE ID. Sent 999999999 inside test_cases alongside a valid id (attempt n=5): 200 {success:true}, nonexistent id silently dropped, valid id moved as if it had been sent alone. This is the 'silent 200 half-success' bucket among the four/five distinct nonexistent-id behaviors now on record across this product's write routes (others: clean 400, bare 404 {success:false}, 404 {error:...} with no success key, 502) — reorder_test_cases_by_folder adds this fifth, no-error-at-all variant to that catalogue, and nothing in the response signals that anything was filtered.\n\nCASES_COUNT ACCURACY. Read via list_folder_contents at the very start of the probe (cases_count:2, total_cases_count:2) and again independently mid-probe after the nonexistent-id write (cases_count:2, total_cases_count:2, sub_folders_count:0) — both accurate, matching the two prior confirmations on record and settling the third the task asked for: cases_count stayed correct across writes in this probe too.\n\nFOLDER-MOVE CONCURRENCY. Read the folder's own record (list_folder_contents) immediately before the very first write: parent_id was null (folder sits at project root, not nested, despite its 'subfolder' name — presumably a prior probe already relocated it, or it was created that way). Read again after the write sequence: parent_id still null. No concurrent move was observed landing during this session; the reorder writes and the folder's own parent/location were confirmed orthogonal, as the task predicted.\n\nOVERALL: functionality is real and works correctly — manual reorder actually persists, is independently verifiable via read-back, does not delete or silently reparent cases, and correctly rejects invalid anchors. Verdict is DRIFT rather than PASS because of concrete contract mismatches: (1) top_test_case/bottom_test_case are declared fully optional but at least one is actually mandatory; (2) the declared 200 schema promises a top-level `info` object that never actually appears; (3) the declared error envelope ({success:false, error:{code,message,details}}) never matches the real one ({errors:\"<string>\"}); (4) the write response includes ~10 undeclared per-row fields beyond the declared schema."
+}

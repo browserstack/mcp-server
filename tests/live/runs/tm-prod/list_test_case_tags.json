@@ -1,0 +1,70 @@
+{
+  "capability": "list_test_case_tags",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T07:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Fetched the contract fresh from the PROD MCP server rather than assuming the preprod contract still applies. Confirms path_params (project_id, integer, required), query (p: integer page, default 1, ignored whenever q is sent; q: string free-text match on tag name), and the declared 200 schema requiring tags + tag_objects + info.",
+      "source": "invoked",
+      "capability": "describeCapability",
+      "arguments": { "name": "list_test_case_tags", "product": "tm", "include_responses": "all" },
+      "status": null,
+      "produced": { "declared_200_required": ["tags", "tag_objects", "info"], "declared_401": true }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1 } },
+      "status": 200,
+      "error": null,
+      "changed": "Baseline, no q. Real prod project PR-18723 (332537). Returned 30 tag names on page 1 (info.count=31, info.page_size=30, info.next=2), matching the fixture's confirmed 31 real tags. Response top-level keys were ONLY tags + info - tag_objects was absent entirely, not an empty array."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "q": "auth" } },
+      "status": 200,
+      "error": null,
+      "changed": "Real substring of two real tags on this project (auth, Authentication). Returned 200 cleanly with tags:[auth, Authentication] and info.count=2. Note 'Authentication' was NOT among the 30 tags shown on the no-q page 1 - it lives on page 2, confirming q searches the full vocabulary regardless of paging as guidance states. Critically: tag_objects WAS present in this response (2 objects with name+created_at), unlike the no-q call."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "q": "sprint" } },
+      "status": 200,
+      "error": null,
+      "changed": "Second real substring, matching 5 real tags (Sprint, sprint5, sprint3, sprint2, sprint1). Clean 200, tag_objects present, info.count=5. No 500."
+    },
+    {
+      "n": 4,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "q": "zzz_nonexistent_tag" } },
+      "status": 200,
+      "error": null,
+      "changed": "Negative control - a term matching no real tag. Clean 200, empty tags:[] and tag_objects:[], info.count=0. Not a 500, not a hang."
+    },
+    {
+      "n": 5,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "q": "%" } },
+      "status": 200,
+      "error": null,
+      "changed": "Edge-case value (bare SQL-LIKE wildcard character). Clean 200 (no 500), but the result set (30 tags, info.count=30) does NOT match the project's known 31-tag vocabulary from attempt 1 - it returned many tag names never seen in the full no-q listing (e.g. 'no', 'if', 'that', 'Call', 'Code', 'TOTP', '2FA'), most with created_at timestamps from 2026-01-19/2026-01-23. This looks like a separate scoping/wildcard-handling anomaly (q='%' not being treated as a literal 1-char match, and/or not being scoped the same way as a normal substring), but it is NOT a 500 and is out of scope for this recheck's headline question - flagged for a follow-up probe, not chased further here."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "query": { "q": "auth" } },
+    "status": 200,
+    "response_keys": ["tags", "tag_objects", "info"],
+    "item_shape": { "tags[i]": "string", "tag_objects[i]": "{name: string, created_at: string}", "info": "{page, page_size, count, prev, next}" }
+  },
+  "contract": {
+    "required": ["tags", "tag_objects", "info"],
+    "json_path": null,
+    "declared_missing": [
+      "tag_objects — declared required in the 200 schema but absent from the response body (not even an empty array) when q is omitted (attempt 1). Present and populated as soon as q is supplied (attempts 2-3). Confirmed on real data: this project has 31 real test-case tags, all visible via the no-q call, none of which came back with tag_objects."
+    ],
+    "undeclared_returned": []
+  },
+  "notes": "HEADLINE QUESTION - does the q=500 reproduce on prod: NO. Tested q against two real tag substrings that genuinely match project data (auth -> 2 hits including one tag only visible on page 2; sprint -> 5 hits), one substring matching nothing, and one edge-case wildcard character. All four returned clean 200s. No 500 in any q call, on any value tried, against the real production project (PR-18723 / 332537, 31 real tags). The originally-reported 500-on-q for this capability does NOT reproduce on prod today.\n\nATTRIBUTION CHECK - was the original defect correctly attributed to THIS capability (not list_tags): YES, as a matter of which capability was actually tested. Read the source finding directly (findings/5xx-declared-inputs.md section 2, and findings/update_tag.md 'Side finding'): the preprod evidence explicitly names list_test_case_tags, cites its own path (GET /api/v1/projects/{project_id}/test-case/tags-v2?q=<term>), and states it was found incidentally while cross-checking list_test_case_tags against list_tags's tag counts during the update_tag probe - not a mix-up between the two capabilities' code paths. The list_tags defect in the same file (entity_type=test_recording -> 500) is a distinct, separately-evidenced crash on a different capability and was NOT conflated with the q-filter claim in the source text. So the routing-to-product-team was attributed to the correct capability by name; it just does not reproduce here. Most likely explanations, in order of plausibility: (a) fixed between the 2026-09-18 preprod probe and today, (b) a preprod-only environment defect (preprod's fixture project had only 1 tag at the time vs prod's 31 - a near-empty-collection edge case that may behave differently server-side), or (c) the preprod crash was genuinely a q-branch bug that prod's code no longer hits. Cannot fully rule out (a) vs (b) vs (c) from this recheck alone, but misattribution to the WRONG CAPABILITY (i.e., that it was really list_tags all along) is not supported by the source text - that theory can be set aside for this capability specifically.\n\nSECOND QUESTION - tag_objects/tags/info shape-split: REPRODUCES on prod, confirmed on real data (31 real tags, not an empty collection). The no-q call (paged listing) returns only tags + info; tag_objects is declared required in the 200 schema but is silently absent. As soon as q is supplied, tag_objects appears and is fully populated. This is a genuine, real-data-backed contract violation - same shape as the preprod DRIFT finding - and is the basis for this run's DRIFT verdict.\n\nSIDE OBSERVATION (not chased further, flagged for a separate probe): q='%' returned a clean 200 but with a result set that does not match the project's real 31-tag vocabulary - suggests '%' may be hitting an unscoped or differently-scoped code path rather than being treated as a literal character to match. Distinct from the 500 question and from the tag_objects drift; noted here so it isn't lost, not included in the verdict."
+}

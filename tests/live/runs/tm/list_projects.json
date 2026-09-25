@@ -1,0 +1,64 @@
+{
+  "capability": "list_projects",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:09:30Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "none needed — free-text q filter on the fixture project's own name resolves it directly",
+      "source": "pool",
+      "capability": null,
+      "produced": {}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "query": { "q": "__mcp-capability-fixture__" } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": { "query": { "q": "__mcp-capability-fixture__" } },
+    "status": 200,
+    "response_keys": ["success", "projects", "info"],
+    "item_shape": {
+      "name": "string",
+      "identifier": "string",
+      "id": "integer",
+      "thProjectId": "integer",
+      "description": "string",
+      "created_at": "string (date-time)",
+      "import_id": null,
+      "test_cases_count": "integer",
+      "test_runs_count": "integer",
+      "test_plans_count": "integer",
+      "links": { "repository": "string", "self": "string", "test_runs": "string", "test_plans": "string", "users": "string" },
+      "normalisedName": "string",
+      "starred": "boolean",
+      "jira_mapped": "boolean",
+      "projectVisibilityBanner": null,
+      "duplicates_tc_count": "integer"
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": ["projects[].project_creator"],
+    "undeclared_returned": [
+      "projects[].thProjectId",
+      "projects[].test_plans_count",
+      "projects[].normalisedName",
+      "projects[].starred",
+      "projects[].jira_mapped",
+      "projects[].projectVisibilityBanner",
+      "projects[].duplicates_tc_count",
+      "info.starred_count"
+    ]
+  },
+  "notes": "Query-only capability (no path_params, no body, no json_path nesting): q (flat string), p (int, default 1), sort_by (closed enum), starred/shared (bool passthrough), is_hidden_projects (bool). No param is marked required. First probe used q=__mcp-capability-fixture__ and returned exactly the pool's fixture project (id 379335744, identifier PR-2005), so the item shape was genuinely exercised, not an empty-collection case. A second, unfiltered call (p=1, sort_by=identifier-asc) confirmed the paging block: page_size is fixed at 30 regardless of no size param being sent (30 rows returned), count=1832 matches the account's known project total, prev=null and next=2 on page 1 — all consistent with the declared `info` schema (page/page_size/count/prev/next all present and correctly typed). One extra field, info.starred_count, appears in both calls' info block but is not in the declared schema (which lists only the five required fields). At the item level, the declared 200 schema promises `project_creator` (boolean) but it is never emitted by either call — this matches the capability's own guidance text ('project_creator ... is NOT emitted ... commented out in the serializer'), so the omission is self-disclosed rather than surprising, but it is still a genuine declared-vs-actual schema mismatch. Conversely, the actual response carries seven item fields not present in the declared 200 schema object at all (thProjectId, test_plans_count, normalisedName, starred, jira_mapped, projectVisibilityBanner, duplicates_tc_count) plus info.starred_count; most of these (thProjectId, normalisedName, starred, jira_mapped, test_plans_count, duplicates_tc_count, projectVisibilityBanner) are at least named in the capability's flat `returns` manifest and/or guidance prose, but none of them are represented in the structured response.schema.200 object that describeCapability hands back as 'the declared 200 response'. Net: the capability itself works correctly and returns real, well-formed data (verdict is not BLOCKED or UNVERIFIED — a non-empty, specifically-matched collection was returned and paging was cross-checked against a known total), but the declared schema and the actual response body disagree on eight fields (one missing, seven extra), so DRIFT rather than PASS."
+}

@@ -1,0 +1,44 @@
+{
+  "capability": "upload_ai_attachments",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T00:00:00.000Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the path param",
+      "source": "pool/task",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": {}
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — no `attachments` file field exists in this capability's schema to attempt a payload on. describeCapability declares zero body/query parameters at all; the real input is `attachments` read as an array of uploaded FILES from a multipart form (same handler as upload_generic_attachments, with a restricted type/size allowlist applied), which invokeCapability's JSON-only path_params/query/body surface has no way to express. This single call exists to confirm the guidance's documented no-op behavior against the live API rather than take it on faith. No second attempt was made: there is no declared field to vary, and inventing an undeclared key would test a guess, not the contract."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": {}
+    },
+    "status": 200,
+    "response_keys": ["generic_attachment"],
+    "item_shape": "n/a — 200 body was {generic_attachment: []}, an empty array; no item to shape-check, and per instruction an error/no-op body is never diffed against the declared success item schema (id/name/url/download_url/content_type/size)"
+  },
+  "contract": {
+    "required": ["project_id (path, integer)"],
+    "json_path": "none declared — describeCapability returns no body/query parameters at all for this capability; the only input the contract needs (the file bytes) has no field to carry it",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "MECHANISM: identical wall to upload_generic_attachments and import_dataset_csv. describeCapability's contract for upload_ai_attachments declares exactly one input, the path param project_id. There is no body or query parameter, and no field of any kind for file content — the endpoint's real input is `attachments` read as an array of uploaded FILES from a multipart/form-data request. Guidance confirms it is the SAME handler as upload_generic_attachments, with only the validation layer (type allowlist: pdf/txt/csv/json/rtf/doc/docx/xls/xlsx/pptx/jpeg/png; per-type size caps 500KB-25MB, or a flat 3MB with linked_jira_data=true) differing. invokeCapability cannot express a file part, so there is no key to carry bytes, a base64 payload, or a pre-uploaded reference — same structural gap as its two probed siblings.\n\nFLAGGED STATUS: not quarantine-tagged (no machine-readable marker the way import_dataset_csv carries one), but the guidance is explicit and unambiguous: 'NOT INVOCABLE through this interface. Identical handler to the generic upload: it reads attachments as an array of uploaded FILES from a multipart form, so the one input it needs cannot be expressed as a JSON argument and this record carries no body parameter.' Flagged-in-guidance, not flagged-in-metadata — the same partial-flag gap as upload_generic_attachments.\n\nBEHAVIOR CONFIRMED IDENTICAL TO upload_generic_attachments, NOT to import_dataset_csv: one live invocation (project_id only, empty body) returned 200 {generic_attachment: []}, not a 400. Guidance states this plainly: 'With no files it returns 200 and generic_attachment: [] rather than an error — a call from here looks successful and uploads nothing.' Confirmed verbatim, and worse than a loud 400 for the same reason noted on the generic-upload probe: a 200 with an empty array can read as a legitimate zero-file success rather than a failure.\n\nNo second or third attempt was made — with zero declared fields for the file there is no alternative payload shape to try (there being no way to even signal a type/size violation without a file to violate it with), and the one call already reproduced the documented mechanism exactly. Nothing was written. TC-54455/54456/54458 and the __readonly__ folder (764093) were never referenced. delete_test_case_attachment was not invoked, per standing instruction.\n\nCROSS-CAPABILITY SUMMARY (all three probed in this pass): upload_generic_attachments and upload_ai_attachments are TRANSPORT-BLOCKED, identically to import_dataset_csv — no JSON field exists anywhere in their contracts that could carry a file (no base64 field, no URL field, no blob-id field), so they are structurally unreachable from invokeCapability regardless of what bytes an agent has in hand. link_attachments_to_test_case is the odd one out: it is NOT transport-blocked at all (its real input is a flat JSON array of integer blob ids, fully expressible), but it is server-broken — every well-formed call 500s unconditionally per its own guidance, confirmed live. None of the three carries a machine-readable quarantine marker the way import_dataset_csv does, though all three carry explicit prose guidance describing their failure mode — an agent that reads guidance before invoking is warned; one that only reads the parameter list and mode:'write' is not, and would burn a live write attempt to discover what guidance already knew."
+}

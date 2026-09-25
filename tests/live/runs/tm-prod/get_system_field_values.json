@@ -1,0 +1,102 @@
+{
+  "capability": "get_system_field_values",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:58:22Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": false,
+  "setup": [
+    "Fixed production fixtures per task: project_id=332537, project_identifier=PR-18723 (\"Demo Project 1\").",
+    "describeCapability(get_system_field_values, product=tm) to get the contract.",
+    "invokeCapability for field_name in [status, priority, case_type, automation_state, defects], each with path_params={project_id:332537, field_name}, no query (page 1, default page_size=30).",
+    "Followed up with q-filtered calls per field, searching for the field's default option display name (status:q=Active, priority:q=Medium, case_type:q=Functional, automation_state:q=Not Automated), to get a supposedly-complete (next:null) result set directly comparable to preprod's single-page methodology."
+  ],
+  "attempts": [
+    {"field_name": "status", "query": {}, "status": 200, "info": {"page": 1, "page_size": 30, "count": 277, "prev": null, "next": 2}, "rows_returned": 26},
+    {"field_name": "priority", "query": {}, "status": 200, "info": {"page": 1, "page_size": 30, "count": 759, "prev": null, "next": 2}, "rows_returned": 30},
+    {"field_name": "case_type", "query": {}, "status": 200, "info": {"page": 1, "page_size": 30, "count": 277, "prev": null, "next": 2}, "rows_returned": 30},
+    {"field_name": "automation_state", "query": {}, "status": 200, "info": {"page": 1, "page_size": 30, "count": 111, "prev": null, "next": 2}, "rows_returned": 16},
+    {"field_name": "defects", "query": {}, "status": 200, "info": {"page": 1, "page_size": 30, "count": 0, "prev": null, "next": null}, "rows_returned": 0},
+    {"field_name": "status", "query": {"q": "Active"}, "status": 200, "info": {"page": 1, "page_size": 30, "count": 5, "prev": null, "next": null}, "rows_returned": 1},
+    {"field_name": "priority", "query": {"q": "Medium"}, "status": 200, "info": {"page": 1, "page_size": 30, "count": 5, "prev": null, "next": null}, "rows_returned": 2},
+    {"field_name": "case_type", "query": {"q": "Functional"}, "status": 200, "info": {"page": 1, "page_size": 30, "count": 14, "prev": null, "next": null}, "rows_returned": 1},
+    {"field_name": "automation_state", "query": {"q": "Not Automated"}, "status": 200, "info": {"page": 1, "page_size": 30, "count": 2, "prev": null, "next": null}, "rows_returned": 2}
+  ],
+  "probe": {
+    "arguments": {"project_id": 332537, "field_name": "status|priority|case_type|automation_state|defects"},
+    "status": 200,
+    "response_keys": ["success", "<field_name>", "info"],
+    "item_shape": {
+      "status": "{value, name, internal_name, is_default, colour}",
+      "priority": "{value, name, internal_name, is_default}",
+      "case_type": "{value, name, internal_name, is_default}",
+      "automation_state": "{value, name, internal_name, is_default, value_category}",
+      "defects": "empty array on this project"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "field_name (path, enum: priority|status|case_type|automation_state|defects)"],
+    "json_path": "<field_name>.values",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "internal_name (undeclared on every field_name)",
+      "is_default (undeclared on every field_name)",
+      "status.values[].colour (present only on status)",
+      "automation_state.values[].value_category (present only on automation_state)"
+    ]
+  },
+  "prod_vs_preprod": {
+    "per_field_name": {
+      "status": {
+        "info_count_unfiltered_page1": 277,
+        "rows_returned_unfiltered_page1": 26,
+        "page_size_declared": 30,
+        "next_declared": 2,
+        "info_count_filtered_default_name": 5,
+        "rows_returned_filtered_default_name": 1,
+        "duplicates_found_on_default_option": false,
+        "note": "Default 'Active' (value=9319, is_default:1) appears exactly ONCE in the q='Active' result. Unfiltered page1 (30 declared page_size, next=2 i.e. NOT the last page) returned only 26 rows -- a page-fill shortfall on a non-final page. The q-filtered call also under-returns vs its own declared count (5 declared, 1 returned) despite next:null (claims complete). Page1 also shows organic name-duplication unrelated to defaults: 'Temp state' appears 5x under 5 different ids (35945805/814/815/816/825), clearly ad-hoc user-created custom values in this heavily-used demo project, not a systematic default-clone."
+      },
+      "priority": {
+        "info_count_unfiltered_page1": 759,
+        "rows_returned_unfiltered_page1": 30,
+        "page_size_declared": 30,
+        "next_declared": 2,
+        "info_count_filtered_default_name": 5,
+        "rows_returned_filtered_default_name": 2,
+        "duplicates_found_on_default_option": false,
+        "note": "No option is marked is_default:1 anywhere on unfiltered page1, including the four original system priorities (Critical/High/Low/Medium) -- unlike preprod, this project appears to have no priority option currently flagged default (or it lives outside page1's 30 of 759 total). 'Medium' (value=9261) appears once; 'Medium priority' (value=17866808) is a distinct custom option, not a duplicate of Medium. Unfiltered page1 DOES exactly fill page_size=30. q-filtered call under-returns vs its own count (5 declared, 2 returned). Organic duplicate custom values also present: 'PW23' x2 (21316064/21316065), 'd' x2 (16169219/16169220)."
+      },
+      "case_type": {
+        "info_count_unfiltered_page1": 277,
+        "rows_returned_unfiltered_page1": 30,
+        "page_size_declared": 30,
+        "next_declared": 2,
+        "info_count_filtered_default_name": 14,
+        "rows_returned_filtered_default_name": 1,
+        "duplicates_found_on_default_option": false,
+        "note": "Default 'Functional' (value=9379, is_default:1) appears exactly ONCE in the q='Functional' result. Unfiltered page1 exactly fills page_size=30. q-filtered call under-returns severely vs its own count (14 declared, only 1 returned) despite next:null. Organic duplicate custom values also present: 'frsadas' x3 (17964082/083/092)."
+      },
+      "automation_state": {
+        "info_count_unfiltered_page1": 111,
+        "rows_returned_unfiltered_page1": 16,
+        "page_size_declared": 30,
+        "next_declared": 2,
+        "info_count_filtered_default_name": 2,
+        "rows_returned_filtered_default_name": 2,
+        "duplicates_found_on_default_option": false,
+        "note": "Default 'Not Automated' (value=18172471, is_default:1) appears exactly ONCE; the only other q-match is the distinct custom value 'Not Automatedssss' (value=25003264) -- not a duplicate. This is the one field_name where the q-filtered count and rows_returned actually agree (2 == 2). Unfiltered page1 (declared page_size=30, next=2 i.e. NOT last page) returned only 16 rows -- same page-fill shortfall pattern as status."
+      },
+      "defects": {
+        "info_count": 0,
+        "rows_returned": 0,
+        "duplicates_found": false
+      }
+    },
+    "doubling_conclusion": "does not reproduce on prod (preprod-data artifact)",
+    "field_name_present": false,
+    "summary": "The exact preprod pattern -- every DEFAULT dropdown value duplicated live in two disjoint id blocks, both interchangeable -- does NOT reproduce on production project 332537: every field's default option (Active/Medium/Functional/Not Automated) appears exactly once, by both raw enumeration and targeted q-filter search. So the specific 'default option cloned twice' finding was a preprod-account data artifact, not a systemic product trait, as suspected. However, a RELATED but distinct manifestation of the same underlying defect family (info.count/pagination metadata disagreeing with actual returned rows) clearly reproduces on prod: (1) on non-final pages (next != null), the response under-fills the declared page_size -- status returned 26/30 and automation_state returned 16/30 rows despite both declaring more pages exist; (2) the q= filtered search consistently under-returns against its own declared info.count even when info.next is null (i.e. claiming a complete result) -- status q=Active declared count:5 but returned 1 row, case_type q=Functional declared count:14 but returned 1 row, priority q=Medium declared count:5 but returned 2 rows. Only automation_state's q-filtered call had count==rows (2==2), mirroring preprod's own automation_state/defects exact-match cases. Separately, this production project also has extensive ORGANIC duplicate-name custom options (same display name, different ids: 'Temp state' x5, 'frsadas' x3, 'PW23' x2, 'd' x2) -- these are plausible real user-created duplicates from a heavily-reused demo/test project over years, unrelated to the preprod default-cloning bug. field_name key confirmed ABSENT from every option object on this capability (status/priority/case_type/automation_state/defects), matching preprod and contrasting with get_test_case_detail which does return field_name."
+  },
+  "notes": "status.values[].colour present only on status (matches preprod). automation_state.values[].value_category present only on automation_state (matches preprod). priority and case_type carry neither colour nor value_category (matches preprod). internal_name and is_default are undeclared on every field_name (matches preprod); both duplicate rows of organic duplicate names (e.g. 'Temp state' x5, 'frsadas' x3) carry is_default:0, so unlike preprod's is_default:1/is_default:1 ambiguity, these organic dupes are clearly non-default junk -- no canonical-copy ambiguity for them. Priority stands out: no option is flagged is_default:1 on the visible/queried data for this project, unlike preprod where a default was always identifiable -- flagged as a secondary anomaly worth a follow-up query against a page further into the 759-item priority list, not pursued here due to probe budget. Overall verdict is DRIFT: the contract (json_path <field_name>.values, response_keys success/<field_name>/info) holds structurally, but info.count and info.page_size are unreliable against actual rows returned in multiple distinct ways (non-final-page underfill; q-filtered-but-claimed-complete undercount), which is a real declared-vs-actual mismatch on real production data, not an empty-collection edge case."
+}

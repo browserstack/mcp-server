@@ -1,0 +1,571 @@
+/**
+ * Replay saved payloads against the live API and re-check every contract, with no agents.
+ *
+ *   npm run replay:live                 reads only (safe, creates nothing)
+ *   npm run replay:live -- --writes     also replay the writes (MUTATES the fixture)
+ *   npm run replay:live -- --all        every saved payload, not just the drifts
+ *
+ * WHY THIS EXISTS. Seven batches of subagents established which capabilities describe
+ * themselves incorrectly. That was the expensive part and it is done. Verifying a FIX does
+ * not need judgement — it needs the same request sent again and the response compared to
+ * the contract, which is arithmetic. The probe skill says so: bootstrap with agents once,
+ * then replay forever without spending one.
+ *
+ * It reuses `bind` and `fetchTransport` rather than re-implementing a client, so a payload
+ * that stops binding is itself a finding — the request-shaping code is under test here too.
+ *
+ * READS ONLY BY DEFAULT, and that default is deliberate. Replaying a create makes another
+ * object in a real project every time it runs; after seven batches the fixture already
+ * holds enough residue. Writes are opt-in and the report says which ones were skipped, so
+ * a green run is never mistaken for full coverage.
+ *
+ * NESTING. `returns` is a flat list of field names at ANY depth, while a response is a
+ * tree. Comparing the two as sets of top-level keys reports an envelope like
+ * `{success, folder:{…}}` as a dozen failures and is how two people already drew the wrong
+ * conclusion. So the response is flattened to every key at every depth before comparing.
+ */
+
+import { readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+import { bind } from "../src/tools/capability-registry/bind.js";
+import { fetchTransport, authHeaders } from "../src/tools/capability-registry/egress.js";
+import type { Capability, ProductIndex } from "../src/tools/capability-registry/types.js";
+
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const args = process.argv.slice(2);
+const WRITES = args.includes("--writes");
+const ALL = args.includes("--all");
+// --emit-types <file>: for every undeclared path, write the type OBSERVED in the response.
+// Declaring a field needs its type, and re-deriving that by hand from a live call per field
+// is where wrong types get guessed. The replay already holds the body; this just reads it.
+// --skip a,b,c : leave these capabilities out entirely. Replaying a write repeats its effect
+// on a shared fixture, and a few of them (bulk archive, unlink, reorder, settings, uploads)
+// are the ones whose effect other payloads then assert against. Naming them keeps a write
+// run reproducible without making it all-or-nothing.
+const SKIP_AT = args.indexOf("--skip");
+const SKIP = new Set(SKIP_AT >= 0 ? (args[SKIP_AT + 1] ?? "").split(",").filter(Boolean) : []);
+const TYPES_AT = args.indexOf("--emit-types");
+const TYPES_FILE = TYPES_AT >= 0 ? args[TYPES_AT + 1] : undefined;
+
+const username = process.env.TM_LIVE_USERNAME || process.env.BROWSERSTACK_USERNAME;
+const accessKey = process.env.TM_LIVE_ACCESS_KEY || process.env.BROWSERSTACK_ACCESS_KEY;
+const baseUrl =
+  process.env.CAPABILITY_REGISTRY_BASE_URL_TM ||
+  "https://test-management-preprod.bsstag.com";
+
+if (!username || !accessKey) {
+  console.error(
+    "\nCredentials are required and are never read from a file.\n" +
+      "  export TM_LIVE_USERNAME=...   TM_LIVE_ACCESS_KEY=...\n" +
+      "or the BROWSERSTACK_* pair the server already uses.\n",
+  );
+  process.exit(2);
+}
+
+const doc = JSON.parse(
+  readFileSync(`${ROOT}capability/tm.capability-index.json`, "utf8"),
+);
+const index: ProductIndex = doc.products ? doc.products.tm : doc.tm;
+const byName = new Map(index.capabilities.map((c) => [c.name!, c]));
+// {{RUNID}} — a per-run token substituted into saved payloads.
+//
+// A create with a hard-coded name succeeds once and then 400s "already exists" on every
+// later replay, which reads in the report as a contract failure when it is only the fixture
+// remembering the first run. Four capabilities were sitting in the drift list for exactly
+// that reason. The token keeps each replay's created objects distinct and still prefixed so
+// they stay identifiable as probe residue.
+const RUNID = new Date().toISOString().replace(/[-:T.]/g, "").slice(2, 14);
+const savedRaw = readFileSync(`${ROOT}tests/live/payloads/tm.json`, "utf8");
+const saved = JSON.parse(savedRaw.split("{{RUNID}}").join(RUNID));
+const pool = JSON.parse(readFileSync(`${ROOT}tests/live/.id-pool.json`, "utf8"));
+
+/**
+ * Is this object a MAP KEYED BY DATA rather than a record with fields?
+ *
+ * tm returns several: `overall_progress` is {Passed: 3, Untested: 5}, and search results
+ * come back keyed by id, {614654: {...}}. Their keys are values, not field names, and
+ * walking into them reports `Passed` and `614654` as undeclared fields — which the first
+ * run of this script duly did, for 13 capabilities. Detected by shape rather than by a
+ * list of exceptions: either the keys are numeric, or every value under them is an object
+ * of the same shape, which is what a map looks like and what a record does not.
+ */
+function looksKeyedByData(record: Record<string, unknown>): boolean {
+  const keys = Object.keys(record);
+  if (keys.length === 0) return false;
+  if (keys.every((k) => /^\d+$/.test(k))) return true;
+  // Status-count maps: every value a scalar, every key Capitalised like an enum member.
+  const scalar = Object.values(record).every((v) => v === null || typeof v !== "object");
+  return scalar && keys.length > 1 && keys.every((k) => /^[A-Z][a-z]+$/.test(k));
+}
+
+/**
+ * Every field as a DOTTED PATH, not a bare leaf name.
+ *
+ * Comparing leaf names attributes a nested entity's field to its parent. `get_test_run`
+ * resolves `test_plan.id` and `issues[].id`, both real fields on nested objects — and a
+ * leaf-name matcher reported the run itself as declaring `id`, which sent a false "he
+ * shipped a third half-fix" to the person who had just fixed the first two. Any response
+ * carrying any nested entity hits this, so it is a class, not an instance.
+ */
+/**
+ * Paths present but carrying NOTHING — null, [] or {}.
+ *
+ * A null parent proves as little about its children as an empty array does, and the absent
+ * filter already knew that for arrays. `exploratory_session.assignee` comes back null on a
+ * session with no assignee, and reporting `assignee.email` as a missing declaration says
+ * the contract is wrong when the fixture simply had no assignee. Same for a null
+ * `frequency_details` on an unscheduled report. Collected here and used to suppress
+ * children, exactly as an empty array is.
+ */
+const hollow = new Set<string>();
+
+function pathsOf(
+  value: unknown,
+  prefix = "",
+  out = new Set<string>(),
+  open: Set<string> = new Set(),
+): Set<string> {
+  if (prefix && open.has(prefix)) return out;
+  if (Array.isArray(value)) {
+    // One element is enough to learn an array's item shape; the rest repeat it.
+    if (value.length > 0) pathsOf(value[0], prefix, out, open);
+    else if (prefix) hollow.add(prefix);
+    return out;
+  }
+  if (value === null && prefix) hollow.add(prefix);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (looksKeyedByData(record)) return out;
+    if (prefix && Object.keys(record).length === 0) hollow.add(prefix);
+    for (const [k, v] of Object.entries(record)) {
+      const path = prefix ? `${prefix}.${k}` : k;
+      out.add(path);
+      pathsOf(v, path, out, open);
+    }
+  }
+  return out;
+}
+
+/**
+ * What the capability DECLARES, taken from the resolved response schema as well as
+ * `returns`.
+ *
+ * `returns` is a convenience list, not the contract: it is flat, and it does not enumerate
+ * the pagination envelope or nested objects. Comparing a response against it alone reports
+ * `count`/`page_size`/`next` as undeclared on every paginated read, when the schema
+ * declares them perfectly well under `info`. The schema is the thing a caller is actually
+ * promised, so it is what the response is checked against.
+ */
+/**
+ * Paths the schema explicitly declares as an object with NO properties.
+ *
+ * That is the contract saying "the keys here are data, not fields" — `overall_progress` is
+ * {Passed: 3, Untested: 5}, keyed by status display name, and the product can add a status
+ * tomorrow. Descending into one reports `Untested` as an undeclared field, which is what my
+ * shape heuristic caught for multi-key maps and missed for single-key ones.
+ *
+ * Keyed on the CONTRACT, not on the data — teststack-73's suggestion, and the better rule:
+ * guessing from key shape means enumerating status names the product owns. The distinction
+ * that matters is `{type: "object"}` with no properties, which is a deliberate open map,
+ * versus a path the schema never mentions at all, which is an under-declaration and exactly
+ * the finding this script exists to report. Only the first is suppressed.
+ */
+function openObjectPaths(capability: Capability): Set<string> {
+  const out = new Set<string>();
+  const walk = (node: unknown, prefix: string, seen: Set<string>): void => {
+    if (!node || typeof node !== "object") return;
+    const obj = node as Record<string, any>;
+    for (const ref of ["$schema", "$response"] as const) {
+      if (typeof obj[ref] === "string") {
+        // Keyed by KIND and name, for the same reason as declaredFields: several responses
+        // share a name with a schema, and a name-only guard reads that as a cycle.
+        const key = `${ref}:${obj[ref]}`;
+        if (seen.has(key)) return;
+        const table = ref === "$schema" ? index.schemas : index.responses;
+        return walk((table || {})[obj[ref]], prefix, new Set([...seen, key]));
+      }
+    }
+    if (obj.type === "object" && !obj.properties && !obj.allOf && !obj.anyOf && prefix) {
+      out.add(prefix);
+      return;
+    }
+    if (obj.properties && typeof obj.properties === "object") {
+      for (const [name, sub] of Object.entries(obj.properties)) {
+        walk(sub, prefix ? `${prefix}.${name}` : name, seen);
+      }
+    }
+    if (obj.items) walk(obj.items, prefix, seen);
+    if (obj.schema) walk(obj.schema, prefix, seen);
+    // COMPOSED SCHEMAS COUNT TOO. This walked properties/items/schema but never allOf, so a
+    // field inherited through composition was invisible here while being perfectly visible
+    // to declaredFields. `overall_progress` is declared an open map on TestRun and reached
+    // through V1TestRunDetailRow's allOf; without this its status keys were reported as
+    // seven undeclared fields, which is precisely the "keys are data, not fields" case this
+    // function exists to suppress.
+    for (const key of ["allOf", "anyOf", "oneOf"]) {
+      if (Array.isArray(obj[key])) obj[key].forEach((x: unknown) => walk(x, prefix, seen));
+    }
+  };
+  const ok = Object.entries(capability.responses || {}).find(([c]) => c.startsWith("2"));
+  if (ok) walk(ok[1], "", new Set());
+  return out;
+}
+
+function declaredFields(capability: Capability): Set<string> {
+  // `returns` is flat and pathless, so it can only ever be matched at the top level.
+  const out = new Set<string>(capability.returns || []);
+  const walk = (node: unknown, prefix: string, seen: Set<string>): void => {
+    if (!node || typeof node !== "object") return;
+    const obj = node as Record<string, any>;
+    for (const ref of ["$schema", "$response"] as const) {
+      if (typeof obj[ref] === "string") {
+        // Recursion guard is per BRANCH, not global: the same schema legitimately appears
+        // at two different paths, and a global guard would silently drop the second.
+        //
+        // KEYED BY KIND AND NAME, not by name alone. Several responses share a name with a
+        // schema — `TestResultCustomFieldsResponse` is both — so a name-only guard treats
+        // the response's own `{$schema: "<same name>"}` as a cycle and returns before
+        // declaring anything. Those capabilities then report EVERY field as undeclared,
+        // which reads as a contract with no schema at all rather than as a walk that gave
+        // up. `index-loader.ts` already keys its guard `${kind}:${name}` for this reason.
+        const key = `${ref}:${obj[ref]}`;
+        if (seen.has(key)) return;
+        const table = ref === "$schema" ? index.schemas : index.responses;
+        return walk((table || {})[obj[ref]], prefix, new Set([...seen, key]));
+      }
+    }
+    if (obj.properties && typeof obj.properties === "object") {
+      for (const [name, sub] of Object.entries(obj.properties)) {
+        const path = prefix ? `${prefix}.${name}` : name;
+        out.add(path);
+        walk(sub, path, seen);
+      }
+    }
+    if (obj.items) walk(obj.items, prefix, seen);
+    if (obj.schema) walk(obj.schema, prefix, seen);
+    for (const key of ["allOf", "anyOf", "oneOf"]) {
+      if (Array.isArray(obj[key])) obj[key].forEach((x: unknown) => walk(x, prefix, seen));
+    }
+  };
+  const ok = Object.entries(capability.responses || {}).find(([code]) =>
+    code.startsWith("2"),
+  );
+  if (ok) walk(ok[1], "", new Set());
+  return out;
+}
+
+/**
+ * Capabilities whose schema describes the ENVELOPE by design.
+ *
+ * Both return mixed entity payloads — global search spans every entity type, a history row
+ * carries whatever changed — so the schema deliberately stops at the wrapper and a
+ * field-level diff is a hundred-line list on every run. Suppressed by name rather than
+ * left to dilute the signal, because a report nobody reads catches nothing.
+ */
+// search_all_projects WAS here and has been removed. It looked envelope-only; the static
+// contract check found seven top-level entity buckets — test_case, test_run, test_plan,
+// project, report, shared_step, project_details — named in `returns` and absent from the
+// resolved schema. A caller reading the contract cannot learn a global search returns a
+// test_case bucket at all. That is under-described, not deliberately terse, and
+// suppressing it here would hide the same gap on every future run.
+const ENVELOPE_ONLY = new Set<string>([]);
+
+/**
+ * Put flat arguments back into the groups bind() expects.
+ *
+ * The probe subagents recorded `probe.arguments` in two shapes — some grouped as
+ * {path_params, query, body}, some flat with the path params as top-level keys beside
+ * `body`. Five payloads were unreplayable for that reason alone, which looked like stale
+ * fixture ids and was really a recording inconsistency: update_test_run carried a body
+ * and no path params at all, edit_project had project_id as a sibling of `body`.
+ *
+ * Fixing it here rather than rewriting the saved payloads keeps them as the probes left
+ * them — they are evidence of what was actually sent — while still letting the replay
+ * judge the contract. A key that matches no declared parameter is left where it is, so a
+ * genuinely unknown field still fails loudly instead of being quietly dropped.
+ */
+function regroup(capability: Capability, args: any): any {
+  const GROUPS = ["path_params", "query", "body"] as const;
+  const stray = Object.keys(args).filter((k) => !GROUPS.includes(k as any));
+  if (stray.length === 0) return args;
+  const out: any = { ...args };
+  const declared = (group: "path_params" | "query" | "body") =>
+    new Set((((capability as any)[group] as any[]) || []).map((p) => p.name));
+  for (const key of stray) {
+    const home = GROUPS.find((g) => declared(g).has(key));
+    if (!home) continue;
+    out[home] = { ...(out[home] || {}), [key]: args[key] };
+    delete out[key];
+  }
+  return out;
+}
+
+/**
+ * Fill a REQUIRED path param the saved payload does not carry, from the fixture pool.
+ *
+ * Two payloads recorded a body and no path params at all — update_test_run and
+ * bulk_update_test_run_test_cases — so they could not be replayed and sat as permanent
+ * "not invoked" rows. Rewriting the saved payloads was the wrong fix: they are evidence of
+ * what the probes actually sent, and editing them destroys that. The pool is the canonical
+ * fixture, so a payload that names no run should replay against the fixture run.
+ *
+ * Only REQUIRED params, only when absent, and only from the pool — a payload that names a
+ * DIFFERENT run keeps its own value, because that choice may have been the point.
+ */
+function fillFromPool(capability: Capability, args: any): any {
+  const required = (capability.path_params ?? []).filter((p) => p.required);
+  if (required.length === 0) return args;
+  const supplied = { ...(args.path_params ?? {}) };
+  const numeric = (p: { name: string; type?: string }) => p.type === "integer";
+  const POOL: Record<string, unknown> = {
+    project_id: pool.project.id,
+    folder_id: pool.readonly.folder,
+    test_case_id: pool.readonly.cases?.[0],
+    test_plan_id: pool.readonly.plan,
+    test_run_id: pool.readonly.run,
+  };
+  let filled = false;
+  for (const param of required) {
+    if (supplied[param.name] !== undefined) continue;
+    let value = POOL[param.name];
+    if (value === undefined) continue;
+    // v1 routes take the integer project id, v2 the PR-NNN form; the pool carries both.
+    if (param.name === "project_id" && !numeric(param)) value = pool.project.identifier;
+    supplied[param.name] = value;
+    filled = true;
+  }
+  return filled ? { ...args, path_params: supplied } : args;
+}
+
+/**
+ * Substitute {{unique}} in a saved payload.
+ *
+ * A payload that CREATES something has to be idempotent or it tests a different code path
+ * on every run after the first. Two were not: create_folder and create_report carried
+ * a fixed name and title, so every replay after the first hit a duplicate and returned a
+ * 400 — which the checker then diffed against the success schema and reported as undeclared
+ * success fields. Both were sent to the product team as drifts; one was withdrawn after
+ * capturing the body, the other would have been.
+ *
+ * The placeholder makes the intent explicit in the payload itself rather than leaving the
+ * next reader to rediscover why a create-shaped payload is unreplayable.
+ */
+function unique(args: any): any {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") return v.replaceAll("{{unique}}", stamp);
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") {
+      return Object.fromEntries(
+        Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, walk(x)]),
+      );
+    }
+    return v;
+  };
+  return walk(args);
+}
+
+const observedTypes: Record<string, Record<string, { type: string; nullable: boolean; sample: string }>> = {};
+const transport = fetchTransport();
+const headers = authHeaders({ username, accessKey }, index.auth);
+
+interface Row {
+  name: string;
+  mode: string;
+  status: number | "skipped" | "bind-error";
+  undeclared: string[];
+  absent: string[];
+  note?: string;
+}
+
+const rows: Row[] = [];
+const entries = Object.entries(
+  (saved.payloads || {}) as Record<string, { verdict?: string; arguments?: any }>,
+);
+
+for (const [name, entry] of entries) {
+  // EVERY saved payload, not just the ones a probe once called DRIFT. That filter read a
+  // verdict recorded at probe time, which goes stale the moment anything is fixed — it hid
+  // list_binned_test_cases for three passes as "not invoked" when the truth was that
+  // nothing had selected it. Verification is not triage: replaying a payload that passed
+  // last week is how you learn it stopped.
+  if (ALL === false && !entry.arguments) continue;
+  const capability = byName.get(name) as Capability | undefined;
+  if (!capability) {
+    rows.push({ name, mode: "?", status: "skipped", undeclared: [], absent: [], note: "not in the current index" });
+    continue;
+  }
+  if (ENVELOPE_ONLY.has(name)) {
+    rows.push({ name, mode: capability.mode, status: "skipped", undeclared: [], absent: [], note: "schema describes the envelope by design — a field diff is noise" });
+    continue;
+  }
+  if (capability.mode !== "read" && !WRITES) {
+    rows.push({ name, mode: capability.mode, status: "skipped", undeclared: [], absent: [], note: "write — rerun with --writes" });
+    continue;
+  }
+  if (SKIP.has(name)) {
+    rows.push({ name, mode: capability.mode, status: "skipped", undeclared: [], absent: [], note: "excluded by --skip" });
+    continue;
+  }
+
+  let bound;
+  try {
+    bound = bind(
+      capability,
+      fillFromPool(capability, regroup(capability, unique(entry.arguments || {}))),
+    );
+  } catch (error) {
+    // A payload that no longer binds is a finding in its own right: either the contract
+    // moved under it, or the saved arguments were never valid.
+    rows.push({ name, mode: capability.mode, status: "bind-error", undeclared: [], absent: [], note: String(error instanceof Error ? error.message : error).slice(0, 160) });
+    continue;
+  }
+
+  const response = await transport(
+    capability.method,
+    `${baseUrl.replace(/\/$/, "")}${bound.path}`,
+    headers,
+    bound.query,
+    bound.body,
+  );
+
+  // TWO DECLARATION SOURCES, MATCHED DIFFERENTLY, because they are different things.
+  // The resolved schema is a tree and compares by PATH — that is what stops a nested
+  // entity's `id` being read as the parent's. `returns` is a flat, pathless convenience
+  // list whose entries legitimately sit at any depth, so it compares by LEAF. Matching
+  // either one path-wise or both leaf-wise produces a confident wrong answer, and this
+  // script has now shipped both mistakes.
+  // ONLY DIFF A SUCCESS BODY AGAINST THE SUCCESS SCHEMA.
+  //
+  // A non-2xx carries an ERROR shape, and comparing it with the 2xx schema reports the
+  // error's own fields as undeclared successes. That is how create_folder was reported
+  // as returning an undeclared `message` — it was a duplicate-name 400 — and it caught
+  // create_report the same way with `details` and `error` off a 400 body. Twice is a
+  // pattern: the fix belongs here rather than in each payload.
+  const succeeded =
+    typeof response.status === "number" &&
+    response.status >= 200 &&
+    response.status < 300;
+  const declaredPaths = succeeded ? declaredFields(capability) : new Set<string>();
+  const declaredLeaves = new Set(capability.returns || []);
+  hollow.clear();
+  const present = succeeded
+    ? pathsOf(response.body, "", new Set(), openObjectPaths(capability))
+    : new Set<string>();
+  const leaf = (path: string) => path.slice(path.lastIndexOf(".") + 1);
+  const valueAt = (root: unknown, path: string): unknown[] => {
+    let nodes: unknown[] = [root];
+    for (const seg of path.split(".")) {
+      const next: unknown[] = [];
+      for (const n of nodes) {
+        const o = Array.isArray(n) ? n[0] : n;
+        if (o && typeof o === "object" && seg in (o as Record<string, unknown>))
+          next.push((o as Record<string, unknown>)[seg]);
+      }
+      nodes = next;
+      if (!nodes.length) return [];
+    }
+    return nodes;
+  };
+  const jsonType = (v: unknown): string =>
+    v === null ? "null" : Array.isArray(v) ? "array"
+      : typeof v === "object" ? "object"
+      : typeof v === "number" ? (Number.isInteger(v) ? "integer" : "number")
+      : typeof v;
+  rows.push({
+    name,
+    mode: capability.mode,
+    status: response.status,
+    undeclared: [...present]
+      .filter((k) => !declaredPaths.has(k) && !declaredLeaves.has(leaf(k)))
+      .sort(),
+    // A CHILD IS NOT ABSENT WHEN ITS PARENT IS. `test_run.issues` comes back as an empty
+    // array on a run with no linked tickets, so `test_run.issues.id` cannot appear — and
+    // reporting the child says the contract is wrong when the fixture simply had nothing
+    // there. It buried the real signal: clone_test_run showed 21 "absent" fields, all
+    // of them children of two empty collections. Only the SHALLOWEST missing path on a
+    // branch is reported, which is the one a reader can act on.
+    absent: [...declaredPaths]
+      .filter((k) => !present.has(k) && !declaredLeaves.has(leaf(k)))
+      .filter((k) => {
+        const parent = k.slice(0, k.lastIndexOf("."));
+        if (!parent) return true;
+        if (!present.has(parent)) return false;
+        // A parent that is null, [] or {} carries no evidence about its children.
+        for (let p: string = parent; p; p = p.slice(0, p.lastIndexOf("."))) {
+          if (hollow.has(p)) return false;
+          if (!p.includes(".")) break;
+        }
+        return true;
+      })
+      .sort(),
+  });
+  if (TYPES_FILE) {
+    const seen: Record<string, { type: string; nullable: boolean; sample: string }> = {};
+    for (const p of rows[rows.length - 1].undeclared) {
+      const vals = valueAt(response.body, p).flatMap((v) => (Array.isArray(v) ? v.slice(0, 1) : [v]));
+      const ts = new Set(vals.map(jsonType));
+      const nonNull = vals.find((v) => v !== null);
+      seen[p] = {
+        type: [...ts].filter((t) => t !== "null").join("|") || "null",
+        nullable: ts.has("null"),
+        sample: JSON.stringify(nonNull ?? null).slice(0, 80),
+      };
+    }
+    observedTypes[name] = seen;
+  }
+}
+
+if (TYPES_FILE) {
+  writeFileSync(TYPES_FILE, JSON.stringify(observedTypes, null, 1));
+  console.log(`observed types for ${Object.keys(observedTypes).length} capabilities -> ${TYPES_FILE}`);
+}
+
+// ---- report ----
+
+const ran = rows.filter((r) => typeof r.status === "number");
+// ANY 2xx, not just 200. bulk_update_test_run_test_cases answers 202 — the bulk change
+// is accepted and applied asynchronously — and a check pinned to 200 filed that success
+// under "non-200" where the reconcile read it as never invoked.
+const clean = ran.filter(
+  (r) => typeof r.status === "number" && r.status >= 200 && r.status < 300 &&
+    r.undeclared.length === 0 && r.absent.length === 0,
+);
+const overReturn = ran.filter((r) => r.undeclared.length > 0);
+const conditional = ran.filter((r) => r.undeclared.length === 0 && r.absent.length > 0);
+
+console.log(`\nreplay: ${entries.length} saved payloads, ${rows.length} selected, ${ran.length} invoked`);
+console.log(`index v${doc.version} build ${doc.build_id}   env ${baseUrl}\n`);
+
+console.log(`CLEAN — contract matches the response exactly: ${clean.length}`);
+for (const r of clean) console.log(`   ${r.name}`);
+
+console.log(`\nRETURNS A FIELD IT DOES NOT DECLARE: ${overReturn.length}`);
+for (const r of overReturn)
+  console.log(`   ${r.name}\n      undeclared: ${r.undeclared.join(", ")}` +
+    (r.absent.length ? `\n      absent    : ${r.absent.join(", ")}` : ""));
+
+console.log(`\nDECLARES A FIELD THE RESPONSE OMITS: ${conditional.length}`);
+console.log(`   (expected where the field is conditional — check the guidance says so)`);
+for (const r of conditional) console.log(`   ${r.name}\n      absent: ${r.absent.join(", ")}`);
+
+const odd = rows.filter(
+  (r) => typeof r.status === "number" && !(r.status >= 200 && r.status < 300),
+);
+if (odd.length) {
+  console.log(`\nNON-200: ${odd.length}`);
+  for (const r of odd) console.log(`   ${r.name}  status ${r.status}`);
+}
+const skipped = rows.filter((r) => r.status === "skipped" || r.status === "bind-error");
+if (skipped.length) {
+  console.log(`\nNOT INVOKED: ${skipped.length}`);
+  for (const r of skipped) console.log(`   ${r.name}  (${r.note})`);
+}
+
+console.log();
+if (overReturn.length > 0) {
+  console.log(`${overReturn.length} capabilit${overReturn.length === 1 ? "y" : "ies"} still return undeclared fields.`);
+  process.exit(1);
+}
+console.log("No capability returns a field it fails to declare.");

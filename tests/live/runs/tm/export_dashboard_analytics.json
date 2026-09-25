@@ -1,0 +1,45 @@
+{
+  "capability": "export_dashboard_analytics",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope — given directly by the task (PR-2005, 29 test cases / 31+ runs / 30 plans)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "project_id": 379335744, "body": { "q": { "type": "csv", "created_at": "all_time" } } },
+      "status": 0,
+      "error": "unknown body: q. accepted: closed_at, created_at, owner, type. q is a wrapper this surface builds for you from each field's json_path — send the fields directly instead of nesting them",
+      "changed": "Stopped nesting under q. The capability's own describeCapability guidance says the wire body is `{q:{...}}`, but the invokeCapability surface auto-builds that wrapper from each field's declared json_path (/q/type, /q/created_at, ...) — so the caller must pass flat fields (type, created_at) and the tool nests them. This is a tooling-layer rejection before any HTTP call was made (status 0), not the live API rejecting a request."
+    },
+    {
+      "n": 2,
+      "arguments": { "project_id": 379335744, "body": { "type": "csv", "created_at": "all_time" } },
+      "status": 200,
+      "error": null,
+      "changed": "Sent type and created_at as flat body fields; invoke succeeded."
+    }
+  ],
+  "probe": {
+    "arguments": { "project_id": 379335744, "body": { "type": "csv", "created_at": "all_time" } },
+    "status": 200,
+    "response_keys": ["export_id", "success"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["success", "export_id"],
+    "json_path": "/q/type, /q/created_at, /q/closed_at, /q/owner (request body, per-field); response is a flat object, no json_path envelope",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "READ-vs-WRITE classification (established before invoking, per task instruction): the registry's mode:\"write\" is correct, not a misclassification of a read-shaped export. The DATA being exported (dashboard analytics: run/issue counts, case-type split, automation stats) is read-only, but the ACT of calling this capability is not — it creates a persistent export record (export_id 11944 this run) and enqueues a background worker job that generates a CSV and uploads it to S3. That is a real side effect independent of the content's read-shape, so classifying the call as a write is correct.\n\nEMAIL CHECK (done before invoking, per instruction): the contract's body accepts only type/created_at/closed_at/owner — no recipient, mail-to, or send flag exists anywhere in this capability. describeCapability's own guidance states delivery is 'the worker uploads the CSV to S3 and pushes the URL over a websocket channel addressed to the requesting user' — not email. So there was no outbound-mail risk to withhold; the full declared parameter surface was exercised (type=csv, created_at=all_time).\n\nFILE/URL HANDLING: this call does NOT return a file or a URL — only export_id (11944), which the capability's own guidance says is a correlation token, not something redeemable: 'the generic export status/download endpoints therefore report pending forever and 404 on download for this export type, and neither is exposed as a capability here.' This is the exact same structurally-unreachable-handle defect shape already flagged for get_report_attachment_url (no capability in the profile consumes an attachment_id) — here export_dashboard_analytics mints an export_id that nothing in the profile can consume either. The actual CSV is delivered out-of-band over a websocket that is entirely outside this MCP surface, so the file's existence, shape, and any row-level data it contains (and thus whether the positional-array bug recurs a fourth time) is UNVERIFIABLE through this API. This response contains no analytics rows at all — no array, no `data[]` — so the count-vs-rows and positional-array-serializer checks that apply to the other analytics/trend reads do not apply to *this* response; they would only be checkable against the CSV itself, which this capability cannot retrieve.\n\nASYNC: the HTTP response is synchronous and immediate (200, ~text 'Export queued successfully' per the optional message field, not observed in this run's actual body), but success:true says nothing about whether the export will actually succeed — per guidance, 'a failure happens later in the background and is only signalled on the websocket.' The response schema declares no status/pending field and no job id beyond export_id itself, so a caller reading only the contract has no way to detect that this is asynchronous, nor any way to poll for completion. This is the same caller-facing blind-spot shape flagged on clone_exploratory_session (a write response that cannot be trusted about its own outcome) — here it is worse, because there is no capability at all (sync or async) that can later confirm success or fetch the result.\n\nDATE-FILTER TRAP (contract-only, not exercised): guidance states owner-only filters silently default to a 12-month window on the closed_at path even though created_at's 'all_time' has no such trap — not tested here since this probe used created_at=all_time explicitly, but worth flagging as a footgun for a caller who sends `owner` alone.\n\nWhat was and was not exercised: exercised type=csv + created_at=all_time (full unfiltered project-wide export, matching this task's instruction to prefer the synchronous/no-recipient path). Did NOT exercise owner or closed_at filters (no need — they don't change the write-vs-read classification or the unreachable-handle finding, and closed_at's silent-1-year-default trap is a filtering nuance, not a delivery-mechanism risk). Did NOT and could not observe the websocket push, the S3 URL, or the CSV's contents/row-shape — entirely out of reach of the MCP capability surface as currently indexed."
+}

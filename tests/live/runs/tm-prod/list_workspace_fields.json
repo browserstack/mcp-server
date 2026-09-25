@@ -1,0 +1,48 @@
+{
+  "capability": "list_workspace_fields",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "BLOCKED",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": false,
+  "setup": [
+    "describeCapability(list_workspace_fields, product=tm, include_responses=all) confirmed the contract: no path_params (workspace-scoped, matches fixture note), query params entity_type/field_source/field_type/q/p/sort_by/sort_order/selected_ids.",
+    "Confirmed general auth/session health by invoking a sibling capability (get_system_field_values, path_params project_id=332537, field_name=status) which returned 200 with real data -- ruling out a broad credentials outage."
+  ],
+  "attempts": [
+    {"mode": "field_source=system, entity_type=TestCase", "query": {"entity_type": "TestCase", "field_source": "system"}, "status": 403, "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}},
+    {"mode": "field_source=custom, entity_type=TestCase", "query": {"entity_type": "TestCase", "field_source": "custom"}, "status": 403, "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}},
+    {"mode": "field_source=all, entity_type=TestCase", "query": {"entity_type": "TestCase", "field_source": "all"}, "status": 403, "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}},
+    {"mode": "entity_type=TestPlan, field_source=all (zero/near-zero candidate)", "query": {"entity_type": "TestPlan", "field_source": "all"}, "status": 403, "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}},
+    {"mode": "entity_type=TestCaseStep, field_source=all (step-custom-fields flag candidate)", "query": {"entity_type": "TestCaseStep", "field_source": "all"}, "status": 403, "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}},
+    {"mode": "retry, field_source=system, entity_type=TestCase (transience check)", "query": {"entity_type": "TestCase", "field_source": "system"}, "status": 403, "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}},
+    {"mode": "no query params (defaults: entity_type=TestCase, field_source=all)", "query": {}, "status": 403, "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}},
+    {"mode": "entity_type=TestResult, field_source=custom (preprod's known-working entity_type)", "query": {"entity_type": "TestResult", "field_source": "custom"}, "status": 403, "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}},
+    {"mode": "field_source=all, p=1 (all defaults except explicit p)", "query": {"field_source": "all", "p": 1}, "status": 403, "body": {"success": false, "error": "This action is not permitted for the user", "data": {"login_url": "https://test-management.browserstack.com/api/v1/auth/start-sso"}}}
+  ],
+  "probe": {
+    "arguments": {"entity_type": "TestCase|TestPlan|TestResult|TestCaseStep", "field_source": "system|custom|all"},
+    "status": 403,
+    "response_keys": ["success", "error", "data"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": [],
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "prod_vs_preprod": {
+    "per_mode": {
+      "field_source=system": {"status": 403, "info": null},
+      "field_source=custom": {"status": 403, "info": null},
+      "field_source=all": {"status": 403, "info": null},
+      "entity_type=TestPlan": {"status": 403, "info": null},
+      "entity_type=TestCaseStep": {"status": 403, "info": null},
+      "entity_type=TestResult": {"status": 403, "info": null}
+    },
+    "conditional_info_still_varies": null,
+    "paging_reliability": null
+  },
+  "notes": "Every combination of entity_type and field_source tried against production returned a uniform 403 'This action is not permitted for the user' with an SSO login_url, including a bare-defaults call and a same-request retry (ruling out transience). This is NOT the same as a get-403-then-fall-back situation: a sibling capability on the same product/token (get_system_field_values, project_id=332537) succeeded with 200 and real data in the same session, so the API credentials and general TM access are healthy -- the block is specific to list_workspace_fields on production. Per the rules for this recheck, an error body is never diffed against the declared success schema, so none of the settle-points (3: conditional info shape, 4: paging reliability, 5: descriptor-serializer shape, 6: duplicate check) could be exercised or confirmed/refuted on prod this pass. Settle-point 1 (declared shape) is confirmed from describeCapability: info is documented as {count, page, page_size, total_pages} with prose 'there is no prev/next' -- identical to the preprod declaration, so the DRIFT-producing prose is unchanged going into this recheck; it just could not be tested against live prod data. Verdict is BLOCKED, not PASS or DRIFT: the capability could not be exercised on production at all in this session, so reproduces_preprod is false only in the narrow sense that the specific preprod info-shape/prev-next contradiction could not be observed here -- it was neither reproduced nor ruled out. This access gap itself is worth flagging to the product/infra team since it blocks any live verification of this capability on prod with current credentials."
+}

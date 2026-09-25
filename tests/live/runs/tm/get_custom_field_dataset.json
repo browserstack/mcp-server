@@ -1,0 +1,82 @@
+{
+  "capability": "get_custom_field_dataset",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Need a custom field id that already has a dataset, so the dataset-read route has something real to fetch. The fixture pool has no custom-field or dataset ids at all.",
+      "source": "invoked",
+      "capability": "list_workspace_fields",
+      "arguments": { "query": { "field_source": "custom", "p": 1 } },
+      "status": 200,
+      "produced": "Page 1 of 31 custom TestCase fields, each carrying dataset_count. Picked id 105915 ('dropdown_field_pnw5i3', field_type dropdown, dataset_count 1, linked_projects_count 1) as a dropdown field likely to hold real option values."
+    },
+    {
+      "step": 2,
+      "why": "list_workspace_fields gives dataset_count but not the actual dataset id(s) — need the field read to get dataset_ids.",
+      "source": "invoked",
+      "capability": "get_custom_field",
+      "arguments": { "path_params": { "id": 105915 } },
+      "status": 200,
+      "produced": "custom_field.dataset_ids = [31196] (also dataset_urls pointing at https://.../api/v2/custom-fields/105915/datasets/31196 — note this hint URL uses a DIFFERENT path/version than the admin-v2 route the target capability actually calls; see notes)."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "custom_fields_id": 105915, "dataset_id": 31196 },
+        "query": { "fetch_options": true }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt, no retry needed"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "custom_fields_id": 105915, "dataset_id": 31196 },
+      "query": { "fetch_options": true }
+    },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "data": {
+        "id": 31196,
+        "custom_field_id": 105915,
+        "group_id": 3452,
+        "future_projects_applicable": 0,
+        "record_status": "active",
+        "created_at": "2026-09-11T06:50:12.000Z",
+        "datasetProjects": "[ {project_id, project:{name,identifier}, name, identifier, id} ]",
+        "options": {
+          "data": "[ {id, group_id, project_id, custom_field_id, dataset_id, option_value, is_default, parent_option_id, record_status, created_at, updated_at} x30 ]",
+          "info": { "page": 1, "page_size": 30, "count": 50, "prev": null, "next": 2 }
+        },
+        "linked_projects": "[ {project_id, project:{name,identifier}, name, identifier, id} ]",
+        "linked_project_count": 1,
+        "link_to_future_projects": false,
+        "linked_to_all_projects": false
+      }
+    }
+  },
+  "contract": {
+    "required": ["custom_fields_id (path, positive int)", "dataset_id (path, positive int)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "data.custom_field_id",
+      "data.group_id",
+      "data.future_projects_applicable",
+      "data.record_status",
+      "data.created_at",
+      "data.datasetProjects (duplicates data.linked_projects' project entries under a differently-shaped, undeclared key)",
+      "data.options.info (page/page_size/count/prev/next — an undocumented pagination block for the options list; the contract's guidance only calls out missing pagination info for linked_projects, never mentions options has its own paging)",
+      "each options row's extra fields beyond a generic object: group_id, project_id, custom_field_id, dataset_id, record_status, created_at, updated_at"
+    ]
+  },
+  "notes": "DRIFT is in the shape of `options`, not its presence: the declared 200 schema types data.options as a bare array (`{type:'array', items:{type:'object'}}`), but with fetch_options=true the live response returns data.options as an OBJECT — {data:[...30 rows...], info:{page,page_size,count:50,prev,next:2}} — not an array. Code written against the declared contract (`data.options.map(...)`) would throw; the real array is one level deeper at data.options.data, and there is a full second, wholly undocumented pagination surface (options.info) alongside the one the guidance does describe for linked_projects. Everything else matched the declared contract exactly: both path ids required as positive ints, fetch_options/​p query params behaved as documented, data.{id,link_to_future_projects,linked_project_count,linked_to_all_projects,linked_projects} all present and correctly nested under data, and linked_projects (1 item, well under the fixed 30-page-size) needed no paging to verify. Single attempt, no retries needed (200 on the first call). Route identification for the routing-eval note: this capability's own path is `/api/v1/admin-v2/settings/custom-fields/{custom_fields_id}/datasets/{dataset_id}` — clearly the admin/workspace-settings surface (same family as get_custom_field_definition, list_custom_field_dataset_options, list_workspace_fields), not the public TestCase-only surface (list_custom_fields, get_custom_field, get_custom_field_values). But the capability NAME alone doesn't signal that: unlike get_custom_field_definition, this one carries no '_definition_' token, so the naming heuristic from the routing eval doesn't fully generalize. Worse, get_custom_field (the public-ish field read) hands back a ready-made `dataset_urls` hint of `/api/v2/custom-fields/105915/datasets/31196` — a different path/version than the admin-v2 route actually used here — so following that in-response hint would lead a caller to the wrong surface entirely. The only reliable signal is the path declared by describeCapability itself (the admin-v2/settings/custom-fields segment), not the capability's name and not any URL the API hands back in a sibling response."
+}

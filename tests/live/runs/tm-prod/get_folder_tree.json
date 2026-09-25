@@ -1,0 +1,61 @@
+{
+  "capability": "get_folder_tree",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Get the full declared contract (params, declared 200 schema, guidance text on group_id/id types, and whether any paging param exists) before invoking.",
+      "source": "describeCapability",
+      "capability": "get_folder_tree",
+      "arguments": { "name": "get_folder_tree", "product": "tm", "include_responses": "all" },
+      "status": "ok",
+      "produced": "path_params: [project_id:int required]; query: [folder_sort_by (enum, comma-separated, validated), shared (boolean, presence-only)] — NO paging/page/per_page param declared anywhere. Declared 200 schema is bare {success: boolean, structure: array<object>} with no per-item properties; the richer field list lives only in the prose `returns` array: success, structure, id, name, parent_id, project_id, group_id, is_automation, cases_count, total_cases_count, sub_folders_count, contents, links. Guidance explicitly states: 'This returns the WHOLE tree in one response and is not paginated — no page or per-page parameter is read', and 'Folder ids in the tree are plain integers, and they are what every other folder capability expects in its path.'"
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 } },
+    "status": 200,
+    "response_keys": ["structure", "success"],
+    "item_shape": {
+      "root_node_example": {
+        "source": "structure[] element for folder 40231630 (\"Automation\", a root folder)",
+        "id": "string, quoted e.g. \"40231630\"",
+        "project_id": "int",
+        "name": "string",
+        "parent_id": "ABSENT on root nodes",
+        "is_automation": "int 0|1",
+        "cases_count": "int (972 observed)",
+        "sub_folders_count": "int (36 observed)",
+        "total_cases_count": "int, observed 0",
+        "contents": "array, always present (even [] on leaf/no-subfolder nodes), recursive same shape",
+        "links": "{ self: string }",
+        "group_id": "ABSENT"
+      },
+      "nested_node_example": {
+        "source": "structure[..].contents[0] = folder 40231631 (\"LCA\"), direct child of 40231630",
+        "id": "string, quoted e.g. \"40231631\"",
+        "project_id": "int",
+        "name": "string",
+        "parent_id": "int, UNQUOTED, value 40231630 — identical id-space value to parent's own quoted string id \"40231630\"",
+        "is_automation": "int 0|1",
+        "cases_count": "int",
+        "sub_folders_count": "int",
+        "total_cases_count": "int, observed 0",
+        "contents": "array, recursive",
+        "links": "{ self: string }",
+        "group_id": "ABSENT"
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": ["group_id"],
+    "undeclared_returned": []
+  },
+  "notes": "Called describeCapability then invokeCapability(get_folder_tree, project_id=332537) against real production project PR-18723. Response: 200, {success:true, structure:[...]}, 211 root folders, 447 total nodes across the tree, sum of all leaf cases_count = 16238 (close to but not exactly the stated 16,267 total — likely fixture drift over time on live prod data, not a capability defect; not scored). (1) PAGING: describeCapability declares NO page/per_page/paging param at all (only folder_sort_by and shared, neither paginates). This is explicitly confirmed by guidance text: 'not paginated — no page or per-page parameter is read.' The real 211-root-folder / 447-node tree for project 332537 came back complete in a single 200 response (ok:true, completed:true, no follow-up page), matching the declared behaviour. Not applicable / working as declared — no drift here. (2) group_id: searched the ENTIRE raw response body (regex over the full JSON text) for the literal string 'group_id' — zero occurrences. It is declared in describeCapability's `returns` list for every node but is absent on all 447 nodes observed, including the root node for folder 40231630 (\"Automation\") and every one of its 36 direct subfolders (e.g. 40231631 \"LCA\"). The declared_missing drift from preprod reproduces exactly at real scale. (3) id vs parent_id type split: reproduces exactly. Folder 40231630 appears as a root entry with id:\"40231630\" (quoted JSON string). The same underlying folder appears as parent_id on its direct child 40231631 (\"LCA\") as parent_id:40231630 (bare, unquoted JSON integer) — identical id-space value, two different JSON types for the same field concept, directly contradicting the capability's own guidance text 'Folder ids in the tree are plain integers.' (4) Counts on folder 40231630's node: cases_count=972 (matches expected direct exactly), sub_folders_count=36 (matches expected exactly), total_cases_count=0 (expected ~1168 if it were meant to represent the recursive/aggregate total). This is a much stronger finding than the ambiguous preprod observation: total_cases_count is 0 on literally ALL 447 nodes in this real, populated tree — including small leaf folders like 9697326 (\"MCP Testing\", cases_count=3, total_cases_count=0) and large single-level folders like 9600935 (\"Shivani Demo- Booking.com\", cases_count=2052, total_cases_count=0). Since it is uniformly zero even on leaf nodes with no children and nonzero cases_count, it cannot be 'sum of descendant folders' cases only' (that theory predicted 0 correctly for pure leaves, but folder 40231630 has 36 nested subfolders with their own cases and still reads 0, and even folder 9600935 — a flat root folder with 2052 direct cases and 0 subfolders — reads 0 instead of reflecting its own cases). The field appears to simply never be populated/computed by this endpoint at all, regardless of aggregation semantics — a functional defect beyond the 'ambiguous contract' preprod treated it as. (5) Overall: the preprod DRIFT verdict reproduces on prod at real scale — group_id remains declared-but-absent, and the id(string)/parent_id(int) type mismatch remains present and contradicts the endpoint's own guidance text. total_cases_count is additionally confirmed broken (always 0) on real populated data, reinforcing rather than resolving the preprod ambiguity."
+}

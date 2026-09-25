@@ -1,0 +1,96 @@
+{
+  "capability": "list_tags",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:11:00Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Re-fetched the contract on the PROD MCP server (describeCapability) rather than assuming the preprod enum still applies. entity_type enum came back identical: test_case, test_run, test_plan, test_recording, shared_step - same five values, same required project_id integer path param, same declared 200 schema ({tags:[{id,name,...}], info:{page,page_size,count,prev,next}}).",
+      "source": "invoked",
+      "capability": "describeCapability",
+      "arguments": { "name": "list_tags", "product": "tm", "include_responses": "all" },
+      "status": 200,
+      "produced": { "entity_type_enum": ["test_case", "test_run", "test_plan", "test_recording", "shared_step"], "success_schema_top_level_keys": ["tags", "info"] }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "entity_type": "test_case", "per_page": 20 } },
+      "status": 200,
+      "changed": "Baseline call against the real prod project (PR-18723, 16,267 cases). Returned real data - 104 test_case tags total, page 1 of 20 shown (AI Generated: entity_count 15535, AI Generated Details: entity_count 13141, etc.). Confirms the endpoint and project_id work as expected on prod."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "entity_type": "test_run", "per_page": 20 } },
+      "status": 200,
+      "changed": "9 test_run tags, single page, all real (Regression, abc, p1, sss, ssss, test tag, testingggg, jfnknqfnqk, tagabc)."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "entity_type": "test_plan", "per_page": 20 } },
+      "status": 200,
+      "changed": "4 test_plan tags, single page (Sprint1, learning, milestone may, sasas)."
+    },
+    {
+      "n": 4,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "entity_type": "shared_step", "per_page": 20 } },
+      "status": 200,
+      "changed": "37 shared_step tags total, page 1 of 20 shown (aatag1-10, bbtag1-5, ggtag1-2, tag1/2/10, ...)."
+    },
+    {
+      "n": 5,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "entity_type": "test_recording", "per_page": 20 } },
+      "status": 500,
+      "error": "Error message: the server returns an error\nHTTP status code: 500\nResponse body: {\"type\":\"server_error\",\"message\":\"Internal Server Error\"}",
+      "changed": "test_recording is one of the five entity_type enum values the contract declares as valid (confirmed fresh from prod describeCapability in setup, not assumed from preprod). It 500s on prod, exactly as it did on preprod. ETag on the error body: W/\"39-eXznx/DumxHmPFvxkGa/Xp237H4\"."
+    },
+    {
+      "n": 6,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "entity_type": "test_recording", "per_page": 20 } },
+      "status": 500,
+      "error": "Error message: the server returns an error\nHTTP status code: 500\nResponse body: {\"type\":\"server_error\",\"message\":\"Internal Server Error\"}",
+      "changed": "Immediate retry, identical request. Same 500, SAME ETag (W/\"39-eXznx/DumxHmPFvxkGa/Xp237H4\") as attempt 5 - deterministic crash, not intermittency, exactly matching the preprod signature (which also produced an identical error-body ETag across retries)."
+    },
+    {
+      "n": 7,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "entity_type": "test_case", "search": "AI Generated", "per_page": 20 } },
+      "status": 200,
+      "changed": "Dedicated check of the declared `search` query param, which a prior probe of another capability had incidentally flagged as non-filtering. On prod, searching 'AI Generated' against the 104-tag test_case vocabulary returned exactly 2 matches ('AI Generated', 'AI Generated Details') with info.count:2 - not the full unfiltered list of 104. search DOES filter here."
+    },
+    {
+      "n": 8,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "entity_type": "test_case", "search": "zzz_nonexistent_xyz_123", "per_page": 20 } },
+      "status": 200,
+      "changed": "Negative control for the search check: a term matching no real tag returned an EMPTY list (tags: [], info.count:0), not the full 104-row list. Confirms search is a real filter on prod, not a no-op - directly refutes the incidental preprod observation for this capability."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "query": { "entity_type": "test_case", "per_page": 20 } },
+    "status": 200,
+    "response_keys": ["tags", "info"],
+    "item_shape": { "id": "integer", "name": "string", "created_at": "string (undeclared, extra)", "updated_at": "string (undeclared, extra)", "entity_count": "integer (undeclared, extra)" },
+    "per_entity_type_table": [
+      { "entity_type": "test_case", "status": 200, "count": 104, "sample_tag": "AI Generated (id 37405524, entity_count 15535)" },
+      { "entity_type": "test_run", "status": 200, "count": 9, "sample_tag": "Regression (id 11497289, entity_count 3)" },
+      { "entity_type": "test_plan", "status": 200, "count": 4, "sample_tag": "Sprint1 (id 38417775, entity_count 1)" },
+      { "entity_type": "shared_step", "status": 200, "count": 37, "sample_tag": "aatag1 (id 39074913, entity_count 1)" },
+      { "entity_type": "test_recording", "status": 500, "count": null, "sample_tag": null }
+    ],
+    "note": "Every readable entity_type (test_case, test_run, test_plan, shared_step) returned real, populated data with the declared {id, name} shape plus undeclared extra fields (created_at, updated_at, entity_count) - unlike the preprod fixture project, which returned empty collections for all of these and left the item shape UNVERIFIED. The response key is 'tags' (matching the declared schema) on every successful call, never 'tag_objects'. entity_type=test_recording alone crashes with a 500, reproduced twice with an identical error-body ETag."
+  },
+  "contract": {
+    "required": ["project_id (integer, path)", "entity_type (string enum: test_case|test_run|test_plan|test_recording|shared_step, query)"],
+    "json_path": "none - GET request, path_param + query only, no request body",
+    "declared_missing": [
+      "entity_type=test_recording: declared as a valid enum value but the endpoint 500s for it unconditionally. Reproduced twice on prod with an identical error-body ETag (W/\"39-eXznx/DumxHmPFvxkGa/Xp237H4\"), matching the deterministic-crash signature already reported on preprod. This is a real, load-bearing contract violation, not sampling noise: one of the five documented valid inputs is unusable on both environments."
+    ],
+    "undeclared_returned": [
+      "Per-tag entries carry created_at, updated_at, and entity_count in addition to the declared id/name - useful, consistently present across all four working entity_types, but not in the formal schema.",
+      "'page' as an alternate spelling of 'p' is documented in the request contract but not exercised here (per_page/implicit p=1 was used throughout)."
+    ]
+  },
+  "notes": "PREPROD vs PROD verdict, side by side:\n\n1) entity_type=test_recording -> 500 'Internal Server Error'. PREPROD: reproduced twice with an identical error-body ETag (deterministic crash) -> routed to the product team as BLOCKED. PROD: REPRODUCES. Same enum value, same crash, same deterministic signature - reproduced twice here too with an identical error-body ETag (W/\"39-eXznx/DumxHmPFvxkGa/Xp237H4\" on both attempts, see attempts 5-6). This is not a preprod-only artifact: it is a real production defect. The prior escalation to the product team is VINDICATED, not an over-escalation - one of the five contract-declared entity_type values is unusable on production for a real project (PR-18723, 16,267 cases), not just an empty fixture. VERDICT: BLOCKED (shallowest missing path: the request cannot complete for a declared-valid input; no success schema to diff against, per the rule against diffing error bodies against the success schema).\n\n2) `search` query param allegedly not filtering. PREPROD: incidental observation from another capability's probe (not list_tags itself), never confirmed with a dedicated test. PROD: REFUTED for list_tags. Two dedicated checks: searching 'AI Generated' against the 104-tag test_case vocabulary returned exactly the 2 matching tags (info.count:2), and a nonsense search term returned an empty list (info.count:0) rather than the full 104. search is a real, working filter on prod for this capability. This is NOT a second instance of the v2-projects-listing pattern (where query/search/name/filter are silently ignored and all 89,102 rows come back regardless) - list_tags's search behaves correctly.\n\n3) Response key allegedly 'tag_objects' instead of the declared 'tags'. PREPROD: same incidental, unconfirmed observation as above. PROD: REFUTED. All four successful entity_type calls (test_case, test_run, test_plan, shared_step) returned the top-level key as 'tags', exactly as describeCapability's 200 schema declares. No 'tag_objects' key was observed anywhere in this probe.\n\nSUMMARY: one defect confirmed live on production data (test_recording 500, escalation was correct), two incidental preprod claims dedicated-checked and refuted for this specific capability on prod (search filters correctly; key is 'tags' not 'tag_objects'). The four working entity_types (test_case:104, test_run:9, test_plan:4, shared_step:37) all match the declared {id,name} shape plus undeclared bonus fields (created_at, updated_at, entity_count)."
+}

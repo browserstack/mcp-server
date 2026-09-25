@@ -1,0 +1,58 @@
+{
+  "capability": "list_test_case_attachments",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:21:06Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope (fixture pool)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    },
+    {
+      "step": 2,
+      "why": "folder scope (fixture pool, __readonly__ folder)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "folder_id": 764093 }
+    },
+    {
+      "step": 3,
+      "why": "route needs the INTEGER test_case_id, not the TC-NNNN identifier; resolved TC-54455 and TC-54456 to their integer ids",
+      "source": "list_folder_test_cases",
+      "capability": "list_folder_test_cases",
+      "produced": { "TC-54455": 1971631, "TC-54456": 1971632 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764093, "test_case_id": 1971631 }
+      },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Well-formed request with the correct integer ids (project, folder, and the case known to carry attachment 1102622); still a bare 500. Retried against a second, sibling test case to check whether the 500 was specific to this one case's data."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764093, "test_case_id": 1971632 }
+      },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Identical bare 500 on TC-54456 (a different case in the same folder). Confirms the failure is not specific to one case's attachment data and fires on any well-formed request, matching the capability's own guidance verbatim. No further attempts made - varying valid ids further would not surface a fix for a pre-serialization handler bug."
+    }
+  ],
+  "probe": { "arguments": {}, "status": 500, "response_keys": [], "item_shape": {} },
+  "contract": {
+    "required": ["project_id", "folder_id", "test_case_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "describeCapability's own guidance already states: 'DOES NOT WORK. Returns a bare 500 on any request. The handler calls a collection method on a value that is a plain array on this path, so it raises before serialising.' This was verified live and holds: two well-formed requests (project_id=379335744, folder_id=764093, test_case_id=1971631 then 1971632 - the latter resolved from TC-54455/TC-54456 via list_folder_test_cases since this v1 route needs integer ids) both returned HTTP 500 with an identical bare body {\"status\":500,\"error\":\"Internal Server Error\"}. This is a SECOND, separate defect beyond the 500 itself: describeCapability declares a structured error envelope for its 500 response ({success:false, error:{code, message, details}}), but the live body is bare - no `success`, no `error` object, no `code`/`message`/`details` fields at all, just top-level `status` and `error` (a string, not an object). The response shape does not match the capability's own declared error schema. Per the empty-case rule, since only 500s were ever observed, `declared_missing` and `undeclared_returned` are left empty - a failure body says nothing about whether the declared 200 shape (attachments[].{id, filename, content_type, byte_size}) is correct; that remains unverified. Guidance also states the v1 surface has no url/download field and folder_id is not used for lookup (only project + test_case_id) - neither could be confirmed since no 200 was ever reached. No write or destructive capability was used; list_folder_test_cases (read) was used only to resolve TC-NNNN identifiers to the integer ids this route requires."
+}

@@ -1,0 +1,50 @@
+{
+  "capability": "list_group_users",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [],
+  "attempts": [
+    {
+      "attempt": 1,
+      "arguments": {
+        "query": {}
+      },
+      "result": "success",
+      "status": 200
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "query": {}
+    },
+    "status": 200,
+    "response_keys": ["users", "myself", "success", "info"],
+    "item_shape": [
+      "id",
+      "browserstack_user_id",
+      "full_name",
+      "email",
+      "group_id",
+      "onboarded",
+      "reports_and_notification_enabled"
+    ]
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": [
+    "No required params exist for this capability at all: no path_params, and every query param (q, q[email], q[id], p) is optional. Scope is derived purely from the caller's session/group — there is no project param, confirming the context note that this route (/api/v1/group/users-v2) is group-scoped with no project involved.",
+    "Invoked with no arguments (default page 1). Returned exactly the 12 users of group 2615, including known user id 2522 ('ing', probe-user@example.invalid) as expected. info.count = 12 and the actual row count of `users` = 12 — no count-vs-rows disagreement here.",
+    "Response matched the declared 200 schema exactly: all four required top-level keys present (success, users, myself, info), every users[] row has exactly the seven declared fields (no more, no less), myself has the reduced shape (id, full_name, email, reports_and_notification_enabled — no browserstack_user_id, matching this capability's own declared myself schema), and info has all five declared pagination fields (page, page_size, count, prev, next). No undeclared fields returned, nothing declared-required was missing.",
+    "SPECIFIC INTEREST — closing the tracked question on the three user-listing capabilities (list_group_users, list_project_users, list_users):",
+    "list_group_users (this probe) returned the identical 12-user set, in the identical row shape (id, browserstack_user_id, full_name, email, group_id, onboarded, reports_and_notification_enabled), as list_project_users's already-probed result — same users, same myself shape, same info/pagination block, same query-param surface (q / q[email] / q[id] / p). The only structural difference between these two capabilities is which path carries a project_id: list_project_users requires one (as an access gate only, per its own guidance: 'despite the path, this is GROUP-scoped ... never filters by the project in the URL'), while list_group_users requires no params whatsoever and is reached without ever naming a project. Functionally they are the same query against the same group-wide user list — the project_id on the sibling capability is decorative.",
+    "list_users is the one capability of the three that is genuinely distinct in mechanism, not just in path: it takes a required project_id (also an access gate, not a filter — 'the returned list is not filtered to this project's members'), but unlike the other two it has NO q/q[email]/q[id]/p search-or-paginate surface at all, returns the full account's active users unpaginated in one response (alphabetical by full_name), and omits the info block entirely. Its own guidance even cross-references the other two: 'For project membership with roles use search_project_users; for a paged, name-filterable list of account users use list_project_users' — implicitly treating list_project_users (and by the finding above, list_group_users) as the 'real' search/paginate tool and itself as the simple unpaginated fetch.",
+    "Net: list_group_users and list_project_users are unlabelled near-duplicates — identical params, identical response contract, identical group-wide result set, differing only in which cosmetic path segment (group vs project) is used to reach them. list_users is a real third variant (unpaginated, unsearchable, project_id as gate) but returns overlapping data from the same underlying group. None of the three capability entries carries any 'preferred' or 'deprecated' marker distinguishing them — this is exactly the unlabelled-near-duplicate pattern already tracked elsewhere in this index (four such pairs open before this one).",
+    "Contrast worth keeping: search_group_tags proved GENUINELY group-scoped when probed (31 group tags vs 3 project tags for the same project) — a real, verifiable behavioral difference from its project-scoped sibling. The user-listing trio shows the opposite: list_group_users vs list_project_users's scope distinction is nominal only (both return the identical group-wide set regardless of the project named in the path), so the 'scope' implied by a capability's name/path is not reliable and must be verified per-capability rather than assumed from naming."
+  ]
+}

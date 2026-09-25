@@ -1,0 +1,80 @@
+{
+  "capability": "create_folder",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T04:33:52Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Fixture pool supplies the write target directly: __scratch__ folder (int 764138) under project PR-2005 (int 379335744). No invocation needed to obtain these ids.",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "project_id": "PR-2005", "parent_folder_id": 764138 },
+      "status": null,
+      "produced": { "folder_id": 764138, "name": "__scratch__" }
+    },
+    {
+      "step": 2,
+      "why": "Create a second disposable child folder under __scratch__ to serve as a ready-made move destination for the sibling move_folder probe, saving it a prerequisite.",
+      "source": "invoked",
+      "capability": "create_folder",
+      "arguments": { "path_params": { "project_id": "PR-2005" }, "body": { "name": "__mcp-probe-movetarget-2026-09-18T04-31-51Z", "parent_id": 764138 } },
+      "status": 200,
+      "produced": { "id": 764828, "name": "__mcp-probe-movetarget-2026-09-18T04-31-51Z", "parent_id": 764138 }
+    },
+    {
+      "step": 3,
+      "why": "Verify (by re-reading, not global search) that both the probe folder and the move-target folder actually exist as children of __scratch__ after creation.",
+      "source": "invoked",
+      "capability": "list_folder_contents",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764138 } },
+      "status": 200,
+      "produced": {
+        "self.sub_folders_count": 2,
+        "folders": [
+          { "id": 764827, "name": "__mcp-probe-folder-2026-09-18T04-31-22Z", "parent_id": 764138, "cases_count": 0, "sub_folders_count": 0 },
+          { "id": 764828, "name": "__mcp-probe-movetarget-2026-09-18T04-31-51Z", "parent_id": 764138, "cases_count": 0, "sub_folders_count": 0 }
+        ]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "body": { "folder": { "name": "__mcp-probe-folder-2026-09-18T04-31-22Z", "parent_id": 764138 } }
+      },
+      "status": null,
+      "error": "unknown body: folder. accepted: attachments, description, name, parent_id",
+      "changed": "Removed the 'folder' wrapper object and passed name/parent_id as flat top-level keys in body, matching each field's own declared 'name' (name, description, parent_id, attachments) rather than the json_path nesting (/folder/name, /folder/parent_id, ...)."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005" },
+      "body": { "name": "__mcp-probe-folder-2026-09-18T04-31-22Z", "parent_id": 764138 }
+    },
+    "status": 200,
+    "response_keys": ["success", "folder"],
+    "item_shape": {
+      "folder.id": "integer (764827)",
+      "folder.name": "string, exact echo of sent value",
+      "folder.description": "null (never set)",
+      "folder.parent_id": "integer (764138)",
+      "folder.cases_count": "null -- contract declares type integer with no nullable flag",
+      "folder.sub_folders_count": "null -- contract declares type integer with no nullable flag",
+      "folder.attachments": "absent (contract: present only when the folder has attachments -- consistent, none set)",
+      "folder.links.sub_folders": "string path, matches declared shape",
+      "folder.urls.self": "string path, matches declared shape"
+    }
+  },
+  "contract": {
+    "required": ["name (body)", "project_id (path, PR-NNN pattern)"],
+    "json_path": "Declared body fields are name (/folder/name), description (/folder/description), parent_id (/folder/parent_id), attachments (/folder/attachments) -- i.e. the contract's json_path metadata describes every body field as nested one level under a 'folder' key on the wire.",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "CREATED: folder id 764827, name '__mcp-probe-folder-2026-09-18T04-31-22Z', parent_id 764138 (__scratch__), project PR-2005 / int 379335744. A second disposable folder, id 764828 name '__mcp-probe-movetarget-2026-09-18T04-31-51Z', was also created as a sibling under 764138 specifically to serve as a move destination for move_folder -- no further prerequisite needed for that sibling. rename_folder's sibling can operate directly on 764827.\n\nWORKING ARGUMENTS (what actually succeeded): path_params {project_id: 'PR-2005'} (the v2 PR-NNN string form -- never tried the numeric form since PR-2005 worked immediately, consistent with the path_param's declared pattern ^PR-\\\\d+$), body {name: <string>, parent_id: <int>} as FLAT top-level keys. This is the exact set of field names the contract's body parameter list itself declares (name, description, parent_id, attachments) -- but is NOT what a literal reading of each field's accompanying json_path (/folder/name, /folder/parent_id, ...) implies about wire shape.\n\nTHE DRIFT, exactly as the batch asks to check: attempt 1 built the body by nesting every field one level under 'folder' -- {folder: {name, parent_id}} -- mirroring the json_path convention literally (the same convention that, for the v1 twin create_root_folder, WAS the real wire shape the backend required). For create_folder this nested form was REJECTED outright, and not even by the downstream API: invokeCapability's own body-key validator refused it before any HTTP call was made, with the verbatim error 'unknown body: folder. accepted: attachments, description, name, parent_id.' Attempt 2 removed the wrapper and sent the four fields flat, matching their own declared parameter names exactly, and that succeeded (200, folder created, verified present afterward).\n\nSo: the declared body shape did NOT work as a nested object matching its own json_path annotations on the first attempt -- that construction was flatly rejected. It DID work when built from the contract's literal parameter names (name, description, parent_id, attachments) used as flat top-level body keys, ignoring json_path as call-shape guidance. This is the inverse problem from the v1 twin's defect (there, the flat declared shape was rejected by the real API and a nested nested nested wrapper was required; here, a nested wrapper inferred from json_path is rejected outright and the flat declared parameter names are what the surface actually accepts) -- but it is squarely the same class of finding: a contract whose json_path metadata, taken as call-shape guidance, leads to a rejected request. create_folder does NOT reproduce the v1 defect's specific symptom (it is not broken/unusable -- the correctly-flat shape works cleanly), but the json_path field is misleading as a guide to what invokeCapability's body argument should look like, and a caller who trusted it literally (as I did on attempt 1) is sent to a dead end first.\n\nADDITIONAL RESPONSE-FIELD DRIFT (declared vs actual, per the batch's standing instruction to check every field both directions): the create response's folder.cases_count and folder.sub_folders_count are declared as plain (non-nullable) type integer in the response schema, but the live response returned null for both on the freshly created folder (id 764827). Notably, this is inconsistent with the SAME folder read moments later via list_folder_contents, which reported cases_count: 0 and sub_folders_count: 0 (not null) for that same id -- so two endpoints disagree on how to represent 'a brand new folder with nothing in it' (null vs 0) for the identical object, and the create response itself violates its own declared (non-nullable) type. All other declared response fields (id, name, description, parent_id, links.sub_folders, urls.self) matched their declared shapes exactly; no undeclared/extra fields were returned beyond the documented envelope."
+}

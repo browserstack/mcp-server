@@ -1,0 +1,89 @@
+{
+  "capability": "get_template",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "id": 1164 } },
+    "status": 200,
+    "response_keys": ["success", "template"],
+    "item_shape": {
+      "description_fields_system_example": {
+        "id": 17876,
+        "field_category": "description",
+        "custom_field_id": null,
+        "system_field_id": 1,
+        "order": 1,
+        "is_mandatory": false,
+        "field_data": {
+          "id": 1,
+          "field_name": "Title",
+          "field_type": "string",
+          "system_name": "title",
+          "optional": false,
+          "created_at": "2025-05-02T15:57:28.000Z",
+          "updated_at": "2025-05-02T15:57:28.000Z"
+        }
+      },
+      "properties_fields_system_example": {
+        "id": 17888,
+        "field_category": "properties",
+        "custom_field_id": null,
+        "system_field_id": 16,
+        "order": 13,
+        "is_mandatory": false,
+        "field_data": {
+          "id": 16,
+          "field_name": "Requirements",
+          "field_type": "dropdown",
+          "system_name": "requirements",
+          "optional": false,
+          "created_at": "2025-05-02T15:57:28.000Z",
+          "updated_at": "2025-05-02T15:57:28.000Z"
+        }
+      },
+      "properties_fields_custom_example": {
+        "id": 1000896,
+        "field_category": "properties",
+        "custom_field_id": 104762,
+        "system_field_id": null,
+        "order": 19,
+        "is_mandatory": false,
+        "field_data": {
+          "id": 104762,
+          "group_id": 3452,
+          "project_id": null,
+          "entity_type": "TestCase",
+          "field_type": "field_string",
+          "field_name": "CF_x3ckvk",
+          "default_value": null,
+          "system_name": "CF_x3ckvk",
+          "is_required": true,
+          "is_bulk_editable": true,
+          "placeholder": "Value_3wesrj",
+          "record_status": "active",
+          "is_filterable": true,
+          "parent_custom_field_id": null,
+          "created_at": "2026-09-03T15:54:18.000Z",
+          "updated_at": "2026-09-03T15:54:18.000Z",
+          "field_type_raw": "string"
+        }
+      },
+      "step_fields": []
+    }
+  },
+  "contract": {
+    "required": ["id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "field_data.field_type_raw is documented as 'the raw numeric type' but is actually a string type-name (\"string\", \"date\", \"dropdown\", \"multi_dropdown\", \"url\"), never a number, for every custom field observed on both templates",
+      "field_data (custom fields) carries 12 keys the contract never enumerates: group_id, project_id, entity_type, default_value, is_required, is_bulk_editable, placeholder, record_status, is_filterable, parent_custom_field_id, created_at, updated_at",
+      "field_data (system fields) carries keys the contract never enumerates either: system_name, optional, created_at, updated_at (contract only vaguely says field_data is 'the underlying field definition')"
+    ]
+  },
+  "notes": "describeCapability declares a rich, non-thin 200 schema (not a passthrough) — path_params.id (integer, required) is the only input, no query/body/json_path. Both invokes succeeded on the first attempt (no retries needed): id=1164 'Test Case Steps' and id=1664 'Test Case BDD', both real system templates from the fixture pool. Confirms the earlier batch's core facts on 1164: description_fields system ids [1,2,3,4,8,9], properties_fields system ids [10,11,12,13,14,15,16] plus exactly 30 custom field ids, and is_mandatory is false on every single mapping row on both templates (Title/Attachments/Owner/Requirements included), with field_data.optional false for those same system fields on both templates — so the 'nothing is non-removable' finding replicates across a second template, ruling out a one-record fluke. 1664 additionally carries system_field_id 5/6/7 (Background/Features/Scenario, all gherkin type) in its description_fields in place of just id 4 on 1164 — expected, since BDD templates model additional description sections; step_fields is [] on both (workspace has no step custom fields enabled), matching the contract's 'always empty array, key always present' note. New since the earlier batch: field_count is null on BOTH templates now (previously known as 45/47) — this is NOT itself a contract violation, since the schema explicitly allows field_count nullable 'when the count was not computed for this response', and get_template appears to simply never compute it (list_templates presumably does) — but it does mean the earlier-recorded 45/47 numbers should not be relied on as this endpoint's output. project_count is 1830 on both (not null), matching the 'non-null when workspace-wide count computed' branch. The real drift, and the reason for the DRIFT verdict rather than PASS: (1) the contract makes one specific, checkable claim about field_data — that field_type_raw carries 'the raw numeric type' — and this is factually wrong on every custom field in both responses; field_type_raw is always a string type-name (string/date/dropdown/multi_dropdown/url), never numeric, while the human-readable name lives in field_type (e.g. field_type: \"field_string\", field_type_raw: \"string\" — both strings, neither numeric). (2) field_data itself is left almost entirely unenumerated by the contract (just 'the underlying field definition... for custom fields the type is a name with the raw numeric type alongside it'), yet in practice it is a large, asymmetric object: system fields carry 7 keys, custom fields carry 17, including several with real semantic weight the contract never previews — notably field_data.is_required, which was true on custom field CF_x3ckvk (id 104762) on BOTH templates while the mapping-level is_mandatory for that same row was false. That is a second, more consequential thing the earlier batch's 'nothing is non-removable' framing could miss if someone only reads is_mandatory: a custom field can independently declare itself required via field_data.is_required, and the contract's field_data description gives no hint this key exists or matters for editing. Also observed (informational, not a discrepancy): the 30 custom fields are identical by custom_field_id across both templates 1164 and 1664, just with per-template mapping ids/order — these are account-wide custom fields shared across all TestCase templates, consistent with is_system templates being account-wide (project_count 1830 on both). Review & Approve fields (reviewers, review status) were absent from properties_fields on both, consistent with the contract's guidance that this surface filters them even when stored — but per that same guidance this is unverifiable proof of filtering vs. genuine absence, since we cannot see the templates' Review & Approve config from any other capability without invoking a write. No setup/prerequisite calls were needed: both template ids came straight from the fixture pool (1164, 1664) and get_template takes only the path id, so nothing else had to be built or verified first."
+}

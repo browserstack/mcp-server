@@ -1,0 +1,119 @@
+{
+  "capability": "list_entity_filter_details",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:12:11Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Project scope for every call below.",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "Real folder ids to resolve under q[folder_ids].",
+      "source": "pool",
+      "capability": null,
+      "produced": { "folder_ids": [764093, 764138], "names": { "764093": "__readonly__", "764138": "__scratch__" } }
+    },
+    {
+      "step": 3,
+      "why": "Resolve real numeric ids for status/priority/case_type options configured on this project (the endpoint under test only echoes ids back as objects -- it does not enumerate them).",
+      "source": "invoked",
+      "capability": "get_system_field_values",
+      "arguments": { "path_params": { "project_id": 379335744, "field_name": "status|priority|case_type" } },
+      "status": 200,
+      "produced": {
+        "status_id": 318605,
+        "status_name": "Active",
+        "priority_id": 318591,
+        "priority_name": "Medium",
+        "case_type_id": 318599,
+        "case_type_name": "Other"
+      }
+    },
+    {
+      "step": 4,
+      "why": "Resolve a real owner user id by reading the two known fixture cases (TC-54455, TC-54456) in folder 764093 with required[fields]=owner.",
+      "source": "invoked",
+      "capability": "list_folder_test_cases",
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764093 }, "query": { "required[fields]": "owner,priority,status,case_type" } },
+      "status": 200,
+      "produced": { "owner_id": 2522, "owner_email": "probe-user@example.invalid", "owner_full_name": "ing" }
+    },
+    {
+      "step": 5,
+      "why": "Resolve real test-case tag names for q[test_case_tags] (must be a JSON-encoded array of names, not ids, per the contract).",
+      "source": "invoked",
+      "capability": "list_test_case_tags",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": { "tags": ["__mcp-probe-tag-20260918a-renamed", "mcp-probe", "probe-update"] }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "entity": "test-cases" },
+        "query": {
+          "q[status]": "318605",
+          "q[priority]": "318591",
+          "q[case_type]": "318599",
+          "q[folder_ids]": "764093,764138",
+          "q[owner]": "2522",
+          "q[test_case_tags]": "[\"mcp-probe\",\"probe-update\"]"
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "No retry needed -- succeeded on the first attempt using ids resolved in setup steps 3-5."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "entity": "test-cases" },
+      "query": {
+        "q[status]": "318605",
+        "q[priority]": "318591",
+        "q[case_type]": "318599",
+        "q[folder_ids]": "764093,764138",
+        "q[owner]": "2522",
+        "q[test_case_tags]": "[\"mcp-probe\",\"probe-update\"]"
+      }
+    },
+    "status": 200,
+    "response_keys": ["success", "filter_details"],
+    "item_shape": {
+      "filter_details_keys_present": ["priority", "test_case_tags", "automation_status", "created_at", "updated_at", "status", "case_type", "custom_fields", "owner", "folders"],
+      "priority": [{ "id": 318591, "entity_type": "TestCase", "field_name": "priority", "field_value": "Medium", "internal_name": "medium" }],
+      "status": [{ "id": 318605, "entity_type": "TestCase", "field_name": "status", "field_value": "Active", "internal_name": "active" }],
+      "case_type": [{ "id": 318599, "entity_type": "TestCase", "field_name": "category", "field_value": "Other", "internal_name": "other" }],
+      "test_case_tags": ["mcp-probe", "probe-update"],
+      "owner": [{ "id": 2522, "browserstack_user_id": 6013, "full_name": "ing", "email": "probe-user@example.invalid", "group_id": 2615, "onboarded": 1, "reports_and_notification_enabled": true }],
+      "folders": {
+        "folder_tree_item": { "id": 764093, "parent_id": null, "sub_folders_count": 0, "name": "__readonly__", "folder_path": "/764093/", "selected_all": true, "ancestors": [], "contents": [] },
+        "flat_folders_item": { "id": 764093, "parent_id": null, "sub_folders_count": 0, "name": "__readonly__", "folder_path": "/764093/", "selected_all": true, "ancestors": [] },
+        "extra_top_level_keys": ["select_all_parent_ids", "partial_selected_parent_ids", "only_selected_parent_ids", "only_child_selected_parent_ids"]
+      },
+      "unrequested_keys_present_anyway": { "automation_status": null, "created_at": null, "updated_at": null, "custom_fields": {} }
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "entity (path, enum: test-cases | trtc | test-runs -- test-plans is route-legal but handler-rejected with 400, and is also rejected client-side by the MCP tool's own enum before it can even reach the server)"],
+    "json_path": null,
+    "declared_missing": [
+      "colour -- declared as a REQUIRED property on every priority/status/case_type item (shared status-value shape), but absent from all three in the actual response."
+    ],
+    "undeclared_returned": [
+      "entity_type -- present on every priority/status/case_type item, not in the declared schema for that shared shape.",
+      "folders.folder_tree[] and folders.folders[] items -- actual shape is {id, parent_id, sub_folders_count, name, folder_path, selected_all, ancestors, contents(tree only)}; the declared schema instead specifies {id, project_id, group_id, name, is_automation, sub_folders_count, links.self, cases_count, total_cases_count}. None of project_id/group_id/is_automation/links/cases_count/total_cases_count appeared, and none of parent_id/folder_path/selected_all/ancestors/contents are declared. This is not a couple of extra fields -- it is a different folder-row shape entirely.",
+      "folders.select_all_parent_ids, folders.partial_selected_parent_ids, folders.only_selected_parent_ids, folders.only_child_selected_parent_ids -- four top-level keys under filter_details.folders with no mention anywhere in the declared schema.",
+      "automation_status, created_at, updated_at, custom_fields -- returned as null/{} in the body even though none of q[automation_status]/q[created_at]/q[updated_at]/q[custom_fields] were sent. This directly contradicts the capability's own guidance ('It returns only the keys you actually passed under q... Keys absent from the request are absent here') and the 200 description ('only the keys you supplied under q are present; an empty q yields filter_details:{}'). Every unrequested filter key is present anyway (just empty/null), not absent."
+    ]
+  },
+  "notes": "Additional entity coverage beyond the representative test-cases probe above (all reads, not scored against the representative probe.status): entity=trtc with q[assignee]=2522 -> 200, resolved correctly (filter_details.assignee=[{...owner-shaped user...}]); entity=trtc with q[last_executed_by]=2522 -> 200, resolved correctly; entity=trtc with q[folder_ids]=764093,764138 alone -> 400 {success:false, message:'The API request is invalid or improperly formed'} -- folder_ids resolution appears entity-restricted (works for test-cases and test-runs, breaks for trtc), which the contract's per-entity guidance never mentions (it only documents owner/reviewers/assignee/last_executed_by as entity-restricted, not folder_ids). entity=trtc with assignee+last_executed_by+folder_ids together also 400'd, consistent with folder_ids being the failing param. entity=test-runs with q[owner]=2522 and q[folder_ids]=764093,764138 -> 200, both resolved fine, same folders shape drift as above. entity=test-plans could not be probed at all: the invokeCapability tool itself enforces the three-value enum client-side ({'ok':false,'error':\"'entity' must be one of: test-cases, trtc, test-runs\"}), so the contract's own documented 400-from-the-handler behaviour for test-plans is unreachable through this MCP surface -- a second, tool-level gap layered on top of the route/handler disagreement the contract already flags.\n\nSPECIAL INTEREST -- project vs filter classification: From what the capability actually does, 'project' looks wrong and 'filter' is the closer fit, though neither is a great single label. Reasoning: (1) project_id is present only as a mandatory SCOPE parameter -- true of nearly every v1 TM endpoint (folders, test cases, custom fields, tags all take it) -- and the response carries nothing about the project itself (no name, settings, membership). Nothing here is about the project as a subject. (2) The capability's entire purpose, per its own intent text, is 'so a saved filter can be rendered' -- it is explicitly in service of rendering a filter's chip/label state, which is exactly what the name says (entity_filter_details). (3) Behaviourally it is a pure echo/hydration endpoint: send an id under q[whatever], get back the matching display object; send nothing, get back filter_details:{} (or, as observed, a handful of null/empty placeholder keys). It resolves across MANY different underlying entities in a single call -- status, priority, case_type, folder, user (four different user-role keys depending on entity), tags, custom_fields, result_custom_fields, configurations -- so it does not belong to any one of those entities either (it is not really a 'folder' capability just because it can resolve folder ids). Given the choice actually on offer between 'project' and 'filter', 'filter' is the substantially better match: a caller who has a saved filter's raw id list and wants to render it is precisely the caller who would search entity:'filter' for help, and they currently cannot reach this capability that way (confirmed separately: entity:'filter' search returns exactly the five filter CRUD capabilities and omits this one). 'project' as the classification undersells what this does and overweights a parameter every sibling endpoint also requires."
+}

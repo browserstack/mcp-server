@@ -1,0 +1,93 @@
+{
+  "capability": "list_test_plan_test_runs_by_integer_id",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "This v1 route addresses the plan by INTEGER id, not TP-NNN. Resolve TP-1616's integer id (and confirm the pool's expected active-run count / sub-plan count) before probing.",
+      "source": "resolved",
+      "capability": "list_test_plans_by_integer_id",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"p": 1}},
+      "status": 200,
+      "produced": {"TP-1616": {"id": 48283, "test_runs_count": {"active": 1, "closed": 0}, "sub_plans_count": 14}},
+      "notes": "Confirmed TP-1616 = integer id 48283, test_runs_count.active = 1, sub_plans_count = 14, matching the pool description. TP-1621 (id 48300, __readonly__) was also visible on this same page with test_runs_count {active:0, closed:0} — confirms the empty-case warning: that plan genuinely has zero linked runs, so it was not used as the probe subject. This same listing call also incidentally shows the count-vs-rows check for ITS OWN envelope: info.count = 15 matches the 15 rows actually returned on this page, while the separate project-wide count.active = 29 is a different, intentionally page-independent total — no desync observed here."
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48283}, "query": {"p": 1}},
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "test_plan_id": 48283}, "query": {"p": 1}},
+    "status": 200,
+    "response_keys": ["success", "test_runs", "info", "count"],
+    "item_shape": {
+      "id": "TR-9061",
+      "identifier": "TR-9061",
+      "uuid": 17574995,
+      "name": "MCP capability probe fixture run (link_entities_to_jira_issue)",
+      "description": "",
+      "run_state": "new_run",
+      "active_state": "active",
+      "owner": null,
+      "assignee": null,
+      "environment": "",
+      "overall_progress": null,
+      "overall_progress_by_status_id": {"318615": {"count": 1, "result_status": {"id": 318615, "field_value": "Untested", "internal_name": "untested", "field_name": "status", "colour": "#E5E7EB"}}},
+      "test_cases_count": 1,
+      "tags": [],
+      "is_automation": false,
+      "is_dynamic": 0,
+      "project_id": 379335744,
+      "test_plans": [],
+      "configurations": [],
+      "metadata": {"test_plan_error": "PLAN_LINKED"},
+      "assignee_imported": null,
+      "links": {},
+      "observability_url": "https://observability.browserstack.com/builds/d495b92739315c71a27a28b976139ce58f7b6bf5",
+      "created_at": "2026-09-17T10:43:25.885Z",
+      "updated_at": "2026-09-18T05:06:07.000Z"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "test_plan_id (path, integer)"],
+    "json_path": "N/A — GET with only path_params (project_id, test_plan_id) and query (p); no request body",
+    "declared_missing": [
+      "test_runs[].type — declared string (example 'TestRun'); absent entirely from the actual row.",
+      "test_runs[].self_ui_link — declared string; absent entirely from the actual row (same depth as `type`, so both are reported — neither sits inside another missing path)."
+    ],
+    "undeclared_returned": [
+      "test_runs[].attachments (null)",
+      "test_runs[].created_by (null)",
+      "test_runs[].updated_by (null)",
+      "test_runs[].closed_at (null)",
+      "test_runs[].closed_by (null)",
+      "test_runs[].observability_id (string, duplicates the numeric part of observability_url)",
+      "test_runs[].build_meta (object: id, name, creationType, buildNormalisedName, build_number) — none of this is in the declared schema or the capability's `returns` list."
+    ],
+    "type_mismatches": [
+      "test_runs[].project_id — declared type string, actual is a bare JSON integer (379335744, not \"379335744\").",
+      "test_runs[].is_dynamic — declared type boolean, actual is the integer 0. (Same underlying field the v2 sibling documents as inconsistently typed — but v2 nests it at filter_test_cases.is_dynamic while v1 keeps it top-level; v1's own schema still claims plain boolean, so this is a real violation of v1's own contract, not just a cross-version note.)",
+      "test_runs[].owner — declared non-nullable integer, actual null.",
+      "test_runs[].assignee — declared non-nullable object ({id, browserstack_user_id, full_name, group_id, onboarded}), actual null.",
+      "test_runs[].overall_progress — declared non-nullable object (untested/passed/retest/failed/blocked/skipped/in_progress), actual null. The capability's own guidance calls this field 'legacy' and points at overall_progress_by_status_id as the real rollup, which WAS populated — so the null is expected in spirit, but the schema itself never marks the field nullable.",
+      "test_runs[].assignee_imported — declared boolean, actual null."
+    ],
+    "content_omission": [
+      "test_runs[].test_plans is declared as an array of {id, name} and came back as [] even though this very row was fetched BY its link to plan 48283 (TP-1616) — the run is definitively linked, yet the field that should show that link is empty. This is the v1 analogue of the defect the v2 sibling already documents explicitly ('test_plan absent from every row of the plan-scoped listing'): v1 keeps the key present but empties it instead of omitting it, same underlying gap."
+    ],
+    "unverified": [
+      "test_runs[].configurations, test_runs[].tags element shapes — only one row exists in the pool and both came back empty; array-of-object vs array-of-primitive could not be checked against a real element.",
+      "test_runs[].links.self / links.detail — declared object with two string properties, but neither is required by the schema; the actual row returned links: {} (empty object), which is schema-valid but never exercises those two keys."
+    ]
+  },
+  "notes": "PASS on the endpoint's core function (200, real test_runs row, correct pagination/count envelope) but DRIFT on the row contract: two declared fields (type, self_ui_link) never appear, seven undeclared fields do (attachments/created_by/updated_by/closed_at/closed_by/observability_id/build_meta), and six fields disagree on type or nullability with the declared schema (project_id string-vs-int, is_dynamic boolean-vs-int, owner/assignee/overall_progress/assignee_imported non-nullable-vs-null). Confirmed patterns: (1) unfalsifiable {type:object} — metadata is typed as a bare object with no sub-schema and matched trivially; (2) count-vs-rows disagreement — checked and NOT present here: info.count=1, count={active:1,closed:0}, and exactly 1 row returned, all consistent (the setup list_test_plans_by_integer_id call also showed a consistent info.count=15 against 15 rows on its own page). No container mismatch (test_runs is correctly an array) and no error-envelope drift observed (single attempt succeeded, so no error body was produced to compare). COUNT-VS-ROWS check done deliberately: re-invoked with include_sub_test_plan_runs=true (TP-1616/48283 has 14 sub-plans, so this is the direct analogue of list_test_plans_by_integer_id's include_sub_plans desync) — response was byte-identical to the include_sub_test_plan_runs=false call (same 1 row, info.count=1, count={active:1,closed:0}). No desync observed, but only because all 14 sub-plans genuinely have zero linked runs in this pool; the flag's effect on the count envelope remains structurally unverified for the case where a sub-plan run would actually be pulled in. No run was linked or unlinked by this probe — TR-9061 was already attached to TP-1616 from the earlier list_test_plan_test_runs probe (see tests/live/runs/tm/list_test_plan_test_runs.json), and this probe only read it.\n\nv1 vs v2, what genuinely separates them on this same plan/run: (1) ID FORM — v1 takes integer project_id/test_plan_id (379335744/48283) and returns both id (TR-NNN string) + identifier + uuid (integer) per row; v2 takes string identifiers (PR-2005/TP-1616) and returns ONLY identifier, no numeric id anywhere in the row. (2) ENVELOPE — v1's top level is {success, test_runs, info, count}, where `count` is an extra {active, closed} rollup scoped to this plan's own linkage; v2's top level is only {success, test_runs, info} — no rollup key at all. (3) ROW FIELDS — substantially different, not just relabeled: v1's assignee is a full user object ({id, browserstack_user_id, full_name, group_id, onboarded}, though null here); v2's assignee is declared as a bare nullable email string. v1 carries owner, test_cases_count, is_automation, test_plans, metadata, links{self,detail}, self_ui_link (declared, but missing in practice) and this run's extra undeclared fields (build_meta etc.); v2 carries filter_test_cases.is_dynamic (nested) instead of v1's top-level is_dynamic, plus a `urls` object (UI deep link) that v1 does not have at all. Both keep is_dynamic inconsistently typed, but in different shapes/locations. (4) FILTERING — v1 declares q (free-text search), include_sub_test_plan_runs, compact and is_archived; v2 declares none of that, only `p`. (5) PAGING — NOT a divergence here: both are fixed at page_size 30 with only `p` to page, unlike the sibling LISTING pair where v2 raised the ceiling to 300 — this pair does not carry that particular divergence forward. (6) parent/sub-plan semantics — v1 has an explicit include_sub_test_plan_runs toggle (off by default); v2 has no such switch at all (guidance: list each sub-plan's runs separately) — so v2 doesn't invert parent/sub-plan semantics the way the sibling LISTING pair did, it simply drops the feature. Net: like the sibling LISTING split, this v1/v2 pair diverges substantially and unlabelled (no preferred/deprecated marker on either capability in the index), driven mainly by envelope shape, id form and row-field richness — but paging behavior itself, unlike the sibling pair, is identical between the two."
+}

@@ -1,0 +1,154 @@
+{
+  "capability": "search_test_cases_by_folder",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "BLOCKED",
+  "preprod_verdict": "BLOCKED",
+  "reproduces_preprod": true,
+  "setup": [
+    {
+      "step": 1,
+      "why": "Discover exact case name/identifier/id for real cases in folder 9697326 (MCP Testing), to use as exact-match search terms for search_test_cases_by_folder's id/name/identifier filters.",
+      "source": "invoked",
+      "capability": "search_project_entities_by_filter",
+      "arguments": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "body": {"folder_id": "9697326", "p": 1, "per_page": 5}},
+      "status": 200,
+      "produced": {
+        "cases": [
+          {"id": 32747791, "identifier": "TC-838571", "name": "MCP"},
+          {"id": 32747562, "identifier": "TC-838570", "name": "MCP"},
+          {"id": 32747539, "identifier": "TC-838569", "name": "User Register form"}
+        ],
+        "info": {"page": 1, "page_size": 5, "count": 3}
+      }
+    },
+    {
+      "step": 2,
+      "why": "Discover exact case name/identifier/id for a real case in the much larger folder 40231630 (Automation, ~972-1168 cases) to rule out data-starvation at scale.",
+      "source": "invoked",
+      "capability": "search_project_entities_by_filter",
+      "arguments": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "body": {"folder_id": "40231630", "p": 1, "per_page": 3}},
+      "status": 200,
+      "produced": {
+        "cases": [
+          {"id": 138574661, "identifier": "TC-6268089", "name": "login with google"},
+          {"id": 138498600, "identifier": "TC-6265333", "name": "login flow"},
+          {"id": 137260629, "identifier": "TC-6232544", "name": "login with google"}
+        ],
+        "info": {"page": 1, "page_size": 3, "count": 972, "next": 2}
+      }
+    },
+    {
+      "step": 3,
+      "why": "Discover exact case name/identifier/id for a real case in a third, unrelated folder (7772651, 'prd') to further rule out a single-folder anomaly.",
+      "source": "invoked",
+      "capability": "search_project_entities_by_filter",
+      "arguments": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "body": {"folder_id": "7772651", "p": 1, "per_page": 2}},
+      "status": 200,
+      "produced": {
+        "cases": [
+          {"id": 38648437, "identifier": "TC-1041802", "name": "Evaluate server processing time for Apple filter application"},
+          {"id": 38648438, "identifier": "TC-1041803", "name": "Assess client-side rendering time for filtered Apple products"}
+        ],
+        "info": {"page": 1, "page_size": 2, "count": 16, "next": 2}
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 9697326}, "query": {"name": "MCP"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact, real case name (from TC-838571/TC-838570 in this same folder) still produced zero rows.",
+      "changed": "n/a"
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 9697326}, "query": {"identifier": "TC-838571"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact identifier of a real, existing case still produced zero rows.",
+      "changed": "n/a"
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 9697326}, "query": {"id": 32747791}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact integer id of the same real case still produced zero rows.",
+      "changed": "n/a"
+    },
+    {
+      "n": 4,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 9697326}, "query": {"name": "User Register form"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact name of a second real case (TC-838569) in the same folder still produced zero rows.",
+      "changed": "n/a"
+    },
+    {
+      "n": 5,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 9697326}, "query": {"identifier": "TC-838569"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact identifier of the second real case still produced zero rows.",
+      "changed": "n/a"
+    },
+    {
+      "n": 6,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 9697326}, "query": {"id": 32747539}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact integer id of the second real case still produced zero rows.",
+      "changed": "Exhausted small folder (3 cases total, count matches); moved to the much larger folder 40231630 (~972-1168 cases) to rule out this being a small/sparse-folder artifact."
+    },
+    {
+      "n": 7,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 40231630}, "query": {"name": "login with google"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact name of a real case (id 138574661) in a folder with ~972-1168 cases still produced zero rows.",
+      "changed": "n/a"
+    },
+    {
+      "n": 8,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 40231630}, "query": {"identifier": "TC-6268089"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact identifier of the same real case still produced zero rows.",
+      "changed": "n/a"
+    },
+    {
+      "n": 9,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 40231630}, "query": {"id": 138574661}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact integer id of the same real case, in the largest fixture folder available, still produced zero rows.",
+      "changed": "Tested a third, unrelated folder (7772651, 'prd') as a final cross-check."
+    },
+    {
+      "n": 10,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 7772651}, "query": {"identifier": "TC-1041802"}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact identifier of a real case in a third, independent folder still produced zero rows.",
+      "changed": "n/a"
+    },
+    {
+      "n": 11,
+      "arguments": {"path_params": {"project_id": 332537, "folder_id": 7772651}, "query": {"id": 38648437}},
+      "status": 200,
+      "error": "No HTTP error. Body is []. Exact integer id of the same real case in the third folder still produced zero rows. Eleven exact-match attempts across three independent production folders (3 cases / ~972-1168 cases / 16 cases), all three supported filter fields (name, identifier, id), all against real, confirmed-existing production data on project 332537 (16,267 cases, 294 folders) — every single call returned HTTP 200 with an empty array. No combination ever produced a hit.",
+      "changed": "Stopped attempting further payload variations; the capability's own guidance is now directly corroborated on PRODUCTION with abundant real data, not just preprod."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 332537, "folder_id": 9697326}, "query": {"identifier": "TC-838571"}},
+    "status": 200,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id (path)", "folder_id (path)"],
+    "json_path": "n/a — GET with query params (id, name, identifier), not a body/json_path capability",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "prod_vs_preprod": {
+    "summary": "Preprod's BLOCKED verdict reproduces exactly on production. Eleven exact-match invocations (name/identifier/id, individually) against three independent production folders on project 332537 — folder 9697326 'MCP Testing' (3 cases, using TC-838571/TC-838570/TC-838569), folder 40231630 'Automation' (~972-1168 cases, using TC-6268089), and folder 7772651 'prd' (16 cases, using TC-1041802) — all real, freshly-confirmed-existing cases (confirmed via search_project_entities_by_filter immediately beforehand) all returned HTTP 200 with body []. This is not a small-sample or single-folder fluke: production has 16,267 cases across 294 folders, and even the 972-case folder produced zero rows for an exact id/identifier/name match on a case proven to exist in it seconds earlier. This directly corroborates the capability's own guidance text verbatim ('DEPRECATED AND EFFECTIVELY DEAD... queries the legacy local test-case table, which is no longer the system of record... returns an empty list with 200, whatever you search for') using abundant real production data, ruling out the preprod-data-starvation hypothesis.",
+    "genuinely_dead_or_data_starved": "genuinely dead"
+  },
+  "notes": "Because no invocation of search_test_cases_by_folder ever returned a non-empty array (on either preprod or prod), item shape (test_case_steps type, sibling steps field, count/info agreement) could not be inspected on prod either — there is no successful non-empty response to examine. This is expected and consistent with the capability being genuinely dead rather than a payload error: all calls were exact-match on name/identifier/id fields exactly as declared, all against cases independently confirmed to exist via search_project_entities_by_filter moments before each attempt, across three folders spanning 3 to ~1168 cases. Verdict is BLOCKED (matching preprod) rather than PASS, because a 200 on an empty collection is only unremarkable when the queried data genuinely has no matches — here the whole point of the probe was to determine whether emptiness reflects real absence or dead-capability behavior, and prod's abundant real data with zero hits settles it as the latter. DRIFT was ruled out because prod did NOT contradict preprod's dead-capability framing — it corroborated it with much stronger evidence (larger dataset, three folders, freshly-verified real data) than preprod could produce."
+}

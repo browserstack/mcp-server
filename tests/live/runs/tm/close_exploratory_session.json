@@ -1,0 +1,60 @@
+{
+  "capability": "close_exploratory_session",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:42:25Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "confirm pre-close state of the clone before closing it — deliberately closed second per the task's expendable-first ordering",
+      "source": "pool",
+      "capability": null,
+      "produced": {
+        "project_id": 379335744,
+        "session_id_780": { "session_state": "active", "actual_duration": null, "closed_at": null, "closed_by": null },
+        "session_id_779": { "session_state": "active", "actual_duration": 210, "closed_at": null, "closed_by": null }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "target": "session 780 (ES-15, clone)",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "session_id": 780 },
+        "body": {}
+      },
+      "status": 200,
+      "error": null,
+      "changed": "none needed — no-body call succeeded on the first attempt, matching the capability's own guidance that it takes no body at all."
+    },
+    {
+      "n": 2,
+      "target": "session 779 (ES-14, source) — comparison close, run after 780 closed cleanly",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "session_id": 779 },
+        "body": {}
+      },
+      "status": 200,
+      "error": null,
+      "changed": "none needed — same no-body call, first attempt."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "session_id": 780 },
+      "body": {}
+    },
+    "status": 200,
+    "response_keys": ["success"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id (path)", "session_id (path)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "PASS-shaped invoke, DRIFT overall on downstream behavior verified by read-back. The capability itself returns exactly its declared 200 shape ({success:true}) and nothing else — no declared_missing/undeclared_returned on the invoke response itself, since the declared schema is just {success}. Both closes (780 then 779, per the task's expendable-clone-first ordering) returned 200 {success:true} on the first attempt with no body sent, matching the capability's own guidance that the endpoint takes no body at all.\n\nVERIFIED BY READ-BACK, NOT FROM THE WRITE RESPONSE (per campaign standard — six capabilities in this family have been caught misreporting their own result): a get_exploratory_session on each session after closing.\n\nSESSION 780 (closed first, the clone): session_state flipped active -> closed. closed_by populated for the first time anywhere in this family's probing: {id:2522, email:'probe-user@example.invalid', full_name:'ing', group_id:2615} — matches the declared user-reference shape exactly. closed_at populated for the first time: '2026-09-22T05:42:25.000Z'. actual_duration: STAYED NULL. It was null before close (the clone's long-standing broken value, per get_exploratory_session.md and clone_exploratory_session.md) and null after — closing did not set it, despite the declared description 'Final recorded duration of the session in minutes (set on close)'.\n\nSESSION 779 (closed second, the source, for comparison): session_state flipped active -> closed. closed_by and closed_at populated the same way (id 2522, timestamp '2026-09-22T05:42:57.000Z'). actual_duration: STAYED 210 — unchanged from its pre-close, live-computed value (sum of its two logs' elapsed_time: 120 + 90). Closing neither zeroed it, recomputed it, nor otherwise touched it.\n\nTHE HIGH-VALUE QUESTION THIS RESOLVES: actual_duration's declared 'set on close' semantics is now falsified in both directions on the same field, on two sessions closed back to back. 780 (null before, null after) shows close does not populate a previously-unset value. 779 (210 before, 210 after) shows close does not even touch an already-set value — it is neither recomputed nor overwritten. Combined with this capability's own guidance text ('the handler's actual_duration pass-through is commented out, so posting a duration here returns 200 and changes nothing'), the mechanism is now clear: actual_duration is set ONLY as a side effect elsewhere (apparently when a log is created directly on a session, consistent with 779 = 120+90 = sum of its own two logged elapsed_time values), never by this close call despite its declared description, and never recomputed for a clone whose logs arrived via copy rather than direct creation (780's clone-copied logs still carry elapsed_time 45/120 in `timeline`, yet never contributed to `actual_duration`). The declared 'set on close' text for this field is confirmed wrong, not merely stale.\n\nTHE OTHER HIGH-VALUE QUESTION -- DOES CLOSING LOCK THE SESSION: yes. A follow-up update_exploratory_session on closed session 780 (title-only change, otherwise harmless) was rejected with HTTP 400, body {success:false, message:'The API request is invalid or improperly formed'}. This is an HONEST 4xx rejection, not a silent no-op under 200 -- the lock is real and is surfaced as a real error, unlike the family's other confirmed silent-no-op defects (update_filter's inert entity field, unlink_test_runs_from_test_plan's 200-with-no-effect). The error body itself does not match this family's declared 400 error envelope ({success:false, error:{code,message,details}}) -- it is the flat {success:false, message} shape -- but that specific mismatch is already documented verbatim in update_exploratory_session's own guidance ('Upstream validation failures all arrive as 400 {success:false, message:...}'), so it is not a new finding here, just a re-confirmation. Per instruction, no error-vs-success schema diff is drawn from this 400 body.\n\nFOLDER_ID: still absent (key missing, not null) from both post-close reads (780 and 779) -- the family's confirmed 'declared in every schema, absent from every response' defect persists after close, same as on create/clone/update/read.\n\nPROJECT_ID: both post-close reads return project_id as an integer (379335744), consistent with every prior plain-read observation in this family; the write-path string-vs-read-path integer split remains isolated to create/clone responses, not reproduced here since close's own response carries no session object at all.\n\nBOTH SESSIONS NOW CLOSED: 780 closed at 05:42:25Z, 779 closed at 05:42:57Z, both by user 2522. Both are one-way per the capability's own guidance (no session_state acceptance anywhere, no reopen endpoint) -- this is treated as irreversible and no attempt was made to undo it.\n\nVerdict rationale: DRIFT, not PASS -- the invoke path itself is clean and matches its (minimal) declared contract, but the capability's declared field semantics for actual_duration are actively contradicted by the read-back on two independent sessions, which is exactly the kind of declared-vs-actual gap this campaign tracks. Not BLOCKED (fully invokable, both attempts succeeded first try). Not UNVERIFIED (both the close-then-lock question and the actual_duration-on-close question were fully exercised, each on two sessions, with read-back verification)."
+}

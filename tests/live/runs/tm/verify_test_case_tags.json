@@ -1,0 +1,105 @@
+{
+  "capability": "verify_test_case_tags",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T04:33:04Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Fixture cases carry no tags (confirmed batch-1). Tag a scratch case so the probe has a real, already-in-use tag wording to check against, rather than only ever exercising the empty/all-new branch.",
+      "source": "invoked",
+      "capability": "update_test_case",
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54457" },
+        "body": { "tags": ["__mcp-probe-tag-20260918a"] }
+      },
+      "status": 200,
+      "produced": {
+        "identifier": "TC-54457",
+        "folder_id": 764138,
+        "tags": ["__mcp-probe-tag-20260918a"]
+      }
+    },
+    {
+      "step": 2,
+      "why": "Confirm the tag actually landed in the project's tag vocabulary (independent evidence, and a general health-check on the tag surface / preprod reachability before blaming verify_test_case_tags for its 500s).",
+      "source": "invoked",
+      "capability": "list_test_case_tags",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": {
+        "tags": ["__mcp-probe-tag-20260918a"],
+        "info": { "page": 1, "page_size": 30, "count": 1, "prev": null, "next": null }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "tags": ["__mcp-probe-tag-20260918a", "__mcp-probe-tag-20260918-new"] }
+      },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Retried the identical call once, per the outage-caution in the brief."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "tags": ["__mcp-probe-tag-20260918a", "__mcp-probe-tag-20260918-new"] }
+      },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Same 500 on retry, and the message is plain 'Internal Server Error', not the 'the product could not be reached' text the brief flags as the known preprod-outage signature. Next, tested whether the contract's declared integer project_id was actually being enforced by trying the v2 identifier form instead."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005" },
+        "body": { "tags": ["__mcp-probe-tag-20260918a", "__mcp-probe-tag-20260918-new"] }
+      },
+      "status": null,
+      "error": "\"'project_id' must be a number\"",
+      "changed": "This is a client-side (MCP layer) validation rejection, not a server response — confirms the contract's declared integer type is correct and the v1 route genuinely wants the integer id, not PR-2005. Reverted to the integer form and simplified the body to an empty tags array, to rule out the specific tag wordings as the cause."
+    },
+    {
+      "n": 4,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "tags": [] }
+      },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "The contract explicitly says an empty list 'is accepted and simply reports nothing new' — it still 500s, so the failure is not payload-shape-dependent. Tried one more variant: a single common, plausible-real tag name ('smoke') instead of the probe's own disposable tags."
+    },
+    {
+      "n": 5,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "tags": ["smoke"] }
+      },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Same 500 with an ordinary tag name. Since the sibling read list_test_case_tags against the SAME project_id succeeded with 200 in setup step 2, this rules out a general preprod outage or a bad project_id — the failure is specific to verify_test_case_tags's own handler, independent of the tags payload."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "body": { "tags": ["__mcp-probe-tag-20260918a", "__mcp-probe-tag-20260918-new"] }
+    },
+    "status": null,
+    "response_keys": [],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "tags (body, array of strings)"],
+    "json_path": "no json_path nesting declared — tags is a flat top-level body field, unlike test_case-wrapped bodies on the update/edit routes",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Never got a 200, so no field-level declared-vs-actual diff is possible here — that whole axis is UNVERIFIED, not PASS and not DRIFT. Two things ARE established with confidence, from the contract text plus the setup calls, independent of the 500s: (1) What this capability actually does, despite its name: it is NOT scoped to a test case at all — there is no case_id/test_case_id parameter anywhere in its contract. It takes a project_id and a list of arbitrary tag WORDINGS, and reports which of those wordings are new vs already used somewhere on that project's test cases (a project-wide vocabulary check against a supplied list), not 'verify the tags on test case X' and not 'report case X's current tags'. Its declared mode ('read') matches its declared/guidance-stated effect ('Nothing is saved by this check') — no mode-vs-effect drift here, unlike batch 2's update_custom_field. (2) The endpoint itself appears broken in preprod right now: every invocation — with a mixed known/new tag pair, with an empty array (which the contract explicitly promises is valid), and with a single ordinary tag name — returned the same 500 Internal Server Error, verbatim. This is NOT the 'the product could not be reached' outage signature the brief calls out, and a sibling read (list_test_case_tags) against the identical project_id succeeded immediately with 200, so preprod and this project are reachable; the fault is localized to verify_test_case_tags's own handler. Tag residue for the record: created tag '__mcp-probe-tag-20260918a' (applied to TC-54457 / int 1972036, scratch folder 764138, via update_test_case), confirmed present in project PR-2005's test-case tag vocabulary via list_test_case_tags (count 1, page 1). This tag is disposable, account/project-wide residue and is a good candidate target for a sibling update_tag (rename) probe."
+}

@@ -1,0 +1,68 @@
+{
+  "capability": "get_project_form_fields",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:25:15Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the test-case form (custom fields, system fields, standard dropdown pick lists)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 } },
+    "status": 200,
+    "response_keys": ["success", "custom_fields", "default_fields", "system_fields"],
+    "item_shape": {
+      "custom_fields[0]": {
+        "id": 106126,
+        "field_type": "field_string",
+        "field_name": "__probe_cf_1789735254346_renamed",
+        "entity_type": "TestCase",
+        "field_user_name": "__probe_cf_1789735254346_renamed",
+        "optional": true,
+        "is_bulk_editable": true,
+        "is_filterable": true,
+        "links": { "self": "/api/v1/projects/379335744/test-case/custom-fields/106126" },
+        "option_values": [],
+        "field_values": [],
+        "placeholder": "probe re-check 1789735475446",
+        "is_required": false,
+        "default_value": null
+      },
+      "default_fields": {
+        "keys_present": ["automation_state", "priority", "status", "case_type", "automation_status"],
+        "automation_state.values[0]": { "internal_name": "not_automated", "is_default": 1, "value_category": "manual", "value": 2509329, "name": "Not Automated" },
+        "priority.values[0]": { "internal_name": "medium", "is_default": 1, "value": 318591, "name": "Medium" },
+        "status.values[0]": { "internal_name": "active", "is_default": 1, "colour": "active", "value": 318605, "name": "Active" },
+        "case_type.values[0]": { "internal_name": "other", "is_default": 1, "value": 318626, "name": "Other" },
+        "automation_status.values[0]": { "name": "Not Automated", "value": "not_automated", "is_default": true }
+      },
+      "system_fields": {
+        "actual_type": "object",
+        "declared_type": "array",
+        "keys": ["description_fields", "property_fields", "others"],
+        "description_fields[0]": { "id": 1, "field_name": "Title", "field_type": "string", "system_name": "title", "is_removable": false },
+        "property_fields[0]": { "id": 10, "field_name": "Owner", "field_type": "dropdown", "system_name": "owner", "is_removable": false },
+        "others": []
+      }
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "default_fields.automation_state.values[].value_category — not declared anywhere (default_fields has no item-level schema at all, only prose '{values, total_count}')",
+      "default_fields.status.values[].colour — same, undeclared",
+      "default_fields.*.values[].internal_name / is_default / value / name — whole option-row shape is undocumented at the schema level for default_fields",
+      "system_fields returned as an OBJECT {description_fields, property_fields, others} instead of the declared bare ARRAY of {id, field_name, field_type, system_name, is_removable} rows — structural container mismatch (DRIFT)"
+    ]
+  },
+  "notes": "First attempt succeeded (200), no retries needed.\n\nWATCH-1 (undeclared option-descriptor fields): CONFIRMED, partially. automation_state rows carry `value_category` (values: 'manual'/'automated'); status rows carry `colour` (equal to internal_name, e.g. 'active'/'draft'). priority and case_type rows carry NEITHER value_category nor colour — just internal_name/is_default/value/name. Neither `valueDetails` nor `entity_type` appears anywhere in this response (not on default_fields rows, not on custom_fields rows). None of these per-option fields (value_category, colour, internal_name, is_default) are declared in the schema at all — default_fields is documented only as an object with prose '{values, total_count}' and carries no item-level JSON-schema properties, so strictly everything inside each option row is 'undeclared'. automation_status has a distinct, simpler shape again ({name, value, is_default} only — no internal_name, no value_category) and guidance explicitly says it is 'assembled in this layer, not read from storage', which matches its odd-one-out shape.\n\nWATCH-2 (duplicate option rows): CONFIRMED on this endpoint too. priority: 8 rows / 4 distinct values (Medium, Critical, High, Low), each name appearing exactly twice with different `value` ids (e.g. Medium: 318591 and 318618). status: 10 rows / 5 distinct values, same doubling pattern (e.g. Active: 318605 and 318632). case_type: 22 rows / 11 distinct values, same doubling pattern (e.g. Other: 318626 and 318599). In every duplicate pair, ALL other fields (internal_name, name, is_default, colour where present) are byte-identical between the two rows — the only difference is the `value` id. This endpoint exposes no `entity_type`, no `record_status`, and no per-option count field at all (only a list-level `total_count`), so it cannot itself confirm which of the two duplicate ids is the one 'carrying a real count' from the other probe's finding — it only corroborates that the same duplicate-id pattern exists at the project level (independent of whichever capability originally surfaced it). automation_state (5/5 distinct) and automation_status (5/5 distinct) show NO duplication — the doubling is specific to priority/status/case_type.\n\nWATCH-3 (structural container mismatch): CONFIRMED, but on `system_fields`, not on custom_fields/default_fields. Schema declares system_fields as a bare `array` of {id, field_name, field_type, system_name, is_removable}. Actual response returns system_fields as an OBJECT: {description_fields: [...9 rows...], property_fields: [...10 rows...], others: []} — each sub-list holding the array-of-rows shape the schema described for the whole field. This is a genuine DRIFT: declared array, actual is a 3-key object of arrays.\n\nWATCH-4 (prose vs schema disagreement): The capability's own guidance text says 'The response is three lists at the top level' (custom_fields, default_fields, system_fields) — this prose is itself wrong for system_fields (it's an object, not a list), independent of the JSON-schema's (also wrong) 'array' declaration. Both prose and schema agree system_fields should be array-shaped; reality disagrees with both. Separately, guidance's 'Each row carries links.self' is true for custom_fields rows and true for default_fields' top-level field groups (e.g. priority.links.self = '/api/v1/projects/379335744/test-case/priority'), but not for individual option values inside a group's `values` array — consistent with a reasonable reading of 'row' as the field/group level, not the option-value level, so no disagreement there.\n\ncustom_fields for this project contains one leftover field from earlier probe activity (__probe_cf_1789735254346_renamed, field_string) — pool project data, not something this probe created; noted for completeness, does not affect the verdict.\n\nAll declared top-level required keys (success, custom_fields, default_fields, system_fields) and all declared required custom_fields item keys are present; no missing required fields. Verdict is DRIFT solely on the system_fields array-vs-object structural mismatch, plus the broader undeclared-shape situation in default_fields."
+}

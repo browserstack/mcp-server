@@ -1,0 +1,142 @@
+{
+  "capability": "replace_test_run",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T07:11:25Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Capture complete before-state of the run header (name/description/assignee/run_state/active_state/tags/configurations/plan-linkage/overall_progress) before sending a partial replace body",
+      "source": "pool",
+      "capability": "get_test_run",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" } },
+      "status": 200,
+      "produced": {
+        "name": "__mcp-probe-run-2026-09-18T06-35-00Z",
+        "description": "",
+        "run_state": "new_run",
+        "active_state": "active",
+        "assignee": "probe-user@example.invalid",
+        "tags": ["mcp-probe"],
+        "configurations": [],
+        "no_test_plan_field": true,
+        "overall_progress": { "Untested": 5 },
+        "updated_at": "2026-09-18T06:27:38.743Z",
+        "created_at": "2026-09-18T06:27:38.743Z"
+      }
+    },
+    {
+      "step": 2,
+      "why": "Capture the complete before-state of all 5 rows, including the accidental TC-54457 duplicate mapping, so any row-set change from the replace can be diffed precisely",
+      "source": "pool",
+      "capability": "list_test_run_test_cases",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "count": 5,
+        "rows": [
+          { "identifier": "TC-54458", "latest_result_id": 2150387254 },
+          { "identifier": "TC-54457", "latest_result_id": 2150387252 },
+          { "identifier": "TC-54457", "latest_result_id": 2150387283, "note": "the accidental duplicate mapping" },
+          { "identifier": "TC-54456", "latest_result_id": 2150387251 },
+          { "identifier": "TC-54455", "latest_result_id": 2150387253 }
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "why": "Re-read the run header immediately after the replace to compare against the write response's own echoed values (verify-against-storage, not the 2xx body)",
+      "source": "invoked",
+      "capability": "get_test_run",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" } },
+      "status": 200,
+      "produced": {
+        "assignee": null,
+        "updated_at": "2026-09-18T06:27:38.743Z",
+        "overall_progress": { "Untested": 5 },
+        "note": "assignee is null and overall_progress is 5 here, contradicting the write response's own echoed assignee probe-user@example.invalid and overall_progress 4"
+      }
+    },
+    {
+      "step": 4,
+      "why": "Second re-read after a short interval to rule out replication lag before concluding the write response was simply wrong (per the preprod-intermittency lesson)",
+      "source": "invoked",
+      "capability": "get_test_run",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" } },
+      "status": 200,
+      "produced": {
+        "assignee": null,
+        "updated_at": "2026-09-18T06:27:38.743Z",
+        "overall_progress": { "Untested": 5 },
+        "stable_across_two_reads": true
+      }
+    },
+    {
+      "step": 5,
+      "why": "Control call in the same window to an untouched fixture run, to confirm preprod is behaving normally and the anomaly is specific to the write response, not a general server fault",
+      "source": "invoked",
+      "capability": "get_test_run",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9058" } },
+      "status": 200,
+      "produced": {
+        "identifier": "TR-9058",
+        "assignee": "probe-user@example.invalid",
+        "overall_progress": { "Untested": 2 },
+        "note": "healthy, unaffected fixture run returned normally in the same window"
+      }
+    },
+    {
+      "step": 6,
+      "why": "Re-read the run's 5 rows after the replace to determine whether the row set (and the duplicate mapping) survived, was rebuilt/deduped, or was cleared",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "count": 5,
+        "rows_unchanged": true,
+        "latest_result_ids": [2150387254, 2150387252, 2150387283, 2150387251, 2150387253],
+        "duplicate_survived": true
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+        "body": { "description": "replace-probe-partial-description", "tags": ["replace-probe-tag"] }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "none needed — flat body (per json_path /test_run/*, re-nested by the tool) worked on the first try; only description and tags sent, everything else deliberately omitted"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+      "body": { "description": "replace-probe-partial-description", "tags": ["replace-probe-tag"] }
+    },
+    "status": 200,
+    "response_keys": ["success", "testrun"],
+    "item_shape": {
+      "testrun_keys": [
+        "active_state", "run_state", "created_at", "updated_at", "description", "identifier",
+        "name", "assignee", "project_id", "overall_progress", "tags", "configurations",
+        "filter_test_cases", "issues", "links"
+      ]
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id"],
+    "json_path": "/test_run/* (wrapper object required server-side; the MCP tool re-nests a flat body under test_run per each field's json_path, confirmed working on the first attempt)",
+    "declared_missing": [
+      "id", "uuid", "type", "owner", "environment", "overall_progress_by_status_id",
+      "test_cases_count", "is_automation", "observability_url", "metadata",
+      "assignee_imported", "is_dynamic", "test_plans", "self_ui_link", "links.detail"
+    ],
+    "undeclared_returned": ["filter_test_cases", "urls", "links.test_cases", "issues"]
+  },
+  "notes": "CONFIRMED, matches the entity-wide pattern already established for test_run: the 15 declared_missing fields and the 3 previously-known undeclared fields (filter_test_cases, urls, links.test_cases) are all present/absent exactly as expected. assignee is again returned as a plain string despite being declared an object, and overall_progress is again the sparse capitalised map instead of the 7 fixed lowercase keys. NEWLY OBSERVED (likely also entity-wide, not yet in the catalogued list): this capability's response also returns an undeclared `issues` array (empty here) — get_test_run returns the same undeclared field, so this looks entity-wide rather than endpoint-specific; worth folding into the known undeclared-field list. || ROW SET (the batch's central question): the row set was PRESERVED, not replaced and not reset. All 5 rows survived untouched, including the accidental TC-54457 duplicate mapping (latest_result_id 2150387252 AND 2150387283 both still present) — confirmed by two independent re-reads. This matches the contract's own guidance ('Case membership is union-only: test_cases/folder_ids/include_all ADD cases, and nothing here removes one') — sending neither field left rows completely alone. Contrast with clone_test_run on the same source run (TR-9063), which DID dedupe the same TC-54457 duplicate down to a single row — so 'replace' and 'clone' handle the identical duplicate differently, and only clone's behavior resembles a row-table rebuild. || WHAT GOT CLEARED BY OMISSION: assignee was silently cleared to null by omitting it. This matches the capability's own stated intent ('every metadata field you leave out is reset') but is NOT called out in the guidance's specific omission-warning bullet list (which names only run_state, test_plan_id/sub_test_plan_id, and issues) — a real gap in the contract's own warnings, since assignee-loss is exactly the kind of silent data loss that bullet list exists to flag. tags were replaced with the sent list (as declared). description was updated and HTML-wrapped ('<p>...</p>', as the contract warns). run_state, active_state, configurations ([]), filter_test_cases, and the plan linkage (still none) were all unchanged, but since run_state was already new_run and configurations/plan were already empty/absent, this call cannot independently confirm the contract's claim that omitting run_state/test_plan_id actively resets them versus merely leaving an already-default value alone — that needs a run that starts in a non-default state. || MOST SIGNIFICANT NEW FINDING — the write response is NOT trustworthy for the fields it did not receive: the 200 body from the replace call itself echoed assignee as the OLD value 'probe-user@example.invalid' (not the null it actually became), overall_progress as {Untested:4} (not the correct 5 that both immediate and delayed re-reads confirmed), and updated_at as 2026-09-18T07:11:25.000Z (a fresh timestamp that was NEVER persisted — every subsequent read, including one taken well after, shows updated_at unchanged from created_at, 06:27:38.743Z). tags and description, by contrast, were correctly reflected in both the write response and every re-read. So this is not a generic 'response is stale' issue — it is a partial one: some fields in the 200 body are the pre-write image or a miscomputed transient value, while others are accurate. A caller trusting the write's own 2xx body (rather than re-reading, per this batch's standing rule) would wrongly conclude the run kept its assignee and gained a fresh updated_at, when in storage the assignee was wiped and the timestamp never moved. Severity: high — this is a correctness gap in the write endpoint's own response, distinct from and worse than an over-declared schema field, and it is exactly the kind of silent-data-loss-disguised-as-success this suite exists to catch. Not yet known whether this is endpoint-specific to replace_test_run or shared with update_test_run — recommend the sibling probe check its own write-response fields (especially assignee/updated_at/overall_progress) against a fresh re-read rather than trusting its 200 body. || POST-STATE FOR THE update_test_run SIBLING: TR-9062 now has name (unchanged) '__mcp-probe-run-2026-09-18T06-35-00Z', description '<p>replace-probe-partial-description</p>', assignee null (cleared), run_state 'new_run', active_state 'active', tags ['replace-probe-tag'], configurations [], no plan linkage, overall_progress {Untested:5}, issues [], and the same 5 rows as before (TC-54458/2150387254, TC-54457/2150387252, TC-54457-duplicate/2150387283, TC-54456/2150387251, TC-54455/2150387253) all still untested and unassigned. The run was left existing and otherwise usable — nothing beyond a normal partial replace was done to it."
+}

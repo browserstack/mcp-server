@@ -1,0 +1,93 @@
+{
+  "capability": "validate_bdd_export_selection",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T10:20:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Reuse fixture project/folder/case ids directly from the provided pool; no prerequisite capability call was needed since the read-only __readonly__ folder already has cases to select.",
+      "source": "pool",
+      "capability": null,
+      "arguments": {
+        "project_id_v1": 379335744,
+        "project_id_v2": "PR-2005",
+        "folder_id": 764093,
+        "case_ids": [
+          1971631,
+          1971632
+        ]
+      },
+      "status": null,
+      "produced": {}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": {
+          "project_id": 379335744
+        },
+        "body": {
+          "ids": [
+            1971631,
+            1971632
+          ]
+        }
+      },
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"No BDD Test Case(s) selected.\"}",
+      "changed": "First attempt. Sent the simplest declared selection form (flat `ids` array under project's integer id) with the two real __readonly__ cases (TC-54455/TC-54456, int 1971631/1971632). Both cases use template 1164 (\"Test Case Steps\"), not the BDD template 1664, so the validator filtered them out as non-BDD and returned the documented 'no BDD cases selected' verdict. This is a clean, contract-matching 400, not an error \u2014 nothing changed for attempt 2 except testing the id-type guard."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": {
+          "project_id": "PR-2005"
+        },
+        "body": {
+          "ids": [
+            1971631,
+            1971632
+          ]
+        }
+      },
+      "status": null,
+      "error": "client-side rejection before any HTTP call: \"'project_id' must be a number\"",
+      "changed": "Deliberately substituted the v2 identifier (PR-2005) for the v1 integer project_id, to confirm the contract's claim that 'the v1 route only matches digits; a PR-NNN identifier never reaches the API'. Confirmed: the MCP tool layer itself refused the string before issuing a request, matching the declared path_params constraint exactly. Reverted to the integer id (379335744) for all further calls."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": {
+        "project_id": 379335744
+      },
+      "body": {
+        "ids": [
+          1971631,
+          1971632
+        ]
+      }
+    },
+    "status": 400,
+    "response_keys": [
+      "success",
+      "message"
+    ],
+    "item_shape": {
+      "success": "boolean (false)",
+      "message": "string (\"No BDD Test Case(s) selected.\")"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id"
+    ],
+    "json_path": "body fields are declared under /test_case/* (ids, select_all, de_selected_ids, folders) but invokeCapability accepts them FLAT under their own names (ids, select_all, de_selected_ids, folders) and applies the json_path wrapping itself \u2014 confirmed working, no client-side rejection for the flat form.",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "[ORCHESTRATOR RE-CLASSIFICATION 2026-09-18] Verdict changed from PASS to UNVERIFIED by the main session. The probing subagent's evidence is accepted in full and unaltered; only the verdict label is corrected.\nRationale: the capability never returned a 200. Every call - including two beyond the attempt budget, using this capability's own declared folders sub-shape and a select_all form - resolved to the same 400 {success:false, message:\"No BDD Test Case(s) selected.\"}, because every case in the fixture pool uses template 1164 ('Test Case Steps') rather than BDD template 1664. So the DECLARED SUCCESS RESPONSE WAS NEVER EXERCISED. PASS means 'invoked, and the response carries what the contract declares'; the response that carries what this contract declares on success has not been seen.\nThis matches how the suite has judged the same situation before: batch 2 marked both attachment capabilities UNVERIFIED when the envelope matched but the item shape was never populated, and batch 3's list_reports was UNVERIFIED until a sibling created a real row for it. UNVERIFIED's definition - prerequisites unavailable - is exactly the case here: the pool contains no BDD-templated case.\nThe 400-branch match is also weak evidence on its own, because this contract declares the SAME flat {success, message} shape for both 200 and 400 - so matching it proves little about the success path.\nWhat the probe did establish, and which is not in doubt: the capability is reachable and behaves sensibly; the v1 route rejects the PR-NNN project id form client-side ('project_id' must be a number) exactly as declared; non-BDD cases are correctly filtered out rather than erroring confusingly; and this capability's own declared folders sub-shape ({select_all, ids, de_selected_ids}) worked as declared, even though it is named differently from the sibling selection shape used elsewhere in the product - each contract is internally accurate on that point.\nREMEDIABLE: template 1664 ('Test Case BDD') exists on this account, so a BDD-templated case could be created in __scratch__ (folder 764138) to reach the success branch. This is being followed up.\n\n--- original subagent note, verbatim ---\nThis capability is a pure pre-flight check for a BDD-feature export: it does not export, create or modify anything (mode: read, confirmed by behavior \u2014 no side effects across 4 calls). It compares the trimmed Feature+Background text of the FIRST step of every BDD-templated case in the selection; non-BDD cases (template 1164, like every fixture case in this pool) are silently dropped from consideration. Because the entire fixture pool (__readonly__ folder 764093 and __scratch__ folder 764138) uses template 1164 'Test Case Steps' and not the BDD template 1664, no selection built from this pool can ever reach the success:true branch -- every real selection resolves to zero BDD cases and returns the documented 400 'No BDD Test Case(s) selected.' This was verified as a determinate, contract-matching result (not an empty-collection non-result): the response body always had exactly {success:false, message:'No BDD Test Case(s) selected.'}, matching the declared 200/400 schema {success, message} exactly, across THREE different selection shapes tried beyond the recorded attempts -- (a) flat `ids` array, (b) `folders: {\"764093\": {select_all:false, ids:[1971631,1971632], de_selected_ids:[]}}` exactly as this capability's OWN contract declares its folders sub-shape, and (c) `select_all:true` + `folder_id:764093`. All three returned byte-identical bodies. This is a useful finding in its own right: this capability's declared folders shape ({select_all, ids, de_selected_ids} keyed by folder id) is NOT the same field-naming convention as the sibling capability's working folders shape noted in the task brief ({test_case_select_all, selected_test_cases, deselected_test_cases}) -- yet THIS capability's own declared names worked without any client-side or server-side rejection, so its contract's naming is internally accurate even though it diverges from that sibling's. No 500s were encountered so the declared-error-envelope / integration-scope checks from prior batches do not apply here. The success:true branch (an actual pass verdict) could not be exercised because the fixture pool contains no BDD-template (1664) cases at all -- this is a pool limitation, not a capability defect; the failure branch was verified thoroughly and consistently and it exactly matches the single-shape {success, message} contract declared for both 200 and 400, so verdict is PASS on the observed (failure) branch with the pass branch UNVERIFIED for lack of BDD-templated fixture data. No writes were made; nothing in the fixture pool was created, modified, or deleted."
+}

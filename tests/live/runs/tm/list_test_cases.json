@@ -1,0 +1,51 @@
+{
+  "capability": "list_test_cases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 },
+      "query": { "all_folders": "true", "per_page": "100", "p": "1" }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "info", "folders"],
+    "item_shape": [
+      "assignee", "creator_details", "created_at", "updator_details", "updated_at",
+      "case_type", "priority", "status", "automation_state", "is_shared",
+      "case_type_imported", "description", "custom_fields", "estimate",
+      "estimated_duration_seconds", "expected_result", "id", "identifier",
+      "is_automation", "links", "name", "history_count", "owner", "preconditions",
+      "owner_imported", "priority_imported", "project_id", "status_imported",
+      "steps", "tags", "template", "template_step_type", "template_id",
+      "template_name", "test_case_folder_id", "step_count", "test_case_steps",
+      "lcnc_build_map", "automation_status", "test_run_results_count",
+      "test_run_results_issues_count", "issues", "metadata", "test_case_dataset"
+    ]
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": "test_cases",
+    "declared_missing": ["test_cases[].comments_count"],
+    "undeclared_returned": [
+      "test_cases[].automation_state (whole descriptor object)",
+      "test_cases[].is_shared",
+      "test_cases[].estimated_duration_seconds",
+      "test_cases[].template_step_type",
+      "test_cases[].template_id",
+      "test_cases[].template_name",
+      "test_cases[].step_count",
+      "test_cases[].test_run_results_count",
+      "test_cases[].test_run_results_issues_count",
+      "test_cases[].test_case_dataset",
+      "test_cases[].priority.value_category / case_type.value_category / status.value_category"
+    ],
+    "type_drift": [
+      "test_cases[].test_case_steps is declared {type: object, properties: {background, feature, scenario, ...}} but every row returned it as an empty ARRAY ([]), even when step_count was 1. Confirms the known cross-capability trap: test_case_steps is object-in-spec, array-in-practice here too."
+    ]
+  },
+  "notes": "Baseline succeeded on attempt 1: project_id=379335744, all_folders=\"true\", per_page=100, p=1 -> success:true, info.count=21, len(test_cases)=21, info.next=null. Row folder distribution matched the pool exactly: 2 rows in __readonly__ (764093, TC-54455/TC-54456), 18 rows directly in __scratch__ (764138), and 1 row (TC-54458) in subfolder 764828 (parent_id=764138) -- i.e. 19 reached recursively under __scratch__, matching the stated 18 direct/19 recursive split.\n\nKNOWN TRAPS verified:\n1) all_folders string-vs-boolean: could NOT be falsified through invokeCapability. Sending {\"all_folders\": true} (JSON boolean) produced the identical full 21-row project-wide result as the string \"true\" -- the MCP invoke layer evidently serializes query values to strings before the HTTP call regardless of the JSON type supplied, so the documented backend string-comparison quirk is real but unobservable from this tool surface. Marking this sub-check UNVERIFIED-via-MCP, not confirmed either way.\n2) per_page clamp/fallback: could NOT be observed either, for a different reason -- invokeCapability enforces the declared schema (minimum 1 / maximum 100, type integer) CLIENT-SIDE and refuses before any request is sent: per_page=\"500\" -> {\"ok\":false,\"error\":\"'per_page' must be at most 100\"}; per_page=\"abc\" -> {\"ok\":false,\"error\":\"'per_page' must be a number\"}. Neither ever reached the backend, so the guidance's claim that out-of-range/non-numeric values 'silently fall back to 30' is untestable through this path (it may still be true of the raw HTTP API). Note per the rules this was NOT diffed against the success schema -- these are pre-flight client validation errors, not HTTP responses.\n3) sort_by + required[fields] trap: CONFIRMED exactly as documented. sort_by=priority-ASC with required[fields]=owner (a different column) -> HTTP 422 {\"success\":false,\"message\":\"Sort by column priority is not present in required fields\"}. sort_by=priority-ASC with required[fields]=priority (matching column) -> 200 success. sort_by=priority-ASC alone (no required[fields] at all) -> 200 success, sorted ascending by the priority name string (\"High\" before \"Medium\", i.e. alphabetical, not severity order).\n4) UNDOCUMENTED SIDE EFFECT found while testing #3: as soon as required[fields] is supplied at all, several otherwise-always-present descriptor/association fields on every row flip to null -- assignee, owner, and automation_state all became null when required[fields]=priority was sent, versus fully populated in every call that omitted required[fields]. The contract's guidance says nothing about required[fields] suppressing default fields. This is a real, reproducible drift, not a payload mistake (verified with two separate required[fields] values).\n5) p advances by page size, not rows returned: walked p=1 and p=2 with per_page=10. Page 1: page_size=10, count=21, prev=null, next=2, 10 rows. Page 2: page_size=10, count=21, prev=1, next=3, 10 rows, no overlap/gap with page 1 (distinct identifiers). info.count stayed correctly fixed at 21 on both pages and len(rows) matched page_size on both -- no count-vs-rows desync found for this capability across the two pages walked.\n6) Backend 404 swallowed into empty success:true: CONTRADICTED. project_id=999999999 (nonexistent) returned an actual HTTP 404 with body {\"success\":false} -- NOT swallowed, NOT success:true, NOT an empty list. This directly contradicts the declared guidance ('A backend 404 is swallowed into an empty list with success: true rather than surfacing'). Evidence: raw response above, reproduced on a single clean call, no retry needed.\n\nWRONG-DATA WATCH: cross-checked TC-54458 (int 1975349, folder 764828, known to genuinely have 14 test_run_results) across every successful invocation in this probe (7 total). test_cases[].test_run_results_count and test_cases[].test_run_results_issues_count were BOTH null in every single row, every single call, for every case including TC-54458 -- never 14, and never even the (also wrong) 0 that get_test_case_detail reportedly returns. The field is undeclared by the contract and, on this endpoint, is simply unpopulated dead weight rather than a wrong number; an agent trying to read result/issue counts off this listing endpoint gets nothing usable and should be told to use a different capability instead.\n\nOther observations: 'estimate' matched the guidance's 'always null' claim (null on every row). The 'folders' block, though declared only as {type: object}, has a real and useful shape in practice: {<folder_id>: [{id, name, parent_id, ui_position}, ...ancestors...]} -- confirms the 'unfalsifiable {type:object}' pattern (technically valid, practically undocumented). Descriptor shape for priority/automation_state matched the documented case-row serializer {id, internal_name, field_name, colour, value_category, name} once value_category is added to what the schema declares. No container mismatch was found -- every returned row's project_id was 379335744 as requested."
+}

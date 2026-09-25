@@ -1,0 +1,56 @@
+{
+  "capability": "get_project_by_integer_id",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:20:04Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "integer project id to look up",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 } },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "name": "string",
+      "identifier": "string (PR-NNN)",
+      "user_role": "string",
+      "permissions": "string[] (68 entries)",
+      "id": "integer",
+      "thProjectId": "integer",
+      "description": "string",
+      "created_at": "string (date-time)",
+      "import_id": null,
+      "test_cases_count": "integer",
+      "test_runs_count": "integer",
+      "test_plans_count": null,
+      "links": "object",
+      "normalisedName": "string",
+      "starred": "boolean",
+      "jira_mapped": "boolean",
+      "projectVisibilityBanner": "object ({is_visible, source})"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "No body/query — single required path_param project_id, no json_path nesting. Invoked with the fixture project's integer id (379335744) and succeeded on the first attempt. Every field in the formal 200 schema's project object (identifier, id, thProjectId, name, description, user_role, permissions, test_cases_count, test_runs_count, test_plans_count, created_at, starred, jira_mapped, links, import_id, normalisedName, projectVisibilityBanner) was present with the declared type (test_plans_count and import_id came back null, both explicitly nullable). No undeclared fields beyond the formal schema were returned. One documentation-only wrinkle, not scored against the verdict: the capability's top-level `returns` prose summary lists `access_type` as a returned field, but it is absent from BOTH the formal 200 schema's properties AND the actual response — the prose list and the schema disagree with each other here, and the schema (which the actual response matches exactly) is what this verdict is judged against.\n\nSPECIFIC INTEREST — answering directly: (a) `permissions` IS declared on this capability (present in both the `returns` summary and the formal schema, with guidance that it's populated only when the caller holds an explicit role) and (b) it WAS actually returned here: a 68-entry array of permission strings (project_write, tc_view, test_run_execute, ... project_delete), alongside `user_role: \"Admin\"`. This is the opposite of the two sibling project reads (get_projects_basic, get_projects_minify), where `permissions` was declared but returned in 0/300 rows — so the omission on those two listing endpoints is not a universal backend gap; the by-integer-id detail route delivers the caller's actual permission list correctly. `access_via_secondary_team` and `project_creator`: neither is declared ANYWHERE on this capability's contract — absent from both the `returns` prose summary and the formal 200 schema — and neither was returned in the actual response. This differs from the siblings, where `access_via_secondary_team` is declared inconsistently (present in get_projects_basic's schema and returned; present only in get_projects_minify's prose summary, not its schema, yet still returned there). On this capability the field simply doesn't exist in the contract or the response at all, so there is nothing inconsistent to report for it here beyond its total absence."
+}

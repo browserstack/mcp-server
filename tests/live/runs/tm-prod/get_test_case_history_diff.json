@@ -1,0 +1,92 @@
+{
+  "capability": "get_test_case_history_diff",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm >=2 real revisions exist on TC-1971433 (fixture-adjacent case in folder 8227653) and grab real numeric history ids.",
+      "source": "invoked",
+      "capability": "list_test_case_histories",
+      "arguments": { "project_id": 332537, "test_case_id": 66081640 },
+      "status": 200,
+      "produced": {
+        "count": 2,
+        "history_ids": { "old_v1": 54192295, "new_v2": 72588167 }
+      }
+    },
+    {
+      "step": 2,
+      "why": "Confirm the three original fixture cases (TC-838571/70/69, folder 9697326) named in the task briefing do NOT have >=2 revisions on prod, unlike what the task premise assumed from preprod residue.",
+      "source": "invoked",
+      "capability": "list_test_case_histories",
+      "arguments": { "project_id": 332537, "test_case_id": "32747791 | 32747562 | 32747539" },
+      "status": 200,
+      "produced": {
+        "note": "All three returned count:1, source:create only (V1 only) — despite last_updated_at (2025-06-15) differing from created_at (2025-04-25) on all three, no second history record exists. Not usable as the diff fixture; a different case was substituted (see steps 3-4)."
+      }
+    },
+    {
+      "step": 3,
+      "why": "Get a second independent case+pair to rule out an id-specific 404, from the same folder (8227653), a genuine two-revision case with a real custom-field edit.",
+      "source": "invoked",
+      "capability": "list_test_case_histories",
+      "arguments": { "project_id": 332537, "test_case_id": 39347460 },
+      "status": 200,
+      "produced": {
+        "count": 2,
+        "history_ids": { "old_v1": 19984074, "new_v2": 72588300 }
+      }
+    },
+    {
+      "step": 4,
+      "why": "Get a third independent case+pair for a third confirmation attempt.",
+      "source": "invoked",
+      "capability": "list_test_case_histories",
+      "arguments": { "project_id": 332537, "test_case_id": 39347465 },
+      "status": 200,
+      "produced": {
+        "count": 2,
+        "history_ids": { "old_v1": 19984079, "new_v2": 72588243 }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "project_id": 332537, "test_case_id": 66081640, "versions[]": [54192295, 72588167] },
+      "status": 404,
+      "error": "{\"success\": false}",
+      "changed": "n/a — never reached a comparable state; identical failure to preprod"
+    },
+    {
+      "n": 2,
+      "arguments": { "project_id": 332537, "test_case_id": 39347460, "versions[]": [19984074, 72588300] },
+      "status": 404,
+      "error": "{\"success\": false}",
+      "changed": "different test case entirely from attempt 1, same result"
+    },
+    {
+      "n": 3,
+      "arguments": { "project_id": 332537, "test_case_id": 39347465, "versions[]": [19984079, 72588243] },
+      "status": 404,
+      "error": "{\"success\": false}",
+      "changed": "third distinct test case, third identical 404"
+    }
+  ],
+  "probe": {
+    "arguments": { "project_id": 332537, "test_case_id": 66081640, "versions[]": [54192295, 72588167] },
+    "status": 404,
+    "response_keys": ["success"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id (path)", "test_case_id (path)", "versions[] (query, exactly 2 numeric history ids)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "DECISIVE RESULT: the preprod 404 REPRODUCES on production, byte-identical body {\"success\": false}, across THREE separate real revision-id pairs drawn from THREE separate test cases (66081640, 39347460, 39347465), all confirmed live via list_test_case_histories immediately beforehand (each returned count:2, one 'create' V1 record and one real 'update' V2 record with a genuine field diff in modified.custom_fields). This mirrors preprod's own multi-attempt methodology (3 attempts, 2+ cases) and strengthens rather than weakens the preprod finding. Production is the user's own full commercial account (Demo Project 1, 16,267 test cases, dozens of other capabilities already confirmed reachable here in this same campaign) — there is no indication this account is plan-restricted in the way a preprod test account might be, yet the capability still fails identically. The 404 body {\"success\": false} matches NEITHER of describeCapability's documented shapes for this route: not the 422 plan-gate shape ({success:false, message:'Not Allowed'}), and not the generic structured error shape declared for 404 itself ({success:false, error:{code,message,details}}). A genuine plan gate on this route is documented to surface as 422, not 404 — so an actual account-tier block would look different from what was observed both here and on preprod. CONCLUSION: this is NOT a plan-gate misclassification. The evidence points to a genuinely broken or unwired route — same status code, same minimal undocumented body, same failure to match the declared error contract, reproduced across two full environments and three independent, verifiably-real id pairs. The error-envelope question is NOT moot; it remains a real, separate defect layered on top of the routing failure. Secondary observation (not this capability's fault, but relevant context): TC-838571/70/69 (the folder-9697326 fixture cases named in the task) have only a single 'create' history record each on prod despite last_updated_at differing from created_at — their apparent 'edit residue' does not correspond to a second history entry, so they could not have served as the diff fixture even if the route worked. Substitute cases from folder 8227653 were used instead, all independently confirmed to carry two real, distinct revisions before the diff call was attempted."
+}

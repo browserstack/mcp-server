@@ -1,0 +1,115 @@
+{
+  "capability": "update_report",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:41:14.555Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the target report",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "identifier": "PR-2005" }
+    },
+    {
+      "step": 2,
+      "why": "baseline read of the target report before mutating it, so the update's effect can be diffed rather than assumed",
+      "source": "invoked",
+      "capability": "get_report_detail",
+      "arguments": { "path_params": { "project_id": 379335744, "report_id": 10393 } },
+      "status": 200,
+      "produced": {
+        "id": 10393,
+        "identifier": "SC-492",
+        "title": "__mcp-probe-report-20260921",
+        "description": "MCP live probe of create_report_by_integer_id capability",
+        "report_type": "Test Run Summary",
+        "report_timeframe": "last_one_week",
+        "report_creation_mode": "custom_report",
+        "grain": "test_case",
+        "is_dynamic": false,
+        "frequency": null,
+        "frequency_details": null,
+        "next_run_at": null,
+        "mail_to": "absent (key does not exist)",
+        "project_id": 379335744,
+        "note": "SC-489/SC-490/SC-491 (ids 10374/10390/10391) not read or touched by this probe"
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "report_id": 10393 },
+        "body": { "description": "PUT-vs-PATCH probe: description-only update, attempt 1" }
+      },
+      "status": null,
+      "error": "missing required parameter(s): projectId, report_creation_mode, report_timeframe, report_type",
+      "changed": "n/a — rejected by the MCP tool itself before any HTTP request was sent. A truly minimal single-field body (description only) is not reachable: the client enforces the schema's declared-required body fields (projectId, report_type, report_timeframe, report_creation_mode) up front."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "report_id": 10393 },
+        "body": {
+          "projectId": 379335744,
+          "report_type": "Test Run Summary",
+          "report_timeframe": "last_one_week",
+          "report_creation_mode": "custom_report",
+          "grain": "test_case",
+          "description": "PUT-vs-PATCH probe: description-only change, attempt 2 (title/is_dynamic deliberately omitted)"
+        }
+      },
+      "status": 422,
+      "error": "{\"success\":false,\"message\":\"{\\\"errorTraceId\\\":\\\"57f31bbe-9bf3-44f4-9f58-5edf17c52dd7\\\",\\\"message\\\":\\\"name name is required\\\",\\\"classification\\\":\\\"bstack-issue\\\"}\"}",
+      "changed": "n/a — reached the server this time (all client-enforced required fields present) but was rejected 422 because `title` was omitted. `title` is NOT marked required in the declared schema (only report_type/report_timeframe/report_creation_mode/projectId are), yet the live server treats it as mandatory and refuses the write outright rather than nulling it as the schema's own guidance text claims ('omit it and the title is set to null')."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "report_id": 10393 },
+        "body": {
+          "projectId": 379335744,
+          "report_type": "Test Run Summary",
+          "report_timeframe": "last_one_week",
+          "report_creation_mode": "custom_report",
+          "grain": "test_case",
+          "title": "__mcp-probe-report-20260921",
+          "description": "PUT-vs-PATCH probe: description changed by update_report attempt 3, 2026-09-21"
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "Succeeded once title was resent unchanged alongside the required identity/type fields. Only `description` was actually intended to change; `is_dynamic` was deliberately left out of the body to see if it would be merge-preserved or nulled."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "report_id": 10393 },
+      "body": {
+        "projectId": 379335744,
+        "report_type": "Test Run Summary",
+        "report_timeframe": "last_one_week",
+        "report_creation_mode": "custom_report",
+        "grain": "test_case",
+        "title": "__mcp-probe-report-20260921",
+        "description": "PUT-vs-PATCH probe: description changed by update_report attempt 3, 2026-09-21"
+      }
+    },
+    "status": 200,
+    "response_keys": ["data", "report_data", "report_filters", "filters", "dynamic_filters", "is_dynamic"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": [
+      "report_type", "report_timeframe", "report_creation_mode", "projectId (body)",
+      "title — LIVE-REQUIRED despite not being declared required in the schema; omitting it is 422 'name name is required', not a silent null-out"
+    ],
+    "json_path": "flat for the core update fields (projectId, report_type, report_timeframe, report_creation_mode, grain, title, description all top-level body keys, matching create). Filter/schedule json_path fields (report_filters.*, dynamic_filters.test_run, mail_to.users/external_mails, frequency_details.time/day) were declared but not exercised in this probe — the report's report_filters was already {} before and after, and no scheduling/recipient fields were sent.",
+    "declared_missing": ["data.mail_to"],
+    "undeclared_returned": ["data.updated_at", "data.project_ids", "data.included_projects", "data.is_dynamic", "data.grain", "data.slack_notification", "data.slack_notification_supported"]
+  },
+  "notes": "PUT-vs-PATCH verdict: a true single-field PATCH is not reachable at all on this endpoint. Two independent enforcement layers force a near-complete resend: (1) the MCP tool client-side rejects any call missing the schema's declared-required fields (report_type, report_timeframe, report_creation_mode, projectId) before a request is even sent (attempt 1); (2) the live server additionally 422s if `title` is omitted (attempt 2) — 'name name is required' — even though `title` is NOT marked required in the declared schema. This directly contradicts the schema's own guidance text for `title` ('Written unconditionally — omit it and the title is set to null'): live, omitting title never reaches a silent-null outcome, it hard-fails 422 first. So the documented 'full replace nulls what you omit' behavior is only half right for title — in practice you cannot omit it at all, so it can never be silently nulled the way the docs describe. Once title/report_type/report_timeframe/report_creation_mode/projectId/grain were all resent at their persisted values and only `description` was changed, the call succeeded (attempt 3, 200) and the read-back (get_report_detail) confirmed description changed and title/report_type/report_timeframe/report_creation_mode/grain all survived unchanged — as expected, since we resent them ourselves, not because the endpoint merged. `is_dynamic` was deliberately omitted from the body in attempts 2 and 3 to test the same claim for a non-required field; it came back `false` in both the write response and the read-back, identical to its pre-update persisted value — this is INCONCLUSIVE for merge-vs-null (false-if-nulled and false-if-preserved are indistinguishable here) and is explicitly left unverified rather than guessed. Net assessment: this endpoint behaves less like a forgiving PATCH and more like a gated full-replace — most identity/type fields are protected from accidental omission by hard validation (client-side or 422), which is safer than silent data loss, but it also means the schema's stated 'omit-to-null' contract is not what actually happens for at least `title`. INHERITED-DRIFT CONFIRMED, SAME SERIALIZER: exactly the same declared-missing field (data.mail_to — required in the schema, absent from the actual response, both on create and here) and exactly the same 7 undeclared fields (data.updated_at, data.project_ids, data.included_projects, data.is_dynamic, data.grain, data.slack_notification, data.slack_notification_supported) came back on this update as were found on create_report_by_integer_id for the same report id 10393. This is strong evidence create_report_by_integer_id and update_report share one serializer rather than being two independently-drifted response shapes — the 'two representations of project (project_id vs project_ids/included_projects)' pattern is identical on both, matching the pattern already confirmed for projects elsewhere. STATUS CODE: update correctly returns 200 (not the 200-for-201 anomaly seen on create — that was specific to record creation, not reproduced here since this is a genuine update of an existing record). NO EMAIL SENT / SCHEDULING UNTOUCHED: frequency, frequency_details, users, external_mails were never included in any attempt. Baseline and post-update reads both show frequency=null, frequency_details=null, next_run_at=null, and no mail_to key at all — the report remains unscheduled exactly as it was created, and no recipient fields were populated or exercised. SC-489/SC-490/SC-491 (ids 10374/10390/10391) were never read or touched by this probe — only report 10393/SC-492 was used, per instructions."
+}

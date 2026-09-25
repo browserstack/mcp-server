@@ -1,0 +1,75 @@
+{
+  "capability": "get_test_run",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T07:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_run_id": "TR-9062"}, "query": {"minify": "true"}},
+      "status": 500,
+      "error": "body was literally null (no envelope at all — does not match the declared 500 schema of {success:false, error:{code,message,details}})",
+      "changed": "dropped the minify query param and reissued the default (unqualified) request against the same run, which returned 200"
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": "PR-2005", "test_run_id": "TR-9062"}, "query": {"minify": "true"}},
+      "status": 500,
+      "error": "identical null-body 500, reproduced on retry — this is a real server error, not the preprod status-0 flake",
+      "changed": "confirmed reproducible; abandoned minify for the rest of the probe and used the default query (no minify) for all successful reads below"
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": "PR-2005", "test_run_id": "TR-9062"}, "query": {}},
+    "status": 200,
+    "response_keys": [
+      "active_state", "run_state", "created_at", "updated_at", "description", "identifier", "name",
+      "assignee", "project_id", "tags", "configurations", "filter_test_cases", "links", "urls",
+      "test_cases", "overall_progress", "issues"
+    ],
+    "item_shape": {
+      "id": "ABSENT",
+      "uuid": "ABSENT",
+      "identifier": "string, e.g. \"TR-9062\" — the only run identifier present anywhere in the payload",
+      "name": "string",
+      "type": "ABSENT",
+      "description": "string (empty)",
+      "owner": "ABSENT",
+      "assignee": "string (plain email, e.g. \"probe-user@example.invalid\") on TR-9062/TR-9058; null on TR-9061 (no assignee) — never an object",
+      "environment": "ABSENT",
+      "overall_progress": "object, but shape diverges hard from contract: contract declares {untested,passed,retest,failed,blocked,skipped,in_progress} (all-lowercase, always-present keys); actual is {\"Untested\": 4} — a single capitalized key, only the statuses with nonzero counts appear",
+      "overall_progress_by_status_id": "ABSENT",
+      "test_cases_count": "ABSENT (no discrete count field anywhere; you'd have to len() the undeclared test_cases array)",
+      "is_automation": "ABSENT",
+      "observability_url": "ABSENT",
+      "metadata": "ABSENT",
+      "assignee_imported": "ABSENT",
+      "is_dynamic": "ABSENT at top level of test_run; a same-named field exists only nested at filter_test_cases.is_dynamic (boolean, false in all three runs read)",
+      "test_plans": "ABSENT as declared (array). When a run IS linked to a plan (TR-9061 → TP-1616), a differently-named, differently-shaped field appears instead: test_plan (singular, one object) = {id:\"TP-1616\" (STRING, not the declared integer), identifier:\"TP-1616\", name:\"...\"}. Runs with no plan (TR-9062, TR-9058) omit the key entirely rather than returning [].",
+      "self_ui_link": "ABSENT by that name; its content is delivered under a different, undeclared field: urls.self (e.g. \"https://test-management-preprod.bsstag.com/projects/379335744/test-runs/TR-9062\")",
+      "links.detail": "ABSENT — links only ever contains {self, test_cases}, never detail",
+      "links.self": "present, string, e.g. \"/api/v2/projects/PR-2005/test-runs/TR-9062\" (declared)",
+      "filter_test_cases": "UNDECLARED object, {is_dynamic: boolean}",
+      "urls": "UNDECLARED object, {self: string}",
+      "links.test_cases": "UNDECLARED string path",
+      "test_cases": "UNDECLARED array of full test-case objects (case_type, priority, status, identifier, name, step_count, latest_status, latest_result_id, assignee, folder_path, configuration_id, execution_id, dataset, created_at/by, updated_at/by, urls.self) — nowhere in the get_test_run contract, flat or nested",
+      "issues": "UNDECLARED array (empty in all three reads — UNVERIFIED item shape)"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_run_id"],
+    "json_path": "test_run",
+    "declared_missing": [
+      "id", "uuid", "type", "owner", "environment", "overall_progress_by_status_id",
+      "test_cases_count", "is_automation", "observability_url", "metadata",
+      "assignee_imported", "is_dynamic", "test_plans", "self_ui_link", "links.detail"
+    ],
+    "undeclared_returned": [
+      "filter_test_cases", "filter_test_cases.is_dynamic", "urls", "urls.self",
+      "links.test_cases", "test_cases", "issues", "test_plan"
+    ]
+  },
+  "notes": "Field-by-field verdict on the 15 fields the create sibling flagged, using TR-9062 (subject, fresh) cross-checked against TR-9061 (linked to TP-1616) and TR-9058 (older, readonly): ALL 15 are also absent here — id, uuid, type, owner, environment, overall_progress_by_status_id, test_cases_count, is_automation, observability_url, metadata, assignee_imported, is_dynamic (top-level), test_plans, self_ui_link, links.detail. This is a clean match with the create sibling's gap list, confirming the pattern flagged in the task: this looks like a contract-wide over-declaration for the test_run entity rather than a create-specific projection gap, since the read path (which has every reason to return a fuller record than a create response) still omits the exact same 15 fields. Two of those need a caveat rather than a flat ABSENT: (1) is_dynamic does not exist at top level, but a field of the same name exists nested at filter_test_cases.is_dynamic (boolean) — so the name is real, just relocated and never at the path the schema declares it; (2) test_plans (plural array) never appears in any read, but when a run actually carries a plan link (TR-9061), a related-but-different field test_plan (singular object) shows up instead, with id as a STRING (\"TP-1616\") rather than the declared integer — this is exactly the test_plan-entity-wide drift pattern batch 4 already caught on the five dedicated test_plan capabilities, now showing up a sixth time inside get_test_run's own nested shape. overall_progress is the one exception to 'identical to create': it IS present on read (unlike create, where it was fully missing), but its actual shape ({\"Untested\": 4}, one capitalized sparse key) is incompatible with the declared shape (seven fixed lowercase keys always present) — so even where the read path fills in a create gap, it fills it in with the wrong contract. assignee: returned as a plain string (email) or null, never the declared object with id/browserstack_user_id/full_name/group_id/onboarded — identical to the create finding; DRIFT, not a create-only quirk. Numeric/uuid run id: NONE appears anywhere in any of the three reads, at the run level or nested. TR-NNNN (via `identifier`) is the only run identifier on the whole v2 surface for this capability. The contract is not merely silent about this — its own guidance text explicitly says 'The run's id field comes back as the TR-NNN string; the integer lives in uuid. Take uuid whenever you need a numeric run id downstream,' which is actively wrong: neither id nor uuid is ever present, so following that guidance fails. filter_test_cases, urls, and links.test_cases: all three are returned and are genuinely UNDECLARED in this capability's own contract (schema only declares links.{self,detail}, nothing else) — matches the create finding exactly, same undeclared trio. filter_test_cases.is_dynamic type: boolean (false) on TR-9062, TR-9061, and TR-9058 alike — a third/fourth data point agreeing with list_test_runs and update_test_run (boolean), reinforcing list_test_plan_test_runs (integer) as the outlier. Additional undeclared surface beyond the create-comparison checklist: the response also returns a full `test_cases` array (rich nested objects: case_type, latest_result_id, execution_id, folder_path, urls.self, etc.) and an `issues` array — neither mentioned anywhere in the contract, flat returns or nested schema; issues was empty in all three runs, so its item shape is UNVERIFIED, not cleared. Error envelope: a `minify=true` query param reproducibly triggers a 500 with a literal null body (no {success,error} envelope at all) on two consecutive attempts against TR-9062 — status 500 is in the declared set, but the body shape is not, adding an eighth confirmed error-envelope mismatch to the systemic tally; this is a genuine 500, distinct from the preprod status-0 flake, and is a real functional bug in the minify path specifically (default/no-minify requests succeeded every time, 3/3 runs). No writes were made to TR-9062 or the sibling fixtures; only reads were performed."
+}

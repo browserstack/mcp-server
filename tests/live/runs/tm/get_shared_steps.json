@@ -1,0 +1,40 @@
+{
+  "capability": "get_shared_steps",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T10:53:57Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the path param",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744 }
+    },
+    "status": 200,
+    "response_keys": ["data", "info", "pre_fetched_shared_step", "success"],
+    "item_shape": {
+      "title": "string",
+      "id": "integer",
+      "test_case_count": "integer",
+      "step_count": "integer",
+      "tags": "array",
+      "created_by": "object",
+      "updated_by": "object"
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["data[].tags"]
+  },
+  "notes": "Succeeded first try with only the required path param project_id; no query params were needed. Entity queried is `shared_step` (get_shared_steps), NOT `shared_field` (list_shared_components) — these are distinct entities in the index, and the capability's own `entity` field correctly says `shared_step`. Unlike list_shared_components, which came back empty account-wide across six projects in a prior probe, this call returned a NON-EMPTY list: one row, {id:27842, title:\"__probe-shared-step\", step_count:1, test_case_count:0}, apparently left over from an earlier live probe/seed. Because the list is non-empty the EMPTY-CASE RULE does not apply and the item shape is genuinely exercised (PASS, not UNVERIFIED). No shared step was created by this probe (read-only round, no write capability invoked). Field-level drift: the row-level JSON schema for `data[]` declares only {title,id,created_by,updated_by,test_case_count,step_count} in `properties`/`required` and never mentions `tags` on the item — yet the capability's flat top-level `returns` summary explicitly lists `tags` as a returned field, and the live response does include `tags:[]` on the row. This is a prose-vs-schema disagreement (the flat returns list is right, the nested item JSON schema is incomplete) rather than a wrong API — recorded as `undeclared_returned: [\"data[].tags\"]` against the strict item schema. No `total_pages` field was seen anywhere; the response's `info` object exactly matches the declared shape (page, page_size, count, prev, next), all present, both prev and next null. PAGINATION CHECK: only the single-page branch was reachable — count=1, page_size=30, so there is exactly one page (prev:null, next:null). The multi-page branch (undeclared prev/next mid-pagination, or any total_pages-vs-prev/next mutual-exclusivity the wider batch flagged) could NOT be exercised: this is a READ-ONLY round with no write/destructive capability permitted, so no second shared step could be created to force pagination, and the pool provides no second shared step. Do not read this run as confirming the multi-page envelope — it confirms only the single-page one. No container-shape mismatch (data is declared and returned as an array, not a map). No unfalsifiable {type:object} contracts encountered — all declared shapes here are concretely typed."
+}

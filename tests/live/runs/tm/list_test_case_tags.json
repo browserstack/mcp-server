@@ -1,0 +1,45 @@
+{
+  "capability": "list_test_case_tags",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope for the tag vocabulary listing",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "q": "mcp-probe" } },
+      "status": 200,
+      "error": "",
+      "changed": "did NOT reproduce the previously reported 500; q filter on a known real tag name returned 200 with tags, tag_objects and info all populated"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 379335744 }, "query": { "q": "__mcp-probe-tag-20260918a" } },
+      "status": 200,
+      "error": "",
+      "changed": "second q value (the exact tag name named in the task) also returned 200, not 500 — note the live tag has since been renamed to '__mcp-probe-tag-20260918a-renamed', but the substring still matched and returned 1 row cleanly, no 500"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "query": {} },
+    "status": 200,
+    "response_keys": ["tags", "info"],
+    "item_shape": { "tags": "array<string>", "info": "{page,page_size,count,prev,next}" }
+  },
+  "contract": {
+    "required": ["project_id (path)"],
+    "json_path": null,
+    "declared_missing": ["tag_objects — declared as a required field of the 200 schema (required: [tags, tag_objects, info]), but the unfiltered/paged call (no q) omits it entirely; it only appears when q is supplied"],
+    "undeclared_returned": []
+  },
+  "notes": "KNOWN DEFECT NOT REPRODUCED: ran the q filter twice (against 'mcp-probe' and the literal tag name '__mcp-probe-tag-20260918a', which now lives in this project renamed to '__mcp-probe-tag-20260918a-renamed') and both returned clean 200s with tags, tag_objects and info fully populated — no 500 in either case. Also confirmed the unfiltered paged call (no q, and again with p=1 explicitly) returns 200 consistently across three separate invocations. The earlier BLOCKED verdict for a 500-on-q does not hold today; recommend correcting it. Chose DRIFT instead of PASS because a real, reproducible contract mismatch was found on the plain/paged branch: the 200 schema declares tags, tag_objects and info as all required, but the no-q response consistently returns only tags and info — tag_objects is silently dropped. The q-filtered response, by contrast, DOES include tag_objects, so the container shape genuinely differs between the two branches (an undeclared shape split, not just a missing optional field). No 500/error body was produced at any point this round, so there is nothing to compare against the declared error envelope for this capability."
+}

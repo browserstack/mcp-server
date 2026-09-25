@@ -84,6 +84,13 @@ export default function addAutomationTools(
         .enum([SessionType.Automate, SessionType.AppAutomate])
         .describe("Type of BrowserStack session"),
     },
+    {
+      title: "Fetch Automation Screenshots",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     async (args) => {
       try {
         trackMCP(

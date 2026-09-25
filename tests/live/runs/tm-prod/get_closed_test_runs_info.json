@@ -1,0 +1,41 @@
+{
+  "capability": "get_closed_test_runs_info",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    "describeCapability confirmed declared 200 schema: data[] items are objects {month: string, count: integer}, e.g. example [{\"month\":\"Apr\",\"count\":3},{\"month\":\"May\",\"count\":0}].",
+    "Capability's own guidance text already states data entries are positional pairs (period label first, count second), not {month, count} objects — the guidance is accurate; only the machine-readable schema is stale.",
+    "project 332537 ('Demo Project 1') has 2,378 test runs, giving a real chance of closed runs within a 6-month window."
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 332537}, "query": {"q[closed_at]": "6_month"}},
+      "status": 200,
+      "error": null,
+      "changed": "Single attempt sufficed: empty_data was false and non-zero counts were present, so no widening to 12_month/all_time was needed."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 332537}, "query": {"q[closed_at]": "6_month"}},
+    "status": 200,
+    "response_keys": ["data", "empty_data"],
+    "item_shape": {
+      "declared": "object {month: string, count: integer}",
+      "actual": "2-element positional array [month, count]",
+      "actual_example": ["Jun", 1],
+      "empty_data": false,
+      "raw_data": [["Mar", 0], ["Apr", 0], ["May", 0], ["Jun", 1], ["Jul", 0], ["Aug", 1], ["Sep", 0]]
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": "$.data[*]",
+    "declared_missing": [],
+    "undeclared_returned": [],
+    "shape_mismatch": "Declared schema types each data[] entry as an object {month, count}; actual response returns a 2-element positional array [month, count] for every entry, including the non-zero ones. This is a container/item-shape drift in the machine-readable schema (the capability's own prose guidance already describes the correct positional behavior)."
+  },
+  "notes": "Preprod vs prod side by side: preprod (project_id 379335744, q[closed_at]=6_month, no q[created_at]) returned empty_data:true with an all-zero padded 7-month series of positional arrays like [\"Mar\", 0] — so the shape drift was only checkable against zero-padding, not real values. Prod (project_id 332537, same query, same trap-avoidance of omitting q[created_at]) returned empty_data:false on the FIRST attempt with a 7-month positional-array series [[\"Mar\",0],[\"Apr\",0],[\"May\",0],[\"Jun\",1],[\"Jul\",0],[\"Aug\",1],[\"Sep\",0]] — two real non-zero closed-run counts (Jun:1, Aug:1) against project 332537's 2,378 test runs. This settles both open questions with real data: (1) the positional-array-vs-declared-object drift reproduces identically on prod, now confirmed against genuinely non-zero entries rather than just zero-padding; (2) real non-zero closed-run data was found on prod, unlike preprod's all-zero fixture, so the underlying counting logic itself works correctly (only the declared schema shape is wrong) — this was never an empty-collection false-positive, it is a real, confirmed contract mismatch between the declared 2xx schema and the actual response shape."
+}

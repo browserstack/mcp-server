@@ -1,0 +1,73 @@
+{
+  "capability": "create_project",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T13:34:19Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "blast-radius check — confirm no delete-project capability exists in this profile before creating a group-visible top-level object that per this capability's own guidance cannot otherwise be cleaned up",
+      "source": "searchCapability(query=\"delete project\", product=tm, entity=project, mode=destructive)",
+      "capability": null,
+      "produced": { "total_matched": 0, "confirms": "no destructive-mode capability on the project entity exists anywhere in the tm profile — matches describeCapability's own guidance text for create_project ('There is no delete-project capability in this index')" }
+    },
+    {
+      "step": 2,
+      "why": "pre-create sanity check — confirm the probe name is not already in use (name uniqueness is explicitly NOT enforced server-side, so a stale prior run could otherwise be mistaken for this one)",
+      "source": "list_projects",
+      "capability": "list_projects",
+      "produced": { "query": { "q": "__mcp-probe-project-20260921" }, "count": 0 }
+    }
+  ],
+  "attempts": [
+    {
+      "attempt": 1,
+      "arguments": {
+        "body": { "name": "__mcp-probe-project-20260921" }
+      },
+      "result": "SUCCESS — 200, project created (id 379339429, identifier PR-2011)"
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "body": { "name": "__mcp-probe-project-20260921" }
+    },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "data.success": "boolean (true)",
+      "data.project": {
+        "name": "string",
+        "identifier": "string (PR-2011)",
+        "id": "integer (379339429)",
+        "thProjectId": "integer (379339429, same as id)",
+        "description": "null",
+        "created_at": "string (date-time)",
+        "import_id": "null",
+        "test_cases_count": "integer (0)",
+        "test_runs_count": "integer (0)",
+        "test_plans_count": "null",
+        "links": { "repository": "string", "self": "string", "test_runs": "string", "test_plans": "string", "users": "string" },
+        "normalisedName": "string",
+        "starred": "boolean (false)",
+        "jira_mapped": "boolean (false)",
+        "projectVisibilityBanner": { "is_visible": "boolean (false)", "source": "string (empty)" }
+      }
+    }
+  },
+  "contract": {
+    "required": ["name (body, string)"],
+    "json_path": "/project/name — confirmed auto-wrapped: a flat body ({name: ...}, no project wrapper) succeeded on the first attempt, matching describeCapability's guidance ('send the fields flat'). description/access_type/users were not exercised on this probe (not required, and access_type/users only take effect when project-level RBAC is on for the group, which risks a broader-blast-radius 400 or an RBAC-conditional write path outside the minimal probe's scope).",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "VERDICT PASS. Single attempt, no retries needed, so the 'never retry a create that may have partially succeeded without first checking the project list' constraint never came into play. BLAST RADIUS / CLEANUP: confirmed BEFORE creating, via searchCapability(entity=project, mode=destructive) returning zero matches, that no delete-project capability exists anywhere in this profile — matching create_project's own describeCapability guidance verbatim ('There is no delete-project capability in this index, so a project created by mistake cannot be removed through the registry — only through the UI'). The project created by this probe (id 379339429 / PR-2011) is therefore NOT removable through any capability in this profile; it can only be deleted via the TM UI. This is a bigger/worse version of the create_configuration finding: a configuration at least only pollutes a shared pool other projects read from, whereas an orphaned top-level project stays visible to the whole group (3452) indefinitely with no registry-level cleanup path at all. BOTH ID FORMS: the create response returns BOTH forms in a single call — data.project.id (379339429, integer, v1 form) and data.project.identifier (PR-2011, v2 form), plus thProjectId which duplicates id. No second call is needed to obtain either form, unlike the risk the campaign has been flagging elsewhere. CONTRACT: the 200 response matches its declared schema exactly — every returned key in data.project is declared, and nothing declared is missing except user_role and permissions, which the schema explicitly documents as conditional ('present only when the caller holds an explicit role here... a user whose access is implicit, such as through workspace ownership, gets neither this nor permissions') — their absence here is the documented behavior, not drift, so declared_missing is empty rather than listing them. TWO-SERIALIZER CHECK (against the create_root_folder defect on record): create_root_folder's data.project object is missing test_cases_count, test_runs_count, links and project_creator, and carries 16 undeclared fields (group_id, user_id, slug, is_demo, publicly_readable, access, applicable_role_id, applicable_role, four *_build_updated_at, source, archived, team_id, default_team_id, sub_group_id). This create_project response's data.project object has NONE of that: test_cases_count, test_runs_count and links are all present and correctly populated, and none of the 16 undeclared create_root_folder fields appear here at all. The two capabilities return visibly different project representations for what is nominally the same underlying record — confirming there are two distinct project serializers in play (one clean and schema-accurate, used by create_project and presumably the v1 project-detail read it shares its envelope with; one cut-down and leaking internal columns, used by create_root_folder's embedded project object) rather than one serializer with incidental per-endpoint drift. That is the more important finding than either endpoint's drift taken alone. ENTITLEMENT GATE: not applicable — response was an ordinary 200 with data.success:true, no {success:false} refusal-wearing-200 pattern observed. ERROR ENVELOPE: not exercised — the single attempt succeeded, so no error body was diffed against the success schema.",
+  "created": {
+    "project_id": 379339429,
+    "project_identifier": "PR-2011",
+    "project_name": "__mcp-probe-project-20260921",
+    "removable_via_any_capability_in_profile": false,
+    "removal_path": "UI only — no delete-project capability exists in this profile"
+  }
+}

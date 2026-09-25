@@ -1,0 +1,101 @@
+{
+  "capability": "get_test_case_by_integer_id",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T11:13:17Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project/folder/case ids for the pool fixture — all three path segments are plain integers per the contract",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "folder_id": 764093, "test_case_id": 1971631 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764093, "test_case_id": 1971631 } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded on first attempt"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744, "folder_id": 764093, "test_case_id": 1971631 } },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "id": "integer",
+      "identifier": "string (TC-NNN, e.g. TC-54455)",
+      "name": "string (case title — field is `name`, NOT `title`)",
+      "assignee": "object {id, browserstack_user_id, full_name, email, group_id, onboarded, reports_and_notification_enabled}",
+      "creator_details": "object (same user shape as assignee)",
+      "updator_details": null,
+      "created_at": "string (date-time)",
+      "updated_at": null,
+      "case_type": "object {id, internal_name, field_name, colour, value_category, name}",
+      "priority": "object {id, internal_name, field_name, colour, value_category, name}",
+      "status": "object {id, internal_name, field_name, colour, value_category, name}",
+      "automation_state": "object {id, internal_name, field_name, colour, value_category, name}",
+      "is_shared": "boolean",
+      "case_type_imported": "string (empty)",
+      "description": null,
+      "custom_fields": "array (empty)",
+      "estimate": null,
+      "estimated_duration_seconds": null,
+      "expected_result": null,
+      "is_automation": "boolean",
+      "links": "object {self, detail, folder}",
+      "history_count": "integer",
+      "owner": "integer",
+      "preconditions": null,
+      "owner_imported": "string (empty)",
+      "attachments": "array of objects {id, name, content_type, key, product_id, byte_size, checksum, url, download_url, size}",
+      "priority_imported": "string (empty)",
+      "project_id": "integer",
+      "status_imported": "string (empty)",
+      "steps": "array (empty)",
+      "tags": "array (empty)",
+      "template": "string",
+      "template_step_type": "string",
+      "template_id": "integer",
+      "template_name": "string",
+      "test_case_folder_id": "integer",
+      "test_case_steps": "array (empty)",
+      "lcnc_build_map": "object {resource_path, status}",
+      "automation_status": "object {name, value}",
+      "test_run_results_count": "integer",
+      "test_run_results_issues_count": "integer",
+      "issues": "array (empty)",
+      "comments_count": "integer",
+      "metadata": "object {lcnc_build_map, ai_prompt}",
+      "test_case_dataset": "object (empty)"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer)",
+      "folder_id (path, integer)",
+      "test_case_id (path, integer)"
+    ],
+    "json_path": null,
+    "declared_missing": [
+      "data.test_case.title — the declared 200 schema names the field `title` (with example \"Login with valid credentials\"); the actual response has no `title` key at all, only `name`. This matches the capability's own guidance text (\"the field is called `name`, not `title`\"), so the guidance is correct and the formal schema property is simply stale/wrong."
+    ],
+    "undeclared_returned": [
+      "assignee", "creator_details", "updator_details", "created_at", "updated_at",
+      "case_type", "priority", "status", "automation_state", "is_shared",
+      "case_type_imported", "description", "custom_fields", "estimated_duration_seconds",
+      "expected_result", "is_automation", "links", "name", "history_count", "owner",
+      "preconditions", "owner_imported", "attachments", "priority_imported", "project_id",
+      "status_imported", "steps", "tags", "template", "template_step_type", "template_id",
+      "template_name", "test_case_folder_id", "test_case_steps", "lcnc_build_map",
+      "automation_status", "test_run_results_count", "test_run_results_issues_count",
+      "issues", "comments_count", "metadata", "test_case_dataset",
+      "(~41 fields total under data.test_case — the declared 200 schema lists only 3 properties: identifier, id, title/name. Everything else the live route returns is undeclared, including the full assignee/creator user objects, all four option-row descriptors, steps/tags/attachments, and run/issue counts.)"
+    ]
+  },
+  "notes": "PASS on function, DRIFT on contract. The capability works: given the pool's integer project/folder/case ids it returned the correct case (TC-54455 / 'probe case A') with a 200 and a `data.test_case` envelope, confirming the envelope claim and the TC-NNN identifier claim. Verdict is DRIFT rather than PASS because the declared 200 schema is a near-empty stub (3 properties) against a live payload of ~41 fields at `data.test_case`, and the one property the schema does name (`title`) does not exist in the response — the real field is `name`, exactly as the guidance prose (correctly) says. So this is a schema-vs-reality mismatch where the prose is right and the formal schema is wrong, not a prose-vs-reality mismatch.\n\nCLAIMS VERIFIED:\n1. Digits-only route claim ('a TC-NNN or PR-NNN identifier never reaches the API and 404s at the router') — UNTESTABLE via this tool as stated. Passing test_case_id: \"TC-54455\" was rejected client-side by invokeCapability itself ({\"ok\":false,\"error\":\"'test_case_id' must be a number\"}) before any HTTP request was made, so this never reached the live route and says nothing about the router's own behavior. Neither confirmed nor denied.\n2. 'data.test_case is the envelope' — CONFIRMED. Response is exactly `{data: {success, test_case: {...}}}`.\n3. 'data.test_case.identifier is the TC-NNN form' — CONFIRMED (`\"identifier\":\"TC-54455\"`).\n4. 'the field is called name, not title' — CONFIRMED in the live response; but the formal 200 schema still declares `title`, not `name` — so this guidance line is actually flagging a real defect in the capability's own declared schema, not just documenting a naming quirk.\n5. 'estimate is always null, real value in estimated_duration_seconds' — PARTIALLY CONFIRMED: `estimate` was null as claimed. `estimated_duration_seconds` was also null here (no estimate was ever set on this case), so this probe cannot confirm that a non-null estimate actually surfaces there — it only confirms `estimate` itself is null.\n6. WRONG-FOLDER TEST (folder 764138 __scratch__ with case 1971631, which belongs to 764093) — CLAIM FALSIFIED. Guidance says 'the folder id must be the case's CURRENT folder... a correct case id under the wrong folder is a 404, not a redirect.' Actual: invoking with folder_id=764138 (case's real folder is 764093) returned **200** with the identical full case payload (`test_case_folder_id: 764093`, `links.self: \".../folder/764093/test-cases/1971631\"` — note the response's own self-link still points at the correct folder 764093, not the 764138 requested in the path). The route resolves the case by `(project_id, test_case_id)` alone and silently ignores a mismatched `folder_id` in the path rather than 404ing. This is a genuine behavioral drift from the documented contract, verified verbatim by direct comparison of the two invocations (both attached above / reproducible with the same arguments).\n\nDOCUMENTED-PAIR CLAIM (vs get_test_case_detail) — PARTIALLY CONFIRMED, with an important correction. get_test_case_by_integer_id's own guidance says 'This returns the case record only. For its linked runs, results and issue metadata use the detail read instead' — implying by-integer-id omits run/result/issue data entirely. That is NOT what was observed: the by-integer-id response already includes `issues` (array, empty here), `test_run_results_count`, `test_run_results_issues_count`, and `comments_count` — i.e. issue/result *counts* are present on this endpoint too, matching get_test_case_detail's own default (non-`exclude`) behavior of returning 'counts, not the run results themselves.' The two capabilities' declared schemas are otherwise near-identical in shape (both expose assignee/creator_details/steps/tags/attachments/case_type etc.) — by-integer-id is not a stripped-down 'case only' view. The actual differentiators, per get_test_case_detail's declared-but-not-shared fields, are: (a) `testcase_template` / `using_fallback_template` (template resolution) — absent from by-integer-id's response; (b) `folder_path` — opt-in via `include=folder_path`, a query param by-integer-id doesn't have at all; (c) an actual `test_run_results` array (row-level data) rather than just counts — not present in either response body observed here, so not directly confirmed, but declared only on detail; (d) top-level envelope fields `is_archived`, `linked_issues`, `pagy` — absent from by-integer-id's envelope, which is flat `{success, test_case}` with no sibling keys. So: confirm the general direction (detail is the richer read for cross-entity data) but the guidance's framing that by-integer-id carries none of it is overstated — it already carries assignee/creator/steps/attachments/issue-counts identical to detail's default mode; the real gap is template resolution, folder_path, actual result rows, and the archived/linked_issues/pagy envelope fields.\n\nDESCRIPTOR-FIELD WATCH ITEM — the 'authoritative source' claim in this session's guidance ('each option row carries {value,name,internal_name,is_default}, colour only on status, value_category only on automation_state') does NOT match what this capability actually returns. Observed shape for all four descriptor objects (case_type, priority, status, automation_state) is uniformly `{id, internal_name, field_name, colour, value_category, name}` — there is no `value` field anywhere (an `id` integer instead) and no `is_default` field at all; and `colour`/`value_category` keys are present on ALL FOUR objects (non-null only where meaningful: colour on status='active', value_category on automation_state='manual'; null elsewhere), not restricted to status/automation_state respectively as claimed. This capability's evidence contradicts that authoritative-source claim.\n\nID-TYPE WATCH ITEM — not observed here. Every id in this response (test_case.id, case_type.id, priority.id, status.id, automation_state.id) is a plain JSON integer; no quoted-string id was seen on this capability, so the 'one capability returns id as a quoted string' claim does not apply to get_test_case_by_integer_id.\n\nContainer/shape: no container mismatch found — response_keys is exactly `[\"data\"]` as declared, and `data.success`/`data.test_case` match the declared envelope structure. The drift here is entirely about the *completeness* of the declared schema (3 declared properties vs. ~41 actual) and the one wrong property name (`title` vs `name`), plus the behavioral folder_id-is-ignored finding above."
+}

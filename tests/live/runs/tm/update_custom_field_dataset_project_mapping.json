@@ -1,0 +1,125 @@
+{
+  "capability": "update_custom_field_dataset_project_mapping",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T06:10:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Establish 31320's baseline before any write — confirm it is still the unlinked dataset the parent create_custom_field_dataset probe left it as (linked_project_count 0), and note the concurrent is_default churn on its options mentioned by the task (146670 now is_default:false, 146669 now is_default:true — different from the parent probe's recorded 146668:true).",
+      "source": "invoked",
+      "capability": "get_custom_field_dataset",
+      "arguments": { "path_params": { "custom_fields_id": 106131, "dataset_id": 31320 }, "query": { "fetch_options": true } },
+      "status": 200,
+      "produced": { "linked_project_count": 0, "linked_projects": [], "datasetProjects": [], "options_note": "146670 is_default:false, 146669 is_default:true, 146668 is_default:false — confirms the sibling is_default probe churned since the parent probe's recording" }
+    },
+    {
+      "step": 2,
+      "why": "Known state of sibling dataset 31319 going in, from CLEANUP-LEDGER.md / the parent create_custom_field_dataset probe — needed as the pre-image to detect any cross-dataset side effect of the deliberate collision test.",
+      "source": "CLEANUP-LEDGER.md (prior probe)",
+      "capability": null,
+      "produced": { "dataset_id": 31319, "linked_projects": [{ "id": 379335744, "identifier": "PR-2005" }], "linked_project_count": 1 }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "purpose": "DELIBERATE FAILURE-MODE TEST: map 31320 to project 379335744/PR-2005, already claimed by sibling dataset 31319 for the same field. Guidance promised an upstream-relayed masked 400.",
+      "arguments": {
+        "path_params": { "custom_fields_id": 106131, "dataset_id": 31320 },
+        "body": { "link_projects": [379335744], "unlink_projects": [], "link_to_future_projects": false }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "NOT a 400 of any kind. The call succeeded (200, success:true) and 31320 came back with linked_project_count:1, linked_projects/datasetProjects both containing PR-2005/379335744. Re-reading sibling dataset 31319 immediately after showed linked_project_count had dropped from 1 to 0 — PR-2005 had been silently REASSIGNED away from 31319 to 31320, with no error, no warning, and no field in the 200 response hinting that another dataset's mapping had just been destroyed."
+    },
+    {
+      "n": 2,
+      "purpose": "PUT-vs-PATCH test + legitimate mapping: link 31320 to 379339429/PR-2011 (the designated throwaway target) WITHOUT unlinking the PR-2005 it just picked up in attempt 1. Also sets link_to_future_projects:true to observe whether it's reflected.",
+      "arguments": {
+        "path_params": { "custom_fields_id": 106131, "dataset_id": 31320 },
+        "body": { "link_projects": [379339429], "unlink_projects": [], "link_to_future_projects": true }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "ADDITIVE confirmed: linked_project_count went 1 -> 2, with BOTH PR-2005 (379335744) and PR-2011 (379339429) present in linked_projects/datasetProjects. The previously-linked project was NOT dropped by this second call. link_to_future_projects was echoed back as true in the response, and the previously-unseen field future_projects_applicable flipped 0 -> 1 in lockstep."
+    },
+    {
+      "n": 3,
+      "purpose": "Correction: remove the accidental PR-2005 mapping from 31320 (picked up as a side effect of attempt 1, not the intended target) and disable link_to_future_projects again, leaving 31320 mapped only to the intended PR-2011.",
+      "arguments": {
+        "path_params": { "custom_fields_id": 106131, "dataset_id": 31320 },
+        "body": { "link_projects": [], "unlink_projects": [379335744], "link_to_future_projects": false }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "linked_project_count 2 -> 1; only PR-2011/379339429 remains linked to 31320. link_to_future_projects back to false, future_projects_applicable back to 0."
+    },
+    {
+      "n": 4,
+      "purpose": "Restore sibling dataset 31319's original mapping to PR-2005, which attempt 1 silently stole away from it. Other probes read PR-2005's state from 31319, so its original mapping must be back in place.",
+      "arguments": {
+        "path_params": { "custom_fields_id": 106131, "dataset_id": 31319 },
+        "body": { "link_projects": [379335744], "unlink_projects": [], "link_to_future_projects": false }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "31319 linked_project_count 0 -> 1, PR-2005/379335744 restored. Re-reading 31320 immediately after confirmed it kept only PR-2011 (this relink did NOT steal PR-2011 back away from 31320 — the two projects are now on their correct, non-conflicting datasets)."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "custom_fields_id": 106131, "dataset_id": 31320 },
+      "body": { "link_projects": [379339429], "unlink_projects": [], "link_to_future_projects": true },
+      "json_path": null,
+      "wrapper_used": "flat body, no envelope — path_params + body.{link_projects, unlink_projects, link_to_future_projects} exactly as declared, matched on first attempt (all 4 calls in this probe were flat and all returned 200 on the first try — no WRAPPER TRAP, no retries needed)."
+    },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "data": {
+        "id": 31320,
+        "custom_field_id": 106131,
+        "group_id": 3452,
+        "future_projects_applicable": 1,
+        "record_status": "active",
+        "created_at": "2026-09-21T13:34:12.000Z",
+        "datasetProjects": [
+          { "project_id": 379335744, "project": { "name": "__mcp-capability-fixture__", "identifier": "PR-2005" }, "id": 379335744 },
+          { "project_id": 379339429, "project": { "name": "__mcp-probe-project-20260921", "identifier": "PR-2011" }, "id": 379339429 }
+        ],
+        "options": { "data": "[3 option rows]", "info": { "page": 1, "page_size": 30, "count": 3, "prev": null, "next": null } },
+        "linked_projects": [
+          { "project_id": 379335744, "project": { "name": "__mcp-capability-fixture__", "identifier": "PR-2005" }, "id": 379335744 },
+          { "project_id": 379339429, "project": { "name": "__mcp-probe-project-20260921", "identifier": "PR-2011" }, "id": 379339429 }
+        ],
+        "linked_project_count": 2,
+        "link_to_future_projects": true,
+        "linked_to_all_projects": false
+      }
+    },
+    "post_correction_final_state": {
+      "dataset_31320": { "linked_project_count": 1, "linked_projects": ["PR-2011/379339429"], "link_to_future_projects": false, "verified_by": "get_custom_field_dataset(106131, 31320) read after corrective attempt 3" },
+      "dataset_31319": { "linked_project_count": 1, "linked_projects": ["PR-2005/379335744"], "verified_by": "get_custom_field_dataset(106131, 31319) read after corrective attempt 4 — restored to its pre-probe state" }
+    }
+  },
+  "contract": {
+    "required": ["custom_fields_id (path)", "dataset_id (path)"],
+    "json_path": null,
+    "declared_missing": [
+      "data.options — declared type 'array' (items: object); every live response (all 4 calls) returned it as an OBJECT {data:[...3 rows...], info:{page,page_size,count,prev,next}}, never a bare array. Same drift previously confirmed on get_custom_field_dataset's contract — this write endpoint's re-read has the identical shape bug."
+    ],
+    "undeclared_returned": [
+      "data.custom_field_id",
+      "data.group_id",
+      "data.future_projects_applicable — tracks link_to_future_projects (0/1), not declared anywhere in this capability's schema",
+      "data.record_status",
+      "data.created_at",
+      "data.datasetProjects — a second, differently-named copy of the exact same content as the declared data.linked_projects (confirmed identical project rows in both keys on every call in this probe, matching the parent create_custom_field_dataset probe's finding)",
+      "data.options.info — undeclared pagination envelope around options.data",
+      "each options row's extra fields beyond a generic object: group_id, project_id, custom_field_id, dataset_id, record_status, created_at, updated_at"
+    ]
+  },
+  "notes": "*** THE DOCUMENTED FAILURE MODE DID NOT REPRODUCE — IT IS WORSE THAN 'MASKED' ***\ncreate_custom_field_dataset_v2's guidance (and this capability's own guidance) warns that mapping a project to a second dataset when a sibling dataset already claims it 'fails with the upstream message relayed verbatim (e.g. Projects already linked to a different dataset for this custom field..., invalid project mapping, Dataset id is invalid)'. That did not happen. Attempt 1 mapped 31320 to PR-2005 (already owned by 31319) and got a clean 200/success:true — and 31319's own mapping was silently deleted as a side effect, with no error, no field in either response indicating a conflict occurred, and no way for a caller to learn about it short of independently re-reading the sibling dataset. This is not 'the error is masked' — there is no error at all. The one-project-one-dataset-per-field rule is enforced by silent last-writer-wins reassignment, not by rejection. Any caller who maps a project believing they are only adding it to their own dataset can unknowingly detach it from whatever dataset previously held it, with a 200 telling them everything is fine.\n\n*** PUT vs PATCH: THIS ONE IS GENUINELY ADDITIVE (unlike edit_test_run) ***\nAttempt 2 sent link_projects:[379339429] with 31320 already holding PR-2005 from attempt 1, and did NOT send PR-2005 in the same call. Result: linked_project_count went 1 -> 2, both projects present. Sending a link_projects list does NOT replace the dataset's project list — it adds to it, exactly as the parameter-level guidance says ('Integer project ids to ADD'). This is the opposite of edit_test_run.test_case_ids, which claims 'additive' in its docs but is actually a full replace. Here the docs and the behavior agree: link_projects/unlink_projects are true deltas against the existing list, not a replacement of it. Confirmed the inverse too in attempt 3 (unlink_projects:[379335744] alone removed exactly that one project, leaving PR-2011 untouched) and attempt 4 (relinking 31319 to PR-2005 did not steal PR-2011 back off of 31320 — the exclusive-ownership reassignment in attempt 1 was specifically about the SAME project moving between datasets, not a wholesale replace of any dataset's list).\n\n*** link_to_future_projects: reflected immediately, plus one undeclared side-channel ***\nSetting link_to_future_projects:true on attempt 2 was echoed back verbatim in the same call's response, and drove the undeclared future_projects_applicable field from 0 to 1 in lockstep (attempt 3 flipped both back to false/0 together). Whether it actually auto-links a newly created project was not tested further (out of scope, and doing so would have required creating another throwaway project) but the flag is real, is honored, and now correctly sits at false on both 31320 and 31319 after cleanup.\n\n*** DRIFT CLUSTER — CONFIRMED ON THIS CAPABILITY TOO ***\n- data.options: declared array, always an object {data,info} in practice, identical to get_custom_field_dataset's confirmed drift (this endpoint returns the freshly re-read dataset, so it inherits that read's shape).\n- datasetProjects: present and undeclared on every call, an exact duplicate of the declared linked_projects — same second-copy pattern flagged on the parent create probe.\n- Everything must be verified by reading back: this capability's OWN write response is trustworthy for the dataset it targets (the re-read `data` block is accurate, unlike create_custom_field_dataset's write response, which returns options:{} regardless of content) — but it says NOTHING about side effects on other datasets. The PR-2005 theft from 31319 was invisible in attempt 1's response and only surfaced by independently re-reading 31319.\n\nCLEANUP: dataset 31320 ends this probe linked only to 379339429/PR-2011 (linked_project_count 1, link_to_future_projects false) — the intended legitimate mapping. Sibling dataset 31319 ends restored to its original state, linked only to 379335744/PR-2005 (linked_project_count 1) — the incidental detachment caused by the deliberate collision test (attempt 1) was corrected by attempt 4. Both states were verified live by get_custom_field_dataset reads after the corrective calls, not inferred from write responses. No 500s, no status:0/hang — the v2-tier outage flagged as a risk for this capability did not manifest; all 4 writes and both verification reads returned promptly with 200."
+}

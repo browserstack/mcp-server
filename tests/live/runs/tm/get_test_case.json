@@ -1,0 +1,78 @@
+{
+  "capability": "get_test_case",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T05:55:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Project identifier PR-2005 and case identifiers TC-54458 (fresh, __scratch__, created by the sibling create_test_case probe) and TC-54455 (older, __readonly__) came from the fixture pool given in the task; no extra invocation was needed to obtain them.",
+      "source": "pool",
+      "capability": null,
+      "arguments": {},
+      "status": null,
+      "produced": {
+        "project_id": "PR-2005",
+        "test_case_ids_used": ["TC-54458", "TC-54455"]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" } },
+      "status": 200,
+      "error": null,
+      "changed": "none needed - succeeded first try"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54455" } },
+      "status": 200,
+      "error": null,
+      "changed": "invoked again on an older __readonly__ case (TC-54455) to guard against a one-off and to see if any fields the fresh case leaves blank get populated on an older row"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" } },
+    "status": 200,
+    "response_keys": [
+      "case_type", "priority", "status", "folder_id", "issues", "created_at",
+      "last_updated_at", "created_by", "updated_by", "tags", "template",
+      "description", "preconditions", "title", "is_shared", "identifier",
+      "automation_status", "owner", "attachments", "steps", "custom_fields", "urls"
+    ],
+    "item_shape": {
+      "identifier": "string, e.g. \"TC-54458\"",
+      "title": "string",
+      "description": "null",
+      "preconditions": "null",
+      "template": "string, \"test_case_steps\"",
+      "folder_id": "integer, 764138",
+      "status": "string, \"Active\" - POPULATED (see notes, check 2)",
+      "priority": "string, \"Medium\"",
+      "case_type": "string, \"Other\" - POPULATED (see notes, check 2)",
+      "automation_status": "string, \"not_automated\"",
+      "owner": "string email, \"probe-user@example.invalid\"",
+      "tags": "array[string], [\"mcp-probe\"]",
+      "issues": "array, [] (empty - proves nothing about item shape)",
+      "steps": "array[{step,result}], 1 item matching create-time content exactly",
+      "custom_fields": "array, [] (empty - proves nothing about item shape)",
+      "attachments": "array, [] - PRESENT as empty array, not omitted (see notes, check 3)",
+      "is_shared": "boolean, false",
+      "created_at": "string date-time",
+      "created_by": "string email",
+      "last_updated_at": "string date-time",
+      "updated_by": "string email",
+      "urls": "{ self: string } - deep link only; numeric id 1975349 recoverable only from the trailing path segment of urls.self, exactly as at create time; no dedicated numeric-id field (see notes, check 1)"
+    }
+  },
+  "contract": {
+    "required": ["project_id", "test_case_id"],
+    "json_path": "data.test_case",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Probed TC-54458 (fresh, __scratch__ 764138) as the primary subject, then TC-54455 (older, __readonly__ 764093, tags=[], steps=[]) as a second read to guard against a one-off; both returned 200 with an identically-shaped test_case object and no field-population differences attributable to age. No writes were made to either case (read-only). \n\nCHECK 1 (numeric id): NOT exposed as a real field on this read either - the nested schema explicitly documents 'no integer id in the body' and the guidance says the same, and the actual response for both cases confirms it: no id/numeric_id/test_case_id key anywhere in the body. The only way to recover the numeric id (1975349 for TC-54458, 1971631 for TC-54455) is parsing the trailing path segment of urls.self, exactly as with create. Unlike the create-time precedent (get_test_plan/create_test_plan pair) where the create contract wrongly claimed the id was absent when it was actually parseable, THIS contract is honest in both directions: it says there's no id field, and there is genuinely no better way to get it than URL-parsing. So the read contract's honesty here matches the good half of that precedent (the read side), not the bad half.\n\nCHECK 2 (status/case_type): Both come back POPULATED on this v2 read - status: \"Active\", case_type: \"Other\" - for both TC-54458 and TC-54455. This confirms the create-probe's hypothesis: the earlier list_folder_test_cases read returning status: null, case_type: null for the same TC-54458 row is that v1 listing's own default column-selection behaviour, not a real data inconsistency. get_test_case (fetching one case in full) does not share that omission.\n\nCHECK 3 (attachments): This read returns attachments as an explicit empty array ([]), not an omitted key, for both cases probed. That means the create response's behaviour - declaring attachments as an array type but omitting the key entirely when there are no attachments - is NOT a shared 'omit when empty' convention across this API. The get_test_case read is the more conventional one (present as [] when empty); the create_test_case response is the outlier that should be flagged for that endpoint specifically, not generalized as house style.\n\nContract self-consistency note (not a response drift): the flat `returns` array omits `folder_path`, while the nested per-field schema declares it (documented there as 'only present on list responses, not single-case responses'). The actual response for both probed cases has no folder_path key, which is exactly what the nested schema's own caveat predicts - so the flat array's omission happens to match observed behaviour here, but the flat/nested disagreement itself is worth recording per the standing lesson about the flat returns array being unreliable in both directions, even though it did not cause a real declared_missing in this case. Similarly, feature/background/scenario (Gherkin-only) and review_status/reviewers (Review & Approve-only) are declared in both the flat and nested schema but absent from both probed cases' responses - both cases use template test_case_steps (not test_case_bdd) and the project apparently does not have Review & Approve enabled, so per the contract's own explicit conditional guidance this absence is expected, not drift.\n\nEvery other field the nested schema declares (identifier, title, description, preconditions, template, folder_id, status, priority, case_type, automation_status, owner, tags, issues, steps, custom_fields, attachments, is_shared, created_at, created_by, last_updated_at, updated_by, urls.self) was returned with the declared type on at least one of the two probed cases, and no key came back that the nested schema does not mention. This is not a hollow contract - the schema declares ~20 substantive fields and all were checked against real, non-empty (where applicable) data. Verdict: PASS."
+}

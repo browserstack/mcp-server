@@ -1,0 +1,127 @@
+{
+  "capability": "list_test_run_test_case_comments",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Get mapping_ids and comments_count per row for TR-9062 (subject run) to cross-check the comments endpoint against an independent field.",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases_by_integer_id",
+      "arguments": {"project_id": 379335744, "test_run_id": "TR-9062"},
+      "status": 200,
+      "produced": {
+        "count": 5,
+        "rows": [
+          {"identifier": "TC-54458", "test_case_id": 1975349, "mapping_id": 2150387254, "comments_count": 0},
+          {"identifier": "TC-54457", "test_case_id": 1972036, "mapping_id": 2150387252, "comments_count": 0},
+          {"identifier": "TC-54457", "test_case_id": 1972036, "mapping_id": 2150387283, "comments_count": 0},
+          {"identifier": "TC-54456", "test_case_id": 1971632, "mapping_id": 2150387251, "comments_count": 0},
+          {"identifier": "TC-54455", "test_case_id": 1971631, "mapping_id": 2150387253, "comments_count": 0}
+        ]
+      }
+    },
+    {
+      "step": 2,
+      "why": "Same cross-check for the older __readonly__ run TR-9058, which may carry pre-existing comments.",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases_by_integer_id",
+      "arguments": {"project_id": 379335744, "test_run_id": "TR-9058"},
+      "status": 200,
+      "produced": {
+        "count": 2,
+        "rows": [
+          {"identifier": "TC-54456", "test_case_id": 1971632, "mapping_id": 2150363779, "comments_count": 0},
+          {"identifier": "TC-54455", "test_case_id": 1971631, "mapping_id": 2150363778, "comments_count": 0}
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "why": "Same cross-check for batch-1 leftover run TR-9061.",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases_by_integer_id",
+      "arguments": {"project_id": 379335744, "test_run_id": "TR-9061"},
+      "status": 200,
+      "produced": {
+        "count": 1,
+        "rows": [
+          {"identifier": "TC-54457", "test_case_id": 1972036, "mapping_id": 2150364326, "comments_count": 0}
+        ]
+      }
+    },
+    {
+      "step": 4,
+      "why": "Same cross-check for the clone run TR-9063 mentioned in the fixture pool.",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases_by_integer_id",
+      "arguments": {"project_id": 379335744, "test_run_id": "TR-9063"},
+      "status": 200,
+      "produced": {
+        "count": 4,
+        "rows": [
+          {"identifier": "TC-54458", "test_case_id": 1975349, "mapping_id": 2150387391, "comments_count": 0},
+          {"identifier": "TC-54457", "test_case_id": 1972036, "mapping_id": 2150387393, "comments_count": 0},
+          {"identifier": "TC-54456", "test_case_id": 1971632, "mapping_id": 2150387394, "comments_count": 0},
+          {"identifier": "TC-54455", "test_case_id": 1971631, "mapping_id": 2150387395, "comments_count": 0}
+        ]
+      }
+    },
+    {
+      "step": 5,
+      "why": "Authoritative cross-check of TR-9062's true integer run id, to verify the fixture-pool-supplied numeric id (17575382) is genuinely correct before concluding the comments capability mishandles it.",
+      "source": "invoked",
+      "capability": "get_test_run_by_integer_id",
+      "arguments": {"project_id": 379335744, "test_run_id": 17575382},
+      "status": 200,
+      "produced": {"identifier": "TR-9062", "uuid": 17575382}
+    },
+    {
+      "step": 6,
+      "why": "Same cross-check for TR-9061's true integer id.",
+      "source": "invoked",
+      "capability": "get_test_run",
+      "arguments": {"project_id": "PR-2005", "test_run_id": "TR-9062"},
+      "status": 200,
+      "produced": {"note": "Confirms TR-9062's 5 test cases and their mapping/latest_result ids; response carries no `id`/`uuid` field on the run itself (already-known systemic drift on get_test_run, not scored here)."}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744, "test_run_id": "TR-9062", "test_case_id": 1971631}, "query": {"p": 1}},
+      "status": 200,
+      "error": null,
+      "changed": "First try, built exactly as declared (integer project_id, TR-NNN test_run_id, integer test_case_id) — worked immediately: {\"comments\":[],\"success\":true,\"info\":{\"page\":1,\"next\":null,\"prev\":null,\"count\":0,\"page_size\":30}}"
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744, "test_run_id": "17575382", "test_case_id": 1971631}, "query": {"p": 1}},
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"TRTC not found for given testrun_id:358823, testcase_id:1971631, mapping_id:\"}",
+      "changed": "Swapped test_run_id from the TR-NNN string to the bare-integer alternate form the contract's own pattern (^(TR-)?[0-9]+$) and description declare acceptable, using TR-9062's OWN verified integer id (17575382, confirmed correct via get_test_run_by_integer_id in setup step 5). Same project/case that succeeded in attempt 1. Instead of resolving to TR-9062, the server rejected it citing a completely unrelated testrun_id (358823) in the error message — not 17575382, not any id belonging to TR-9062."
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": 379335744, "test_run_id": "17574995", "test_case_id": 1972036}, "query": {"p": 1}},
+      "status": 400,
+      "error": "{\"success\":false,\"message\":\"TRTC not found for given testrun_id:358621, testcase_id:1972036, mapping_id:\"}",
+      "changed": "Control repeat of the bare-integer form on a DIFFERENT run (TR-9061's own integer id, 17574995) and a valid case for that run (TC-54457/1972036, confirmed present in TR-9061 via setup step 3). Reproduced the same failure pattern with a different, again-unrelated cited id (358621) — deterministic across two distinct inputs, not a one-off preprod flake (no 500/null-body pattern; consistent 400 shape both times). Confirms the bare-integer test_run_id form is broken in this capability, not merely a bad fixture value."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744, "test_run_id": "TR-9062", "test_case_id": 1971631}, "query": {"p": 1}},
+    "status": 200,
+    "response_keys": ["comments", "success", "info"],
+    "item_shape": "UNVERIFIED — every row checked (TR-9062 all 5, TR-9058 both, TR-9061's 1, TR-9063's 4) returned an empty comments[] array, so the declared per-comment item fields (id, user_id{id,full_name,email}, group_id, project_id, parent_id, entity_id, entity_type, created_at, comment, edited, is_editable, review_status) could not be checked against a real row. mappingId was also exercised (both of TC-54457's mapping ids, 2150387252 and 2150387283) and accepted without error, still returning empty."
+  },
+  "contract": {
+    "required": ["comments", "success", "info"],
+    "json_path": "$.comments[]",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Id-form scorecard (this is the capability documented as mixing id conventions in one call): project_id declared INTEGER (v1 route, digits only) — 379335744 worked as declared; passing 'PR-2005' was rejected client-side by invokeCapability itself ('project_id' must be a number), consistent with the declared type, no drift. test_case_id declared INTEGER (numeric case id, not TC-NNN) — 1971631/1971632/1972036/1975349 all worked as declared; passing 'TC-54455' was likewise rejected client-side ('test_case_id' must be a number), again consistent — unlike the assign_test_run_test_cases precedent, the declared type here is correct so the capability stays usable. test_run_id declared STRING accepting EITHER 'TR-NNN' (preferred) OR the run's bare integer id (pattern ^(TR-)?[0-9]+$) — only the TR-NNN form actually works. The bare-integer form, even using TR-9062's and TR-9061's own verified integer ids (confirmed correct via get_test_run_by_integer_id and via the fixture pool), produced a 400 'TRTC not found for given testrun_id:<unrelated number>' where the cited id (358823, then 358621) matches neither the id sent nor the target run — reproduced twice with different inputs, so it is a stable defect in this capability's bare-integer id resolution, not a fixture mistake or preprod flakiness. This is DRIFT, HIGH severity: one of the two declared id conventions for test_run_id does not work. Separately, error envelope: both 400s observed here were flat {success:false, message:'...'} with no `error` object, no `code`, no `details` — contradicting the declared 400 schema {success, error:{code, message, details}}. This is another instance of the suite-wide systemic error-envelope problem (previously nine capabilities / six shapes) — DRIFT, low-to-moderate severity (does not block reading, but callers cannot programmatically branch on error.code as documented). mappingId (query, declared REQUIRED but server-optional per guidance) was confirmed genuinely optional: omitting it and supplying either of TC-54457's two real mapping ids (2150387252, 2150387283) both returned 200 with no error, matching guidance over the stricter 'required' label — no drift, guidance is correct here. Comment-count baseline recorded per row (all zero, confirmed both via this capability directly and via list_test_run_test_cases_by_integer_id's independent comments_count field, which agreed in every case): TR-9062 (17575382) — TC-54455/1971631=0, TC-54456/1971632=0, TC-54457/1972036 (mapping 2150387252)=0, TC-54457/1972036 (mapping 2150387283, the duplicate row)=0, TC-54458/1975349=0. TR-9058 (__readonly__) — TC-54455/1971631=0, TC-54456/1971632=0. TR-9061 (17574995, batch-1 leftover) — TC-54457/1972036=0. TR-9063 (clone) — TC-54458/1975349=0 (checked directly), other 3 rows (TC-54457/1972036, TC-54456/1971632, TC-54455/1971631) at comments_count=0 per list_test_run_test_cases_by_integer_id only. Nothing in this pool has ever added a run-scoped comment, so zero everywhere is expected and proves nothing about item shape — this file is the 'before' baseline for the sibling create_test_run_test_case_comment probe; re-run this capability against TR-9062/TC-54455 (mapping 2150387253) or any row the create probe touches to verify item_shape against a real comment once one exists."
+}

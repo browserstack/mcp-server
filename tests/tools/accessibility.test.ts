@@ -80,7 +80,9 @@ describe("Accessibility Tools", () => {
     vi.clearAllMocks();
     handlers = {};
     serverMock = {
-      tool: vi.fn((name: string, _desc: string, _schema: any, handler: (...args: any[]) => any) => {
+      tool: vi.fn((...toolArgs: any[]) => {
+        const name = toolArgs[0] as string;
+        const handler = toolArgs[toolArgs.length - 1] as (...args: any[]) => any;
         handlers[name] = handler;
       }),
       server: {

@@ -1,0 +1,106 @@
+{
+  "capability": "create_test_case_comment",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T07:37:23Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm the declared 0-comment baseline on TC-54458 before writing, per task instructions and the sibling's prior sweep finding 0 comments everywhere in the fixture pool.",
+      "source": "invoked",
+      "capability": "list_test_case_comments",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764828, "test_case_id": 1975349 },
+        "query": { "p": 1 }
+      },
+      "status": 200,
+      "produced": { "comments": [], "success": true, "info": { "page": 1, "next": null, "prev": null, "count": 0, "page_size": 30 } }
+    },
+    {
+      "step": 2,
+      "why": "Re-read storage after the write to verify the comment actually persisted (do not trust the 2xx on the write alone), and to capture the field-by-field shape of a real stored comment for the first time in this suite.",
+      "source": "invoked",
+      "capability": "list_test_case_comments",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764828, "test_case_id": 1975349 },
+        "query": { "p": 1 }
+      },
+      "status": 200,
+      "produced": {
+        "comments": [
+          {
+            "id": 1307,
+            "user_id": { "id": 2522, "full_name": "ing", "email": "probe-user@example.invalid" },
+            "group_id": 2615,
+            "project_id": 379335744,
+            "parent_id": null,
+            "entity_id": 1975349,
+            "entity_type": "TestCase",
+            "created_at": "2026-09-18T07:36:43.727Z",
+            "comment": "__mcp-probe-comment-2026-09-18T07:36:35Z",
+            "edited": false,
+            "is_editable": true
+          }
+        ],
+        "success": true,
+        "info": { "page": 1, "next": null, "prev": null, "count": 1, "page_size": 30 }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764828, "test_case_id": 1975349 },
+        "body": { "comment": "__mcp-probe-comment-2026-09-18T07:36:35Z" }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - first attempt, built exactly as declared: flat body field `comment` (per the json_path-is-not-call-shape lesson, sent flat rather than nested under a `comment` wrapper despite the declared json_path `/comment/comment`), plain text (not HTML), correct integer path params. Succeeded on the first try; no second or third attempt was needed."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 764828, "test_case_id": 1975349 },
+      "body": { "comment": "__mcp-probe-comment-2026-09-18T07:36:35Z" }
+    },
+    "status": 200,
+    "response_keys": [
+      "data.success",
+      "data.comment.id",
+      "data.comment.user_id.id",
+      "data.comment.user_id.full_name",
+      "data.comment.user_id.email",
+      "data.comment.group_id",
+      "data.comment.project_id",
+      "data.comment.parent_id",
+      "data.comment.entity_id",
+      "data.comment.entity_type",
+      "data.comment.created_at",
+      "data.comment.comment",
+      "data.comment.edited",
+      "data.comment.is_editable"
+    ],
+    "item_shape": {
+      "id": 1307,
+      "user_id": { "id": 2522, "full_name": "ing", "email": "probe-user@example.invalid" },
+      "group_id": 2615,
+      "project_id": 379335744,
+      "parent_id": null,
+      "entity_id": 1975349,
+      "entity_type": "TestCase",
+      "created_at": "2026-09-18T07:36:43.727Z",
+      "comment": "__mcp-probe-comment-2026-09-18T07:36:35Z",
+      "edited": false,
+      "is_editable": true
+    }
+  },
+  "contract": {
+    "required": ["project_id", "folder_id", "test_case_id", "comment"],
+    "json_path": "/comment/comment",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "WRITE SUCCEEDED FIRST TRY. Comment id 1307, text '__mcp-probe-comment-2026-09-18T07:36:35Z', posted on TC-54458 (int 1975349, folder 764828, project int 379335744). Re-read confirmed count went 0 -> 1 and the exact same object (id 1307, same text, same created_at 2026-09-18T07:36:43.727Z) is present via list_test_case_comments -- this write is NOT a false-success like the batch-6 test_run cases; storage genuinely changed.\n\nField-by-field check of the stored comment against the declared item shape (id/user_id{id,full_name,email}/group_id/project_id/parent_id/entity_id/entity_type/created_at/comment/edited/is_editable/review_status):\n- id: present, integer (1307). Matches.\n- user_id: present, object with id (2522, int), full_name ('ing'), email ('probe-user@example.invalid'). All three sub-fields present and typed as declared. Matches.\n- group_id: present, integer (2615). Matches (this field is in the nested schema but is ABSENT from the flat `returns` array on both create_test_case_comment and list_test_case_comments -- confirms the standing 'flat returns array is unreliable' lesson yet again).\n- project_id: present, integer (379335744), equals the project id passed in the path. Matches.\n- parent_id: present, null. Matches declared 'always null through this path'.\n- entity_id: present, integer (1975349) -- **this is exactly the test_case_id from the path**, not 'the id of the run/case mapping cell' as the schema literally describes it. For this capability there is no run/case mapping cell at all: it comments directly on a bare test case. So the entity_id description is DRIFT (copy-pasted from a test-run-comment capability) even though the field itself is present with a plausible-looking integer.\n- entity_type: present, value **'TestCase'** -- NOT 'TRTC' as declared (schema literally has `\"example\": \"TRTC\"` and the description text 'TRTC for a comment on a test case inside a test run'). This resolves the open question from the task: case comments and run-case comments do NOT share one storage type/enum value here -- create_test_case_comment / list_test_case_comments return entity_type 'TestCase' for a genuine bare-test-case comment. The declared 'TRTC' value (and its description) appears to have been copied from a different, run-scoped comment capability and is simply wrong for this one. This is the single most notable finding of this probe.\n- created_at: present, ISO datetime string ('2026-09-18T07:36:43.727Z'). Matches.\n- comment: present, string, exactly the text sent back verbatim (no HTML wrapping was added since plain text was sent). Matches.\n- edited: present, boolean, false (correct, unedited). Matches.\n- is_editable: present, boolean, true (correct, author-owned, freshly created). Matches.\n- review_status: ABSENT from the response. This matches the schema's own caveat ('present only on comments that were recorded as part of a review verdict') since this comment was not part of a review verdict -- correctly absent, not treated as declared_missing.\n\nNo undeclared fields were returned beyond the declared comment-object properties.\n\nAlso re-confirms the standing json_path lesson: the declared json_path for the body field is '/comment/comment' (implying a nested wrapper {comment:{comment:...}}), but the working call used a flat body {comment:'...'} directly, exactly as the capability's own schema note says ('the published spec wraps it under an extra `comment` key that the server does not send') -- so in this rare case the capability's own guidance already flags the json_path as misleading, and the flat call was correct and worked on the first attempt.\n\nSeverity: the entity_type/entity_id description drift is functional/documentation-level (moderate) -- a caller relying on entity_type=='TRTC' to detect a case-level comment, or relying on the entity_id description to look up a run/case mapping row, would be wrong. The write itself is fully reliable (no false success). This comment is permanent residue (deletes are refused as destructive) -- id 1307 on TC-54458, text '__mcp-probe-comment-2026-09-18T07:36:35Z', is the first and only comment in this fixture pool as of this probe."
+}

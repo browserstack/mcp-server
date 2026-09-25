@@ -1,0 +1,140 @@
+{
+  "capability": "edit_project",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-17T10:47:41Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Read the fixture project's current state before touching it, per safety constraint 3 \u2014 must record original field values before mutating.",
+      "source": "invoked",
+      "capability": "get_project_by_integer_id",
+      "arguments": {
+        "project_id": 379335744
+      },
+      "status": 200,
+      "produced": {
+        "name": "__mcp-capability-fixture__",
+        "description": "Automated capability probes for the MCP capability registry. Do not use for manual testing; contents are asserted against. Owner: AI Platform.",
+        "identifier": "PR-2005",
+        "access_type": "NOT RETURNED \u2014 declared in get_project_by_integer_id's returns list but absent from the actual response body"
+      }
+    },
+    {
+      "step": 2,
+      "why": "Verify the probe edit actually took effect (not just a 200) before restoring.",
+      "source": "invoked",
+      "capability": "get_project_by_integer_id",
+      "arguments": {
+        "project_id": 379335744
+      },
+      "status": 200,
+      "produced": {
+        "description": "probe edit_project 2026-09-17T10:47:41Z"
+      }
+    },
+    {
+      "step": 3,
+      "why": "Restore the fixture project's original description, mandated by safety constraint 4.",
+      "source": "invoked",
+      "capability": "edit_project",
+      "arguments": {
+        "project_id": 379335744,
+        "body": {
+          "description": "Automated capability probes for the MCP capability registry. Do not use for manual testing; contents are asserted against. Owner: AI Platform."
+        }
+      },
+      "status": 200,
+      "produced": {
+        "description": "Automated capability probes for the MCP capability registry. Do not use for manual testing; contents are asserted against. Owner: AI Platform."
+      }
+    },
+    {
+      "step": 4,
+      "why": "Confirm the restore actually took effect with a fresh read (not just trust the echoed response).",
+      "source": "invoked",
+      "capability": "get_project_by_integer_id",
+      "arguments": {
+        "project_id": 379335744
+      },
+      "status": 200,
+      "produced": {
+        "description": "Automated capability probes for the MCP capability registry. Do not use for manual testing; contents are asserted against. Owner: AI Platform.",
+        "name": "__mcp-capability-fixture__"
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "project_id": 379335744,
+        "body": {
+          "description": "probe edit_project 2026-09-17T10:47:41Z"
+        }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "n/a \u2014 succeeded on first attempt. Sent only `description` inside the body (per the spec's flat field names, which the invoke tool maps onto the contract's declared json_path `/project/description`); omitted `name` and `access_type` entirely so they would be left untouched per the contract's own 'omit to keep the current value' semantics, satisfying the safety constraint against ever touching `name` without needing to echo it back. Used the integer project id (379335744) as the contract's path_params description explicitly requires ('the numeric id, not the PR-NNN identifier') \u2014 did not attempt the PR-2005 form since the sibling read capability's guidance states the path segment only matches digits and a PR-NNN identifier would 404 at routing before reaching the handler, so trying it would not have exercised this capability's own logic."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "project_id": 379335744,
+      "body": {
+        "description": "probe edit_project 2026-09-17T10:47:41Z"
+      }
+    },
+    "status": 200,
+    "response_keys": [
+      "name",
+      "identifier",
+      "id",
+      "thProjectId",
+      "description",
+      "created_at",
+      "import_id",
+      "test_cases_count",
+      "test_runs_count",
+      "test_plans_count",
+      "links",
+      "normalisedName",
+      "starred",
+      "jira_mapped",
+      "projectVisibilityBanner"
+    ],
+    "item_shape": {
+      "data.success": "boolean",
+      "data.project.id": "integer",
+      "data.project.thProjectId": "integer (same as id)",
+      "data.project.identifier": "string (PR-NNN)",
+      "data.project.name": "string",
+      "data.project.description": "string \u2014 reflected the new value immediately",
+      "data.project.created_at": "string (date-time), unchanged",
+      "data.project.import_id": "null",
+      "data.project.test_cases_count": "integer",
+      "data.project.test_runs_count": "integer",
+      "data.project.test_plans_count": "null",
+      "data.project.links": "object of route strings",
+      "data.project.normalisedName": "string",
+      "data.project.starred": "boolean",
+      "data.project.jira_mapped": "boolean",
+      "data.project.projectVisibilityBanner": "object|null \u2014 was `null` on the edit response but `{is_visible:false,source:\"\"}` (an object, never null) on the plain read of the same project moments later"
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer)",
+      "at least one of: name, description, access_type in the body \u2014 an empty body/project object is documented as a 400"
+    ],
+    "json_path": "/project/{field} \u2014 name, description, access_type and users are each declared under a `project` wrapper (`/project/name` etc.); invokeCapability accepts them as flat top-level body keys and performs the /project nesting itself, confirmed by the successful call above using a flat {\"description\": ...} body.",
+    "declared_missing": [
+      "access_type \u2014 listed in edit_project's `returns` and in its own response schema properties, but absent from the actual 200 body on both the edit call and the plain get_project_by_integer_id read of the same project",
+      "user_role \u2014 listed in `returns` for edit_project but absent from the edit response (though present when reading the project via get_project_by_integer_id)",
+      "permissions \u2014 same: listed in `returns` for edit_project but absent from the edit response (present on a plain read)"
+    ],
+    "undeclared_returned": []
+  },
+  "notes": "[ORCHESTRATOR RE-CLASSIFICATION 2026-09-17] Verdict changed from PASS to DRIFT by the main session. The probing subagent's evidence is accepted in full and unaltered; only the verdict label is corrected. Rationale: contract.declared_missing is non-empty (access_type, user_role, permissions), which is by definition DRIFT ('invoked, but declared and actual disagree'), not PASS ('the response carries what the contract declares'). The subagent attributed the absences to an account-level condition (project-level access control likely off on this preprod account). That explanation covers access_type, which is also absent from a plain read \u2014 but it does NOT cover user_role and permissions, which the subagent observed as PRESENT on get_project_by_integer_id for the same project and ABSENT on this endpoint's 200. That is an endpoint-specific declared-vs-actual gap regardless of account configuration. It also has a concrete agent-facing consequence: this capability's own guidance instructs the caller to 'read access_type back from the response to confirm the change took', which is impossible when the key is never returned. The write itself worked correctly and was verified and reverted \u2014 see the original note below.\n\n--- original subagent note, verbatim ---\nVerdict PASS. This is a genuine partial patch, not a full-object replace: the contract's body params (name/description/access_type/users) are all individually optional, and the guidance explicitly says omitted fields keep their current value \u2014 confirmed empirically, since sending only `description` left `name` (__mcp-capability-fixture__) completely untouched. Original value was restored: description was read as 'Automated capability probes for the MCP capability registry. Do not use for manual testing; contents are asserted against. Owner: AI Platform.' before any mutation, changed to a timestamped probe string, verified changed via a fresh read, then restored with a second edit_project call, and the restore was independently confirmed with a third fresh read (setup step 4) showing the description back to its exact original text and the name unchanged throughout. No other fields (access_type, users, folders, cases, plan, run) were touched. The one real discrepancy worth flagging: edit_project's declared `returns`/response schema promises access_type, user_role and permissions on its 200 body, but none of the three actually came back on either edit call in this probe \u2014 an agent that edits access_type and then tries to read the confirmation straight off the edit response (as the guidance itself suggests: 'Read access_type back from the response to confirm the change took') would find the key simply missing and have to issue a separate read instead. Also noteworthy: the same three keys are absent from get_project_by_integer_id's own actual response too (that capability's schema also declares access_type), so this looks like an account-level omission (project-level access control likely not enabled on this preprod account) rather than an edit_project-specific bug \u2014 filed here since it's what this probe surfaced, but it plausibly extends to every project-read/edit capability on this account. A second minor drift: `projectVisibilityBanner` came back as `null` on the edit response and as `{is_visible:false,source:\"\"}` (structurally an object) on the very next plain read of the identical, unchanged project \u2014 the field's type is not stable across these two 200s for the same underlying value."
+}

@@ -1,0 +1,28 @@
+{
+  "capability": "get_archived_test_plan_count",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "PASS",
+  "reclassification": "ACCOUNT-LIMITATION, NOT A PRODUCT DEFECT. Same group-level archive flag as list_archived_test_plans. Off on the preprod account, on for production PR-18723 / project 332537. The 404 path (documented, correctly-shaped) was preprod's ENTIRE observed behavior; on prod the 200 path is reached cleanly and matches its declared {success, count} shape exactly.",
+  "preprod_reference": {
+    "run_file": "tests/live/runs/tm/get_archived_test_plan_count.json",
+    "verdict": "BLOCKED",
+    "reason": "Both attempts returned 404 {\"success\":false,\"errors\":\"Feature not available\"} before the 200 path was ever reached. Treated as stronger than a PASS/UNVERIFIED-with-zero-count nuance, since the endpoint could not be exercised in its documented working mode at all in that environment."
+  },
+  "setup": [],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 } },
+    "status": 200,
+    "response_keys": ["success", "count"],
+    "item_shape": { "success": true, "count": 0 }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "STANDING RULE APPLIED: a 2xx counts as PASS even on a zero/empty result — {success:true, count:0} is a fully-formed, contract-matching scalar response, not an error masquerading as data. count:0 is consistent with list_archived_test_plans's own 200/empty result for the same project (both capabilities agree: 0 archived plans in PR-18723), which also answers the cross-check preprod's own probe explicitly flagged as worth watching for ('if the sibling returns 200 while this 404s, that's a meaningful mismatch') — on prod there is no such mismatch: both capabilities agree the archive feature is available and the project has nothing archived. HEADLINE ANSWER: reclassification, not still-BLOCKED. This capability plus list_archived_test_plans together confirm the preprod BLOCKED verdicts for both were an account/group entitlement limitation specific to the preprod test account, not a defect in the archived-plan-count or archived-plan-listing routes themselves. The same group flag is described as also gating bulk_archive_test_plans and bulk_restore_archived_test_plans — not retested here, but the mechanism (a single group-level flag) means those two would be expected to reclassify identically on this account if retested."
+}

@@ -1,0 +1,88 @@
+{
+  "capability": "search_project_entities",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    "describeCapability(name=search_project_entities, product=tm) — contract confirmed identical in shape to preprod: entity enum test-cases|test-runs|trtc|test-plans, project_id is an integer path param (route only matches digits, PR-NNN would 404), page param is `p` (not `page`), per_page is the size param, filter_details=true echoes resolved filters."
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "query": {"q[folder_ids]": "9697326", "per_page": 10, "filter_details": "true"}},
+      "status": 200,
+      "error": null,
+      "changed": "Primary probe on the known 3-case fixture folder (MCP Testing, 9697326). Returned all 3 rows (TC-838571/32747791, TC-838570/32747562, TC-838569/32747539). comments_count absent from every row. folders returned as {\"9697326\": [{id,name,parent_id,ui_position}]} — object keyed by folder id (declared schema says folders is a flat array of rich objects). Undeclared tail present: reviewers, review_status, automation_state, is_shared, attachments, estimated_duration_seconds, template_id/name/step_type, step_count, test_run_results_count/issues_count, test_case_dataset, case_type/priority/status .value_category/.valueDetails."
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "query": {"per_page": 10, "p": 1}},
+      "status": 200,
+      "error": null,
+      "changed": "Unscoped project-wide page 1 (no q filters) to check count-vs-rows at scale. info={page:1,page_size:10,count:16261,prev:null,next:2}, 10 rows returned matching per_page. Live project total is 16261 test cases (prod fixture note of 16267 has drifted slightly since the fixture was recorded — expected on a live, actively-edited project). folders again object-keyed, spanning the two folders touched by this page (9600935, 11647340)."
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "query": {"per_page": 10, "p": 2}},
+      "status": 200,
+      "error": null,
+      "changed": "Page 2 of the same unscoped query. info={page:2,page_size:10,count:16261,prev:1,next:3} — count identical to page 1, confirming a stable total across pages. All 10 rows are distinct test case ids from page 1 (e.g. 51231664, 51231672, 51231668, 68257843... vs page 1's 109344980, 109344981, 73875257...). Pagination behaves correctly: count-vs-rows is consistent, and page 2 genuinely advances through the collection rather than repeating page 1."
+    },
+    {
+      "n": 4,
+      "arguments": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "query": {"q[query]": "Chrome Version Selector", "per_page": 5}},
+      "status": 200,
+      "error": null,
+      "changed": "Text-search filter probe: q[query] narrowed the 16261-case project down to count=2, returning exactly the two test cases whose names contain 'Chrome Version Selector' (TC-2111663, TC-2111657). Filter works as declared — not silently ignored."
+    },
+    {
+      "n": 5,
+      "arguments": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "query": {"q[query]": "zzzznonexistentqueryxyz123", "per_page": 5}},
+      "status": 200,
+      "error": null,
+      "changed": "Negative control for the text filter: a nonsense query string returns count=0, test_cases=[], folders={} — confirms q[query] is genuinely applied server-side rather than dropped (an unrecognised/dropped filter would have silently returned the full unfiltered set, per the capability's own guidance about unknown keys)."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 332537, "entity": "test-cases"}, "query": {"q[folder_ids]": "9697326", "per_page": 10, "filter_details": "true"}},
+    "status": 200,
+    "response_keys": ["success", "test_cases", "folders", "info", "filter_details"],
+    "item_shape": {
+      "declared_but_absent": ["comments_count"],
+      "present_undeclared_top_level": ["reviewers", "review_status", "automation_state", "is_shared", "attachments", "estimated_duration_seconds", "template_step_type", "template_id", "template_name", "step_count", "test_run_results_count", "test_run_results_issues_count", "test_case_dataset"],
+      "present_undeclared_nested": ["case_type.value_category", "case_type.valueDetails", "priority.value_category", "priority.valueDetails", "status.value_category", "status.valueDetails", "metadata.lcnc_build_map.profileId"],
+      "folders_declared_type": "array of {id, project_id, group_id, name, is_automation, sub_folders_count, links, cases_count, total_cases_count}",
+      "folders_actual_type": "object keyed by folder_id, each value an array of trimmed objects {id, name, parent_id, ui_position}"
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "entity (path, enum: test-cases|test-runs|trtc|test-plans)"],
+    "json_path": null,
+    "declared_missing": ["test_cases[].comments_count"],
+    "undeclared_returned": [
+      "test_cases[].reviewers",
+      "test_cases[].review_status",
+      "test_cases[].automation_state",
+      "test_cases[].is_shared",
+      "test_cases[].attachments",
+      "test_cases[].estimated_duration_seconds",
+      "test_cases[].template_step_type",
+      "test_cases[].template_id",
+      "test_cases[].template_name",
+      "test_cases[].step_count",
+      "test_cases[].test_run_results_count",
+      "test_cases[].test_run_results_issues_count",
+      "test_cases[].test_case_dataset",
+      "test_cases[].case_type.value_category",
+      "test_cases[].case_type.valueDetails",
+      "test_cases[].priority.value_category",
+      "test_cases[].priority.valueDetails",
+      "test_cases[].status.value_category",
+      "test_cases[].status.valueDetails",
+      "test_cases[].metadata.lcnc_build_map.profileId",
+      "folders: structural type mismatch — declared array, actual object keyed by folder_id with a further-trimmed item shape wrapped in an array per key"
+    ]
+  },
+  "notes": "Reproduces the preprod DRIFT finding on prod, on real populated data (both the fixture folder 9697326 'MCP Testing' with 3 cases, and the full 16261-case project). (1) comments_count: declared on every test_cases[] item, absent from all rows in every call — confirmed DRIFT, identical to preprod. (2) folders: declared as a flat array of rich folder objects {id,project_id,group_id,name,is_automation,sub_folders_count,links,cases_count,total_cases_count}; actual prod response is an OBJECT keyed by folder_id — same structural type mismatch preprod found. One nuance beyond the preprod writeup: on prod each key's value is itself an ARRAY containing one trimmed object {id,name,parent_id,ui_position} (preprod described the value as the object directly) — doesn't change the verdict, still a declared-array-vs-actual-object mismatch at the top level, just one more level of nesting than preprod's note captured. (3) Undeclared-but-present field tail (automation_state, is_shared, attachments, template_id/name/step_type, step_count, test_run_results_count/issues_count, test_case_dataset, .value_category/.valueDetails on case_type/priority/status) reproduces verbatim on prod. (4) Count-vs-rows/paging: for the 3-case fixture folder, info.count=3 matched len(test_cases)=3 exactly (small-collection PASS). For the unscoped 16261-case project, info.count stayed identical (16261) across page 1 and page 2, page_size/per_page was honored (10 rows each), and page 2 returned entirely distinct test case ids from page 1 — pagination and count reporting are correct and NOT part of the drift; this is a PASS on that axis. Minor scale note: prod fixture said 16267 cases, live count is now 16261 — expected drift on an actively-edited project, not a bug. (5) q[query] (secondary check): narrowed correctly from 16261 to 2 matches for a specific phrase, and to 0 for a nonsense string — filter is applied server-side, not silently dropped. Overall verdict: DRIFT (driven by comments_count and the folders array/object type mismatch), everything else (pagination, count consistency, text search) PASSED."
+}

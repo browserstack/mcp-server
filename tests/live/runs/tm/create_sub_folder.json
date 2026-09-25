@@ -1,0 +1,75 @@
+{
+  "capability": "create_sub_folder",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "parent folder to nest under — must be one this campaign owns, not __readonly__",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744, "project_identifier": "PR-2005", "parent_folder_id": 765811, "parent_folder_name": "__mcp-probe-createrootfolder-20260921" }
+    }
+  ],
+  "attempts": [
+    {
+      "attempt": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 765811 },
+        "body": { "name": "__mcp-probe-subfolder-20260921" }
+      },
+      "result": "SUCCESS — 200, folder created (id 765817, parent_id 765811)",
+      "note": "Sent flat (no `folder` wrapper), per describeCapability's top-level `guidance`. Worked on the first try, same as create_root_folder."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 765811 },
+      "body": { "name": "__mcp-probe-subfolder-20260921" }
+    },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "data.success": "boolean (true)",
+      "data.folder": {
+        "id": "integer (765817) — NOT a quoted string; parent_id is also an integer. This capability does NOT reproduce the id-as-quoted-string inconsistency flagged elsewhere in the folder family.",
+        "project_id": "integer (379335744)",
+        "group_id": "integer (3452)",
+        "name": "string",
+        "parent_id": "integer (765811) — UNDECLARED in the 200 schema's folder properties (though it does appear in describeCapability's flat top-level `returns` list, which disagrees with the nested schema — see notes)",
+        "root": "boolean (false) — UNDECLARED, same as create_root_folder",
+        "is_automation": "boolean",
+        "created_by": "integer (6013) — UNDECLARED, same as create_root_folder",
+        "updated_by": "integer (6013) — UNDECLARED, same as create_root_folder",
+        "attachments": "array (empty here) — UNDECLARED, same as create_root_folder",
+        "links": { "self": "string" },
+        "cases_count": "integer (0)",
+        "total_cases_count": "integer (0)",
+        "sub_folders_count": "integer (0)"
+      },
+      "data.project": "ABSENT — matches contract guidance verbatim ('Present only on root-folder creation; the sub-folder and rename actions omit it.'). No project object of any shape (leaky or clean) is returned here, so the two-known-serializers question does not apply to this capability at all — it returns no project object, period."
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "folder_id (path, integer — the PARENT)", "name (body, string)"],
+    "json_path": "/folder/name (required), /folder/notes, /folder/attachments — confirmed auto-wrapped: flat body (no `folder` key) succeeded on the first attempt, matching the top-level `guidance`, not the field-level description on `name` (see notes for the exact contradiction).",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "data.folder.parent_id",
+      "data.folder.root",
+      "data.folder.created_by",
+      "data.folder.updated_by",
+      "data.folder.attachments"
+    ]
+  },
+  "notes": "STALE DESCRIPTION CONFIRMED SHARED: the `name` field's own description on THIS capability still reads verbatim: 'Must be wrapped in a `folder` object — the handler reads a required `folder` wrapper, so a flat body is a 400 before any field is looked at.' That is the exact same false sentence flagged on create_root_folder's `name` field, word for word. It directly contradicts this capability's own top-level `guidance` ('Send the fields flat. The `folder` wrapper is added for you from each field's json_path, and sending your own `folder` object is rejected before the call as an unknown body key.'), and the live call proves guidance right and the field description wrong: a flat body succeeded on attempt 1, no wrapper, no retry needed. This is not a one-off — it is the same template defect present on at least two folder-family capabilities (create_root_folder, create_sub_folder), which means every other create/rename endpoint sharing this parameter template should be assumed stale until checked, not treated as independent bugs. FIVE UNDECLARED-FOLDER-FIELDS CHECK (per instructions): of the five fields flagged as undeclared on create_root_folder's data.folder (root, notes, created_by, updated_by, attachments), FOUR reproduce identically here — root, created_by, updated_by, attachments are all present in the actual response and absent from the 200 schema's folder properties. The fifth, `notes`, could not be checked the same way: this probe did not send a `notes` value, and the response has no `notes` key at all (unlike root-folder's response, which always echoes notes because the probe there explicitly sent one). So `notes` is UNVERIFIED here, not confirmed absent-when-declared — it simply was not exercised. In its place, this capability returns a NEW undeclared field root-folder's list doesn't have to fill the fifth slot in the same structural way: `parent_id`. That one carries an extra wrinkle: describeCapability's own contract is internally split on it — the flat top-level `returns` array lists both `notes` and `parent_id` as returned keys, but the nested 200 JSON schema's `data.folder.properties` lists neither. The actual response includes `parent_id` (undeclared-per-schema, declared-per-returns-list) and omits `notes` (declared-per-returns-list, absent-in-practice, unsent-in-this-probe). That disagreement between describeCapability's two own declaration surfaces (summary `returns` list vs. structured `schema`) is itself worth flagging to whoever maintains the index — they are not reporting the same contract. PROJECT SERIALIZER QUESTION (per instructions): does not apply here — this capability returns no `data.project` object at all, exactly as its own guidance says. So it cannot be matched against either of the two known project serializers (the leaky one from create_root_folder or the clean one from create_project); the leaky-serializer defect is confirmed specific to root-folder creation, not a folder-family-wide response shape. ID TYPE CHECK (per instructions): `id` (765817) and `parent_id` (765811) are both plain JSON integers in this response, not quoted strings — the id-as-quoted-string inconsistency flagged elsewhere in the family does NOT reproduce on this capability. ENTITLEMENT GATE: not applicable — this call returned an ordinary 200 with `success:true`, no `{success:false}` refusal-wearing-200 pattern observed. ERROR ENVELOPE: not exercised — the single attempt succeeded, so per instructions no error body was diffed against the success schema. UNBLOCKS DOWNSTREAM PROBES: new folder id 765817, parent 765811 (project 379335744 / PR-2005), name __mcp-probe-subfolder-20260921 — safe for move_folder_by_integer_id / rename_folder_by_integer_id / copy_folder / reorder_folders to use as their subject. The response DOES tell you the parent: `data.folder.parent_id` is present and correct (765811), even though that field is undeclared in the 200 schema.",
+  "created": {
+    "folder_id": 765817,
+    "folder_name": "__mcp-probe-subfolder-20260921",
+    "parent_folder_id": 765811,
+    "project_id": 379335744,
+    "project_identifier": "PR-2005"
+  }
+}

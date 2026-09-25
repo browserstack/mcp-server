@@ -1,0 +1,30 @@
+{
+  "capability": "list_exploratory_sessions",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744}
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}, "query": {}},
+    "status": 200,
+    "response_keys": ["success", "exploratory_sessions", "info", "count"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id (path_param)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "EMPTY-CASE RULE applied strictly: verdict is UNVERIFIED, not PASS. No session was created (read-only probe, per instructions). Two calls made, both 200, no retries needed: (1) default query (q[session_state] omitted, defaults to 'active' per guidance) -> exploratory_sessions=[], info={page:1,page_size:30,count:0,prev:null,next:null}, count={active:0,closed:0}; (2) explicit q[session_state]=closed -> identical empty result, exploratory_sessions=[], info.count=0, count={active:0,closed:0}. This confirms the sibling's finding (0 active, 0 closed in project 379335744/PR-2005) directly from this capability itself, and the top-level `count` per-state object is internally consistent with info.count across both state filters -- no count-vs-rows disagreement observed, but this is a degenerate check since both are 0. Because exploratory_sessions was empty on every call, the declared 200 schema's row shape (id, title, description, charter, session_state, timebox_duration, duration, actual_duration, session_log_count, folder_id, assignee, created_by, closed_by, tags, configurations, issues, timeline, created_at, updated_at) could not be exercised against any real row -- no container-mismatch check (array vs map vs {data,info}) was possible since the top-level keys (success, exploratory_sessions, info, count) matched the declared 200 schema at the envelope level, but the array itself is unfalsifiable while empty. No error-envelope drift observed since no error was hit (both attempts were clean 200s, so 'attempts' is empty -- these were not retries after failures). ACCOUNT-WIDE QUESTION: no account-wide (cross-project) exploratory-session listing capability exists in this product's index -- list_exploratory_sessions itself is scoped by required project_id path param only, with no project-agnostic variant found. A prior probe in this session run already established that no account-wide session listing exists. Given the account has 1834 projects, an exhaustive per-project sweep to find any live session was out of scope for this probe and was NOT performed -- this report should not be read as having checked account-wide. The three project_ids known from the pool description (379335744, 379335189, 379334332) were reported by the sibling as all 0/0; this probe independently re-confirms 379335744 is 0 active / 0 closed via this exact capability, which is the most useful signal available for the sibling probes of get_exploratory_session, list_exploratory_session_logs and list_exploratory_session_defects: no session id is obtainable from any project checked so far, and no broader read can settle whether ANY session exists reachable from this account."
+}

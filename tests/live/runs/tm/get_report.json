@@ -1,0 +1,74 @@
+{
+  "capability": "get_report",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T04:37:45Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Subject already exists: report SC-489 on project PR-2005 was created by the sibling create_report probe immediately prior (its file records the same create, plus its own independent get_report read at that time). Used its ids directly rather than creating a new report — this is a read-only probe and two sibling probes assert against this exact SC-489.",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "project_id": "PR-2005", "report_id": "SC-489" },
+      "status": null,
+      "produced": { "note": "ids and expected field values carried over from the creating probe's record; not independently created by this probe" }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": "PR-2005", "report_id": "SC-489" } },
+      "status": 0,
+      "error": "{\"error\":\"the product could not be reached\"}",
+      "changed": "No change made — this is the documented preprod outage signature (status 0 / transport-level, not a 500 from the app), so retried unchanged per instructions."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": "PR-2005", "report_id": "SC-489" } },
+      "status": 0,
+      "error": "{\"error\":\"the product could not be reached\"}",
+      "changed": "Retried unchanged a second time; outage still in effect."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": "PR-2005", "report_id": "SC-489" } },
+      "status": 200,
+      "error": null,
+      "changed": "Retried unchanged a third time; the outage had cleared and the call succeeded."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": "PR-2005", "report_id": "SC-489" } },
+    "status": 200,
+    "response_keys": ["success", "data"],
+    "item_shape": {
+      "id": "SC-489",
+      "project_id": "PR-2005",
+      "project_ids": ["PR-2005"],
+      "report_type": "Test Run Summary",
+      "title": "__mcp-probe-report-2026-09-18T04:32:18Z",
+      "description": null,
+      "report_timeframe": "last_one_week",
+      "report_creation_mode": "custom_report",
+      "custom_date_range": null,
+      "frequency": "once",
+      "frequency_details": null,
+      "next_run_at": null,
+      "is_scheduled": false,
+      "created_at": "2026-09-18T04:32:35Z",
+      "owner": { "email": "probe-user@example.invalid", "full_name": "ing" },
+      "mail_to": { "users": [], "external_mails": [] },
+      "report_filters": {},
+      "dynamic_filters": null,
+      "latest_attachment": null
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, ^PR-\\d+$)", "report_id (path, ^SC-\\d+$)"],
+    "json_path": "no body — both parameters are path params (project_id, report_id); not disclosed as method/path since the capability was invoked by name",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Full match, both directions. Every field describeCapability's success schema promises (id, project_id, project_ids, report_type, title, description, report_timeframe, report_creation_mode, custom_date_range, frequency, frequency_details, next_run_at, is_scheduled, created_at, owner, mail_to, report_filters, dynamic_filters, latest_attachment) is present in the actual response with matching nested shapes (owner: email+full_name; mail_to: users[]+external_mails[]; report_filters: object, empty; dynamic_filters: null), and no undeclared extra fields were returned. This is not a thin-passthrough contract (unlike a bare {status,body} shape), so the PASS is not hollow — the declared schema is the full nested record and it was checked field-by-field.\n\nAgainst the creating probe's expected values: every single one matched exactly — title '__mcp-probe-report-2026-09-18T04:32:18Z', report_type 'Test Run Summary', report_timeframe 'last_one_week', is_scheduled=false, next_run_at=null, frequency_details=null, frequency='once', mail_to={users:[],external_mails:[]}, report_filters={}, dynamic_filters=null, latest_attachment=null. No disagreement to flag. The response also byte-for-byte matches both the creating probe's own 201 create response and its own independent get_report read taken at creation time (all three snapshots identical), so this second, later, independently-invoked read reconfirms the record is genuinely persisted and stable, not a fluke of the create echo.\n\nfrequency='once' substitution: describeCapability's own guidance states this outright — 'frequency reads once for an unscheduled report — that is a substitution for a stored null, not something the report was created with. Trust is_scheduled and next_run_at for whether anything will actually fire.' The live response is internally consistent with that claim: frequency='once' alongside is_scheduled=false, next_run_at=null and frequency_details=null. So the substitution behaves exactly as documented here — this is NOT drift. But it is worth flagging as a real footgun regardless: 'once' is also listed as a legitimate member of the same frequency enum (once/daily/weekly/monthly) for a genuinely scheduled one-shot report. An agent that reads only the `frequency` field — which is the single most naturally-named field for 'is this scheduled' — without cross-checking `is_scheduled`/`next_run_at` could easily conclude this report is a live one-time schedule about to fire, when in fact nothing was ever scheduled and nothing will ever fire. The contract does warn about this, but the warning lives in prose guidance rather than in the response shape itself (e.g. there is no is_scheduled-gated null for frequency), so the misleading surface is still there for any caller who doesn't read the guidance closely."
+}

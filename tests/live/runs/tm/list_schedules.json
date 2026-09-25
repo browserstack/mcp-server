@@ -1,0 +1,59 @@
+{
+  "capability": "list_schedules",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744}
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}},
+    "status": 200,
+    "response_keys": ["data", "scheduled_report_count", "total_report_count", "info"],
+    "item_shape": {
+      "id": "integer",
+      "report_type": "string",
+      "created_at": "string(date-time)",
+      "updated_at": "string(date-time) [undeclared]",
+      "description": "null",
+      "title": "string",
+      "frequency": "null (declared type:object, not nullable)",
+      "identifier": "string (SC-NNN)",
+      "next_run_at": "null",
+      "report_timeframe": "string(enum)",
+      "group_id": "integer",
+      "frequency_details": "null (declared type:object, not nullable)",
+      "project_id": "integer",
+      "project_ids": "array<integer> [undeclared]",
+      "included_projects": "array<object> [undeclared]",
+      "report_creation_mode": "string(enum)",
+      "custom_date_range": "null",
+      "is_dynamic": "boolean [undeclared]",
+      "grain": "string [undeclared]",
+      "slack_notification": "null [undeclared]",
+      "owner": "object (matches declared sub-schema)"
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "data[].updated_at",
+      "data[].project_ids",
+      "data[].included_projects",
+      "data[].is_dynamic",
+      "data[].grain",
+      "data[].slack_notification"
+    ]
+  },
+  "notes": "Single call succeeded first try (200), no retries needed. Pool-state note: the project actually contains THREE reports (SC-489, SC-490, SC-491), not just SC-489 as stated in the task pool description — this probe made no writes (read-only round) and did not create them; they were already present when queried, so the pool description is stale. All three are unscheduled: frequency=null, next_run_at=null, and scheduled_report_count=0/total_report_count=3. EMPTY-CASE finding: SC-489 DOES appear in the list_schedules listing despite being unscheduled — the endpoint lists 'all reports, not only scheduled ones' per its own guidance, confirmed by direct observation. Its frequency here reads as literal null, NOT the string 'once' the earlier probe reported for frequency substitution — so if a 'once' substitution for a stored null happens anywhere, it is NOT in this list_schedules response; list_schedules exposes the raw null. There is also no is_scheduled field anywhere in this endpoint's response (declared or returned) — callers must test frequency===null (or next_run_at===null) to detect an unscheduled report in this listing, not rely on an is_scheduled flag or infer scheduling from frequency:'once'. PAGINATION: total_report_count/info.count=3 is well under the fixed page_size=30, so only the single-page branch is reachable — info returned {page:1,page_size:30,count:3,prev:null,next:null}, matching the declared schema's fields (page, page_size, count, prev, next) exactly; no alternate/undeclared info shape (e.g. total_pages) was observed, and the second-page branch could not be exercised because there isn't enough data (read-only round, cannot create more reports to force pagination). CONTRACT: data is declared and returned as an array (no container mismatch). Two fields — frequency and frequency_details — are declared as bare {\"type\":\"object\"} with no properties and not marked nullable; both are unfalsifiable-by-shape AND actually violated here since the observed value is null, not an object. Six fields are returned but undeclared: updated_at, project_ids, included_projects, is_dynamic, grain, slack_notification. VERDICT rationale: per the empty-case rule, since scheduled_report_count=0 for every report in the only available project, the 'scheduled' half of this capability's contract (a report with real frequency/frequency_details/next_run_at populated) was never exercised — only the unscheduled/empty case was observed, so this is UNVERIFIED rather than PASS despite the 200 and structurally-consistent response."
+}

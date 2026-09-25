@@ -1,0 +1,64 @@
+{
+  "capability": "search_project_users",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "describeCapability to confirm exact param shape and pull the current 200 schema + guidance/prose before invoking, per task instructions",
+      "source": "describeCapability",
+      "capability": null,
+      "produced": {
+        "path_params": ["project_id (integer, required)"],
+        "query": ["q", "p", "sort", "sort_order"],
+        "note": "guidance block explicitly states search is group-scoped, not project-scoped, and explicitly disambiguates id vs browserstack_user_id (see contract.id_space_answer below)"
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "q": "deep" } },
+      "status": 200,
+      "error": null,
+      "changed": "n/a - succeeded on first attempt; q=\"deep\" against fixture project 332537 (\"Demo Project 1\") returned 28 matching users, including the known real user user-b@example.invalid (id 305420) named in the fixture"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "query": { "q": "deep" } },
+    "status": 200,
+    "response_keys": ["users", "info"],
+    "item_shape": {
+      "users[]": {
+        "id": "integer (TM-internal user id), e.g. 305420 for User B",
+        "full_name": "string, e.g. \"User B\"",
+        "email": "string, e.g. \"user-b@example.invalid\" - returned live but NOT in the 200 schema's item properties (same gap as preprod)",
+        "onboarded": "integer, observed 0 or 1 (not boolean) - matches preprod",
+        "group_id": "integer, all 28 rows share group_id 1",
+        "browserstack_user_id": "integer, distinct id space, e.g. 10836602 for the same User B row whose TM id is 305420",
+        "role": "string enum, observed \"user\" and \"admin\"",
+        "has_access": "boolean, true on every row",
+        "permissions": "array of strings, longer/richer lists on admin rows than user rows",
+        "productRole": "string, observed \"User\" and \"Admin\"",
+        "is_re_arch_enabled": "boolean (all false in this sample) - returned live but NOT in the 200 schema's item properties (same gap as preprod)",
+        "is_test_plan_detailed_report_enabled": "boolean (all true in this sample) - returned live but NOT in the 200 schema's item properties (same gap as preprod)",
+        "plus": "is_delighted_visible, is_product_intro_visible, is_onboarding_project_header_visible, is_lcnc_explore_dismissed, reports_and_notification_enabled, customisable_dashboard_accessible, webhook_accessible, is_build_listing_enabled, is_new_project_settings_visible, is_jira_app_project_panel_visible - all present and all declared"
+      },
+      "info": { "page": 1, "page_size": 30, "count": 28, "prev": null, "next": null },
+      "illustrative_rows": [
+        { "id": 504, "full_name": "User B2", "email": "user-b2@example.invalid", "group_id": 1, "browserstack_user_id": 4251054, "role": "user" },
+        { "id": 305420, "full_name": "User B", "email": "user-b@example.invalid", "group_id": 1, "browserstack_user_id": 10836602, "role": "user" }
+      ]
+    }
+  },
+  "contract": {
+    "required": ["users", "info"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": ["email", "is_re_arch_enabled", "is_test_plan_detailed_report_enabled"],
+    "id_space_answer": "The prod describeCapability guidance block explicitly disambiguates the two ids, in these exact words: \"`id` is the Test Management user id — the one owner and assignee fields take. `browserstack_user_id` is the BrowserStack account id for the same person and is a different number.\" This directly answers the id-space question for callers: an id-taking capability like assign_test_run_owner should be fed `id` (e.g. 305420 for User B here), never `browserstack_user_id` (10836602). The contract is NOT silent here - it names owner/assignee fields by exact use case, which lines up with assign_test_run_owner's known TM-id expectation from the prior probe."
+  },
+  "notes": "RECHECK RESULT: DRIFT reproduces on prod, narrowly, in the same place as preprod. (1) Undeclared-but-returned fields: email, is_re_arch_enabled, and is_test_plan_detailed_report_enabled are present on every one of 28 real rows from project 332537 (\"Demo Project 1\", q=\"deep\") but are still absent from the 200 schema's item `properties` block in describeCapability - identical to the preprod finding. As on preprod, this is a prose-vs-schema split, not a prose error: the capability's own flat top-level `returns` list already names all three fields correctly; only the expanded JSON-schema `properties` under-declares them. All schema-required fields (id, full_name, onboarded, group_id, browserstack_user_id, role, has_access, permissions) were present on every row, so declared_missing is empty. (2) Id-space question - the most important part of this recheck: on prod, id (e.g. 305420 for User B) and browserstack_user_id (10836602 for the same person) are confirmed to be two clearly different numbers, matching the preprod pattern (id 3325 vs browserstack_user_id 9021 for User D). Unlike the framing in the task prompt, the prod capability's own guidance text is NOT silent about which id to feed an id-taking capability: it explicitly states id is 'the one owner and assignee fields take,' directly matching assign_test_run_owner's known TM-id expectation - so this is documented, unambiguous prose, not a gap. (3) Project-scoping secondary check: SKIPPED, per the task's own budget guidance ('do not spend excess effort discovering a second project id if it's not easy to get one cheaply'). No list_projects/search capability output was already in hand from this session, and PROD-FIXTURE.md records no second verified prod project id, so getting one cheaply was not available. This is noted explicitly rather than silently omitted. That said, the prod capability's own guidance block already independently asserts the identical group-scoped-not-project-scoped behavior found empirically on preprod ('project_id resolves the route and is never used in the lookup'), so the underlying claim is corroborated by contract text even without a second live call here. (4) Pagination: info.count (28) matched len(users) (28) exactly, page_size is 30, and next:null is correct since count < page_size - there is only one page of results for this query, so a second page could not be fetched to test pagination; this is a structural limit of a 28-hit narrow-substring query against a fixed page_size=30, not a gap in the probe. No error responses were encountered (single attempt succeeded on first try), so no error-envelope comparison was attempted."
+}

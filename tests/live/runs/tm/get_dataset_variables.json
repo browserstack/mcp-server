@@ -1,0 +1,41 @@
+{
+  "capability": "get_dataset_variables",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:25:26Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope (route is project-scoped, no dataset uuid taken)",
+      "source": "pool",
+      "capability": null,
+      "produced": {"project_id": 379335744}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744}},
+      "status": 200,
+      "error": "",
+      "changed": ""
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}},
+    "status": 200,
+    "response_keys": ["success", "variables", "info"],
+    "item_shape": {
+      "variables[]": ["uuid", "name", "dataset.uuid", "dataset.name", "dataset.count_rows"],
+      "info": ["page", "page_size", "count", "prev", "next"]
+    }
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Project PR-2005 (379335744) has one existing dataset (__probe-dataset-1789734836192, uuid 92d4a614-57d3-4201-8ffc-3f3c9faf9747) with 2 columns (username, password), so the non-empty branch of the declared 200 schema was fully exercised on the first attempt — no retries needed. Response is a bare top-level object {success, variables, info}, matching the declared schema exactly (no {data:[...],info:{...}} container mismatch). Each variables[] row carries uuid, name, and an inline dataset object {uuid, name, count_rows} as declared. info carries page, page_size, count, prev, next as declared, all present. No undeclared fields, no missing declared fields. Because this project has data, this run establishes that datasets DO exist in project 379335744 — relevant to the sibling list_datasets probe running in parallel: an empty result there would be surprising/inconsistent with this finding, since this endpoint found exactly one dataset with 2 rows owned by this project."
+}

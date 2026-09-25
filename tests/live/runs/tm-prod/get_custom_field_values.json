@@ -1,0 +1,90 @@
+{
+  "capability": "get_custom_field_values",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T07:38:48Z",
+  "verdict": "DRIFT",
+  "preprod_verdict": "DRIFT",
+  "reproduces_preprod": true,
+  "setup": [
+    {
+      "why": "Get the exact declared contract before probing.",
+      "capability": "describeCapability(get_custom_field_values, product=tm, include_responses=all)",
+      "arguments": {},
+      "status": "n/a (describe call)",
+      "produced": "path_params: project_id (int), entity_type (enum: test-case|test-result|test-plan|exploratory-session), field_id (string); query: q, p, parent_option_id. 200 schema: {success, info, '<field_id>': {field_type, values:[{}]}} dynamic key, items generically typed as object (no declared item properties). 400 schema: {success:false, error:{code, message, details}} (object)."
+    },
+    {
+      "why": "Enumerate project 332537's own TestCase custom fields to find real field ids with configured option_values, per task instructions.",
+      "capability": "get_project_form_fields",
+      "arguments": {"path_params": {"project_id": 332537}},
+      "status": 200,
+      "produced": "16 custom fields on TestCase. Several dropdown/multi_dropdown fields carry non-empty option_values: field_id 180001 'saple pronya te' (field_dropdown, 29+ option_values visible), field_id 223478 'tets dp' (field_dropdown, 2 options), field_id 233776 'Sample DD field with >30 values' (field_dropdown, 30 option_values visible in this endpoint), field_id 194184 'aaas' (field_multi_dropdown, 22 option_values). All option_values here show is_default:false for every row (no custom-field default is flagged true in this project)."
+    },
+    {
+      "why": "Try to enumerate TestResult (and other entity_type) custom fields to also test a non-test-case field_id, per task guidance to try several entity_types.",
+      "capability": "list_workspace_fields",
+      "arguments": {"query": {"field_source": "custom", "entity_type": "TestCase", "p": 1}},
+      "status": 403,
+      "produced": "{success:false, error:'This action is not permitted for the user', data:{login_url:...}} -- SSO/auth permission block, unrelated to field params."
+    },
+    {
+      "why": "Confirm the 403 on list_workspace_fields is systemic (auth), not parameter-specific, before giving up on it.",
+      "capability": "list_workspace_fields",
+      "arguments": {"query": {}},
+      "status": 403,
+      "produced": "Same 403 'This action is not permitted for the user' with no query params at all -- confirms this is an account/auth-level block on list_workspace_fields in this environment, not something get_custom_field_values itself is doing. BLOCKED: could not enumerate real TestResult/TestPlan/ExploratorySession custom field ids this way. get_project_form_fields only ever serves TestCase fields (per its own declared guidance), so no alternate live path to a real non-test-case field id was available within probe budget."
+    }
+  ],
+  "attempts": [
+    {
+      "purpose": "entity_type/field-id mismatch to reproduce the preprod 400-error-shape finding",
+      "arguments": {"path_params": {"project_id": 332537, "entity_type": "test-result", "field_id": "233776"}, "query": {}},
+      "status": 400,
+      "produced": "{success:false, error:'Something went wrong'} -- error is a plain STRING, not the declared object schema {code,message,details}. Field 233776 is a TestCase-scoped field; passing it under entity_type=test-result reproduces the declared entity_type/field mismatch case."
+    }
+  ],
+  "probe": {
+    "arguments": {"project_id": 332537, "entity_type": "test-case", "field_id": "233776 (and 180001, 194184 spot-checked)"},
+    "status": 200,
+    "response_keys": ["success", "<field_id>", "info"],
+    "item_shape": {
+      "keys": ["id", "group_id", "project_id", "custom_field_id", "dataset_id", "option_value", "is_default", "parent_option_id", "record_status", "created_at", "updated_at"],
+      "example": {"id": 5059334, "group_id": 2, "project_id": null, "custom_field_id": 233776, "dataset_id": 77246, "option_value": "1", "is_default": false, "parent_option_id": null, "record_status": "active", "created_at": "2026-03-24T11:10:17.000Z", "updated_at": "2026-03-24T11:10:17.000Z"},
+      "variant_match": "NEITHER variant A (field-definition: {value,name,internal_name,is_default}) NOR variant B (case-row: {id,internal_name,field_name,colour,value_category,name}). This is a THIRD, distinct shape -- a dataset-option-row keyed by option_value/dataset_id/record_status, closely mirroring the option_values sub-objects returned inline by get_project_form_fields (option_value, is_default, record_status, created_at, updated_at, dataset_id) but with extra relational keys (id, group_id, project_id, custom_field_id, parent_option_id) not present there either."
+    }
+  },
+  "contract": {
+    "required": ["project_id (path)", "entity_type (path, enum: test-case|test-result|test-plan|exploratory-session)", "field_id (path)"],
+    "json_path": "<field_id>.values",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "values[].id, group_id, project_id, custom_field_id, dataset_id, option_value, is_default, parent_option_id, record_status, created_at, updated_at -- ALL undeclared, since the capability's own schema types `values[]` items as a bare `object` with no listed properties. Not a contract violation (nothing was promised to be absent), but confirms the item shape was genuinely unspecified until this probe."
+    ]
+  },
+  "prod_vs_preprod": {
+    "point_1_declared_contract": "Matches preprod exactly: dynamic top-level key '<field_id>': {field_type, values}, plus info and success. Declared 400 schema is the structured object {success:false, error:{code,message,details}}.",
+    "point_2_nonempty_values_found": {
+      "found": true,
+      "fields_used": [
+        {"field_id": 180001, "entity_type": "test-case", "field_type": "field_dropdown", "unfiltered_count": 120},
+        {"field_id": 233776, "entity_type": "test-case", "field_type": "field_dropdown", "unfiltered_count": 33}
+      ],
+      "note": "Unlike preprod (every field tried had values:[]), project 332537's real custom dropdown fields have plenty of configured option values, letting the item shape and duplicate/paging checks actually run."
+    },
+    "point_3_item_shape": "Third/distinct shape (see probe.item_shape above) -- neither declared variant A nor B from preprod's hypothesis; a dataset-option-row with id/group_id/project_id/custom_field_id/dataset_id/option_value/is_default/parent_option_id/record_status/created_at/updated_at.",
+    "point_4_duplicate_option_ids": {
+      "found_duplicates": false,
+      "detail": "Across all values inspected for field 233776 (33/33, both pages) and field 180001 (90 of 120 rows inspected across pages 1, 2 and 4, plus targeted q= searches), every option_value string was unique -- no organic duplicate names and no systematic doubling of a 'default' option. Also, every single option row in this project's custom dropdown/multi_dropdown fields carries is_default:false (per get_project_form_fields) -- unlike preprod's SYSTEM field defaults (status/priority/etc.), this project has no custom-field option flagged as the canonical default at all, so the preprod 'default option cloned twice' pattern has no equivalent case to even test here. Distinguish from get_system_field_values's prod findings (that capability's SYSTEM fields had real organic duplicate names, e.g. 'Temp state' x5) -- this capability's CUSTOM fields, on the same project, showed none in the sampled rows."
+    },
+    "point_5_400_error_shape": {
+      "reproduces": true,
+      "detail": "Entity_type/field-id mismatch (field_id=233776, a test-case field, requested under entity_type=test-result) returned HTTP 400 with body {success:false, error:'Something went wrong'} -- error is a plain STRING. This exactly reproduces the preprod DRIFT: contradicts the declared object schema {code,message,details}, matches the capability's own prose guidance ('A field that does not exist, or any upstream failure, returns 400 {success:false, error:'Something went wrong''), and matches prod's own get_system_field_values-adjacent pattern of string-shaped errors."
+    },
+    "point_6_paging_reliability": {
+      "reproduces_system_field_values_bug": false,
+      "detail": "Checked non-final and final pages on two fields with real data: field 233776 (count=33, page_size=30) -- page 1 returned exactly 30/30 rows (full, next=2), page 2 (final, next=null) returned exactly 3/3 rows (30+3=33, matches declared count exactly). Field 180001 (count=120, page_size=30) -- page 1 returned 30/30 (next=2), page 2 (non-final, next=3) returned 30/30, page 4 (final, next=null) returned 30/30 (4*30=120, matches declared count exactly). q-filtered checks also agreed: q='Chiranjeevi' declared count=1, returned 1 row (next=null); q='d1' declared count=12, returned 12 rows (next=null). In every case checked on prod, info.count and info.page_size were fully consistent with actual rows returned -- this capability's paging/filtering metadata does NOT reproduce the under-fill / undercount bug seen on get_system_field_values. This is a genuine positive distinction worth recording: the two capabilities share a similar info{page,page_size,count,prev,next} shape but do not share the same paging-metadata reliability defect on this data."
+    }
+  },
+  "notes": "Verdict is DRIFT and reproduces_preprod=true, driven entirely by point 5: the declared 400 error schema is a structured object {code,message,details}, but the actual body for an entity_type/field-id mismatch is {success:false, error:'Something went wrong'} with error as a plain string -- confirmed again on production with real data, exactly as found on preprod. Point 2 is now settled (previously UNVERIFIED on preprod): production project 332537 has multiple custom dropdown fields with genuinely configured, non-empty option values, so this recheck was able to observe the item shape for real. Point 3 is a new finding: the value/option item shape is a THIRD distinct shape (dataset-option-row: id/group_id/project_id/custom_field_id/dataset_id/option_value/is_default/parent_option_id/record_status/created_at/updated_at), not either of the two hypothesized variants (A: field-definition, B: case-row) -- and since the capability's own declared schema types `values[]` items as a bare, property-less object, this is new information rather than a contract violation. Point 4 (duplicate-option-id check) found no duplicates and, notably, no custom-field option anywhere flagged is_default:true in this project, so the preprod 'default dropdown cloned twice' pattern (which was specific to SYSTEM fields on get_system_field_values) has no analogous case to reproduce or refute here -- reported as 'not applicable to this data' rather than forced into a pass/fail. Point 6 is a genuine POSITIVE distinction from get_system_field_values: paging metadata (info.count/page_size vs actual rows returned) was fully self-consistent across every page and every q-filtered call checked here, on both a 33-row and a 120-row field, unfiltered and filtered, final and non-final pages -- the sibling capability's under-fill/undercount defect does not reproduce on get_custom_field_values with this data. Limitation: list_workspace_fields returned a systemic 403 'This action is not permitted for the user' (SSO/auth block, confirmed with and without query params) in this environment, so real field ids for entity_type test-result / test-plan / exploratory-session could not be enumerated live; get_project_form_fields only ever serves TestCase fields by its own declared design, so no alternate live path existed within probe budget. The entity_type-mismatch 400 check (point 5) was still exercised successfully using a real TestCase field id requested under entity_type=test-result, which is sufficient to trigger and confirm the mismatch-error-shape behavior, but a genuine non-empty test-result/test-plan/exploratory-session custom field's item shape remains UNVERIFIED on prod."
+}

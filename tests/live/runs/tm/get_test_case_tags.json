@@ -1,0 +1,46 @@
+{
+  "capability": "get_test_case_tags",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Use pool-confirmed live ids directly (project 379335744/PR-2005, __readonly__ folder 764093, cases TC-54455/int 1971631 and TC-54456/int 1971632) — no discovery calls needed since all required integer path ids were already confirmed live by the pool.",
+      "source": "pool",
+      "capability": null,
+      "produced": {
+        "project_id": 379335744,
+        "folder_id": 764093,
+        "test_case_ids": [1971631, 1971632]
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": {
+      "path_params": {"project_id": 379335744, "folder_id": 764093, "test_case_id": 1971631}
+    },
+    "status": 200,
+    "response_keys": [],
+    "item_shape": null,
+    "note": "First pool case (TC-54455 / 1971631) returned HTTP 200 with body [] — an empty bare array, no tags on this case."
+  },
+  "second_case_probe": {
+    "arguments": {
+      "path_params": {"project_id": 379335744, "folder_id": 764093, "test_case_id": 1971632}
+    },
+    "status": 200,
+    "response_keys": [],
+    "item_shape": null,
+    "note": "Second pool case (TC-54456 / 1971632), tried per the empty-case rule, also returned HTTP 200 with body [] — no tags on this case either."
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "folder_id (path, integer)", "test_case_id (path, integer)"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Both invocations succeeded on the first attempt (no retries needed, no failures to record verbatim). Declared 200 shape is a bare JSON array of tag name strings (or, per the capability's own guidance, tag-record objects {id, name, taggings_count} for legacy Rails-backed projects). Both pool cases (TC-54455 and TC-54456, the only two cases in the __readonly__ pool) returned an empty array — neither case carries any of the project's known tags (__mcp-probe-tag-20260918a, mcp-probe, probe-update). Per the EMPTY-CASE RULE this is UNVERIFIED, not PASS: the item shape (string vs legacy tag-record object) was never exercised, so neither the container-level match (bare array, confirmed consistent with prose+schema for the empty case) nor the per-item field contract could be checked. No write capability exists in this profile to tag a case for verification (guidance explicitly states 'there is no add/remove-tag capability in this profile'), and this is a read-only round regardless, so no case was tagged. Pattern check: container mismatch — not observed (bare array declared, bare array returned, at the container level); prose vs schema — both agree on the bare-array container, consistent with each other for what could be observed; error-envelope drift — not applicable, no non-2xx response was hit; unfalsifiable {type:object} — not applicable, declared type is array/string, not exercised beyond the empty case; undeclared descriptor fields (value_category/colour/entity_type/valueDetails) — not observed, but only because the array was empty in both cases, not because they were confirmed absent. Sibling distinction: get_test_case_tags requires the full project_id+folder_id+test_case_id path triple and is scoped to exactly one test case, returning that case's tag names as a bare array; list_test_case_tags is described as a project-wide tag listing, which by name and by this capability's own guidance ('Tags are referenced by NAME everywhere in this product; there are no tag ids in this response') should key on project_id alone and enumerate the full tag vocabulary for the project (id + name + usage-count style records) rather than one case's applied subset. That is a real, non-overlapping signal — one is a per-case membership read, the other is a project-scoped catalog read — so this pair does not look like an undistinguished duplicate, though the sibling's own probe should confirm its actual required params before treating this as settled."
+}

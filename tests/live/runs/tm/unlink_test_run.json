@@ -1,0 +1,85 @@
+{
+  "capability": "unlink_test_run",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-17T16:20:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm the prerequisite link exists before attempting to unlink it (sibling probe of link_entities_to_jira_issue reported creating it, but this probe re-verifies independently).",
+      "source": "invoked",
+      "capability": "get_test_run_detail",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9061" } },
+      "status": 200,
+      "produced": {
+        "issues": [
+          { "id": 848917, "issue_id": "TES-121", "issue_type": "jira", "entity_type": "Build", "entity_id": 17574995, "record_status": "active", "project_id": 379335744, "group_id": 3452 }
+        ]
+      }
+    },
+    {
+      "step": 2,
+      "why": "Re-read the run after the successful unlink invocation to verify the link was actually removed, not just acknowledged with a 200.",
+      "source": "invoked",
+      "capability": "get_test_run_detail",
+      "arguments": { "path_params": { "project_id": 379335744, "test_run_id": "TR-9061" } },
+      "status": 200,
+      "produced": {
+        "issues": [],
+        "note": "issues[] is now empty; the TES-121 link (row 848917) is gone. test_result_issues also empty, unchanged (was already empty)."
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "issue_type": "jira-app" },
+        "body": { "test_run_id": 17574995, "project_id": 379335744, "issue_id": "TES-121" }
+      },
+      "status": 200,
+      "error": "{\"success\": false, \"status\": 404}",
+      "changed": "First attempt used exactly the documented 'normal call' shape: build_id omitted per contract guidance ('Omit the field entirely and the server resolves the run itself'). Result was a false-negative-looking 404-in-body despite the link (row 848917, record_status active) being confirmed present in setup step 1."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "issue_type": "jira-app" },
+        "body": { "test_run_id": 17574995, "project_id": 379335744, "issue_id": "TES-121" }
+      },
+      "status": 200,
+      "error": "{\"success\": false, \"status\": 404}",
+      "changed": "No parameter change — retried identically to rule out the contract's own stated ambiguity ('during a platform downtime window this refuses with a success flag set to false and a 404 in the body ... indistinguishable from no such link without checking platform status'). Identical failure on retry rules out a one-off transient blip; the omit-build_id path is consistently non-functional for this run."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "issue_type": "jira-app" },
+        "body": { "test_run_id": 17574995, "project_id": 379335744, "issue_id": "TES-121", "build_id": 17574995 }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "Added build_id=17574995 (same value as test_run_id/uuid), reasoning from setup step 1's issues[0].entity_type == 'Build' and entity_id == 17574995 — i.e. the link is stored against a Build-typed entity, suggesting this project is on build-based run ingestion where build_id must be supplied rather than left for server resolution. This succeeded: {\"success\": true, \"test_runs\": [], \"info\": {\"page\":1,\"page_size\":10,\"count\":0,\"prev\":null,\"next\":null}}."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "issue_type": "jira-app" },
+      "body": { "test_run_id": 17574995, "project_id": 379335744, "issue_id": "TES-121", "build_id": 17574995 }
+    },
+    "status": 200,
+    "response_keys": ["success", "test_runs", "info"],
+    "item_shape": {
+      "test_runs": "empty array — TES-121 now has zero linked test runs, consistent with the only link (this one) having been removed",
+      "info": { "page": 1, "page_size": 10, "count": 0, "prev": null, "next": null }
+    }
+  },
+  "contract": {
+    "required": ["issue_type (path, enum: jira-app|azure|asana|linear|clickup|confluence|figma|devrev|gitlab|github|custom|trello)", "test_run_id (body, integer)", "project_id (body, integer)"],
+    "json_path": "none — the body is flat: {test_run_id, project_id, issue_id, build_id, p} with no wrapper/nesting object",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "PASS-shaped end state (the link is genuinely gone, verified by re-read) but reported as DRIFT because the contract's own guidance actively misled the first two attempts: it states build_id should be 'omitted entirely' as 'the normal call', with build_id documented only as relevant 'for accounts on build-based run ingestion'. For this fixture project (379335744 / __scratch__), omitting build_id twice produced a 200 with {success:false, status:404} — a shape the contract itself says is indistinguishable from a genuine 'no such link' or a platform-downtime window — even though the link was independently confirmed present and active immediately beforehand. The call only succeeded once build_id was supplied (using the run's own uuid, inferred from the linked issue row's entity_type:'Build'/entity_id match). Nothing in the contract signals that THIS project needs build_id, nor what value to use; a caller following the documented 'normal call' path would conclude, incorrectly and silently, that the run has no Jira link to remove. This is the exact confusing-403-vs-404-style failure mode the capability's own guidance warns about, just triggered by a wrong default rather than downtime. TES-121 is the contract's own documented example ticket key (no real Jira ticket exists in this account; the handler is documented to never validate issue_id) — issue_id is accepted/echoed but not used to select the link, and the handler correctly never validated it, so this result should be treated as provisional/handler-plumbing-level and not as evidence about real Jira-ticket validation. Only TR-9061 / TES-121 / link row 848917 in project 379335744 (__scratch__) were touched; __readonly__ run TR-9058 was never referenced or modified."
+}

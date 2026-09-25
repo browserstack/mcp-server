@@ -1,0 +1,28 @@
+{
+  "capability": "list_archived_test_plans",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "PASS",
+  "reclassification": "ACCOUNT-LIMITATION, NOT A PRODUCT DEFECT. Preprod's BLOCKED verdict was the group-level test-plan-archive feature flag being off for the preprod account (PR-2005 / project 379335744). On production (PR-18723 / project 332537), the same flag is ON: the call returns 200 with a valid, correctly-shaped empty envelope. The capability itself works; what was broken was the preprod account's entitlement, not the route.",
+  "preprod_reference": {
+    "run_file": "tests/live/runs/tm/list_archived_test_plans.json",
+    "verdict": "BLOCKED",
+    "reason": "Both attempts returned 404 {\"success\":false,\"errors\":\"Feature not available\"} — the documented shape for the group archive flag being off. The 200 success schema (test_plans array + info envelope, no count field) was never exercised."
+  },
+  "setup": [],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1 } },
+    "status": 200,
+    "response_keys": ["success", "test_plans", "info"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "STANDING RULE APPLIED: a 2xx on an empty collection counts as PASS. This project has 0 archived test plans (info: {page:1, page_size:30, count:0, prev:null, next:null} — no top-level `count` rollup object, correctly matching the documented difference from the active listing which does have one). ITEM SHAPE NOT EXERCISED: with 0 archived plans in this project, the array row shape (record_status:\"archived\" plus the rest of the active-listing fields, per guidance) could not be checked against real data anywhere in this batch — this remains genuinely unexercised, not just on preprod but now on prod too, since this specific project happens to have nothing archived. Flagging as the still-open gap: no probe run anywhere in this suite (preprod or prod) has yet seen a real archived-plan row returned by this capability. HEADLINE ANSWER: this is a reclassification, not a still-BLOCKED defect — the underlying capability is reachable and well-formed once the group flag is on; the same flag reportedly also gates bulk_archive_test_plans and bulk_restore_archived_test_plans (per task framing), which were not retested in this pass but should be expected to reclassify the same way on this same prod account if retested, since they share the identical group-level gate."
+}

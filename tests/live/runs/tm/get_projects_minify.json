@@ -1,0 +1,31 @@
+{
+  "capability": "get_projects_minify",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [],
+  "probe": {
+    "arguments": { "query": {} },
+    "status": 200,
+    "response_keys": ["success", "projects"],
+    "item_shape": {
+      "name": "string",
+      "id": "integer",
+      "thProjectId": "integer",
+      "description": "string|null",
+      "import_id": "integer|null",
+      "normalisedName": "string",
+      "starred": "boolean",
+      "access_via_secondary_team": "boolean"
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": ["projects[].permissions"],
+    "undeclared_returned": ["projects[].access_via_secondary_team"]
+  },
+  "notes": "Capability has no required params, no path_params, no body, and no json_path nesting — it lists all projects in the caller's group, not scoped to a single project, so nothing from the fixture pool was needed to build the payload. Invoked with an empty query ({}), relying on documented defaults (p=1, count=300). First attempt succeeded outright (200), no retries needed. Response was {success: true, projects: [...300 items]} — matches the declared top-level shape (no `info` block, per guidance). The 300-item collection was non-empty, so the empty-case rule does not apply; item shape was genuinely exercised across all 300 rows. The pool's fixture project (id 379335744, __mcp-capability-fixture__) was present in the results, confirming live/current data. Drift found: every one of the 300 items carried `access_via_secondary_team` (boolean), a field absent from the formal 200 response schema's item properties (it is only mentioned in the capability's prose `returns` summary, not the schema). Conversely, `permissions` — declared in the formal item schema — was present in 0/300 items. Both are shallow, direct field-level mismatches on `projects[]` items; no deeper nested paths to report under them."
+}

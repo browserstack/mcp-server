@@ -1,0 +1,153 @@
+{
+  "capability": "list_test_run_test_cases_by_integer_id",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "fixture project id (given)",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "project_id": 332537, "identifier": "PR-18723" },
+      "status": null,
+      "produced": { "project_id": 332537 }
+    },
+    {
+      "step": 2,
+      "why": "sanity-check run TR-4827350 (given, 2-case run: 1 Passed + 1 Failed) too small to check row grain",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases_by_integer_id",
+      "arguments": { "path_params": { "project_id": 332537, "test_run_id": "TR-4827350" }, "query": { "p": 1, "per_page": 30 } },
+      "status": 200,
+      "produced": { "rows": 2, "count": 2 }
+    },
+    {
+      "step": 3,
+      "why": "scan project runs (p=1..3) via list_test_runs_by_integer_id to find a run with test_cases_count large enough to reveal multi-configuration rows and exercise pagination",
+      "source": "invoked",
+      "capability": "list_test_runs_by_integer_id",
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": "1..3", "ignore_run_type": "true" } },
+      "status": 200,
+      "produced": {
+        "note": "configurations[] was empty [] on every row in this listing (not usable as a signal); test_cases_count was usable instead. Candidates found: TR-5176433 (90), TR-5251658 (183), TR-5217425 (1188), TR-5182118 (1186), TR-5182082 (1158), TR-5182088 (1127).",
+        "chosen_runs": ["TR-5176433", "TR-5251658"]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537, "test_run_id": "TR-4827350" }, "query": { "p": 1, "per_page": 30 } },
+      "status": 200,
+      "error": null,
+      "changed": "none — sanity check worked first try"
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537, "test_run_id": "TR-5176433" }, "query": { "p": 1, "per_page": 100 } },
+      "status": 200,
+      "error": null,
+      "changed": "none — main grain/per_page=100 probe worked first try (count=90, 90 rows returned since total < 100)"
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 332537, "test_run_id": "TR-5176433" }, "query": { "p": 1, "per_page": 9999 } },
+      "status": null,
+      "error": "'per_page' must be at most 100",
+      "changed": "deliberate out-of-range probe, not a retry — documents that out-of-range per_page HARD ERRORS instead of the documented silent fallback to 30"
+    },
+    {
+      "n": 4,
+      "arguments": { "path_params": { "project_id": 332537, "test_run_id": "TR-5176433" }, "query": { "p": 1, "per_page": 101 } },
+      "status": null,
+      "error": "'per_page' must be at most 100",
+      "changed": "deliberate boundary probe (one over max) — same hard error, one off max=100"
+    },
+    {
+      "n": 5,
+      "arguments": { "path_params": { "project_id": 332537, "test_run_id": "TR-5176433" }, "query": { "p": 1, "per_page": "abc" } },
+      "status": null,
+      "error": "'per_page' must be a number",
+      "changed": "deliberate non-numeric probe — also a hard error, not a silent fallback"
+    },
+    {
+      "n": 6,
+      "arguments": { "path_params": { "project_id": 332537, "test_run_id": "TR-5251658" }, "query": { "p": 1, "per_page": 30 } },
+      "status": 200,
+      "error": null,
+      "changed": "none — pagination page-1 probe on 183-case run worked first try"
+    },
+    {
+      "n": 7,
+      "arguments": { "path_params": { "project_id": 332537, "test_run_id": "TR-5251658" }, "query": { "p": 2, "per_page": 30 } },
+      "status": 200,
+      "error": null,
+      "changed": "none — pagination page-2 probe worked first try"
+    },
+    {
+      "n": 8,
+      "arguments": { "path_params": { "project_id": 332537, "test_run_id": "TR-4827350" }, "query": { "p": 1, "per_page": 30, "minify": true } },
+      "status": null,
+      "error": "unknown query: minify. accepted: p, per_page, q, required[custom_fields], required[fields], required[result_custom_fields], shared, sort_by, source_project_id",
+      "changed": "confirms minify is not an accepted param for this capability"
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537, "test_run_id": "TR-5176433" }, "query": { "p": 1, "per_page": 100 } },
+    "status": 200,
+    "response_keys": ["success", "info", "test_cases", "skipped_test_case_ids"],
+    "item_shape": {
+      "keys": [
+        "assignee", "assignee_imported", "automation_state", "automation_status", "case_type", "case_type_imported",
+        "comments_count", "configuration", "created_at", "creator_details", "custom_fields", "dataset_values",
+        "defects", "deleted", "description", "estimate", "expected_result", "history_count", "id", "identifier",
+        "is_automation", "is_shared", "issues", "last_executed_at", "last_executed_by", "latest_status",
+        "lcnc_build_map", "links", "mapping_id", "metadata", "name", "owner", "owner_imported",
+        "planned_execution_date", "preconditions", "priority", "priority_imported", "project_id", "project_name",
+        "result_custom_fields", "result_notes", "result_status", "review_status", "reviewers", "status",
+        "status_imported", "step_count", "steps", "tags", "template", "template_id", "template_step_type",
+        "test_assignee", "test_case_folder_id", "test_case_folders_path", "test_case_id", "test_case_steps",
+        "test_run_id", "test_run_results_count", "test_run_results_issues_count", "updated_at", "updator_details"
+      ],
+      "key_count": 62,
+      "example_duplicate_case": {
+        "run": "TR-5176433",
+        "id": 132249863,
+        "identifier": "TC-5944002",
+        "mapping_ids_observed": [1718327517, 1718327516, 1718327518],
+        "occurrences_on_page": 3
+      },
+      "example_duplicate_case_2": {
+        "run": "TR-5251658",
+        "id": 135385555,
+        "mapping_ids_observed": [1737333576, 1737333577, 1737333578],
+        "occurrences_on_page": 3
+      },
+      "notable_absence": "execution_eligible is named in describeCapability's 'returns' list but was NOT present as a key on any row inspected, across 3 different runs (TR-4827350, TR-5176433, TR-5251658)."
+    }
+  },
+  "contract": {
+    "required": [
+      "project_id (path, integer)",
+      "test_run_id (path, string, pattern ^(TR-)?[0-9]+$)"
+    ],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": [
+      "automation_state", "is_shared", "project_name", "template_step_type", "template_id", "step_count",
+      "test_case_folders_path", "test_run_results_count", "test_run_results_issues_count", "dataset_values",
+      "deleted", "assignee_imported", "result_notes", "reviewers", "review_status"
+    ],
+    "undeclared_in_json_schema_but_named_in_returns_list": [
+      "latest_status", "result_status", "result_custom_fields", "defects", "mapping_id", "test_assignee",
+      "last_executed_by", "last_executed_at", "test_run_id", "configuration", "test_case_id",
+      "planned_execution_date", "execution_eligible"
+    ],
+    "named_in_returns_list_but_never_actually_returned": [
+      "execution_eligible"
+    ]
+  },
+  "notes": "VERDICT: DRIFT — confirmed on real production data across three different runs (TR-4827350: 2 cases; TR-5176433: 90 rows/30 distinct cases; TR-5251658: 183 rows).\n\n1) ROW GRAIN — REPRODUCES ON PROD, confirmed twice. TR-5176433 page 1 (per_page=100, count=90): case id 132249863 (TC-5944002) appears 3 times with mapping_id values 1718327517, 1718327516, 1718327518 — identical id/identifier, distinct mapping_ids, exactly the case×configuration grain the guidance describes. 30 distinct case ids each recur exactly 3 times (90 rows / 30 ids = 3), consistent with a 3-configuration run. TR-5251658 page 1 (per_page=30, count=183) independently confirms the same pattern: case id 135385555 appears 3 times with mapping_ids 1737333576/1737333577/1737333578. Same conclusion as preprod: this is not a bug, it is the documented grain, and it fully reproduces on prod.\n\n2) SCHEMA-VS-RETURNS-LIST INCONSISTENCY — REPRODUCES EXACTLY. describeCapability's expanded 200 JSON-schema item properties (assignee, creator_details, created_at, updator_details, updated_at, case_type, priority, status, case_type_imported, description, custom_fields, estimate, expected_result, id, identifier, is_automation, links, name, history_count, owner, preconditions, owner_imported, priority_imported, project_id, status_imported, steps, tags, template, test_case_folder_id, test_case_steps, lcnc_build_map, automation_status, issues, comments_count, metadata) omit mapping_id, latest_status, test_case_id, test_run_id, configuration, test_assignee, last_executed_by, last_executed_at, planned_execution_date, execution_eligible, result_status, result_custom_fields, defects — all of which ARE named in the capability's own 'returns' list and guidance prose ('mapping_id is the id every bulk operation on this run takes...'). Every declared schema field was present and typed correctly (declared_missing: none). This exactly matches preprod's finding — the contract's free text is more accurate than its machine-checkable schema, on both environments.\n\n3) NEW, PROD-SPECIFIC FINDING — returns-list itself is now inaccurate, not just the schema. 'execution_eligible' is listed in describeCapability's top-level 'returns' array, but across all three runs tested (2-row, 90-row, 183-row) it never once appeared as a key on any test_cases row. On preprod's trace, execution_eligible WAS present in the actual row (absent from schema, but present in the real payload and in item_shape.keys) — so this is a regression/divergence not seen in the preprod probe: on prod, this field is missing from BOTH the schema AND the actual response, while the returns list still promises it. This is a stronger form of contract drift than preprod exhibited for this specific field.\n\n4) Two more undeclared surplus fields not named anywhere in the contract (not in schema, not in returns[]) were seen on every prod row: 'reviewers' (empty array) and 'review_status' ('pending'). These were not called out in the preprod trace's key list either, so this may be new surface, though it's a minor/harmless surplus field, same class as the ~13 other undeclared fields (automation_state, is_shared, project_name, template_step_type, template_id, step_count, test_case_folders_path, test_run_results_count, test_run_results_issues_count, dataset_values, deleted, assignee_imported, result_notes) that preprod already flagged as pure surplus.\n\n5) TEST_RUN_RESULTS_COUNT — DATA-CORRECTNESS GAP REPRODUCES, and is worse than a single sighting. Every single row inspected across all three runs (TR-4827350 x2, TR-5176433 x90, TR-5251658 x60 checked) had test_run_results_count = null, with zero exceptions observed — including rows whose own result_status field carried a genuine completed value ('Passed', 'Failed', 'Conditionally Passed'). E.g. TR-4827350's two rows: id 126144964 has result_status.field_value='Failed', test_run_results_count=null; id 125494645 has result_status.field_value='Passed', test_run_results_count=null. TR-5176433's rows: id 132249863 has result_status.field_value='Conditionally Passed', test_run_results_count=null (repeated across all 30 executed cases on the page). This is the same defect class preprod flagged on TC-54458 (there: null instead of the true count of 14) but now observed as a systemic pattern (100% null rate on every executed row seen) rather than a single case — a broader, more confidently DRIFT-worthy finding on prod.\n\n6) NEW ADDITIONAL FINDING — latest_status also appears stuck/stale, contradicting its own guidance. The contract states: \"`latest_status` is 'untested' for a case that has never been executed; it is never blank.\" On prod, EVERY row inspected across all three runs showed latest_status='untested' even when the SAME row's result_status field carried a genuinely completed value (Passed/Failed/Conditionally Passed) and even when the parent run's own list_test_runs_by_integer_id progress summary (overall_progress_by_status_id) showed real non-zero counts of completed results for that exact run (e.g. TR-5176433: overall_progress_by_status_id showed count:6 'Conditionally Passed' at the run level; every one of the 90 rows in the case listing nonetheless reports latest_status='untested'). This directly contradicts the guidance's implicit claim that latest_status reflects real execution state, and is a second, independent manifestation of the same underlying 'result data not surfaced onto the row' defect class as the test_run_results_count gap — not tested this way in the preprod trace, so this is a new confirmation of a broader staleness problem on prod, not merely a repeat of the preprod finding.\n\n7) PAGINATION / per_page / count-vs-rows. per_page=100 was honored correctly on TR-5176433 (count=90 < 100): info={page:1,page_size:100,count:90,prev:null,next:null}, 90 rows returned, matching count exactly. On TR-5251658 (count=183), per_page=30 paged correctly: page 1 info={page:1,page_size:30,count:183,prev:null,next:2}, 30 rows (10 distinct case ids × 3 configs); page 2 info={page:2,page_size:30,count:183,prev:1,next:3}, 30 more rows (10 more distinct case ids). Zero overlap between page 1 and page 2 on either `id` or `mapping_id` — no duplication, no skip at the page boundary. count-vs-rows matched on every page fetched.\n\n8) PER_PAGE OUT-OF-RANGE — CONTRADICTS THE DOCUMENTED CONTRACT. describeCapability's own guidance states: \"Anything outside 1..100, or non-numeric, silently falls back to 30 instead of erroring — a request for 500 returns 30 rows and looks like a short run.\" This does NOT reproduce on prod as documented: per_page=9999 and per_page=101 both returned a hard error — {\"error\":\"'per_page' must be at most 100\"} — and per_page='abc' (non-numeric) returned {\"error\":\"'per_page' must be a number\"}. No silent fallback occurred in any of the three out-of-range/invalid probes; every one errored cleanly instead. Whether this validation happens in the capability wrapper before the call reaches BrowserStack's real API, or in BrowserStack's API itself, is not distinguishable from here — but from the caller's observed behavior, the documented 'silent fallback to 30' claim is FALSE on production as tested. This is a genuine, freshly-tested drift (preprod's trace never actually invoked an out-of-range per_page; it only asserted the guidance text was true from documentation, so this is new information, not a re-confirmation).\n\n9) MINIFY — no such param exists for this capability, confirmed two ways: describeCapability's query list (p, per_page, required[fields], required[custom_fields], required[result_custom_fields], sort_by, shared, source_project_id, q) does not include minify, and a live invoke with minify:true was rejected outright: {\"error\":\"unknown query: minify. accepted: p, per_page, q, required[custom_fields], required[fields], required[result_custom_fields], shared, sort_by, source_project_id\"}. None of the three known minify behaviours (no-op / key-dropping / value-corrupting) applies here — this capability simply has no minify surface, same conclusion as would be expected from the contract alone.\n\n10) OUT OF SCOPE, NOT RE-TESTED. mapping_id's instability across a write (shifting to the latest result's id after a mutation) was a preprod finding made via WRITE capabilities. This recheck is read-only per task instructions — no write capability was invoked, so this sub-claim was NOT (and could not be) re-tested here. It is neither confirmed nor refuted by this probe; it remains an open item from the preprod finding.\n\nPREPROD VS PROD COMPARISON, DIRECTLY: (a) row grain — reproduces identically on both. (b) schema-vs-returns-list gap for mapping_id/latest_status/etc — reproduces identically on both. (c) test_run_results_count null-on-executed-row defect — reproduces on both, and is more systemic on prod (100% null rate across every executed row seen, vs. preprod's single-case sighting). (d) execution_eligible — WORSE on prod: present in preprod's actual payload (though missing from schema), but absent from BOTH schema and actual payload on prod, despite still being named in returns[]. (e) latest_status staleness — a NEW finding surfaced on prod's dataset (every row 'untested' despite populated result_status), not something preprod's trace called out; may be a difference in production's underlying data rather than the capability code itself, but it is a real, observed data-correctness gap on prod as instructed to check. (f) per_page out-of-range — NEW information on prod: preprod never actually tested it; prod testing shows the documented 'silent fallback to 30' is false — the capability (or its wrapper) hard-errors instead. (g) minify — no param on either environment (unchanged). Net: preprod's DRIFT verdict is CONFIRMED on production, with the contract-vs-reality gap arguably wider on prod (execution_eligible, per_page behavior) alongside a directly reproduced core grain finding."
+}

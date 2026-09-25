@@ -1,0 +1,30 @@
+{
+  "capability": "list_archived_test_cases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T00:00:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "project scope (from pool: project 379335744 / PR-2005, 21 test cases)",
+      "source": "pool",
+      "capability": null,
+      "produced": { "project_id": 379335744 }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 }, "query": { "p": 1 } },
+    "status": 200,
+    "response_keys": ["success", "test_cases", "info", "cases_count"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["project_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Single clean attempt, no retries needed: HTTP 200, success:true, test_cases:[] (empty), info:{page:1,page_size:30,count:0,prev:null,next:null}. No cases in the pool project (379335744/PR-2005) are actually archived, so the row shape (assignee/creator_details/status/steps/etc — a large declared object) could never be exercised. Per the empty-case rule this is UNVERIFIED, not PASS: a 200 with success:true and an empty array proves the envelope works but says nothing about whether the declared per-row shape is accurate. Read-only constraint honored — did not archive any case to force a non-empty result, so item-shape verification is left undone by design, not by failure. info.count (0) agrees with len(test_cases) (0) — no count-vs-rows disagreement observed, though with both at zero this check has limited power; would need a follow-up probe against a project with real archived cases to be conclusive. Only page 1 was checked; info.next was null so there was no further page to walk — the guidance's 'walk pages until info.next is null' was trivially satisfied on the first page.\n\nMinor undeclared-shape nuance (not counted as DRIFT since it's below the response_keys level and the field is genuinely absent-of-data): describeCapability's own schema description for cases_count says 'null on this route, since it takes no folder' (implying key: null), but the actual response returned cases_count:{\"\":0} — an object with an empty-string key mapping to 0, not a null value. This is a prose-vs-reality mismatch in the description text, but with only one, zero-count sample it isn't possible to say whether the real behavior is 'key is always empty-string' or something else entirely; flagging it rather than scoring it.\n\nARCHIVE vs BIN distinction: this capability's own contract keeps the two concepts clearly separate and does NOT conflate them. The intent text says explicitly 'List the test cases that have been archived in a project — the source of the ids the bulk-retrieve (un-archive) call needs,' and the response schema/guidance never mentions bin, trash, or soft-delete at all — no shared fields, no shared terminology with count_binned_test_cases / list_binned_test_cases. An agent reading only this capability's own describeCapability output would not mistake 'archived' for 'binned.'\n\nFEATURE-GATE comparison (the specific ask): test-CASE archiving is NOT gated the same way as test-PLAN archiving for this project/group. list_archived_test_plans and get_archived_test_plan_count both return the documented 404 {success:false, errors:\"Feature not available\"} for project 379335744 in preprod (see tests/live/runs/tm/get_archived_test_plan_count.json). list_archived_test_cases, probed against the same project in the same environment, returned a normal 200 with success:true — the endpoint is reachable and the feature is not gated off; there is simply nothing archived in the pool project. So this is the 200-with-empty-list outcome, explicitly distinct from the plan-archiving 404 feature-gate outcome — verdict is UNVERIFIED (empty-collection rule), not BLOCKED (feature gate). No error body was returned at all, so there is nothing to diff against the success schema, and the error-envelope-drift pattern seen elsewhere in this suite was not applicable here."
+}

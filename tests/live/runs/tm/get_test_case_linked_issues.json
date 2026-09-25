@@ -1,0 +1,69 @@
+{
+  "capability": "get_test_case_linked_issues",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-17T16:45:00Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "get_test_case_linked_issues requires an INTEGER test_case_id path param, but the fixture pool only lists the TC-NNN identifiers (TC-54455, TC-54456). Listed the __readonly__ folder to resolve identifier -> integer id.",
+      "source": "invoked",
+      "capability": "list_folder_test_cases",
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 764093 },
+        "query": { "p": 1, "per_page": 30 }
+      },
+      "status": 200,
+      "produced": {
+        "TC-54455": { "test_case_id": 1971631, "name": "probe case A" },
+        "TC-54456": { "test_case_id": 1971632, "name": "probe case B" }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "issue_type": "jira-app", "test_case_id": 1971631 },
+        "query": { "p": 1, "per_page": 10 }
+      },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "n/a (first attempt). issue_type='jira-app' chosen as the documented normalization example ('the server normalises it to jira internally'); test_case_id resolved from pool via setup step 1."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "issue_type": "jira-app", "test_case_id": 1971631 }
+      },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "dropped the p/per_page query params entirely, in case sending pagination params triggered a different (broken) code path than the server default read."
+    },
+    {
+      "n": 3,
+      "arguments": {
+        "path_params": { "issue_type": "custom", "test_case_id": 1971631 }
+      },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "switched issue_type from 'jira-app' to 'custom' (both are declared-allowed values), to test whether the 500 was specific to a jira integration lookup or happens for every tracker type. Same 500 for a tracker type that needs no external app connection, so it is not jira-specific."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "issue_type": "custom", "test_case_id": 1971631 }
+    },
+    "status": null,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["issue_type", "test_case_id"],
+    "json_path": "data.test_case",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Never got a 200. Three attempts, varying (a) whether pagination query params (p/per_page) were sent and (b) the issue_type path value ('jira-app' vs 'custom', both from the contract's declared enum: jira-app, azure, asana, linear, clickup, confluence, figma, devrev, gitlab, github, custom, trello) — all three returned the identical transport-level 500 {\"status\":500,\"error\":\"Internal Server Error\"} with no error body/code from the app itself (unlike the capability's own declared 400/401/403/404/500 shapes, which all carry {success:false, error:{code, message}} — this 500 doesn't even match the capability's own declared error schema). test_case_id was not guessed: it was resolved from the __readonly__ pool fixture (TC-54455 -> 1971631) via list_folder_test_cases, and that same case's 'issues' field came back as an empty array on that read, i.e. this account/case has no tracker tickets linked at all. That is consistent with two different explanations this run cannot distinguish between: (1) the preprod account '<redacted>' has no external-tracker integration configured for any issue_type, and the handler crashes instead of returning a graceful empty/'not configured' response when it tries to resolve one; or (2) the endpoint is broken outright regardless of tracker configuration. Either way this is a genuine BLOCKED result, not a payload mistake on this end: the path params match the declared contract exactly (issue_type from the closed enum, test_case_id as the required integer, verified to belong to the fixture project/group), and varying both dimensions the contract exposes did not change the outcome. Did not try the other 10 issue_type values (azure, asana, linear, clickup, confluence, figma, devrev, gitlab, github, trello) beyond the 3-attempt cap the task sets; given 'jira-app' and 'custom' both failed identically, there is no reason from the evidence gathered to expect a different tracker type to succeed. Because no call ever succeeded, contract.declared_missing/undeclared_returned could not be computed against a real response and are left empty rather than guessed."
+}

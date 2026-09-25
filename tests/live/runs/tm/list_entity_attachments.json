@@ -1,0 +1,119 @@
+{
+  "capability": "list_entity_attachments",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T04:20:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "probe readonly test case TC-54455 first, per the fixture pool's own read-probe convention; contract requires the v2 PR-NNN project form so used PR-2005",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "path_params": { "project_id": "PR-2005", "entity_type": "test-cases", "entity_id": "TC-54455" }, "query": { "per_page": 300 } },
+      "status": 200,
+      "produced": { "attachments": [], "info": { "page": 1, "page_size": 300, "count": 0, "prev": null, "next": null } }
+    },
+    {
+      "step": 2,
+      "why": "probe second readonly test case TC-54456 to rule out a per-item fluke",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "path_params": { "project_id": "PR-2005", "entity_type": "test-cases", "entity_id": "TC-54456" }, "query": { "per_page": 300 } },
+      "status": 200,
+      "produced": { "attachments": [], "info": { "page": 1, "page_size": 300, "count": 0, "prev": null, "next": null } }
+    },
+    {
+      "step": 3,
+      "why": "try a different entity type from the closed set (test-plans) using the readonly pool plan TP-1596",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "path_params": { "project_id": "PR-2005", "entity_type": "test-plans", "entity_id": "TP-1596" }, "query": { "per_page": 300 } },
+      "status": 200,
+      "produced": { "attachments": [], "info": { "page": 1, "page_size": 300, "count": 0, "prev": null, "next": null } }
+    },
+    {
+      "step": 4,
+      "why": "entity_type=test-results needs a real INTEGER result id (not TR-/TC- forms), which the contract says only comes from a v2 test-results listing; checked whether readonly case TC-54455 has ever been executed in readonly run TR-9058 to obtain one",
+      "source": "invoked",
+      "capability": "list_test_results_for_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9058", "test_case_id": "TC-54455" }, "query": { "page_size": 300 } },
+      "status": 200,
+      "produced": { "test_results": [], "info": { "page": 1, "page_size": 300, "count": 0, "prev": null, "next": null } }
+    },
+    {
+      "step": 5,
+      "why": "same check for readonly case TC-54456 in readonly run TR-9058",
+      "source": "invoked",
+      "capability": "list_test_results_for_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9058", "test_case_id": "TC-54456" }, "query": { "page_size": 300 } },
+      "status": 200,
+      "produced": { "test_results": [], "info": { "page": 1, "page_size": 300, "count": 0, "prev": null, "next": null } }
+    },
+    {
+      "step": 6,
+      "why": "same check for scratch case TC-54457 in readonly run TR-9058 (cross combination, read-only so safe against the readonly run)",
+      "source": "invoked",
+      "capability": "list_test_results_for_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9058", "test_case_id": "TC-54457" }, "query": { "page_size": 300 } },
+      "status": 200,
+      "produced": { "test_results": [], "info": { "page": 1, "page_size": 300, "count": 0, "prev": null, "next": null } }
+    },
+    {
+      "step": 7,
+      "why": "same check for readonly case TC-54455 in scratch run TR-9061",
+      "source": "invoked",
+      "capability": "list_test_results_for_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9061", "test_case_id": "TC-54455" }, "query": { "page_size": 300 } },
+      "status": 200,
+      "produced": { "test_results": [], "info": { "page": 1, "page_size": 300, "count": 0, "prev": null, "next": null } }
+    },
+    {
+      "step": 8,
+      "why": "same check for readonly case TC-54456 in scratch run TR-9061",
+      "source": "invoked",
+      "capability": "list_test_results_for_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9061", "test_case_id": "TC-54456" }, "query": { "page_size": 300 } },
+      "status": 200,
+      "produced": { "test_results": [], "info": { "page": 1, "page_size": 300, "count": 0, "prev": null, "next": null } }
+    },
+    {
+      "step": 9,
+      "why": "same check for scratch case TC-54457 in scratch run TR-9061 -- exhausted every case x run combination the pool offers",
+      "source": "invoked",
+      "capability": "list_test_results_for_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9061", "test_case_id": "TC-54457" }, "query": { "page_size": 300 } },
+      "status": 200,
+      "produced": {
+        "test_results": [],
+        "info": { "page": 1, "page_size": 300, "count": 0, "prev": null, "next": null },
+        "finding": "none of the three fixture test cases has ever been executed in either fixture run, so no real integer test-result id exists anywhere in the pool; entity_type=test-results could not be probed without inventing an id, which the task explicitly disallows"
+      }
+    },
+    {
+      "step": 10,
+      "why": "every collection probed was empty; searched for a documented attachment-create/upload capability that could attach a real file to scratch entities (case TC-54457 or run TR-9061) so the item shape becomes checkable",
+      "source": "invoked",
+      "capability": "searchCapability",
+      "arguments": { "query": "upload attachment file to test case or test result", "product": "tm", "entity": "attachment" },
+      "status": 200,
+      "produced": {
+        "finding": "The attach flow for test-cases/results/plans is two-step: upload_generic_attachments (or upload_ai_attachments) mints a blob id from real file bytes, then link_attachments_to_test_case links that blob id (JSON body) to a case. Both file-content endpoints are explicitly documented as 'NOT INVOCABLE through this interface' -- they read `attachments` as multipart FILE parts, which cannot be expressed as JSON invokeCapability arguments; calling them with no files silently returns 200 {generic_attachment: []} rather than an error. Since link_attachments_to_test_case requires a blob id that only those non-invocable endpoints can produce, the entire attach chain is blocked at its first step. No attachment of any kind can be created through this MCP surface, so no write-based workaround was available to make the item shape checkable."
+      }
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": { "path_params": { "project_id": "PR-2005", "entity_type": "test-cases", "entity_id": "TC-54455" }, "query": { "per_page": 300 } },
+    "status": 200,
+    "response_keys": ["success", "attachments", "info"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id", "entity_type", "entity_id"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "describeCapability declares a real committed shape, not a thin passthrough: 200 -> {success: boolean, attachments: [{id, name, size, created_at, url, data_id?}], info: {page, page_size, count, prev, next}}. All params are path/query only (project_id as PR-NNN, entity_type as a closed set of test-cases/test-results/test-plans, entity_id whose form depends on entity_type) -- a plain GET with no request body and no json_path nesting. Used the v2 PR-2005 project form directly, per the contract text which states a bare integer 379335744 does not match this route's PR-\\d+ constraint; that form was never actually tried against this capability since the contract already resolved it (recording that here rather than burning a live call on a form the contract rules out). Invoked against every entity the pool makes reachable for this route's closed entity_type set: readonly test cases TC-54455 and TC-54456, and readonly test plan TP-1596 (test runs/exploratory sessions are explicitly out of scope for this route per the contract, so TR-9058/TR-9061 could not be used directly as entity_id). All three returned HTTP 200 {success:true, attachments:[], info:{count:0,...}} exactly as declared for an empty case -- no drift in the envelope shape. entity_type=test-results could not be probed at all: it needs a real INTEGER result id, and exhausting all 3 fixture cases x 2 fixture runs (steps 4-9) showed none of the cases has ever been executed in either run, so no such id exists in the pool; inventing one is explicitly disallowed by the task since entity_id is documented as unvalidated by the resolver (a made-up id would just produce a confusing 404, not evidence). Before settling for UNVERIFIED, looked for a documented upload/attachment-create capability that could plant a real file on scratch case TC-54457 or scratch run TR-9061 so the item shape becomes checkable (step 10): the two-step attach flow exists on paper (upload_generic_attachments / upload_ai_attachments to mint a blob id, then link_attachments_to_test_case to link it) but the file-content half is explicitly documented as NOT INVOCABLE through this MCP interface -- it requires real multipart file bytes that cannot be expressed as JSON invokeCapability arguments, and calling it with no files returns a deceptive 200 with an empty result rather than an error. So the attach chain is blocked at its first step and no attachment could be manufactured; this absence -- there is no working path to create a test-management attachment from this MCP surface at all -- is itself worth reporting. Global search was deliberately not used to hunt for attachments elsewhere, per the task's instruction about the >=6-day indexing lag making an empty search result meaningless. No write was attempted (nothing invocable to write with), so no user_permission was requested. Per the task's own instruction, an empty collection proves nothing about the declared item row shape (id/name/size/created_at/url/data_id), so this cannot be scored PASS -- verdict is UNVERIFIED: the capability responds exactly as declared for the wrapper ({success, attachments, info}) across every reachable entity_type/entity_id combination in the pool, but the declared per-row shape inside `attachments` could never be checked against a real row, and no path (documented or invocable) exists in this environment to produce one."
+}

@@ -1,0 +1,30 @@
+{
+  "capability": "get_test_case_type_split",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:55:10Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "q[created_at]": "all_time" } },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "query": { "q[created_at]": "all_time" } },
+    "status": 200,
+    "response_keys": ["data", "empty_data"],
+    "item_shape": { "name": "string", "y": "integer", "value": "integer", "field": "string" }
+  },
+  "contract": {
+    "required": ["data", "empty_data"],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "CONTAINER SHAPE: `data` is a plain array of OBJECTS {name, y, value, field}, exactly as declared in the schema (properties: name:string, y:integer, value:integer, field:string). This capability is NOT part of the 'positional array' family the task briefing floated (get_issues_count_info, get_closed_test_runs_info) — that framing does not apply here; both preprod and prod agree the container is schema-clean object-array. No shape drift on the container in either env.\n\nY-VS-VALUE GUIDANCE CLAIM: DRIFT, and prod makes it unambiguous. Guidance text says 'Each row carries both y and value; they are the same count under two names (y is the chart's series value).' On prod (project 332537, 16,267 cases across 48 case-type rows / 45 distinct type names), y and value NEVER match for any row with real data. Examples: Functional y=10113 value=9379; Acceptance y=764 value=9375; Performance y=1657 value=9381; Security y=1281 value=9383; API y=1 value=851218; MIddleware y=13 value=1519284; No y=1 value=2115198. y is clearly the real per-type case count (sum of nonzero y ~= 16,255, matching the project's 16,267 total cases within a small remainder likely from cases with no case_type set). value is clearly an internal case_type field-config id: for the 'core'/pre-seeded types it clusters tightly (9375-9385, 851218, 1519284...) while for later user-created custom types it runs into large sequential-looking ids up to ~28,083,809 tracking apparent creation order, and rows with y=0 still carry a large distinct value. This is the exact pattern preprod showed at tiny scale (value 318594-318631 vs y in {0,21}); prod confirms it decisively with realistic volume and non-trivial counts. The guidance sentence is factually wrong and should be corrected (e.g. 'value is an internal case-type field-config id, not a duplicate of the count; use y for the actual count').\n\nDUPLICATE-ROW ANOMALY: does NOT reproduce as a systemic pattern on prod -> preprod-fixture-specific, not a capability bug. Preprod showed EVERY one of its ~21 case-type names duplicated 2x with disjoint value-id ranges (looked like a duplicated field-config for the whole project). On prod, of 48 total rows / 45 distinct names, all but two names appear exactly once; the exceptions are 'sadas' (2 rows, values 17964080/17964081) and 'frsadas' (3 rows, values 17964082/17964083/17964092) - a small number of distinctly-named-but-duplicate-text custom case types, most likely separate user-created field-config entries that happen to share a display string (test/junk data visible in the row names, e.g. 'bhavyatest7may', 'dhaval test', 'dummy_test'), not the same global-duplication defect preprod exhibited. This confirms the preprod duplication was specific to that fixture project's field-config state, not a general capability defect.\n\nVERDICT RATIONALE: DRIFT is driven solely by the guidance/documentation mismatch on y vs value, now confirmed decisively on real production data at full scale. Container shape, required keys (data/empty_data), and item shape all match the declared schema exactly - no JSON-schema-level drift. Not a 5xx/refusal issue; response was a clean 200 on real populated data, so per instructions this counts as evaluated (not a trivial empty-collection PASS) and the guidance defect stands as genuine DRIFT."
+}

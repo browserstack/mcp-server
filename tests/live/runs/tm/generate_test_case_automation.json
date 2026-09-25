@@ -1,0 +1,148 @@
+{
+  "capability": "generate_test_case_automation",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T06:07:00Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Capture the case's full before-state (automation_status, steps, last_updated_at) so any mutation from the probe invoke is attributable, per the task's mutation-capture requirement.",
+      "source": "invoked",
+      "capability": "get_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" } },
+      "status": 200,
+      "produced": {
+        "automation_status": "not_automated",
+        "template": "test_case_steps",
+        "folder_id": 764828,
+        "last_updated_at": "2026-09-18T06:05:41.000Z",
+        "steps": [{ "step": "Open the login page", "result": "Login page is displayed" }],
+        "tags": ["mcp-probe"]
+      }
+    },
+    {
+      "step": 2,
+      "why": "Re-read the case immediately after the probe invoke to check whether the case's automation metadata (lock/status) changed, and to confirm the response envelope. First attempt hit the preprod outage signature.",
+      "source": "invoked",
+      "capability": "get_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" } },
+      "status": 0,
+      "produced": { "error": "the product could not be reached" }
+    },
+    {
+      "step": 3,
+      "why": "Retry of step 2's read, justified per the stated exception for the preprod-outage signature (status 0, 'the product could not be reached') — an environment failure that reached nothing, not a real answer to retry away.",
+      "source": "invoked",
+      "capability": "get_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" } },
+      "status": 200,
+      "produced": {
+        "automation_status": "not_automated",
+        "last_updated_at": "2026-09-18T06:05:41.000Z",
+        "steps": [{ "step": "Open the login page", "result": "Login page is displayed" }]
+      }
+    },
+    {
+      "step": 4,
+      "why": "Re-read the case after the second (maximal-payload) invocation, to confirm whether that attempt mutated or queued anything either.",
+      "source": "invoked",
+      "capability": "get_test_case",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_case_id": "TC-54458" } },
+      "status": 200,
+      "produced": {
+        "automation_status": "not_automated",
+        "last_updated_at": "2026-09-18T06:05:41.000Z",
+        "steps": [{ "step": "Open the login page", "result": "Login page is displayed" }]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_case_id": 1975349 },
+        "body": {
+          "version": "v1",
+          "test_name": "mcp-probe generate_test_case_automation TC-54458",
+          "base_url": "https://example.com/login",
+          "steps": ["Open the login page"],
+          "local_enabled": false
+        }
+      },
+      "status": 422,
+      "error": "{\"success\":false,\"message\":\"{\\\"message\\\":{\\\"title\\\":\\\"Internal Error\\\",\\\"message\\\":\\\"undefined method `[]' for nil:NilClass\\\"}}\"}",
+      "changed": "Initially no second attempt was planned: this was an unhandled server-side exception (NoMethodError on a nil), not a validation rejection of a specific field I could name a fix for, and the post-invoke re-read (setup step 3) confirmed the case was not mutated (automation_status still not_automated, last_updated_at unchanged) — so nothing appeared to have been queued upstream either. Per the probe protocol, retrying without a concrete, stated theory of which field was malformed was not justified on its own, so I initially stopped at one real invocation. A coordinator follow-up directed exactly one more real call with a maximal payload, to distinguish 'endpoint is broken regardless of input' from 'a required field the contract didn't mark required' — recorded as attempt 2 below. This was judged not to be a second metered job, since attempt 1 left the case's automation metadata completely untouched, meaning nothing was queued upstream before it crashed."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "test_case_id": 1975349 },
+        "body": {
+          "version": "v1",
+          "test_name": "mcp-probe generate_test_case_automation TC-54458 (maximal)",
+          "base_url": "https://example.com/login",
+          "credentials": "testuser:testpass",
+          "local_enabled": false,
+          "steps": ["Open the login page"],
+          "test_case_details": {
+            "name": "__mcp-probe-case-2026-09-18T00:00:00Z",
+            "identifier": "TC-54458",
+            "description": "",
+            "preconditions": "",
+            "test_case_steps": [{ "step": "Open the login page", "result": "Login page is displayed" }]
+          },
+          "tags": ["mcp-probe"],
+          "test_case_folder_id": 764828,
+          "folder_id": 764828
+        }
+      },
+      "status": 422,
+      "error": "{\"success\":false,\"message\":\"{\\\"message\\\":{\\\"title\\\":\\\"Internal Error\\\",\\\"message\\\":\\\"undefined method `[]' for nil:NilClass\\\"}}\"}",
+      "changed": "Every declared body field that could be given a real or sensible value was populated (credentials, test_case_details built from the case's own real title/identifier/steps, tags reusing the case's real 'mcp-probe' tag, test_case_folder_id and folder_id both set to the case's real folder 764828). Only fields requiring a reference to an artifact that does not exist were left out and are named in notes (lcnc_link, feedback, score, preTestConfig). Result: BYTE-IDENTICAL error — same status 422, same exact double-encoded 'undefined method `[]' for nil:NilClass' body. Since a maximal payload reproduces the exact same crash as a minimal one, this rules out 'a required field the contract didn't mark required' as the explanation (there was no field left to add that plausibly would have prevented the nil-dereference) and points instead to a bug independent of the request body — e.g. a stale/missing lookup on the automation-service side for this project/case/environment combination, or a broken preprod dependency the handler always dereferences. No further retry was made (two real invocations total, as directed)."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "test_case_id": 1975349 },
+      "body": {
+        "version": "v1",
+        "test_name": "mcp-probe generate_test_case_automation TC-54458 (maximal)",
+        "base_url": "https://example.com/login",
+        "credentials": "testuser:testpass",
+        "local_enabled": false,
+        "steps": ["Open the login page"],
+        "test_case_details": {
+          "name": "__mcp-probe-case-2026-09-18T00:00:00Z",
+          "identifier": "TC-54458",
+          "description": "",
+          "preconditions": "",
+          "test_case_steps": [{ "step": "Open the login page", "result": "Login page is displayed" }]
+        },
+        "tags": ["mcp-probe"],
+        "test_case_folder_id": 764828,
+        "folder_id": 764828
+      }
+    },
+    "status": 422,
+    "response_keys": ["success", "message"],
+    "item_shape": {
+      "success": "boolean (false)",
+      "message": "STRING containing a second, nested JSON object {message:{title,message}} — double-encoded, not the declared error object. IDENTICAL to the minimal-payload attempt's body byte-for-byte."
+    }
+  },
+  "contract": {
+    "required": ["project_id (int, path)", "test_case_id (int, path)"],
+    "json_path": null,
+    "declared_missing": [
+      "No 2xx wrapper {status, body} was reached on either attempt, so the entire declared success shape is unobserved this run.",
+      "None of the declared error envelopes' actual fields: error.code, error.message, error.details (400/401/403/404/500 shape) or success/message/error (451 shape) are present in the observed body's outer layer, on either attempt — the outer body only ever contains {success, message}, and `message` is not the human-readable string the schema implies, it is a JSON-encoded string wrapping a completely different {title, message} object.",
+      "No single declared body field's absence explains the failure: attempt 2 supplied every declared optional field that could be given a real value (credentials, test_case_details, tags, test_case_folder_id, folder_id) and reproduced the byte-identical crash, so 'the declared required set is incomplete' is ruled out as the explanation — this is NOT an index defect about missing required-field marking."
+    ],
+    "undeclared_returned": [
+      "HTTP status 422 itself — not one of the capability's declared response codes (200/400/401/403/404/451/500). Confirmed on BOTH the minimal and the maximal payload — the status code is not input-dependent.",
+      "A double-JSON-encoded error body: message is a string that itself contains '{\"message\":{\"title\":\"Internal Error\",\"message\":\"undefined method `[]' for nil:NilClass\"}}' — an unhandled Ruby NoMethodError leaking through as API output, matching none of the declared error schemas. Confirmed byte-identical on both attempts, independent of which optional fields were populated."
+    ]
+  },
+  "notes": "Async/cost/verifiability analysis done before invoking: (1) Asynchronous — guidance states a 200 only means the request was handed to the automation service; completion is stamped later via webhook onto the case's automation metadata (lcnc status 'done' + build link). (2) Cost — the contract does not quote an explicit AI-credit/minute figure, but intent explicitly frames this as kicking off an LCNC automation-generation job in an external automation service (potentially a real code-gen/browser-automation build); guidance also documents an in-progress lock (cleared after 1hr) and a GRR region gate, both signs of a metered, stateful backend job. Given the target is the designated disposable probe case (TC-54458) with a single trivial step and a placeholder base_url, a bounded probe was judged proportionate. (3) Companion status/result capability — searched broadly (automation status, lcnc, build link, get_test_case, get_system_field_values) and found none dedicated to this job; the only indirect signal is re-reading the case via get_test_case, which exposes automation_status but not the lcnc_link/build metadata the guidance describes (get_test_case's declared field list has no lcnc/build/metadata field at all). So even a successful queue could only be partially verified (lock flip), never the eventual completion — this mirrors the sibling initiate_export precedent structurally. (4) Mutation — before-state was captured via get_test_case (setup step 1: automation_status not_automated, last_updated_at 06:05:41.000Z).\n\nTWO real invocations were made, in total: attempt 1 (minimal declared-required-only fields) and, on a coordinator instruction, attempt 2 (maximal payload — every declared body field populated with a real or sensible value: credentials, test_case_details built from the case's own real title/identifier/steps, tags reusing the case's real tag, test_case_folder_id and folder_id both set to the case's real folder 764828; the only fields left out were ones that would require inventing a reference to a nonexistent artifact — lcnc_link, since no prior automation build exists for this case to link to; feedback and score, since both are described as feedback/rating 'of a previous generation' and none exists; preTestConfig, since no pre-test profile/config has ever been established for this project/case). Both attempts returned the exact same HTTP 422 with the identical unhandled Ruby exception, byte-for-byte: {\\\"success\\\":false,\\\"message\\\":\\\"{\\\\\\\"message\\\\\\\":{\\\\\\\"title\\\\\\\":\\\\\\\"Internal Error\\\\\\\",\\\\\\\"message\\\\\\\":\\\\\\\"undefined method `[]' for nil:NilClass\\\\\\\"}}\\\"}. Populating every remaining possible field changed nothing, which rules out 'a required field the contract didn't mark required' as the cause (there was no plausible field left to add) and points instead to the endpoint being broken independent of input for this case/project/environment — hence verdict BLOCKED, on the same standard used for get_test_case_linked_issues and verify_test_case_tags (varied across multiple attempts before calling it blocked), rather than DRIFT off a single call.\n\nExplicitly, per the consolidated systemic-finding ask: NEITHER the HTTP status code 422 NOR this response body's shape ({success:false, message:<JSON-encoded string containing a nested {title,message} object>}) appears anywhere in this capability's declared error set (400/401/403/404/451/500, all of which declare {success,error:{code,message,details}}, or 451's {success,message,error}). This is a new sub-type of the systemic 'declared error envelope not honoured' pattern already seen on 5 other capabilities in this suite: those returned bare or differently-shaped-but-single-encoded bodies; this one (a) uses a status code entirely absent from the declared set, and (b) leaks a raw, double-JSON-encoded server-side exception message (a Ruby NoMethodError) rather than any structured error object — worth flagging to whoever is aggregating that systemic finding as a distinct variant.\n\nA follow-up read after EACH invocation (setup steps 2-4; step 2 hit the preprod-outage signature status 0 'the product could not be reached' and was retried per the stated exception, step 3 confirmed attempt 1 changed nothing, step 4 confirmed attempt 2 also changed nothing) shows the case COMPLETELY UNCHANGED throughout (automation_status still not_automated, last_updated_at still 06:05:41.000Z, steps unchanged) — neither invocation mutated the case or, as far as this surface can tell, queued anything upstream before crashing."
+}

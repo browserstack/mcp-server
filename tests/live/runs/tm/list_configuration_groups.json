@@ -1,0 +1,28 @@
+{
+  "capability": "list_configuration_groups",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [],
+  "attempts": [],
+  "probe": {
+    "arguments": { "query": { "p": 1, "per_page": 30 } },
+    "status": 200,
+    "response_keys": ["success", "info", "configuration_groups"],
+    "item_shape": {
+      "id": 6596,
+      "group_id": 3452,
+      "name": "CfgGroup_n28g6b",
+      "is_system": false,
+      "created_at": "2026-09-11T06:36:40.000Z"
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": ["record_status", "updated_at"],
+    "undeclared_returned": []
+  },
+  "notes": "Method/path: describeCapability does not surface an HTTP method or path for this capability at all — it only returns path_params/query/body groups plus the response schema (confirmed by contrast with list_configurations, whose describe output is likewise method/path-free but does carry a path_params entry). So the transport-level method+path is opaque through this MCP surface for named capabilities; only the parameter contract is visible. Project scope: ABSENT ENTIRELY. The only declared inputs are query params `p` (page, default 1) and `per_page` (default 30, ceiling 30, >300 refused). There is no path_param, no body, and no project-scoped query field — matching the capability's own guidance ('Nothing here is project-scoped ... cannot be filtered to one project'). Consequently neither fixture project id form (v1 int 379335744 nor v2 PR-2005) was applicable or attempted; there was nothing to vary. No setup/prerequisite calls were needed or made — the endpoint is account-level and required no ids from the fixture pool. First invocation (query p=1, per_page=30) succeeded immediately with real, pre-existing account data: 2 configuration groups already present on the account (ids 6596 'CfgGroup_n28g6b' and 6597 'ScopeTest_xlh4tt', both is_system:false, both group_id 3452, both created 2026-09-11 — evidently left over from earlier probing/testing on this account, not from the documented fixture pool, which lists no configuration-group ids). This satisfies the instruction to look for pre-existing account data rather than expecting the fresh fixture to have any, and means the row shape IS verifiable (not UNVERIFIED). Row-shape comparison: declared item schema promises id, name, is_system, group_id, record_status, created_at, updated_at. Actual rows carry id, group_id, name, is_system, created_at only — record_status and updated_at are declared but absent from both returned rows (declared_missing). No extra/undeclared keys were returned. Top-level response_keys (success, info, configuration_groups) match the declared 200 schema exactly. This is not a thin passthrough — the contract commits to a real, detailed item shape and a real info/pagination shape, both mostly matched — so the two missing fields are a genuine, non-hollow DRIFT rather than a hollow PASS. Only 2 rows were available to check, both missing the same two fields, so it looks systematic rather than an occasional null, but a larger sample would firm that up."
+}

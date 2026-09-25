@@ -1,0 +1,86 @@
+{
+  "capability": "bulk_copy_test_cases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T05:25:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "baseline read of the SOURCE case, to diff against its already-existing copies field by field (steps, template, option ids, tags, custom_fields)",
+      "source": "invoked",
+      "capability": "get_test_case_detail",
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 764138, "test_case_id": 1985023}},
+      "status": 200,
+      "produced": {
+        "identifier": "TC-54489",
+        "template_id": 1164, "template_name": "Test Case Steps", "template_step_type": "test_case_steps",
+        "case_type": {"id": 318626, "name": "Other"}, "priority": {"id": 318618, "name": "Medium"}, "status": {"id": 318632, "name": "Active"},
+        "tags": ["mcp-probe"], "custom_fields": [],
+        "test_case_steps": [{"id": 12372586, "hashed_id": null, "order": 1, "step": "Open the login page", "result": "Login page is displayed", "shared_step_id": null, "shared_step_detail_id": null}]
+      }
+    },
+    {
+      "step": 2,
+      "why": "read an EXISTING copy of TC-54489 (created by a previous agent's already-committed write) instead of creating a third copy, per explicit instruction not to repeat the working base case",
+      "source": "invoked",
+      "capability": "get_test_case_detail",
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 765811, "test_case_id": 1985025}},
+      "status": 200,
+      "produced": {
+        "identifier": "TC-54490",
+        "template_id": 1164, "template_name": "Test Case Steps", "template_step_type": "test_case_steps",
+        "case_type": {"id": 318599, "name": "Other"}, "priority": {"id": 318591, "name": "Medium"}, "status": {"id": 318605, "name": "Active"},
+        "tags": ["mcp-probe"], "custom_fields": [],
+        "test_case_steps": [{"id": 12372588, "hashed_id": "b3c9f968c29c3de196588d25f2ef12c089dcbc22", "order": 1, "step": "Open the login page", "result": "Login page is displayed", "shared_step_id": null, "shared_step_detail_id": null}]
+      }
+    },
+    {
+      "step": 3,
+      "why": "enumerate the actual rows in destination folder 765811, to check its reported cases_count against reality",
+      "source": "invoked",
+      "capability": "list_folder_test_cases",
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 765811}, "query": {"per_page": 100}},
+      "status": 200,
+      "produced": {"rows": ["TC-54490 (1985025)", "TC-54491 (1985026)"], "info": {"count": 2}}
+    },
+    {
+      "step": 4,
+      "why": "read folder 765811's own record (cases_count/total_cases_count/sub_folders_count) plus its subfolder 765817, to cross-check step 3's row count",
+      "source": "invoked",
+      "capability": "list_folder_contents",
+      "arguments": {"path_params": {"project_id": 379335744, "folder_id": 765811}},
+      "status": 200,
+      "produced": {"self": {"cases_count": 2, "total_cases_count": 3, "sub_folders_count": 1}, "subfolder_765817": {"cases_count": 1, "total_cases_count": 1}}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"ids": [1985023], "destination_folder_id": 999999999}},
+      "status": 400,
+      "error": "{\"success\":false}",
+      "changed": "n/a — first attempt at this experiment (copy to a nonexistent destination folder). Verified afterward via list_folder_test_cases on the source folder (764138, 23 rows, unchanged) that no case was created anywhere."
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 379335744}, "body": {"ids": [1985023, 999999999], "destination_folder_id": 765817}},
+      "status": 200,
+      "error": null,
+      "changed": "n/a — succeeded, but only for the valid id. See notes: the invalid id (999999999) was silently dropped with no signal anywhere in the 200 response."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 379335744}, "body": {"ids": [1985023, 999999999], "destination_folder_id": 765817}},
+    "status": 200,
+    "response_keys": ["success", "test_cases", "info", "cases_count", "destination_path_folders", "folders"],
+    "item_shape": ["assignee", "creator_details", "created_at", "updator_details", "updated_at", "case_type", "priority", "status", "automation_state", "is_shared", "case_type_imported", "description", "custom_fields", "estimate", "estimated_duration_seconds", "expected_result", "id", "identifier", "is_automation", "links", "name", "history_count", "owner", "preconditions", "owner_imported", "attachments", "priority_imported", "project_id", "status_imported", "steps", "tags", "template", "template_step_type", "template_id", "template_name", "test_case_folder_id", "step_count", "test_case_steps", "lcnc_build_map", "automation_status", "test_run_results_count", "test_run_results_issues_count", "issues", "metadata", "test_case_dataset", "duplicates_tc_count"]
+  },
+  "contract": {
+    "required": ["project_id (path)", "destination_folder_id", "ids OR select_all"],
+    "json_path": "/test_case/ids, /test_case/select_all, /test_case/de_selected_ids, /test_case/folders are all declared as nested under test_case, but the live body is FLAT: ids/select_all/de_selected_ids/folders/destination_folder_id/folder_id all go at the top level. The nested form is rejected client-side by the invoke wrapper (confirmed by a previous attempt); this run only ever sent the flat form and it was accepted both times.",
+    "declared_missing": ["source_path_folders"],
+    "undeclared_returned": ["folders"]
+  },
+  "notes": "VERDICT DRIFT, headline finding: option-field ids are NOT carried over from the source case — they are silently rewritten to the destination project's DEFAULT custom-values block, even when the source used a different, equally-live block for the same field. TC-54489 (source) carries the upper block (case_type 318626, priority 318618, status 318632). Its existing copy TC-54490 carries the lower/default block instead (case_type 318599, priority 318591, status 318605) — verified again independently on TC-54502 (1985215), the copy created by this run's own experiment 2, which shows the identical lower-block substitution (case_type 318599, priority 318591, status 318605). This is reproducible across two independently created copies and is a real data-fidelity defect for any workspace where the source and destination use different custom-values blocks for the same logical option — the copy quietly ends up with a DIFFERENT priority/status/case than the case it was copied from, with zero signal that a substitution happened.\n\nWhat DID copy correctly: (1) steps — copied with a brand-new step-row id (12372586 on the source vs 12372588 on TC-54490) and no shared_step_id/shared_step_detail_id on either side, so there is no aliasing between a case and its copy; the only oddity is that the copy's step row carries a populated hashed_id where the source's was null (a generation-time artifact, not a bug). (2) template_id/template_name/template_step_type — fully preserved on the copy (1164 / 'Test Case Steps' / 'test_case_steps' identical on source and copy); this capability does NOT have edit_test_case's silent-template-reset bug. (3) tags — preserved verbatim (['mcp-probe'] on both TC-54489 and TC-54490). NOT tested: custom_fields — both source and copy report [], so nothing here demonstrates preservation either way; do not read this as confirmed-preserved.\n\nFolder-count accuracy (asked for explicitly): VERIFIED ACCURATE. Folder 765811's own record reports cases_count:2 (direct) and total_cases_count:3; list_folder_test_cases on the same folder returns exactly 2 rows (TC-54490, TC-54491); its one subfolder (765817) independently reports cases_count:1, total_cases_count:1, which reconciles 2+1=3 exactly. No drift found in folder counts in this probe.\n\nPriority-2 experiment 1 (copy to a nonexistent destination_folder_id): a clean, if uninformative, 400 {success:false} with no message and no async marker — the destination folder is pre-validated before any copy work starts, exactly as describeCapability's guidance claims. Confirmed nothing was created anywhere (source folder 764138 re-read afterward: 23 rows, unchanged). This is DIFFERENT from create_bulk_test_cases, which the task notes silently discards a bogus folder id and files the case into the path folder instead, 200, no signal — bulk_copy_test_cases does the safer thing here.\n\nPriority-2 experiment 2 (one valid id + one nonexistent id): SILENT HALF-SUCCESS UNDER 200. The call returned success:true and copied only the valid id (1985023 → new case TC-54502, integer id 1985215, filed into folder 765817 as requested); the nonexistent id (999999999) was dropped with absolutely no trace — no skipped-ids field, no message, no count-mismatch warning anywhere in the body. The only way to notice anything happened to only one of the two requested ids is external: folder 765817's cases_count went from 1 (before, per setup step 4) to 2 (per this response's own cases_count:{'765817':2}), i.e. exactly one case landed, not two. This settles the three-way question the task posed: of 'silent half-success under 200' / 'undeclared 502' / 'clean named rejection', it is the first — the same silent-discard failure mode as create_bulk_test_cases's bad-folder-id case, just applied to a bad case id instead.\n\nContract drift (200 schema): the declared success schema lists source_path_folders as a REQUIRED field. Neither successful call captured in this probe (the previous agents' straight copy, nor this run's experiment 2) ever returns it — the live 200 body has destination_path_folders (as declared) but no source_path_folders at all, and instead returns an undeclared folders key not present in the schema. Shallowest missing path: source_path_folders (top level).\n\nNEW CASE CREATED BY THIS RUN (for the cleanup ledger): TC-54502 (integer id 1985215), a copy of TC-54489, created by Priority-2 experiment 2, filed in folder 765817 (__mcp-probe-subfolder-20260921) under project 379335744. TC-54490 (1985025) and TC-54491 (1985026) were pre-existing — created by earlier agents' attempts, not by this run. __readonly__ 764093, TC-54455, TC-54456, and TC-54458 (1975349, in folder 764828) were never referenced by any call in this probe."
+}

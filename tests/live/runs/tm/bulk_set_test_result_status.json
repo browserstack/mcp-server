@@ -1,0 +1,92 @@
+{
+  "capability": "bulk_set_test_result_status",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T07:51:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "record before-state of all 5 rows in TR-9062 before writing",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "TC-54458": { "mapping_id": 2150387456, "latest_status": "passed" },
+        "TC-54457_a": { "mapping_id": 2150387252, "latest_status": "untested" },
+        "TC-54457_b": { "mapping_id": 2150387283, "latest_status": "untested" },
+        "TC-54456_readonly": { "mapping_id": 2150387251, "latest_status": "untested" },
+        "TC-54455_readonly": { "mapping_id": 2150387253, "latest_status": "untested" }
+      }
+    },
+    {
+      "step": 2,
+      "why": "verify storage after write attempt 1 (status: 'Failed', title case) before trusting the 200",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "TC-54458": { "mapping_id": 2150387456, "latest_status": "passed", "changed": false },
+        "TC-54457_a_2150387252": { "latest_status": "untested", "changed": false },
+        "TC-54457_b_2150387283": { "latest_status": "failed", "changed": true },
+        "TC-54456_readonly": { "latest_status": "untested", "changed": false },
+        "TC-54455_readonly": { "latest_status": "untested", "changed": false }
+      }
+    },
+    {
+      "step": 3,
+      "why": "verify storage after write attempt 2 (status: 'passed', lowercase) — second deliberate call to the same case id, to test determinism of which duplicate mapping gets touched and whether lowercase input is also accepted",
+      "source": "invoked",
+      "capability": "list_test_run_test_cases",
+      "arguments": { "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" }, "query": { "page_size": 30 } },
+      "status": 200,
+      "produced": {
+        "TC-54458": { "mapping_id": 2150387456, "latest_status": "passed", "changed": false },
+        "TC-54457_a_2150387252": { "latest_status": "untested", "changed": false },
+        "TC-54457_b_2150387283": { "latest_status": "passed", "changed": true },
+        "TC-54456_readonly": { "latest_status": "untested", "changed": false },
+        "TC-54455_readonly": { "latest_status": "untested", "changed": false }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+        "body": { "status": "Failed", "test_case_ids": ["TC-54457"] }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "Succeeded first try, built exactly as declared (flat body, no json_path wrapper). Verified in storage: only mapping 2150387283 (the duplicate mapping) moved untested -> failed; mapping 2150387252 (the original mapping for the same case) stayed untested."
+    },
+    {
+      "n": 2,
+      "arguments": {
+        "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+        "body": { "status": "passed", "test_case_ids": ["TC-54457"] }
+      },
+      "status": 200,
+      "error": null,
+      "changed": "Deliberate follow-up (not a failure retry): same case id targeted again, this time with a lowercase status value, to test (a) whether lowercase is also accepted and (b) whether the same mapping is deterministically the one that changes. Result: mapping 2150387283 again moved (failed -> passed); mapping 2150387252 again stayed untested. Lowercase accepted; targeting is deterministic and always misses the original mapping."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": "PR-2005", "test_run_id": "TR-9062" },
+      "body": { "status": "passed", "test_case_ids": ["TC-54457"] }
+    },
+    "status": 200,
+    "response_keys": ["success"],
+    "item_shape": null
+  },
+  "contract": {
+    "required": ["status"],
+    "json_path": "(none — body is flat: status + test_case_ids at the top level, exactly as declared; no wrapper object, matches 'start flat' expectation)",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "SCHEMA CONFORMANCE: PASS at the field level. Both invocations returned exactly {\"success\": true} — matches the declared 200 schema exactly (only key: success). No declared_missing, no undeclared_returned. This is NOT one of the silent-no-op failures batch 6 found on sibling test_run write capabilities: the 200 correlated with a real, verified storage change on the row it touched, both times, with the correct status value each time. TC-54458 (passed) was left alone as required — a sibling is re-probing it separately and its result id/state is unchanged. Both __readonly__ rows (TC-54455 mapping 2150387253, TC-54456 mapping 2150387251) were never targeted and are confirmed unchanged in storage across all three reads.\n\nADDRESSING MECHANISM: this v2 capability addresses rows purely by case identifier (test_case_ids: [\"TC-54457\"]) — there is no mapping_id parameter at all (confirming the sibling's finding that v1's result-create capability has mapping_id to disambiguate duplicates while this v2 capability has none). \n\nTHE DUPLICATE-MAPPING NATURAL EXPERIMENT: TC-54457 has two mappings in TR-9062 (2150387252, created 06:27:38, and 2150387283, created 06:51:21 — the batch-6 add_test_cases duplicate). Addressing by case id does NOT set both, and does NOT fail — it silently resolves to exactly ONE of the two mappings, every time. Across two separate calls with two different target statuses ('Failed' then 'passed'), the SAME mapping (2150387283 — the later-created, duplicate one) changed both times; the original mapping (2150387252) was never touched by either call and remains 'untested' to this moment. This looks deterministic (plausibly 'last/highest-id mapping for this case in this run wins'), but nothing in the guidance documents this resolution rule, and the 200 response gives zero signal that only one of two mapped rows for the targeted case was affected. A caller who assumes 'target case TC-54457' means all of its rows in the run will silently under-apply the status change to the older mapping — exactly the kind of undocumented, unsignaled partial effect this entity family has been shown to produce, even though in this instance the capability was truthful about the row it did change. Verdict recorded as DRIFT on this behavioral gap (guidance vs. actual coverage), distinct from and less severe than the four sibling capabilities in batch 6 that fabricated success while doing nothing at all.\n\nVOCABULARY: input accepted both display-case ('Failed', title case, matching create_test_results_for_test_run's echo form) and lowercase ('passed') case-insensitively, exactly as the guidance states ('Matched case-insensitively against the configured internal name or display value'). This capability's OWN response never echoes the status or any affected id back — the 200 body is only {\"success\": true} in both calls, so 'which form it returns' cannot be observed from this capability directly. The resulting stored state, read back via the sibling list_test_run_test_cases.latest_status, always renders lowercase ('failed', then 'passed') regardless of which case was sent — consistent with that sibling's own documented lowercase form, and not itself evidence of what this capability would echo if it echoed anything.\n\nFINAL STATE OF ALL 5 ROWS (verified in storage): TC-54458 / mapping 2150387456 = passed (untouched, as required). TC-54457 / mapping 2150387252 = untested (targeted twice by case id, never actually changed — the 'missed' duplicate). TC-54457 / mapping 2150387283 = passed (targeted twice, changed both times: untested -> failed -> passed). TC-54456 / mapping 2150387251 = untested (readonly, untouched). TC-54455 / mapping 2150387253 = untested (readonly, untouched). Net permanent residue of this probe: one result on run TR-9062 (mapping 2150387283) now reads 'passed' instead of 'untested'; this cannot be undone through this or any other surface per the task's own note that result/status changes have no undo on this entity."
+}

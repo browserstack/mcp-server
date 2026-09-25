@@ -1,0 +1,68 @@
+{
+  "capability": "get_projects_basic",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "query": { "q[identifier]": "PR-18723" } },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    },
+    {
+      "n": 2,
+      "arguments": { "query": { "q[query]": "Demo Project 1" } },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    },
+    {
+      "n": 3,
+      "arguments": { "query": { "q[query]": "zzzznonexistentproject12345" } },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    },
+    {
+      "n": 4,
+      "arguments": { "query": {} },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    },
+    {
+      "n": 5,
+      "arguments": { "query": { "p": 2 } },
+      "status": 200,
+      "error": null,
+      "changed": ""
+    }
+  ],
+  "probe": {
+    "arguments": { "q[identifier]": "PR-18723" },
+    "status": 200,
+    "response_keys": ["success", "projects", "info"],
+    "item_shape": {
+      "name": "string",
+      "id": "integer",
+      "thProjectId": "integer",
+      "description": "string|null",
+      "import_id": "integer|null",
+      "normalisedName": "string",
+      "starred": "boolean",
+      "permissions": "array of strings (present)",
+      "access_via_secondary_team": "boolean (declared in top-level 'returns' list, not in item schema.properties, but consistently present - matches preprod, not a new drift)"
+    }
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Reproduction of preprod DRIFT finding on prod, against the fixture project PR-18723/332537 ('Demo Project 1') and the 89k-project account. describeCapability: no required params; declared query filters are p (page, default 1), count (page size, default 30, max_page_size 300 documented but unbounded server-side), q[query] (free-text name match), q[identifier] (exact PR-NNN lookup, structured `q` object - flat q=foo returns 400 here, opposite of list_projects). Declared 200 item shape: name, id, thProjectId, description, import_id, normalisedName, starred, permissions (array of caller's rights); guidance/returns also names access_via_secondary_team. THE PERMISSIONS DRIFT DOES NOT REPRODUCE ON PROD: invoking q[identifier]=PR-18723 (the prod fixture's own identifier, direct analogue of the preprod call that used PR-2005) returned project id=332537 name='Demo Project 1' with a full, non-empty `permissions` array (44 rights: project_write, project_create, ..., integrations_delete) present on the row. declared_missing is empty and undeclared_returned is empty - the row matches the declared schema exactly, including the identifier-omission behavior the guidance calls out by design (the row has no `identifier` field, as documented). This is a straight contradiction of the preprod finding, which recorded `permissions` absent from every row for the identical parameter shape. Filter-narrowing test at 89k-project scale: q[query]='Demo Project 1' (no q[identifier]) returned info.count=16 with a real substring/fuzzy match set (Demo Project 1, Demo Project 12, Demo Project 1 v1, TM demo project 1, Rohan Demo Project 12th, Demo Project 123, etc.) - not the full 89k account. q[query]='zzzznonexistentproject12345' returned 200 with info.count=0 and projects=[] - an honest empty result, not silently-ignored-filter behavior. So q[query] on get_projects_basic genuinely narrows server-side; it does NOT fall into the 'search params silently ignored, full listing returned regardless' failure mode seen elsewhere on this account. Count-vs-rows paging test: empty query (p defaults to 1) -> info={page:1,page_size:30,count:89111,prev:null,next:2}, len(projects)=30 (matches page_size). Second page p=2 -> info={page:2,page_size:30,count:89111,prev:1,next:3}, len(projects)=30, and all 30 rows on p=2 are a disjoint, strictly-later-by-id slice from p=1 (no repeats) - genuine pagination, not a stuck page. count held stable at 89111 across both pages, closely matching the documented ~89,102 fixture total (small delta is expected account churn since the fixture was recorded, not a bug); info.count correctly describes the true total and len(rows) per page is consistent with info.page_size. Verdict is PASS: on prod, with real populated data, the declared 200 schema for get_projects_basic matches the actual response exactly (permissions present, no undeclared/missing fields), and both q[query] narrowing and count/paging behave as documented. The preprod DRIFT for this capability appears to be preprod-only (e.g. a preprod-only serializer regression, a stale preprod build, or a preprod-specific caller/permissions edge case) and should be flagged back to whoever owns the preprod finding as non-reproducing on prod."
+}

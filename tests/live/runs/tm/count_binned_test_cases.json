@@ -1,0 +1,40 @@
+{
+  "capability": "count_binned_test_cases",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T00:00:00Z",
+  "verdict": "PASS",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Cross-check the count against the underlying list to confirm they agree on the same fixture project.",
+      "source": "invoked",
+      "capability": "list_binned_test_cases",
+      "arguments": { "path_params": { "project_id": 379335744 } },
+      "status": 200,
+      "produced": { "success": true, "test_cases": [], "metadata": { "total": 0, "page": 1, "page_size": 30, "total_pages": 0 } }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": "PR-2005" } },
+      "status": null,
+      "error": "'project_id' must be a number",
+      "changed": "Rejected client-side before any request left the tool (same as list_binned_test_cases's sibling finding). Switched to the fixture's integer id 379335744 for the next attempt."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 379335744 } },
+    "status": 200,
+    "response_keys": ["success", "count"],
+    "item_shape": { "success": "boolean (true)", "count": "integer (0)" }
+  },
+  "contract": {
+    "required": ["success", "count"],
+    "json_path": "$",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "Fully verified, not hollow: the declared 200 shape is a scalar envelope {success:boolean, count:integer} with no nested/per-row structure, and the response matched it exactly in both directions — no declared field missing, no undeclared field returned, and both values had the declared types (success=true boolean, count=0 integer, not a string). count=0 is a legitimate, complete answer for an empty bin, not an unverifiable one, since this contract declares no per-folder breakdown, grouping, nested summary, or 'oldest_trashed_at'-style field that an empty bin would leave unexercised. Cross-checked against list_binned_test_cases on the same project (379335744): its metadata.total was also 0 — count and list agree, no drift. The contract explicitly declares this route takes no filters ('Counts the whole bin; it takes no filters. For a filtered count, call the listing with the filter and read metadata.total.') and describeCapability confirms no query/body params exist, so there was no folder-filter behavior to probe — this is a documented limitation, not an unverified gap. The v1 path-param rejection was reconfirmed independently on this capability: passing the v2 identifier 'PR-2005' as project_id is rejected client-side with \"'project_id' must be a number\" before any HTTP request is made, exactly like list_binned_test_cases's sibling finding. Not exercised (bin is genuinely empty and cannot be populated per the sibling's findings, and no restore/unbin capability exists): the 403 feature-gate error body, and the 500/backing-service-failure error body — both remain declared-but-unobserved for this capability specifically, though the systemic error-envelope drift pattern noted elsewhere in this suite was not tested here since no error response occurred."
+}

@@ -1,0 +1,75 @@
+{
+  "capability": "rename_folder_by_integer_id",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "target folder to rename — must be one this campaign owns, not __readonly__/__scratch__",
+      "source": "pool",
+      "capability": null,
+      "produced": {
+        "project_id": 379335744,
+        "project_identifier": "PR-2005",
+        "folder_id": 765811,
+        "folder_name_before": "__mcp-probe-createrootfolder-20260921",
+        "subfolder_id": 765817,
+        "held_test_cases": ["TC-54490", "TC-54491"]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "attempt": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744, "folder_id": 765811 },
+        "body": { "name": "__mcp-probe-renamefolder-20260922" }
+      },
+      "result": "SUCCESS — 200, folder 765811 renamed",
+      "note": "Sent flat (no `folder` wrapper), per describeCapability's top-level `guidance`. Worked on the first try, same as create_root_folder and create_sub_folder — no need to fall back to a nested body."
+    }
+  ],
+  "probe": {
+    "arguments": {
+      "path_params": { "project_id": 379335744, "folder_id": 765811 },
+      "body": { "name": "__mcp-probe-renamefolder-20260922" }
+    },
+    "status": 200,
+    "response_keys": ["data"],
+    "item_shape": {
+      "data.success": "boolean (true)",
+      "data.folder": {
+        "id": "integer (765811) — plain JSON integer, not a quoted string",
+        "project_id": "integer (379335744) — plain JSON integer",
+        "group_id": "string (\"3452\") — DECLARED type is integer in the 200 schema; the actual value came back as a quoted JSON string, not a number. This is a fresh type-drift, distinct from the previously-flagged id-as-quoted-string defect (which was about `id`, not `group_id`, and which this capability does NOT reproduce on `id`). create_sub_folder's probe returned this same folder's group_id as a plain integer (3452) — so the string form is specific to (or at least newly observed on) this endpoint/call.",
+        "name": "string (new name, applied correctly)",
+        "notes": "string, HTML-entity-escaped (\"&lt;p&gt;Live probe of create_root_folder - safe to delete.&lt;/p&gt;\") — UNDECLARED in the 200 schema's folder properties, same as create_root_folder. Echoed even though this call did not send a `notes` value — it is the stored value carried over unchanged.",
+        "is_automation": "boolean (false)",
+        "cases_count": "integer (2) — matches the 2 known copies (TC-54490/TC-54491) held directly in this folder",
+        "total_cases_count": "integer (4) — direct + nested (subfolder 765817) cases",
+        "sub_folders_count": "integer (1) — matches the one known subfolder, 765817",
+        "links": { "self": "string (/api/v1/projects/379335744/folder/765811)" }
+      },
+      "data.project": "ABSENT — matches this capability's own guidance verbatim (project is 'present only on root-folder creation; sub-folder and rename actions omit it'). No project object, leaky or clean, is embedded here."
+    }
+  },
+  "contract": {
+    "required": ["project_id (path, integer)", "folder_id (path, integer — the folder being renamed)"],
+    "json_path": "/folder/name (and /folder/notes, /folder/attachments if sent) — confirmed auto-wrapped: a flat body (no `folder` key) succeeded on the first attempt, matching the top-level `guidance`, not the field-level description on `name` (see notes for the exact contradiction, now confirmed a third time).",
+    "declared_missing": [],
+    "undeclared_returned": [
+      "data.folder.notes",
+      "data.folder.group_id (declared type integer in the 200 schema; returned as the JSON string \"3452\" instead of a number)"
+    ]
+  },
+  "notes": "THIRD CONFIRMED INSTANCE OF THE SHARED TEMPLATE DEFECT: rename_folder_by_integer_id's own describeCapability carries the identical false sentence on its `name` field — 'Must be wrapped in a `folder` object — the handler reads a required `folder` wrapper, so a flat body is a 400 before any field is looked at.' — word for word the same claim already flagged as stale/wrong on create_root_folder and create_sub_folder. It directly contradicts this same capability's own top-level `guidance` ('Send `name` flat. The `folder` wrapper is added for you from the field's json_path, and sending your own `folder` object is rejected before the call as an unknown body key.'). The live call proves guidance right and the field description wrong yet again: a flat body succeeded on attempt 1, no retry needed. That is three capabilities in the folder family sharing one bad per-field description — strong evidence this is a single stale template applied at authoring time (probably copy-pasted before whatever fix guidance now describes), not three independent bugs. Worth fixing once at the source (the shared `name`-field description template) rather than patching each endpoint's copy separately.\n\nPROJECT-SERIALIZER QUESTION — NOW FULLY CLOSED: this rename response has no `data.project` key at all, exactly matching the capability's own guidance text. Combined with the two prior probes, all three folder-family write actions now have a definitive, verified answer: create_root_folder embeds a project object with 4 declared fields missing and 16 undeclared fields leaked (confirmed defective); create_sub_folder and rename_folder_by_integer_id both omit the project object entirely, exactly as guidance claims. The leaky project serializer is confirmed CONFINED to root-folder creation only — it is not a folder-family-wide response-shape defect, it is specific to the one action that legitimately needs to hand back project context (a brand-new root folder has no other way to convey its parent project). Guidance is accurate on this point across all three capabilities checked.\n\nFIVE-UNDECLARED-FOLDER-FIELDS CHECK: of the five fields flagged as undeclared on create_root_folder (root, notes, created_by, updated_by, attachments), only ONE reproduces on rename_folder_by_integer_id — `notes`. The other four (root, created_by, updated_by, attachments) are simply ABSENT from this response; rename_folder_by_integer_id returns a materially narrower folder object than either create endpoint. This isn't the same 'undeclared field' pattern repeating — it's evidence the three endpoints serialize the folder differently (create endpoints return a fuller audit-style folder record; rename returns a slimmer one), which is worth knowing if any client relies on `created_by`/`updated_by`/`attachments` being present after every folder-family write — they are not.\n\nID / GROUP_ID TYPE CHECK: `id` (765811) and `project_id` (379335744) are both plain JSON integers here, not quoted strings — same as create_sub_folder, so the previously-flagged id-as-quoted-string defect does NOT reproduce on this capability's `id` field either. However, a DIFFERENT, previously unflagged type mismatch showed up on `group_id`: it is declared `type: integer` in the 200 schema and was returned as a plain integer (3452) by create_sub_folder's probe of this same folder family, but here — same folder, same group — it came back as the JSON string \"3452\". That is a genuine, checkable type drift against the declared schema (not a shrug case: the schema enumerates group_id's type explicitly), and it is new — not previously reported on this family. Worth a follow-up to see if it's rename-specific or intermittent across the serializer.\n\nCOUNTS AFTER RENAME: cases_count (2), total_cases_count (4), sub_folders_count (1) all match the folder's known contents (2 direct copies TC-54490/TC-54491, one subfolder 765817) — the second confirmation the instructions asked for, and it holds. Caveat carried over from this capability's own guidance, which explicitly warns these counts are 'copied from the read taken BEFORE the update, not re-derived' — a rename doesn't change folder contents, so this call alone can't distinguish a truly fresh recount from a correct-by-luck stale echo; a real freshness test would need a case add/move immediately before the rename, which was out of scope here.\n\nENTITLEMENT GATE: not applicable — the write returned an ordinary 200 with `success:true`, no `{success:false}` refusal-wearing-200 pattern observed.\n\nERROR ENVELOPE: not exercised — the single attempt succeeded on the first try, so per instructions no error body was diffed against the success schema.\n\nNo `request_trace_id` was returned, consistent with this capability's own guidance stating it never returns one (only `data.folder` and `data.success`).\n\nNo destructive action taken and no unexpected structure encountered — folder 765811 still holds subfolder 765817 and both known test cases; no sign of a concurrent probe having altered its shape.",
+  "renamed": {
+    "folder_id": 765811,
+    "folder_name_before": "__mcp-probe-createrootfolder-20260921",
+    "folder_name_after": "__mcp-probe-renamefolder-20260922",
+    "project_id": 379335744,
+    "project_identifier": "PR-2005"
+  }
+}

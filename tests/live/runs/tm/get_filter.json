@@ -1,0 +1,41 @@
+{
+  "capability": "get_filter",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-21T08:31:04Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "need a filter_id and a before-state; also the only way to check whether any filter exists to probe against",
+      "source": "invoked",
+      "capability": "list_filters",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"entity": "testcase"}},
+      "status": 200,
+      "produced": {"data": [], "info": {"page": 1, "page_size": 30, "count": 0, "prev": null, "next": null}}
+    },
+    {
+      "step": 2,
+      "why": "checked remaining entity types (list_filters query.entity is effectively required per that capability's own drift) to be sure no filter of any type exists in the pool project",
+      "source": "invoked",
+      "capability": "list_filters",
+      "arguments": {"path_params": {"project_id": 379335744}, "query": {"entity": "testrun|testplan|exploratory_session|test_plan_test_case (one call per value)"}},
+      "status": 200,
+      "produced": {"testrun": {"count": 0}, "testplan": {"count": 0}, "exploratory_session": {"count": 0}, "test_plan_test_case": {"count": 0}}
+    }
+  ],
+  "attempts": [],
+  "probe": {
+    "arguments": null,
+    "status": null,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": [],
+    "json_path": null,
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "GUIDANCE CHECK (asked for explicitly): describeCapability was read before anything else. The relayed warning is accurate, verbatim in substance. get_filter's own guidance states: 'This read is not side-effect free. The handler validates every custom-field condition in the saved view against the project's current custom fields and, when any no longer exist, it rewrites the stored filter without them. Reading a filter can permanently change it.' It also states 'a second read will not put the pruned conditions back. Treat what you get as the new truth.' On the testrun gap specifically: 'The entity_type to custom-field-entity map has no entry for `testrun`, so a run filter is validated against TEST CASE custom fields and conditions that were valid for runs can be pruned.' And on the render-nothing defect: 'Known defect: if the custom-field lookup or the write-back fails with a 400, the action returns without rendering anything at all — you get an empty/500 response rather than the filter.' All three claims in the task brief are confirmed as the capability's own documented behavior, not a garbled relay.\n\nEMPTY-CASE RULE APPLIED: list_filters (project 379335744 / PR-2005) was queried for every entity_type the query schema declares — testcase, testrun, testplan, exploratory_session, test_plan_test_case — and every one returned data=[] with info.count=0. There are zero saved filters of any kind in this project. This matches the sibling list_filters probe run (tests/live/runs/tm/list_filters.json, same project, same result) exactly, so this is a reconfirmation, not a new finding.\n\nCONSEQUENCE: there is no filter_id to obtain from the pool, so the 'prefer a plainly-safe filter over a custom-field or run-scoped one' decision never had a candidate to choose between — the choice set is empty, not merely unsafe. get_filter was NOT invoked. Zero risk of the destructive-read behavior firing, because no call was made at all. Per the brief's strict empty-case rule this is UNVERIFIED, and per that rule no filter was created to force a non-empty case (also disallowed anyway: read-only round, no write/destructive capability).\n\nCROSS-CAPABILITY CORROBORATION: list_filters' own guidance independently states 'Unlike reading a single filter, this listing does no custom-field validation and never rewrites anything — use it when you want to inspect filters without altering them,' which corroborates get_filter's self-reported mutation-on-read by contrast with its sibling endpoint. A caller who trusts 'GET is safe' from calling list_filters would wrongly extend that assumption to get_filter.\n\nWhat remains genuinely unverified: whether the described prune-and-rewrite actually fires in this preprod environment (no filter existed to observe it against), whether a testrun-scoped filter's run-only conditions actually get silently dropped as claimed, and whether the render-nothing/500 defect actually reproduces. All three are capability self-reported guidance, correctly not treated as independently confirmed by execution since execution never happened. Declared error envelope for get_filter was also never exercised for the same reason (no non-2xx response was produced), so the 'declared error shapes have not matched reality' pattern from other probes could not be checked here either way."
+}

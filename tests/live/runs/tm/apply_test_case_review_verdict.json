@@ -1,0 +1,56 @@
+{
+  "capability": "apply_test_case_review_verdict",
+  "product": "tm",
+  "env": "preprod",
+  "probed_at": "2026-09-18T06:10:00Z",
+  "verdict": "UNVERIFIED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Identify the fixture project and disposable probe case to target for the entitlement-confirmation call. No creation was needed or attempted here.",
+      "source": "pool",
+      "capability": null,
+      "arguments": { "project": "__mcp-capability-fixture__ (v1 id 379335744, v2 identifier PR-2005)", "case": "TC-54458 (numeric 1975349, folder 764828)" },
+      "status": null,
+      "produced": {}
+    },
+    {
+      "step": 2,
+      "why": "Prerequisite check (established by the sibling submit_test_cases_for_review probe, not re-run here): get_project_settings on project 379335744 returned {success:true, project_settings:[]} — no stored override, so review_approve falls back to the invisible group default. Inconclusive by itself, but the sibling's own confirmation invoke against submit_test_cases_for_review got HTTP 400 {\"errors\":\"Please enable review approve feature from project settings page\"} — the exact review_approve-OFF gate message — which definitively confirms the setting is OFF for this project. A second re-read of TC-54458's storage (by the sibling) showed no review_status/reviewers keys at all, i.e. no case in review anywhere in the project.",
+      "source": "invoked",
+      "capability": "get_project_settings (sibling probe, referenced not repeated)",
+      "arguments": {},
+      "status": 200,
+      "produced": { "project_settings": [] }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {
+        "path_params": { "project_id": 379335744 },
+        "body": { "ids": [1975349], "review_status": "approved" }
+      },
+      "status": 400,
+      "error": "{\"errors\":\"Please enable review approve feature from project settings page\"}",
+      "changed": "n/a - entitlement confirmation only, not a retry"
+    }
+  ],
+  "probe": {
+    "arguments": {},
+    "status": null,
+    "response_keys": [],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": [
+      "project_id (integer, path)",
+      "review_status (string, body /test_case/review_status, enum: approved|rejected|changes_requested)",
+      "exactly one selection mechanism: ids[] | select_all (+ optional q/folder_id scope) | folders{}"
+    ],
+    "json_path": "/test_case/review_status (verdict); /test_case/ids, /test_case/select_all, /test_case/de_selected_ids, /test_case/folders, /test_case/comment, /test_case/notify, /test_case/reauth_token also under /test_case/*; q and folder_id are siblings of test_case, not nested under it",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "VERDICT RATIONALE (UNVERIFIED, not BLOCKED): the index and reality agree here — the capability's own guidance correctly predicts that this call is gated behind the project's review_approve setting, and a live sibling probe (submit_test_cases_for_review) already proved that setting is OFF on the only writable fixture project available (__mcp-capability-fixture__ / 379335744 / PR-2005), and that as a result no test case anywhere in this project is or can be put into 'in_review' state. apply_test_case_review_verdict's own first guidance line requires every selected case to currently be 'in_review' (else 422 invalid_review_state) — with review_approve off there is structurally no case that can reach that state, so this capability's prerequisite cannot be created on this environment. This is a scope decision, not a probe failure: flipping review_approve would mutate account-level project configuration to manufacture a subject to review, which this suite has declined to do elsewhere (system templates, account-level custom fields) for the same reason.\n\nFULL CONTRACT AS DECLARED:\n- Path: project_id (integer, v1-style route; PR-NNN identifiers never reach it).\n- Body (all under /test_case/*): ids[] (integer ids; ignored if select_all true) OR select_all (bool, compared as string 'true', scoped by top-level q + folder_id siblings, counts >100 flip to async) OR folders{} (per-folder selection map, takes precedence over ids/select_all, empty map selects nothing not the whole project) — send exactly one of these three selection mechanisms. de_selected_ids[] subtracts from whichever selection is active. review_status (REQUIRED, enum exactly ['approved','rejected','changes_requested'] — approve/reject/send back for edits; one verdict applies to the whole selection, no per-case verdicts in one call). comment (string; unlike the submit-for-review comment, THIS one is persisted — one comment object created per case, tagged with the verdict, echoed back in the response's `comment` array; strongly recommended for rejected/changes_requested). notify (bool as string 'true'; emails case owners the verdict — in-app alerts fire regardless). reauth_token (uuid, single-use, 5-minute validity, only checked when the project's Part 11 setting part_11_reauth is 'true'; every verdict value requires a fresh one when that setting is on).\n- Declared 200: {success, testCases[] (updated cases, absent on the async path, present with review_status+reviewers inline for selections <=100), comment[] (created comment objects, only when a comment was sent), async (true if selection >100, queued), unique_id (uuid of the queued op, async path only)}.\n- Declared error set: 400 generic {success:false, error:{code,message,details}} ('invalid parameters' / bulk-approval generic failure / cases locked by another op / zero-case selection with no message); 401 {success:false, error_code:'reauth_required'} (Part 11 token missing/expired/reused); 403/404 same generic {success:false, error:{code,message,details}} shape; 422 {success:false, error_code:'invalid_review_state', error:<string>} when a selected case is not currently in_review, OR 422 {success:false, message:'Feature not available'} when the account plan is not Team/Pro (message replaces error/errors on this specific gate); 500 generic {success:false, error:{...}}.\n\nGATE LADDER (as declared, in the order guidance implies a request would hit them):\n  1. project setting review_approve must be ON -> else 400 {errors:'Please enable review approve feature from project settings page'}.  <-- THIS IS THE GATE FAILING HERE, confirmed OFF by the sibling probe and re-confirmed verbatim by this probe's own entitlement-confirmation call.\n  2. account plan must be Team or Pro -> else 422 {message:'Feature not available'}. Not reached/testable while gate 1 blocks.\n  3. (only if project setting part_11_reauth is 'true') a fresh reauth_token from the (out-of-index) re-authentication endpoint -> else 401 {error_code:'reauth_required'}. Not reached/testable while gate 1 blocks.\n  4. every selected case must currently be review_status='in_review' -> else 422 {error_code:'invalid_review_state'}, whole call refused, nothing applied. This is the gate that has NO possible subject on this project: with review_approve off, no case can ever be in_review, so this gate can never be exercised here either.\n\nENTITLEMENT-CONFIRMATION CALL (attempts[0]): invoked apply_test_case_review_verdict against project 379335744 with body {ids:[1975349], review_status:'approved'} targeting only the disposable probe case TC-54458. Got HTTP 400, verbatim body: {\"errors\":\"Please enable review approve feature from project settings page\"}. This is the review_approve-OFF gate (gate 1 above), exactly as the contract's own guidance predicts, and textually identical to the sibling probe's confirmation of the same gate on submit_test_cases_for_review -- strong internal consistency.\n\nERROR-ENVELOPE DATA POINT: the actual 400 body {\"errors\":\"Please enable review approve feature from project settings page\"} does NOT match this capability's own DECLARED 400 schema, which is {success:boolean, error:{code,message,details}} (a nested `error` object with `code`/`message`/`details`). The real body has no `success` key at all and uses a flat top-level `errors` (plural) string instead of the nested `error` object -- this is the `{errors:<string>}` shape called out in the suite-wide systemic problem (six capabilities, five-plus divergent shapes so far; this is the same {errors:<string>} shape independently seen on submit_test_cases_for_review's confirmation). The HTTP status code itself (400) IS in the declared set, so only the body shape is wrong, not the status. Notably, the capability's own PROSE guidance -- \"Needs project setting review_approve ON (else 400 {errors:'Please enable review approve feature ...'})\" -- predicts this exact non-standard flat-errors body verbatim, while the formal JSON schema for the 400 response does not. This is a clean instance of \"prose right, schema wrong\" for this capability specifically.\n\nPOST-CALL STORAGE RE-READ: re-read TC-54458 via get_test_case (PR-2005/TC-54458) immediately after the confirmation call. Result: case unchanged -- title, steps, tags, folder_id, owner, timestamps (last_updated_at 2026-09-18T06:05:41Z, unaffected by the verdict attempt) all consistent with its pre-existing fixture state, and critically NO review_status or reviewers keys present in the response at all (those keys are documented to appear only when Review & Approve is enabled on the project). Confirms the refused call caused no state change, as expected.\n\nWHY declared_missing/undeclared_returned ARE EMPTY: there is no successful (200) response anywhere in this probe to diff against the declared success schema -- filling either list would be a guess about behavior never observed. The probe.status is null and probe.arguments/response_keys/item_shape are empty for the same reason: no probe-of-the-success-path was attempted, per instructions.\n\nWHAT PROPER FUTURE VERIFICATION WOULD REQUIRE: an entitled fixture project with (a) a Team or Pro plan, and (b) the review_approve project setting turned ON, PLUS (c) at least one test case actually submitted into and sitting in 'in_review' state (e.g. via submit_test_cases_for_review or update_test_case's send_for_review path) before this capability is invoked. That is an entitled-fixture-and-state problem, not a payload problem -- no combination of request bodies against the current fixture project can produce a verifiable success path, because the project itself cannot host a case in review. If part_11_reauth is also enabled on that future fixture project, verification should additionally exercise the reauth_token flow (fresh token via the out-of-index reauth endpoint, 5-minute validity, single-use) to confirm the 401 reauth_required gate and the happy path both work as declared."
+}

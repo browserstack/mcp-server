@@ -1,0 +1,93 @@
+{
+  "capability": "get_test_run_detail",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T00:00:00Z",
+  "verdict": "DRIFT",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Confirm the declared contract before invoking, per procedure.",
+      "source": "pool",
+      "capability": "describeCapability",
+      "arguments": {"name": "get_test_run_detail", "product": "tm", "include_responses": "all"},
+      "status": 200,
+      "produced": {"path_params": ["project_id", "uuid_or_TR-id test_run_id"], "query": "none declared", "returns_flat_list_len": 38, "nested_schema_property_count": 27}
+    },
+    {
+      "step": 2,
+      "why": "Find a second, real run in project 332537 with test_cases_count > 2 and a genuine status mix (not all-untested, not all-passed), for the overall_progress_by_status_id cross-capability comparison.",
+      "source": "invoked",
+      "capability": "list_test_runs_by_integer_id",
+      "arguments": {"path_params": {"project_id": 332537}, "query": {"p": 1}},
+      "status": 200,
+      "produced": {"note": "info.count = 2378 active runs, 30 closed. Paged p=1,2,3 (90 rows sampled) looking for a run with untested split across two distinct status ids."}
+    },
+    {
+      "step": 3,
+      "why": "Continue paging to widen the sample for the untested-split search.",
+      "source": "invoked",
+      "capability": "list_test_runs_by_integer_id",
+      "arguments": {"path_params": {"project_id": 332537}, "query": {"p": 2}},
+      "status": 200,
+      "produced": {"note": "No run with two distinct 'Untested'-labelled status ids found; found TR-5271607 (32 cases, Passed+Conditionally Passed) as a mixed-status candidate."}
+    },
+    {
+      "step": 4,
+      "why": "Third page; found TR-5041503 (28 cases: Failed 1, Blocked 1, Untested 26) - chosen as the comparison run since it has a real multi-status mix including untested, even though the untested count sits under a single status id (982105) rather than split across two.",
+      "source": "invoked",
+      "capability": "list_test_runs_by_integer_id",
+      "arguments": {"path_params": {"project_id": 332537}, "query": {"p": 3}},
+      "status": 200,
+      "produced": {"chosen_run": "TR-5041503", "list_row_overall_progress_by_status_id": {"982101": "Failed:1", "982102": "Blocked:1", "982105": "Untested:26"}}
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": {"path_params": {"project_id": 332537, "test_run_id": "TR-4827350"}},
+      "status": 200,
+      "error": null,
+      "changed": "Primary probe against fixture run; succeeded on first try."
+    },
+    {
+      "n": 2,
+      "arguments": {"path_params": {"project_id": 332537, "test_run_id": "TR-5041503"}},
+      "status": 200,
+      "error": null,
+      "changed": "Second-run probe for the bucket cross-check; succeeded on first try."
+    },
+    {
+      "n": 3,
+      "arguments": {"path_params": {"project_id": 332537, "test_run_id": "TR-4827350"}, "query": {"minify": "true"}},
+      "status": null,
+      "error": "unknown query: minify. accepted: none",
+      "changed": "Confirmed the capability has NO query parameters at all (server rejects any unknown query key outright, rather than silently ignoring it) - minify is not applicable, and this was verified live rather than assumed from the declared contract alone."
+    }
+  ],
+  "probe": {
+    "arguments": {"path_params": {"project_id": 332537, "test_run_id": "TR-4827350"}},
+    "status": 200,
+    "response_keys": ["data.success", "data.test_run.*"],
+    "item_shape": {
+      "data.test_run": [
+        "active_state","run_state","assignee","created_at","description","environment","id","identifier","uuid",
+        "is_automation","overall_progress","overall_progress_by_status_id","name","owner","project_id","tags",
+        "test_cases_count","updated_at","test_plans","is_dynamic","attachments","links","configurations","metadata",
+        "assignee_imported","created_by","updated_by","closed_at","closed_by","issues","test_result_issues",
+        "observability_id","observability_url","trtc_folder_progress_enabled","tc_sharing_enabled",
+        "is_read_from_tra_enabled","build_normalised_name","build_serial_id","dynamic_filter","filters"
+      ],
+      "no_case_rows_field_present": false,
+      "all_test_cases_present": false,
+      "test_cases_array_present": false
+    }
+  },
+  "contract": {
+    "required": ["project_id (integer, path)", "test_run_id (TR-NNN or bare integer, path)"],
+    "json_path": "declared for test_run under data.test_run (per describeCapability guidance, matching Api::V1::TestRunsController#show_cases)",
+    "declared_missing": ["all_test_cases"],
+    "undeclared_returned": ["tc_sharing_enabled", "is_read_from_tra_enabled", "build_normalised_name", "build_serial_id"]
+  },
+  "notes": "PREPROD FINDING 1 (no case rows despite the name) REPRODUCES ON PROD, verbatim. Both probed runs (TR-4827350, 2 cases; TR-5041503, 28 cases) returned only a run-header object under data.test_run - no test_cases array, no per-case rows, anywhere in the body. `all_test_cases` is still declared in the flat `returns` list but never appears in either probe. Notably, on prod the describeCapability contract has ALREADY been corrected to document this: intent says 'This does NOT return the run's test cases' and guidance says 'Despite the path, this returns NO per-case rows' - so the *documentation* has caught up with reality even though the stale `all_test_cases` entry in the flat returns list has not been removed. This is a smaller residual issue than preprod's, where the contract still implied cases would appear; net verdict is still DRIFT because the field is declared-but-never-returned.\n\nPREPROD FINDING 2 (undeclared fields environment/assignee_imported/build_normalised_name/build_serial_id) PARTIALLY REPRODUCES, with a more precise picture than preprod's. `environment` and `assignee_imported` ARE present in the actual prod response AND are declared in the nested JSON-schema (responses.200.schema...test_run.properties) - they are simply missing from the separate flat `returns` list. So these two are a returns-list-vs-schema inconsistency, not truly undeclared, confirming preprod's own caveat that this might be the case. `build_normalised_name` and `build_serial_id`, however, are genuinely undeclared in BOTH the flat returns list and the nested schema, on prod, same as preprod - true undeclared fields. Additionally found two MORE undeclared fields not called out in preprod's notes: `tc_sharing_enabled` and `is_read_from_tra_enabled`, both present in the prod response body and absent from both declared sources.\n\nBUCKET DISAGREEMENT CROSS-CHECK (preprod finding 3): UNVERIFIED for the exact preprod scenario. Paged list_test_runs_by_integer_id for project 332537 across p=1,2,3 (90 of 2378 active runs sampled) specifically looking for a run where 'untested' is split across two distinct status ids (the preprod pattern, e.g. 318615 + 318642). None was found in the sample - every run's overall_progress_by_status_id here carries at most ONE status id whose field_value/internal_name is 'Untested' (e.g. TR-5041503: id 982105, count 26). Given the effort budget, further paging through the remaining ~2288 runs was not exhaustive, so this is marked UNVERIFIED rather than PASS or DRIFT - the specific defect preprod described may be project/data-dependent and this fixture project may simply not have duplicate-'Untested'-status-id data. Where a genuine comparison WAS possible (TR-5041503, 28 cases, Failed:1/Blocked:1/Untested:26), get_test_run_detail's overall_progress_by_status_id and list_test_runs_by_integer_id's list-row overall_progress_by_status_id for the SAME run were IDENTICAL (same three ids, same counts, same result_status objects) - no cross-capability disagreement observed on prod for that field.\n\nNEW FINDING NOT IN PREPROD NOTES (worth flagging as the most significant thing found on prod): within get_test_run_detail's own single response, the two progress fields internally CONTRADICT each other on both probed runs. TR-4827350: overall_progress reports {untested:2, passed:0, failed:0, ...} while overall_progress_by_status_id in the SAME response reports {982100 Passed:1, 982101 Failed:1} (i.e. 0 untested). TR-5041503: overall_progress reports {untested:28, passed:0, failed:0, blocked:0, ...} while overall_progress_by_status_id in the SAME response reports {982101 Failed:1, 982102 Blocked:1, 982105 Untested:26} (only 26 of 28 actually untested). In both cases overall_progress collapses the ENTIRE test_cases_count into the 'untested' bucket and zeroes every other named bucket, regardless of the true per-status breakdown that overall_progress_by_status_id (the same response's other field) correctly shows. This looks like overall_progress being effectively broken/unpopulated for this project's custom status scheme (it may only understand a fixed set of legacy status names and default everything else to 'untested'), and it reproduced consistently across both probed runs, both of which have non-default/custom result statuses. This is a genuine DRIFT-grade defect distinct from anything preprod's trace recorded, and is the strongest evidence found on prod for this capability's contract being misleading beyond just the missing case rows.\n\nMINIFY CHECK: NOT APPLICABLE. describeCapability declares zero query parameters for this capability. Verified live: passing minify=true was rejected outright with 'unknown query: minify. accepted: none' - the server enforces a strict allow-list of query params (empty, in this case) rather than silently ignoring unknown ones. So none of the three known minify behaviours (no-op / key-dropping / value-corrupting) apply here; there is no minify surface to exhibit them on.\n\nPAGINATION CHECK: confirmed not applicable, as expected - this endpoint returns a single header object (data.test_run), not a collection. describeCapability declares no `p`/`per_page`/paging params, and the live 'accepted: none' rejection above confirms no undeclared paging param exists either.\n\nOVERALL PREPROD VS PROD COMPARISON: the core defect (misleading capability name/contract - no case rows, all_test_cases declared-but-absent) reproduces unchanged on prod, which alone is sufficient for a DRIFT verdict per the grading rule. The documentation (intent/guidance) has been improved on prod's describeCapability output relative to what preprod's trace implied, but the underlying flat returns list and the internal overall_progress/overall_progress_by_status_id contradiction remain real, live defects."
+}

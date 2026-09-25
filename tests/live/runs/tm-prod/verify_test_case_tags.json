@@ -1,0 +1,54 @@
+{
+  "capability": "verify_test_case_tags",
+  "product": "tm",
+  "env": "production",
+  "probed_at": "2026-09-22T06:13:41Z",
+  "verdict": "BLOCKED",
+  "setup": [
+    {
+      "step": 1,
+      "why": "Control: confirm prod tag-listing works for this project before probing the capability under test, and get a sense of the real tag vocabulary.",
+      "source": "invoked",
+      "capability": "list_test_case_tags",
+      "arguments": { "path_params": { "project_id": 332537 }, "query": { "p": 1 } },
+      "status": 200,
+      "produced": { "tags_count_page1": 29, "info": { "page": 1, "page_size": 30, "count": 31, "prev": null, "next": 2 }, "sample_tags": ["sprint1", "auth", "admin", "security", "AI Generated", "Happy Path", "Edge Case"] }
+    }
+  ],
+  "attempts": [
+    {
+      "n": 1,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "tags": [] } },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Documented-valid empty array. Bare unshaped 500 - not the declared {success,tags,error_tags,error} 200 shape, and not the declared {success:false,error:{code,message,details}} error envelope either. Identical body to the preprod failure for this exact capability."
+    },
+    {
+      "n": 2,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "tags": ["sprint1", "__mcp-probe-readonly-check"] } },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Mixed payload: one real, already-used tag ('sprint1', confirmed present in setup) plus one disposable, obviously-synthetic wording. Same bare 500, byte-identical body to attempt 1 - payload-independent, exactly as on preprod."
+    },
+    {
+      "n": 3,
+      "arguments": { "path_params": { "project_id": 332537 }, "body": { "tags": ["__mcp-probe-readonly-check"] } },
+      "status": 500,
+      "error": "{\"status\":500,\"error\":\"Internal Server Error\"}",
+      "changed": "Single new (unused) tag wording alone. Same bare 500, byte-identical body to attempts 1-2. Three distinct payload shapes (empty array, mixed known+new, single new), three identical 500s - confirms this is a deterministic handler-level fault, not sensitive to array contents or length."
+    }
+  ],
+  "probe": {
+    "arguments": { "path_params": { "project_id": 332537 }, "body": { "tags": [] } },
+    "status": 500,
+    "response_keys": ["status", "error"],
+    "item_shape": {}
+  },
+  "contract": {
+    "required": ["project_id (integer, path)", "tags (array of strings, body, required)"],
+    "json_path": "(flat top-level)",
+    "declared_missing": [],
+    "undeclared_returned": []
+  },
+  "notes": "PREPROD vs PROD, side by side: PREPROD verdict for verify_test_case_tags was BLOCKED - all 5 attempts (a real known-used tag + a new one, an identical retry, a rejected non-integer project_id control, the documented-valid empty tags:[], and an ordinary tag wording) returned an identical bare {\"status\":500,\"error\":\"Internal Server Error\"} instead of the declared 200 shape, while the sibling list_test_case_tags succeeded against the same project_id in the same window (ruling out an outage or bad id). PROD: the block REPRODUCES exactly, with the identical bare body. Ran 3 attempts here (empty tags:[] per the contract's documented-valid case, a mixed known+new tag payload, and a single new-tag payload) - all three returned status 500 with the exact same literal body {\"status\":500,\"error\":\"Internal Server Error\"}, never the declared {success,tags,error_tags,error} 200 shape and never the declared {success:false,error:{code,message,details}} error envelope either. The control call (list_test_case_tags, same project_id 332537, same session) returned 200 with real data, so this is not an outage, not a bad project id, and not a prod-only artifact - it reproduces the preprod fault verbatim, including the exact error body text.\n\nShared-shape question: is this the same family as list_tags's test_recording 500 or list_test_case_tags's q-filter 500? Partial match. All three share the defining characteristic of being a BARE, framework-level 500 that does not conform to either declared response schema (success or the app's {success:false,error:{code,message,details}} envelope) and that reproduces deterministically regardless of otherwise-valid payload/query variation - i.e. all three are handler-level crashes exposed as raw server errors rather than caught application errors. However the literal JSON body differs between families: verify_test_case_tags on both preprod and prod returns {\"status\":500,\"error\":\"Internal Server Error\"}, while list_tags's test_recording crash (re-probed on prod separately, see tests/live/runs/tm-prod/list_tags.json) returns a differently-shaped body {\"type\":\"server_error\",\"message\":\"Internal Server Error\"} with a stable ETag across retries. I did not independently re-invoke list_test_case_tags with a q filter in this probe (out of scope for verify_test_case_tags's contract, which takes no q param), so I can't confirm its exact error body shape here - going only on the task's description of it as a bare 500. So: same underlying pattern (uncaught handler-level 500, non-declared shape, payload-independent) but not byte-identical error bodies across capabilities - each looks like its own uncaught exception surfacing through a generic error path rather than all three sharing one literal error renderer. Recommend routing verify_test_case_tags's prod block to the product team as a confirmed-live production defect, same as was done for list_tags's test_recording case."
+}

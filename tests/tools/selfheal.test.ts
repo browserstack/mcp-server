@@ -137,14 +137,14 @@ describe("fetchSelfHealSelectorTool error contract", () => {
 });
 
 describe("prepareSelfHealingPlanTool", () => {
-  it("returns plan instructions explicitly telling the caller NOT to edit files itself", async () => {
+  it("returns plan instructions stating the tool does not edit files itself", async () => {
     const res = await prepareSelfHealingPlanTool(
       { sessions: [canonicalSession] },
       EMPTY_CONFIG,
     );
     const text = String(res.content?.[0]?.text);
-    expect(text).toContain("This tool does NOT modify any files");
-    expect(text).toContain("do NOT blindly");
+    expect(text).toContain("This tool does not modify any files");
+    expect(text).toContain("blanket");
   });
 
   it("includes the provided locator pair in the plan", async () => {
@@ -163,12 +163,12 @@ describe("prepareSelfHealingPlanTool", () => {
       EMPTY_CONFIG,
     );
     const text = String(res.content?.[0]?.text);
-    // Banner must appear before the plan JSON, not after, so the LLM anchors on it.
-    const bannerIdx = text.indexOf("ATTENTION");
+    const bannerIdx = text.indexOf(
+      "## Test code fetch did not return usable source",
+    );
     const planIdx = text.indexOf("## Plan");
     expect(bannerIdx).toBeGreaterThanOrEqual(0);
     expect(planIdx).toBeGreaterThan(bannerIdx);
-    expect(text).toMatch(/credentials or session issue/);
     expect(text).toMatch(/BrowserStack credentials not provided/);
   });
 

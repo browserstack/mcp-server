@@ -152,11 +152,10 @@ export async function fetchTestCodeBySession(
 }
 
 /**
- * Builds a directive guidance block for the calling LLM when one or more
- * sessions did not return usable test code. Each status block contains:
+ * Builds per-status notes when one or more sessions did not return usable
+ * test code. Each status block contains:
  *   - A diagnosis (what happened, per BrowserStack)
- *   - An explicit "do NOT paraphrase this as X" constraint
- *   - A ready-to-say phrasing the LLM can quote when replying to the user
+ *   - The next step
  *
  * Returns empty string when every session returned `status: ok`.
  */

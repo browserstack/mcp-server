@@ -73,20 +73,13 @@ function trimOrUndefined(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-/**
- * Wraps per-status guidance in a HEAD-OF-RESPONSE banner the LLM is unlikely
- * to paraphrase away. The banner must come BEFORE the plan JSON so the model
- * anchors on it when composing its user-facing reply.
- */
+/** Per-status notes, placed ahead of the plan JSON. */
 function buildWarningBanner(body: string): string {
   return [
-    "## ATTENTION — test code fetch did not return usable source",
+    "## Test code fetch did not return usable source",
     "",
-    "Read this block BEFORE composing your reply to the user. When relaying " +
-      "this to the user, quote the provided phrasings below as closely as " +
-      "possible — do NOT compress multiple statuses into a generic " +
-      "'credentials or session issue' message. If the status below is " +
-      "`non_sdk_build`, it is definitely NOT a credentials problem.",
+    "Each status below has a different cause and is reported separately; " +
+      "a `non_sdk_build` status is not a credentials problem.",
     "",
     body,
     "",
@@ -320,7 +313,7 @@ export async function fetchSelfHealSelectorTool(
             "Self-healing report fetched successfully (buildUuid mode). " +
             "Work session-by-session: for each entry in `healing_logs[]`, " +
             "pass `healed_selectors[]` to `prepareSelfHealingPlan` so the " +
-            "calling LLM can apply the edits with its own file-editing " +
+            "caller can apply the edits with its own file-editing " +
             "tools (this server never writes files).\n" +
             JSON.stringify(report, null, 2) +
             (testCodeContext
@@ -376,9 +369,9 @@ interface PlannedSession {
 const PLAN_INSTRUCTIONS = [
   "## How to use this plan",
   "",
-  "This tool does NOT modify any files. It returns the healed-locator plan",
-  "and per-session test source code so that YOU (the calling LLM) can make",
-  "surgical edits with your own file-editing tools.",
+  "This tool does not modify any files. It returns the healed-locator plan",
+  "and per-session test source code so the caller can make targeted edits",
+  "with its own file-editing tools.",
   "",
   "For each session in the plan:",
   "  1. Read each `tests[].code` to understand the test intent — especially",
@@ -386,10 +379,10 @@ const PLAN_INSTRUCTIONS = [
   "  2. Locate the exact call site(s) in the user's local project that",
   "     correspond to the original locator. Use `tests[].filename` as the",
   "     first place to look.",
-  "  3. Edit ONLY the call sites that belong to this session's failing step.",
-  "     A single id / class value may appear in many places; do NOT blindly",
-  "     find/replace across the repo (e.g. two different elements both using",
-  '     id="foo" must be resolved individually).',
+  "  3. Edit only the call sites that belong to this session's failing step.",
+  "     A single id / class value may appear in many places, so a blanket",
+  "     find/replace across the repo is unsafe (e.g. two different elements",
+  '     both using id="foo" must be resolved individually).',
   "  4. The healing report speaks in CSS/xpath, but the source often uses",
   "     `By.id(...)`, `By.name(...)`, `By.css(...)` wrappers. Translate as",
   "     needed — e.g. `*[id=\"email-field\"]` → `By.id('email-field')`, or",
@@ -398,7 +391,7 @@ const PLAN_INSTRUCTIONS = [
   "",
   "If `tests[]` is empty for a session, the BrowserStack API did not return",
   "test code (credentials missing, or the session has no associated test",
-  "runs). Ask the user to point you at the right file before editing.",
+  "runs). The local file path is needed before editing.",
 ].join("\n");
 
 export async function prepareSelfHealingPlanTool(

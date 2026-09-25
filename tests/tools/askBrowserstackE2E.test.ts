@@ -76,14 +76,16 @@ interface AtlasCall {
 /**
  * A fake Atlas speaking CONTRACT v2 (A1).
  *
- * The shape change from A2 is the whole point and it is visible right here: this stub no
- * longer dials back into the tool. It streams `run`, then a `permission` frame per
- * scripted ask, then one `result` — and each ask is held open until the tool answers it
- * on a SEPARATE `POST /agent/{run_id}/permission`, which lands on this same stub.
+ * THE STREAM NO LONGER WAITS. It used to hold each ask open until the tool answered it
+ * on a separate POST, because Atlas's gate was a blocked coroutine on the far end of
+ * that socket. The ask parks in a checkpoint now, so the stream emits `run`, the ask it
+ * parked on, and a `needs_approval` result — then ENDS. The decision POST is what
+ * carries the run forward, and it answers 200 with whatever happened next: another park,
+ * or the finished run.
  *
- * Every assertion these tests make is about `relay.ts` and `buildResult`, which A1 does
- * not touch. Repointing this one function is therefore the whole migration: if the
- * behaviour those tests pin were transport-dependent, that would be the bug.
+ * Every assertion these tests make is about `relay.ts` and `buildResult`, which none of
+ * that touches. Repointing this one function is the whole migration: if the behaviour
+ * those tests pin were transport-dependent, that would be the bug.
  */
 function atlas(options: {
   asks?: { perm_id: string; description: string }[];
@@ -91,7 +93,7 @@ function atlas(options: {
   throws?: boolean;
   authStatus?: number;
   authError?: string;
-  /** Answer the decision POST with something other than 204. */
+  /** Answer the decision POST with something other than 200. */
   decisionStatus?: number;
   /** Reply to `POST /agent` with plain JSON, as an Atlas that predates A1 does. */
   json?: boolean;
@@ -101,7 +103,20 @@ function atlas(options: {
   const mints: Record<string, string>[] = [];
   const RUN_ID = "run-" + "a".repeat(32);
   const encoder = new TextEncoder();
-  let answered: ((body: unknown) => void) | null = null;
+
+  /** The finished run's payload — the script's own, or a plain success. */
+  const payloadFor = () =>
+    options.payload
+      ? options.payload(decisions)
+      : { status: "ok", answer: "done", needs_approval: [] };
+
+  /** What Atlas answers with while a run is parked. */
+  const parkPayload = (ask: { perm_id: string; description: string }) => ({
+    ok: false,
+    status: "needs_approval",
+    run_id: RUN_ID,
+    asks: [{ ...ask, product: "tm", mode: "ask-always" }],
+  });
 
   const frame = (event: string, data: unknown) =>
     encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -128,25 +143,23 @@ function atlas(options: {
       );
     }
 
-    // The decision endpoint. Recording it and releasing the stream is what makes this
-    // an A1 round trip rather than a scripted playback.
+    // The decision endpoint, which now CARRIES THE RUN FORWARD: its reply is the next
+    // park or the finished run, so this is where the rest of the script plays out.
     if (/\/agent\/[^/]+\/permission$/.test(String(url))) {
       const body = JSON.parse(init.body);
-      const status = options.decisionStatus ?? 204;
+      const status = options.decisionStatus ?? 200;
       decisions.push({ status, body });
-      answered?.(body);
-      answered = null;
-      return { ok: status < 300, status, headers: { get: () => "" }, json: async () => null };
+      if (status !== 200) {
+        return jsonResponse(status, { detail: "no such run" });
+      }
+      const remaining = (options.asks || []).slice(decisions.length);
+      return jsonResponse(200, remaining.length ? parkPayload(remaining[0]) : payloadFor());
     }
 
     const body = JSON.parse(init.body);
     calls.push({ url: String(url), headers: init.headers, body });
     if (options.throws) throw new Error("connection reset");
 
-    const payloadFor = () =>
-      options.payload
-        ? options.payload(decisions)
-        : { status: "ok", answer: "done", needs_approval: [] };
 
     // No relay asked for, or an Atlas that does not know A1: a plain JSON body. The
     // tool's stream transport degrades to a single `result`, which is exactly how it
@@ -155,25 +168,20 @@ function atlas(options: {
       return jsonResponse(200, payloadFor());
     }
 
+    const first = (options.asks || [])[0];
     const stream = new ReadableStream({
-      async start(controller) {
+      start(controller) {
         controller.enqueue(frame("run", { run_id: RUN_ID }));
-        for (const ask of options.asks || []) {
-          const wait = new Promise<unknown>((resolve) => {
-            answered = resolve;
-          });
+        if (first) {
+          // ONE ask, then the run parks and the stream ends. A second ask cannot exist
+          // yet — the gate is serial — and it arrives on the decision's reply instead.
           controller.enqueue(
-            frame("permission", {
-              ...ask,
-              product: body.product,
-              mode: "ask-always",
-            }),
+            frame("permission", { ...first, product: body.product, mode: "ask-always" }),
           );
-          // Held open deliberately: Atlas's gate blocks here, and a stub that raced
-          // ahead would test a sequence the real server cannot produce.
-          await wait;
+          controller.enqueue(frame("result", parkPayload(first)));
+        } else {
+          controller.enqueue(frame("result", payloadFor()));
         }
-        controller.enqueue(frame("result", payloadFor()));
         controller.close();
       },
     });
@@ -361,8 +369,11 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       // 3. the answer on the wire, echoing Atlas's own id
       expect(stub.decisions[0])
-        // 204: v2 §3.3, the decision endpoint has nothing to return.
-        .toEqual({ status: 204, body: { perm_id: PERM_A, decision: "allow", reason: "" } });
+        // 200, and the body carries `product`: the decision request is what resumes the
+        // run, and the run comes back on a fresh Agent that must be scoped before it
+        // can be built.
+        .toEqual({ status: 200, body: {
+          perm_id: PERM_A, decision: "allow", reason: "", product: "tm" } });
 
       // 4. the result
       expect(payload.ok).toBe(true);
@@ -407,7 +418,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(elicit).toHaveBeenCalledTimes(1);
       // On the wire to Atlas: an allow, not a denial.
       expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "allow", reason: "" });
+        .toEqual({ perm_id: PERM_A, decision: "allow", reason: "", product: "tm" });
       // And the two trails agree that it was approved.
       expect(payload.approvals[0]).toMatchObject({ decision: "allow", applied: true });
       expect(payload.elicitations[0]).toMatchObject({ decision: "allow", reason: "" });
@@ -465,7 +476,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const { payload } = await call(server.getTools());
 
       expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "declined" });
+        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "declined", product: "tm" });
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(payload.status).toBe("blocked");
       expect(payload.approvals[0].reason).toBe("declined");
@@ -481,7 +492,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
       expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "declined" });
+        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "declined", product: "tm" });
       expect(payload.approvals[0].decision).toBe("deny");
     });
 
@@ -495,7 +506,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // This is the security property: an unattended run cannot self-approve, and a second
       // prompt would only be an attempt to wear a human down.
       expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "cancelled" });
+        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "cancelled", product: "tm" });
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(payload.approvals[0].reason).toBe("cancelled");
     });
@@ -509,7 +520,8 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
       expect(stub.decisions[0])
-        .toEqual({ status: 204, body: { perm_id: PERM_A, decision: "deny", reason: "timeout" } });
+        .toEqual({ status: 200, body: {
+          perm_id: PERM_A, decision: "deny", reason: "timeout", product: "tm" } });
       expect(payload.approvals[0].reason).toBe("timeout");
     });
 
@@ -555,7 +567,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // out its 300s gate. The invariant is the same and it is the one that matters: a
       // broken channel never becomes an approval.
       expect(stub.decisions[0].body).toEqual({
-        perm_id: PERM_A, decision: "deny", reason: "error",
+        perm_id: PERM_A, decision: "deny", reason: "error", product: "tm",
       });
       expect(payload.approvals[0]).toEqual({
         description: "Archive the plan.", decision: "deny", reason: "error",
@@ -563,16 +575,16 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       });
     });
 
-    it("does not retry or fail the run when a decision is refused", async () => {
-      // The A1 replacement for A2's "a stray local process cannot present the run's
-      // token". That hazard is GONE: nothing dials in, so there is no inbound
+    it("never re-sends a decision Atlas refused, and never calls it a success", async () => {
+      // The A1 hazard this replaces is GONE: nothing dials in, so there is no inbound
       // connection to authenticate and no per-run bearer to steal. Atlas authorises the
-      // decision instead, on the attested JWT plus an unguessable run_id (v2 §3.1).
+      // decision on the attested JWT plus an unguessable run_id (v2 §3.1).
       //
-      // What remains on this side is the opposite risk: a decision Atlas refuses (409
-      // already-decided, 404 stale) must not be re-sent. A retry could land an approval
-      // on a step the run has already moved past. Losing it is safe — Atlas's gate
-      // denies on its own expiry — so we log and carry on.
+      // What remains is that a refused decision must not be RE-SENT — a retry could land
+      // an approval on a step the run has already moved past. What CHANGED is that it can
+      // no longer be shrugged off: the decision request is the one that carries the run
+      // forward, so if it was refused the run did not advance, and reporting "ok" would
+      // claim an answer nobody produced.
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [
         { action: "accept" },
@@ -585,7 +597,8 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const { payload } = await call(server.getTools());
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(stub.decisions).toHaveLength(1);      // sent once, never re-sent
-      expect(payload.status).toBe("ok");           // and the run still completed
+      expect(payload.ok).toBe(false);
+      expect(payload.status).not.toBe("ok");
     });
 
     it("says some steps applied before it stopped", async () => {

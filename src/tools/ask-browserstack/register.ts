@@ -57,16 +57,20 @@ import {
   EVENT_RUN,
   decisionUrl,
   fetchAgentStreamTransport,
-  fetchDecisionTransport,
   fetchDeferredTransport,
   parseAsk,
 } from "./stream.js";
 import type {
   AgentStreamTransport,
-  DecisionTransport,
   DeferredTransport,
 } from "./stream.js";
-import { incompleteResume, runDeferred, runResumed } from "./deferred.js";
+import {
+  incompleteResume,
+  parkedResult,
+  resumeFailed,
+  runDeferred,
+  runResumed,
+} from "./deferred.js";
 import {
   buildResult,
   decide,
@@ -108,7 +112,6 @@ export interface AskDeps {
    * — ask, elicit, decide, result — without a socket.
    */
   streamTransport?: AgentStreamTransport;
-  decisionTransport?: DecisionTransport;
   /** The deferred START (one request, one JSON response). Substituted in tests. */
   deferredTransport?: DeferredTransport;
 }
@@ -306,7 +309,7 @@ async function relayOneAsk(
 async function runStreamed(
   server: McpServer,
   streamTransport: AgentStreamTransport,
-  decisionTransport: DecisionTransport,
+  postTransport: DeferredTransport,
   url: string,
   headers: Record<string, string>,
   body: AgentRequest,
@@ -321,7 +324,11 @@ async function runStreamed(
   // 200 unless the reply was not a stream at all, in which case the transport carries
   // the real status — `relay.ts` needs it to tell 401 from 403 from a plain failure.
   let resultStatus = 200;
+  let pending: PermissionAsk | null = null;
 
+  // PHASE 1 — the start, streamed. Kept a stream rather than folded into the decision
+  // loop below because a long turn needs the heartbeats: a proxy that gives up
+  // mid-thinking looks exactly like a hang.
   for await (const event of streamTransport(url, headers, body)) {
     if (event.event === EVENT_RUN) {
       runId = String((event.data as { run_id?: string })?.run_id || "");
@@ -353,40 +360,65 @@ async function runStreamed(
       );
       continue;
     }
+    pending = ask;
+  }
 
-    // `relayOneAsk` RETHROWS on an unexpected elicitation failure. Under A2 that was
-    // load-bearing: the throw made the inbound callback answer 500, which Atlas's
-    // fail-closed rule read as a deny. Under A1 there is no inbound request to fail, so
-    // letting it escape would abandon the run and leave Atlas waiting out its full 300s
-    // gate — turning a client hiccup into a five-minute stall. So it is caught here and
-    // converted into the explicit deny the throw used to imply. `relayOneAsk` has
-    // already recorded the approvals entry, so only the wire decision is missing.
+  // PHASE 2 — answer, and keep answering. The stream ENDED at the park: Atlas's ask is
+  // in its checkpoint, not in a coroutine waiting on this socket, so the run is carried
+  // forward by the decision request itself and its reply is either the next ask or the
+  // finished run.
+  //
+  // This is what used to be a POST in the middle of phase 1, whose 204 was acknowledged
+  // and whose outcome was expected to arrive on the same stream. That could not survive
+  // the ask moving into the checkpoint, and the shape it becomes is the deferred one —
+  // the only difference being who supplies the decision.
+  while (pending) {
+    // `relayOneAsk` RETHROWS on an unexpected elicitation failure. Letting it escape
+    // would abandon the run and leave Atlas parked until its gate expires — turning a
+    // client hiccup into a five-minute stall — so it is caught and converted into the
+    // explicit deny the throw used to imply. `relayOneAsk` has already recorded the
+    // approvals entry, so only the wire decision is missing.
     let decision: PermissionDecision;
     try {
-      decision = await relayOneAsk(server, ask, approvals, relatedRequestId);
+      decision = await relayOneAsk(server, pending, approvals, relatedRequestId);
     } catch (error) {
       logger.warn(
         "askBrowserStackAI: elicitation failed, denying explicitly: %s",
         error instanceof Error ? error.message : String(error),
       );
-      decision = { perm_id: ask.perm_id, decision: "deny", reason: "error" };
+      decision = { perm_id: pending.perm_id, decision: "deny", reason: "error" };
     }
-    const status = await decisionTransport(decisionUrl(url, runId), headers, {
+
+    const response = await postTransport(decisionUrl(url, runId), headers, {
       perm_id: decision.perm_id,
       decision: decision.decision,
       reason: decision.reason || "",
+      product,
     });
-    if (status !== 204) {
-      // Never fatal, and never re-sent. Atlas's gate is still waiting and denies on its
-      // own expiry, so a lost decision is safe — it can only cost an approval, never
-      // grant one. Retrying risks the opposite: a duplicate that 409s, or worse, an
-      // approval applied to a step the run has already moved past.
-      logger.warn(
-        "askBrowserStackAI: decision for %s was not accepted (HTTP %s)",
-        decision.perm_id,
-        status,
+    if (response.status === 404) {
+      // No such parked run: expired, already answered, or not ours. None of those is
+      // an approval and none of them changed anything — but a denial we could not
+      // deliver is not a denial either, so say which.
+      return resumeFailed(
+        "That approval could not be applied (HTTP 404). The run may have expired — " +
+          "BrowserStack AI stops waiting after five minutes — or it may already have " +
+          "been answered. Nothing was changed beyond any step you already approved.",
       );
     }
+
+    const parked = parkedResult(response.body, product);
+    if (parked) {
+      // Another ask: the task needs more than one approval, and each one is a separate
+      // question for the human.
+      pending = {
+        perm_id: parked.ask.perm_id,
+        description: parked.ask.description,
+        product: parked.ask.product,
+        mode: parked.ask.mode,
+      } as PermissionAsk;
+      continue;
+    }
+    return buildResult(response, approvals, mode, product);
   }
 
   if (!sawResult) {
@@ -450,7 +482,6 @@ export function addAskBrowserStackAITool(
   // JSON, the parser sees no `text/event-stream`, and the run degrades to a read-only
   // answer carrying that response's own status.
   const streamTransport = deps.streamTransport || fetchAgentStreamTransport();
-  const decisionTransport = deps.decisionTransport || fetchDecisionTransport();
   // Resolved here with the others: one place decides which transports this
   // registration uses, so a test substituting one is not surprised by another.
   const deferredTransport = deps.deferredTransport || fetchDeferredTransport();
@@ -562,8 +593,9 @@ export function addAskBrowserStackAITool(
               run_id,
               perm_id,
               decision,
-              decisionTransport,
-              streamTransport,
+              // The SAME transport the start uses: since the converged gate both calls
+              // POST and read back either a parked run or a finished one.
+              deferredTransport,
               mode,
               product,
             ),
@@ -608,7 +640,7 @@ export function addAskBrowserStackAITool(
           await runStreamed(
             server,
             streamTransport,
-            decisionTransport,
+            deferredTransport,
             url,
             headers,
             body,

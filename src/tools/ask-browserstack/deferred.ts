@@ -24,15 +24,9 @@
 import logger from "../../logger.js";
 
 import {
-  AgentStreamTransport,
-  DecisionTransport,
   DeferredTransport,
-  EVENT_PERMISSION,
-  EVENT_RESULT,
-  EVENT_RUN,
   decisionUrl,
   parseAsk,
-  resumeUrl,
 } from "./stream.js";
 import { buildResult } from "./relay.js";
 import {
@@ -193,100 +187,55 @@ export async function runResumed(
   runId: string,
   permId: string,
   decision: "allow" | "deny",
-  decisionTransport: DecisionTransport,
-  streamTransport: AgentStreamTransport,
+  transport: DeferredTransport,
   mode: RelayMode,
   product: string,
 ): Promise<AskResult> {
-  const status = await decisionTransport(
-    decisionUrl(agentUrl, runId),
-    headers,
-    { perm_id: permId, decision, reason: "" },
-  );
-  if (status !== 204) {
-    // 404 (run expired or never existed), 409 (already answered), 0 (never delivered).
-    // All three mean the same thing to the caller — this decision did not land — and
-    // none of them is an approval, so saying so plainly beats guessing which.
-    return {
-      ok: false,
-      status: "error",
-      answer: null,
-      approvals: [],
-      approvals_source: "mcp",
-      elicitations: [],
-      needs_approval: [],
-      applied_before_stop: false,
-      permission_relay: {
-        used: true,
-        reason: "",
-        detail:
-          "The approval channel was used; this call could not deliver the answer.",
-      },
-      atlas_response: null,
-      error:
-        `The decision could not be delivered (HTTP ${status}). The run may have ` +
-        `expired — BrowserStack AI stops waiting after five minutes — or it may already ` +
-        `have been answered. Nothing was changed by this call. Start the task again ` +
-        `if it still needs doing.`,
-    };
+  // ONE CALL. This used to POST the decision, check for a 204, and then reattach to
+  // `GET /agent/{run_id}/stream` to collect what the run did next — two requests, and a
+  // reattach that only existed because the run was a paused coroutine in one pod. The
+  // ask parks in Atlas's checkpoint now, so the decision request IS the one that carries
+  // the run forward and the continuation comes back in its own reply, from any replica.
+  const response = await transport(decisionUrl(agentUrl, runId), headers, {
+    perm_id: permId,
+    decision,
+    reason: "",
+    // Required. The run resumes on a fresh Agent that must be scoped before it can be
+    // built, and Atlas deliberately will not take that scope from persisted state.
+    product,
+  });
+
+  if (response.status === 404) {
+    // The only failure worth its own words: there is no such parked run. It expired, it
+    // was already answered, or this is not the caller that owns it. None of those is an
+    // approval, and none of them changed anything.
+    return resumeFailed(
+      `That approval could not be applied (HTTP 404). The run may have expired — ` +
+        `BrowserStack AI stops waiting after five minutes — or it may already have ` +
+        `been answered. Nothing was changed by this call. Start the task again if it ` +
+        `still needs doing.`,
+    );
   }
 
-  const approvals: ApprovalRecord[] = [];
-  let result: unknown;
-  let resultStatus = 200;
-  let nextAsk: ParkedAsk | null = null;
-
-  // `null` body ⇒ GET: the reattach carries none.
-  for await (const event of streamTransport(
-    resumeUrl(agentUrl, runId),
-    headers,
-    null,
-  )) {
-    if (event.event === EVENT_RUN) continue;
-    if (event.event === EVENT_RESULT) {
-      result = event.data;
-      if (typeof event.status === "number") resultStatus = event.status;
-      continue;
-    }
-    if (event.event !== EVENT_PERMISSION) continue;
-    // ANOTHER ask: the task needs more than one approval. Park again rather than
-    // answering it ourselves — the whole point is that a human decides each one.
-    const ask = parseAsk(event.data);
-    if (ask) {
-      nextAsk = {
-        perm_id: ask.perm_id,
-        description: ask.description,
-        product: ask.product || product,
-        mode: ask.mode,
-      };
-      break;
-    }
-  }
-
-  if (nextAsk) {
+  // PARKED AGAIN: the task needs more than one approval. Handed straight back rather
+  // than answered here, because the whole point is that a human decides each one.
+  const parked = parkedResult(response.body, product);
+  if (parked) {
     logger.info(
       "askBrowserStackAI: run parked again after a decision (run=%s)",
       runId,
     );
-    return needsApprovalResult(runId, nextAsk, product);
+    return needsApprovalResult(parked.runId, parked.ask, product);
   }
-  return buildResult(
-    { status: resultStatus, body: result },
-    approvals,
-    mode,
-    product,
-  );
+  // Finished. Through the SAME builder the start path uses, so an entitlement refusal,
+  // a 401 and a plain failure read identically whichever call produced them.
+  return buildResult(response, [], mode, product);
 }
 
-/**
- * A resume missing half its arguments.
- *
- * Not an error the caller can fix by retrying the same way, so it says what is missing
- * rather than failing generically — and it is fail-closed by construction: with no
- * `decision` there is nothing to deliver, so the gate keeps waiting and eventually
- * denies on its own expiry. Nothing is approved by omission.
- */
-export function incompleteResume(): AskResult {
+/** A resume that did not happen. Every field says "nothing changed", because in each
+ *  case nothing did — and a caller that cannot tell a failed resume from a refusal
+ *  either retries a write that landed or abandons one that never did. */
+export function resumeFailed(error: string): AskResult {
   return {
     ok: false,
     status: "error",
@@ -298,9 +247,14 @@ export function incompleteResume(): AskResult {
     applied_before_stop: false,
     permission_relay: { used: true, reason: "", detail: "" },
     atlas_response: null,
-    error:
-      "Resuming needs all three of `run_id`, `perm_id` and `decision`. Nothing was " +
+    error,
+  };
+}
+
+export function incompleteResume(): AskResult {
+  return resumeFailed(
+    "Resuming needs all three of `run_id`, `perm_id` and `decision`. Nothing was " +
       "sent, so nothing changed and the pending approval is still waiting — ask the " +
       "user whether to allow it and call again with all three.",
-  };
+  );
 }

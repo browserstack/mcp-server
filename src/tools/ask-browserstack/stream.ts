@@ -109,15 +109,19 @@ export type AgentStreamTransport = (
    * it would be a second place for an ask to be silently dropped. The method is the
    * only thing that differs.
    */
-  body: AgentRequest | null,
+  body: AgentRequest,
 ) => AsyncIterable<StreamEvent>;
 
 /** Posts one decision. Separate seam because it is a separate connection. */
-export type DecisionTransport = (
-  url: string,
-  headers: Record<string, string>,
-  body: { perm_id: string; decision: string; reason: string },
-) => Promise<number>;
+/** What a decision POST carries. `product` is required: the run comes back on a fresh
+ *  Agent that has to be scoped to a harness before it can be built, and scoping is the
+ *  one thing that must not be re-derived from persisted state. */
+export interface DecisionBody {
+  perm_id: string;
+  decision: string;
+  reason: string;
+  product: string;
+}
 
 /**
  * Split a buffer into complete SSE frames, returning the leftover.
@@ -190,9 +194,9 @@ export function fetchAgentStreamTransport(
           let response: Response;
           try {
             response = await fetch(url, {
-              method: body === null ? "GET" : "POST",
+              method: "POST",
               headers: { ...headers, Accept: "text/event-stream" },
-              ...(body === null ? {} : { body: JSON.stringify(body) }),
+              body: JSON.stringify(body),
               // A redirect from an authenticated API is usually a login bounce, and
               // following it turns a clear 401 into a 200 carrying an HTML page.
               redirect: "manual",
@@ -257,38 +261,20 @@ export function fetchAgentStreamTransport(
 }
 
 /** The decision POST. 30s, because it is an ordinary short request. */
-export function fetchDecisionTransport(timeoutMs = 30_000): DecisionTransport {
-  return async (url, headers, body) => {
-    try {
-      // Through `apiClient` per rules/security.md. `raise_error: false` because the caller
-      // reads the STATUS: a 404 (run gone) and a 409 (already decided) are both answers,
-      // and a thrown AxiosError would collapse them into the unreachable case below.
-      const response = await apiClient.post<unknown>({
-        url,
-        headers,
-        body,
-        timeout: timeoutMs,
-        raise_error: false,
-      });
-      return response.status;
-    } catch {
-      // The gate on the far side is still waiting and will deny on its own expiry, so
-      // a lost decision is safe — it is never an approval. 0 says "never delivered" so
-      // the caller can say that rather than implying a human refused.
-      return 0;
-    }
-  };
-}
+// `fetchDecisionTransport` IS GONE. It returned a bare status because the decision
+// POST used to answer 204 and the run's continuation arrived on a reattached stream.
+// It now answers 200 with that continuation, which is the same shape the deferred START
+// answers with — so both use one transport and there is one place that knows how to read
+// a park out of a response.
 
 /** `POST /agent/{run_id}/permission`, built from the base URL the tool already resolved. */
 export function decisionUrl(agentUrl: string, runId: string): string {
   return `${agentUrl.replace(/\/+$/, "")}/${encodeURIComponent(runId)}/permission`;
 }
 
-/** `GET /agent/{run_id}/stream` — the reattach, for picking a parked run back up. */
-export function resumeUrl(agentUrl: string, runId: string): string {
-  return `${agentUrl.replace(/\/+$/, "")}/${encodeURIComponent(runId)}/stream`;
-}
+// `resumeUrl` IS GONE with `GET /agent/{run_id}/stream`. There is nothing to reattach
+// to: an ask parks in Atlas's checkpoint, so a caller that lost its stream answers the
+// ask and gets the continuation in that reply, from any replica.
 
 /**
  * The deferred START: one request, one JSON response, nothing held open.
@@ -298,10 +284,13 @@ export function resumeUrl(agentUrl: string, runId: string): string {
  * no stream to read and nothing to keep alive while a human decides. That is the entire
  * point of the transport: this process holds no state between the ask and the answer.
  */
+/** One POST, one JSON response. Used for BOTH calls of the two-call shape: the start
+ *  (`POST /agent`) and every decision (`POST /agent/{run_id}/permission`), because since
+ *  the converged gate they answer the same thing — a parked run, or a finished one. */
 export type DeferredTransport = (
   url: string,
   headers: Record<string, string>,
-  body: AgentRequest,
+  body: AgentRequest | DecisionBody,
 ) => Promise<{ status: number; body: unknown }>;
 
 export function fetchDeferredTransport(timeoutMs = 120_000): DeferredTransport {

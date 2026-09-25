@@ -21,7 +21,6 @@ import {
   WHOLE_RUN_TIMEOUT_MS,
   decisionUrl,
   fetchAgentStreamTransport,
-  fetchDecisionTransport,
   parseFrame,
   splitFrames,
 } from "../../src/tools/ask-browserstack/stream.js";
@@ -231,34 +230,10 @@ describe("fetchAgentStreamTransport", () => {
   });
 });
 
-describe("fetchDecisionTransport", () => {
-  it("returns the status so the caller can tell 204 from 409", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(null, { status: 204 })),
-    );
-    const status = await fetchDecisionTransport()(
-      "https://atlas.test/agent/run-1/permission",
-      {},
-      { perm_id: "perm-1", decision: "allow", reason: "" },
-    );
-    expect(status).toBe(204);
-    vi.unstubAllGlobals();
-  });
-
-  it("reports 0 when the decision never left, rather than implying a refusal", async () => {
-    // The gate on the far side is still waiting and denies on its own expiry, so a
-    // lost decision is safe. But it must not be reported as "the human said no".
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("socket closed")));
-    const status = await fetchDecisionTransport()(
-      "https://atlas.test/agent/run-1/permission",
-      {},
-      { perm_id: "perm-1", decision: "allow", reason: "" },
-    );
-    expect(status).toBe(0);
-    vi.unstubAllGlobals();
-  });
-});
+// `fetchDecisionTransport` and its tests are gone. It returned a bare status because
+// the decision POST answered 204 and the run's continuation came back on a reattached
+// stream. It answers 200 WITH that continuation now — the same shape the start answers
+// with — so both calls use `fetchDeferredTransport`, whose tests cover the reading.
 
 describe("decisionUrl", () => {
   it("builds the v2 §3 path from the agent url", () => {
@@ -473,32 +448,28 @@ describe("deferred — the two-call shape", () => {
     expect(result.run_id).toBeUndefined();
   });
 
-  it("delivers the decision, then reattaches for the remainder", async () => {
+  it("delivers the decision and returns the continuation, in ONE call", async () => {
     const { runResumed } = await import(
       "../../src/tools/ask-browserstack/deferred.js"
     );
-    const decided = vi.fn(async () => 204);
-    const streamed = vi.fn(() => ({
-      async *[Symbol.asyncIterator]() {
-        yield { event: "run", data: { run_id: "run-1" } };
-        yield { event: "result", data: { ok: true, status: "ok", answer: "made it" } };
-      },
+    const post = vi.fn(async () => ({
+      status: 200,
+      body: { ok: true, status: "ok", answer: "made it" },
     }));
     const result = await runResumed(
       "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
-      decided as never, streamed as never, "deferred", "tm",
+      post as never, "deferred", "tm",
     );
-    // The decision names WHICH ask, and goes to the run's own endpoint.
-    expect(decided).toHaveBeenCalledWith(
+    // ONE request, to the run's own endpoint, naming WHICH ask — and carrying the
+    // product, because the run resumes on a fresh Agent that must be scoped first.
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith(
       "https://atlas.example/agent/run-1/permission",
       HEADERS,
-      { perm_id: ASK.perm_id, decision: "allow", reason: "" },
+      { perm_id: ASK.perm_id, decision: "allow", reason: "", product: "tm" },
     );
-    // The reattach is a GET: no body.
-    expect((streamed.mock.calls[0] as never as unknown[])[0])
-      .toBe("https://atlas.example/agent/run-1/stream");
-    expect((streamed.mock.calls[0] as never as unknown[])[2]).toBeNull();
     expect(result.status).toBe("ok");
+    expect(result.answer).toBe("made it");
   });
 
   it("parks AGAIN when the resumed run needs a second approval", async () => {
@@ -507,36 +478,50 @@ describe("deferred — the two-call shape", () => {
     );
     const second = { ...ASK, perm_id: "perm-" + "d".repeat(32),
                      description: "Adding the first test run" };
-    const streamed = vi.fn(() => ({
-      async *[Symbol.asyncIterator]() {
-        yield { event: "run", data: { run_id: "run-1" } };
-        yield { event: "permission", data: second };
-      },
+    const post = vi.fn(async () => ({
+      status: 200,
+      body: { ok: false, status: "needs_approval", run_id: "run-1", asks: [second] },
     }));
     const result = await runResumed(
       "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
-      (async () => 204) as never, streamed as never, "deferred", "tm",
+      post as never, "deferred", "tm",
     );
+    // Handed straight back, not answered here: each approval is a human's to give.
     expect(result.status).toBe("needs_approval");
     expect(result.perm_id).toBe(second.perm_id);
+    expect(result.next_step?.params.perm_id).toBe(second.perm_id);
   });
 
-  it("an undelivered decision is reported as such, never as an approval", async () => {
+  it("a 404 says the approval did not apply, and never reads as one", async () => {
     const { runResumed } = await import(
       "../../src/tools/ask-browserstack/deferred.js"
     );
-    const streamed = vi.fn();
-    for (const status of [0, 404, 409]) {
-      const result = await runResumed(
-        "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
-        (async () => status) as never, streamed as never, "deferred", "tm",
-      );
-      expect(result.status).toBe("error");
-      expect(result.ok).toBe(false);
-      expect(String(result.error)).toContain("could not be delivered");
-    }
-    // Never reattached: there is nothing to pick up when the answer did not land.
-    expect(streamed).not.toHaveBeenCalled();
+    const post = vi.fn(async () => ({ status: 404, body: { detail: "no such run" } }));
+    const result = await runResumed(
+      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
+      post as never, "deferred", "tm",
+    );
+    expect(result.status).toBe("error");
+    expect(result.ok).toBe(false);
+    expect(result.approvals).toEqual([]);
+    expect(result.applied_before_stop).toBe(false);
+    expect(String(result.error)).toContain("could not be applied");
+  });
+
+  it("a denial is delivered as faithfully as an approval", async () => {
+    const { runResumed } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const post = vi.fn(async () => ({
+      status: 200, body: { ok: false, status: "blocked", error: "not approved" },
+    }));
+    await runResumed(
+      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "deny",
+      post as never, "deferred", "tm",
+    );
+    expect((post.mock.calls[0] as never as unknown[])[2]).toMatchObject(
+      { decision: "deny" },
+    );
   });
 
   it("a resume missing its arguments changes nothing and says which", async () => {

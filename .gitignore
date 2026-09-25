@@ -7,3 +7,14 @@ tests.md
 .npmrc
 .vscode/
 .env
+# Live-probe artefacts: run records, findings, payloads and the id pool.
+#
+# These are EVIDENCE, not code — captured responses from real projects, so they carry
+# workspace ids, internal hostnames and other data that has no business in a public
+# repository. Nothing in src/ or tests/ reads them; only the three scripts/*-live.mts
+# tools do, against a local working copy.
+#
+# The durable output of that work is committed: the capability index itself, and
+# docs/capability-rename-map.csv.
+tests/live/
+__pycache__/

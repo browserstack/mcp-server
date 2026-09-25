@@ -1,0 +1,402 @@
+{
+  "note": "One natural-language user query per capability, for END-TO-END routing evaluation: given the query, does a model using the MCP server actually invoke the right capability? This is NOT search-eval.json. That fixture measures whether the correct answer lands in the top N of searchCapability's ranking — pure scoring, keyed by method+path. This one measures whether a model, handed those results, PICKS correctly. The two can disagree in both directions: a model can rescue a rank-3 answer, or choose wrong when the right one ranked 1. Design rule for every query here: phrase the need as a user would, and do NOT echo the capability's own distinctive tokens. A query that restates the capability name makes the test pass trivially and measures nothing. These 77 cover the capabilities search-eval.json has no query for (77 tm); the other 165 already have one there and should be reused rather than rewritten. KNOWN CAVEAT, so results are read honestly: 29 of these queries share a word with their own capability name — almost always the ENTITY noun (folder, plan, report, comment). That is legitimate, because a user asking about a folder does say 'folder', and stripping it would produce queries no real user would type. But it does make those 29 easier than the rest, so a per-case pass is not uniformly hard. The cases carrying a `trap` field are the deliberately hard ones: near-duplicate siblings, a scope difference (one test vs the whole project), or a misleading capability name.",
+  "cases": [
+    {
+      "capability": "assign_test_run_test_cases",
+      "product": "tm",
+      "q": "hand out the cases in this regression run to the three people who are going to execute them"
+    },
+    {
+      "capability": "bulk_edit_test_cases_in_test_run",
+      "product": "tm",
+      "q": "mark a whole batch of cases in my run as passed and set their owner at the same time"
+    },
+    {
+      "capability": "bulk_edit_test_cases",
+      "product": "tm",
+      "q": "add a label to about 200 cases and clear the existing owner on all of them"
+    },
+    {
+      "capability": "bulk_set_test_result_status",
+      "product": "tm",
+      "q": "set everything still untested in this run to skipped in one go"
+    },
+    {
+      "capability": "bulk_update_test_run_test_cases",
+      "product": "tm",
+      "q": "add another 40 cases to a run that already exists"
+    },
+    {
+      "capability": "clone_test_run",
+      "product": "tm",
+      "q": "the last cycle had a bunch of failures — run just those again for the new build"
+    },
+    {
+      "capability": "create_sub_folder",
+      "product": "tm",
+      "q": "make a nested folder under Checkout to hold the payment cases"
+    },
+    {
+      "capability": "create_template",
+      "product": "tm",
+      "q": "define a new layout controlling which fields our test cases capture"
+    },
+    {
+      "capability": "create_test_cases",
+      "product": "tm",
+      "q": "write up a single new test case in the login folder"
+    },
+    {
+      "capability": "create_test_results_for_test_run",
+      "product": "tm",
+      "q": "log that these cases failed when we executed them"
+    },
+    {
+      "capability": "delete_custom_field_dataset",
+      "product": "tm",
+      "q": "get rid of one of the option lists attached to a custom field"
+    },
+    {
+      "capability": "delete_template",
+      "product": "tm",
+      "q": "remove a case layout nobody uses any more"
+    },
+    {
+      "capability": "delete_test_run",
+      "product": "tm",
+      "q": "throw away a run and everything that was recorded in it"
+    },
+    {
+      "capability": "list_entity_filter_details",
+      "product": "tm",
+      "q": "I have a set of filter ids, what do they actually refer to"
+    },
+    {
+      "capability": "get_template",
+      "product": "tm",
+      "q": "show me every field on this particular case layout"
+    },
+    {
+      "capability": "list_test_results_for_test_case",
+      "product": "tm",
+      "q": "what happened when we executed this one case inside that run",
+      "also_accept": [
+        "list_test_results_for_test_case_by_integer_id"
+      ],
+      "trap": "VERSION SIBLING: the v1 and v2 reads are semantically identical (same entity, same scoping, near-identical intent) and the index gives a caller no steer between them. Either answer is correct; picking one over the other is not a model error."
+    },
+    {
+      "capability": "list_test_run_test_cases",
+      "product": "tm",
+      "q": "which cases are in this run, and who owns each one"
+    },
+    {
+      "capability": "get_test_run",
+      "product": "tm",
+      "q": "pull up the details of this run"
+    },
+    {
+      "capability": "list_test_runs_selection",
+      "product": "tm",
+      "q": "before I build the run from this folder, show me which cases the selection actually resolves to"
+    },
+    {
+      "capability": "list_test_case_templates",
+      "product": "tm",
+      "q": "what case layouts does this workspace have"
+    },
+    {
+      "capability": "move_folder_by_integer_id",
+      "product": "tm",
+      "q": "shift this folder and everything under it to a different parent"
+    },
+    {
+      "capability": "replace_test_run",
+      "product": "tm",
+      "q": "overwrite the whole run definition with a fresh payload"
+    },
+    {
+      "capability": "search_project_entities",
+      "product": "tm",
+      "q": "find the cases in this project that match a few filters"
+    },
+    {
+      "capability": "search_project_entities_by_filter",
+      "product": "tm",
+      "q": "run an entity search in a project where the filter set is too big to fit in a query string",
+      "trap": "near-duplicate of search_project_entities; only the POST-body form distinguishes them"
+    },
+    {
+      "capability": "update_template",
+      "product": "tm",
+      "q": "make this layout the workspace default and rename it"
+    },
+    {
+      "capability": "update_test_run",
+      "product": "tm",
+      "q": "just change the run's name and its due date, leave everything else"
+    },
+    {
+      "capability": "update_test_case",
+      "product": "tm",
+      "q": "rewrite the steps on a case that already exists"
+    },
+    {
+      "capability": "move_test_case",
+      "product": "tm",
+      "q": "file this one case under a different folder"
+    },
+    {
+      "capability": "get_test_case_histories",
+      "product": "tm",
+      "q": "who changed this case, and when",
+      "also_accept": [
+        "list_test_case_histories"
+      ],
+      "trap": "VERSION SIBLING: v1 says \"who changed it, when, which fields moved\"; v2 says \"what changed on a test case, when, and who changed it\". Indistinguishable. Either is correct."
+    },
+    {
+      "capability": "list_test_runs",
+      "product": "tm",
+      "q": "show me the runs I own that are still open"
+    },
+    {
+      "capability": "create_test_run",
+      "product": "tm",
+      "q": "spin up a run for this sprint with these cases loaded into it"
+    },
+    {
+      "capability": "list_test_plans",
+      "product": "tm",
+      "q": "what plans exist in this project"
+    },
+    {
+      "capability": "create_test_plan",
+      "product": "tm",
+      "q": "set something up to group all the runs for this release together"
+    },
+    {
+      "capability": "get_test_plan",
+      "product": "tm",
+      "q": "open this plan and show me its dates, status and how many runs it holds"
+    },
+    {
+      "capability": "create_sub_test_plan",
+      "product": "tm",
+      "q": "split the release plan into a child plan for each team"
+    },
+    {
+      "capability": "list_test_plan_test_runs",
+      "product": "tm",
+      "q": "which runs belong to this plan"
+    },
+    {
+      "capability": "update_test_plan",
+      "product": "tm",
+      "q": "push the plan's end date out by a week"
+    },
+    {
+      "capability": "list_custom_fields",
+      "product": "tm",
+      "q": "what custom fields has this workspace defined for test cases"
+    },
+    {
+      "capability": "create_custom_field",
+      "product": "tm",
+      "q": "add a new dropdown for component to our test cases"
+    },
+    {
+      "capability": "get_custom_field",
+      "product": "tm",
+      "q": "look up one of those extra fields by its numeric id"
+    },
+    {
+      "capability": "update_custom_field",
+      "product": "tm",
+      "q": "make that extra field mandatory"
+    },
+    {
+      "capability": "list_reports",
+      "product": "tm",
+      "q": "find the saved reports in this project"
+    },
+    {
+      "capability": "create_report",
+      "product": "tm",
+      "q": "set up something that summarises our test data every week"
+    },
+    {
+      "capability": "get_report",
+      "product": "tm",
+      "q": "show me the configuration behind SC-12"
+    },
+    {
+      "capability": "list_entity_attachments",
+      "product": "tm",
+      "q": "what files are attached to this test case"
+    },
+    {
+      "capability": "search_test_results",
+      "product": "tm",
+      "q": "find results anywhere in the account when I don't know which project they're in"
+    },
+    {
+      "capability": "list_test_run_test_case_comments",
+      "product": "tm",
+      "q": "read the notes people left on this case inside the run"
+    },
+    {
+      "capability": "create_test_run_test_case_comment",
+      "product": "tm",
+      "q": "leave a note on this case in the run explaining why it failed"
+    },
+    {
+      "capability": "export_test_run_csv",
+      "product": "tm",
+      "q": "get this run's cases and their results out as a spreadsheet"
+    },
+    {
+      "capability": "get_test_run_progress",
+      "product": "tm",
+      "q": "how far along is this run — what's the pass/fail breakdown"
+    },
+    {
+      "capability": "generate_test_case_automation",
+      "product": "tm",
+      "q": "turn this manual case into an automated no-code test"
+    },
+    {
+      "capability": "list_binned_test_cases",
+      "product": "tm",
+      "q": "what's sitting in the recycle bin"
+    },
+    {
+      "capability": "count_binned_test_cases",
+      "product": "tm",
+      "q": "how many cases are in the bin right now",
+      "trap": "differs from list_binned_test_cases only by wanting a number, not the rows"
+    },
+    {
+      "capability": "submit_test_cases_for_review",
+      "product": "tm",
+      "q": "send these cases off to someone to review"
+    },
+    {
+      "capability": "apply_test_case_review_verdict",
+      "product": "tm",
+      "q": "approve the cases that are sitting under review"
+    },
+    {
+      "capability": "validate_bdd_export_selection",
+      "product": "tm",
+      "q": "check my selection is all Gherkin before I export a feature file"
+    },
+    {
+      "capability": "create_test_case_comment",
+      "product": "tm",
+      "q": "leave a comment on this test case"
+    },
+    {
+      "capability": "edit_project",
+      "product": "tm",
+      "q": "rename the project and update its description"
+    },
+    {
+      "capability": "list_folder_attachments",
+      "product": "tm",
+      "q": "what files are attached to the folder itself, not to the cases in it",
+      "trap": "competes with list_entity_attachments"
+    },
+    {
+      "capability": "list_exploratory_session_form_fields",
+      "product": "tm",
+      "q": "what do I need to fill in to author an exploratory session"
+    },
+    {
+      "capability": "get_lcnc_user_test_config",
+      "product": "tm",
+      "q": "what low-code test setup do I have saved for this project"
+    },
+    {
+      "capability": "list_shared_components",
+      "product": "tm",
+      "q": "list the shared fields set up in this project"
+    },
+    {
+      "capability": "list_test_case_comments",
+      "product": "tm",
+      "q": "read the comments on this case"
+    },
+    {
+      "capability": "get_test_case",
+      "product": "tm",
+      "q": "open TC-1042 and show me everything on it"
+    },
+    {
+      "capability": "search_all_projects",
+      "product": "tm",
+      "q": "search everywhere in the account for the word checkout"
+    },
+    {
+      "capability": "initiate_export",
+      "product": "tm",
+      "q": "kick off an export of our cases to a file"
+    },
+    {
+      "capability": "link_entities_to_jira_issue",
+      "product": "tm",
+      "q": "attach these cases to the tracker ticket"
+    },
+    {
+      "capability": "get_linked_test_case_selection",
+      "product": "tm",
+      "q": "before I link anything, show me which cases that ticket would pull in"
+    },
+    {
+      "capability": "list_configuration_groups",
+      "product": "tm",
+      "q": "what configuration groups does the account have"
+    },
+    {
+      "capability": "list_tags",
+      "product": "tm",
+      "q": "list the labels used in this project along with their ids"
+    },
+    {
+      "capability": "list_users",
+      "product": "tm",
+      "q": "who can I assign this case to"
+    },
+    {
+      "capability": "rename_folder",
+      "product": "tm",
+      "q": "change this folder's name"
+    },
+    {
+      "capability": "get_test_case_linked_issues",
+      "product": "tm",
+      "q": "which tracker tickets are linked to this case",
+      "trap": "NAME TRAP: called get_test_case_linked_issues but returns linked issues, not results. Competes with search_test_results and list_test_results_for_test_case on the word 'results'."
+    },
+    {
+      "capability": "unlink_test_case",
+      "product": "tm",
+      "q": "detach this case from the ticket it's linked to"
+    },
+    {
+      "capability": "unlink_test_run",
+      "product": "tm",
+      "q": "detach this run from the ticket it's linked to"
+    },
+    {
+      "capability": "update_tag",
+      "product": "tm",
+      "q": "rename a label everywhere it's used in the project"
+    },
+    {
+      "capability": "verify_test_case_tags",
+      "product": "tm",
+      "q": "check whether these label names are already in use"
+    }
+  ]
+}

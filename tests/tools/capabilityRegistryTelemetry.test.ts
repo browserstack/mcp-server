@@ -62,7 +62,7 @@ describe("capability registry telemetry", () => {
     const server = await buildServer();
 
     await call(server, "invokeCapability", {
-      name: "get_archived_test_cases",
+      name: "list_archived_test_cases",
       product: "tm",
       path_params: { project_id: 1 },
     });
@@ -74,7 +74,7 @@ describe("capability registry telemetry", () => {
       product: "tm",
       capability_method: expect.any(String),
       capability_path: expect.any(String),
-      capability: "get_archived_test_cases",
+      capability: "list_archived_test_cases",
       capability_mode: "read",
       upstream_ok: true,
       upstream_status: 200,
@@ -95,7 +95,7 @@ describe("capability registry telemetry", () => {
     const server = await buildServer();
 
     await call(server, "invokeCapability", {
-      name: "get_archived_test_cases",
+      name: "list_archived_test_cases",
       product: "tm",
       path_params: { project_id: 1 },
     });
@@ -103,7 +103,7 @@ describe("capability registry telemetry", () => {
     const recorded = await rowsFor("invokeCapability");
     expect(recorded).toHaveLength(1);
     expect(recorded[0]).toMatchObject({
-      capability: "get_archived_test_cases",
+      capability: "list_archived_test_cases",
       upstream_ok: true,
       upstream_status: 200,
     });
@@ -127,7 +127,7 @@ describe("capability registry telemetry", () => {
     const server = await buildServer();
 
     await call(server, "invokeCapability", {
-      name: "get_archived_test_cases",
+      name: "list_archived_test_cases",
       product: "tm",
       path_params: { project_id: 1 },
     });
@@ -160,12 +160,12 @@ describe("capability registry telemetry", () => {
       "unknown_capability",
     ],
     [
-      { name: "get_archived_test_cases", product: "tm", path_params: {} },
+      { name: "list_archived_test_cases", product: "tm", path_params: {} },
       "missing_parameter",
     ],
     [
       {
-        name: "get_archived_test_cases",
+        name: "list_archived_test_cases",
         product: "tm",
         path_params: { project_id: "not-a-number" },
       },

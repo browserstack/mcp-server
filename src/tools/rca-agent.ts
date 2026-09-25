@@ -57,7 +57,7 @@ export async function getBuildIdTool(
     };
   } catch (error) {
     const errorMessage = describeBuildIdError(error, args);
-    logger.error(`Error fetching build ID: ${errorMessage}`);
+    logger.error("Error fetching build ID: %s", errorMessage);
     return {
       content: [
         {
@@ -98,7 +98,7 @@ export async function listBuildIdTool(
     };
   } catch (error) {
     const errorMessage = describeBuildIdError(error, args);
-    logger.error(`Error fetching build ID: ${errorMessage}`);
+    logger.error("Error fetching build ID: %s", errorMessage);
     return {
       content: [
         {

@@ -12,9 +12,6 @@
  * eliminate it, and the sign-off should be read on those terms.
  */
 
-/** After redaction, not before: a secret at position 400 must not survive by being cut. */
-export const MAX_LENGTH = 200;
-
 interface Rule {
   name: string;
   pattern: RegExp;
@@ -86,7 +83,7 @@ export function redact(text: unknown): string | undefined {
 
     for (const rule of RULES) out = out.replace(rule.pattern, rule.replacement);
 
-    return out.length > MAX_LENGTH ? `${out.slice(0, MAX_LENGTH)}…` : out;
+    return out;
   } catch {
     return undefined;
   }

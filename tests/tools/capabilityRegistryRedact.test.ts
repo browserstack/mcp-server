@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  MAX_LENGTH,
-  redact,
-} from "../../src/tools/capability-registry/redact.js";
+import { redact } from "../../src/tools/capability-registry/redact.js";
 
 /** Built at runtime: a committed credential-shaped literal trips secret scanning. */
 const fake = {
@@ -58,10 +55,10 @@ describe("redact", () => {
     expect(redact(input)).toBe(input);
   });
 
-  it("caps length AFTER redacting, so a late secret cannot survive by being cut", () => {
+  it("redacts regardless of position in a long string", () => {
     const out = redact(`${"padding ".repeat(40)}priya@example.com`)!;
-    expect(out.length).toBeLessThanOrEqual(MAX_LENGTH + 1);
     expect(out).not.toContain("priya@example.com");
+    expect(out).toContain("[email]");
   });
 
   it("collapses whitespace", () => {

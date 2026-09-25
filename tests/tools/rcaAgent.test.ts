@@ -196,4 +196,47 @@ describe("RCA Agent Tools", () => {
       expect(result.content[0].text).toContain("Error fetching RCA data");
     });
   });
+
+  describe("build-id 404 handling", () => {
+    const args = {
+      browserStackProjectName: "MyProject",
+      browserStackBuildName: "MyBuild",
+    };
+
+    it("listBuildIdTool: an upstream 404 becomes a readable no-build message", async () => {
+      const axiosLike = Object.assign(
+        new Error("Request failed with status code 404"),
+        { response: { status: 404 } },
+      );
+      (listBuildId as Mock).mockRejectedValue(axiosLike);
+
+      const result = await listBuildIdTool(args, mockConfig);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(
+        'No build found for project "MyProject" and build "MyBuild"',
+      );
+      expect(result.content[0].text).not.toContain("status code 404");
+    });
+
+    it("getBuildIdTool: a fetch-style 404 message is also translated", async () => {
+      (getBuildId as Mock).mockRejectedValue(
+        new Error("Failed to fetch build ID: 404 Not Found"),
+      );
+
+      const result = await getBuildIdTool(args, mockConfig);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("No build found for project");
+    });
+
+    it("listBuildIdTool: non-404 errors keep their original message", async () => {
+      (listBuildId as Mock).mockRejectedValue(new Error("socket hang up"));
+
+      const result = await listBuildIdTool(args, mockConfig);
+
+      expect(result.content[0].text).toContain("socket hang up");
+    });
+  });
+
 });

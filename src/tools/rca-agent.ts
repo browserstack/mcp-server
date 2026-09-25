@@ -19,6 +19,16 @@ import {
   LIST_TEST_IDS_PARAMS,
 } from "./rca-agent-utils/constants.js";
 
+function describeBuildIdError(error: unknown, args: BuildIdArgs): string {
+  const status = (error as { response?: { status?: number } })?.response
+    ?.status;
+  const message = error instanceof Error ? error.message : "Unknown error";
+  if (status === 404 || /\b404\b/.test(message)) {
+    return `No build found for project "${args.browserStackProjectName}" and build "${args.browserStackBuildName}". Both names must match the BrowserStack Automate dashboard exactly.`;
+  }
+  return message;
+}
+
 // Tool function to fetch build ID
 export async function getBuildIdTool(
   args: BuildIdArgs,
@@ -46,9 +56,8 @@ export async function getBuildIdTool(
       ],
     };
   } catch (error) {
-    logger.error("Error fetching build ID", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = describeBuildIdError(error, args);
+    logger.error("Error fetching build ID: %s", errorMessage);
     return {
       content: [
         {
@@ -88,9 +97,8 @@ export async function listBuildIdTool(
       ],
     };
   } catch (error) {
-    logger.error("Error fetching build ID", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = describeBuildIdError(error, args);
+    logger.error("Error fetching build ID: %s", errorMessage);
     return {
       content: [
         {

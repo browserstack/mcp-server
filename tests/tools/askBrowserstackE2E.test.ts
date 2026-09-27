@@ -348,7 +348,11 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // there is nothing to dial; no per-run bearer, because there is no inbound
       // connection to authenticate. That absence is the fix — the URL this used to
       // carry was a loopback address a pod could never reach.
-      expect(stub.calls[0].body.permission_relay).toEqual({ mode: "stream" });
+      // `contract` rides along: it is what lets Atlas tell this client from every
+      // published build that cannot complete an approval, and its absence makes Atlas
+      // refuse to park rather than hand back an ask nobody can answer.
+      expect(stub.calls[0].body.permission_relay)
+        .toEqual({ mode: "stream", contract: 2 });
 
       // 2. the prompt: framed with the product, Atlas's description verbatim, boolean confirm
       expect(elicit).toHaveBeenCalledTimes(1);
@@ -1191,16 +1195,10 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
   });
 
   describe("REMOTE_MCP — the hosted deployment must not attempt the relay", () => {
-    /**
-     * `appConfig` reads `process.env.REMOTE_MCP` once at module load, so the whole graph is
-     * re-imported with the env in place — the same trick `tests/lib/tm-base-url.test.ts` uses.
-     */
-    async function buildRemoteServer() {
-      vi.resetModules();
-      process.env.REMOTE_MCP = "true";
-      const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
-      return new BrowserStackMcpServer(CONFIG);
-    }
+    // `buildRemoteServer` lived here. It built a whole server with REMOTE_MCP set, for
+    // the two tests that asserted the hosted deployment REFUSES — both gone with
+    // `remote_mode`. What remains reaches into `addAskBrowserStackAITool` directly,
+    // which is cheaper and asserts the transport rather than the refusal.
 
     afterEach(() => {
       delete process.env.REMOTE_MCP;
@@ -1338,6 +1336,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         expect(payload.status).toBe("needs_approval");
         expect(payload.permission_relay.reason).not.toBe("no_human");
       } finally {
+        vi.resetModules();
       }
     });
 
@@ -1386,7 +1385,11 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Create folder." }] });
 
       const { payload } = await call(server.getTools());
-      expect(stub.calls[0].body.permission_relay).toEqual({ mode: "stream" });
+      // `contract` rides along: it is what lets Atlas tell this client from every
+      // published build that cannot complete an approval, and its absence makes Atlas
+      // refuse to park rather than hand back an ask nobody can answer.
+      expect(stub.calls[0].body.permission_relay)
+        .toEqual({ mode: "stream", contract: 2 });
       expect(payload.permission_relay.used).toBe(true);
       expect(payload.permission_relay.reason).toBe("");
     });

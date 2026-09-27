@@ -23,7 +23,12 @@
 
 import logger from "../../logger.js";
 
-import { DeferredTransport, decisionUrl, parseAsk } from "./stream.js";
+import {
+  DeferredTransport,
+  RELAY_CONTRACT,
+  decisionUrl,
+  parseAsk,
+} from "./stream.js";
 import { buildResult } from "./relay.js";
 import { AgentRequest, AskResult, PermissionAsk, RelayMode } from "./types.js";
 
@@ -147,7 +152,7 @@ export async function runDeferred(
 ): Promise<AskResult> {
   const response = await transport(url, headers, {
     ...body,
-    permission_relay: { mode: "deferred" },
+    permission_relay: { mode: "deferred", contract: RELAY_CONTRACT },
   });
   const parked = parkedResult(response.body, product);
   if (parked) {

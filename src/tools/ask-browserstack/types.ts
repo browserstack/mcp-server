@@ -77,6 +77,16 @@ export interface PermissionDecision {
  */
 export interface PermissionRelay {
   mode?: string;
+  /**
+   * The wire this client speaks. Atlas reads an absent or lower value as a build that
+   * CANNOT complete an approval and refuses to park rather than offering one.
+   *
+   * Declared, not inferred, because the two are identical on the way in: this client's
+   * stdio path sends `{"mode": "stream"}` exactly as 1.5.1 does. Measured against
+   * 1.5.1 talking to a converged Atlas — it answers a decision without `product`, gets
+   * a 400, logs it to stderr and then reports `ok: true` for a run that did nothing.
+   */
+  contract?: number;
 }
 
 /**

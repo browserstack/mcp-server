@@ -57,6 +57,16 @@ export const EVENT_PERMISSION = "permission";
 export const EVENT_RESULT = "result";
 
 /** Atlas's `f"perm-{uuid.uuid4().hex}"`, and nothing else. */
+/**
+ * The wire version this client speaks, sent in `permission_relay`. See
+ * `PermissionRelay.contract` for why Atlas cannot infer it.
+ *
+ * Bump only when a change leaves an older client unable to COMPLETE the exchange —
+ * not merely unaware of a new field. Bumped once so far, for the converged gate, which
+ * made the decision request carry the run forward.
+ */
+export const RELAY_CONTRACT = 2;
+
 export const PERM_ID_PATTERN = /^perm-[0-9a-f]{32}$/;
 
 /**

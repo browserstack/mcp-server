@@ -55,6 +55,7 @@ import {
   EVENT_RESULT,
   EVENT_RUN,
   decisionUrl,
+  RELAY_CONTRACT,
   fetchAgentStreamTransport,
   fetchDeferredTransport,
   parseAsk,
@@ -629,7 +630,7 @@ export function addAskBrowserStackAITool(
         // callback this replaces could never reach a laptop behind NAT, so the feature
         // was read-only for every real user regardless of what was configured.
         if (mode === "offered") {
-          body.permission_relay = { mode: "stream" };
+          body.permission_relay = { mode: "stream", contract: RELAY_CONTRACT };
         } else {
           // Omitted ENTIRELY, not sent empty: its absence is what selects Atlas's
           // read-only HeadlessGate.

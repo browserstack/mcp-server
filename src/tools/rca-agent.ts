@@ -46,9 +46,9 @@ export async function getBuildIdTool(
       ],
     };
   } catch (error) {
-    logger.error("Error fetching build ID", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
+    logger.error("Error fetching build ID: %s", errorMessage);
     return {
       content: [
         {
@@ -88,9 +88,9 @@ export async function listBuildIdTool(
       ],
     };
   } catch (error) {
-    logger.error("Error fetching build ID", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
+    logger.error("Error fetching build ID: %s", errorMessage);
     return {
       content: [
         {

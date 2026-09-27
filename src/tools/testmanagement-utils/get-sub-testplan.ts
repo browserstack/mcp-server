@@ -5,6 +5,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /**
  * Schema for fetching a single sub-test-plan by identifier under a parent test
@@ -167,7 +168,9 @@ export async function getSubTestPlan(
       `Sub-Test-Plan ${plan.identifier}: ${plan.name}`,
       `Parent plan: ${plan.parent_plan_id}`,
       `Status: ${plan.active_state}`,
-      plan.description ? `Description: ${plan.description}` : null,
+      plan.description
+        ? `Description:\n${wrapUntrusted("sub-test-plan description", plan.description)}`
+        : null,
       tagsLine,
       issuesLine,
       plan.start_date || plan.end_date
@@ -199,15 +202,18 @@ export async function getSubTestPlan(
         { type: "text", text: header + runsBlock },
         {
           type: "text",
-          text: JSON.stringify(
-            {
-              sub_test_plan: plan,
-              linked_test_runs: runs,
-              status_summary: statusSummary,
-              total_test_cases: totalCases,
-            },
-            null,
-            2,
+          text: wrapUntrusted(
+            "sub-test-plan (structured data)",
+            JSON.stringify(
+              {
+                sub_test_plan: plan,
+                linked_test_runs: runs,
+                status_summary: statusSummary,
+                total_test_cases: totalCases,
+              },
+              null,
+              2,
+            ),
           ),
         },
       ],

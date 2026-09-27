@@ -333,7 +333,7 @@ export default function addAppAutomationTools(
       appPath: z
         .string()
         .describe(
-          "The path to the .apk or .ipa file. Required for app installation.",
+          "The path to the .apk or .ipa file. Required for app installation. Must be located inside the directory set in MCP_UPLOAD_BASE_DIR.",
         ),
     },
     {
@@ -435,8 +435,20 @@ export default function addAppAutomationTools(
     },
     async (args) => {
       try {
+        trackMCP(
+          "setupBrowserStackAppAutomateTests",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
         return await setupAppAutomateHandler(args, config);
       } catch (error) {
+        trackMCP(
+          "setupBrowserStackAppAutomateTests",
+          server.server.getClientVersion()!,
+          error,
+          config,
+        );
         const error_message =
           error instanceof Error ? error.message : "Unknown error";
         return {

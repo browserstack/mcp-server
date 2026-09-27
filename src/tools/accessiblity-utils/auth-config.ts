@@ -35,6 +35,20 @@ export function safeAuthConfigData(response?: AuthConfigResponse) {
   };
 }
 
+interface AuthConfigListEntry {
+  id: number;
+  name: string;
+  type: string;
+  type_identifier?: string;
+  authData?: { url?: string; [key: string]: unknown };
+}
+
+interface AuthConfigListResponse {
+  success: boolean;
+  data?: { authConfigs?: AuthConfigListEntry[] };
+  errors?: string[];
+}
+
 export interface FormAuthData {
   username: string;
   usernameSelector: string;
@@ -191,8 +205,9 @@ export class AccessibilityAuthConfig {
     }
 
     try {
-      const response = await apiClient.get<AuthConfigResponse>({
-        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/auth_configs/${configId}`,
+      // No GET-by-id route exists; list and select.
+      const response = await apiClient.get<AuthConfigListResponse>({
+        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/auth_configs",
         headers: {
           Authorization:
             "Basic " +
@@ -208,7 +223,21 @@ export class AccessibilityAuthConfig {
           `Unable to get auth config: ${data.errors?.join(", ")}`,
         );
       }
-      return data;
+      const match = data.data?.authConfigs?.find(
+        (entry) => Number(entry.id) === Number(configId),
+      );
+      if (!match) {
+        throw new Error(`Auth config ${configId} not found for this account`);
+      }
+      return {
+        success: true,
+        data: {
+          id: match.id,
+          name: match.name,
+          type: match.type_identifier ?? match.type,
+          ...(match.authData?.url ? { url: match.authData.url } : {}),
+        },
+      };
     } catch (err: any) {
       const msg =
         err?.response?.data?.error ||

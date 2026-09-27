@@ -5,6 +5,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /**
  * Schema for fetching a single test plan by identifier, including its linked test runs.
@@ -106,7 +107,9 @@ export async function getTestPlan(
     const header = [
       `Test Plan ${plan.identifier}: ${plan.name}`,
       `Status: ${plan.active_state}`,
-      plan.description ? `Description: ${plan.description}` : null,
+      plan.description
+        ? `Description:\n${wrapUntrusted("test plan description", plan.description)}`
+        : null,
       plan.start_date || plan.end_date
         ? `Dates: ${plan.start_date ?? "—"} → ${plan.end_date ?? "—"}`
         : null,
@@ -136,15 +139,18 @@ export async function getTestPlan(
         { type: "text", text: header + runsBlock },
         {
           type: "text",
-          text: JSON.stringify(
-            {
-              test_plan: plan,
-              linked_test_runs: runs,
-              status_summary: statusSummary,
-              total_test_cases: totalCases,
-            },
-            null,
-            2,
+          text: wrapUntrusted(
+            "test plan (structured data)",
+            JSON.stringify(
+              {
+                test_plan: plan,
+                linked_test_runs: runs,
+                status_summary: statusSummary,
+                total_test_cases: totalCases,
+              },
+              null,
+              2,
+            ),
           ),
         },
       ],

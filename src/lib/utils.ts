@@ -1,10 +1,10 @@
-import sharp from "sharp";
 import type { ApiResponse } from "./apiClient.js";
 import { BrowserStackConfig } from "./types.js";
 import { getBrowserStackAuth } from "./get-auth.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { trackMCP } from "../index.js";
+import logger from "../logger.js";
 
 export function sanitizeUrlParam(param: string): string {
   // Remove any characters that could be used for command injection
@@ -25,9 +25,17 @@ export async function maybeCompressBase64(base64: string): Promise<string> {
   const estimatedQuality = Math.floor(sizeRatio * 100);
   const quality = Math.min(95, Math.max(30, estimatedQuality));
 
-  const compressedBuffer = await sharp(buffer).png({ quality }).toBuffer();
-
-  return compressedBuffer.toString("base64");
+  try {
+    const { default: sharp } = await import("sharp");
+    const compressedBuffer = await sharp(buffer).png({ quality }).toBuffer();
+    return compressedBuffer.toString("base64");
+  } catch (err) {
+    logger.warn(
+      "Image compression unavailable (sharp failed to load); returning the uncompressed image. %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return base64;
+  }
 }
 
 export async function assertOkResponse(

@@ -32,8 +32,30 @@ describe("validateUploadPath", () => {
     const resolved = validateUploadPath(file, {
       allowedExtensions: APP_BINARY_EXTENSIONS,
       maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+      allowedBaseDir: workDir,
     });
     expect(resolved).toBe(fs.realpathSync(file));
+  });
+
+  it("refuses when no base directory is configured (MCP_UPLOAD_BASE_DIR unset)", () => {
+    const file = write("app.apk");
+    expect(() =>
+      validateUploadPath(file, {
+        allowedExtensions: APP_BINARY_EXTENSIONS,
+        maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+      }),
+    ).toThrow(/MCP_UPLOAD_BASE_DIR is not set/);
+  });
+
+  it("refuses when the configured base directory does not exist", () => {
+    const file = write("app.apk");
+    expect(() =>
+      validateUploadPath(file, {
+        allowedExtensions: APP_BINARY_EXTENSIONS,
+        maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+        allowedBaseDir: path.join(os.tmpdir(), "no-such-base-dir-xyz"),
+      }),
+    ).toThrow(/does not exist/);
   });
 
   it("rejects an empty path", () => {
@@ -185,6 +207,7 @@ describe("validateUploadPath", () => {
     const resolved = validateUploadPath(file, {
       allowedExtensions: APP_BINARY_EXTENSIONS,
       maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+      allowedBaseDir: workDir,
     });
     expect(resolved).toBe(fs.realpathSync(file));
   });

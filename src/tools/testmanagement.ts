@@ -488,10 +488,16 @@ export async function createTestCasesFromFileTool(
       "createTestCasesFromFile",
       server.server.getClientVersion()!,
       undefined,
+      config,
     );
     return await createTestCasesFromFile(args, context, config);
   } catch (err) {
-    trackMCP("createTestCasesFromFile", server.server.getClientVersion()!, err);
+    trackMCP(
+      "createTestCasesFromFile",
+      server.server.getClientVersion()!,
+      err,
+      config,
+    );
     return {
       content: [
         {

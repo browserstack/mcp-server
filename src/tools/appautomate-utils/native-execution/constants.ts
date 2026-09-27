@@ -26,7 +26,8 @@ export const RUN_APP_AUTOMATE_SCHEMA = {
         "  xcodebuild clean -scheme YOUR_SCHEME && \\\n" +
         "  xcodebuild archive -scheme YOUR_SCHEME -configuration Release -archivePath build/app.xcarchive && \\\n" +
         "  xcodebuild -exportArchive -archivePath build/app.xcarchive -exportPath build/ipa -exportOptionsPlist exportOptions.plist\n\n" +
-        "If in other directory, provide existing app path",
+        "If in other directory, provide existing app path.\n" +
+        "The resolved file must be located inside the directory set in MCP_UPLOAD_BASE_DIR.",
     ),
   testSuitePath: z
     .string()
@@ -38,7 +39,8 @@ export const RUN_APP_AUTOMATE_SCHEMA = {
         "  xcodebuild test-without-building -scheme YOUR_SCHEME -destination 'generic/platform=iOS' && \\\n" +
         "  cd ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphonesimulator/ && \\\n" +
         "  zip -r Tests.zip *.xctestrun *-Runner.app\n\n" +
-        "If in other directory, provide existing test file path",
+        "If in other directory, provide existing test file path.\n" +
+        "The resolved file must be located inside the directory set in MCP_UPLOAD_BASE_DIR.",
     ),
   devices: z
     .array(MobileDeviceSchema)

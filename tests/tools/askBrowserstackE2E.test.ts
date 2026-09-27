@@ -1296,7 +1296,6 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // closed by construction. stdio keeps elicitation for exactly that reason.
       vi.resetModules();
       process.env.REMOTE_MCP = "true";
-      process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY = "true";
       try {
         const { addAskBrowserStackAITool } = await import(
           "../../src/tools/ask-browserstack/register.js"

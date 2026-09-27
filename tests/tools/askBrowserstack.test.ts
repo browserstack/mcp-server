@@ -1270,11 +1270,13 @@ describe("403 — the account is not entitled, which is none of the other failur
     expect(result.elicitations).toEqual([]);
   });
 
-  it("beats not_reached and remote_mode, which are both also true of a 403", () => {
-    expect(buildResult(REFUSED, [], "remote_mode", "tm").permission_relay.reason)
-      .toBe("not_entitled");
-    expect(buildResult(REFUSED, [], "no_human", "tm").permission_relay.reason)
-      .toBe("not_entitled");
+  it("beats every other reason a 403 could also be read as", () => {
+    // `not_entitled` is the one the reader can act on: the others describe how the
+    // relay was configured, which is irrelevant once the account was refused outright.
+    for (const mode of ["no_human", "offered", "deferred"] as const) {
+      expect(buildResult(REFUSED, [], mode, "tm").permission_relay.reason)
+        .toBe("not_entitled");
+    }
   });
 
   it("leaves applied_before_stop null: no gate ran", () => {

@@ -62,7 +62,6 @@ export class Config {
     // ASK_BROWSERSTACK_DISABLED is deliberately NOT here: it is a kill switch, and reading
     // it per call keeps it effective without a restart. Fixing it at boot would mean a pod
     // roll to disable the tool, which is slowest exactly when you need it fastest.
-    public readonly ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY: boolean,
     public readonly ASK_BROWSERSTACK_ATLAS_URL: string | undefined,
     public readonly ASK_BROWSERSTACK_AUTH_TOKEN_URL: string | undefined,
     /**
@@ -101,8 +100,6 @@ const config = new Config(
     process.env.BROWSERSTACK_O11Y_UI_BASE_URL.length > 0
     ? process.env.BROWSERSTACK_O11Y_UI_BASE_URL
     : DEFAULT_BROWSERSTACK_O11Y_UI_BASE_URL,
-  (process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY || "").toLowerCase() ===
-    "true",
   process.env.ASK_BROWSERSTACK_ATLAS_URL &&
     process.env.ASK_BROWSERSTACK_ATLAS_URL.trim().length > 0
     ? process.env.ASK_BROWSERSTACK_ATLAS_URL

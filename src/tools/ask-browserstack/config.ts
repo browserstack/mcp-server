@@ -51,9 +51,11 @@ export function isEnabled(): boolean {
  * declared the `elicitation` capability, and a client that did not still gets a read-only
  * run. This flag only removes the blanket refusal.
  */
-export function allowRemoteRelay(): boolean {
-  return appConfig.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
-}
+// `allowRemoteRelay` IS GONE. It gated the relay on the hosted deployment while
+// relaying meant elicitation — a guard against switching on the thing that pinned an
+// McpServer per session. Deferred holds no sessions, so the hazard it guarded no
+// longer exists, and read at boot it was the weaker of the kill switches anyway:
+// `isEnabled` above is read per call and needs no pod roll.
 
 /**
  * ============================================================================

@@ -73,15 +73,6 @@ export const RELAY_OFF_DETAILS: Record<string, string> = {
     "That is a bug on this side, not something you did; everything in `needs_approval` was " +
     "refused because of it.",
 
-  // Neither the human nor the client is the constraint here — the DEPLOYMENT is, and no
-  // change either of them can make will help.
-  remote_mode:
-    "NOBODY DECLINED THIS, AND YOUR CLIENT IS NOT THE PROBLEM. This BrowserStack MCP server " +
-    "is running in its hosted, multi-tenant mode, which has no way to put an approval " +
-    "prompt in front of you, so it ran read-only and everything in `needs_approval` was " +
-    "refused for that reason alone. Mid-run approval works when the server runs locally over stdio; retrying " +
-    "against this deployment will keep failing the same way.",
-
   // Not a refusal by anyone and not a relay problem at all: the account is not on the
   // product's agent flag. The product-specific sentence and what to do about it live in
   // `error`, so this one points there rather than duplicating the plumbing.
@@ -492,16 +483,10 @@ function relayVerdict(
       detail: RELAY_OFF_DETAILS.not_reached,
     };
   }
-  // BEFORE `no_human`, deliberately, when both are true. In the hosted deployment even a
-  // client that CAN be prompted is of no use, so the deployment is the binding constraint and
-  // the one the reader can act on; telling them to switch clients would waste their time.
-  if (mode === "remote_mode") {
-    return {
-      used: false,
-      reason: "remote_mode",
-      detail: RELAY_OFF_DETAILS.remote_mode,
-    };
-  }
+  // `remote_mode` IS GONE, and with it the sentence "this hosted server has no way to
+  // put an approval prompt in front of you". It now has one: the hosted deployment
+  // defers unconditionally. Keeping the message would have told users to go and run
+  // the server locally to get something they already have.
   if (mode === "no_human") {
     // CONTRACT §7's last row: no elicitation capability means the field was never sent.
     return {

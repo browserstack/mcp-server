@@ -487,50 +487,16 @@ describe("Atlas's permission_relay verdict — CONTRACT v1.1 §D", () => {
   });
 });
 
-describe("REMOTE_MCP — the relay is a stdio-only feature", () => {
-  function relayOf(mode: RelayMode, permission_relay?: unknown) {
-    return buildResult(
-      { status: 200, body: { status: "blocked", answer: "", permission_relay } },
-      [], mode,
-    ).permission_relay;
-  }
-
-  it("says the DEPLOYMENT is why, not the human and not the client", () => {
-    const relay = relayOf("remote_mode");
-    expect(relay).toEqual({
-      used: false,
-      reason: "remote_mode",
-      detail: expect.stringContaining("NOBODY DECLINED THIS, AND YOUR CLIENT IS NOT THE PROBLEM"),
-    });
-    expect(relay.detail).toMatch(/hosted, multi-tenant mode/);
-    expect(relay.detail).toMatch(/works when the server runs locally over stdio/);
-  });
-
-  it("reads differently from every other reason", () => {
-    const remote = relayOf("remote_mode").detail;
-    const noHuman = relayOf("no_human").detail;
-    const notReached = buildResult(
-      { status: 401, body: { detail: "unauthorized" } }, [], "remote_mode",
-    ).permission_relay.detail;
-    const disabled = relayOf("offered", { used: false, reason: "disabled" }).detail;
-    expect(new Set([remote, noHuman, notReached, disabled]).size).toBe(4);
-    // Telling a hosted user to switch to a client that can be prompted would waste their time.
-    expect(remote).not.toMatch(/does not support MCP elicitation/);
-  });
-
-  it("beats no_human, because switching clients cannot help a hosted deployment", () => {
-    // Both facts can be true at once. The deployment is the binding constraint and the only
-    // one the reader can act on.
-    expect(relayOf("remote_mode").reason).toBe("remote_mode");
-  });
-
-  it("still loses to not_reached: a request that never arrived says so first", () => {
-    const relay = buildResult(
-      { status: 401, body: { detail: "unauthorized" } }, [], "remote_mode",
-    ).permission_relay;
-    expect(relay.reason).toBe("not_reached");
-  });
-});
+// `describe("REMOTE_MCP — the relay is a stdio-only feature")` IS GONE, along with the
+// `remote_mode` it covered. It pinned the sentence "this hosted server has no way to
+// put an approval prompt in front of you… mid-run approval works when the server runs
+// locally over stdio", and that is no longer true: the hosted deployment defers
+// unconditionally, so it asks for approvals like any other. The relay is not a
+// stdio-only feature any more, which is the entire point of the deferred flow.
+//
+// What replaced the coverage: `relayMode` returning "deferred" for REMOTE_MCP is
+// pinned in askBrowserstackE2E.test.ts, and `not_reached` still beating every other
+// reason is covered by its own test above.
 
 describe("the elicitation message — CONTRACT v1.1 §G", () => {
   it("names the product and leaves the description untouched", () => {

@@ -146,7 +146,6 @@ export type RelayMode =
   /** The client declares no `elicitation` capability, so nobody could be prompted. */
   | "no_human"
   /** This process is the hosted multi-tenant server, which cannot prompt a human. */
-  | "remote_mode"
   /**
    * The hosted server, relaying WITHOUT holding anything open.
    *

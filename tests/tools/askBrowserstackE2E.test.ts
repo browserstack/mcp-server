@@ -1207,93 +1207,23 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       vi.resetModules();
     });
 
-    it("never binds a listener, omits permission_relay, and says why", async () => {
-      const server = await buildRemoteServer();
-      // A client that CAN be prompted — this is the case where remote_mode has to beat
-      // no_human, because switching clients would not help.
-      const elicit = fakeClient(server.getInstance(), { roots: {}, elicitation: {} }, []);
-      const stub = atlas({
-        payload: () => ({
-          ok: true, status: "blocked", answer: "I could not create the folder.", steps: [],
-          needs_approval: ["Create folder \"Regression\"."],
-        }),
-      });
+    // The two tests that stood here asserted the OPPOSITE behaviour: that the hosted
+    // deployment refuses, omits `permission_relay` entirely and explains that mid-run
+    // approval only works over stdio. That was true while relaying meant elicitation,
+    // which needs one live McpServer per session. The hosted deployment defers now, so
+    // it asks like any other — and `remote_mode` is gone with the sentence.
 
-      const { result, payload } = await call(server.getTools());
-
-      // 1. nothing was offered to Atlas
-      expect("permission_relay" in stub.calls[0].body).toBe(false);
-      expect(Object.keys(stub.calls[0].body).sort())
-        .toEqual(["product", "task", "user_id"]);
-      // 2. nothing was ever asked
-      expect(elicit).not.toHaveBeenCalled();
-      // 3. the result blames the deployment, not the human and not the client
-      expect(payload.permission_relay).toEqual({
-        used: false,
-        reason: "remote_mode",
-        detail: expect.stringContaining("hosted, multi-tenant mode"),
-      });
-      expect(payload.permission_relay.detail)
-        .not.toMatch(/does not support MCP elicitation/);
-      // 4. a read-only run is not a tool failure
-      expect(result.isError).toBeUndefined();
-      expect(payload.needs_approval).toEqual(["Create folder \"Regression\"."]);
-    });
-
-    it("offers no relay at all — `permission_relay` is never put on the body", async () => {
-      // Not "offered and left to fail on an ask nobody can be shown": never offered. The
-      // ask channel A1 uses needs a server-initiated elicitation, which the stateless
-      // hosted `/mcp` cannot do across replicas (v2 §5).
-      //
-      // Asserted through the injected seam rather than a module spy, so a negative result
-      // means the code did not send it — not that the spy failed to attach. The positive
-      // control below is what makes this assertion mean anything.
-      vi.resetModules();
-      process.env.REMOTE_MCP = "true";
-      const { addAskBrowserStackAITool } = await import(
-        "../../src/tools/ask-browserstack/register.js"
-      );
-      const { McpServer: RemoteMcpServer } = await import(
-        "@modelcontextprotocol/sdk/server/mcp.js"
-      );
-
-      const streamed = vi.fn(() => ({
-        async *[Symbol.asyncIterator]() {
-          yield { event: "result", data: { status: "ok", answer: "" } };
-        },
-      }));
-
-      const remote = new RemoteMcpServer({ name: "t", version: "0" });
-      vi.spyOn(remote.server, "getClientCapabilities")
-        .mockReturnValue({ elicitation: {} } as never);
-      const tools = addAskBrowserStackAITool(remote, {
-        agentUrl: () => "https://atlas.example/agent",
-        mintToken: async () => MINTED,
-        credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
-        streamTransport: streamed as never,
-      });
-
-      const { payload } = await call(tools);
-      // A1 binds nothing anywhere, so "never bound a port" is no longer the property to
-      // assert — it is now true by construction. What still matters, and is what this
-      // guarded all along, is that the hosted deployment OFFERS no relay: the ask
-      // channel it would get cannot survive being spread across replicas (v2 §5).
-      expect("permission_relay" in (streamed.mock.calls[0] as never as unknown[])[2]!).toBe(false);
-      expect(payload.permission_relay.reason).toBe("remote_mode");
-    });
-
-    it("relays DEFERRED in remote mode once the operator opts in", async () => {
+    it("sends the deferred block on the request/response transport", async () => {
       // The refusal above is about the HOST: a stateless host cannot deliver an
       // elicitation answer to the instance waiting for it. The fix is NOT to make the
       // host stateful and elicit anyway — that is what forced sessions, ingress affinity
       // and a session cap onto the hosted deployment. It is to stop suspending: Atlas
       // returns at its first ask, and the caller comes back with the decision.
       //
-      // So the opt-in selects `deferred`, and the request goes over the REQUEST/RESPONSE
-      // transport rather than the stream — there is no stream to hold.
+      // So remote mode selects `deferred`, and the request goes over the
+      // REQUEST/RESPONSE transport rather than the stream — there is no stream to hold.
       vi.resetModules();
       process.env.REMOTE_MCP = "true";
-      process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY = "true";
       try {
         const { addAskBrowserStackAITool } = await import(
           "../../src/tools/ask-browserstack/register.js"
@@ -1340,9 +1270,13 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         expect(payload.run_id).toBe("run-abc");
         expect(payload.perm_id).toBe("perm-" + "a".repeat(32));
         expect(payload.applied_before_stop).toBe(false);
-        expect(payload.permission_relay.reason).not.toBe("remote_mode");
+        // No refusal reason at all: the hosted deployment relays now. This used to
+        // read `remote_mode` — "this server has no way to ask you" — which is the
+        // sentence the deferred flow made untrue.
+        expect(payload.permission_relay.used).toBe(true);
+        expect(payload.permission_relay.reason).toBe("");
       } finally {
-        delete process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
+        vi.resetModules();
       }
     });
 
@@ -1405,7 +1339,6 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         expect(payload.status).toBe("needs_approval");
         expect(payload.permission_relay.reason).not.toBe("no_human");
       } finally {
-        delete process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
       }
     });
 

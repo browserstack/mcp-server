@@ -45,7 +45,6 @@ import {
   AskError,
   ELICITATION_TIMEOUT_MS,
   agentUrl,
-  allowRemoteRelay,
   authTokenUrl,
   isEnabled,
 } from "./config.js";
@@ -284,7 +283,7 @@ async function relayOneAsk(
  * client bug, which is exactly why it must not be the default.
  *
  * When refused, Atlas runs read-only — a supported path that already works — and
- * `permission_relay.reason` says `remote_mode` so nobody mistakes it for a human's no.
+ * `permission_relay.reason` names the reason so nobody mistakes it for a human's no.
  */
 /**
  * CONTRACT v2 (A1) — drive one run over the stream.
@@ -445,10 +444,6 @@ async function runStreamed(
 }
 
 export function relayMode(server: McpServer): RelayMode {
-  // The hosted deployment refuses UNLESS its operator has opted in, because whether an
-  // elicitation can be answered there depends on the host keeping one server alive per
-  // session — see `allowRemoteRelay`. Verified working against the hosted Streamable
-  // HTTP server once it does (browserstack/remote-mcp-server#96).
   // An explicit transport wins over whatever the deployment implies. `REMOTE_MCP`
   // cannot select `deferred` from a local stdio install — that flag makes this
   // entrypoint exit, because the hosted deployment runs remote-mcp-server instead — so
@@ -457,15 +452,20 @@ export function relayMode(server: McpServer): RelayMode {
   const forced = appConfig.ASK_BROWSERSTACK_RELAY_TRANSPORT;
   if (forced === "deferred") return "deferred";
   if (forced !== "elicit" && appConfig.REMOTE_MCP) {
-    // DEFERRED, not elicitation, and not because elicitation would be worse here — it
+    // DEFERRED, unconditionally, and not because elicitation would be worse here — it
     // would be better. It is what makes this process stateful: a suspended
     // `elicitation/create` pins an McpServer in one pod's heap until the answer
-    // arrives, so the hosted deployment has to keep sessions, pin requests to a pod and
-    // cap how many can be alive. Deferred removes the suspension, and with it the
-    // reason any of that exists. See the `deferred` RelayMode for the trade.
+    // arrives, so the hosted deployment would have to keep sessions, pin requests to a
+    // pod and cap how many can be alive. Deferred removes the suspension, and with it
+    // the reason any of that exists.
     //
-    // The knob still gates it: a deployment that has not opted in stays read-only.
-    return allowRemoteRelay() ? "deferred" : "remote_mode";
+    // THERE IS NO OPT-IN ANY MORE. `ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY` gated this
+    // while relaying meant elicitation — it was a guard against switching on the
+    // stateful thing, and that thing is gone. Two better switches remain: this tool's
+    // own `ASK_BROWSERSTACK_DISABLED`, which is read per call and so does not need a
+    // pod roll, and Atlas's `delegation.permission_relay`, which turns the relay off
+    // for every client at once from a config change.
+    return "deferred";
   }
   // stdio keeps elicitation, deliberately: one process, nothing to pin, and the client
   // renders the prompt so the model cannot fabricate the answer. Nothing is gained by

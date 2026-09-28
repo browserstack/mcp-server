@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.45",
+  "version": "1.46",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. Destructive capabilities exist and always need explicit human approval.",
@@ -4355,7 +4355,7 @@
             "name": "filters",
             "type": "object",
             "required": true,
-            "description": "The condition set the view applies. Sent only when non-empty: `{}` is treated as absent and the backing service then rejects the create with 400 'Filters cannot be empty'. Its inner shape is the same filter object the entity search takes and is not validated here."
+            "description": "The condition set the view applies, in the product UI's filter-state shape — NOT the flat id lists the entity search takes. The UI only applies a view whose conditions are in this shape: {systemFields: {priority: [{labelInnerText: 'High', label: 'High', value: 9262}]}, extraSystemFields: {issue_type: {label: 'Jira', value: 'jira'}}, matchAllMatchAny: {global: {value: 'all'}, priority: {value: 'any'}}}. Each selected option carries the project's numeric option id as `value` (resolve it with get_project_form_fields or get_system_field_values — the ids differ per project) and its display name as `label` and `labelInnerText`. `extraSystemFields.issue_type` is REQUIRED even when the view does not filter on linked issues: without it the view saves but the UI does not apply it. matchAllMatchAny carries `global` ('all' = match every filter, 'any' = match any one) plus one entry per filtered field ('any' = contains any one value, 'all' = contains all values). Nothing inside is validated, so a wrong shape still saves with a success response. Sent only when non-empty: `{}` is treated as absent and the backing service then rejects the create with 400 'Filters cannot be empty'."
           }
         ],
         "intent": "Save a reusable named filter view on a project — the condition set behind a test case, test run, test plan or exploratory-session list — so the same selection can be reapplied later or shared with everyone on the project",
@@ -4398,6 +4398,7 @@
           "`filters: {}` is dropped as blank before the request is built, so an empty object behaves exactly like omitting the key and the create then fails downstream. Send at least one real condition.",
           "Conditions are not checked against the project's custom fields at write time. A condition on a custom field that does not exist is accepted here and is silently pruned — permanently — the first time anyone reads the filter back.",
           "Carry `data.id` from the response: that integer is the filter_id every later read, update and delete takes.",
+          "`extraSystemFields.issue_type` names the issue tracker the view's linked-issues condition searches, and must always be present. Send {label: 'Jira', value: 'jira'} unless the view filters on linked issues from another tracker. The allowed values are the product's own tracker names — jira, azure, asana, linear, clickup, devrev, github, gitlab, zoho, trello — not the integration route names (`jira-app` and the rest), which are a different vocabulary. Nothing checks that the project has that tracker connected; get_project_settings shows which trackers a project uses. To filter on another tracker's linked issues, take the value from the `issue_type` those issues carry on the test case.",
           "Only the backing service's 400 is translated into `{success:false, message:...}`; any other failure from it is re-raised and surfaces as a 500, so a 500 here is not necessarily a server bug.",
           "Not permission-gated — the filter controller has no entry in the RBAC map, so anyone with product access to the project can create a project-level view."
         ]
@@ -7870,7 +7871,8 @@
           "Unlike the on-screen read, this path does NOT validate your column list: a misspelled field name is not an error here — the worker silently falls back to the report's default columns, so the export arrives missing what you asked for. Verify field names against the report read first.",
           "`fields: [\"all\"]` for an entity expands to every supported column for that entity.",
           "The report is matched on group + id, so the project in the path does not scope the lookup; an unknown id is 404 `Report not found.`. A `Test Plan Detailed Report` on a group without the feature flag is 403 `Operation not permitted`. Requires the report_view permission."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "edit_test_case_partial",
@@ -15714,6 +15716,7 @@
         "query": [
           {
             "name": "entity",
+            "required": true,
             "type": "string",
             "values": [
               "testcase",
@@ -15722,7 +15725,7 @@
               "exploratory_session",
               "test_plan_test_case"
             ],
-            "description": "Optional, despite being published as required: omit it and every entity type comes back in one mixed list (read `entity_type` on each row to tell them apart). An unlisted value is rejected with 422 `{success:false, message:\"Invalid payload\"}` — 422 here, not 400."
+            "description": "Required — which list's saved views to return, one type per call. Omitting it is a 400 'Invalid entity type'; to see every view, call once per type. An unlisted value is rejected with 422 `{success:false, message:\"Invalid payload\"}` — 422 here, not 400."
           },
           {
             "name": "p",
@@ -15739,13 +15742,7 @@
           "info",
           "id",
           "name",
-          "entity_type",
-          "is_project_level",
-          "filters",
-          "owner",
-          "project_id",
-          "created_at",
-          "updated_at"
+          "is_project_level"
         ],
         "paginated": true,
         "responses": {
@@ -15772,9 +15769,9 @@
         "guidance": [
           "Page with `p`. The previously published `page` parameter is never read — sending it returns page 1 and looks like a successful call.",
           "Page size is fixed at 30 and cannot be changed; there is no per_page or limit here. Walk pages until `info.next` is null.",
-          "The list mixes your private views with the project-level ones; `is_project_level` on each row is the only thing that distinguishes them, and `owner` is who created it.",
+          "The list mixes your private views with the project-level ones. Each row carries only `id`, `name` and `is_project_level` — no owner, entity_type or conditions — and `is_project_level` is the only thing that tells private views from project-wide ones.",
           "An invalid `entity` returns 422, not the 400 the other filter endpoints use for validation failures.",
-          "Unlike reading a single filter, this listing does no custom-field validation and never rewrites anything — use it when you want to inspect filters without altering them.",
+          "Unlike reading a single filter, this listing does no custom-field validation and never rewrites anything — but it does not return a view's conditions either, only its id, name and scope.",
           "Not permission-gated — the filter controller has no RBAC entry."
         ]
       },
@@ -19820,7 +19817,7 @@
               "exploratory_session",
               "test_plan_test_case"
             ],
-            "description": "Required on every update. Resend the filter's existing entity_type; sending a different one repoints the saved view at another list type. An unlisted value returns 400 'Invalid JSON data'."
+            "description": "Required on every update, but not applied: a saved view's list type cannot be changed, and a different value returns success while changing nothing. Resend the filter's existing entity_type. An unlisted value returns 400 'Invalid JSON data'."
           },
           {
             "name": "is_project_level",
@@ -19830,7 +19827,7 @@
           {
             "name": "filters",
             "type": "object",
-            "description": "Replacement condition set. Omit to leave the stored conditions untouched. `{}` is treated as absent, so conditions cannot be cleared to empty through this call."
+            "description": "Replacement condition set, in the same UI filter-state shape as create_filter's `filters` (systemFields option objects, extraSystemFields.issue_type, matchAllMatchAny) — send the whole set, not just the change. Omit to leave the stored conditions untouched. `{}` is treated as absent, so conditions cannot be cleared to empty through this call."
           }
         ],
         "intent": "Rename a saved filter view, replace its conditions, or switch it between private and project-wide — resending name and entity on every call",
@@ -42276,6 +42273,21 @@
           }
         }
       },
+      "FilterListRow": {
+        "type": "object",
+        "description": "One saved view as list_filters returns it: its id, name and scope only.",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "is_project_level": {
+            "type": "boolean"
+          }
+        }
+      },
       "Filter__CreateFilter": {
         "type": "object",
         "description": "Filter as returned by `create_filter`. Composes Filter and adds only the fields this response actually returns, so the shared schema stays correct for its other consumers.\n",
@@ -45141,9 +45153,9 @@
           "properties": {
             "data": {
               "type": "array",
-              "description": "Array of filter objects",
+              "description": "Array of saved views, each carrying only id, name and is_project_level",
               "items": {
-                "$schema": "Filter"
+                "$schema": "FilterListRow"
               }
             },
             "info": {
@@ -49580,7 +49592,7 @@
           "Reports are not versioned and there is no undo. An edit replaces the entire definition — every field you leave out is cleared, and filters you leave out are deleted — and a delete is permanent, silent, and reports success even for an id that never existed.",
           "Whether a report is scheduled is inferred, never declared: it is scheduled exactly when both a cadence and its details are present. Drop either one on an edit and the report stops emailing. Recipients are only stored on a scheduled report.",
           "A report can span up to 60 projects, but only for Test Run Summary, Test Plan Summary, Test Run Detailed, Test Plan Detailed, Test Case Activity, Requirement Traceability and User Workload — and User Workload stops at 5.",
-          "Exporting a report is asynchronous and the finished file never comes back through the API: the export hands over a job channel only. Mailing the report to an address is the only way to obtain the file itself.",
+          "A report file cannot be downloaded through the API: the export call only hands back a job channel, so it is withheld. To get the file, mail it with send_report_email_now (confirm the recipient first — it sends immediately); to work with the figures, read them with get_report_summary_by_type or get_report_detail.",
           "Listing reports is fixed at 30 per page and always newest-first; the page size cannot be changed and asking for a page past the end is an error rather than an empty page.",
           "Requirement Traceability reports have a grain — test case (default) or test plan — fixed when the report is created and refused on any later edit."
         ]

@@ -255,13 +255,12 @@ describe("capability registry, end to end through the server factory", () => {
     expect(tm.shared_terms[0]).toMatchObject({ term: "project", entity: "project" });
     expect(tm.shared_terms[0].means).toMatch(/top-level container/);
 
-    // Load Testing ships no entity descriptions, so its sense of `project` has no
-    // `means`. Absent rather than invented: the question is still askable, just thinner
-    // on one side, and that is a data gap for that product to close.
+    // Load Testing now ships an entity description for every entity, so its sense of
+    // `project` carries a `means` too — the disambiguation reads on both sides.
     const lt = clarify.options.find((o: any) => o.product === "loadtesting");
     expect(lt.summary).toMatch(/Load and performance testing/);
     expect(lt.shared_terms[0].entity).toBe("project");
-    expect(lt.shared_terms[0].means).toBeUndefined();
+    expect(lt.shared_terms[0].means).toMatch(/groups related load tests/);
   });
 
   it("folds plurals on both sides, or the gate misses the case it was built for", async () => {

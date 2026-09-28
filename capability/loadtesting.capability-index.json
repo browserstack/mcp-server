@@ -28,7 +28,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "GetLoadTestPlatformStatusData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -51,7 +64,9 @@
           {
             "name": "limit",
             "type": "integer",
-            "description": "Max items to return (1-100, default 50)."
+            "description": "Max items to return (1-100, default 50).",
+            "minimum": 1,
+            "maximum": 100
           },
           {
             "name": "cursor",
@@ -85,7 +100,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "ListLoadTestProjectsData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -117,7 +145,9 @@
           {
             "name": "limit",
             "type": "integer",
-            "description": "Max items to return (1-100, default 50)."
+            "description": "Max items to return (1-100, default 50).",
+            "minimum": 1,
+            "maximum": 100
           },
           {
             "name": "cursor",
@@ -159,7 +189,8 @@
             "name": "updatedSince",
             "type": "string",
             "description": "ISO-8601 timestamp; only tests updated after it.",
-            "example": "2026-08-01T00:00:00Z"
+            "example": "2026-08-01T00:00:00Z",
+            "format": "date-time"
           }
         ],
         "intent": "List the load tests in a project — use this to find a testId or browse tests, optionally filtered by type, framework, tag or recent activity.",
@@ -177,7 +208,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "ListLoadTestsData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -205,19 +249,23 @@
           {
             "name": "name",
             "type": "string",
-            "description": "Test name to search for (substring match, case-insensitive); required."
+            "description": "Test name to search for (substring match, case-insensitive); required.",
+            "example": "checkout"
           },
           {
             "name": "limit",
             "type": "integer",
-            "description": "Max items to return (1-100, default 50)."
+            "description": "Max items to return (1-100, default 50).",
+            "minimum": 1,
+            "maximum": 100
           }
         ],
         "intent": "Find a load test by name across ALL of the caller's projects — use this to resolve a named test to a testId without knowing which project it is in.",
         "guidance": [
           "Group-scoped: unlike listLoadTests it needs no projectId. Prefer it to resolve a named test in one call instead of paging every project.",
           "Each row carries testId, projectId, name, testType and framework — disambiguate same-named tests in different projects by projectId.",
-          "Returns one row per test (its latest version); the numeric testId is what getLoadTest and startLoadTestRun need."
+          "Returns one row per test (its latest version); the numeric testId is what getLoadTest and startLoadTestRun need.",
+          "hasMore:true means more matches exist beyond the returned limit — there is NO cursor and no page 2; narrow the name query or raise limit to surface them (results are the top matches, not a paginated list)."
         ],
         "returns": [
           "tests",
@@ -225,7 +273,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "SearchLoadTestsData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -284,12 +345,14 @@
             "name": "sinceIso",
             "type": "string",
             "description": "ISO-8601 lower bound.",
-            "example": "2026-08-01T00:00:00Z"
+            "example": "2026-08-01T00:00:00Z",
+            "format": "date-time"
           },
           {
             "name": "untilIso",
             "type": "string",
-            "description": "ISO-8601 upper bound."
+            "description": "ISO-8601 upper bound.",
+            "format": "date-time"
           }
         ],
         "intent": "Show how a project's load-test metrics trend across recent runs — use this for 'is performance getting better or worse across this project?'",
@@ -303,7 +366,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "GetLoadTestProjectTrendsData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -336,7 +412,9 @@
           {
             "name": "limit",
             "type": "integer",
-            "description": "Max items to return (1-100, default 50)."
+            "description": "Max items to return (1-100, default 50).",
+            "minimum": 1,
+            "maximum": 100
           },
           {
             "name": "cursor",
@@ -372,12 +450,14 @@
             "name": "sinceIso",
             "type": "string",
             "description": "ISO-8601 lower bound.",
-            "example": "2026-08-01T00:00:00Z"
+            "example": "2026-08-01T00:00:00Z",
+            "format": "date-time"
           },
           {
             "name": "untilIso",
             "type": "string",
-            "description": "ISO-8601 upper bound."
+            "description": "ISO-8601 upper bound.",
+            "format": "date-time"
           },
           {
             "name": "hadSlaBreach",
@@ -405,7 +485,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "ListProjectLoadTestRunsData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -433,7 +526,9 @@
           {
             "name": "limit",
             "type": "integer",
-            "description": "Max items to return (1-200, default 50)."
+            "description": "Max items to return (1-200, default 50).",
+            "minimum": 1,
+            "maximum": 200
           },
           {
             "name": "minElapsedSec",
@@ -468,7 +563,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "ListActiveLoadTestRunsData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -519,7 +627,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "GetLoadTestRunStatusData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -575,7 +696,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "GetLoadTestInsightSummaryData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -667,12 +801,14 @@
           {
             "name": "sinceIso",
             "type": "string",
-            "description": "ISO-8601 lower bound; slices the report to data in this time window."
+            "description": "ISO-8601 lower bound; slices the report to data in this time window.",
+            "format": "date-time"
           },
           {
             "name": "untilIso",
             "type": "string",
-            "description": "ISO-8601 upper bound for the time-window slice."
+            "description": "ISO-8601 upper bound for the time-window slice.",
+            "format": "date-time"
           }
         ],
         "intent": "Get the full metrics report for a completed run — KPIs, SLA verdicts, per-transaction and error breakdowns. Use this to answer 'how did this run perform?'",
@@ -699,7 +835,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "GetLoadTestRunReportData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -741,7 +890,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "StopLoadTestRunData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -775,7 +937,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "GetLoadTestQuotaData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -799,7 +974,8 @@
             "name": "testId",
             "type": "integer",
             "required": true,
-            "description": "The test to price."
+            "description": "The test to price.",
+            "example": 1234
           },
           {
             "name": "overrides",
@@ -836,7 +1012,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "EstimateLoadTestRunCostData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -860,13 +1049,17 @@
             "name": "baselineRunId",
             "type": "string",
             "required": true,
-            "description": "Run UUID to compare against."
+            "description": "Run UUID to compare against.",
+            "format": "uuid",
+            "example": "6f1d2c9a-7b3e-4a10-9c22-0e5f8a1b2c3d"
           },
           {
             "name": "candidateRunId",
             "type": "string",
             "required": true,
-            "description": "Run UUID being evaluated; must differ from baselineRunId."
+            "description": "Run UUID being evaluated; must differ from baselineRunId.",
+            "format": "uuid",
+            "example": "b2e4f6a8-1c3d-4e5f-8a90-2b4c6d8e0f11"
           },
           {
             "name": "dimensions",
@@ -916,7 +1109,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "CompareLoadTestRunsData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -941,7 +1147,8 @@
             "type": "string",
             "required": true,
             "maxLength": 255,
-            "description": "Test name. Max 255 characters — truncate before sending; a longer name is rejected with a 400."
+            "description": "Test name. Max 255 characters — truncate before sending; a longer name is rejected with a 400.",
+            "example": "checkout-baseline"
           },
           {
             "name": "testType",
@@ -1043,7 +1250,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "CreateLoadTestData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -1125,7 +1345,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "StartLoadTestRunData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -1158,7 +1391,9 @@
           {
             "name": "limit",
             "type": "integer",
-            "description": "Max items to return (1-100, default 50)."
+            "description": "Max items to return (1-100, default 50).",
+            "minimum": 1,
+            "maximum": 100
           },
           {
             "name": "cursor",
@@ -1178,12 +1413,14 @@
           {
             "name": "sinceIso",
             "type": "string",
-            "description": "ISO-8601 lower bound."
+            "description": "ISO-8601 lower bound.",
+            "format": "date-time"
           },
           {
             "name": "untilIso",
             "type": "string",
-            "description": "ISO-8601 upper bound."
+            "description": "ISO-8601 upper bound.",
+            "format": "date-time"
           },
           {
             "name": "verdict",
@@ -1222,7 +1459,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "ListLoadTestRunsData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -1285,12 +1535,14 @@
           {
             "name": "sinceIso",
             "type": "string",
-            "description": "ISO-8601 lower bound."
+            "description": "ISO-8601 lower bound.",
+            "format": "date-time"
           },
           {
             "name": "untilIso",
             "type": "string",
-            "description": "ISO-8601 upper bound."
+            "description": "ISO-8601 upper bound.",
+            "format": "date-time"
           }
         ],
         "intent": "Show how one test's metrics trend across its recent runs — use this for 'is this test getting slower over time?'",
@@ -1304,7 +1556,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "GetLoadTestHistoricalTrendsData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -1345,7 +1610,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "GetLoadTestMetricsManifestData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -1388,7 +1666,8 @@
           {
             "name": "ifVersion",
             "type": "string",
-            "description": "Optimistic-concurrency guard (ISO timestamp of the version being edited)."
+            "description": "Optimistic-concurrency guard (ISO timestamp of the version being edited).",
+            "format": "date-time"
           },
           {
             "name": "validationToken",
@@ -1424,7 +1703,8 @@
           "config is a partial update, but each field it carries REPLACES that field wholesale — it does not merge. tags overwrites the entire tag set; it does not append. To add a tag to a test (or the same tag across several tests), getLoadTest each one first and send the union under config.tags.",
           "To change the load profile, send config.loadProfile plus that profile's fields (see createLoadTest's load-profile guidance for the four shapes). Switching profiles clears the previous profile's fields — e.g. ramping→throughput empties the stages and drops iterations. iterations and throughput are PLU-only.",
           "To tag a specific RUN rather than the test, pass runId (a run UUID from listLoadTestRuns) together with config.tags — the tags apply to that one run and the saved test is untouched. A run inherits the test's tags until you set its own; setting run tags overrides (they also replace wholesale, so send the union to add). Omit runId to tag the test itself.",
-          "Tags live on the load test, not on its runs — there is no per-run tagging, so do not touch runs when asked to tag a test. To tag every test in a project, list them with listLoadTests and page through with cursor until hasMore is false, then updateLoadTest each one — do not stop after the first page or a subset."
+          "Tags live on the load test, not on its runs — there is no per-run tagging, so do not touch runs when asked to tag a test. To tag every test in a project, list them with listLoadTests and page through with cursor until hasMore is false, then updateLoadTest each one — do not stop after the first page or a subset.",
+          "Optimistic concurrency is opt-in: pass ifVersion (the version token from a prior get/create/update) so the edit fails with 409 CONFLICT if the test changed meanwhile; OMITTING ifVersion is a last-write-wins update that overwrites any concurrent change."
         ],
         "returns": [
           "testId",
@@ -1432,7 +1712,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "UpdateLoadTestData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -1494,7 +1787,20 @@
         ],
         "responses": {
           "200": {
-            "$response": "Success"
+            "schema": {
+              "allOf": [
+                {
+                  "$schema": "SuccessEnvelope"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$schema": "GetLoadTestData"
+                    }
+                  }
+                }
+              ]
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -1549,6 +1855,342 @@
           "success",
           "error"
         ]
+      },
+      "GetLoadTestPlatformStatusData": {
+        "type": "object",
+        "properties": {
+          "platformState": {
+            "type": "string"
+          },
+          "components": {
+            "type": "array"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ListLoadTestProjectsData": {
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        }
+      },
+      "ListLoadTestsData": {
+        "type": "object",
+        "properties": {
+          "tests": {
+            "type": "array"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        }
+      },
+      "SearchLoadTestsData": {
+        "type": "object",
+        "properties": {
+          "tests": {
+            "type": "array"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
+      "GetLoadTestProjectTrendsData": {
+        "type": "object",
+        "properties": {
+          "metrics": {
+            "description": "Trend series payload; shape per getLoadTestMetricsManifest."
+          }
+        }
+      },
+      "ListProjectLoadTestRunsData": {
+        "type": "object",
+        "properties": {
+          "runs": {
+            "type": "array"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        }
+      },
+      "ListActiveLoadTestRunsData": {
+        "type": "object",
+        "properties": {
+          "runs": {
+            "type": "array"
+          }
+        }
+      },
+      "GetLoadTestRunStatusData": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "elapsedSec": {
+            "type": "number"
+          },
+          "remainingSec": {
+            "type": "number"
+          },
+          "pollAfterSeconds": {
+            "type": "number"
+          },
+          "slaBreachFlags": {
+            "type": "array"
+          }
+        }
+      },
+      "GetLoadTestInsightSummaryData": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "report": {
+            "type": "object"
+          }
+        }
+      },
+      "GetLoadTestRunReportData": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "testType": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "testName": {
+            "type": "string"
+          },
+          "durationSec": {
+            "type": "number"
+          },
+          "kpis": {
+            "type": "object"
+          },
+          "slaVerdicts": {
+            "type": "array"
+          },
+          "transactions": {
+            "type": "array"
+          },
+          "errorsByCategory": {
+            "type": "object"
+          },
+          "meta": {
+            "type": "object"
+          }
+        }
+      },
+      "StopLoadTestRunData": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "stoppedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GetLoadTestQuotaData": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "object"
+          },
+          "vuHours": {
+            "type": "object"
+          },
+          "concurrency": {
+            "type": "object"
+          }
+        }
+      },
+      "EstimateLoadTestRunCostData": {
+        "type": "object",
+        "properties": {
+          "estimatedVuHours": {
+            "type": "number"
+          },
+          "estimationBasis": {
+            "type": "string"
+          },
+          "rangeBasis": {
+            "type": "string"
+          },
+          "rangeExplanation": {
+            "type": "string"
+          },
+          "fitsInQuota": {
+            "type": "boolean"
+          },
+          "remainingAfterEstimate": {
+            "type": "number"
+          }
+        }
+      },
+      "CompareLoadTestRunsData": {
+        "type": "object",
+        "properties": {
+          "kpiDeltas": {
+            "description": "Per-KPI baseline→candidate deltas."
+          },
+          "transactionDeltas": {
+            "type": "array"
+          }
+        }
+      },
+      "CreateLoadTestData": {
+        "type": "object",
+        "properties": {
+          "testId": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          },
+          "dashboardLink": {
+            "type": "string"
+          }
+        }
+      },
+      "StartLoadTestRunData": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dashboardLink": {
+            "type": "string"
+          },
+          "estimatedVuHoursRange": {
+            "description": "Low/high VU-hour estimate for the started run."
+          }
+        }
+      },
+      "ListLoadTestRunsData": {
+        "type": "object",
+        "properties": {
+          "runs": {
+            "type": "array"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        }
+      },
+      "GetLoadTestHistoricalTrendsData": {
+        "type": "object",
+        "properties": {
+          "metrics": {
+            "description": "Trend series payload; shape per getLoadTestMetricsManifest."
+          }
+        }
+      },
+      "GetLoadTestMetricsManifestData": {
+        "type": "object",
+        "properties": {
+          "testType": {
+            "type": "string"
+          },
+          "metrics": {
+            "type": "array"
+          },
+          "aliases": {
+            "type": "object"
+          }
+        }
+      },
+      "UpdateLoadTestData": {
+        "type": "object",
+        "properties": {
+          "testId": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "GetLoadTestData": {
+        "type": "object",
+        "properties": {
+          "testId": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "testType": {
+            "type": "string"
+          },
+          "framework": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "integer"
+          },
+          "ownerUserId": {
+            "type": "integer"
+          },
+          "config": {
+            "type": "object"
+          }
+        }
       }
     },
     "responses": {
@@ -1613,6 +2255,7 @@
       "loadTest": {
         "entity": "loadTest",
         "title": "Load Test",
+        "description": "A saved load-test configuration (framework, script, load profile and thresholds); addressed by a numeric testId. Runs are executions of it.",
         "aliases": [
           "test",
           "load test",
@@ -1652,6 +2295,7 @@
       "run": {
         "entity": "run",
         "title": "Run",
+        "description": "A single execution of a load test; addressed by runId (a UUID, also called jobId). Carries status, metrics and a report.",
         "aliases": [
           "execution",
           "job",
@@ -1690,6 +2334,7 @@
       "project": {
         "entity": "project",
         "title": "Project",
+        "description": "A container that groups related load tests under a group/account; addressed by a numeric projectId.",
         "aliases": [
           "project",
           "workspace",
@@ -1715,6 +2360,7 @@
       "report": {
         "entity": "report",
         "title": "Run Report",
+        "description": "The results of a completed run (KPIs, SLA verdicts, per-transaction rows, error breakdown); addressed by the run's runId.",
         "aliases": [
           "report",
           "result",
@@ -1742,6 +2388,7 @@
       "insight": {
         "entity": "insight",
         "title": "AI Insight",
+        "description": "AI-generated analysis of a completed run (root cause and recommendations); addressed by the run's runId, and may be pending until generated.",
         "aliases": [
           "insight",
           "ai insight",
@@ -1768,6 +2415,7 @@
       "trend": {
         "entity": "trend",
         "title": "Historical Trend",
+        "description": "Historical time-series of a metric across a test's or project's runs; scoped by testId or projectId, not independently identified.",
         "aliases": [
           "trend",
           "trends",
@@ -1800,6 +2448,7 @@
       "quota": {
         "entity": "quota",
         "title": "Quota & Cost",
+        "description": "The caller's VU-hour entitlement, usage and concurrency limits; account/group-scoped, with no id.",
         "aliases": [
           "quota",
           "vu hours",
@@ -1829,6 +2478,7 @@
       "metrics": {
         "entity": "metrics",
         "title": "Metrics Manifest",
+        "description": "The per-testType catalogue of available metric names, @-aliases and groupBy dimensions; a manifest, not an instance.",
         "aliases": [
           "metric",
           "metrics",
@@ -1856,6 +2506,7 @@
       "platform": {
         "entity": "platform",
         "title": "Platform Status",
+        "description": "Health status of the Load Testing service and its dependencies; a singleton probe with no id.",
         "aliases": [
           "platform",
           "status",

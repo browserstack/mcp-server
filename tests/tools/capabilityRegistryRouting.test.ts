@@ -53,25 +53,26 @@ describe("routing between products", () => {
     // project. The only other way to find out is describeEntity, once per entity — for
     // tm that is 19 calls at ~1.4KB each, paid exactly when the agent is least oriented.
     const vocab = vocabularyOf(BOTH);
-    const described = vocab[tm.name].filter((e) => e.description);
-    expect(described.length).toBe(vocab[tm.name].length);
+    // Both products now author an entity description for every entity — the field
+    // listProducts routes on. (loadtesting previously shipped 9 entities with 0
+    // descriptions; that gap is closed.)
+    for (const product of [tm, lt]) {
+      const entries = vocab[product.name];
+      const described = entries.filter((e) => e.description);
+      expect(described.length, product.name).toBe(entries.length);
 
-    for (const entry of described) {
-      // One line, capped by the build. Long enough to define, short enough that every
-      // entity of every product can travel on one listProducts call.
-      expect(entry.description!.length, entry.entity).toBeLessThanOrEqual(140);
-      // A definition, not a restatement of the name: `tag: "tag"` would pass a presence
-      // check and teach nothing.
-      expect(
-        entry.description!.toLowerCase().replace(/[^a-z]/g, ""),
-        entry.entity,
-      ).not.toBe(entry.entity.replace(/[^a-z]/g, ""));
+      for (const entry of described) {
+        // One line, capped by the build. Long enough to define, short enough that every
+        // entity of every product can travel on one listProducts call.
+        expect(entry.description!.length, entry.entity).toBeLessThanOrEqual(140);
+        // A definition, not a restatement of the name: `tag: "tag"` would pass a presence
+        // check and teach nothing.
+        expect(
+          entry.description!.toLowerCase().replace(/[^a-z]/g, ""),
+          entry.entity,
+        ).not.toBe(entry.entity.replace(/[^a-z]/g, ""));
+      }
     }
-
-    // Absent, not empty, where a product has not authored them. loadtesting ships 9
-    // entities and 0 descriptions today; that has to read as "unwritten" rather than as
-    // a build that produced nothing.
-    expect(vocab[lt.name].every((e) => e.description === undefined)).toBe(true);
   });
 
   it("answers within one product, so size cannot decide the answer", () => {

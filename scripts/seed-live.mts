@@ -74,6 +74,25 @@ const USERNAME =
 const ACCESS_KEY =
   process.env.TM_LIVE_ACCESS_KEY ?? process.env.BROWSERSTACK_ACCESS_KEY;
 
+/**
+ * The account, shortened for printing.
+ *
+ * The username is not a secret on its own, but it is half of the
+ * `Api-Token: <username>:<access_key>` pair this surface authenticates with, and stdout
+ * here reaches CI logs, terminal scrollback and screen shares — all read by more people
+ * than the shell that set the variable. Enough survives to tell two accounts apart, which
+ * is the only thing the caller needs from it.
+ *
+ * The POOL FILE keeps the full value: it is gitignored, and knowing which account seeded a
+ * fixture is exactly what you need when a probe result looks wrong.
+ */
+function maskedAccount(account = USERNAME): string {
+  if (!account) return "(unset)";
+  return account.length <= 6
+    ? `${account.slice(0, 2)}…`
+    : `${account.slice(0, 3)}…${account.slice(-2)}`;
+}
+
 interface Pool {
   env: string;
   account: string;
@@ -220,7 +239,7 @@ async function main() {
     return;
   }
 
-  console.log(`seeding ${ENV} as ${USERNAME}\n`);
+  console.log(`seeding ${ENV} as ${maskedAccount()}\n`);
 
   // 1. FIND OR CREATE the fixture project.
   const projects = await call("list_projects");
@@ -601,7 +620,8 @@ async function main() {
   mkdirSync(`${ROOT}tests/live`, { recursive: true });
   writeFileSync(POOL, JSON.stringify(pool, null, 2) + "\n");
   console.log(`\npool -> tests/live/.id-pool.json`);
-  console.log(JSON.stringify(pool, null, 2));
+  // The file above holds the real account; what gets printed does not.
+  console.log(JSON.stringify({ ...pool, account: maskedAccount() }, null, 2));
 }
 
 main().catch((error) => die("unexpected", error?.stack ?? String(error)));

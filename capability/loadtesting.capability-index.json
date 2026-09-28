@@ -1098,15 +1098,21 @@
             "description": "Minimum percent change to include."
           }
         ],
-        "intent": "Compare two completed runs and surface the deltas — use this for 'did this run regress vs the baseline?'",
+        "intent": "Compare two completed runs of the SAME test and surface the deltas — the regression check ('did this run regress vs the baseline?'). Comparing runs of different tests is allowed but flagged in warnings as potentially misleading.",
         "guidance": [
           "baselineRunId and candidateRunId are run UUIDs and must differ; both runs must be terminal.",
           "regressedOnly + pctChangeMin filter to material regressions; dimensions accepts kpi, transaction, sla.",
-          "Use this to compare two runs — it returns per-KPI and per-transaction deltas directly. Do not fetch both run reports and diff them yourself."
+          "Use this to compare two runs — it returns per-KPI and per-transaction deltas directly. Do not fetch both run reports and diff them yourself.",
+          "Prefer two runs of the SAME test (pick both from listLoadTestRuns for one testId). baseline.testId and candidate.testId tell you whether they match.",
+          "Always check warnings before reporting the result: it flags different-test comparisons ('runs are of different tests — comparison may be misleading'), differing SLA definitions, and non-terminal runs. Surface any warning to the user — a cross-test delta can be meaningless."
         ],
         "returns": [
+          "baseline",
+          "candidate",
           "kpiDeltas",
-          "transactionDeltas"
+          "transactionDeltas",
+          "slaVerdictChanges",
+          "warnings"
         ],
         "responses": {
           "200": {
@@ -2068,11 +2074,52 @@
       "CompareLoadTestRunsData": {
         "type": "object",
         "properties": {
+          "baseline": {
+            "type": "object",
+            "properties": {
+              "runId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "testId": {
+                "type": "integer"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "candidate": {
+            "type": "object",
+            "properties": {
+              "runId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "testId": {
+                "type": "integer"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
           "kpiDeltas": {
             "description": "Per-KPI baseline→candidate deltas."
           },
           "transactionDeltas": {
             "type": "array"
+          },
+          "slaVerdictChanges": {
+            "type": "array"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

@@ -83,6 +83,19 @@ export const RELAY_OFF_DETAILS: Record<string, string> = {
     "the account, not a problem with your credentials and not a decision anyone made about " +
     "your request.",
 
+  // THE ONE CASE WHERE WE DO NOT KNOW. The decision was put on the wire and the reply
+  // never came back — a timeout, or a proxy cutting an idle connection. Since the
+  // converged gate the decision request carries the whole continuation, so "no reply"
+  // spans everything from "it never arrived" to "the write succeeded and we lost the
+  // answer". `not_reached` claims the first of those, which is exactly the claim that
+  // gets a write done twice, so this exists to stop the two being collapsed.
+  outcome_unknown:
+    "THE ANSWER WAS DELIVERED BUT ITS OUTCOME IS UNKNOWN. The approval reached " +
+    "BrowserStack and the reply was lost before it came back, so the step may or may " +
+    "not have completed. DO NOT repeat this task — a retry could perform the same " +
+    "change a second time. Check the state in the product, and only then decide " +
+    "whether anything still needs doing.",
+
   // The request never got as far as the agent. Distinct from `disabled` (the agent ran, with
   // the relay switched off) and from a decline (someone was asked and said no), because the
   // three call for completely different things from whoever reads them.
@@ -483,10 +496,6 @@ function relayVerdict(
       detail: RELAY_OFF_DETAILS.not_reached,
     };
   }
-  // `remote_mode` IS GONE, and with it the sentence "this hosted server has no way to
-  // put an approval prompt in front of you". It now has one: the hosted deployment
-  // defers unconditionally. Keeping the message would have told users to go and run
-  // the server locally to get something they already have.
   if (mode === "no_human") {
     // CONTRACT §7's last row: no elicitation capability means the field was never sent.
     return {

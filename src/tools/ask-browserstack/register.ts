@@ -62,7 +62,9 @@ import {
 } from "./stream.js";
 import type { AgentStreamTransport, DeferredTransport } from "./stream.js";
 import {
+  decisionUnknown,
   incompleteResume,
+  missingQuery,
   parkedResult,
   resumeFailed,
   runDeferred,
@@ -140,9 +142,10 @@ const DESCRIPTION =
   "predictable than handing the job to an agent. " +
   "Otherwise, describe what you want in plain language and BrowserStack's agent decides " +
   "which calls to make, then returns its answer plus the steps it took. Anything that would " +
-  "change data pauses and asks you to confirm it first, in your own client; deletes are " +
-  "refused outright. If your client cannot show you a prompt, the run is read-only and " +
-  "everything it wanted to change comes back in `needs_approval` instead. One task per call.";
+  "change data pauses and asks you to confirm it first; deletes are refused outright. " +
+  "Put that confirmation to the user and answer with what THEY say — never decide on " +
+  "their behalf. If it cannot be put to anyone, the run is read-only and everything it " +
+  "wanted to change comes back in `needs_approval` instead. One task per call.";
 
 /**
  * `isError` marks a call that FAILED, not one that was refused.
@@ -257,36 +260,6 @@ async function relayOneAsk(
 }
 
 /**
- * Decide whether to offer the approval channel at all.
- *
- * STDIO ALWAYS. HOSTED ONLY WHEN ITS OPERATOR OPTS IN — and the reason is a property of
- * the HOST, not of this tool.
- *
- * Elicitation is a SERVER-INITIATED message whose answer arrives on a SEPARATE POST. A
- * stateless host builds a fresh `McpServer` per POST, so that answer reaches an instance
- * which never asked anything, while the one actually suspended on `await` waits out its
- * timeout. Nothing in this package can fix that; what it holds is a live Promise resolver
- * and a paused function in the host's heap, and a paused call cannot be moved.
- *
- * This is why `841c6358` was right to remove sessions from the hosted server on the
- * grounds that "we use neither server-initiated messages nor subscriptions/sampling" —
- * this feature is the exception that commit did not have to consider.
- *
- * MEASURED, not assumed: with the host keeping one server per session
- * (browserstack/remote-mcp-server#96), a tool call and its elicitation answer were served
- * by the same instance over hosted Streamable HTTP, and the relay completed. So the
- * refusal below is now conditional rather than absolute.
- *
- * It stays OFF by default because it depends on a deployment property this package cannot
- * observe. A hosted operator turns it on only once their host keeps sessions AND pins a
- * session to a pod — sessions are per-process, so without affinity the answer POST can
- * land on a replica that has never seen it. That failure is intermittent and reads like a
- * client bug, which is exactly why it must not be the default.
- *
- * When refused, Atlas runs read-only — a supported path that already works — and
- * `permission_relay.reason` names the reason so nobody mistakes it for a human's no.
- */
-/**
  * CONTRACT v2 (A1) — drive one run over the stream.
  *
  * The loop is the whole orchestration: read events, elicit on each `permission`, POST
@@ -322,6 +295,95 @@ async function runStreamed(
   // the real status — `relay.ts` needs it to tell 401 from 403 from a plain failure.
   let resultStatus = 200;
   let pending: PermissionAsk | null = null;
+  // Set once a decision reply carries the run, which only a converged Atlas does. When
+  // it is set it is the authoritative outcome and the stream's own `result` is stale.
+  let carried: { status: number; body: unknown } | null = null;
+
+  /**
+   * Put ONE ask to the human and deliver their answer. Shared by both loops so the two
+   * servers cannot drift apart in how an approval is asked for or recorded.
+   *
+   * Returns exactly one of:
+   *   `terminal` — stop, with this result (a lost reply, or a run that is not there).
+   *   `carried`  — the reply contained the run: `next` is the following ask, if any.
+   *   neither    — a bare 204; this server continues on the stream.
+   */
+  const answerAsk = async (
+    ask: PermissionAsk,
+  ): Promise<{
+    terminal?: AskResult;
+    carried?: boolean;
+    next?: PermissionAsk | null;
+    response?: { status: number; body: unknown };
+  }> => {
+    // `relayOneAsk` RETHROWS on an unexpected elicitation failure. Letting it escape
+    // would abandon the run and leave Atlas parked until its gate expires — turning a
+    // client hiccup into a five-minute stall — so it is caught and converted into the
+    // explicit deny the throw used to imply. `relayOneAsk` has already recorded the
+    // approvals entry, so only the wire decision is missing.
+    let decision: PermissionDecision;
+    try {
+      decision = await relayOneAsk(server, ask, approvals, relatedRequestId);
+    } catch (error) {
+      logger.warn(
+        "askBrowserStackAI: elicitation failed, denying explicitly: %s",
+        error instanceof Error ? error.message : String(error),
+      );
+      decision = { perm_id: ask.perm_id, decision: "deny", reason: "error" };
+    }
+
+    let response: { status: number; body: unknown };
+    try {
+      response = await postTransport(decisionUrl(url, runId), headers, {
+        perm_id: decision.perm_id,
+        decision: decision.decision,
+        reason: decision.reason || "",
+        product,
+      });
+    } catch {
+      // This request can carry the continuation, so a lost reply is NOT "nothing
+      // happened". Letting it reach the outer catch would report `not_reached` — which
+      // says nothing was changed — for a write that may well have landed.
+      logger.warn(
+        "askBrowserStackAI: no reply to the decision on run %s; outcome unknown",
+        runId,
+      );
+      return { terminal: decisionUnknown() };
+    }
+
+    if (response.status === 404) {
+      // No such parked run: expired, already answered, or not ours. None of those is
+      // an approval and none of them changed anything — but a denial we could not
+      // deliver is not a denial either, so say which.
+      return {
+        terminal: resumeFailed(
+          "That approval could not be applied (HTTP 404). The run may have expired — " +
+            "BrowserStack AI stops waiting after five minutes — or it may already " +
+            "have been answered. Nothing was changed beyond any step you already " +
+            "approved.",
+        ),
+      };
+    }
+    // 204 MEANS AN OLDER SERVER: it acknowledged the decision and is continuing on the
+    // stream, so there is no continuation to read here and nothing to supersede.
+    if (response.status === 204) return {};
+
+    const parked = parkedResult(response.body, product);
+    return {
+      carried: true,
+      response,
+      // Another ask: the task needs more than one approval, and each is a separate
+      // question for the human.
+      next: parked
+        ? ({
+            perm_id: parked.ask.perm_id,
+            description: parked.ask.description,
+            product: parked.ask.product,
+            mode: parked.ask.mode,
+          } as PermissionAsk)
+        : null,
+    };
+  };
 
   // PHASE 1 — the start, streamed. Kept a stream rather than folded into the decision
   // loop below because a long turn needs the heartbeats: a proxy that gives up
@@ -357,75 +419,54 @@ async function runStreamed(
       );
       continue;
     }
-    pending = ask;
+    // ANSWERED HERE, ON THE STREAM, and that placement is a compatibility decision
+    // rather than a preference.
+    //
+    // A converged Atlas emits its asks as the stream ENDS and carries the run forward
+    // on the decision request. An Atlas that predates that holds the stream OPEN
+    // waiting for the decision to arrive, and acknowledges it with a bare 204 before
+    // continuing on the same socket. Collecting asks and answering only after the
+    // stream closed worked against the first and DEADLOCKED against the second: both
+    // sides waited, until the server's own five-minute gate denied the ask and the
+    // user got a refusal nobody made.
+    //
+    // Answering as each ask arrives works against both, and the reply says which one
+    // we are talking to: a 204 carries nothing, so the run continues on the stream,
+    // while anything else IS the continuation and the stream is already over. That
+    // removes the deploy ordering constraint in both directions — this client is safe
+    // to publish before or after the server changes.
+    const answered = await answerAsk(ask);
+    if (answered.terminal) return answered.terminal;
+    if (answered.carried) {
+      // The reply carried the run: a converged Atlas. Anything still on the stream is
+      // the tail of a response that has already been superseded by this one.
+      pending = answered.next ?? null;
+      carried = answered.response ?? null;
+      break;
+    }
+    // A bare 204: this server continues on the stream, so keep reading it.
   }
 
-  // PHASE 2 — answer, and keep answering. The stream ENDED at the park: Atlas's ask is
-  // in its checkpoint, not in a coroutine waiting on this socket, so the run is carried
-  // forward by the decision request itself and its reply is either the next ask or the
-  // finished run.
-  //
-  // This is what used to be a POST in the middle of phase 1, whose 204 was acknowledged
-  // and whose outcome was expected to arrive on the same stream. That could not survive
-  // the ask moving into the checkpoint, and the shape it becomes is the deferred one —
-  // the only difference being who supplies the decision.
+  // PHASE 2 — only reachable against a converged Atlas, where the decision reply IS the
+  // run. Each further ask comes back in a reply rather than on the stream, so the
+  // prompt-and-post pair repeats here instead of in the loop above.
   while (pending) {
-    // `relayOneAsk` RETHROWS on an unexpected elicitation failure. Letting it escape
-    // would abandon the run and leave Atlas parked until its gate expires — turning a
-    // client hiccup into a five-minute stall — so it is caught and converted into the
-    // explicit deny the throw used to imply. `relayOneAsk` has already recorded the
-    // approvals entry, so only the wire decision is missing.
-    let decision: PermissionDecision;
-    try {
-      decision = await relayOneAsk(
-        server,
-        pending,
-        approvals,
-        relatedRequestId,
-      );
-    } catch (error) {
-      logger.warn(
-        "askBrowserStackAI: elicitation failed, denying explicitly: %s",
-        error instanceof Error ? error.message : String(error),
-      );
-      decision = {
-        perm_id: pending.perm_id,
-        decision: "deny",
-        reason: "error",
-      };
+    const answered = await answerAsk(pending);
+    if (answered.terminal) return answered.terminal;
+    if (!answered.carried) {
+      // A 204 cannot arise here: only a converged Atlas reaches phase 2, and it always
+      // replies with the continuation. Treated as a run that ended without saying
+      // anything rather than assumed away.
+      break;
     }
-
-    const response = await postTransport(decisionUrl(url, runId), headers, {
-      perm_id: decision.perm_id,
-      decision: decision.decision,
-      reason: decision.reason || "",
-      product,
-    });
-    if (response.status === 404) {
-      // No such parked run: expired, already answered, or not ours. None of those is
-      // an approval and none of them changed anything — but a denial we could not
-      // deliver is not a denial either, so say which.
-      return resumeFailed(
-        "That approval could not be applied (HTTP 404). The run may have expired — " +
-          "BrowserStack AI stops waiting after five minutes — or it may already have " +
-          "been answered. Nothing was changed beyond any step you already approved.",
-      );
-    }
-
-    const parked = parkedResult(response.body, product);
-    if (parked) {
-      // Another ask: the task needs more than one approval, and each one is a separate
-      // question for the human.
-      pending = {
-        perm_id: parked.ask.perm_id,
-        description: parked.ask.description,
-        product: parked.ask.product,
-        mode: parked.ask.mode,
-      } as PermissionAsk;
-      continue;
-    }
-    return buildResult(response, approvals, mode, product);
+    pending = answered.next ?? null;
+    carried = answered.response ?? null;
   }
+
+  // The decision reply supersedes the stream's own `result`, which said "needs
+  // approval" — true when it was written, and the question it asked has since been
+  // answered.
+  if (carried) return buildResult(carried, approvals, mode, product);
 
   if (!sawResult) {
     return errorResult(
@@ -513,8 +554,15 @@ export function addAskBrowserStackAITool(
           "Which product to work in: tm (Test Management), " +
             "tra (Test Reporting & Analytics).",
         ),
+      // OPTIONAL, because a resume does not carry one. `next_step` tells the model to
+      // call again "with exactly these params" — `product`, `run_id`, `perm_id`,
+      // `decision` — and a required `query` made following that instruction literally
+      // fail schema validation before the handler ever ran. It is still required to
+      // START a run; the handler enforces that, where a useful message can be given
+      // instead of an InvalidParams from the SDK.
       query: z
         .string()
+        .optional()
         .describe("What you want, in plain language. One thing per call."),
       // --- resuming a parked run (the hosted, deferred path only) ---
       //
@@ -526,25 +574,15 @@ export function addAskBrowserStackAITool(
       run_id: z
         .string()
         .optional()
-        .describe(
-          "Only when continuing a previous call that returned " +
-            'status "needs_approval": the `run_id` it gave you. Send `decision` too.',
-        ),
+        .describe("`run_id` from a needs_approval result."),
       perm_id: z
         .string()
         .optional()
-        .describe(
-          "The `perm_id` the previous call returned, naming WHICH approval this " +
-            "answers. Send it with `run_id` and `decision`.",
-        ),
+        .describe("`perm_id` from that same result."),
       decision: z
         .enum(["allow", "deny"])
         .optional()
-        .describe(
-          "Your answer to the approval that previous call returned, once the user " +
-            "has told you which it is. Requires `run_id` and `perm_id`. " +
-            "Never assume allow — ask the user.",
-        ),
+        .describe("The user's answer. Never assume allow — ask them."),
     },
     {
       // It can write now, which is the whole point of the relay. Destructive operations
@@ -575,24 +613,17 @@ export function addAskBrowserStackAITool(
         // lazily mid-call would put a token round-trip inside the window where a human is
         // being prompted, and a mint that failed there would strand an open port.
         const headers = agentHeaders(await deps.mintToken());
-        const body: AgentRequest = { task: query, product };
-
-        // Attribution, and now belt-and-braces rather than the source of truth: the minted
-        // JWT is user-attested, so Atlas sets `principal_verified=True` and takes the acting
-        // user from signed claims instead of this field. It is still sent because it is part
-        // of the frozen wire format (CONTRACT v1.2 §3) and dropping it would be a one-sided
-        // change — but nothing should trust it, and Atlas no longer does.
-        // Omitted ENTIRELY when unset, never sent as "".
-        const username = (deps.credentialsFor().username || "").trim();
-        if (username) body.user_id = username;
 
         // RESUMING a parked run: no new run, no task — just the decision and the
-        // remainder. Checked before anything else because the arguments are mutually
-        // exclusive with starting one, and a caller that sent both meant to resume.
+        // remainder. FIRST, because the arguments are mutually exclusive with starting
+        // one and a caller that sent both meant to resume — and because `query` is not
+        // required on this path, so nothing above may depend on it.
         if (run_id) {
           if (!perm_id || !decision) {
             return toResult(incompleteResume());
           }
+          // A `query` sent here is ignored rather than rejected: the run's task is in
+          // Atlas's checkpoint, so a model that resent it is redundant, not wrong.
           return toResult(
             await runResumed(
               url,
@@ -608,6 +639,23 @@ export function addAskBrowserStackAITool(
             ),
           );
         }
+
+        // STARTING one, which is the only path that needs a task. Enforced here rather
+        // than in the schema so the model gets a sentence it can act on instead of an
+        // SDK InvalidParams — and so `next_step`, which omits `query`, stays valid.
+        if (!query || !query.trim()) {
+          return toResult(missingQuery());
+        }
+        const body: AgentRequest = { task: query, product };
+
+        // Attribution, and now belt-and-braces rather than the source of truth: the minted
+        // JWT is user-attested, so Atlas sets `principal_verified=True` and takes the acting
+        // user from signed claims instead of this field. It is still sent because it is part
+        // of the frozen wire format (CONTRACT v1.2 §3) and dropping it would be a one-sided
+        // change — but nothing should trust it, and Atlas no longer does.
+        // Omitted ENTIRELY when unset, never sent as "".
+        const username = (deps.credentialsFor().username || "").trim();
+        if (username) body.user_id = username;
 
         // DEFERRED: the hosted shape. One request, one JSON answer, nothing held open
         // while a human decides — see `deferred.ts` for why that matters here and why

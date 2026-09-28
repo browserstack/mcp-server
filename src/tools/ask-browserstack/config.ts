@@ -39,25 +39,6 @@ export function isEnabled(): boolean {
 }
 
 /**
- * May the relay be offered in the hosted (`REMOTE_MCP`) deployment?
- *
- * OFF BY DEFAULT, because it depends on something outside this package: the host has to
- * keep one `McpServer` alive per session. Stateless hosts build a fresh server per POST,
- * and an elicitation answer — which arrives as a SEPARATE POST — then reaches an instance
- * that never asked anything, leaving the real one suspended until it times out. So this
- * must stay opt-in per deployment rather than become a default that silently hangs.
- *
- * Turning it on does NOT force the relay on: `relayMode` still asks whether THIS client
- * declared the `elicitation` capability, and a client that did not still gets a read-only
- * run. This flag only removes the blanket refusal.
- */
-// `allowRemoteRelay` IS GONE. It gated the relay on the hosted deployment while
-// relaying meant elicitation — a guard against switching on the thing that pinned an
-// McpServer per session. Deferred holds no sessions, so the hazard it guarded no
-// longer exists, and read at boot it was the weaker of the kill switches anyway:
-// `isEnabled` above is read per call and needs no pod roll.
-
-/**
  * ============================================================================
  * PRODUCTION DEFAULTS
  * ============================================================================

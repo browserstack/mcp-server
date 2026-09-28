@@ -56,17 +56,16 @@ export const EVENT_RUN = "run";
 export const EVENT_PERMISSION = "permission";
 export const EVENT_RESULT = "result";
 
-/** Atlas's `f"perm-{uuid.uuid4().hex}"`, and nothing else. */
 /**
  * The wire version this client speaks, sent in `permission_relay`. See
  * `PermissionRelay.contract` for why Atlas cannot infer it.
  *
  * Bump only when a change leaves an older client unable to COMPLETE the exchange —
- * not merely unaware of a new field. Bumped once so far, for the converged gate, which
- * made the decision request carry the run forward.
+ * not merely unaware of a new field.
  */
 export const RELAY_CONTRACT = 2;
 
+/** Atlas's `f"perm-{uuid.uuid4().hex}"`, and nothing else. */
 export const PERM_ID_PATTERN = /^perm-[0-9a-f]{32}$/;
 
 /**
@@ -111,18 +110,9 @@ export function parseAsk(data: unknown): PermissionAsk | null {
 export type AgentStreamTransport = (
   url: string,
   headers: Record<string, string>,
-  /**
-   * `null` means REATTACH: `GET /agent/{run_id}/stream`, which carries no body.
-   *
-   * One transport rather than two because the half that is easy to get wrong is the
-   * SSE reader below — frame splitting across chunk boundaries — and a second copy of
-   * it would be a second place for an ask to be silently dropped. The method is the
-   * only thing that differs.
-   */
   body: AgentRequest,
 ) => AsyncIterable<StreamEvent>;
 
-/** Posts one decision. Separate seam because it is a separate connection. */
 /** What a decision POST carries. `product` is required: the run comes back on a fresh
  *  Agent that has to be scoped to a harness before it can be built, and scoping is the
  *  one thing that must not be re-derived from persisted state. */
@@ -270,40 +260,33 @@ export function fetchAgentStreamTransport(
   };
 }
 
-/** The decision POST. 30s, because it is an ordinary short request. */
-// `fetchDecisionTransport` IS GONE. It returned a bare status because the decision
-// POST used to answer 204 and the run's continuation arrived on a reattached stream.
-// It now answers 200 with that continuation, which is the same shape the deferred START
-// answers with — so both use one transport and there is one place that knows how to read
-// a park out of a response.
-
 /** `POST /agent/{run_id}/permission`, built from the base URL the tool already resolved. */
 export function decisionUrl(agentUrl: string, runId: string): string {
   return `${agentUrl.replace(/\/+$/, "")}/${encodeURIComponent(runId)}/permission`;
 }
 
-// `resumeUrl` IS GONE with `GET /agent/{run_id}/stream`. There is nothing to reattach
-// to: an ask parks in Atlas's checkpoint, so a caller that lost its stream answers the
-// ask and gets the continuation in that reply, from any replica.
-
 /**
- * The deferred START: one request, one JSON response, nothing held open.
+ * One POST, one JSON response, nothing held open.
  *
- * A separate seam from the streaming transport because it is a different kind of call,
- * not a different URL — Atlas answers `mode: "deferred"` with ordinary JSON, so there is
- * no stream to read and nothing to keep alive while a human decides. That is the entire
- * point of the transport: this process holds no state between the ask and the answer.
+ * Used for BOTH calls of the two-call shape — the start (`POST /agent`) and every
+ * decision (`POST /agent/{run_id}/permission`) — because since the converged gate they
+ * answer the same thing: a parked run, or a finished one. A separate seam from the
+ * streaming transport because it is a different kind of call, not a different URL.
  */
-/** One POST, one JSON response. Used for BOTH calls of the two-call shape: the start
- *  (`POST /agent`) and every decision (`POST /agent/{run_id}/permission`), because since
- *  the converged gate they answer the same thing — a parked run, or a finished one. */
 export type DeferredTransport = (
   url: string,
   headers: Record<string, string>,
   body: AgentRequest | DecisionBody,
 ) => Promise<{ status: number; body: unknown }>;
 
-export function fetchDeferredTransport(timeoutMs = 120_000): DeferredTransport {
+// Bounded by the WHOLE RUN, like the streaming transport, because that is what these
+// requests now contain. 120s was sized for a request that returned as soon as the run
+// parked; since the converged gate the DECISION request carries everything after the
+// approval — the write and the rest of the task — so the old bound cut off successful
+// runs partway and reported them as unreachable.
+export function fetchDeferredTransport(
+  timeoutMs = WHOLE_RUN_TIMEOUT_MS,
+): DeferredTransport {
   return async (url, headers, body) => {
     try {
       // `raise_error: false` for the same reason the decision transport does it: the

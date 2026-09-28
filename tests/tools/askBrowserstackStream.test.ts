@@ -21,6 +21,7 @@ import {
   WHOLE_RUN_TIMEOUT_MS,
   decisionUrl,
   fetchAgentStreamTransport,
+  fetchDeferredTransport,
   parseFrame,
   splitFrames,
 } from "../../src/tools/ask-browserstack/stream.js";
@@ -40,9 +41,14 @@ import {
 const DELEGATED_TO_FETCH = (url: string) =>
   /\/oauth2\/v2\/token$/.test(url) || /\/agent\/[^/]+\/permission$/.test(url);
 
+/** Every apiClient.post argument set, so a transport's own options are assertable. */
+const apiPosts = vi.hoisted(() => [] as any[]);
+
 vi.mock("../../src/lib/apiClient.js", () => ({
   apiClient: {
-    post: async ({ url, headers, body }: any) => {
+    post: async (opts: any) => {
+      apiPosts.push(opts);
+      const { url, headers, body } = opts;
       const target = String(url);
       if (!DELEGATED_TO_FETCH(target)) {
         return { status: 200, data: null, ok: true };
@@ -234,6 +240,53 @@ describe("fetchAgentStreamTransport", () => {
 // the decision POST answered 204 and the run's continuation came back on a reattached
 // stream. It answers 200 WITH that continuation now — the same shape the start answers
 // with — so both calls use `fetchDeferredTransport`, whose tests cover the reading.
+
+describe("fetchDeferredTransport", () => {
+  const DECISION = "https://atlas.example/agent/run-1/permission";
+
+  it("hands back the status and body without interpreting either", async () => {
+    // The CALLER reads the status: a 403 (not entitled), a 404 (no such run) and a 200
+    // mean completely different things, and a transport that threw on a non-2xx would
+    // collapse them all into "unreachable".
+    vi.stubGlobal("fetch", async () => ({
+      status: 403,
+      json: async () => ({ detail: "nope" }),
+    }));
+    const out = await fetchDeferredTransport()(DECISION, {}, {} as never);
+
+    expect(out).toEqual({ status: 403, body: { detail: "nope" } });
+    expect(apiPosts.at(-1)).toMatchObject({ raise_error: false });
+    vi.unstubAllGlobals();
+  });
+
+  it("bounds the WHOLE run, because that is what these requests now carry", async () => {
+    // 120s was sized for a request that returned as soon as the run parked. Since the
+    // converged gate the DECISION request carries everything after the approval, so the
+    // old bound cut successful runs off partway and reported them as unreachable.
+    vi.stubGlobal("fetch", async () => ({ status: 200, json: async () => ({}) }));
+    await fetchDeferredTransport()(DECISION, {}, {} as never);
+
+    expect(apiPosts.at(-1).timeout).toBe(WHOLE_RUN_TIMEOUT_MS);
+    expect(WHOLE_RUN_TIMEOUT_MS).toBeGreaterThan(120_000);
+    vi.unstubAllGlobals();
+  });
+
+  it("turns a transport failure into an AskError, naming nothing internal", async () => {
+    const { AskError } = await import(
+      "../../src/tools/ask-browserstack/config.js"
+    );
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("ECONNREFUSED 10.0.0.1:443");
+    });
+
+    const attempt = () => fetchDeferredTransport()(DECISION, {}, {} as never);
+    await expect(attempt()).rejects.toBeInstanceOf(AskError);
+    // The upstream detail names our plumbing, not anything a reader can act on.
+    await expect(attempt()).rejects.toThrow(/could not be reached/);
+    await expect(attempt()).rejects.not.toThrow(/ECONNREFUSED/);
+    vi.unstubAllGlobals();
+  });
+});
 
 describe("decisionUrl", () => {
   it("builds the v2 §3 path from the agent url", () => {
@@ -429,6 +482,32 @@ describe("deferred — the two-call shape", () => {
     });
     expect(result.next_step?.params.decision).toContain("the user's answer");
     expect(result.next_step?.instruction).toContain("AFTER the user has answered");
+  });
+
+  it("a decision whose reply never came back is not reported as never sent", async () => {
+    // The decision request carries the whole continuation now, so a lost reply spans
+    // everything from "it never arrived" to "the write landed and the answer was lost".
+    // Reporting `not_reached` — "NOTHING WAS ASKED AND NOTHING WAS REFUSED" — is the
+    // claim that gets the same change made a second time.
+    const { runResumed } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const post = vi.fn(async () => {
+      throw new Error("socket hang up");
+    });
+    const result = await runResumed(
+      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
+      post as never, "deferred", "tm",
+    );
+    expect(result.permission_relay.reason).toBe("outcome_unknown");
+    expect(result.permission_relay.reason).not.toBe("not_reached");
+    // `null`, not false: nobody measured it, which is not the same as measuring nothing.
+    expect(result.applied_before_stop).toBeNull();
+    expect(result.permission_relay.detail).toMatch(/OUTCOME IS UNKNOWN/);
+    expect(result.permission_relay.detail).toMatch(/DO NOT repeat this task/);
+    // And it must never say the thing that invites the retry.
+    expect(result.permission_relay.detail).not.toMatch(/nothing was changed/i);
+    expect(String(result.error)).toMatch(/no reply came back/);
   });
 
   it("a read-only task still costs one call, not two", async () => {

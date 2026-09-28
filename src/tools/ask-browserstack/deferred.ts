@@ -29,7 +29,7 @@ import {
   decisionUrl,
   parseAsk,
 } from "./stream.js";
-import { buildResult } from "./relay.js";
+import { RELAY_OFF_DETAILS, buildResult } from "./relay.js";
 import { AgentRequest, AskResult, PermissionAsk, RelayMode } from "./types.js";
 
 /** What a parked run needs the caller to send back. */
@@ -191,14 +191,26 @@ export async function runResumed(
   // reattach that only existed because the run was a paused coroutine in one pod. The
   // ask parks in Atlas's checkpoint now, so the decision request IS the one that carries
   // the run forward and the continuation comes back in its own reply, from any replica.
-  const response = await transport(decisionUrl(agentUrl, runId), headers, {
-    perm_id: permId,
-    decision,
-    reason: "",
-    // Required. The run resumes on a fresh Agent that must be scoped before it can be
-    // built, and Atlas deliberately will not take that scope from persisted state.
-    product,
-  });
+  let response: { status: number; body: unknown };
+  try {
+    response = await transport(decisionUrl(agentUrl, runId), headers, {
+      perm_id: permId,
+      decision,
+      reason: "",
+      // Required. The run resumes on a fresh Agent that must be scoped before it can be
+      // built, and Atlas deliberately will not take that scope from persisted state.
+      product,
+    });
+  } catch {
+    // CAUGHT HERE rather than left to the handler's outer catch, which cannot tell this
+    // apart from a request that never left and so reports `not_reached` — "nothing was
+    // changed" — for a decision that may well have completed.
+    logger.warn(
+      "askBrowserStackAI: no reply to the decision on run %s; outcome unknown",
+      runId,
+    );
+    return decisionUnknown();
+  }
 
   if (response.status === 404) {
     // The only failure worth its own words: there is no such parked run. It expired, it
@@ -244,6 +256,48 @@ export function resumeFailed(error: string): AskResult {
     atlas_response: null,
     error,
   };
+}
+
+/** A decision that went out and whose reply never came back.
+ *
+ *  Deliberately NOT `resumeFailed`: every field there says "nothing changed", and that
+ *  is a claim this case cannot make. The decision request carries the continuation now,
+ *  so a lost reply covers everything from "it never arrived" to "the write landed and
+ *  the answer was lost" — and telling a model nothing happened is what gets the change
+ *  made twice.
+ *
+ *  `applied_before_stop: null` for the same reason: null is "not measured", which is
+ *  true, where false would be a measurement nobody took. */
+export function decisionUnknown(): AskResult {
+  return {
+    ok: false,
+    status: "error",
+    answer: null,
+    approvals: [],
+    approvals_source: "mcp",
+    elicitations: [],
+    needs_approval: [],
+    applied_before_stop: null,
+    permission_relay: {
+      used: true,
+      reason: "outcome_unknown",
+      detail: RELAY_OFF_DETAILS.outcome_unknown,
+    },
+    atlas_response: null,
+    error:
+      "The approval was sent to BrowserStack AI but no reply came back, so it is not " +
+      "known whether the step completed. Nothing should be retried on this run.",
+  };
+}
+
+/** Starting a run with no task. Only reachable now that `query` is optional, which it
+ *  has to be so a model can follow `next_step` — which omits it — literally. */
+export function missingQuery(): AskResult {
+  return resumeFailed(
+    "`query` is required to start a run: say what you want in plain language. " +
+      "(It is only omitted when answering a pending approval, which also needs " +
+      "`run_id`, `perm_id` and `decision`.) Nothing was sent, so nothing changed.",
+  );
 }
 
 export function incompleteResume(): AskResult {

@@ -1502,3 +1502,178 @@ describe("askBrowserStackAI, against the injected seam", () => {
     expect(payload.ok).toBe(false);
   });
 });
+
+describe("next_step can be followed exactly as written", () => {
+  beforeEach(() => {
+    process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = AUTH_URL;
+    process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "deferred";
+    resetTokenCache();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
+    delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
+    delete process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT;
+    resetTokenCache();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("a resume carrying no query is accepted", async () => {
+    // `next_step` says to call again "with exactly these params" — product, run_id,
+    // perm_id, decision — and `query` was a required string, so a model that did
+    // exactly what it was told got InvalidParams from the SDK before the handler ran.
+    // The task lives in Atlas's checkpoint on a resume; there is nothing for a query
+    // to say.
+    const { decisions } = atlas({ asks: [] });
+    const server = await buildServer();
+    fakeClient(server.getInstance(), undefined, []);
+
+    const { payload } = await call(server.getTools(), {
+      product: "tm",
+      run_id: "run-" + "a".repeat(32),
+      perm_id: PERM_A,
+      decision: "allow",
+    } as never);
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0].body).toMatchObject({ perm_id: PERM_A, decision: "allow" });
+    expect(payload.status).toBe("ok");
+  });
+
+  it("starting a run with no query is refused in words, not in a schema error", async () => {
+    // Optional in the schema so a resume can omit it, required by the handler so the
+    // model gets a sentence it can act on rather than an SDK InvalidParams.
+    atlas({});
+    const server = await buildServer();
+    fakeClient(server.getInstance(), undefined, []);
+
+    const { payload } = await call(server.getTools(), { product: "tm" } as never);
+
+    expect(payload.status).toBe("error");
+    expect(String(payload.error)).toMatch(/`query` is required to start a run/);
+    expect(String(payload.error)).toMatch(/[Nn]othing was sent/);
+  });
+});
+
+/**
+ * COMPATIBILITY BOTH WAYS.
+ *
+ * An Atlas that predates the converged gate holds the stream OPEN until the decision
+ * arrives and acknowledges it with a bare 204, continuing on the same socket. A
+ * converged one emits its ask as the stream ENDS and carries the run forward on the
+ * decision's own reply.
+ *
+ * Collecting asks and answering only after the stream closed worked against the second
+ * and DEADLOCKED against the first — both sides waiting, until the server's own
+ * five-minute gate denied an ask nobody had seen. That made the deploy order
+ * load-bearing in a way it should not be, so both shapes are pinned here.
+ */
+describe("the client works against both server generations", () => {
+  const RUN = "run-" + "a".repeat(32);
+  const ASK = { perm_id: PERM_A, description: "Creating the project" };
+
+  beforeEach(() => {
+    process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = AUTH_URL;
+    resetTokenCache();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
+    delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
+    resetTokenCache();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /** An Atlas that predates the converged gate: 204, and the run finishes on the stream. */
+  function legacyAtlas() {
+    const decisions: any[] = [];
+    const encoder = new TextEncoder();
+    let answered: () => void = () => {};
+    const decisionArrived = new Promise<void>((r) => (answered = r));
+
+    const stub = async (url: string, init: any) => {
+      if (String(url) === AUTH_URL) {
+        return {
+          ok: true, status: 200,
+          headers: { get: () => "application/json" },
+          json: async () => ({ access_token: MINTED, expires_in: 3600 }),
+        };
+      }
+      if (/\/agent\/[^/]+\/permission$/.test(String(url))) {
+        decisions.push(JSON.parse(init.body));
+        answered();
+        // 204 — acknowledged, nothing carried. The run continues on the stream.
+        return {
+          ok: true, status: 204,
+          headers: { get: () => "" },
+          json: async () => null,
+        };
+      }
+      const frame = (event: string, data: unknown) =>
+        encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      const stream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue(frame("run", { run_id: RUN }));
+          controller.enqueue(
+            frame("permission", { ...ASK, product: "tm", mode: "ask-always" }),
+          );
+          // THE OLD BEHAVIOUR: nothing more until the decision lands. A client that
+          // waits for the stream to end before answering never gets past this line.
+          await decisionArrived;
+          controller.enqueue(
+            frame("result", { ok: true, status: "ok", answer: "created it" }),
+          );
+          controller.close();
+        },
+      });
+      return {
+        ok: true, status: 200,
+        headers: {
+          get: (k: string) => (k === "content-type" ? "text/event-stream" : ""),
+        },
+        body: stream,
+        json: async () => null,
+      };
+    };
+    vi.stubGlobal("fetch", stub);
+    return { decisions };
+  }
+
+  it("answers on the stream when the server is still waiting on it", async () => {
+    const { decisions } = legacyAtlas();
+    const server = await buildServer();
+    fakeClient(server.getInstance(), { elicitation: {} }, [
+      { action: "accept", content: { decision: "allow" } },
+    ]);
+
+    const { payload } = await call(server.getTools());
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({ perm_id: PERM_A, decision: "allow" });
+    // The run finished ON THE STREAM, and that result is what the caller gets.
+    expect(payload.status).toBe("ok");
+    expect(payload.answer).toBe("created it");
+  }, 10_000);
+
+  it("takes the continuation from the reply when the server sends one", async () => {
+    // The converged shape, for contrast: the same client, the same prompt, but the
+    // decision's own reply carries the finished run and the stream's `needs_approval`
+    // result is stale by the time it is read.
+    atlas({ asks: [ASK] });
+    const server = await buildServer();
+    fakeClient(server.getInstance(), { elicitation: {} }, [
+      { action: "accept", content: { decision: "allow" } },
+    ]);
+
+    const { payload } = await call(server.getTools());
+
+    expect(payload.status).toBe("ok");
+    expect(payload.answer).toBe("done");
+  }, 10_000);
+});

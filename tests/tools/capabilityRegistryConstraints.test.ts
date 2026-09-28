@@ -259,3 +259,75 @@ describe("nothing reaches egress when a constraint fails", () => {
     vi.unstubAllGlobals();
   });
 });
+
+/**
+ * A capability shaped like the real string-id routes: a path parameter with no pattern,
+ * no enum and no format — which is what eleven enabled tm capabilities actually declare.
+ */
+function withPathParam(param: WireParam): Capability {
+  return {
+    name: "c",
+    method: "PATCH",
+    path: "/api/v2/projects/{project_id}/test-cases/{test_case_id}",
+    mode: "write",
+    entity: "test_case",
+    path_params: [{ name: "project_id", type: "string" }, param],
+  } as Capability;
+}
+
+describe("a path value cannot retarget the request", () => {
+  const param: WireParam = { name: "test_case_id", type: "string" };
+  const bindPath = (id: unknown) =>
+    bind(withPathParam(param), {
+      path_params: { project_id: "PR-1", test_case_id: id },
+    });
+
+  // `encodeURIComponent` leaves dots alone and `new URL()` resolves them, so `..` walked
+  // up a segment and PATCH landed on the PROJECT while the human had approved editing one
+  // test case — with the approval already given. Empty and `.` collapse the segment the
+  // same way. None of these fail the type check: the parameter is a bare `string`.
+  it.each([["..", "traversal"], [".", "current segment"], ["", "empty"], ["  ..  ", "padded traversal"]])(
+    "refuses %j (%s)",
+    (id) => {
+      expect(() => bindPath(id)).toThrow(/not a usable path value/);
+    },
+  );
+
+  it("still binds an ordinary identifier", () => {
+    const bound = bind(withPathParam(param), {
+      path_params: { project_id: "PR-1", test_case_id: "TC-1" },
+    }) as any;
+    expect(bound.path).toBe("/api/v2/projects/PR-1/test-cases/TC-1");
+  });
+
+  // A dot inside a real value is not the problem — only a segment that IS a dot run.
+  it("leaves a dot inside an identifier alone", () => {
+    const bound = bind(withPathParam(param), {
+      path_params: { project_id: "PR-1", test_case_id: "v1.2.3" },
+    }) as any;
+    expect(bound.path).toBe("/api/v2/projects/PR-1/test-cases/v1.2.3");
+  });
+});
+
+describe("a numeric parameter is not coerced into a different value", () => {
+  const numeric: WireParam = { name: "count", type: "integer" };
+
+  // Number("") and Number(" ") are both 0, so a blank id became id 0 and the call went to
+  // whatever that resolved to.
+  it.each(["", "   "])("refuses blank %j rather than reading it as 0", (v) => {
+    expect(() => call(withBody(numeric), { count: v })).toThrow(/was empty/);
+  });
+
+  // Math.trunc turned "1.9" into 1 silently. An id is either exact or it is the wrong id.
+  it("refuses a non-integer rather than truncating it", () => {
+    expect(() => call(withBody(numeric), { count: "1.9" })).toThrow(
+      /whole number/,
+    );
+  });
+
+  it("still accepts an integer given as a string", () => {
+    expect(call(withBody(numeric), { count: "42" })).toMatchObject({
+      body: { count: 42 },
+    });
+  });
+});

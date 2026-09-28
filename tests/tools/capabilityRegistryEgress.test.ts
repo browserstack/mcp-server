@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchTransport } from "../../src/tools/capability-registry/egress.js";
+import { invoke } from "../../src/tools/capability-registry/resolve.js";
 
 /**
  * What the transport does with a response body.
@@ -221,4 +222,52 @@ describe("a parameter the spec leaves untyped is passed through, not stringified
     const bound = bind(capability, { body: { label: 42 } });
     expect(bound.body).toEqual({ label: "42" });
   });
+});
+
+describe("credentials are not sent over a plaintext transport", () => {
+  const capability = {
+    name: "c",
+    method: "GET",
+    path: "/api/v1/things",
+    mode: "read",
+    entity: "thing",
+  } as any;
+  const creds = { username: "u", accessKey: "k" };
+  const transport = vi.fn().mockResolvedValue({ status: 200, body: {} });
+
+  beforeEach(() => transport.mockClear());
+
+  // The host comes from an env var, account discovery or the index's own base_url, and
+  // nothing checked its scheme before the access key was attached to the request.
+  it.each(["http://tm.example.com", "ftp://tm.example.com"])(
+    "refuses %s before any request is made",
+    async (base) => {
+      await expect(
+        invoke(capability, {}, base, creds, transport as any),
+      ).rejects.toThrow(/refusing to send credentials/);
+      expect(transport).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses a base URL that is not a URL at all", async () => {
+    await expect(
+      invoke(capability, {}, "tm.example.com", creds, transport as any),
+    ).rejects.toThrow(/not a valid URL/);
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("allows https", async () => {
+    await invoke(capability, {}, "https://tm.example.com", creds, transport as any);
+    expect(transport).toHaveBeenCalledOnce();
+  });
+
+  // A local product server has no certificate; refusing it would make development
+  // impossible for no gain, since the traffic never leaves the machine.
+  it.each(["http://localhost:3000", "http://127.0.0.1:8080"])(
+    "allows %s for local development",
+    async (base) => {
+      await invoke(capability, {}, base, creds, transport as any);
+      expect(transport).toHaveBeenCalledOnce();
+    },
+  );
 });

@@ -190,11 +190,45 @@ function checkFields(value: unknown, param: WireParam): void {
 }
 
 /**
+ * One path value, checked for the segments that silently retarget the request.
+ *
+ * `encodeURIComponent` does NOT escape a dot, and `new URL()` in egress resolves `.` and
+ * `..` the way a filesystem would. So a string path parameter carrying `..` walks up a
+ * segment and the call lands somewhere else entirely:
+ *
+ *     update_test_case { project_id: "PR-1", test_case_id: ".." }
+ *       -> PATCH /api/v2/projects/PR-1/            (the PROJECT, not a test case)
+ *
+ * That is worse than a failed call. The human approved "update this test case" and gave a
+ * change_summary saying so, and the request edits a different resource — with the approval
+ * already banked. A prompt injection sitting in test-case content is enough to steer an
+ * agent into it.
+ *
+ * Empty and `.` are refused for the same reason: both collapse the segment and leave the
+ * request pointing at the collection.
+ *
+ * TYPE CHECKING IS NOT THE DEFENCE HERE, though a comment used to claim it was. It holds
+ * only for `type: integer` ids; eleven enabled capabilities take a STRING path parameter
+ * with no pattern, enum or format, and every one of those values reaches the URL as given.
+ */
+function pathSegment(value: unknown, name: string): string {
+  const text = String(value);
+  const trimmed = text.trim();
+  if (trimmed === "" || trimmed === "." || trimmed === "..") {
+    throw new InvocationError(
+      `'${name}' is not a usable path value: ${JSON.stringify(text)} would ` +
+        `retarget the request at a different resource rather than identify one. ` +
+        `Pass the id exactly as a read returned it.`,
+    );
+  }
+  return text;
+}
+
+/**
  * Check one argument against its declared schema, raising a caller-safe error.
  *
- * Type checking is also the injection defence for path parameters: most of tm's 278 path
- * parameters are `type: integer`, so a traversal attempt like `../../admin-v2` fails here
- * rather than being encoded into a URL.
+ * For path parameters this is only half the defence — see `pathSegment`, which covers the
+ * string ids that carry no type constraint worth the name.
  */
 export function coerce(value: unknown, param: WireParam): unknown {
   const coerced = coerceType(value, param);
@@ -224,11 +258,24 @@ function coerceType(
     return value;
   }
   if (expected === "integer" || expected === "number") {
-    const parsed = Number(String(value).trim());
+    // `Number("")` and `Number(" ")` are both 0, so a blank id silently became id 0 and the
+    // call went to whatever that resolves to. Refuse instead of inventing a value.
+    const raw = String(value).trim();
+    if (raw === "") {
+      throw new InvocationError(`'${label}' must be a number, and was empty`);
+    }
+    const parsed = Number(raw);
     if (!Number.isFinite(parsed)) {
       throw new InvocationError(`'${label}' must be a number`);
     }
-    return expected === "integer" ? Math.trunc(parsed) : parsed;
+    // `Math.trunc` turned "1.9" into 1 without a word. An id is either an integer or it is
+    // the wrong id, and quietly rounding it addresses the wrong record.
+    if (expected === "integer" && !Number.isInteger(parsed)) {
+      throw new InvocationError(
+        `'${label}' must be a whole number, not ${JSON.stringify(raw)}`,
+      );
+    }
+    return parsed;
   }
   if (expected === "boolean") {
     if (typeof value === "boolean") return value;
@@ -354,7 +401,10 @@ export function bind(
       if (group === "path_params") {
         // Encode with nothing exempt: a `/` inside a path value would otherwise rewrite the
         // route. Schema checking already stops this for integer ids; this covers strings.
-        path = path.replaceAll(`{${name}}`, encodeURIComponent(String(value)));
+        path = path.replaceAll(
+          `{${name}}`,
+          encodeURIComponent(pathSegment(value, name)),
+        );
       } else if (group === "body") {
         place(body, param.json_path || `/${name}`, value);
       } else {

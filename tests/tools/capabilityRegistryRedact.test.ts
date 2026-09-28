@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { redact } from "../../src/tools/capability-registry/redact.js";
+import { MAX_LENGTH, redact } from "../../src/tools/capability-registry/redact.js";
 
 /** Built at runtime: a committed credential-shaped literal trips secret scanning. */
 const fake = {
@@ -70,5 +70,26 @@ describe("redact", () => {
     expect(redact(null)).toBeUndefined();
     expect(redact(42)).toBeUndefined();
     expect(redact("   ")).toBeUndefined();
+  });
+});
+
+describe("the length cap", () => {
+  it("truncates past MAX_LENGTH and marks that it did", () => {
+    const out = redact("a ".repeat(MAX_LENGTH))!;
+    expect(out.length).toBe(MAX_LENGTH + 1); // the ellipsis
+    expect(out.endsWith("\u2026")).toBe(true);
+  });
+
+  it("leaves an ordinary query untouched", () => {
+    const q = "find the login regression cases in the Checkout folder";
+    expect(redact(q)).toBe(q);
+  });
+
+  // Truncating BEFORE redacting would cut a match in half and leave its first part in the
+  // clear — the cap has to be the last thing applied, not the first.
+  it("redacts before truncating, so nothing is half-replaced at the boundary", () => {
+    const filler = "x".repeat(MAX_LENGTH - 10);
+    const out = redact(`${filler} someone@example.org`)!;
+    expect(out).not.toMatch(/someone@/);
   });
 });

@@ -16,7 +16,14 @@ export type ToolOutcome = "ok" | "error_result" | "threw";
 /**
  * Extra fields a caller may attach to its own row (the capability registry records what
  * it invoked and how the product answered). Values are scalars so every field stays one
- * queryable column; nothing here is free text written by a user.
+ * queryable column.
+ *
+ * SOME OF IT IS FREE TEXT, and this comment used to claim the opposite. The registry
+ * records `search_query` and `change_summary`, both written by the agent from what the
+ * user asked for, and both leave the machine on every search and every write. They go
+ * through `capability-registry/redact.ts` first, which strips PII it can identify by
+ * SHAPE and caps the length — it cannot strip a person's name, and says so. Anything
+ * added here that carries user text must go through the same filter.
  */
 export type MCPEventExtras = Record<
   string,

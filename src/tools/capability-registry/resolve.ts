@@ -48,6 +48,46 @@ function hasNextPage(body: unknown): boolean {
   return next !== null && next !== undefined && next !== false;
 }
 
+/**
+ * Refuse to send credentials anywhere but over TLS.
+ *
+ * The very next thing `invoke` does is attach the caller's long-lived
+ * `username:access_key` to the request, and the host it attaches them to comes from an
+ * environment variable, account discovery or the index's own `base_url` — none of which
+ * was checked for a scheme. An operator typo of `http://` put those credentials on the
+ * wire in clear text, and nothing anywhere said no.
+ *
+ * Not attacker-controlled today: the index ships inside the package and the environment
+ * variables are operator-set. This is the cheap guard on the one path that forwards a
+ * credential, not a response to a known attack. `egress.authHeaders` already refuses
+ * `auth.in: "query"` so credentials never land in a URL; this is the same concern one
+ * layer up.
+ *
+ * `localhost` and `127.0.0.1` are exempt so a local product server can still be driven
+ * without a certificate.
+ */
+function assertTransportSafe(baseUrl: string): void {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new InvocationError(
+      `the configured base URL is not a valid URL: ${JSON.stringify(baseUrl)}`,
+    );
+  }
+  if (url.protocol === "https:") return;
+  const local =
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "[::1]";
+  if (url.protocol === "http:" && local) return;
+  throw new InvocationError(
+    `refusing to send credentials over ${url.protocol}//${url.host}: this request ` +
+      `carries your BrowserStack access key, so the base URL must be https (or a local ` +
+      `host for development). Check CAPABILITY_REGISTRY_BASE_URL_* for a typo.`,
+  );
+}
+
 export async function invoke(
   capability: Capability,
   args: GroupedArguments,
@@ -58,6 +98,7 @@ export async function invoke(
 ): Promise<InvokeResult> {
   if (!baseUrl)
     throw new InvocationError("no base URL is configured for that product");
+  assertTransportSafe(baseUrl);
   const bound = bind(capability, args);
   const headers = authHeaders(credentials, auth);
 

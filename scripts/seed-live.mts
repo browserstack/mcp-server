@@ -75,22 +75,24 @@ const ACCESS_KEY =
   process.env.TM_LIVE_ACCESS_KEY ?? process.env.BROWSERSTACK_ACCESS_KEY;
 
 /**
- * The account, shortened for printing.
+ * Strip the account from anything printed.
  *
- * The username is not a secret on its own, but it is half of the
- * `Api-Token: <username>:<access_key>` pair this surface authenticates with, and stdout
- * here reaches CI logs, terminal scrollback and screen shares — all read by more people
- * than the shell that set the variable. Enough survives to tell two accounts apart, which
- * is the only thing the caller needs from it.
+ * The username is half of the `Api-Token: <username>:<access_key>` pair this surface
+ * authenticates with, and stdout here reaches CI logs, terminal scrollback and screen
+ * shares — read by more people than the shell that set the variable.
+ *
+ * NOT MASKED — OMITTED. A first attempt printed `ing…Xf`, and CodeQL kept the alert open,
+ * correctly: it follows the value from `process.env` through any transform, and a mask is
+ * still a derived value on a path that did not need to carry it at all. The environment
+ * name already answers the only question the line was for ("am I about to seed the right
+ * place?"), and the account is one `cat` away in the pool file.
  *
  * The POOL FILE keeps the full value: it is gitignored, and knowing which account seeded a
- * fixture is exactly what you need when a probe result looks wrong.
+ * fixture is exactly what you want when a probe result looks wrong.
  */
-function maskedAccount(account = USERNAME): string {
-  if (!account) return "(unset)";
-  return account.length <= 6
-    ? `${account.slice(0, 2)}…`
-    : `${account.slice(0, 3)}…${account.slice(-2)}`;
+function withoutAccount<T extends { account?: string }>(pool: T): Omit<T, "account"> {
+  const { account: _omitted, ...rest } = pool;
+  return rest;
 }
 
 interface Pool {
@@ -235,11 +237,15 @@ async function main() {
   if (process.argv.includes("--show")) {
     if (!existsSync(POOL))
       die("--show", "no pool yet; run `npm run seed:live` first");
-    console.log(readFileSync(POOL, "utf8"));
+    // Reprint from the parsed object, not the file text: the file holds the account and
+    // this is stdout. Read the file directly if you need it.
+    console.log(
+      JSON.stringify(withoutAccount(JSON.parse(readFileSync(POOL, "utf8"))), null, 2),
+    );
     return;
   }
 
-  console.log(`seeding ${ENV} as ${maskedAccount()}\n`);
+  console.log(`seeding ${ENV}\n`);
 
   // 1. FIND OR CREATE the fixture project.
   const projects = await call("list_projects");
@@ -621,7 +627,7 @@ async function main() {
   writeFileSync(POOL, JSON.stringify(pool, null, 2) + "\n");
   console.log(`\npool -> tests/live/.id-pool.json`);
   // The file above holds the real account; what gets printed does not.
-  console.log(JSON.stringify({ ...pool, account: maskedAccount() }, null, 2));
+  console.log(JSON.stringify(withoutAccount(pool), null, 2));
 }
 
 main().catch((error) => die("unexpected", error?.stack ?? String(error)));

@@ -217,24 +217,38 @@ export function addCapabilityRegistryTools(
   };
 
   /**
+   * An InvocationError's reason, from the prefix the registry itself writes. These are our
+   * own messages from bind.ts / index-loader.ts, not a product's prose.
+   *
+   * EVERY BRANCH HERE IS A STRING MATCH AGAINST ANOTHER FILE'S WORDING, which is exactly
+   * as brittle as it sounds — `no_base_url` matched "no base URL is configured" while
+   * config.ts throws "no host is configured", so that reason never once fired. The tests
+   * below pin each branch against the message its source actually produces; if you reword
+   * a refusal, one of them will tell you.
+   */
+  const invocationReason = (message: string): string => {
+    if (message.startsWith("unknown_capability:")) return "unknown_capability";
+    if (message.startsWith("unknown_endpoint:")) return "unknown_endpoint";
+    // The outcome this PR turns on: 46 of 244 capabilities are withheld, so this is the
+    // likeliest refusal of all, and it was landing in the generic bucket.
+    if (message.startsWith("capability_disabled:")) return "capability_disabled";
+    if (message.startsWith("missing required parameter"))
+      return "missing_parameter";
+    if (/is not a usable path value/.test(message)) return "bad_path_value";
+    if (/^'[^']+' must be /.test(message)) return "bad_parameter_type";
+    if (/^'[^']+' must match /.test(message)) return "bad_parameter_pattern";
+    // config.ts's wording, not a paraphrase of it.
+    if (message.includes("no host is configured")) return "no_base_url";
+    return "invocation_error";
+  };
+
+  /**
    * A refusal or a failure, recorded and returned in one step.
    *
    * Every error path here returns through `failed()`, which produced no telemetry at all:
    * BigQuery showed zero registry failures across 1,069 calls in 30 days. `refusal_reason`
    * distinguishes what we refused before any network call from what the product rejected.
    */
-  /**
-   * An InvocationError's reason, from the prefix the registry itself writes. These are our
-   * own messages from bind.ts / index-loader.ts, not a product's prose.
-   */
-  const invocationReason = (message: string): string => {
-    if (message.startsWith("unknown_capability:")) return "unknown_capability";
-    if (message.startsWith("missing required parameter"))
-      return "missing_parameter";
-    if (/^'[^']+' must be /.test(message)) return "bad_parameter_type";
-    if (message.includes("no base URL is configured")) return "no_base_url";
-    return "invocation_error";
-  };
 
   const refuse = (
     tool: string,
@@ -665,6 +679,8 @@ export function addCapabilityRegistryTools(
       openWorldHint: false,
     },
     async (input): Promise<CallToolResult> => {
+      // Hoisted so the catch below can attribute a failure to the capability it was for.
+      let identity: MCPEventExtras | undefined;
       try {
         // The same two handles as invokeCapability, resolved the same way, so a name that
         // describes is a name that invokes. Divergence here would be its own bug class.
@@ -684,13 +700,14 @@ export function addCapabilityRegistryTools(
               input.product,
             );
 
-        track("describeCapability", {
+        identity = {
           capability: capability.name,
           capability_method: capability.method,
           capability_path: capability.path,
           capability_mode: capability.mode,
           product: owner,
-        });
+        };
+        track("describeCapability", identity);
         const selection = (input.include_responses ||
           "success") as ResponseSelection;
         const responses = resolveResponses(
@@ -728,6 +745,8 @@ export function addCapabilityRegistryTools(
             "describeCapability",
             invocationReason(error.message),
             error.message,
+            undefined,
+            identity,
           );
         logger.error(
           "describeCapability failed: %s",
@@ -737,6 +756,8 @@ export function addCapabilityRegistryTools(
           "describeCapability",
           "unexpected_error",
           "that capability could not be described",
+          undefined,
+          identity,
         );
       }
     },
@@ -816,6 +837,10 @@ export function addCapabilityRegistryTools(
       openWorldHint: false,
     },
     async (input): Promise<CallToolResult> => {
+      // Hoisted so the catch below can attribute a failure to the capability it was for.
+      // Left undefined until resolution succeeds, which is the only point it is known —
+      // a refusal before that genuinely has no capability to name.
+      let identity: MCPEventExtras | undefined;
       try {
         // Either handle resolves to the same capability. `name` wins when both are sent,
         // rather than cross-checking them: a caller pasting a stale path alongside a good
@@ -840,10 +865,10 @@ export function addCapabilityRegistryTools(
           capability.name || `${capability.method} ${capability.path}`;
         /**
          * What was asked for. Recorded after resolution, not at entry, because only here is
-         * it known. `capability` is absent for a product that publishes no names
-         * (loadtesting), where method+path are the handle.
+         * it known. `capability` is absent for a product that publishes no names, where
+         * method+path are the handle.
          */
-        const identity: MCPEventExtras = {
+        identity = {
           capability: capability.name,
           capability_method: capability.method,
           capability_path: capability.path,
@@ -922,6 +947,8 @@ export function addCapabilityRegistryTools(
             "invokeCapability",
             invocationReason(error.message),
             error.message,
+            undefined,
+            identity,
           );
         logger.error(
           "invokeCapability failed: %s",
@@ -931,6 +958,8 @@ export function addCapabilityRegistryTools(
           "invokeCapability",
           "unexpected_error",
           "that capability could not be invoked",
+          undefined,
+          identity,
         );
       }
     },

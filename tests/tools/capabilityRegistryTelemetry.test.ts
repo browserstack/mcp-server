@@ -171,12 +171,46 @@ describe("capability registry telemetry", () => {
       },
       "bad_parameter_type",
     ],
+    [
+      { method: "GET", path: "/api/v1/no/such/route", product: "tm" },
+      "unknown_endpoint",
+    ],
+    // A path value that would retarget the request at another resource.
+    [
+      {
+        name: "update_test_case",
+        product: "tm",
+        path_params: { project_id: "PR-1", test_case_id: ".." },
+      },
+      "bad_path_value",
+    ],
   ])("records the specific refusal reason (%#)", async (args, expected) => {
     const server = await buildServer();
     await call(server, "invokeCapability", args);
     const last = (await rowsFor("invokeCapability")).at(-1);
     expect(last.success).toBe(false);
     expect(last.refusal_reason).toBe(expected);
+  });
+
+  // Against the SHIPPED index, not the fixture: the fixture carries no `disabled` flags,
+  // so it cannot produce this outcome at all. This is the likeliest refusal on the real
+  // build — 46 of 244 capabilities are withheld — and it was landing in the generic
+  // `invocation_error` bucket, so the one outcome the flag exists to produce could not be
+  // told apart in BigQuery.
+  it("distinguishes a withheld capability from a missing one", async () => {
+    process.env.CAPABILITY_REGISTRY_INDEX = fileURLToPath(
+      new URL("../../capability/tm.capability-index.json", import.meta.url),
+    );
+    vi.resetModules();
+    const server = await buildServer();
+    await call(server, "invokeCapability", {
+      name: "list_tags",
+      product: "tm",
+      path_params: { project_id: 1 },
+    });
+    const last = (await rowsFor("invokeCapability")).at(-1);
+    expect(last.success).toBe(false);
+    expect(last.refusal_reason).toBe("capability_disabled");
   });
 
   it("records search quality on every search", async () => {

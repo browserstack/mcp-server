@@ -70,7 +70,20 @@ const RULES: Rule[] = [
 ];
 
 /**
- * Returns the text with shape-identifiable PII replaced, capped at MAX_LENGTH.
+ * The ceiling on any redacted field.
+ *
+ * The rules above catch PII by shape, and the header is explicit that a person's NAME has
+ * none — so the longer the recorded string, the more unshaped personal detail rides along
+ * with it. A cap does not make the field safe; it bounds how much escapes when redaction
+ * misses, which it will. 512 leaves an ordinary query or change summary intact.
+ *
+ * This existed, was removed, and the doc comment kept claiming it for two commits. Both
+ * fields it guards are free text an agent writes from what the user said.
+ */
+export const MAX_LENGTH = 512;
+
+/**
+ * Returns the text with shape-identifiable PII replaced, capped at `MAX_LENGTH`.
  *
  * FAILS CLOSED: any throw returns undefined, so the caller records no field rather than
  * the raw value. Non-string and empty input yields undefined for the same reason.
@@ -83,7 +96,9 @@ export function redact(text: unknown): string | undefined {
 
     for (const rule of RULES) out = out.replace(rule.pattern, rule.replacement);
 
-    return out;
+    // Truncate AFTER redacting, so a value that would have been replaced cannot be split
+    // across the boundary and leave its first half in the clear.
+    return out.length > MAX_LENGTH ? `${out.slice(0, MAX_LENGTH)}…` : out;
   } catch {
     return undefined;
   }

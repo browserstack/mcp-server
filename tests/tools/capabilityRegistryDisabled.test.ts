@@ -196,7 +196,7 @@ describe("the shipped tm index", () => {
   /**
    * The published surface is the capabilities that PASSED live probing. Everything that did
    * not — blocked, drifted, unverified, and the destructive tier — is withheld while the
-   * product team works through it, so 47 of 244 are off and 197 remain. download_report is
+   * product team works through it, so 47 of 245 are off and 198 remain. download_report is
    * withheld too: it answers with a job channel the API cannot resolve, so it can never
    * deliver the file it is named for.
    *
@@ -205,7 +205,7 @@ describe("the shipped tm index", () => {
    * effect, not to restate the roster, which is expected to shrink as defects are fixed.
    */
   const WITHHELD_COUNT = 47;
-  const PUBLISHED_COUNT = 197;
+  const PUBLISHED_COUNT = 198;
   const FILE_BEARING = [
     "import_dataset_csv",
     "upload_ai_attachments",

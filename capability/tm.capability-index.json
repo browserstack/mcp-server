@@ -8777,7 +8777,7 @@
         "guidance": [
           "Send every field flat, including the case-selection keys. Each field's json_path decides where it lands — the run's own fields go inside a `test_run` object and the selection keys (test_case_ids, selection, shared_selection, filters, dynamic_filter, trtc_configuration_mappings, auto_assign, is_dynamic) stay beside it at the top level. Building either level yourself is rejected before the call as an unknown body key.",
           "run_state is mandatory on every call, including edits that only rename the run. It is validated first, so a bare 400 'invalid data' almost always means a missing or misspelled run_state — not a bad selection.",
-          "NOT ADDITIVE: the case selection you send (test_case_ids + selection) REPLACES the run's membership, and run fields you omit — the owner among them — are cleared. The call still returns success. The product UI avoids this because it first reads the run's current selection and fields (GET .../test-runs/{id}/edit/selection, not in this index) and resends all of it merged with the new cases. That read is not available here, so do not use this call to add cases — use bulk_update_test_run_test_cases with add_test_cases, which adds without disturbing existing cases, their row ids or assignees. Results on removed cases cannot be restored.",
+          "NOT ADDITIVE: the case selection you send (test_case_ids + selection) REPLACES the run's membership, and run fields you omit — the owner among them — are cleared. The call still returns success. ALWAYS call get_test_run_edit_selection first and resend what it returns — `selection`, `shared_selection`, `trtc_configuration_mappings` and every run field — changing only what you mean to change, after checking the stored selection still matches the run's current cases (it is not updated by the add-only and remove calls, so a stale one re-adds removed cases); that read-then-resend is how the product UI edits a run without losing anything. To only add cases, use bulk_update_test_run_test_cases with add_test_cases instead, which adds without disturbing existing cases, their row ids or assignees. Results on removed cases cannot be restored.",
           "There is no undo. A test run keeps no version history, so an overwritten name, a replaced tag list or a cleared description cannot be restored — confirm destructive-looking edits with the user first.",
           "Changing which cases the run covers is queued: the call returns before the new cases are attached, and an immediate re-read of the run's cases can be short. Re-read rather than retrying, which can double-add.",
           "`filters` is a sync rule, not a selection. An edit carrying only `filters` returns 200 and adds nothing, while quietly marking the run dynamic if you also sent is_dynamic.",
@@ -8786,6 +8786,65 @@
           "The updated run comes back under `data.testrun` — one word, no underscore — with `data.project`, plus a TOP-LEVEL `skipped_test_case_ids` array listing cases the review gate refused to add. Check it: those cases are silently missing from the run.",
           "Backing-service client errors are returned as `{data: {success: false, error: <message>}}` with the 4xx status, so read `data.success` before reading `data.testrun`.",
           "Needs the test-run write permission, with the automation variant demanded on automation runs."
+        ]
+      },
+      {
+        "name": "get_test_run_edit_selection",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/edit/selection",
+        "mode": "read",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "description": "Integer project id. The v1 routes only match digits here, so a PR-NNN identifier never reaches the API."
+          },
+          {
+            "name": "test_run_id",
+            "type": "string",
+            "required": true,
+            "example": "TR-14",
+            "pattern": "^(TR-)?[0-9]+$",
+            "description": "Either the TR-NNN identifier or the bare integer — the v1 run routes accept both forms in the path."
+          }
+        ],
+        "intent": "Read a test run's stored case selection and editable fields — the exact state to resend when editing the run through the full edit form, so the edit does not drop cases, configurations or the owner",
+        "returns": [
+          "data",
+          "success",
+          "selection",
+          "shared_selection",
+          "test_run",
+          "dynamic_filter",
+          "filters",
+          "trtc_configuration_mappings"
+        ],
+        "responses": {
+          "200": {
+            "$response": "TestRunEditSelectionResponse"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        },
+        "guidance": [
+          "Read this before every edit_test_run call. The full edit replaces whatever it is not sent, so resend `data.selection` as `selection`, `data.shared_selection` as `shared_selection` and `data.trtc_configuration_mappings` as `trtc_configuration_mappings` unchanged, together with every field of `data.test_run` — name, description, run_state, owner, is_dynamic, configurations, tags, issues and test_plans.",
+          "`configurations` and `test_plans` come back on `data.test_run` as objects; the edit takes plain integer ids, so map each to its `id` before resending. Tags are sent as their plain strings.",
+          "`selection` carries a top-level `select_all`, a `unique_test_case_count` and `folders`. `selection.folders` is keyed by folder id AS A STRING. In each entry `test_case_select_all: true` means every case in that folder — including cases added to it later — with `deselected_test_cases` as the exceptions; `false` means only the ids in `selected_test_cases`. Do not rebuild this from the run's case listing: whether a folder was stored as all-or-some exists only here, and getting it wrong adds or drops cases.",
+          "To add cases through the edit, merge the new case ids into `selection.folders[\"0\"].selected_test_cases` (create that entry with test_case_select_all: false and empty lists if it is absent) — the product resolves each case's real folder. When the goal is only to add cases, bulk_update_test_run_test_cases with add_test_cases is simpler and cannot remove anything.",
+          "`selection` can be `{}`, and a run with no configurations still returns one default entry in `trtc_configuration_mappings` — {configuration_id: null, select_all: true, linked_test_cases: [], unlinked_test_cases: []}. Resend both as returned rather than omitting them.",
+          "`dynamic_filter` and `filters` carry the same rule twice. For a dynamic run, resend it under both keys plus a top-level `is_dynamic`; for a static run they are null and should be left out.",
+          "The stored selection is NOT kept in step with bulk_update_test_run_test_cases or update_test_run: cases removed or added that way can still be listed here, or be missing, and a folder can still be stored as select-all. Before resending it, compare `selection.unique_test_case_count` with `test_run.test_cases_count` and the run's case listing; when they disagree, resending as-is re-adds removed cases and pulls in whole folders — rebuild the folders entries from the run's current cases, or avoid the full edit.",
+          "Everything is under `data`, including `success` — there is no top-level `success` on this response. Closed runs can be read.",
+          "A read only: it changes nothing and needs no permission beyond access to the project."
         ]
       },
       {
@@ -45118,6 +45177,51 @@
           "$schema": "TestRunFormFieldsResponse"
         }
       },
+        "TestRunEditSelectionResponse": {
+          "description": "A test run's stored case selection and editable fields, as the full edit form reads them before an edit.",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "success": {
+                    "type": "boolean"
+                  },
+                  "selection": {
+                    "type": "object",
+                    "description": "The run's stored case selection: {select_all, unique_test_case_count, folders}, where `folders` maps a folder id (string) to {test_case_select_all, selected_test_cases, deselected_test_cases}. Can be {}. Not kept in step with the add-only and remove calls."
+                  },
+                  "shared_selection": {
+                    "type": "object",
+                    "nullable": true,
+                    "description": "Cases shared in from other projects, keyed by project; null when the run has none."
+                  },
+                  "test_run": {
+                    "$schema": "TestRun"
+                  },
+                  "dynamic_filter": {
+                    "type": "object",
+                    "nullable": true,
+                    "description": "The dynamic-run filter rule; null for a static run."
+                  },
+                  "filters": {
+                    "type": "object",
+                    "nullable": true,
+                    "description": "Same content as dynamic_filter, under its alias."
+                  },
+                  "trtc_configuration_mappings": {
+                    "type": "array",
+                    "description": "Per-configuration case mappings; a run without configurations returns one default entry with configuration_id null and select_all true.",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
       "TestRunsSelectionResponse": {
         "description": "The test CASES a selection resolves to (this endpoint returns cases, not runs).\n`selected` is present only when show='all', and lists the ids of the returned rows that also\nmatch the `q` filter.\n",
         "schema": {
@@ -50011,6 +50115,7 @@
           }
         ],
         "capabilities": [
+          "get_test_run_edit_selection",
           "assign_test_run_owner",
           "assign_test_run_test_cases",
           "bulk_set_test_case_assignee_in_run",

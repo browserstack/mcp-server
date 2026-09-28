@@ -819,7 +819,8 @@
           "metrics accepts dotted names or @ aliases; see getLoadTestMetricsManifest for what applies to this test type.",
           "Answer a scoped question with the narrowest slice instead of the whole report: one metric → metrics=; error breakdown → errorCategory= (or slaOnly=true); a time window → sinceIso/untilIso; slowest transaction → detail=per-txn with groupBy=transaction and topN.",
           "One call with the right params returns everything for that question — do not re-fetch the same run with the same params. Fetch the full report (view=full / detail=full) only when the user explicitly asks for the raw or complete report.",
-          "A plain 'summarize this run' / 'give me a summary' request is answered by getLoadTestInsightSummary, NOT this endpoint. Only call this when the user asks for specific KPIs, SLA verdicts, web vitals, transactions, or the raw/complete report."
+          "A plain 'summarize this run' / 'give me a summary' request is answered by getLoadTestInsightSummary, NOT this endpoint. Only call this when the user asks for specific KPIs, SLA verdicts, web vitals, transactions, or the raw/complete report.",
+          "durationSec is the run's wall-clock length in WHOLE SECONDS. When presenting it to the user, render it as minutes and seconds (e.g. 330 -> '5m 30s', 90 -> '1m 30s', 45 -> '45s'), not as a raw seconds count; keep the raw seconds only for calculations."
         ],
         "returns": [
           "runId",
@@ -1991,7 +1992,8 @@
             "type": "string"
           },
           "durationSec": {
-            "type": "number"
+            "type": "number",
+            "description": "Run wall-clock duration in whole seconds. Present to the user as minutes + seconds (e.g. 5m 30s)."
           },
           "kpis": {
             "type": "object"

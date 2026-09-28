@@ -470,7 +470,7 @@
             "description": "Filter to runs carrying this tag (a run's own tags, or the tags it inherits from its test when it has none of its own)."
           }
         ],
-        "intent": "List the execution history across every load test in a project — newest first, paginated. Use for 'what ran last week in this project?' or to find runs across tests to compare.",
+        "intent": "List the execution history across every load test in a project — newest first, paginated. Use for 'what ran last week in this project?'.",
         "guidance": [
           "Returns run metadata only, not metrics — use getLoadTestRunReport for a run's KPIs.",
           "Each run carries a tags array — its own run-level tags if set (via updateLoadTest with runId), otherwise the tags inherited from its test. Filter with the tag query param.",
@@ -1075,12 +1075,19 @@
           {
             "name": "metrics",
             "type": "string",
-            "description": "Comma-separated dotted metric names or @ aliases (e.g. @vitals, @all). Resolve valid names via getLoadTestMetricsManifest."
+            "description": "Comma-separated dotted metric names or @ aliases (e.g. latency.p95, @vitals). Filters kpiDeltas; the first entry with a per-transaction value also picks the transaction metric. Resolve valid names via getLoadTestMetricsManifest."
           },
           {
             "name": "groupBy",
             "type": "string",
-            "description": "Rollup dimension for transaction deltas."
+            "description": "Axis for transaction deltas (default transaction = request name).",
+            "values": [
+              "transaction",
+              "url",
+              "label",
+              "threadGroup",
+              "scenario"
+            ]
           },
           {
             "name": "topN",
@@ -1090,21 +1097,24 @@
           {
             "name": "regressedOnly",
             "type": "boolean",
-            "description": "Return only regressed rows."
+            "description": "Return only regressed transaction rows."
           },
           {
             "name": "pctChangeMin",
             "type": "number",
-            "description": "Minimum percent change to include."
+            "description": "Minimum absolute percent change for a KPI or transaction row to be included."
           }
         ],
-        "intent": "Compare two completed runs of the SAME test and surface the deltas — the regression check ('did this run regress vs the baseline?'). Comparing runs of different tests is allowed but flagged in warnings as potentially misleading.",
+        "intent": "Compare two executions (runs) of the SAME load test and surface the deltas — the regression check ('did the latest run regress vs the previous one?'). Not for comparing different tests: runs of different tests are rejected (DIFFERENT_TESTS). For a trend across more than two runs use getLoadTestHistoricalTrends.",
         "guidance": [
-          "baselineRunId and candidateRunId are run UUIDs and must differ; both runs must be terminal.",
-          "regressedOnly + pctChangeMin filter to material regressions; dimensions accepts kpi, transaction, sla.",
-          "Use this to compare two runs — it returns per-KPI and per-transaction deltas directly. Do not fetch both run reports and diff them yourself.",
-          "Prefer two runs of the SAME test (pick both from listLoadTestRuns for one testId). baseline.testId and candidate.testId tell you whether they match.",
-          "Always check warnings before reporting the result: it flags different-test comparisons ('runs are of different tests — comparison may be misleading'), differing SLA definitions, and non-terminal runs. Surface any warning to the user — a cross-test delta can be meaningless."
+          "Pick both runs from listLoadTestRuns for ONE testId, filtered to finished runs (status=terminal). The older run is the baseline, the newer the candidate.",
+          "'Compare the latest run' means the latest finished run (candidate) vs the finished run before it (baseline).",
+          "Both runs must be finished and must share the same test types — otherwise the call fails with VALIDATION_ERROR. Runs of different tests fail with DIFFERENT_TESTS; do not retry with other tests' runs.",
+          "Use this to compare two runs — it returns per-KPI, per-transaction and SLA-verdict deltas from the same data as the Compare Runs page. Do not fetch both run reports and diff them yourself.",
+          "pctChange is signed (candidate vs baseline); direction/regressed already account for whether higher or lower is better — report those, do not re-derive them.",
+          "Transaction deltas are computed on one metric: the first metrics entry that has a per-transaction value (latency.*, errors.rate, throughput.*), else latency.p95. groupBy picks the transaction axis.",
+          "regressedOnly + pctChangeMin filter to material regressions; regressedOnly applies to transactionDeltas, pctChangeMin to kpiDeltas and transactionDeltas.",
+          "Check warnings before reporting: it flags SLA definitions that changed between the runs, which can flip verdicts without a performance change. Surface any warning to the user."
         ],
         "returns": [
           "baseline",
@@ -1136,6 +1146,9 @@
           },
           "401": {
             "$response": "Unauthorized"
+          },
+          "404": {
+            "$response": "NotFound"
           },
           "500": {
             "$response": "InternalServerError"
@@ -2107,13 +2120,114 @@
             }
           },
           "kpiDeltas": {
-            "description": "Per-KPI baseline→candidate deltas."
+            "type": "array",
+            "description": "Per-KPI baseline→candidate deltas.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "metric": {
+                  "type": "string"
+                },
+                "baseline": {
+                  "type": "number",
+                  "description": "Null when either run lacks the value."
+                },
+                "candidate": {
+                  "type": "number",
+                  "description": "Null when either run lacks the value."
+                },
+                "absChange": {
+                  "type": "number",
+                  "description": "Null when either run lacks the value."
+                },
+                "pctChange": {
+                  "type": "number",
+                  "description": "Signed percent change, candidate vs baseline. Null when either run lacks the value."
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "improved",
+                    "regressed",
+                    "unchanged"
+                  ]
+                }
+              }
+            }
           },
           "transactionDeltas": {
-            "type": "array"
+            "type": "array",
+            "description": "Per-transaction deltas on one metric, sorted by |pctChange| desc.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "metric": {
+                  "type": "string"
+                },
+                "baseline": {
+                  "type": "number",
+                  "description": "Null when either run lacks the value."
+                },
+                "candidate": {
+                  "type": "number",
+                  "description": "Null when either run lacks the value."
+                },
+                "absChange": {
+                  "type": "number",
+                  "description": "Null when either run lacks the value."
+                },
+                "pctChange": {
+                  "type": "number",
+                  "description": "Signed percent change, candidate vs baseline. Null when either run lacks the value."
+                },
+                "regressed": {
+                  "type": "boolean"
+                }
+              }
+            }
           },
           "slaVerdictChanges": {
-            "type": "array"
+            "type": "array",
+            "description": "SLA thresholds whose verdict changed between the runs.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "metric": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "condition": {
+                  "type": "string"
+                },
+                "threshold": {},
+                "unit": {
+                  "type": "string"
+                },
+                "request": {},
+                "from": {
+                  "type": "string",
+                  "description": "Null when the threshold is absent on that run."
+                },
+                "to": {
+                  "type": "string",
+                  "description": "Null when the threshold is absent on that run."
+                },
+                "diffStatus": {
+                  "type": "string",
+                  "enum": [
+                    "now_failing",
+                    "now_passing",
+                    "added",
+                    "dropped"
+                  ]
+                }
+              }
+            }
           },
           "warnings": {
             "type": "array",

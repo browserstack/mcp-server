@@ -2913,9 +2913,9 @@
         },
         "guidance": [
           "No body at all. This is a fixed transition to run_state `closed`; anything you send is ignored.",
-          "Closing has side effects that reopening does not undo: a snapshot of every result is taken, and the run's linked build in Test Observability is closed too. Treat it as the end of the cycle rather than a toggle.",
+          "Closing is final. A snapshot of every result is taken and the run's linked build in Test Observability is closed too, and nothing sets the run back to an active state afterwards — confirm with the user before closing a run that may need more testing.",
           "A closed run disappears from the default project run listing — it is only visible through the closed-runs listing or a listing that explicitly asks for it. Deleting it afterwards also demands a different permission from deleting an open run.",
-          "Reopening is possible by editing the run back to another run_state, but that edit must resend every mandatory test_run field, and the snapshot taken at close stays.",
+          "A closed run cannot be reopened. The partial run update answers 404 'Test Run ID is invalid' for a closed run, and the full edit returns success while leaving it closed — do not report either as a reopen. To keep testing, clone the run (clone_test_run with copy_all_cases) and add cases to the copy; re-link it to its plan afterwards, since the clone does not carry the plan over.",
           "The run comes back under `data.testrun` — one word, no underscore — alongside `data.project`. The read endpoints use `data.test_run`. The 200 also carries a TOP-LEVEL `skipped_test_case_ids` array (a sibling of `data`, not inside it).",
           "Client errors from the backing service come back as `{data: {success: false, error: <message>}}` with the 4xx status, not as the flat error envelope other endpoints use — read `data.success` before trusting `data.testrun`.",
           "Needs the test-run write permission; an automation run demands the automation variant and 403s otherwise."
@@ -8472,7 +8472,7 @@
               "closed"
             ],
             "example": "in_progress",
-            "description": "MANDATORY on every edit, even one that is not changing the state — resend the run's current value. It is validated against the enum before anything else, so a missing or misspelled value returns 400 {success:false, message:'invalid data'} with no hint about which field was wrong.",
+            "description": "MANDATORY on every edit, even one that is not changing the state — resend the run's current value. It is validated against the enum before anything else, so a missing or misspelled value returns 400 {success:false, message:'invalid data'} with no hint about which field was wrong. `closed` is one-way: a closed run cannot be reopened, and this call does not do it. The full edit: on a closed run it returns success and leaves the run closed.",
             "json_path": "/test_run/run_state"
           },
           {
@@ -17339,6 +17339,7 @@
           },
           {
             "name": "run_state",
+            "description": "`closed` is one-way: a closed run cannot be reopened, and this call does not do it.",
             "type": "string",
             "values": [
               "new_run",
@@ -20111,7 +20112,7 @@
         },
         "guidance": [
           "This EDITS the latest existing result; it never creates one. With nothing logged yet it answers 404 {success:false, message:'No test results found'} — log a result first, then amend it.",
-          "A closed test run is refused with 400 {success:false, error:'Cannot Update Closed Test Run'} before any field is written. Reopen the run or edit nothing.",
+          "A closed test run is refused with 400 {success:false, error:'Cannot Update Closed Test Run'} before any field is written. A closed run cannot be reopened, so its results are final — record new results in a clone of the run instead.",
           "Send the fields flat. The `test_result` wrapper is added for you from each field's json_path, and sending your own `test_result` object is rejected before the call as an unknown body key. Sending no fields at all is legal and re-saves the current values unchanged.",
           "Only description, status_id, custom_fields, attachments and issues survive to the write. `status` (the name) and `elapsed_time` are accepted by the parameter filter and then dropped on this path — set the status by id here, and use the v2 result surface if you only have a status name.",
           "Keys you omit keep their current values (the handler re-reads the result and fills them in), so this is a genuine partial update.",
@@ -21142,6 +21143,7 @@
           },
           {
             "name": "run_state",
+            "description": "`closed` is one-way: a closed run cannot be reopened, and this call does not do it. The partial update: on a closed run it answers 404 'Test Run ID is invalid' rather than a clear refusal.",
             "type": "string",
             "values": [
               "new_run",

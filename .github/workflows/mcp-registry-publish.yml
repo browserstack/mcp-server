@@ -39,6 +39,17 @@ jobs:
           curl -fsSL -o mcp-publisher.tar.gz "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
           echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum --check
           tar xzf mcp-publisher.tar.gz mcp-publisher
+
+      - name: Sync server.json version with package.json
+        # The registry rejects duplicate top-level versions, so the server
+        # version must move with every release. Derive both it and the npm
+        # package version from package.json rather than hand-editing.
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          jq --arg v "$VERSION" '.version = $v | .packages[].version = $v' server.json > server.json.tmp
+          mv server.json.tmp server.json
+          cat server.json
+
       - name: Login to MCP Registry
         run: ./mcp-publisher login github-oidc
 

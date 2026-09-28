@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { copyFileSync, mkdtempSync, readFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -90,7 +90,16 @@ describe("capability registry, end to end through the server factory", () => {
       {} as any,
     );
     const payload = JSON.parse(result.content[0].text);
-    expect(payload.products.map((p: any) => p.name)).toEqual(["tm"]);
+    // One file per product, discovered from the directory — so this asserts EVERY product
+    // the fixture directory holds, not a fixed list. It was pinned to ["tm"] and broke the
+    // moment a second index landed beside it, which is the case the stored layout exists
+    // for: a single product could never prove the discovery works.
+    expect(payload.products.map((p: any) => p.name).sort()).toEqual(
+      readdirSync(FIXTURE_DIR)
+        .filter((f) => f.endsWith(".capability-index.json"))
+        .map((f) => f.replace(".capability-index.json", ""))
+        .sort(),
+    );
     // NO provenance, here or on any other tool. `build_id` and `version` exist for our
     // logs and for cache busting, and capability resolution must never depend on them —
     // which is exactly why no caller has anything to do with them. The startup log

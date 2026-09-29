@@ -2650,6 +2650,7 @@
         "intent": "Set which notification types each listed user receives for this project - the save action of the notification-recipients table; upserts one preference row per (user, notification type).",
         "returns": [],
         "guidance": [
+          "BROKEN ROUTE (product bug): @PreAuthorize passes the path value to hasProjectPermission(Long projectId), while the handler resolves it as a normalised NAME. A name fails the SpEL conversion (400 'Failed to evaluate expression'); an integer passes that step, but the name lookup then fails. Expect this call to fail until the product fixes it.",
           "Despite the name it both adds and updates. The one `notificationType` map is applied to EVERY user id, so a batch cannot express per-user differences - split into multiple calls for that.",
           "Unknown notification-type keys are silently dropped, not rejected, so a mis-typed type just does nothing.",
           "The path variable is the project's normalised NAME, not its numeric id (differs from most notification endpoints).",
@@ -3758,7 +3759,8 @@
           {
             "name": "isGlobalProfile",
             "type": "boolean",
-            "description": "Whether the values are gathered group-wide (for a global profile) rather than scoped to this project \u2014 affects FAILURE_CATEGORIES and ALERTS sources."
+            "description": "Group-wide (true) or this project (false). REQUIRED in practice: the ES-backed types unbox it without a null check, so omitted -> 500.",
+            "required": true
           }
         ],
         "intent": "Typeahead/value source for the filter builder inside a quality profile: return matching build names, build tags, test tags, folder paths, failure categories or alerts so a caller can pick which builds a gate applies to.",
@@ -3773,6 +3775,7 @@
           }
         },
         "guidance": [
+          "Always send isGlobalProfile (false for a project profile): QGFilterESQuery does `if (!getIsGlobalProfile())` on a nullable Boolean, so omitting it makes BUILD_NAME/BUILD_TAGS/TEST_TAGS/FOLDERS return 500.",
           "Page size is fixed PER TYPE, not caller-controlled: 10 for BUILD_NAME/BUILD_TAGS/TEST_TAGS/FAILURE_CATEGORIES/ALERTS, and 1000 for FOLDERS. There is no page-size parameter.",
           "Paginate by passing the response's `afterKey` back as the next request's `afterKey`; stop when it comes back null/absent.",
           "BUILD_NAME/BUILD_TAGS/TEST_TAGS values come from Elasticsearch aggregations over the project's builds/test runs; FAILURE_CATEGORIES and ALERTS come from the DB and honour `isGlobalProfile`."
@@ -4156,9 +4159,8 @@
           {
             "name": "build_id",
             "type": "string",
-            "format": "uuid",
             "required": true,
-            "description": "A build UUID, despite the name `build_id`. Looked up by UUID alone, not scoped to the caller's group."
+            "description": "The build uuid (40-char hashed id, not an RFC-4122 UUID), despite the name `build_id`. Looked up by UUID alone, not scoped to the caller's group."
           }
         ],
         "intent": "The CI-facing quality gate check: given a build UUID, return whether the build passed or failed its quality gate (or that it is still running), so a pipeline can decide to proceed or fail.",
@@ -4192,9 +4194,8 @@
           {
             "name": "uuid",
             "type": "string",
-            "format": "uuid",
             "required": true,
-            "description": "Build UUID."
+            "description": "Build uuid: the 40-char hashed build id from a build read (not an RFC-4122 UUID)."
           }
         ],
         "intent": "The readiness-aware quality-gate summary for a build: return the per-profile results, or instead a status message when the build is still pending, the auto-analyser is running, or an evaluation state is cached. This is the endpoint to poll after triggering a recalculation.",
@@ -4226,9 +4227,8 @@
           {
             "name": "uuid",
             "type": "string",
-            "format": "uuid",
             "required": true,
-            "description": "Build UUID."
+            "description": "Build uuid: the 40-char hashed build id from a build read (not an RFC-4122 UUID)."
           }
         ],
         "intent": "Return the per-quality-profile results for a build as a flat list: each profile with its name, uuid and per-status rule counts \u2014 the quality gate breakdown on the build page.",
@@ -4259,9 +4259,8 @@
           {
             "name": "uuid",
             "type": "string",
-            "format": "uuid",
             "required": true,
-            "description": "Build UUID."
+            "description": "Build uuid: the 40-char hashed build id from a build read (not an RFC-4122 UUID)."
           },
           {
             "name": "profileUuid",
@@ -5832,7 +5831,7 @@
               {
                 "name": "auth",
                 "type": "object",
-                "description": "Target auth. fields: type (noAuth|basicAuth|bearerToken), username, password, token. username and password are required when an auth object is present.",
+                "description": "Target auth. REQUIRED even for none: send {type:\"noAuth\"}; omitted -> 400 'Payload auth is null' (40014). basicAuth needs username+password, bearerToken needs token.",
                 "fields": [
                   {
                     "name": "type",
@@ -5855,7 +5854,8 @@
                     "name": "token",
                     "type": "string"
                   }
-                ]
+                ],
+                "required": true
               },
               {
                 "name": "headers",
@@ -6011,7 +6011,7 @@
             "name": "payload",
             "type": "object",
             "required": true,
-            "description": "Full outbound request definition \u2014 same shape as create (url, method, type, auth{type,username,password,token}, headers[], params[], body). This is a full replacement, not a patch."
+            "description": "Full outbound request definition \u2014 same shape as create (url, method, type, auth{type,username,password,token}, headers[], params[], body). This is a full replacement, not a patch. payload.auth is REQUIRED even for none ({type:\"noAuth\"}); omitted -> 400 'Payload auth is null'."
           },
           {
             "name": "eventRules",
@@ -6419,7 +6419,7 @@
             "name": "payload",
             "type": "object",
             "required": true,
-            "description": "Outbound request definition \u2014 same shape as the project create (url, method[POST|PUT], type[default|custom|reuse], auth{type,username,password,token}, headers[]{key,value}, params[]{key,value}, body). url is SSRF-validated."
+            "description": "Outbound request definition \u2014 same shape as the project create (url, method[POST|PUT], type[default|custom|reuse], auth{type,username,password,token}, headers[]{key,value}, params[]{key,value}, body). url is SSRF-validated. payload.auth is REQUIRED even for none ({type:\"noAuth\"}); omitted -> 400 'Payload auth is null'."
           },
           {
             "name": "eventRules",
@@ -6539,7 +6539,7 @@
             "name": "payload",
             "type": "object",
             "required": true,
-            "description": "Full outbound request definition \u2014 same shape as create. Full replacement, not a patch."
+            "description": "Full outbound request definition \u2014 same shape as create. Full replacement, not a patch. payload.auth is REQUIRED even for none ({type:\"noAuth\"}); omitted -> 400 'Payload auth is null'."
           },
           {
             "name": "eventRules",
@@ -10951,7 +10951,11 @@
                 "name": "level",
                 "type": "string",
                 "maxLength": 16,
-                "description": "Severity/level label for this rule."
+                "description": "Severity level. Case-insensitive; any other value -> 400 'Invalid level specified'.",
+                "values": [
+                  "CRITICAL",
+                  "WARNING"
+                ]
               },
               {
                 "name": "value",
@@ -10964,7 +10968,13 @@
                 "name": "condition",
                 "type": "string",
                 "maxLength": 32,
-                "description": "Comparison/condition. Required."
+                "description": "Comparison. Required. Case-insensitive; any other value -> 400 'Invalid condition specified'.",
+                "values": [
+                  "LESS_THAN_EQUAL",
+                  "GREATER_THAN_EQUAL",
+                  "NOT_EQUAL",
+                  "EQUAL"
+                ]
               },
               {
                 "name": "hooksVisibility",
@@ -11179,7 +11189,7 @@
           {
             "name": "alertRules",
             "type": "array",
-            "description": "Set of rules, each {level (\u226416 chars), value (1\u201332 chars, required), condition (\u226432 chars, required), hooksVisibility}."
+            "description": "Set of rules, each {level: CRITICAL|WARNING (\u226416 chars), value (1\u201332 chars, required), condition: LESS_THAN_EQUAL|GREATER_THAN_EQUAL|NOT_EQUAL|EQUAL (required, case-insensitive; else 400 'Invalid condition specified'), hooksVisibility}."
           },
           {
             "name": "notificationRules",
@@ -11352,12 +11362,12 @@
               {
                 "name": "CRITICAL",
                 "type": "object",
-                "description": "Rule for the CRITICAL level: {value, condition}."
+                "description": "Rule for the CRITICAL level: {value, condition: LESS_THAN_EQUAL | GREATER_THAN_EQUAL | NOT_EQUAL | EQUAL (case-insensitive; else 400 'Invalid condition specified')}."
               },
               {
                 "name": "WARNING",
                 "type": "object",
-                "description": "Rule for the WARNING level: {value, condition}."
+                "description": "Rule for the WARNING level: {value, condition: LESS_THAN_EQUAL | GREATER_THAN_EQUAL | NOT_EQUAL | EQUAL (case-insensitive; else 400 'Invalid condition specified')}."
               }
             ]
           },
@@ -13293,11 +13303,11 @@
             "type": "string",
             "required": true,
             "values": [
-              "all",
-              "true",
-              "false"
+              "ALL",
+              "MUTED",
+              "UNMUTED"
             ],
-            "description": "REQUIRED muted-test visibility. Accepts all / true (muted only) / false (unmuted only); ALL / MUTED / UNMUTED also accepted, case-insensitively. An unrecognised value is a 400. There is no default."
+            "description": "REQUIRED muted-test visibility, as the enum constant ALL / MUTED / UNMUTED (case-sensitive). all/true/false -> 400 'Invalid request payload'."
           },
           {
             "name": "lowerBound",
@@ -13322,7 +13332,7 @@
         ],
         "guidance": [
           "Response is a flat object `{name, combinations}` with NO data wrapper. `name` is the test's display name (empty string when the hash matches nothing in the window, still 200), and `combinations` is the list of OS/browser/device environments it ran on.",
-          "`isMuted` is required here even though it is optional on the listing; omit it and the request fails.",
+          "isMuted is REQUIRED and binds straight to the MutedTestsVisibility enum by constant name: send ALL, MUTED or UNMUTED. The listing's all/true/false spellings fail conversion and return a generic 400 'Invalid request payload'.",
           "Narrower filter set than the test listing: no browser/os/device/tag filters, and only a single `buildName`.",
           "Any internal error is rethrown as a bare RuntimeException and surfaces as a plain 500 (no structured error body), so treat a 500 as opaque rather than parsing it."
         ],
@@ -13367,11 +13377,11 @@
             "type": "string",
             "required": true,
             "values": [
-              "all",
-              "true",
-              "false"
+              "ALL",
+              "MUTED",
+              "UNMUTED"
             ],
-            "description": "REQUIRED muted-test visibility. Accepts all / true / false; ALL / MUTED / UNMUTED also accepted, case-insensitively. An unrecognised value is a 400. There is no default."
+            "description": "REQUIRED muted-test visibility, as the enum constant ALL / MUTED / UNMUTED (case-sensitive). all/true/false -> 400 'Invalid request payload'."
           },
           {
             "name": "lowerBound",
@@ -13426,7 +13436,7 @@
         "guidance": [
           "The body is a BARE JSON ARRAY of environment rows (no object wrapper, no `data` key). Each row: `id` (browser-platform key), `reliability` (fail %), `duration` (avg), `os`/`browser`/`browserDevice` (formatted platform objects), and `totalFailures` {failed,total}.",
           "Uses the older explicit-argument service overload, so it accepts only a SINGLE `buildName` and a much smaller filter set than the test listing (no os/browser/device/tag filters).",
-          "`isMuted` is required; omit it and the request fails.",
+          "isMuted is REQUIRED and binds straight to the MutedTestsVisibility enum by constant name: send ALL, MUTED or UNMUTED. The listing's all/true/false spellings fail conversion and return a generic 400 'Invalid request payload'.",
           "Rows are sorted server-side (default reliability, descending) and platform rows that carry no displayable browser or device are dropped, so the array may be shorter than the number of distinct environments.",
           "Any internal error is rethrown as a bare RuntimeException and surfaces as a plain 500 with no structured body."
         ],
@@ -14043,9 +14053,10 @@
           },
           {
             "name": "clusterId",
-            "type": "integer",
+            "type": "string",
             "required": true,
-            "description": "Unique-error cluster id. It sits in the PATH but is bound onto the filter object's clusterId property by Spring's URI-template data binding \u2014 you do NOT also pass it as a query param."
+            "description": "Error cluster id as a digit STRING, exactly as list_unique_errors returns it (ids exceed 2^53; a JSON number loses precision). Unique-error cluster id. It sits in the PATH but is bound onto the filter object's clusterId property by Spring's URI-template data binding \u2014 you do NOT also pass it as a query param.",
+            "pattern": "^[0-9]+$"
           }
         ],
         "query": [
@@ -14244,19 +14255,20 @@
           "The response is a NESTED hierarchy (suites/folders/tests), each node carrying an external deep-link URL \u2014 it is not a flat array. For a flat list use the flat build listing instead.",
           "Plan- and source-aware: on a freemium or source-fenced build the analysis keys are stripped from every node, and using any smart-tag filter (is_flaky / is_always_failing / is_new_failure / has_performance_anomaly) is refused with a 403 telling you to upgrade \u2014 so gate those filters on plan.",
           "Service-account callers are additionally checked for the TEST_RUN_AUTOMATED_VIEW permission on the build's project; lacking it is a 403.",
-          "Pagination is an opaque base64 next_page token; pass pagination.nextPage back unchanged and stop when pagination.hasNext is false. The response envelope also differs by an account flag: newer accounts get workflowStatusAggregate + isManuallyOverridden, older ones get statusAggregate \u2014 read whichever is present."
+          "Pagination is an opaque base64 next_page token: pass `pagination.next_page` back unchanged and stop when `pagination.has_next` is false. Keys are snake_case. The envelope differs by an account flag: newer accounts add `is_manually_overridden` and `test_summary` carries workflow-status counts, older ones plain status counts."
         ],
         "returns": [
           "hierarchy",
-          "isArchived",
-          "buildName",
-          "buildUuid",
-          "originalName",
-          "buildNumber",
-          "projectId",
+          "is_archived",
+          "build_name",
+          "build_id",
+          "original_name",
+          "build_number",
+          "project_id",
           "name",
-          "groupId",
-          "appDetails",
+          "group_id",
+          "test_summary",
+          "app_details",
           "pagination"
         ],
         "responses": {
@@ -14628,12 +14640,12 @@
           {
             "name": "testRunIds",
             "type": "array",
-            "description": "Restrict to specific numeric run ids. When present it takes precedence over the clusterIds/latest path."
+            "description": "Restrict to specific numeric run ids. Send this OR clusterIds: with neither the handler 500s. Takes precedence over clusterIds."
           },
           {
             "name": "clusterIds",
             "type": "array",
-            "description": "Restrict to runs in these unique-error clusters (only applied when testRunIds is not sent; that path also limits to the latest run per test)."
+            "description": "Restrict to runs in these unique-error clusters (latest run per test). Send this OR testRunIds: with neither the handler 500s."
           },
           {
             "name": "status",
@@ -14679,6 +14691,7 @@
         ],
         "intent": "List a build's test runs as a flat, filterable list (rather than the nested suite/folder hierarchy) \u2014 the data source for the flat test-listing view of a build.",
         "guidance": [
+          "Send testRunIds or clusterIds. With neither, the handler builds an Elasticsearch terms filter from a null clusterIds list and returns 500 Internal System Exception. The other filter params (status, issueType, tags, browser, os, folder, flaky, isMuted, search) are bound but NOT applied by this handler; only testRunIds, clusterIds and virtualDevice narrow the result.",
           "Flat counterpart of the hierarchical build listing \u2014 returns a plain array under testRuns, no tree. Filters arrive as QUERY params bound onto a POJO, not as a JSON body.",
           "In each row the top-level `id` is the test's HASH (a string); the numeric run id you need for other run reads is `details.id`. Do not pass the top-level id where a numeric run id is expected.",
           "Pagination is Elasticsearch search_after: pass the prior page's cursor back as `searchAfter`. Note the underlying query fetches up to 10,000 hits, so on very large builds narrow with filters rather than relying on paging alone.",
@@ -14824,13 +14837,13 @@
             "name": "buildFailureThemeId",
             "type": "integer",
             "required": false,
-            "description": "Integer id of the failure theme to drill into, from a build AI-failures read. Give this OR buildFailureWorkflowId to scope to one cluster."
+            "description": "Integer id of the failure theme to drill into, from a build AI-failures read. Give this OR buildFailureWorkflowId to scope to one cluster. One of theme/workflow id is required."
           },
           {
             "name": "buildFailureWorkflowId",
             "type": "integer",
             "required": false,
-            "description": "Integer id of the failure workflow to drill into, from a build AI-failures read."
+            "description": "Integer id of the failure workflow to drill into, from a build AI-failures read. One of theme/workflow id is required."
           },
           {
             "name": "limit",
@@ -14851,7 +14864,7 @@
           "pagingParams"
         ],
         "guidance": [
-          "Scope with buildFailureThemeId OR buildFailureWorkflowId (ids come from get_build_ai_failures). With neither, the lookup runs for the whole build.",
+          "Send buildFailureThemeId OR buildFailureWorkflowId (integer ids from get_build_ai_failures). One of them is REQUIRED: with neither, the TestHub lookup 400s 'At least one of build_failure_theme_id or build_failure_workflow_id must be provided' (there is no whole-build mode).",
           "limit is accepted but IGNORED; the backend uses its own default page size. Do not treat limit as a cap.",
           "Paginate with the cursor: pass pagingParams.searchAfter back as searchAfter and stop when pagingParams.hasNext is false.",
           "An empty testRuns with hasNext=false means the cluster resolved to no runs, not an error.",
@@ -15065,13 +15078,13 @@
             "name": "buildFailureThemeId",
             "type": "integer",
             "required": false,
-            "description": "Integer id of the failure theme to drill into, from a public AI-failures read. Give this OR buildFailureWorkflowId to scope to one cluster."
+            "description": "Integer id of the failure theme to drill into, from a public AI-failures read. Give this OR buildFailureWorkflowId to scope to one cluster. One of theme/workflow id is required."
           },
           {
             "name": "buildFailureWorkflowId",
             "type": "integer",
             "required": false,
-            "description": "Integer id of the failure workflow to drill into."
+            "description": "Integer id of the failure workflow to drill into. One of theme/workflow id is required."
           },
           {
             "name": "limit",
@@ -15093,7 +15106,7 @@
         ],
         "guidance": [
           "Public endpoint: authenticate with your BrowserStack username + access key.",
-          "Scope with buildFailureThemeId or buildFailureWorkflowId (ids from get_build_ai_failures_via_public_api); with neither, the lookup runs for the whole build.",
+          "Send buildFailureThemeId OR buildFailureWorkflowId (integer ids from get_build_ai_failures_via_public_api). One of them is REQUIRED: with neither, the TestHub lookup 400s 'At least one of build_failure_theme_id or build_failure_workflow_id must be provided' (there is no whole-build mode).",
           "There is no explicit-testRunIds variant on the public flat endpoint.",
           "limit is ignored; page with searchAfter until pagingParams.hasNext is false."
         ],
@@ -17391,8 +17404,49 @@
             "name": "widgetKey",
             "type": "string",
             "required": true,
-            "description": "REQUIRED (@NotNull). The widget type (WidgetTypeEnum) the filter belongs to. Note the wire key is `widgetKey`, not `widget` or `type`.",
-            "json_path": "/widgetKey"
+            "description": "REQUIRED (@NotNull). The widget type (WidgetTypeEnum) the filter belongs to. Note the wire key is `widgetKey`, not `widget` or `type`. Exact WidgetTypeEnum constant; any other value -> 400 'Invalid request payload'.",
+            "json_path": "/widgetKey",
+            "values": [
+              "SUMMARY_BANNER",
+              "BUILD_RUN_SUMMARY",
+              "FLAKINESS",
+              "STABILITY",
+              "MUTED_TESTS",
+              "FAILED_TESTS",
+              "PERFORMANCE",
+              "ALWAYS_FAILING",
+              "NEW_FAILURES",
+              "TEST_EXECUTIONS",
+              "TEST_STATUS_TREND",
+              "UNIQUE_TEST_CASES",
+              "DEFECTS_TREND",
+              "FAILURE_CATEGORIES",
+              "TOP_UNIQUE_ERRORS",
+              "UNIQUE_ERROR_TIMELINE",
+              "FAILURE_RATE_BY_FOLDERS",
+              "TOP_UNSTABLE_TEST_EXECUTIONS",
+              "TOP_TIME_TAKING_TEST_EXECUTIONS",
+              "DEFECTS_TABLE",
+              "PLATFORMS_COVERAGE",
+              "ALERTS",
+              "COMPONENTS_SUMMARY",
+              "GLOBAL_FILTER",
+              "TEST_CASE_STATISTICS_CARD",
+              "TEST_CASE_TYPE",
+              "TEST_CASE_TREND",
+              "ACTIVE_BUILDS",
+              "CLOSED_BUILDS",
+              "CLOSED_BUILDS_RESULTS",
+              "DEFECTS_LOGS",
+              "UNIQUE_BUILDS",
+              "BUILD_FREQUENCY",
+              "RELEASE_READINESS",
+              "AUTOMATION_COVERAGE",
+              "TABULAR_TEST_RUNS",
+              "BUILD_COMPARISON",
+              "TEST_EXECUTION_DISTRIBUTION",
+              "PIVOT_TABLE_WIDGET"
+            ]
           },
           {
             "name": "filterKey",
@@ -17599,7 +17653,48 @@
             "name": "widgetType",
             "type": "string",
             "required": true,
-            "description": "A WidgetTypeEnum value identifying which widget to compute. FLAKINESS, ALWAYS_FAILING and NEW_FAILURES are plan-gated and return FEATURE_INACCESSIBLE if the group lacks the feature."
+            "description": "A WidgetTypeEnum value identifying which widget to compute. FLAKINESS, ALWAYS_FAILING and NEW_FAILURES are plan-gated and return FEATURE_INACCESSIBLE if the group lacks the feature. Exact WidgetTypeEnum constant; any other value -> 400 'Invalid request payload'.",
+            "values": [
+              "SUMMARY_BANNER",
+              "BUILD_RUN_SUMMARY",
+              "FLAKINESS",
+              "STABILITY",
+              "MUTED_TESTS",
+              "FAILED_TESTS",
+              "PERFORMANCE",
+              "ALWAYS_FAILING",
+              "NEW_FAILURES",
+              "TEST_EXECUTIONS",
+              "TEST_STATUS_TREND",
+              "UNIQUE_TEST_CASES",
+              "DEFECTS_TREND",
+              "FAILURE_CATEGORIES",
+              "TOP_UNIQUE_ERRORS",
+              "UNIQUE_ERROR_TIMELINE",
+              "FAILURE_RATE_BY_FOLDERS",
+              "TOP_UNSTABLE_TEST_EXECUTIONS",
+              "TOP_TIME_TAKING_TEST_EXECUTIONS",
+              "DEFECTS_TABLE",
+              "PLATFORMS_COVERAGE",
+              "ALERTS",
+              "COMPONENTS_SUMMARY",
+              "GLOBAL_FILTER",
+              "TEST_CASE_STATISTICS_CARD",
+              "TEST_CASE_TYPE",
+              "TEST_CASE_TREND",
+              "ACTIVE_BUILDS",
+              "CLOSED_BUILDS",
+              "CLOSED_BUILDS_RESULTS",
+              "DEFECTS_LOGS",
+              "UNIQUE_BUILDS",
+              "BUILD_FREQUENCY",
+              "RELEASE_READINESS",
+              "AUTOMATION_COVERAGE",
+              "TABULAR_TEST_RUNS",
+              "BUILD_COMPARISON",
+              "TEST_EXECUTION_DISTRIBUTION",
+              "PIVOT_TABLE_WIDGET"
+            ]
           }
         ],
         "query": [
@@ -19994,7 +20089,14 @@
           {
             "name": "config",
             "type": "object",
-            "description": "WidgetsConfig \u2014 datasets and segments (limits are validated), display columns, etc."
+            "description": "WidgetsConfig with UPPER_SNAKE section keys; the report reads DATASETS.",
+            "fields": [
+              {
+                "name": "DATASETS",
+                "type": "object",
+                "description": "Datasets (WidgetSegments): {value:[{name, dataSetType?, filters:{projects:[id], dateRange?:{lowerBound,upperBound}, ...}}]}. Wire key is UPPER_SNAKE DATASETS; lowercase datasets is ignored and the call 500s."
+              }
+            ]
           },
           {
             "name": "type",
@@ -20024,6 +20126,7 @@
           "sourceFencingFlags"
         ],
         "guidance": [
+          "`config` keys are UPPER_SNAKE WidgetsConfig sections (@JsonProperty): send config.DATASETS.value = [{name, filters:{projects:[<project id>]}}] at minimum. A lowercase `datasets` key is silently dropped, the handler dereferences a null DATASETS and returns 500 'Error while fetching report data'. The path {id} is ignored but must still be a UUID (any placeholder UUID works).",
           "Only reportType TABULAR_TEST_RUNS is implemented; any other type returns a 200 with a null body rather than erroring.",
           "The {id} in the path is ignored entirely \u2014 everything comes from the body, so the path id is just a placeholder.",
           "Widget global filters are sent under the key globalFilters, NOT dashboardFilters.",
@@ -20100,7 +20203,14 @@
           {
             "name": "config",
             "type": "object",
-            "description": "WidgetsConfig \u2014 datasets/segments; configuredColumns containing 'openIssues' adds the totalIssuesCount tile."
+            "description": "WidgetsConfig with UPPER_SNAKE section keys; the report reads DATASETS.",
+            "fields": [
+              {
+                "name": "DATASETS",
+                "type": "object",
+                "description": "Datasets (WidgetSegments): {value:[{name, dataSetType?, filters:{projects:[id], dateRange?:{lowerBound,upperBound}, ...}}]}. Wire key is UPPER_SNAKE DATASETS; lowercase datasets is ignored and the call 500s."
+              }
+            ]
           }
         ],
         "intent": "Get the summary stat tiles (aggregate KPI numbers) for a report widget \u2014 the headline figures shown above the report table.",
@@ -20109,6 +20219,7 @@
           "sourceFencingFlags"
         ],
         "guidance": [
+          "`config` keys are UPPER_SNAKE WidgetsConfig sections (@JsonProperty): send config.DATASETS.value = [{name, filters:{projects:[<project id>]}}] at minimum. A lowercase `datasets` key is silently dropped, the handler dereferences a null DATASETS and returns 500 'Error while fetching report data'. The path {id} is ignored but must still be a UUID (any placeholder UUID works).",
           "Same body as the dataset call but returns aggregates instead of rows; only TABULAR_TEST_RUNS is implemented, other types return a 200 with a null body.",
           "page / per_page / source are accepted and ignored here \u2014 tiles are not paginated.",
           "The {id} path variable is unused; the widget definition comes entirely from the body.",
@@ -20216,8 +20327,11 @@
           },
           {
             "name": "dateRange",
-            "type": "object",
-            "description": "Build date-range filter (2 elements), expected by the report build-scope filter."
+            "type": "array",
+            "required": true,
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "Window as exactly two epoch-millisecond bounds [from, to]. Required (@NotNull @Size(2)); omitted -> 400 'dateRange must not be null'."
           },
           {
             "name": "buildStatuses",
@@ -21013,12 +21127,12 @@
           {
             "name": "config",
             "type": "object",
-            "description": "Report definition.",
+            "description": "Report definition (WidgetsConfig). Keys are UPPER_SNAKE sections; DATASETS is the one the report reads.",
             "fields": [
               {
-                "name": "datasets",
+                "name": "DATASETS",
                 "type": "object",
-                "description": "The report's datasets/segments (WidgetSegments: `value` is the list). Dataset and segment limits are validated - violations throw. If all datasets mutually conflict, an empty response is returned."
+                "description": "Datasets (WidgetSegments): {value:[{name, dataSetType?, filters:{projects:[id], dateRange?:{lowerBound,upperBound}, ...}}]}. Wire key is UPPER_SNAKE DATASETS; lowercase datasets is ignored and the call 500s."
               }
             ]
           },
@@ -21071,6 +21185,7 @@
           }
         },
         "guidance": [
+          "`config` keys are UPPER_SNAKE WidgetsConfig sections (@JsonProperty): send config.DATASETS.value = [{name, filters:{projects:[<project id>]}}] at minimum. A lowercase `datasets` key is silently dropped, the handler dereferences a null DATASETS and returns 500 'Error while fetching report data'.",
           "This is a read despite being a write-shaped call: the body is the query, not new state, and the route is marked read-only.",
           "The `{id}` in the address is never read - the report is defined entirely by the body, so pass any placeholder.",
           "`reportType` is required and only TABULAR_TEST_RUNS works; any other type returns a 200 with a NULL body (not an error), so a null response can mean 'unsupported report type', not 'no data'.",
@@ -21118,12 +21233,12 @@
           {
             "name": "config",
             "type": "object",
-            "description": "Same report definition as the table call.",
+            "description": "Report definition (WidgetsConfig). Keys are UPPER_SNAKE sections; DATASETS is the one the report reads.",
             "fields": [
               {
-                "name": "datasets",
+                "name": "DATASETS",
                 "type": "object",
-                "description": "Datasets/segments (WidgetSegments)."
+                "description": "Datasets (WidgetSegments): {value:[{name, dataSetType?, filters:{projects:[id], dateRange?:{lowerBound,upperBound}, ...}}]}. Wire key is UPPER_SNAKE DATASETS; lowercase datasets is ignored and the call 500s."
               }
             ]
           },
@@ -21170,6 +21285,7 @@
           }
         },
         "guidance": [
+          "`config` keys are UPPER_SNAKE WidgetsConfig sections (@JsonProperty): send config.DATASETS.value = [{name, filters:{projects:[<project id>]}}] at minimum. A lowercase `datasets` key is silently dropped, the handler dereferences a null DATASETS and returns 500 'Error while fetching report data'.",
           "Read-only despite being write-shaped; same body as the table call, but no pagination.",
           "Each tile in `data` is `{meta, value}` where `meta` is the tile name (totalUniqueTests, flakyTestsCount, newFailureTestsCount, alwaysFailingTestsCount, totalPassedExecutions, totalFailedExecutions, totalSkippedExecutions, totalUnknownExecutions, grandTotalExecutions) and `value` is a Long count. Note the key is `meta`, not `name`.",
           "Extra tiles appear only conditionally: totalIssuesCount only when `configuredColumns` contains 'openIssues'; activeRunCount, closedRunCount and totalTestCasesCount only when the backend returns them.",
@@ -21293,7 +21409,48 @@
             "type": "string",
             "required": true,
             "json_path": "/widgetKey",
-            "description": "The widget type the filter is being configured for (WidgetTypeEnum). REQUIRED. NOTE the JSON key is `widgetKey`, not `widget` - the DTO field `widget` is renamed on the wire; sending `widget` is dropped and the request fails @NotNull validation."
+            "description": "The widget type the filter is being configured for (WidgetTypeEnum). REQUIRED. NOTE the JSON key is `widgetKey`, not `widget` - the DTO field `widget` is renamed on the wire; sending `widget` is dropped and the request fails @NotNull validation. Exact WidgetTypeEnum constant; any other value -> 400 'Invalid request payload'.",
+            "values": [
+              "SUMMARY_BANNER",
+              "BUILD_RUN_SUMMARY",
+              "FLAKINESS",
+              "STABILITY",
+              "MUTED_TESTS",
+              "FAILED_TESTS",
+              "PERFORMANCE",
+              "ALWAYS_FAILING",
+              "NEW_FAILURES",
+              "TEST_EXECUTIONS",
+              "TEST_STATUS_TREND",
+              "UNIQUE_TEST_CASES",
+              "DEFECTS_TREND",
+              "FAILURE_CATEGORIES",
+              "TOP_UNIQUE_ERRORS",
+              "UNIQUE_ERROR_TIMELINE",
+              "FAILURE_RATE_BY_FOLDERS",
+              "TOP_UNSTABLE_TEST_EXECUTIONS",
+              "TOP_TIME_TAKING_TEST_EXECUTIONS",
+              "DEFECTS_TABLE",
+              "PLATFORMS_COVERAGE",
+              "ALERTS",
+              "COMPONENTS_SUMMARY",
+              "GLOBAL_FILTER",
+              "TEST_CASE_STATISTICS_CARD",
+              "TEST_CASE_TYPE",
+              "TEST_CASE_TREND",
+              "ACTIVE_BUILDS",
+              "CLOSED_BUILDS",
+              "CLOSED_BUILDS_RESULTS",
+              "DEFECTS_LOGS",
+              "UNIQUE_BUILDS",
+              "BUILD_FREQUENCY",
+              "RELEASE_READINESS",
+              "AUTOMATION_COVERAGE",
+              "TABULAR_TEST_RUNS",
+              "BUILD_COMPARISON",
+              "TEST_EXECUTION_DISTRIBUTION",
+              "PIVOT_TABLE_WIDGET"
+            ]
           },
           {
             "name": "filterKey",
@@ -21369,7 +21526,48 @@
             "name": "widgetType",
             "type": "string",
             "required": true,
-            "description": "The widget to compute (WidgetTypeEnum). Determines the response shape."
+            "description": "The widget to compute (WidgetTypeEnum). Determines the response shape. Bound by exact enum constant name; any other value is a 400.",
+            "values": [
+              "SUMMARY_BANNER",
+              "BUILD_RUN_SUMMARY",
+              "FLAKINESS",
+              "STABILITY",
+              "MUTED_TESTS",
+              "FAILED_TESTS",
+              "PERFORMANCE",
+              "ALWAYS_FAILING",
+              "NEW_FAILURES",
+              "TEST_EXECUTIONS",
+              "TEST_STATUS_TREND",
+              "UNIQUE_TEST_CASES",
+              "DEFECTS_TREND",
+              "FAILURE_CATEGORIES",
+              "TOP_UNIQUE_ERRORS",
+              "UNIQUE_ERROR_TIMELINE",
+              "FAILURE_RATE_BY_FOLDERS",
+              "TOP_UNSTABLE_TEST_EXECUTIONS",
+              "TOP_TIME_TAKING_TEST_EXECUTIONS",
+              "DEFECTS_TABLE",
+              "PLATFORMS_COVERAGE",
+              "ALERTS",
+              "COMPONENTS_SUMMARY",
+              "GLOBAL_FILTER",
+              "TEST_CASE_STATISTICS_CARD",
+              "TEST_CASE_TYPE",
+              "TEST_CASE_TREND",
+              "ACTIVE_BUILDS",
+              "CLOSED_BUILDS",
+              "CLOSED_BUILDS_RESULTS",
+              "DEFECTS_LOGS",
+              "UNIQUE_BUILDS",
+              "BUILD_FREQUENCY",
+              "RELEASE_READINESS",
+              "AUTOMATION_COVERAGE",
+              "TABULAR_TEST_RUNS",
+              "BUILD_COMPARISON",
+              "TEST_EXECUTION_DISTRIBUTION",
+              "PIVOT_TABLE_WIDGET"
+            ]
           }
         ],
         "query": [
@@ -21409,14 +21607,21 @@
               {
                 "name": "dateRange",
                 "type": "object",
-                "description": "Date-range filter used to resolve the window when lowerBound/upperBound are absent."
+                "description": "DateRangeFilter {key, lowerBound, upperBound}. key: days1|days7|days14|days30|months3|months6|year1|year2|allTime|custom (custom uses the epoch-ms bounds)."
               }
             ]
           },
           {
             "name": "config",
             "type": "object",
-            "description": "Widget definition (datasets, segments, display type, ...)."
+            "description": "Widget definition (WidgetsConfig, UPPER_SNAKE section keys). Send at least {\"FILTERS\":{\"value\":{}}}; some types need more sections.",
+            "fields": [
+              {
+                "name": "FILTERS",
+                "type": "object",
+                "description": "WidgetFilters {value:{...WidgetFiltersValue}, filterOrder?, match?}. {value:{}} = no widget-level filter."
+              }
+            ]
           },
           {
             "name": "type",
@@ -21447,6 +21652,7 @@
           }
         },
         "guidance": [
+          "`config` keys are UPPER_SNAKE WidgetsConfig sections. Send config.FILTERS.value (an empty object is fine): 33 widget handlers dereference config.FILTERS.value, so a missing or empty config is a bare 500. Some types read more sections too (FLAKINESS also reads SEGMENTS.value), and a missing one is again a 500. Verified minimal body for ACTIVE_BUILDS: {globalFilters:{projects:[<project id>], dateRange:{key:\"days30\"}}, config:{FILTERS:{value:{}}}}.",
           "Projects come from the body's `globalFilters.projects` (this is the org-level route), NOT from the address - the `{dashboardId}` is ignored here.",
           "The response envelope depends on `widgetType`; there is no single fixed shape, so switch on the type you asked for.",
           "For ClickHouse-powered widget types the project ids you send are translated to TestHub ids before the query runs.",
@@ -21472,7 +21678,48 @@
             "name": "widgetType",
             "type": "string",
             "required": true,
-            "description": "The widget whose data point is being drilled into (WidgetTypeEnum)."
+            "description": "The widget whose data point is being drilled into (WidgetTypeEnum). Bound by exact enum constant name; any other value is a 400.",
+            "values": [
+              "SUMMARY_BANNER",
+              "BUILD_RUN_SUMMARY",
+              "FLAKINESS",
+              "STABILITY",
+              "MUTED_TESTS",
+              "FAILED_TESTS",
+              "PERFORMANCE",
+              "ALWAYS_FAILING",
+              "NEW_FAILURES",
+              "TEST_EXECUTIONS",
+              "TEST_STATUS_TREND",
+              "UNIQUE_TEST_CASES",
+              "DEFECTS_TREND",
+              "FAILURE_CATEGORIES",
+              "TOP_UNIQUE_ERRORS",
+              "UNIQUE_ERROR_TIMELINE",
+              "FAILURE_RATE_BY_FOLDERS",
+              "TOP_UNSTABLE_TEST_EXECUTIONS",
+              "TOP_TIME_TAKING_TEST_EXECUTIONS",
+              "DEFECTS_TABLE",
+              "PLATFORMS_COVERAGE",
+              "ALERTS",
+              "COMPONENTS_SUMMARY",
+              "GLOBAL_FILTER",
+              "TEST_CASE_STATISTICS_CARD",
+              "TEST_CASE_TYPE",
+              "TEST_CASE_TREND",
+              "ACTIVE_BUILDS",
+              "CLOSED_BUILDS",
+              "CLOSED_BUILDS_RESULTS",
+              "DEFECTS_LOGS",
+              "UNIQUE_BUILDS",
+              "BUILD_FREQUENCY",
+              "RELEASE_READINESS",
+              "AUTOMATION_COVERAGE",
+              "TABULAR_TEST_RUNS",
+              "BUILD_COMPARISON",
+              "TEST_EXECUTION_DISTRIBUTION",
+              "PIVOT_TABLE_WIDGET"
+            ]
           }
         ],
         "query": [
@@ -21517,14 +21764,21 @@
               {
                 "name": "dateRange",
                 "type": "object",
-                "description": "Date range of the selected point."
+                "description": "DateRangeFilter {key, lowerBound, upperBound}. key: days1|days7|days14|days30|months3|months6|year1|year2|allTime|custom (custom uses the epoch-ms bounds)."
               }
             ]
           },
           {
             "name": "config",
             "type": "object",
-            "description": "Widget definition."
+            "description": "Widget definition (WidgetsConfig, UPPER_SNAKE section keys). Send at least {\"FILTERS\":{\"value\":{}}}; some types need more sections.",
+            "fields": [
+              {
+                "name": "FILTERS",
+                "type": "object",
+                "description": "WidgetFilters {value:{...WidgetFiltersValue}, filterOrder?, match?}. {value:{}} = no widget-level filter."
+              }
+            ]
           }
         ],
         "intent": "Return the underlying row-level records behind a widget data point - the 'click a bar to see the builds/tests it represents' drill-down for a dashboard widget.",
@@ -21553,6 +21807,7 @@
           }
         },
         "guidance": [
+          "`config` keys are UPPER_SNAKE WidgetsConfig sections. Send config.FILTERS.value (an empty object is fine): 33 widget handlers dereference config.FILTERS.value, so a missing or empty config is a bare 500. Some types read more sections too (FLAKINESS also reads SEGMENTS.value), and a missing one is again a 500. Verified minimal body for ACTIVE_BUILDS: {globalFilters:{projects:[<project id>], dateRange:{key:\"days30\"}}, config:{FILTERS:{value:{}}}}.",
           "There is no separate project-view drill-down route: drilling down from a project view uses THIS route with the projects supplied in the body.",
           "`data` rows carry project identity (projectId/thProjectId/projectName/normalisedName) plus widget-specific fields; `insights` is a `{value, meta}` summary and the boolean flags report a conflicting or empty numerator/denominator selection.",
           "Same project-id translation for ClickHouse-powered widgets and same TCM manual+automated behaviour as the widget-data call.",
@@ -22619,7 +22874,15 @@
             "name": "bucket",
             "type": "string",
             "required": true,
-            "description": "Which comparison bucket to list (the categories returned by get_build_comparison_aggregation, e.g. newlyFailed / startedPassing / droppedTests / additionalTests / noChange / failedWithDifferentReason)."
+            "description": "Comparison bucket, as the exact BucketEnum constant name (case-sensitive). The aggregation's camelCase keys (newlyFailed ...) are NOT accepted: any other value -> 500 'No enum constant'.",
+            "values": [
+              "NEWLY_FAILED_TEST",
+              "STARTED_PASSING_TEST",
+              "DROPPED_TEST",
+              "ADDITIONAL_TEST",
+              "NO_CHANGE",
+              "FAILED_WITH_DIFFERENT_REASON"
+            ]
           },
           {
             "name": "fileOffset",
@@ -23081,7 +23344,8 @@
           {
             "name": "showMyComments",
             "type": "boolean",
-            "description": "Restrict to threads involving comments you authored or were mentioned in."
+            "description": "Restrict to threads you authored or were mentioned in. REQUIRED in practice: omitted -> 500 (null Boolean unboxed). Send false for all threads.",
+            "required": true
           }
         ],
         "returns": [
@@ -23098,7 +23362,8 @@
         "guidance": [
           "Returns a bare JSON array of thread summaries (threadId, commentCount, the thread's page type and testRunUuid for deep-linking), not the individual comments \u2014 fetch a thread's comments via list_comments.",
           "`buildId` must be the PARENT build uuid; a re-run's uuid yields an empty result, not an error.",
-          "Thread aggregation is capped at 1000 threads, and results are bounded by the plan's data-retention window so older threads silently drop out."
+          "Thread aggregation is capped at 1000 threads, and results are bounded by the plan's data-retention window so older threads silently drop out.",
+          "Always send showMyComments (false for every thread): the server unboxes it without a null check, so omitting it returns 500 Internal System Exception."
         ],
         "responses": {
           "200": {
@@ -23382,9 +23647,10 @@
           },
           {
             "name": "errorId",
-            "type": "integer",
+            "type": "string",
             "required": true,
-            "description": "The error cluster id. Declared as a string but parsed with Long.parseLong: a non-numeric value throws a raw NumberFormatException and comes back as a 500, not a clean 400. Bound onto the query command object's clusterId."
+            "description": "Error cluster id as a digit STRING, exactly as list_unique_errors returns it. Ids exceed 2^53, so a JSON number loses precision. Parsed as a Long.",
+            "pattern": "^[0-9]+$"
           }
         ],
         "query": [
@@ -23395,6 +23661,12 @@
             "minItems": 2,
             "maxItems": 2,
             "description": "Window as exactly two epoch-millisecond bounds [from, to], repeated query param. Required. lowerBound + upperBound singles are the only fallback."
+          },
+          {
+            "name": "stabilityHash",
+            "type": "string",
+            "required": true,
+            "description": "Stability hash of the test the error occurred in (id from get_unique_error_impacted_tests). Required: omitted -> 500. Alias: testId."
           },
           {
             "name": "allBuilds",
@@ -23451,6 +23723,7 @@
           }
         },
         "guidance": [
+          "These error-detail reads are per TEST: send stabilityHash (the test's id from get_unique_error_impacted_tests for this cluster) alongside errorId. The handler filters on stabilityHash unconditionally, so omitting it returns 500. Pass errorId as the digit string list_unique_errors returned.",
           "Pass the cluster id as a numeric `errorId`. A non-numeric id is NOT a 400 here \u2014 it is a raw 500 from Long.parseLong, because this handler does not validate or wrap exceptions the way its siblings do.",
           "If no failing run matches the filters+window, the handler dereferences the first (absent) hit and 500s rather than returning an empty summary \u2014 treat a 500 here as possibly 'no sample found', and widen the window.",
           "`error` is the sample text already split on newlines into an array of lines, not a single string.",
@@ -23473,9 +23746,10 @@
           },
           {
             "name": "errorId",
-            "type": "integer",
+            "type": "string",
             "required": true,
-            "description": "The error cluster id (parsed as a Long). Bound onto the query command object's clusterId."
+            "description": "Error cluster id as a digit STRING, exactly as list_unique_errors returns it. Ids exceed 2^53, so a JSON number loses precision. Parsed as a Long.",
+            "pattern": "^[0-9]+$"
           }
         ],
         "query": [
@@ -23486,6 +23760,12 @@
             "minItems": 2,
             "maxItems": 2,
             "description": "Window as exactly two epoch-millisecond bounds [from, to], repeated query param. Required. lowerBound + upperBound singles are the only fallback."
+          },
+          {
+            "name": "stabilityHash",
+            "type": "string",
+            "required": true,
+            "description": "Stability hash of the test the error occurred in (id from get_unique_error_impacted_tests). Required: omitted -> 500. Alias: testId."
           },
           {
             "name": "allBuilds",
@@ -23526,6 +23806,7 @@
           }
         },
         "guidance": [
+          "These error-detail reads are per TEST: send stabilityHash (the test's id from get_unique_error_impacted_tests for this cluster) alongside errorId. The handler filters on stabilityHash unconditionally, so omitting it returns 500. Pass errorId as the digit string list_unique_errors returned.",
           "`chartData` is a flat array of per-day occurrence counts with NO timestamps \u2014 reconstruct the x-axis yourself from the requested window (one bucket per calendar day, extended-bounds padded to the window).",
           "`errorCount` is the total matching-run count for the window, independent of the bucket array length.",
           "Buckets are fixed at one calendar day; the interval is not requestable."
@@ -23547,9 +23828,10 @@
           },
           {
             "name": "errorId",
-            "type": "integer",
+            "type": "string",
             "required": true,
-            "description": "The error cluster id (parsed as a Long). Bound onto the query command object's clusterId."
+            "description": "Error cluster id as a digit STRING, exactly as list_unique_errors returns it. Ids exceed 2^53, so a JSON number loses precision. Parsed as a Long.",
+            "pattern": "^[0-9]+$"
           }
         ],
         "query": [
@@ -23560,6 +23842,12 @@
             "minItems": 2,
             "maxItems": 2,
             "description": "Window as exactly two epoch-millisecond bounds [from, to], repeated query param. Required. lowerBound + upperBound singles are the only fallback."
+          },
+          {
+            "name": "stabilityHash",
+            "type": "string",
+            "required": true,
+            "description": "Stability hash of the test the error occurred in (id from get_unique_error_impacted_tests). Required: omitted -> 500. Alias: testId."
           },
           {
             "name": "allBuilds",
@@ -23600,6 +23888,7 @@
           }
         },
         "guidance": [
+          "These error-detail reads are per TEST: send stabilityHash (the test's id from get_unique_error_impacted_tests for this cluster) alongside errorId. The handler filters on stabilityHash unconditionally, so omitting it returns 500. Pass errorId as the digit string list_unique_errors returned.",
           "Hard-capped at 5000 matching runs: for a very common error the trend is silently truncated to the first 5000 runs by start time, so totals here can understate the real count \u2014 use get_unique_error_occurrence_count for the true total.",
           "Heavier than the other detail calls \u2014 it does a second relational lookup to enrich each run with build info \u2014 so expect higher latency.",
           "`data` is a list of status series ({name, color, data[]}); `keys` is the parallel list of run start timestamps (epoch). A truly missing project is re-thrown as a 404; other failures surface as 500."
@@ -23621,9 +23910,10 @@
           },
           {
             "name": "errorId",
-            "type": "integer",
+            "type": "string",
             "required": true,
-            "description": "The error cluster id (parsed as a Long). Bound onto the query command object's clusterId."
+            "description": "Error cluster id as a digit STRING, exactly as list_unique_errors returns it. Ids exceed 2^53, so a JSON number loses precision. Parsed as a Long.",
+            "pattern": "^[0-9]+$"
           }
         ],
         "query": [
@@ -23634,6 +23924,12 @@
             "minItems": 2,
             "maxItems": 2,
             "description": "Window as exactly two epoch-millisecond bounds [from, to], repeated query param. Required. lowerBound + upperBound singles are the only fallback."
+          },
+          {
+            "name": "stabilityHash",
+            "type": "string",
+            "required": true,
+            "description": "Stability hash of the test the error occurred in (id from get_unique_error_impacted_tests). Required: omitted -> 500. Alias: testId."
           },
           {
             "name": "searchAfter",
@@ -23679,6 +23975,7 @@
           }
         },
         "guidance": [
+          "These error-detail reads are per TEST: send stabilityHash (the test's id from get_unique_error_impacted_tests for this cluster) alongside errorId. The handler filters on stabilityHash unconditionally, so omitting it returns 500. Pass errorId as the digit string list_unique_errors returned.",
           "Cursor pagination only \u2014 there is no page number. Take `pagingParams.searchAfter` from the response and send it back as the `searchAfter` query array for the next page; page size is fixed at 15.",
           "Stop when the response has no further rows: `pagingParams.hasNext` is set to false only on an empty page, so an empty `builds` (or hasNext=false) is the end of the list.",
           "Each build carries isFailedWithSameError, saying whether that build's run failed with THIS exact cluster or merely contains the test; use it to distinguish same-error recurrences from unrelated runs.",
@@ -23701,9 +23998,10 @@
           },
           {
             "name": "errorId",
-            "type": "integer",
+            "type": "string",
             "required": true,
-            "description": "The error cluster id (parsed as a Long). Bound onto the query command object's clusterId."
+            "description": "Error cluster id as a digit STRING, exactly as list_unique_errors returns it. Ids exceed 2^53, so a JSON number loses precision. Parsed as a Long.",
+            "pattern": "^[0-9]+$"
           }
         ],
         "query": [
@@ -23714,6 +24012,12 @@
             "minItems": 2,
             "maxItems": 2,
             "description": "Window as exactly two epoch-millisecond bounds [from, to], repeated query param. Required. lowerBound + upperBound singles are the only fallback."
+          },
+          {
+            "name": "stabilityHash",
+            "type": "string",
+            "required": true,
+            "description": "Stability hash of the test the error occurred in (id from get_unique_error_impacted_tests). Required: omitted -> 500. Alias: testId."
           },
           {
             "name": "allBuilds",
@@ -23757,6 +24061,7 @@
           }
         },
         "guidance": [
+          "These error-detail reads are per TEST: send stabilityHash (the test's id from get_unique_error_impacted_tests for this cluster) alongside errorId. The handler filters on stabilityHash unconditionally, so omitting it returns 500. Pass errorId as the digit string list_unique_errors returned.",
           "Returns a FLAT array of platform buckets, not a nested os->browser->device tree; each entry is one {browser (with a `device`), os} combination.",
           "Per entry, `totalFailure` is the occurrence doc count and `errorCount` is the distinct impacted-test count; `chartData` is per-day occurrence counts with no timestamps (reconstruct from the window).",
           "Combos that are NA on both os and browser are dropped from the list.",
@@ -23779,9 +24084,10 @@
           },
           {
             "name": "clusterId",
-            "type": "integer",
+            "type": "string",
             "required": true,
-            "description": "The error cluster id. It reaches the query only because Spring binds the URI variable onto the command object's `clusterId` setter \u2014 a query param of the same name would be overridden by this path value, so set it here."
+            "description": "Error cluster id as a digit STRING, exactly as list_unique_errors returns it (ids exceed 2^53; a JSON number loses precision). The error cluster id. It reaches the query only because Spring binds the URI variable onto the command object's `clusterId` setter \u2014 a query param of the same name would be overridden by this path value, so set it here.",
+            "pattern": "^[0-9]+$"
           }
         ],
         "query": [
@@ -26898,26 +27204,25 @@
         ],
         "intent": "Find the most recent build in a project matching optional filters (build name, triggering user, build tags, framework) and get its full build-details payload \u2014 the entry point for 'the latest run of X' when you don't know the build uuid.",
         "returns": [
-          "uuid",
+          "build_id",
           "id",
           "name",
-          "buildNumber",
+          "build_number",
           "status",
-          "startedAt",
-          "finishedAt",
+          "started_at",
+          "finished_at",
           "duration",
           "user",
           "tags",
-          "statusStats",
-          "observabilityUrl",
-          "tcmTestRunIdentifier",
-          "source"
+          "status_stats",
+          "observability_url",
+          "tcmTestRunIdentifier"
         ],
         "guidance": [
           "Always returns a SINGLE build (the page limit is fixed at 1), not a list \u2014 the newest match. No match for the given filters is BUILD_NOT_FOUND (404).",
           "The requester must hold automated-test-run view permission on the project (service-account project permission is enforced); otherwise the call is refused.",
           "The response shape is feature-flagged per group: the newer build-listing flag returns the V2 build-details envelope, otherwise the v1 one. Both are FURTHER field-gated by the account's plan through the external JsonView wrapper \u2014 a field absent from the body may be plan-gated rather than empty, so do not treat a missing field as 'no value'.",
-          "Carry the returned `uuid` to the per-build endpoints (insights, reports, history); the display `tcmTestRunIdentifier` is not a build id."
+          "Carry the returned `build_id` (the hashed uuid; keys are snake_case and there is no `uuid` key) to the per-build endpoints (insights, reports, history); the display `tcmTestRunIdentifier` is not a build id."
         ],
         "responses": {
           "200": {
@@ -27233,7 +27538,7 @@
           {
             "name": "next_page",
             "type": "string",
-            "description": "Opaque base64 pagination cursor from the previous page's `pagination.nextPage`. Omit for the first page."
+            "description": "Opaque base64 pagination cursor from the previous page's `pagination.next_page`. Omit for the first page."
           }
         ],
         "intent": "List a project's builds over the public REST API with status, counts and a deep link back to the TRA UI \u2014 filterable like the UI build listing (names, users, teams, tags, branches, frameworks, statuses, date range) and cursor-paginated.",
@@ -27244,12 +27549,12 @@
           "pagination"
         ],
         "guidance": [
-          "Cursor pagination only: read `pagination.hasNext` and pass `pagination.nextPage` back as `next_page`. There is NO caller-settable page size on this route \u2014 the page is fixed at the server default (10 builds); walk the cursor until `hasNext` is false.",
-          "The response shape is feature-flagged per group: with the 'new build listing' flag on you get the V2 build items (which carry `workflowStatusStats` and `isManuallyOverridden` instead of v1's `statusStats`), otherwise the v1 items. Same route, so tolerate both item shapes.",
+          "Cursor pagination only: read `pagination.has_next` and pass `pagination.next_page` back as `next_page` (snake_case keys). There is NO caller-settable page size; walk the cursor until `has_next` is false.",
+          "The item shape is feature-flagged per group: with the 'new build listing' flag on, `status_stats` holds workflow-status counts and items add `is_manually_overridden`; otherwise v1 status counts. Same keys otherwise.",
           "When `date_range` is omitted the window is the LAST 7 DAYS \u2014 older builds simply will not appear unless you pass an explicit [start,end] in epoch millis.",
-          "Builds come back newest-first (the fetched page is reversed before returning).",
+          "Within a page builds come back OLDEST-first: the handler reverses the fetched page (Lists.reverse) before returning.",
           "Requires automated-test-run view permission on the project.",
-          "Each build carries an `observabilityUrl` deep link and `tcmTestRunIdentifier`; use `uuid` for follow-up per-build calls."
+          "Each build carries an `observability_url` deep link and `tcmTestRunIdentifier`; use `build_id` (the hashed uuid; there is no `uuid` key) for follow-up per-build calls."
         ],
         "responses": {
           "200": {
@@ -29608,6 +29913,26 @@
             "name": "uniqueErrorDetectionEnabled",
             "type": "string",
             "description": "Enable/disable unique-error analysis (\"true\"/\"false\"). Top-level key in the flat map body."
+          },
+          {
+            "name": "thresholdPercentage",
+            "type": "string",
+            "description": "Failure-category similarity threshold (analyzer.minShouldMatch), as a string. Top-level key in the flat map body."
+          },
+          {
+            "name": "uniqueErrorGroupingThreshold",
+            "type": "string",
+            "description": "Unique-error grouping similarity threshold, as a string. Top-level key in the flat map body."
+          },
+          {
+            "name": "stackTraceLineLimit",
+            "type": "string",
+            "description": "Stack-trace lines considered for similarity (\"0\" = default), as a string. Top-level key in the flat map body."
+          },
+          {
+            "name": "includeNumbersInSimilarity",
+            "type": "string",
+            "description": "Include numbers in similarity matching (\"true\"/\"false\"). Top-level key in the flat map body."
           }
         ],
         "responses": {
@@ -29983,12 +30308,12 @@
               {
                 "name": "CRITICAL",
                 "type": "object",
-                "description": "Rule for the CRITICAL level: {value, condition}."
+                "description": "Rule for the CRITICAL level: {value, condition: LESS_THAN_EQUAL | GREATER_THAN_EQUAL | NOT_EQUAL | EQUAL (case-insensitive; else 400 'Invalid condition specified')}."
               },
               {
                 "name": "WARNING",
                 "type": "object",
-                "description": "Rule for the WARNING level: {value, condition}."
+                "description": "Rule for the WARNING level: {value, condition: LESS_THAN_EQUAL | GREATER_THAN_EQUAL | NOT_EQUAL | EQUAL (case-insensitive; else 400 'Invalid condition specified')}."
               }
             ]
           },
@@ -30495,11 +30820,11 @@
             "name": "isMuted",
             "type": "string",
             "required": true,
-            "description": "Muted-tests visibility. REQUIRED on this route \u2014 omitting it fails to bind and returns 400.",
+            "description": "REQUIRED muted-test visibility, as the enum constant ALL / MUTED / UNMUTED (case-sensitive). all/true/false -> 400 'Invalid request payload'.",
             "values": [
-              "all",
-              "true",
-              "false"
+              "ALL",
+              "MUTED",
+              "UNMUTED"
             ]
           },
           {
@@ -30539,7 +30864,7 @@
           "failureOccurrence"
         ],
         "guidance": [
-          "isMuted is REQUIRED here (a bare, non-optional bind); send \"true\"/\"false\"/\"all\".",
+          "isMuted is REQUIRED and binds straight to the MutedTestsVisibility enum by constant name: send ALL, MUTED or UNMUTED. The listing's all/true/false spellings fail conversion and return a generic 400 'Invalid request payload'.",
           "reliability is a failure percentage (higher = worse); duration is the average run duration; failureOccurrence carries {failed, total} raw counts.",
           "Failure count on this legacy route is always the raw status count. The Suite Health equivalent (get_suite_health_stats) instead uses the workflow-status count when new build listing is enabled, so the two can disagree for the same test.",
           "Any backend error is rethrown as a bare RuntimeException and surfaces as HTTP 500 with no typed body.",
@@ -30676,11 +31001,11 @@
             "name": "isMuted",
             "type": "string",
             "required": true,
-            "description": "Muted-tests visibility. REQUIRED \u2014 omitting it fails to bind (400).",
+            "description": "REQUIRED muted-test visibility, as the enum constant ALL / MUTED / UNMUTED (case-sensitive). all/true/false -> 400 'Invalid request payload'.",
             "values": [
-              "all",
-              "true",
-              "false"
+              "ALL",
+              "MUTED",
+              "UNMUTED"
             ]
           },
           {
@@ -30728,7 +31053,7 @@
         "guidance": [
           "Response is {keys, data}: keys is the parallel array of startedAt epochs, data is the points. Each point is MINIMAL \u2014 {color, y (duration), id (test-run id), buildId (serial id), buildName}. There are NO smart-tag flags and no workflow status here; use get_suite_health_trend for those.",
           "allBuilds and isFlaky are accepted by the endpoint but silently dropped (never passed to the service) \u2014 do not rely on them to filter.",
-          "isMuted is REQUIRED; send \"true\"/\"false\"/\"all\".",
+          "isMuted is REQUIRED and binds straight to the MutedTestsVisibility enum by constant name: send ALL, MUTED or UNMUTED. The listing's all/true/false spellings fail conversion and return a generic 400 'Invalid request payload'.",
           "Points are ordered oldest-first (startedAt asc) and capped at 5000 executions with no paging.",
           "Any backend error surfaces as a bare 500.",
           "Auth: central-auth, obs-token, service-key, rails-basic, speedboat-token (no public-link)."
@@ -32325,7 +32650,13 @@
               {
                 "name": "unmuteType",
                 "type": "string",
-                "description": "Auto-unmute strategy; defaults to MANUAL when the body/config is absent."
+                "description": "Auto-unmute strategy (UnmuteTypeEnum constant); defaults to MANUAL when the body/config is absent. Any other value -> 400 'Invalid request payload'.",
+                "values": [
+                  "MANUAL",
+                  "AFTER_SELECTED_RUNS",
+                  "AFTER_SELECTED_DAYS",
+                  "AFTER_STATUS_CHANGE"
+                ]
               },
               {
                 "name": "unmuteAfterRuns",
@@ -33549,19 +33880,24 @@
             "name": "reportFormat",
             "type": "array",
             "required": true,
-            "description": "List of requested report formats. Missing \u2192 error."
+            "description": "Requested formats: richHtml, basicHtml and/or plainText (case-sensitive). Other values render nothing -> 400 'Build Report request format is invalid'.",
+            "values": [
+              "richHtml",
+              "basicHtml",
+              "plainText"
+            ]
           },
           {
             "name": "buildUuid",
             "type": "string",
             "required": false,
-            "description": "Resolve the build directly by uuid. Provide this OR originalBuildName + buildStartedAt."
+            "description": "Optional hint passed with originalBuildName (+buildStartedAt); on its own it does not resolve the build."
           },
           {
             "name": "originalBuildName",
             "type": "string",
-            "required": false,
-            "description": "Resolve the build by name together with buildStartedAt when the uuid is not known."
+            "required": true,
+            "description": "Build's original name. REQUIRED: resolution only runs when it is present; buildUuid alone -> 400 'Original build name not found' (40021)."
           },
           {
             "name": "buildStartedAt",
@@ -33601,7 +33937,7 @@
         "guidance": [
           "Polling contract, not a single call: on reportStatus IN_PROGRESS you also get retryCount and pollingInterval \u2014 wait that interval and POST again with requestType=POLL until reportStatus is COMPLETED/TEST_AVAILABLE (or NOT_AVAILABLE/DATA_NOT_AVAILABLE).",
           "Body is an untyped map validated by hand: requestingCi, requestType and reportFormat are each required and their absence is a distinct error; an unknown requestType is a 400.",
-          "Resolve the build by buildUuid, OR by originalBuildName + buildStartedAt. If the resolved build row is missing you get a 200 with a NULL body \u2014 handle that as 'not found', not a report.",
+          "Resolve the build by originalBuildName (+ buildStartedAt; buildUuid optional). Without originalBuildName the handler skips resolution and returns 400 'Original build name not found'. If the resolved build row is missing you get a 200 with a NULL body: handle that as 'not found', not a report.",
           "The report itself (report.richHtml/richCss/basicHtml/plainText) is only populated on the terminal statuses; the envelope is @JsonInclude(NON_NULL) so absent fields are omitted.",
           "In the demo-sandbox environment this returns HTTP 404 with body 'NOT FOUND'."
         ]
@@ -33622,11 +33958,14 @@
         ],
         "intent": "Get the full public build record for one build uuid \u2014 identity and naming, resolved status, duration, timestamps, owner, framework/SDK metadata, per-status test counts, alerts, re-run stats and top-error insights \u2014 the payload CI plugins and API consumers report on.",
         "returns": [
-          "projectId",
-          "buildId",
-          "buildName",
-          "projectName",
-          "status"
+          "build_id",
+          "id",
+          "project_id",
+          "project_name",
+          "name",
+          "build_number",
+          "status",
+          "status_stats"
         ],
         "responses": {
           "200": {
@@ -42162,21 +42501,33 @@
       },
       "ExternalBuildDetails": {
         "type": "object",
-        "description": "Single external build-details object returned by get_latest_build. Fields are further plan-gated by the external JsonView wrapper (v1 BuildDetails / V2 variant selected by the new-build-listing flag), so some fields may be omitted for the account's plan.",
+        "description": "Single external build-details object returned by get_latest_build (BuildDetails / BuildDetailsV2 by the new-build-listing flag). Keys are snake_case except tcmTestRunIdentifier; pro-only fields are plan-gated by the external JsonView wrapper.",
         "properties": {
-          "uuid": {
-            "type": "string"
+          "build_id": {
+            "type": "string",
+            "description": "The build's hashed uuid."
           },
           "id": {
+            "type": "integer",
+            "description": "Integer build id."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "project_id": {
             "type": "integer"
+          },
+          "project_name": {
+            "type": "string"
           },
           "name": {
             "type": "string"
           },
-          "buildNumber": {
+          "build_number": {
             "type": "integer"
           },
-          "originalName": {
+          "original_name": {
             "type": "string"
           },
           "description": {
@@ -42188,15 +42539,11 @@
           "duration": {
             "type": "integer"
           },
-          "startedAt": {
+          "started_at": {
             "type": "string",
             "format": "date-time"
           },
-          "finishedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createdAt": {
+          "finished_at": {
             "type": "string",
             "format": "date-time"
           },
@@ -42206,39 +42553,75 @@
           "user_id": {
             "type": "integer"
           },
-          "projectId": {
-            "type": "integer"
-          },
-          "projectName": {
-            "type": "string"
-          },
           "tags": {
             "type": "array",
             "items": {
               "type": "string"
             }
           },
-          "statusStats": {
+          "status_stats": {
             "type": "object",
-            "description": "Per-status aggregate counts for the build."
+            "description": "Per-status counts (V2: workflow-status counts), same key."
           },
-          "isArchived": {
+          "is_manually_overridden": {
+            "type": "boolean",
+            "description": "V2 shape only."
+          },
+          "failure_categories": {
+            "type": "object",
+            "description": "Pro-only (JsonView)."
+          },
+          "smart_tags": {
+            "type": "object",
+            "description": "Pro-only (JsonView)."
+          },
+          "unique_errors": {
+            "type": "object",
+            "description": "Pro-only (JsonView)."
+          },
+          "alerts": {
+            "type": "array",
+            "description": "Pro-only (JsonView)."
+          },
+          "re_run": {
             "type": "boolean"
           },
-          "observabilityUrl": {
+          "build_error": {
+            "type": "object"
+          },
+          "is_archived": {
+            "type": "boolean"
+          },
+          "observability_version": {
+            "type": "object"
+          },
+          "vcs_info": {
+            "type": "object"
+          },
+          "ci_info": {
+            "type": "object"
+          },
+          "host_info": {
+            "type": "object"
+          },
+          "run_information": {
+            "type": "array"
+          },
+          "observability_url": {
             "type": "string"
           },
           "tcmTestRunIdentifier": {
-            "type": "string"
+            "type": "string",
+            "description": "The one camelCase key."
           },
-          "source": {
-            "type": "string"
+          "app_details": {
+            "type": "object"
           }
         }
       },
       "ExternalProjectBuildListing": {
         "type": "object",
-        "description": "Public-API build listing (BuildListingResponse / BuildListingResponseV2, selected by the new-build-listing group flag). Top-level shape is identical across versions; only the per-build item shape differs.",
+        "description": "Public-API build listing (BuildListingResponse / BuildListingResponseV2, selected by the new-build-listing group flag). Keys are snake_case except tcmTestRunIdentifier; the two versions differ only in what status_stats holds and V2's is_manually_overridden.",
         "properties": {
           "id": {
             "type": "integer",
@@ -42250,20 +42633,18 @@
           },
           "builds": {
             "type": "array",
-            "description": "Newest-first. v1 items (BuildExternal) carry statusStats; V2 items (BuildExternalV2) replace it with workflowStatusStats and add isManuallyOverridden.",
+            "description": "The fetched page, reversed before returning (Lists.reverse), so oldest-first within a page.",
             "items": {
               "type": "object",
               "properties": {
-                "uuid": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "integer"
+                "build_id": {
+                  "type": "string",
+                  "description": "The build's hashed uuid (40 chars); use it for per-build calls. There is no `uuid` or integer `id` key (id is @JsonIgnore)."
                 },
                 "name": {
                   "type": "string"
                 },
-                "originalName": {
+                "original_name": {
                   "type": "string"
                 },
                 "status": {
@@ -42272,11 +42653,11 @@
                 "duration": {
                   "type": "integer"
                 },
-                "startedAt": {
+                "started_at": {
                   "type": "string",
                   "format": "date-time"
                 },
-                "finishedAt": {
+                "finished_at": {
                   "type": "string",
                   "format": "date-time"
                 },
@@ -42289,28 +42670,25 @@
                     "type": "string"
                   }
                 },
-                "buildNumber": {
+                "build_number": {
                   "type": "integer"
                 },
-                "isArchived": {
+                "is_archived": {
                   "type": "boolean"
                 },
-                "observabilityUrl": {
+                "observability_url": {
                   "type": "string",
                   "description": "Deep link to the build in the TRA UI."
                 },
                 "tcmTestRunIdentifier": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The one camelCase key."
                 },
-                "statusStats": {
+                "status_stats": {
                   "type": "object",
-                  "description": "v1 items only \u2014 per-status aggregate counts."
+                  "description": "Per-status counts. Same key on both shapes: v1 StatusAggregate, V2 WorkflowStatusAggregate."
                 },
-                "workflowStatusStats": {
-                  "type": "object",
-                  "description": "V2 items only \u2014 replaces statusStats."
-                },
-                "isManuallyOverridden": {
+                "is_manually_overridden": {
                   "type": "boolean",
                   "description": "V2 items only."
                 }
@@ -42319,13 +42697,14 @@
           },
           "pagination": {
             "type": "object",
+            "description": "snake_case keys (models/external/Pagination).",
             "properties": {
-              "hasNext": {
+              "has_next": {
                 "type": "boolean"
               },
-              "nextPage": {
+              "next_page": {
                 "type": "string",
-                "description": "Opaque base64 cursor for the next page; pass back as the next_page query param."
+                "description": "Opaque base64 cursor; pass back unchanged as the next_page query param."
               }
             }
           }
@@ -43663,42 +44042,121 @@
       },
       "PublicBuildDetails": {
         "type": "object",
-        "description": "Public build record. SHAPE IS FEATURE-FLAGGED (legacy BuildDetails vs BuildDetailsV2 when new build listing is enabled) and pro-only fields are JsonView-gated, so the exact key set varies by flag and plan. Representative top-level fields listed.",
+        "description": "Public build record (models/external BuildDetails, or BuildDetailsV2 when new build listing is enabled). Keys are snake_case except tcmTestRunIdentifier; pro-only fields are JsonView-gated, so the exact key set varies by flag and plan.",
         "properties": {
-          "projectId": {
+          "build_id": {
+            "type": "string",
+            "description": "The build's hashed uuid."
+          },
+          "id": {
+            "type": "integer",
+            "description": "Integer build id."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "project_id": {
             "type": "integer"
           },
-          "buildId": {
+          "project_name": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "build_number": {
             "type": "integer"
           },
-          "buildName": {
+          "original_name": {
             "type": "string"
           },
-          "projectName": {
-            "type": "string"
-          },
-          "projectNormalisedName": {
+          "description": {
             "type": "string"
           },
           "status": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "integer"
+          },
+          "started_at": {
             "type": "string",
-            "description": "Resolved build status."
+            "format": "date-time"
           },
-          "smart_tags": {
+          "finished_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "user": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer"
+          },
+          "tags": {
             "type": "array",
-            "description": "Pro-only; stripped by JsonView for non-pro plans."
+            "items": {
+              "type": "string"
+            }
           },
-          "unique_errors": {
+          "status_stats": {
             "type": "object",
-            "description": "Pro-only; stripped for non-pro plans."
+            "description": "Per-status counts (V2: workflow-status counts), same key."
+          },
+          "is_manually_overridden": {
+            "type": "boolean",
+            "description": "V2 shape only."
           },
           "failure_categories": {
             "type": "object",
-            "description": "Pro-only; stripped for non-pro plans."
+            "description": "Pro-only (JsonView)."
+          },
+          "smart_tags": {
+            "type": "object",
+            "description": "Pro-only (JsonView)."
+          },
+          "unique_errors": {
+            "type": "object",
+            "description": "Pro-only (JsonView)."
           },
           "alerts": {
-            "type": "object",
-            "description": "Pro-only; stripped for non-pro plans."
+            "type": "array",
+            "description": "Pro-only (JsonView)."
+          },
+          "re_run": {
+            "type": "boolean"
+          },
+          "build_error": {
+            "type": "object"
+          },
+          "is_archived": {
+            "type": "boolean"
+          },
+          "observability_version": {
+            "type": "object"
+          },
+          "vcs_info": {
+            "type": "object"
+          },
+          "ci_info": {
+            "type": "object"
+          },
+          "host_info": {
+            "type": "object"
+          },
+          "run_information": {
+            "type": "array"
+          },
+          "observability_url": {
+            "type": "string"
+          },
+          "tcmTestRunIdentifier": {
+            "type": "string",
+            "description": "The one camelCase key."
+          },
+          "app_details": {
+            "type": "object"
           }
         }
       },
@@ -45720,66 +46178,64 @@
         }
       },
       "BuildTestRunListingResponse": {
-        "description": "A build's test runs as a nested suite/folder/test hierarchy with deep-link URLs, plus pagination. Envelope varies by account flag: newer accounts carry workflowStatusAggregate + isManuallyOverridden, older ones statusAggregate.",
+        "description": "A build's test runs as a nested hierarchy, plus pagination. Keys are snake_case (TestListingResponse / V2 by account flag); V2 adds is_manually_overridden and test_summary holds workflow-status counts.",
         "schema": {
           "type": "object",
           "properties": {
             "hierarchy": {
               "type": "array",
-              "description": "Nested nodes (suites/folders/tests). Each node has details, children, and an external deep-link URL. On freemium/source-fenced builds analysis keys are stripped from node details.",
+              "description": "Nested nodes (suites/folders/tests), each with details and children. On freemium/source-fenced builds analysis keys are stripped from node details.",
               "items": {
                 "type": "object"
               }
             },
-            "isArchived": {
-              "type": "boolean"
-            },
-            "statusAggregate": {
-              "type": "object",
-              "description": "Present on the older envelope only."
-            },
-            "workflowStatusAggregate": {
-              "type": "object",
-              "description": "Present on the newer envelope only."
-            },
-            "isManuallyOverridden": {
-              "type": "boolean",
-              "description": "Present on the newer envelope only."
-            },
-            "buildName": {
-              "type": "string"
-            },
-            "buildUuid": {
-              "type": "string"
-            },
-            "originalName": {
-              "type": "string"
-            },
-            "buildNumber": {
-              "type": "integer"
-            },
-            "projectId": {
+            "project_id": {
               "type": "integer"
             },
             "name": {
               "type": "string",
               "description": "Project name."
             },
-            "groupId": {
+            "group_id": {
               "type": "integer"
             },
-            "appDetails": {
+            "build_id": {
+              "type": "string",
+              "description": "The build's hashed uuid."
+            },
+            "build_name": {
+              "type": "string"
+            },
+            "build_number": {
+              "type": "integer"
+            },
+            "original_name": {
+              "type": "string"
+            },
+            "test_summary": {
+              "type": "object",
+              "description": "Per-status counts: StatusAggregate (older envelope) or WorkflowStatusAggregate (newer), same key."
+            },
+            "is_manually_overridden": {
+              "type": "boolean",
+              "description": "Newer envelope only."
+            },
+            "is_archived": {
+              "type": "boolean"
+            },
+            "app_details": {
               "type": "object"
             },
             "pagination": {
               "type": "object",
+              "description": "snake_case keys (models/external/Pagination).",
               "properties": {
-                "hasNext": {
+                "has_next": {
                   "type": "boolean"
                 },
-                "nextPage": {
+                "next_page": {
                   "type": "string",
-                  "description": "Opaque base64 cursor; echo back as next_page."
+                  "description": "Opaque base64 cursor; pass back unchanged as the next_page query param."
                 }
               }
             }

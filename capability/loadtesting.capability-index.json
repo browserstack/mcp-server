@@ -28,6 +28,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -100,6 +101,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -188,9 +190,8 @@
           {
             "name": "updatedSince",
             "type": "string",
-            "description": "ISO-8601 timestamp; only tests updated after it.",
-            "example": "2026-08-01T00:00:00Z",
-            "format": "date-time"
+            "description": "ISO-8601 timestamp; only tests updated after it. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-08-01T00:00:00Z"
           }
         ],
         "intent": "List the load tests in a project — use this to find a testId or browse tests, optionally filtered by type, framework, tag or recent activity.",
@@ -208,6 +209,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -273,6 +275,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -344,15 +347,14 @@
           {
             "name": "sinceIso",
             "type": "string",
-            "description": "ISO-8601 lower bound.",
-            "example": "2026-08-01T00:00:00Z",
-            "format": "date-time"
+            "description": "ISO-8601 lower bound. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-08-01T00:00:00Z"
           },
           {
             "name": "untilIso",
             "type": "string",
-            "description": "ISO-8601 upper bound.",
-            "format": "date-time"
+            "description": "ISO-8601 upper bound. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-09-12"
           }
         ],
         "intent": "Show how a project's load-test metrics trend across recent runs — use this for 'is performance getting better or worse across this project?'",
@@ -366,6 +368,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -449,15 +452,14 @@
           {
             "name": "sinceIso",
             "type": "string",
-            "description": "ISO-8601 lower bound.",
-            "example": "2026-08-01T00:00:00Z",
-            "format": "date-time"
+            "description": "ISO-8601 lower bound. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-08-01T00:00:00Z"
           },
           {
             "name": "untilIso",
             "type": "string",
-            "description": "ISO-8601 upper bound.",
-            "format": "date-time"
+            "description": "ISO-8601 upper bound. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-09-12"
           },
           {
             "name": "hadSlaBreach",
@@ -485,6 +487,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -563,6 +566,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -627,6 +631,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -696,6 +701,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -801,14 +807,14 @@
           {
             "name": "sinceIso",
             "type": "string",
-            "description": "ISO-8601 lower bound; slices the report to data in this time window.",
-            "format": "date-time"
+            "description": "ISO-8601 lower bound; slices the report to data in this time window. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-09-12"
           },
           {
             "name": "untilIso",
             "type": "string",
-            "description": "ISO-8601 upper bound for the time-window slice.",
-            "format": "date-time"
+            "description": "ISO-8601 upper bound for the time-window slice. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-09-12"
           }
         ],
         "intent": "Get the full metrics report for a completed run — KPIs, SLA verdicts, per-transaction and error breakdowns. Use this to answer 'how did this run perform?'",
@@ -836,6 +842,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -891,6 +898,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -938,6 +946,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -1013,6 +1022,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -1125,6 +1135,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -1269,6 +1280,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -1364,6 +1376,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -1432,14 +1445,14 @@
           {
             "name": "sinceIso",
             "type": "string",
-            "description": "ISO-8601 lower bound.",
-            "format": "date-time"
+            "description": "ISO-8601 lower bound. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-09-12"
           },
           {
             "name": "untilIso",
             "type": "string",
-            "description": "ISO-8601 upper bound.",
-            "format": "date-time"
+            "description": "ISO-8601 upper bound. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-09-12"
           },
           {
             "name": "verdict",
@@ -1478,6 +1491,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -1554,14 +1568,14 @@
           {
             "name": "sinceIso",
             "type": "string",
-            "description": "ISO-8601 lower bound.",
-            "format": "date-time"
+            "description": "ISO-8601 lower bound. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-09-12"
           },
           {
             "name": "untilIso",
             "type": "string",
-            "description": "ISO-8601 upper bound.",
-            "format": "date-time"
+            "description": "ISO-8601 upper bound. ISO-8601 — a date (2026-09-12) or a date-time (2026-09-12T10:30:00Z).",
+            "example": "2026-09-12"
           }
         ],
         "intent": "Show how one test's metrics trend across its recent runs — use this for 'is this test getting slower over time?'",
@@ -1575,6 +1589,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -1629,6 +1644,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -1731,6 +1747,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -1806,6 +1823,7 @@
         ],
         "responses": {
           "200": {
+            "description": "Standard success envelope; operation data under `data`.",
             "schema": {
               "allOf": [
                 {
@@ -1894,7 +1912,39 @@
         "type": "object",
         "properties": {
           "projects": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "projectId": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "testCount": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "lastActivityAt": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "owner": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "email": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "hasMore": {
             "type": "boolean"
@@ -1908,7 +1958,68 @@
         "type": "object",
         "properties": {
           "tests": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "testId": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "testType": {
+                  "type": "string",
+                  "description": "plu (API), blu (Browser) or hybrid."
+                },
+                "framework": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "owner": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "email": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                },
+                "lastRun": {
+                  "type": "object",
+                  "description": "Most recent execution, when present.",
+                  "properties": {
+                    "runId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "startedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "verdict": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "hasMore": {
             "type": "boolean"
@@ -1922,7 +2033,30 @@
         "type": "object",
         "properties": {
           "tests": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "testId": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "projectId": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "testType": {
+                  "type": "string"
+                },
+                "framework": {
+                  "type": "string",
+                  "nullable": true
+                }
+              }
+            }
           },
           "hasMore": {
             "type": "boolean"
@@ -1941,7 +2075,48 @@
         "type": "object",
         "properties": {
           "runs": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "runId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "startedAt": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "durationSec": {
+                  "type": "integer",
+                  "nullable": true,
+                  "description": "Wall-clock seconds; null while running or when timestamps are missing."
+                },
+                "vus": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "verdict": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "vuHours": {
+                  "type": "number",
+                  "nullable": true,
+                  "description": "Billed VU-hours; null until billed."
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Run-level tags, or the tags inherited from the test when the run has none."
+                }
+              }
+            }
           },
           "hasMore": {
             "type": "boolean"
@@ -1955,7 +2130,66 @@
         "type": "object",
         "properties": {
           "runs": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "runId": {
+                  "type": "string"
+                },
+                "testId": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "testName": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "projectId": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "startedBy": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "email": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                },
+                "startedAt": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "elapsedSec": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "vus": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "vuHoursBurnedSoFar": {
+                  "type": "number"
+                },
+                "status": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Run-level tags, or the tags inherited from the test when the run has none."
+                }
+              }
+            }
           }
         }
       },
@@ -2129,19 +2363,23 @@
                 },
                 "baseline": {
                   "type": "number",
-                  "description": "Null when either run lacks the value."
+                  "description": "Null when either run lacks the value.",
+                  "nullable": true
                 },
                 "candidate": {
                   "type": "number",
-                  "description": "Null when either run lacks the value."
+                  "description": "Null when either run lacks the value.",
+                  "nullable": true
                 },
                 "absChange": {
                   "type": "number",
-                  "description": "Null when either run lacks the value."
+                  "description": "Null when either run lacks the value.",
+                  "nullable": true
                 },
                 "pctChange": {
                   "type": "number",
-                  "description": "Signed percent change, candidate vs baseline. Null when either run lacks the value."
+                  "description": "Signed percent change, candidate vs baseline. Null when either run lacks the value.",
+                  "nullable": true
                 },
                 "direction": {
                   "type": "string",
@@ -2170,23 +2408,28 @@
                 },
                 "baseline": {
                   "type": "number",
-                  "description": "Null when either run lacks the value."
+                  "description": "Null when either run lacks the value.",
+                  "nullable": true
                 },
                 "candidate": {
                   "type": "number",
-                  "description": "Null when either run lacks the value."
+                  "description": "Null when either run lacks the value.",
+                  "nullable": true
                 },
                 "absChange": {
                   "type": "number",
-                  "description": "Null when either run lacks the value."
+                  "description": "Null when either run lacks the value.",
+                  "nullable": true
                 },
                 "pctChange": {
                   "type": "number",
-                  "description": "Signed percent change, candidate vs baseline. Null when either run lacks the value."
+                  "description": "Signed percent change, candidate vs baseline. Null when either run lacks the value.",
+                  "nullable": true
                 },
                 "regressed": {
                   "type": "boolean",
-                  "description": "Null when either run lacks the transaction (unknown, not unregressed)."
+                  "description": "Null when either run lacks the transaction (unknown, not unregressed).",
+                  "nullable": true
                 }
               }
             }
@@ -2213,11 +2456,13 @@
                 "request": {},
                 "from": {
                   "type": "string",
-                  "description": "Null when the threshold is absent on that run."
+                  "description": "Null when the threshold is absent on that run.",
+                  "nullable": true
                 },
                 "to": {
                   "type": "string",
-                  "description": "Null when the threshold is absent on that run."
+                  "description": "Null when the threshold is absent on that run.",
+                  "nullable": true
                 },
                 "diffStatus": {
                   "type": "string",
@@ -2252,7 +2497,9 @@
             "type": "integer"
           },
           "version": {
-            "type": "string"
+            "type": "string",
+            "format": "date-time",
+            "description": "Optimistic-concurrency token: the test's updated_at as an ISO-8601 date-time (seconds precision). Pass it back unchanged as updateLoadTest's ifVersion."
           },
           "dashboardLink": {
             "type": "string"
@@ -2285,7 +2532,48 @@
         "type": "object",
         "properties": {
           "runs": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "runId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "startedAt": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "durationSec": {
+                  "type": "integer",
+                  "nullable": true,
+                  "description": "Wall-clock seconds; null while running or when timestamps are missing."
+                },
+                "vus": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "verdict": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "vuHours": {
+                  "type": "number",
+                  "nullable": true,
+                  "description": "Billed VU-hours; null until billed."
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Run-level tags, or the tags inherited from the test when the run has none."
+                }
+              }
+            }
           },
           "hasMore": {
             "type": "boolean"
@@ -2324,7 +2612,9 @@
             "type": "integer"
           },
           "version": {
-            "type": "string"
+            "type": "string",
+            "format": "date-time",
+            "description": "Optimistic-concurrency token: the test's updated_at as an ISO-8601 date-time (seconds precision). Pass it back unchanged as updateLoadTest's ifVersion."
           }
         }
       },
@@ -2344,7 +2634,9 @@
             "type": "string"
           },
           "version": {
-            "type": "string"
+            "type": "string",
+            "format": "date-time",
+            "description": "Optimistic-concurrency token: the test's updated_at as an ISO-8601 date-time (seconds precision). Pass it back unchanged as updateLoadTest's ifVersion."
           },
           "projectId": {
             "type": "integer"
@@ -2359,12 +2651,6 @@
       }
     },
     "responses": {
-      "Success": {
-        "description": "Standard success envelope; operation data under `data`.",
-        "schema": {
-          "$schema": "SuccessEnvelope"
-        }
-      },
       "BadRequest": {
         "description": "Invalid parameters or body.",
         "schema": {

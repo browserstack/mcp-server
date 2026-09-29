@@ -1110,10 +1110,10 @@
           "'Compare the latest run' means the latest finished run (candidate) vs the finished run before it (baseline).",
           "Both runs must be finished and must share the same test types — otherwise the call fails with VALIDATION_ERROR. Runs of different tests fail with DIFFERENT_TESTS; do not retry with other tests' runs.",
           "Use this to compare two runs — it returns per-KPI, per-transaction and SLA-verdict deltas from the same data as the Compare Runs page. Do not fetch both run reports and diff them yourself.",
-          "pctChange is signed (candidate vs baseline); direction/regressed already account for whether higher or lower is better — report those, do not re-derive them.",
+          "pctChange is signed (candidate vs baseline); direction/regressed already account for whether higher or lower is better — report those, do not re-derive them. direction \"unknown\" (regressed null) means one or both runs have no value for that metric: report it as missing data, never as no change.",
           "Transaction deltas are computed on one metric: the first metrics entry that has a per-transaction value (latency.*, errors.rate, throughput.*), else latency.p95. groupBy picks the transaction axis.",
           "regressedOnly + pctChangeMin filter to material regressions; regressedOnly applies to transactionDeltas, pctChangeMin to kpiDeltas and transactionDeltas.",
-          "Check warnings before reporting: it flags SLA definitions that changed between the runs (verdicts can flip without a performance change) and lists requested metrics compare cannot serve (e.g. engine.*). Surface any warning to the user."
+          "Check warnings before reporting: they name metrics with no data on a run, runs whose SLA thresholds were not evaluated, SLA definitions that changed between the runs, and requested metrics compare cannot serve (e.g. engine.*). Surface any warning to the user."
         ],
         "returns": [
           "baseline",
@@ -2148,8 +2148,10 @@
                   "enum": [
                     "improved",
                     "regressed",
-                    "unchanged"
-                  ]
+                    "unchanged",
+                    "unknown"
+                  ],
+                  "description": "\"unknown\" when either run has no value for the metric."
                 }
               }
             }
@@ -2183,7 +2185,8 @@
                   "description": "Signed percent change, candidate vs baseline. Null when either run lacks the value."
                 },
                 "regressed": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Null when either run lacks the transaction (unknown, not unregressed)."
                 }
               }
             }

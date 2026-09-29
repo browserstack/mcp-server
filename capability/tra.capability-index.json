@@ -10042,7 +10042,7 @@
           {
             "name": "next_page",
             "type": "string",
-            "description": "Opaque base64 cursor from the previous response's pagination.next_page (it encodes an offset). Omit for the first page. A malformed value is a 400 'Incorrect pagination params'."
+            "description": "Opaque base64 cursor from the previous response's pagination.next_page (it encodes a page index, not a row offset). Omit for the first page. A malformed value is a 400 'Incorrect pagination params'."
           }
         ],
         "returns": [
@@ -10067,8 +10067,8 @@
           }
         },
         "guidance": [
-          "Requires a service-account credential carrying the PROJECT_VIEW permission; a session/user credential without it is refused.",
-          "Fixed page size of 10; there is no page-size parameter. Paginate only with the returned base64 next_page cursor, not a numeric page.",
+          "Requires the PROJECT_VIEW permission; a credential without it is refused. A user OAuth credential that holds it is accepted - a service account is not required.",
+          "Up to 10 projects per page, and a page can hold fewer while has_next is still true - a short page is not the last page. There is no page-size parameter. Paginate only with the returned base64 next_page cursor, not a numeric page.",
           "pagination.has_next is computed as 'this page was non-empty', so the last full page still reports has_next=true and you get one extra EMPTY page. Stop when projects comes back empty, not when has_next turns false.",
           "There is no total count in the response. Each row carries the project's id, name and a ready-made observability_url into its builds page."
         ]
@@ -28570,7 +28570,7 @@
                   },
                   "normalisedName": {
                     "type": "string",
-                    "description": "Derived URL slug (spaces encoded as '+')."
+                    "description": "Derived slug: spaces become '+', '#' becomes '%23', but case and characters such as '&' are kept, so it is not URL-safe - encode it before putting it in a path."
                   },
                   "projectAttributes": {
                     "type": "array",
@@ -28583,6 +28583,14 @@
                   "alerts": {
                     "type": "array",
                     "description": "Alert rows attached to the project."
+                  },
+                  "appLogFilter": {
+                    "type": "object",
+                    "description": "App-log filter settings: {apps, envs}, each null when unset."
+                  },
+                  "latestAlerts": {
+                    "type": "array",
+                    "description": "Most recent alert rows for the project."
                   }
                 }
               }
@@ -37410,7 +37418,8 @@
           "updated_at": {
             "type": "string",
             "format": "date-time",
-            "description": "Derived from the project's finishedAt."
+            "description": "Derived from the project's finishedAt; can be null.",
+            "nullable": true
           },
           "observability_url": {
             "type": "string",
@@ -44978,7 +44987,7 @@
         }
       },
       "ProjectListingExternalResponse": {
-        "description": "One page (10) of the caller's projects, plus the cursor for the next page.",
+        "description": "One page (up to 10) of the caller's projects, plus the cursor for the next page.",
         "schema": {
           "type": "object",
           "properties": {

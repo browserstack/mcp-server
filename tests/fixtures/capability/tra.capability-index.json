@@ -11332,7 +11332,9 @@
           "Requires the PROJECT_SETTING_ALERTS permission (legacy 'modify_project_settings'), checked in-handler against the project's TestHub id \u2014 403 AccessDenied otherwise.",
           "`alertRules` is a MAP keyed by severity level (CRITICAL / WARNING) \u2192 {value, condition}. This differs from the older surface, where alertRules is a flat set and the level is a field.",
           "Build scoping is `buildNames` (PLURAL) here; the alert type is the string `alertType` (not the older integer `alertTypeId`).",
-          "`name` is required. Returns 201 with {success, id} \u2014 note `id` is a STRING on this surface."
+          "`name` is required. Returns 201 with {success, id} \u2014 note `id` is a STRING on this surface.",
+          "`alertType` is REQUIRED and must be one of buildStability | buildPerformance | flakinessPercentage | mutedDays | numberOfAlwaysFailingTests | spanOfAlwaysFailingTests \u2014 omitting it returns a 500, not a validation error.",
+          "`enabled: false` is not honoured on this surface \u2014 the alert is stored enabled (observed live, 2026-09-29); scope it with buildNames if it must not fire."
         ],
         "path_params": [
           {
@@ -11352,7 +11354,16 @@
           {
             "name": "alertType",
             "type": "string",
-            "description": "Alert type, as a string on this surface."
+            "description": "Alert type as its response key. Required: create/update resolve it with AlertTypeEnum.fromResponseKey(...).get(), so a missing or unknown value is a 500 'Internal System Exception', not a 400.",
+            "required": true,
+            "values": [
+              "buildStability",
+              "buildPerformance",
+              "flakinessPercentage",
+              "mutedDays",
+              "numberOfAlwaysFailingTests",
+              "spanOfAlwaysFailingTests"
+            ]
           },
           {
             "name": "alertRules",
@@ -30263,7 +30274,8 @@
           "`name` is required and non-empty. `alertType` is effectively required and must be one of buildStability / buildPerformance / flakinessPercentage / mutedDays / numberOfAlwaysFailingTests / spanOfAlwaysFailingTests \u2014 an unknown or omitted alertType fails as a 500, not a clean 400.",
           "`alertRules` is a MAP keyed by severity level (CRITICAL / WARNING) -> {value (1\u201332 chars), condition (<=32 chars)}. This differs from the older numeric-id surface, where alertRules is a flat set with the level as a field.",
           "Build scoping is `buildNames` (PLURAL); `alertType` is a string (not the older integer `alertTypeId`). To edit by numeric project id use update_project_alert_by_integer_id.",
-          "Returns 200 {success:true, id:'<new alert id>'}."
+          "Returns 200 {success:true, id:'<new alert id>'}.",
+          "`alertType` is REQUIRED and must be one of buildStability | buildPerformance | flakinessPercentage | mutedDays | numberOfAlwaysFailingTests | spanOfAlwaysFailingTests \u2014 omitting it returns a 500, not a validation error."
         ],
         "path_params": [
           {
@@ -30298,7 +30310,7 @@
               "numberOfAlwaysFailingTests",
               "spanOfAlwaysFailingTests"
             ],
-            "description": "Alert type as a string key (not the older integer alertTypeId). An unknown/omitted value fails as a 500."
+            "description": "Alert type as its response key. Required: create/update resolve it with AlertTypeEnum.fromResponseKey(...).get(), so a missing or unknown value is a 500 'Internal System Exception', not a 400."
           },
           {
             "name": "alertRules",
@@ -32696,7 +32708,8 @@
           "This is reversible: call again with mute=false (or configure an auto-unmute condition) to restore the run. There is no separate undo endpoint.",
           "Muting requires the MUTE plan feature; without it you get FORBIDDEN_OPERATION / plan-feature-not-allowed. Unmuting is always allowed.",
           "The auto-unmute config rides inside `unmuteConditionConfig`; the request body is optional and defaults to a manual (no auto-unmute) config. It only applies when muting.",
-          "Success returns `{\"success\": true}` \u2014 a JSON object, even though the handler's return type is a string."
+          "Success returns `{\"success\": true}` \u2014 a JSON object, even though the handler's return type is a string.",
+          "Mute AND unmute only work on a run from the LATEST build of that build name in the project (TestRunService.isLatestTestRun \u2192 isOlderBuild); a run from an older build returns 400 'cannot mute a test from an older run' / 'cannot un-mute \u2026', even when the run itself reports isLatest=true."
         ],
         "returns": [
           "success"

@@ -1083,7 +1083,6 @@
             "description": "Axis for transaction deltas (default transaction = request name).",
             "values": [
               "transaction",
-              "url",
               "label",
               "threadGroup",
               "scenario"
@@ -1114,7 +1113,7 @@
           "pctChange is signed (candidate vs baseline); direction/regressed already account for whether higher or lower is better — report those, do not re-derive them.",
           "Transaction deltas are computed on one metric: the first metrics entry that has a per-transaction value (latency.*, errors.rate, throughput.*), else latency.p95. groupBy picks the transaction axis.",
           "regressedOnly + pctChangeMin filter to material regressions; regressedOnly applies to transactionDeltas, pctChangeMin to kpiDeltas and transactionDeltas.",
-          "Check warnings before reporting: it flags SLA definitions that changed between the runs, which can flip verdicts without a performance change. Surface any warning to the user."
+          "Check warnings before reporting: it flags SLA definitions that changed between the runs (verdicts can flip without a performance change) and lists requested metrics compare cannot serve (e.g. engine.*). Surface any warning to the user."
         ],
         "returns": [
           "baseline",

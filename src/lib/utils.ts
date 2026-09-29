@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { trackMCP } from "../index.js";
 import logger from "../logger.js";
+import globalConfig from "../config.js";
 
 export function sanitizeUrlParam(param: string): string {
   // Remove any characters that could be used for command injection
@@ -28,8 +29,8 @@ export async function maybeCompressBase64(base64: string): Promise<string> {
 
   try {
     const { default: sharp } = await import("sharp");
-    if (!sharpConfigured) {
-      // Bound memory on constrained pods: no libvips cache, single worker thread.
+    if (!sharpConfigured && globalConfig.REMOTE_MCP) {
+      // Bound memory on constrained hosted pods: no libvips cache, single worker thread.
       sharp.cache(false);
       sharp.concurrency(1);
       sharpConfigured = true;

@@ -7,6 +7,12 @@
     "auth": {
       "type": "oauth2"
     },
+    "base_urls": [
+      "https://api-observability.browserstack.com",
+      "https://api-observability-eu.browserstack.com",
+      "https://api-observability-in.browserstack.com"
+    ],
+    "probe_path": "/api/v1/access",
     "capabilities": [
       {
         "name": "list_ci_triggers",

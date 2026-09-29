@@ -43,7 +43,11 @@ export type TokenTransport = (
 /** What we ask for. The endpoint clamps to its own maximum, so the response wins. */
 export const REQUESTED_EXPIRES_IN = 3600;
 
-/** The token endpoint gets its own, short budget — it is not the call being made. */
+/**
+ * The token endpoint gets its own, short budget — it is not the call being made.
+ *
+ * READ AT CALL TIME, NEVER IN A DEFAULT PARAMETER — see `fetchTokenTransport`.
+ */
 export const TOKEN_TIMEOUT_MS = 15_000;
 
 /**
@@ -153,10 +157,20 @@ export function mintForm(
  * `raise_error: false` keeps the status-first contract this transport has always had: the
  * caller distinguishes a 400 scope refusal from a 401 rejection from an unreachable host,
  * so a thrown AxiosError on any non-2xx would destroy the only signal it reads.
+ *
+ * `timeoutMs` IS RESOLVED INSIDE THE CLOSURE, NOT AS A DEFAULT PARAMETER, and that is load
+ * bearing.
+ *
+ * This module sits inside an import cycle — `lib/apiClient` -> `lib/utils` -> `src/index`,
+ * the entry — so its top-level bindings are evaluated AFTER the entry starts running. Tool
+ * registration calls `fetchTokenTransport()` during that window: the function itself is
+ * hoisted and callable, but a default parameter reading `TOKEN_TIMEOUT_MS` is still in its
+ * temporal dead zone and threw `Cannot access 'TOKEN_TIMEOUT_MS' before initialization` on
+ * every server start. Reading it when a token is actually minted defers it past init.
+ *
+ * Anything else added here must follow the same rule until that cycle is broken.
  */
-export function fetchTokenTransport(
-  timeoutMs = TOKEN_TIMEOUT_MS,
-): TokenTransport {
+export function fetchTokenTransport(timeoutMs?: number): TokenTransport {
   return async (url, form) => {
     try {
       const response = await apiClient.post<unknown>({
@@ -166,7 +180,7 @@ export function fetchTokenTransport(
           Accept: "application/json",
         },
         body: new URLSearchParams(form).toString(),
-        timeout: timeoutMs,
+        timeout: timeoutMs ?? TOKEN_TIMEOUT_MS,
         raise_error: false,
       });
       return { status: response.status, body: response.data ?? null };

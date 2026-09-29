@@ -118,13 +118,38 @@ const SEARCH_FLAKE = {
   message: "Request to /api/search timed out after 3000ms",
   line: 19,
 };
+// A different error class from LOGIN_NEW, so the final regression build's failure lands in
+// a cluster none of the earlier runs used — which is what the NEW new-failure rule checks.
+const LOGIN_BRAND_NEW = {
+  type: "TypeError",
+  message: "Cannot read properties of undefined (reading 'accessToken')",
+  line: 64,
+};
 const LOGIN_NEW = {
   type: "AssertionError",
   message: "Expected redirect to /home but was /login?error=session",
   line: 27,
 };
 
-function cases(run: "first" | "second" | "smoke" | "scratch"): Case[] {
+/**
+ * Run shapes. first/second/smoke/scratch are the original fixture; hist_fail / hist_pass /
+ * final extend the regression series so the history analyzer's smart tags can trip. Its
+ * defaults (observability-pipeline HistoryAnalyzerService + common/dto SmartTags):
+ *   always failing  >= 5 runs, the last 5 all failed with the SAME error cluster
+ *   new failure     >= 5 runs, latest failed, its cluster absent from the previous 4
+ *   flaky           >= 10 runs, more than 5 status flips across the last 10
+ */
+type Run =
+  | "first"
+  | "second"
+  | "smoke"
+  | "scratch"
+  | "hist_fail"
+  | "hist_pass"
+  | "final";
+const SEARCH_FAILS: Run[] = ["first", "scratch", "hist_fail"];
+
+function cases(run: Run): Case[] {
   const all: Case[] = [
     // Always failing across both regression runs.
     {
@@ -166,7 +191,7 @@ function cases(run: "first" | "second" | "smoke" | "scratch"): Case[] {
       suite: "Search Suite",
       file: "search.test.js",
       name: "returns results for a query",
-      outcome: run === "second" ? "pass" : "fail",
+      outcome: SEARCH_FAILS.includes(run) ? "fail" : "pass",
       error: SEARCH_FLAKE,
     },
     {
@@ -180,8 +205,8 @@ function cases(run: "first" | "second" | "smoke" | "scratch"): Case[] {
       suite: "Auth Suite",
       file: "auth.test.js",
       name: "logs in with valid credentials",
-      outcome: run === "second" ? "fail" : "pass",
-      error: LOGIN_NEW,
+      outcome: run === "second" || run === "final" ? "fail" : "pass",
+      error: run === "final" ? LOGIN_BRAND_NEW : LOGIN_NEW,
     },
     {
       suite: "Auth Suite",
@@ -206,10 +231,10 @@ function cases(run: "first" | "second" | "smoke" | "scratch"): Case[] {
 
 interface Scenario {
   key: string;
-  region: "readonly" | "scratch";
+  region: "readonly" | "scratch" | "history";
   buildName: string;
   occurrence: number; // 1-based: which build of this name this is
-  run: "first" | "second" | "smoke" | "scratch";
+  run: Run;
   tags: string[];
 }
 
@@ -232,6 +257,38 @@ const SCENARIOS: Scenario[] = [
     buildName: "mcp-probe_regression",
     occurrence: 2,
     run: "second",
+    tags: ["mcp-probe", "readonly", "regression"],
+  },
+  // History for the smart tags: #3/#4 repeat first/second, #5-#11 alternate the search test
+  // and keep login passing, #12 fails login with a brand-new error. Read-only like #1/#2.
+  ...(
+    [
+      [3, "first"],
+      [4, "second"],
+      [5, "hist_fail"],
+      [6, "hist_pass"],
+      [7, "hist_fail"],
+      [8, "hist_pass"],
+      [9, "hist_fail"],
+      [10, "hist_pass"],
+      [11, "hist_fail"],
+    ] as const
+  ).map(
+    ([n, run]): Scenario => ({
+      key: `regression_${n}`,
+      region: "history",
+      buildName: "mcp-probe_regression",
+      occurrence: n,
+      run,
+      tags: ["mcp-probe", "readonly", "regression"],
+    }),
+  ),
+  {
+    key: "smart_tags",
+    region: "readonly",
+    buildName: "mcp-probe_regression",
+    occurrence: 12,
+    run: "final",
     tags: ["mcp-probe", "readonly", "regression"],
   },
   {
@@ -583,9 +640,18 @@ async function main() {
   }
   const readonly: Record<string, unknown> = {};
   const scratch: Record<string, unknown> = {};
+  const history: Record<string, unknown> = {};
   for (const s of SCENARIOS) {
     const b = byName.get(s.buildName)?.[s.occurrence - 1];
     if (!b) die("map builds", `no build #${s.occurrence} named ${s.buildName}`);
+    if (s.region === "history") {
+      history[s.key] = {
+        build_uuid: b.uuid,
+        build_number: b.buildNumber,
+        status: b.status,
+      };
+      continue;
+    }
     const details = await call("get_build_details_via_public_api", {
       path_params: { build_id: b.uuid },
     });
@@ -603,21 +669,48 @@ async function main() {
     (s.region === "readonly" ? readonly : scratch)[s.key] = entry;
   }
 
+  // 5. Smart tags are computed asynchronously by the history analyzer after ingestion, so
+  // wait for them on the build designed to carry them, and record which runs got which.
+  const tagged = readonly.smart_tags as any;
+  const polls = Number(process.env.TRA_SEED_TAG_POLLS || 20);
+  for (let i = 0; i < polls; i++) {
+    const runs = tagged.test_runs as any[];
+    if (
+      runs.some((t) => t.is_always_failing) &&
+      runs.some((t) => t.is_flaky) &&
+      runs.some((t) => t.is_new_failure)
+    )
+      break;
+    if (i === polls - 1) break;
+    await new Promise((r) => setTimeout(r, 15000));
+    tagged.test_runs = await testRuns(tagged.build_uuid);
+  }
+  const names = (flag: string) =>
+    (tagged.test_runs as any[]).filter((t) => t[flag]).map((t) => t.name);
+  const smartTags = {
+    build: "readonly.smart_tags",
+    always_failing: names("is_always_failing"),
+    flaky: names("is_flaky"),
+    new_failure: names("is_new_failure"),
+  };
+  console.log(
+    "smart tags on the final regression build:",
+    JSON.stringify(smartTags),
+  );
+
   // Builds beyond the scenarios (the first run's duplicate uploads, or later ones) are spare
   // scratch: never asserted against, free for write probes that consume a build.
   const used = new Map<string, number>();
   for (const s of SCENARIOS)
     used.set(s.buildName, Math.max(used.get(s.buildName) ?? 0, s.occurrence));
   const spare = [...byName].flatMap(([name, list]) =>
-    list
-      .slice(used.get(name) ?? 0)
-      .map((b) => ({
-        build_uuid: b.uuid,
-        build_id: b.id,
-        build_number: b.buildNumber,
-        name: b.name,
-        status: b.status,
-      })),
+    list.slice(used.get(name) ?? 0).map((b) => ({
+      build_uuid: b.uuid,
+      build_id: b.id,
+      build_number: b.buildNumber,
+      name: b.name,
+      status: b.status,
+    })),
   );
   scratch.spare_builds = spare;
 
@@ -634,6 +727,8 @@ async function main() {
     },
     readonly,
     scratch,
+    history,
+    smart_tags: smartTags,
     scenarios: {
       always_failing: ["completes payment", "applies discount code"],
       flaky: ["returns results for a query"],

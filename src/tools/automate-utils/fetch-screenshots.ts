@@ -57,24 +57,19 @@ async function extractScreenshotUrls(
 async function convertUrlsToBase64(
   urls: string[],
 ): Promise<Array<{ url: string; base64: string }>> {
-  const screenshots = await Promise.all(
-    urls.map(async (url) => {
-      const response = await apiClient.get({
-        url,
-        responseType: "arraybuffer",
-      });
-      // Axios returns response.data as a Buffer for binary data
-      const base64 = Buffer.from(response.data).toString("base64");
-
-      // Compress the base64 image if needed
-      const compressedBase64 = await maybeCompressBase64(base64);
-
-      return {
-        url,
-        base64: compressedBase64,
-      };
-    }),
-  );
+  // Process sequentially so at most one image is decoded/compressed at a time,
+  // keeping peak memory to a single image rather than all of them at once.
+  const screenshots: Array<{ url: string; base64: string }> = [];
+  for (const url of urls) {
+    const response = await apiClient.get({
+      url,
+      responseType: "arraybuffer",
+    });
+    // Axios returns response.data as a Buffer for binary data
+    const base64 = Buffer.from(response.data).toString("base64");
+    const compressedBase64 = await maybeCompressBase64(base64);
+    screenshots.push({ url, base64: compressedBase64 });
+  }
 
   return screenshots;
 }

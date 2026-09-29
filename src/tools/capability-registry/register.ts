@@ -231,7 +231,11 @@ export function addCapabilityRegistryTools(
     if (message.startsWith("unknown_endpoint:")) return "unknown_endpoint";
     // The outcome this PR turns on: 46 of 244 capabilities are withheld, so this is the
     // likeliest refusal of all, and it was landing in the generic bucket.
-    if (message.startsWith("capability_disabled:")) return "capability_disabled";
+    if (message.startsWith("capability_disabled:"))
+      return "capability_disabled";
+    // Auth failed before the product was ever called, so it is not the product's 401 and
+    // must not be counted as one. oauth.ts prefixes every one of these.
+    if (message.startsWith("token_mint_failed:")) return "token_mint_failed";
     if (message.startsWith("missing required parameter"))
       return "missing_parameter";
     if (/is not a usable path value/.test(message)) return "bad_path_value";
@@ -930,6 +934,7 @@ export function addCapabilityRegistryTools(
           deps.credentialsFor(),
           transport,
           registry.index.products[product]?.auth,
+          product,
         );
         // The one row for a completed invoke. invoke() returns a 4xx/5xx rather than
         // throwing, so `success` keeps its tool-level meaning and these two fields carry

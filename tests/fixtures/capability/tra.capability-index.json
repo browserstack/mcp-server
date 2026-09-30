@@ -23207,7 +23207,7 @@
           "You can only edit your OWN comment: if no document matches the id + your userId you get COMMENT_NOT_FOUND (and MULTIPLE_COMMENTS_FOUND in the unlikely event of duplicates).",
           "commentHtml is stored as `content`; commentNode, content and mentions are overwritten and modifiedAt is set to now. No version history \u2014 there is no API undo, the previous body is gone.",
           "`createdAt` is accepted but ignored for locating the comment on this route; only `id` (plus your userId) is used.",
-          "Observed live (2026-09-29): after an update that sent commentNode, list_comments still showed commentNode as the string \"null\", and the first edit's modifiedAt was null on an immediate re-read. Do not rely on commentNode round-tripping; re-read after a short delay to confirm an edit."
+          "Observed live: on one account (2026-09-29) commentNode read back unchanged and modifiedAt was null right after the first edit; on another (2026-09-30) both updated immediately \u2014 treat it as propagation lag and re-read after a short delay to confirm an edit."
         ],
         "responses": {
           "200": {

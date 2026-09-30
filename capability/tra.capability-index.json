@@ -466,7 +466,7 @@
         },
         "guidance": [
           "Credential-disclosure surface: `resolvedSecrets` is a map of every referenced secret name to its DECODED plaintext value, returned to ANY caller who can see the trigger \u2014 including a non-owner viewing a shared trigger.",
-          "The trigger's own stored jenkinsApiToken and authToken are returned in plaintext ONLY to the trigger's owner; a non-owner sees null for both (but still sees the decoded resolvedSecrets).",
+          "The trigger's own stored jenkinsApiToken and authToken are returned in plaintext ONLY to the trigger's owner; a non-owner sees null for both (but still sees the decoded resolvedSecrets). All four stored-credential fields are also null whenever the trigger simply has none set, so null does not mean 'not the owner'.",
           "Read-only despite being a POST: it changes no state and makes NO outbound call (unlike execute_ci_trigger). Use it to preview the effective request.",
           "resolvedUrl has the webhook URL's [SECRET] placeholders substituted and URL-encoded. Only placeholders in the webhook URL are resolved here \u2014 execute additionally resolves custom-tool headers/body.",
           "Takes no request body. Blocked in the demo-sandbox environment."
@@ -805,7 +805,8 @@
           "Restricted to org admins or owners, or a user with the 'Product Admin' product role; other callers get 403.",
           "The score row must already exist: if the org has no score yet this is a 400 'Integration score not found', so read the integration score once first to create it.",
           "The 200 body is a bare JSON boolean (`true`), not an object; there is no message or updated score in the reply, so re-read the score to see the effect.",
-          "The write is skipped silently when the submitted values match what is already stored, and it only sets/clears the category's not-applicable reason (and, for the two build categories, the cannot-integrate flag); it does not change any other category."
+          "The write is skipped silently when the submitted values match what is already stored, and it only sets/clears the category's not-applicable reason (and, for the two build categories, the cannot-integrate flag); it does not change any other category.",
+          "Clearing is partial: sending only `category` clears notApplicable, but a previously stored otherReason is RETAINED (and otherReason='' is accepted with no change), so there is no way to wipe otherReason through this call. It is harmless for scoring once notApplicable is cleared."
         ]
       },
       {
@@ -856,7 +857,8 @@
           "Not-connected is reported as a 200 with a null body, NOT as {\"setup_completed\": false}; treat a null/empty 200 as 'not set up'. Only when connected does it return {\"setup_completed\": true}.",
           "An upstream authorization failure from the integrations service is swallowed and reported as not-connected (false), so a false here can mask a revoked token rather than an unfinished setup.",
           "Always returns not-connected in the demo-sandbox environment regardless of real state.",
-          "Selecting SLACK checks the Slack configuration; any other accepted tool checks the configured PM-tool configuration."
+          "Selecting SLACK checks the Slack configuration; any other accepted tool checks the configured PM-tool configuration.",
+          "KNOWN PRODUCT ERRORS (live 2026-09-29): tool=JENKINS returns 500 'Invalid integration key' despite being accepted here, and tool=JIRA with as_bot=true returns 500 'Integration does not support Bot OAuth'. Both come from the downstream integrations service; treat them as 'cannot tell', not as not-connected."
         ]
       },
       {
@@ -908,7 +910,7 @@
           }
         },
         "guidance": [
-          "The 200 body is a JSON-encoded STRING, not a JSON object: parse the string, then read access_token / expires_at / success from the parsed value.",
+          "The 200 body is a JSON-encoded STRING, not a JSON object: parse the string, then read access_token / expires_at (epoch integer) / success from the parsed value. `success` is the STRING \"true\", not a boolean.",
           "This response carries a live OAuth access token; treat it as a secret and do not log it.",
           "On an upstream authorization failure it deliberately returns 200 with the string \"{}\" (so a frontend auth interceptor does not log the user out); an empty parsed object means not-connected, not an error.",
           "Returns an empty-string 200 body in the demo-sandbox environment."
@@ -1179,8 +1181,7 @@
         "intent": "Read the signed-in user's legacy email-notification settings: per email type, whether they are subscribed and which projects the type applies to. Superseded by the rule-count and detail reads for new callers.",
         "returns": [
           "DAILY_SUMMARY_EMAIL",
-          "BUILD_FINISH_EMAIL",
-          "COMMENT_EMAIL"
+          "BUILD_FINISH_EMAIL"
         ],
         "responses": {
           "200": {
@@ -1195,7 +1196,7 @@
         },
         "guidance": [
           "Always operates on the authenticated user; there are no parameters.",
-          "This is the legacy shape: a map keyed by the raw email-type name, each value {isSubscribed, projects:[projectId,...]}. Only DAILY_SUMMARY_EMAIL and BUILD_FINISH_EMAIL carry a non-empty project list; other types return an empty projects array.",
+          "This is the legacy shape: a map keyed by the raw email-type name, each value {isSubscribed, projects:[projectId,...]}. DAILY_SUMMARY_EMAIL and BUILD_FINISH_EMAIL are ALWAYS present (isSubscribed defaults to false). COMMENT_EMAIL appears only when the user has a stored subscription row for it, always with an empty projects array - treat a missing key as not subscribed.",
           "Differs from the rule-count read, which keys by notification-type name (DAILY_SUMMARY, BUILD_INSIGHTS, ...) and returns ruleCount instead of a project list. Do not assume the two responses share keys or shape.",
           "Reads the user's preference row, lazily creating it if missing."
         ]
@@ -2016,12 +2017,12 @@
             "description": "Test-failure subscription, same shape and rules as buildInsights."
           }
         ],
-        "intent": "Replace one recipient's notification subscriptions on a project - which build names they get insights for, which alerts they are subscribed to, and whether they receive the daily summary.",
+        "intent": "Update one recipient's notification subscriptions on a project, section by section - which build names they get insights for, which alerts they are subscribed to, and whether they receive the daily summary.",
         "returns": [
           "message"
         ],
         "guidance": [
-          "This is a FULL REPLACE, not a patch: any section or specific you omit is removed. Read the current config first and echo back everything you want to keep.",
+          "PER-SECTION update, not a whole-object replace: each top-level section you send (buildInsights, alerts, testFailure, dailySummary) is applied as sent; a section you omit (null) is left untouched. Within a section you send, read the current config first and echo back the specifics you want to keep.",
           "There is no undo - notifications keep no version history, so an overwritten subscription set cannot be restored.",
           "Wire keys differ from the internal names: send `buildInsights`, `alerts`, `testFailure` and `dailySummary` at the top level (the object itself is the body, not wrapped).",
           "Requires the notification-settings permission (non-GET). Modifying a notifier that belongs to another group is refused with 400 'Cannot modify notifications of user from another group'; an unknown notifierId is NOTIFIER_NOT_FOUND.",
@@ -2556,7 +2557,8 @@
         "guidance": [
           "The body is a top-level ARRAY of build summaries, same shape as list_latest_build_summaries.",
           "The only difference from list_latest_build_summaries is that the CALLER chooses the builds by id here, instead of the server picking the latest 5 in a window.",
-          "Internal/job-facing endpoint - no group scoping or role check in the handler."
+          "Internal/job-facing endpoint - no group scoping or role check in the handler.",
+          "Result order does NOT follow the requested buildIds order - match rows by `id`."
         ],
         "responses": {
           "200": {
@@ -3585,7 +3587,7 @@
           }
         },
         "guidance": [
-          "There is NO undo: the edit is a versioning write \u2014 a new profile row is created, the old one is retired, and a NEW UUID is minted and returned. The UUID you edited stops resolving, so read `uuid` from the response and use it from now on. (This contradicts the source inventory, which wrongly says the UUID is stable.)",
+          "There is NO undo: the edit is a versioning write \u2014 a new profile row is created, the old one is retired, and a NEW UUID is minted and returned. Use the returned `uuid` from now on. The old UUID still reads (isLatest:false) but is no longer the live profile and drops out of the project settings list.",
           "This is a FULL replace \u2014 send the complete rules/filters, not a partial patch; omitted fields fail required-field validation.",
           "Send `isGlobalProfile`/`applicableBuilds`, not `isRootProfile`/`buildFilters`.",
           "The built-in default profile cannot be edited (rejected); plan-gated (feature-inaccessible when the plan lacks Quality Gates).",
@@ -3777,7 +3779,7 @@
         "guidance": [
           "Always send isGlobalProfile (false for a project profile): QGFilterESQuery does `if (!getIsGlobalProfile())` on a nullable Boolean, so omitting it makes BUILD_NAME/BUILD_TAGS/TEST_TAGS/FOLDERS return 500.",
           "Page size is fixed PER TYPE, not caller-controlled: 10 for BUILD_NAME/BUILD_TAGS/TEST_TAGS/FAILURE_CATEGORIES/ALERTS, and 1000 for FOLDERS. There is no page-size parameter.",
-          "Paginate by passing the response's `afterKey` back as the next request's `afterKey`; stop when it comes back null/absent.",
+          "Paginate by passing the response's `afterKey` back as the next request's `afterKey`. afterKey is set even on the last page, so stop when a page returns fewer values than the page size (or none).",
           "BUILD_NAME/BUILD_TAGS/TEST_TAGS values come from Elasticsearch aggregations over the project's builds/test runs; FAILURE_CATEGORIES and ALERTS come from the DB and honour `isGlobalProfile`."
         ]
       },
@@ -4021,7 +4023,7 @@
           }
         },
         "guidance": [
-          "No undo: this is a versioning write \u2014 a new profile row is created, the old one retired, and a NEW UUID minted and returned. The UUID you edited stops resolving, so use the returned `uuid` afterwards. (The source inventory's 'UUID is stable' note is wrong.)",
+          "No undo: this is a versioning write \u2014 a new profile row is created, the old one retired, and a NEW UUID minted and returned; use the returned `uuid` afterwards. The retired UUID still reads (isLatest:false) but is not the live profile and is absent from the project settings list.",
           "Full replace, not a partial patch; send the complete rules/filters. Send `isGlobalProfile`/`applicableBuilds`, not the internal names.",
           "The built-in default profile cannot be edited (rejected); plan-gated (feature-inaccessible when the plan lacks Quality Gates).",
           "External surface accepting a username+access-key; enforces the quality-gate project permission."
@@ -4548,7 +4550,7 @@
           {
             "name": "lowerBound",
             "type": "integer",
-            "description": "Window start, epoch milliseconds. Optional; defaults to the plan retention floor."
+            "description": "Window start, epoch milliseconds. Pass it: when omitted the window starts at epoch 0 (not the plan retention floor), giving ~690 monthly buckets that are almost all empty (a 50-90 KB response)."
           },
           {
             "name": "upperBound",
@@ -4587,7 +4589,8 @@
         },
         "guidance": [
           "Counts executions (how many tests ran), not distinct cases; for suite size use get_test_growth_trend.",
-          "`insights.count` here is the raw total execution count as a string (not a percentage), and `insights.metric`/`insights.meta` are null. Per-bucket counts are in `data[].y`. Window clamped to plan retention; bucket interval auto from window width."
+          "`insights.count` here is the raw total execution count as a string (not a percentage), and `insights.metric`/`insights.meta` are null. Per-bucket counts are in `data[].y` (0 for empty buckets); `data[].t` is null on this card.",
+          "Always pass lowerBound (and upperBound): without it the series starts at epoch 0 (negative-x first bucket), producing ~690 mostly-empty monthly buckets and a very large response."
         ]
       },
       {
@@ -4668,7 +4671,7 @@
           {
             "name": "lowerBound",
             "type": "integer",
-            "description": "Window start, epoch milliseconds. Optional; defaults to the plan retention floor."
+            "description": "Window start, epoch milliseconds. Optional; when omitted the window starts at epoch 0 rather than the plan retention floor."
           },
           {
             "name": "upperBound",
@@ -4707,7 +4710,7 @@
         },
         "guidance": [
           "`data` holds the top-level (primary) platform groups; `drillDownData` holds each group's secondary breakdown, addressed by the primary group's key (`drillDownData[].id` matches `data[].drilldown`).",
-          "`percentage` fields are formatted STRINGS (two decimals), and `value` is the raw execution count. Primary points carry no os/browser/device; those appear only on secondary (drill-down) points.",
+          "`percentage` fields are formatted STRINGS (two decimals), and `value` is the raw execution count. Primary points carry os/browser/device as null; those are set only on secondary (drill-down) points. Runs without platform info land in an 'Unknown' group with 'NA' secondaries.",
           "A project with no runs in the window returns empty groups, not an error. Window clamped to plan retention."
         ]
       },
@@ -4911,7 +4914,7 @@
           {
             "name": "lowerBound",
             "type": "integer",
-            "description": "Window start, epoch milliseconds. Optional; defaults to the plan retention floor."
+            "description": "Window start, epoch milliseconds. Pass it: when omitted the window starts at epoch 0 (not the plan retention floor), giving ~690 monthly buckets that are almost all empty (a 50-90 KB response)."
           },
           {
             "name": "upperBound",
@@ -4950,8 +4953,9 @@
         },
         "guidance": [
           "This is the build-name-selected variant of the stability chart: it derives the series identifier from the `buildName` query param and falls back to the literal \"all\" when it is absent. To address a build by an identifier in the path instead, use get_build_stability_chart.",
-          "Response is `{median, data}`: `median` is the overall pass-rate percentage for the window (a number), and `data` is the per-bucket series where each point's `y` is a pass-rate percentage string (null for empty buckets).",
-          "Window clamped to plan retention; bucket interval auto-chosen from the width of the window."
+          "Response is `{median, data}`: `median` is the overall pass-rate percentage for the window (a number), and `data` is the per-bucket series where each point's `y` is a pass-rate percentage NUMBER (e.g. 55.5), null for empty buckets.",
+          "Window clamped to plan retention; bucket interval auto-chosen from the width of the window.",
+          "Always pass lowerBound (and upperBound): without it the series starts at epoch 0 (negative-x first bucket), producing ~690 mostly-empty monthly buckets and a very large response."
         ]
       },
       {
@@ -5100,7 +5104,7 @@
           {
             "name": "lowerBound",
             "type": "integer",
-            "description": "Window start, epoch milliseconds. Optional; defaults to the plan retention floor."
+            "description": "Window start, epoch milliseconds. Pass it: when omitted the window starts at epoch 0 (not the plan retention floor), giving ~690 monthly buckets that are almost all empty (a 50-90 KB response)."
           },
           {
             "name": "upperBound",
@@ -5139,8 +5143,9 @@
         },
         "guidance": [
           "This is the build-name-selected variant: it derives the series identifier from the `buildName` query param, defaulting to \"all\" when absent. To address a build by an identifier in the path, use get_build_performance_chart.",
-          "Response is `{barData, lineData}`: `barData` is the per-bucket average duration series and `lineData` is the per-bucket test-count series. `lineData` points omit `pointRange` (only `x`/`y` are set), whereas `barData` points carry it.",
-          "Window clamped to plan retention; bucket interval auto-chosen from window width."
+          "Response is `{barData, lineData}`: `barData` is the per-bucket average duration series and `lineData` is the per-bucket test-count series. `lineData` points carry `pointRange: null` (only `x`/`y` are meaningful), whereas `barData` points carry the range.",
+          "Window clamped to plan retention; bucket interval auto-chosen from window width.",
+          "Always pass lowerBound (and upperBound): without it the series starts at epoch 0 (negative-x first bucket), producing ~690 mostly-empty monthly buckets and a very large response."
         ]
       },
       {
@@ -5167,7 +5172,7 @@
           {
             "name": "lowerBound",
             "type": "integer",
-            "description": "Window start, epoch milliseconds. Optional; defaults to the plan retention floor."
+            "description": "Window start, epoch milliseconds. Pass it: when omitted the window starts at epoch 0 (not the plan retention floor), giving ~690 monthly buckets that are almost all empty (a 50-90 KB response)."
           },
           {
             "name": "upperBound",
@@ -5201,7 +5206,8 @@
         },
         "guidance": [
           "This is the path-addressed variant: the build is named by the `identifier` path segment (build name, \"all\", or a \"buildName-<name>\" row id). It takes NO `buildName` query param - to select by build name in the query, use get_project_performance_chart. Both return the identical `{barData, lineData}` shape.",
-          "Window clamped to plan retention; bucket interval auto-chosen from window width. `barData` is average duration per bucket, `lineData` is test count per bucket (lineData points omit pointRange)."
+          "Bucket interval auto-chosen from window width. `barData` is average duration per bucket, `lineData` is test count per bucket (lineData points carry pointRange:null and t:null).",
+          "Always pass lowerBound (and upperBound): without it the series starts at epoch 0 (negative-x first bucket), producing ~690 mostly-empty monthly buckets and a very large response."
         ]
       },
       {
@@ -5692,7 +5698,7 @@
         },
         "guidance": [
           "No permission is required to list \u2014 any caller who can address the project sees its rules, unlike the create/edit/delete routes which need the webhook settings permission.",
-          "Each row is a summary only: name, uuid, url, enabled, eventType, projectSelection and projectMapping. The headers, request body and stored auth are NOT here \u2014 call get_project_webhook with the uuid for the full definition.",
+          "Each row is a summary only: name, uuid, url, enabled, eventType, projectSelection and projectMapping (the last two are null on project-scoped rules). The headers, request body and stored auth are NOT here \u2014 call get_project_webhook with the uuid for the full definition.",
           "This is the project-scoped list; it does not return group-scoped rules. Use list_group_webhooks for those.",
           "Not paginated \u2014 the whole set comes back in one response with no page/info envelope."
         ]
@@ -6413,7 +6419,7 @@
           {
             "name": "enabled",
             "type": "boolean",
-            "description": "Enabled state persisted for the new rule (stored NOT NULL)."
+            "description": "Intended enabled state. NOTE: enabled:false is currently IGNORED on create - the rule is born enabled (observed live 2026-09-29); disable it afterwards with the toggle call."
           },
           {
             "name": "payload",
@@ -6496,7 +6502,8 @@
           "`all` (all projects) is refused unless the caller is a Test Management caller; other callers get WEBHOOK_ALL_PROJECTS_NOT_ALLOWED.",
           "A rule links AT MOST 30 projects \u2014 more than 30 in projectMappingChanges.addedProjects is rejected by the cap.",
           "Success returns only {success, uuid}; it does not echo the rule. Take the uuid; read it back with get_group_webhook.",
-          "Link projects via projectMappingChanges.addedProjects (project ids), not a bare projectId \u2014 that legacy field is for single-project (project-scoped) rules."
+          "Link projects via projectMappingChanges.addedProjects (project ids), not a bare projectId \u2014 that legacy field is for single-project (project-scoped) rules.",
+          "KNOWN BEHAVIOUR: `enabled:false` is ignored on create - the new rule is stored enabled=true. If it must start disabled, call toggle_group_webhook right after creating it."
         ]
       },
       {
@@ -7529,8 +7536,8 @@
           "This is the web/Automate accessibility shape. For App-Automate builds that have App Accessibility enabled for the group, the request is proxied to the App Accessibility service and returns a DIFFERENT body \u2014 do not assume the fields below when the build is an app build.",
           "The `run` query param silently overrides the path `buildId`: if you pass a run id, the meta is for the build that run belongs to, not the build in the path.",
           "The build must have finished (status FINISHED or TIMEOUT) and carry accessibility data; otherwise you get a classified accessibility error (build-not-completed / build-not-found / results-not-found), not an empty 200.",
-          "`autoEnabledBuild` and `autoEnabled` are the same value duplicated. `severityBreakdown` only carries the severities that were present, and `totalIssue` is their sum.",
-          "`reportUrl` is a deep link into the Accessibility dashboard, not an API endpoint you can call for the raw report.",
+          "`autoEnabledBuild` and `autoEnabled` are the same value duplicated, read from the build's accessibility settings.auto_enable (the auto-scan config), so they can be false on a build whose SDK run did scan. `severityBreakdown` carries each severity the build summary reports (zero counts included), and `totalIssue` is their sum.",
+          "`reportUrl` is a weak deep link into the Accessibility dashboard: its path uses the literal placeholder segments Project/builds/Build/Number and only the thBuildId query is real. It is not an API endpoint.",
           "The central-auth JWT (cookie or Bearer) is extracted and forwarded to the App-Accessibility proxy on the app path; a missing token there surfaces as an accessibility-service auth error."
         ],
         "responses": {
@@ -8616,7 +8623,7 @@
           {
             "name": "query",
             "type": "string",
-            "description": "Free-text search over the applied selection; echoed back in the resolved `applied` block."
+            "description": "Type-ahead text for the sidebar sub-searches (users/tags/runGroups). NOT applied or echoed by this call - use `search` for the free-text build search."
           },
           {
             "name": "users",
@@ -8672,6 +8679,11 @@
             "type": "string",
             "description": "Build state scope; defaults to `active`.",
             "default": "active"
+          },
+          {
+            "name": "search",
+            "type": "string",
+            "description": "Free-text build search; echoed back as applied.search."
           }
         ],
         "intent": "Hydrate the build-listing sidebar filter panel across a set of projects \u2014 the caller's applied selection resolved into display objects (user/team ids to names, date range, tags, branches, statuses, build names) alongside the static option catalogue.",
@@ -8683,7 +8695,8 @@
           "POST but purely read \u2014 the body is only a filter payload and nothing is written.",
           "`applied` (a SidebarFilter: the resolved build filter plus the `projects` it was scoped to) echoes your selection resolved; `staticFilters` is the option catalogue (statusList, frameworkList, types, sources, creationType).",
           "This is the GROUP-WIDE variant: the static framework list is the hardcoded master list, NOT the frameworks actually present in the selected projects. If you need the frameworks that really occur, treat frameworkList here as the full menu, not a presence list.",
-          "Scope with `projects`; if you leave it out you get the group's default project set rather than an error."
+          "Scope with `projects`; if you leave it out you get the group's default project set rather than an error.",
+          "`applied` echoes users (resolved), teams, dateRange, statuses, buildTags (as `tags`), frameworks, branches, search and the boolean/enum toggles; `assignees` and `query` are NOT echoed, so do not read their absence as rejection."
         ],
         "responses": {
           "200": {
@@ -8827,7 +8840,7 @@
         "guidance": [
           "POST but read-only. ONLY `projects` and `query` are read from the body \u2014 every other build-filter field is ignored here, so do not expect statuses/tags/dateRange to narrow the result.",
           "Pagination is hardcoded to page 1, page size 100 and CANNOT be driven from the request: you always get at most the first 100 run groups. `info` reports paging but there is no way to fetch page 2 through this endpoint \u2014 use the per-project build-groups listing if you need to page.",
-          "`data` items are full build-group objects (id, name, description, projectId, createdBy, isClosed, timestamps, ...), not bare strings, unlike the other sidebar facets.",
+          "`data` items are SLIM build-group rows {id, name, description, isClosed, state, updated_at} (note snake_case updated_at), not bare strings. For projectId/createdBy/closedAt use the per-project build-groups listing.",
           "This facet is not available on a public dashboard link (no public-link-token auth); it needs an authenticated session or service key."
         ],
         "responses": {
@@ -8885,7 +8898,7 @@
         "guidance": [
           "Requires the Custom Dashboard feature entitlement; without it the call is refused (feature-inaccessible), which is not the same as an empty dashboard set.",
           "Scheduled reports are excluded here \u2014 use list_reports for those. Visibility follows the group's enterprise-data-access (UDAC) setting and sub-group membership, not a simple owner check, so two users in one group can see different sets.",
-          "Returns each dashboard's full definition under `data[]` (widgets included), not just id/name \u2014 there is no pagination on this route."
+          "Each row under `data[]` is a SUMMARY: widgets, filters and reports come back null (only totalWidget is counted), and source/isDefault/isAutomation/modifiedBy/modifiedByName are often null. Read one dashboard by id for its widget definitions. There is no pagination on this route."
         ]
       },
       {
@@ -9474,7 +9487,7 @@
             "name": "projectIds",
             "type": "array",
             "required": false,
-            "description": "TRA project ids to filter by. UDAC project filtering is applied on top; if UDAC blocks every project the page comes back empty."
+            "description": "TestHub project ids (a project's thProjectId, e.g. from list_projects), NOT the TRA project id - a TRA id matches nothing and returns an empty 200. UDAC project filtering is applied on top; if UDAC blocks every project the page comes back empty."
           },
           {
             "name": "source",
@@ -9608,7 +9621,7 @@
         },
         "guidance": [
           "Public API surface \u2014 authenticate with a BrowserStack username + access key over HTTP Basic.",
-          "Same underlying service as the internal listing: scheduled-report dashboards are excluded and each row carries the full definition (widgets included); there is no pagination."
+          "Same underlying service as the internal listing: scheduled-report dashboards are excluded and there is no pagination. Rows are summaries - widgets, filters and reports are null (totalWidget counts them); read one dashboard by id for its definition."
         ]
       },
       {
@@ -10079,18 +10092,18 @@
         "path": "/api/v1/home/uniqueBuilds",
         "mode": "read",
         "entity": "project",
-        "intent": "List the Home page's latest runs grouped by unique build name - one row per build pipeline with its most recent run's status and counts - optionally narrowed to 'my builds' and quick filters.",
+        "intent": "List the Home page's latest builds across the caller's visible projects - one row per build with its status and counts - optionally narrowed to 'my builds' and quick filters.",
         "query": [
           {
             "name": "pageNumber",
             "type": "integer",
             "default": 0,
-            "description": "Zero-based offset page (page size 10). Offset pagination is capped: has_next stays true only while offset <= 99, i.e. roughly the first ten pages. For deeper paging use the afterKey cursor instead."
+            "description": "Only affects has_next (true while pageNumber*10 <= 99); it does NOT offset the search, so pageNumber=1 returns the same first page. Page with afterKey instead. The response's pagingParams.pageNumber echoes pageNumber+1."
           },
           {
             "name": "afterKey",
             "type": "string",
-            "description": "Elasticsearch search_after cursor for cursor pagination. Prefer this over pageNumber for walking past the offset cap; carry forward pagingParams.afterKey from the previous response."
+            "description": "Cursor (the last row's build id) for the next page. This is the ONLY real pagination: carry pagingParams.afterKey from the previous response."
           },
           {
             "name": "myBuilds",
@@ -10151,9 +10164,10 @@
         },
         "guidance": [
           "The user's saved Home filters (build tags, projects, users, teams, unique build names, statuses) are merged into the query server-side even when applyQuickFilters is off - results are always scoped by the caller's persisted personalisation and sub-group.",
-          "Two pagination schemes coexist: offset (pageNumber, capped at offset<=99) and cursor (afterKey). Use afterKey to page beyond the offset cap; pagingParams.hasNext is 'this page was full AND under the offset cap'.",
+          "Pagination: pageNumber is not applied to the search (only to the has_next cap); page with afterKey = pagingParams.afterKey. pagingParams.hasNext is 'this page was full AND pageNumber*10 <= 99'.",
           "Quick-filter params are inert unless applyQuickFilters=true. Bad/stale quick-filter values are silently dropped (mapSkippingInvalid), never 400.",
-          "Heavy on large groups (emits per-stage timing telemetry); each row is a BuildSummary for the latest run of that unique build name."
+          "Heavy on large groups (emits per-stage timing telemetry); each row is a BuildSummary - use displayStatus for the pass/fail verdict (status is the lifecycle state, e.g. finished).",
+          "Rows are the most recent builds, one row PER BUILD (not deduplicated by build name: several runs of one pipeline appear as separate rows), in the caller's Home scope. Page size is 10."
         ]
       },
       {
@@ -10206,7 +10220,7 @@
           }
         },
         "guidance": [
-          "This is the older takeaways variant. It returns the aggregate `timeSavingsData` object (timeSavings %, testToVerify, uniqueErrors, flakiness, alwaysFailing, autoTagged) and leaves the v2 `timeSavingV2Metric` field absent. For the shape the current Home page uses, pick get_home_takeaways_with_noise_breakdown instead.",
+          "This is the older takeaways variant. It returns the aggregate `timeSavingsData` object (timeSavings %, testToVerify, uniqueErrors, flakiness, alwaysFailing, autoTagged) and sends the v2 `timeSavingV2Metric` key as null. For the shape the current Home page uses, pick get_home_takeaways_with_noise_breakdown instead.",
           "Scoped implicitly by the caller's saved Home filters, sub-group and visible projects; no parameters.",
           "Cached in Redis per USER id for ~1 hour, so a filter change is not reflected until the cache expires. All metrics compare the current 7 days to the prior 7 days (each TakeAwayMetric carries value and prev)."
         ]
@@ -10280,7 +10294,7 @@
         "path": "/api/v1/init",
         "mode": "read",
         "entity": "project",
-        "intent": "App bootstrap call: get everything the frontend needs on first paint - user identity, group, plan/access, the computed RBAC permission map, T&C and get-started flags, usage banner and the user's build-view preferences.",
+        "intent": "App bootstrap call: get everything the frontend needs on first paint - user identity, group, plan/access, the computed RBAC permission list, T&C and get-started flags, usage banner and the user's build-view preferences.",
         "query": [],
         "path_params": [],
         "returns": [
@@ -10305,7 +10319,7 @@
           }
         },
         "guidance": [
-          "Pass the X-CAD-Product HEADER to select the calling product; AA/AUT/ATS drive the QIG T&C A/B branch that decides hasAcceptedTnC and showGetStartedModal. Other products take the legacy whitelist/blacklist branch.",
+          "Pass the X-CAD-Product HEADER to select the calling product; AA/AUT/ATS drive the QIG T&C A/B branch that decides hasAcceptedTnC and showGetStartedModal. Other products take the legacy whitelist/blacklist branch. The capability binding cannot send that header (it sends X-CAD-Product-Name, default TO), so through this surface you always get the legacy branch.",
           "Requires an authenticated session (obs-token / central-auth cookie in practice); identity is derived from the JWT.",
           "Heavy: fans out to Rails user/group details (Redis-cached), the usage service and the user-filters repo.",
           "In the demo-sandbox environment userDetails.userId and userDetails.groupId are nulled out. When globalRBAC is on, legacy permission keys are added into accessDetails for backward compatibility alongside the new permissions map."
@@ -10637,9 +10651,9 @@
         "returns": [
           "id",
           "name",
-          "builds",
           "buildGroupAggResult",
-          "pagingParams"
+          "activeCount",
+          "closedCount"
         ],
         "responses": {
           "200": {
@@ -10660,7 +10674,7 @@
         },
         "guidance": [
           "Sibling of the ungrouped v2 build listing: this one consolidates re-runs/shards into build groups (see buildGroupAggResult). Filters are the same rich v2 set, passed as query params (there is no request body).",
-          "Cursor-paginated via searchAfter (carry pagingParams.searchAfter forward); pagingParams.hasNext signals more pages. Page size is the server default and was not verifiable from the controller.",
+          "Returns per-group AGGREGATES only (buildGroupAggResult: counts plus the TestHub group record) - no build rows: `builds` and `pagingParams` are always null here, and there is no pagination. To list the builds themselves use the ungrouped v2 build listing.",
           "Side effect: reading this marks the project as SUBSCRIBED for the caller (a user-preference write) - a benign, recoverable effect, but it is not a pure read.",
           "Unlike the ungrouped v2 listing, this route does NOT apply the group's custom-retention window, so it can surface builds older than that window."
         ]
@@ -11735,7 +11749,7 @@
         "intent": "Fetch one turn of a test's AI RCA conversation by message id \u2014 the polling read the panel uses to watch a PENDING turn become COMPLETED or FAILED after a retry.",
         "guidance": [
           "Poll this after retry_test_rca_conversation_turn (or a retrigger) until state is no longer PENDING. state is one of PENDING, WORKFLOW_PENDING, COMPLETED, FAILED.",
-          "This is the test-run turn shape: threadId, threadTitle and userAction are always null here (those carry values only in the build-level chat). The answer is assistantMessage; metadata is sanitised to at most thinking_data and user_approval.",
+          "This is the test-run turn shape: threadId, threadTitle and userAction are always null here (those carry values only in the build-level chat). The answer is assistantMessage (rca_data + thinking_data); metadata carries at most user_approval.",
           "404 RCA_CONVERSATION_NOT_FOUND if the messageId does not belong to that test run."
         ],
         "returns": [
@@ -11784,7 +11798,8 @@
         "guidance": [
           "Returns a bare JSON array of turns (no envelope, no pagination), ordered oldest-first by creation time.",
           "Each element is the test-run turn shape: threadId, threadTitle and userAction are null; the approval decision, when made, is in metadata.user_approval (accepted or discarded).",
-          "There is no query filtering here; it always returns the full history for the run."
+          "There is no query filtering here; it always returns the full history for the run.",
+          "Agent narration is under assistantMessage.thinking_data (not metadata), and the structured RCA under assistantMessage.rca_data. createdAt/updatedAt carry a [zone] suffix (e.g. ...Z[Etc/UTC])."
         ],
         "returns": [
           "messageId",
@@ -12483,7 +12498,8 @@
         "guidance": [
           "Public API \u2014 username + access key auth. External mirror of list_test_rca_conversation_turns.",
           "Returns a bare JSON array of turns (no envelope, no pagination), ordered oldest-first.",
-          "Each element is the test-run turn shape: threadId, threadTitle and userAction are null; approval decision, when made, is in metadata.user_approval."
+          "Each element is the test-run turn shape: threadId, threadTitle and userAction are null; approval decision, when made, is in metadata.user_approval.",
+          "Agent narration is under assistantMessage.thinking_data (not metadata), and the structured RCA under assistantMessage.rca_data. createdAt/updatedAt carry a [zone] suffix (e.g. ...Z[Etc/UTC])."
         ],
         "returns": [
           "messageId",
@@ -12785,7 +12801,7 @@
         ],
         "guidance": [
           "This echoes back the filters you sent (resolved into {id,value,label} fields under `applied`) AND the catalogue of choosable options under `staticFilters` \u2014 send an empty query (just dateRange) to fetch the full option catalogue for building a filter UI.",
-          "It degrades open: the run-level option lists inside `staticFilters` (typeOfRun, assignedTo, state, testPlan) are fetched from an upstream service under a timeout, and on timeout/failure those come back EMPTY rather than erroring. An empty run-level dropdown does not mean there are no options.",
+          "It degrades open: the run-level option lists inside `staticFilters` (typeOfRun, assignedTo, state, testPlan) are fetched from an upstream service under a timeout, and on timeout/failure (or when there is nothing) they come back null or [] rather than erroring. An empty or null run-level dropdown does not mean there are no options.",
           "`dateRange` is mandatory and must be exactly two millisecond timestamps; there are no lowerBound/upperBound scalars on this route.",
           "Scoped to project visibility only; no plan gate."
         ],
@@ -12830,7 +12846,7 @@
           {
             "name": "query",
             "type": "string",
-            "description": "Substring to match. Wrapped in wildcards for the Elasticsearch match, and additionally applied as a case-SENSITIVE literal `contains` post-filter \u2014 a lowercase query will not surface an upper-case branch. Omit/blank to list the top branches in the window."
+            "description": "Substring to match. Wrapped in wildcards for the Elasticsearch match, and additionally applied as a case-SENSITIVE literal `contains` post-filter \u2014 a lowercase query will not surface an upper-case branch. Effectively REQUIRED: when omitted, the case-sensitive post-filter (StringUtils.contains(value, null)) drops every value, so the response is an empty list."
           },
           {
             "name": "isManuallyOverridden",
@@ -12851,7 +12867,8 @@
         "guidance": [
           "Suggestion list only \u2014 the Elasticsearch terms aggregation is capped at 100 branches, so it is not exhaustive; narrow with `query` rather than expecting the full set.",
           "The `query` match is applied twice: a wildcard ES match AND a case-sensitive literal `contains` filter on the returned values, so casing matters when narrowing.",
-          "Each suggestion is a Field object; use its `value` (the branch name) when applying the branch filter elsewhere."
+          "Each suggestion is a Field object; use its `value` (the branch name) when applying the branch filter elsewhere.",
+          "Omitting `query` returns an EMPTY `data` list, not the top branches - the post-filter drops every value when query is null. Send at least one character (e.g. a common prefix)."
         ],
         "responses": {
           "200": {
@@ -12958,7 +12975,7 @@
           {
             "name": "query",
             "type": "string",
-            "description": "Substring to match. Wildcard ES match plus a case-SENSITIVE literal `contains` post-filter on the returned values. Omit/blank to list the top build tags."
+            "description": "Substring to match. Wildcard ES match plus a case-SENSITIVE literal `contains` post-filter on the returned values. Effectively REQUIRED: when omitted, the case-sensitive post-filter (StringUtils.contains(value, null)) drops every value, so the response is an empty list."
           },
           {
             "name": "isManuallyOverridden",
@@ -12979,7 +12996,8 @@
         "guidance": [
           "Suggestion list only \u2014 the terms aggregation is capped at 10 results, so it is not exhaustive; narrow with `query`.",
           "The `query` narrowing is a case-sensitive literal `contains` on top of the wildcard match, so casing matters.",
-          "Each suggestion is a Field object; use its `value` (the tag) when applying the buildTags filter."
+          "Each suggestion is a Field object; use its `value` (the tag) when applying the buildTags filter.",
+          "Omitting `query` returns an EMPTY `data` list, not the top build tags - the post-filter drops every value when query is null. Send at least one character (e.g. a common prefix)."
         ],
         "responses": {
           "200": {
@@ -13081,7 +13099,7 @@
           {
             "name": "query",
             "type": "string",
-            "description": "Substring to match. Wildcard ES match plus a case-SENSITIVE literal `contains` post-filter on the returned values. Omit/blank to list the top test tags."
+            "description": "Substring to match. Wildcard ES match plus a case-SENSITIVE literal `contains` post-filter on the returned values. Effectively REQUIRED: when omitted, the case-sensitive post-filter (StringUtils.contains(value, null)) drops every value, so the response is an empty list."
           },
           {
             "name": "isManuallyOverridden",
@@ -13102,7 +13120,8 @@
         "guidance": [
           "Suggestion list only \u2014 the terms aggregation is capped at 10 results.",
           "The `query` narrowing is a case-sensitive literal `contains` on top of the wildcard match, so casing matters.",
-          "Each suggestion is a Field object; use its `value` (the tag) when applying the testTags filter."
+          "Each suggestion is a Field object; use its `value` (the tag) when applying the testTags filter.",
+          "Omitting `query` returns an EMPTY `data` list, not the top test tags - the post-filter drops every value when query is null. Send at least one character (e.g. a common prefix)."
         ],
         "responses": {
           "200": {
@@ -13729,8 +13748,9 @@
           "Returns URLs, not log content \u2014 the UI fetches each artefact from the URLs inside `browserstackLogs`.",
           "Log-fetch failures are SWALLOWED: if the upstream log fetch throws, the response comes back with an empty `browserstackLogs` (SessionLogs) and 200 rather than an error. An empty logs object is not proof there were no logs.",
           "Locked (plan-restricted) builds are refused with 403 PLAN_FEATURE_NOT_ALLOWED; an unknown session is SESSION_NOT_FOUND.",
-          "`failureLogs` is populated only when the session was manually marked failed with a reason; otherwise it is empty.",
-          "The demo-sandbox environment returns an empty envelope (null framework, empty SessionLogs, empty failureLogs) without any lookup."
+          "`failureLogs` carries the session's failure entries (e.g. an ordinary assertion failure), not only manual mark-failed reasons; each entry's `content` is a JSON-encoded string array inside a string.",
+          "The demo-sandbox environment returns an empty envelope (null framework, empty SessionLogs, empty failureLogs) without any lookup.",
+          "URL presence does not prove an artefact exists: appium/playwright/device URLs are returned even for a Selenium session. The URLs are presigned (about 7 days) - treat them as secrets."
         ]
       },
       {
@@ -13831,7 +13851,7 @@
         "returns": [],
         "responses": {
           "200": {
-            "description": "An opaque capabilities object whose top-level key depends on the platform: `sessionParams` for BrowserStack sessions, `inputCapabilities` for Local-Grid/SauceLabs/LambdaTest, or `outputCapabilities` as a fallback when the BrowserStack fetch fails. Empty for runs with no session.",
+            "description": "An opaque capabilities object. Typically inputCapabilities + outputCapabilities (+ meta.note); sessionParams on some BrowserStack paths. May contain secrets from the requested caps. Empty for runs with no session.",
             "schema": {
               "type": "object",
               "description": "Opaque capabilities object; top-level key varies by test platform (sessionParams / inputCapabilities / outputCapabilities)."
@@ -13848,10 +13868,11 @@
           }
         },
         "guidance": [
-          "The response shape depends on where the run executed: a BrowserStack session returns the live `sessionParams`; Local-Grid/SauceLabs/LambdaTest runs return `inputCapabilities`; if the BrowserStack lookup fails the handler falls back to a stored `outputCapabilities` shape. Do not hard-code one key.",
+          "Observed on a real Automate SDK session: the body carried `inputCapabilities` (the requested caps incl. bstack:options) AND `outputCapabilities.capabilities` (browserVersion, webdriver.remote.sessionid, ...) plus `meta.note`; no `sessionParams`. Do not hard-code one key.",
           "Pulled from the run's BrowserStack integration record, so it is empty for runs that never had a BrowserStack session.",
           "Bad ids give TEST_RUN_NOT_FOUND / BUILD_NOT_FOUND (404); retention-locked builds give FORBIDDEN_OPERATION (403).",
-          "On the demo-sandbox environment canned capabilities are returned instead of the real session's."
+          "On the demo-sandbox environment canned capabilities are returned instead of the real session's.",
+          "SECRET: inputCapabilities can contain credentials the test passed in - e.g. browserstack.accessibilityOptions.authToken (a JWT). Do not log or echo this response."
         ]
       },
       {
@@ -13976,7 +13997,7 @@
         "guidance": [
           "Returns a MAP keyed by test run id, not a single object. Priority 1 is the newest passing run with the same test hash (one entry); if there is none it falls back to the newest passing run per device/os/browser combination (several entries). An EMPTY map means no baseline was found, not an error.",
           "The look-back window is hardcoded to 30 days before this run's start time \u2014 an older last-good run will not appear, so an empty result does not prove the test has never passed.",
-          "Each map value is the same shape as the similar-error read: { testCode, testMetadata } (no hooksCode on this route). Read the passing run's numeric id from the map key."
+          "Each map value is { testCode, testMetadata, hooksCode } - hooksCode is present but null on this route, and testCode is null when no code was captured. Read the passing run's numeric id from the map key."
         ],
         "returns": [
           "<test_run_id> (map key)",
@@ -17546,7 +17567,7 @@
         "guidance": [
           "POST but READ-ONLY (@ReadOnly) \u2014 it fetches filter values and changes nothing.",
           "The value set is chosen by `filterKey`, and `widgetKey` must also be present (both are @NotNull); the two are separate fields and the server dispatches on filterKey.",
-          "Pagination params are `page` and `per_page` (default 30), NOT `p`/`count`. `data` is a map keyed by the filter, each value a list of value structs; `info` carries page metadata and `fullList` says whether the whole set fit in the page.",
+          "Pagination params are `page` and `per_page` (default 30), NOT `p`/`count`. `data` is a map keyed by bucket (`suggested`, `others`), each a list of value structs - the same shape as search_widget_filter_values. `fullList` and `info` can be null; continue with suggestedAfterKey / othersAfterKey.",
           "`filters.projects` is always replaced by the project from the query params, so passing project ids in the body is ignored \u2014 set the project via project_id/project_name/project_identifier.",
           "A public-link token may be supplied via the `Public-Link-Token` (or the observability public-link-token) header to run in shared read-only dashboard mode.",
           "With source=TCM the request is forced to include both manual and automated runs."
@@ -19438,15 +19459,14 @@
         ],
         "intent": "Tune a project's smart-tag detection rules \u2014 e.g. how many status flips within how many consecutive runs make a test flaky \u2014 which changes how tests are tagged across the project's reports.",
         "returns": [
-          "success",
-          "id"
+          "success"
         ],
         "guidance": [
           "Requires the `modify_project_settings` permission on the project's tags setting; a caller without it gets 403.",
           "The flaky `flakeInHistory.flippingCount` must be STRICTLY LESS than `flakeInHistory.consecutiveRuns`. This is checked FIRST \u2014 before the project is looked up and before the permission check \u2014 so an equal-or-greater flipping count returns 400 even for a caller who would otherwise be refused with 403.",
           "Field ranges are enforced: flakeInHistory.flippingCount 1..29, flakeInHistory.consecutiveRuns 5..30, flakeInRerun.consecutiveRuns max 30, alwaysFailing/newFailure.consecutiveRuns 2..30, performanceAnomalies.durationPercentile 80..99 and performanceAnomalies.consecutiveRuns 30..100. Out-of-range values are 400.",
           "This replaces the whole settings object rather than patching one rule; read the current settings first and send the complete structure back with your change. It is reversible by setting values again, but no prior-value history is kept.",
-          "Success returns only a small `{success, id}` envelope \u2014 NOT the saved settings. Re-read the settings to confirm the stored values."
+          "Success returns only `{success:true}` - no id and NOT the saved settings. Re-read the settings to confirm the stored values."
         ],
         "responses": {
           "200": {
@@ -19700,7 +19720,8 @@
           "Whether the saved widgets come from reports[] or widgets[] depends on type: a report-type value persists reports[], anything else (including the default 'Dashboard') persists widgets[] \u2014 send the wrong list for the type and the report saves with no widgets.",
           "Widget-level global filters ride under the key globalFilters (not dashboardFilters); the report-level filter list uses filterOrder / buildName / branches / tcmTestPlanIds on the wire (not their Java names).",
           "source defaults to TO; TCM is the Test-Management-mirror source and normally set by the sync path, not here.",
-          "The new record is stamped with your user, group and team and returned under data with a fresh UUID id."
+          "The new record is stamped with your user, group and team and returned under data with a fresh UUID id.",
+          "The response echoes the saved record, but `desc` is not echoed back, `widgets` is null for a report-typed record (not an empty array), and filters come back normalised to their wire keys (users, lastExecutedBy, teams, ... are added as empty/null)."
         ],
         "responses": {
           "200": {
@@ -19746,7 +19767,8 @@
           "Requires the custom-dashboard plan feature; without it the call is refused (feature inaccessible) rather than returning an empty list.",
           "This is the report-typed view of the shared report/dashboard store, so dashboard-only filter rewriting is skipped.",
           "Returns a flat list under data with NO pagination \u2014 there is no page / per_page on this listing.",
-          "The report listing is the source of the UUIDs the single-report read, update, delete, clone, dataset and tiles calls need."
+          "The report listing is the source of the UUIDs the single-report read, update, delete, clone, dataset and tiles calls need.",
+          "Rows are summaries: `reports`, `widgets` and `filters` come back null even when totalWidget > 0, and source may be null. Read the report by id (get_report) for its widgets and filters."
         ],
         "responses": {
           "200": {
@@ -21375,7 +21397,8 @@
           "This is the simple/legacy flat-list variant. For search, paging, and suggested-vs-others buckets, use `search_widget_filter_values` (same path, richer request/response) instead.",
           "`data` is a flat array of `{label, value, ...}` structs; there is no paging on this route.",
           "Values come from Elasticsearch aggregations with deleted projects excluded.",
-          "The request binds `key` from query params only - there is no body."
+          "The request binds `key` from query params only - there is no body.",
+          "Values are account-wide (every visible project), not scoped to one project. Each item is {id, label, value, count, pId, meta, projectId, projectName, thProjectId}; meta and the project fields are null for most keys."
         ]
       },
       {
@@ -21517,7 +21540,8 @@
           "The widget field is sent as `widgetKey` on the wire, NOT `widget`; both `widgetKey` and `filterKey` are required or the request 400s on validation.",
           "`data` is a map keyed by bucket (suggested / others), each a list of value structs; page onward with `suggestedAfterKey` / `othersAfterKey` cursors rather than by page number alone.",
           "Behaviour is context-dependent: the TEST_EXECUTION_DISTRIBUTION widget forces only-manual-builds, source=TCM forces manual+automated, and ClickHouse-powered widgets have their project ids translated to TestHub ids first.",
-          "`customFields` values are restricted to a hardcoded allow-list of group ids per environment, so a custom-field filter may return nothing for a group not on that list."
+          "`customFields` values are restricted to a hardcoded allow-list of group ids per environment, so a custom-field filter may return nothing for a group not on that list.",
+          "`fullList` and `info` can come back null; rely on suggestedAfterKey / othersAfterKey. Valid widgetKey values are the WidgetTypeEnum constants; filterKey names follow the widget's filter keys (e.g. projects) - an unknown pair is an opaque 400."
         ]
       },
       {
@@ -22678,7 +22702,7 @@
           "buildSummary"
         ],
         "guidance": [
-          "Numbers come from search aggregations over the build's runs: testSummary (totalTests, healedTests, percentHealedTests), locatorSummary (totalLocators, healedLocators, percentHealedLocators) and buildSummary (totalBuild, healedBuilds, percentHealedBuilds).",
+          "Numbers come from search aggregations over the build's runs: testSummary (totalTests, healedTests, percentHealedTests), locatorSummary (totalLocators, healedLocators, percentHealedLocators) and buildSummary (totalBuild, healedBuilds, percentHealedBuilds) - buildSummary can be null.",
           "Refused with FORBIDDEN_OPERATION / plan-feature-not-allowed when the build is locked by plan quota \u2014 you get an error, not zeroes.",
           "In the demo-sandbox environment this returns hardcoded dummy stats, not real data."
         ],
@@ -23059,7 +23083,7 @@
           {
             "name": "buildSerialId",
             "type": "integer",
-            "description": "Numeric serial id of the build; this is what the comment reads key on."
+            "description": "The build's numeric id (build_id), NOT build_number. Numeric serial id of the build; this is what the comment reads key on."
           },
           {
             "name": "threadId",
@@ -23178,7 +23202,8 @@
           "Response is the PLAIN STRING \"updated\", not JSON \u2014 do not parse it as an object or read fields off it.",
           "You can only edit your OWN comment: if no document matches the id + your userId you get COMMENT_NOT_FOUND (and MULTIPLE_COMMENTS_FOUND in the unlikely event of duplicates).",
           "commentHtml is stored as `content`; commentNode, content and mentions are overwritten and modifiedAt is set to now. No version history \u2014 there is no API undo, the previous body is gone.",
-          "`createdAt` is accepted but ignored for locating the comment on this route; only `id` (plus your userId) is used."
+          "`createdAt` is accepted but ignored for locating the comment on this route; only `id` (plus your userId) is used.",
+          "Observed live (2026-09-29): after an update that sent commentNode, list_comments still showed commentNode as the string \"null\", and the first edit's modifiedAt was null on an immediate re-read. Do not rely on commentNode round-tripping; re-read after a short delay to confirm an edit."
         ],
         "responses": {
           "200": {
@@ -23247,7 +23272,7 @@
           {
             "name": "buildSerialId",
             "type": "integer",
-            "description": "Numeric build serial id. REQUIRED in practice \u2014 omitting it returns [] with 200 (not an error). The read looks back over a fixed window of preceding serial ids from this value."
+            "description": "The build's numeric id (build_id, e.g. 160459727) - NOT its build_number. REQUIRED in practice \u2014 omitting it returns [] with 200 (not an error). The read looks back over a fixed window of preceding ids from this value."
           },
           {
             "name": "buildUuid",
@@ -24702,7 +24727,8 @@
         },
         "guidance": [
           "Elasticsearch wildcard lookup with source fencing applied; returns a bounded set under `data` (each {id, value, label, count, pId}).",
-          "Uses the compact QueryRq shape; dateRange must be exactly two bounds. includeManualRuns defaults to true and is honoured here (not forced false)."
+          "Uses the compact QueryRq shape; dateRange must be exactly two bounds. includeManualRuns defaults to true and is honoured here (not forced false).",
+          "Runs without a recorded host name aggregate into one option with empty id/value/label (and a count) - skip it when building a host filter."
         ]
       },
       {
@@ -25054,7 +25080,8 @@
           "This is the public-API twin of get_test_rca and accepts username + access-key auth. Behaviour splits on peek: peek=true is safe (never enqueues); peek=false (the default) is get-or-create and has a side effect.",
           "To poll without triggering, always pass peek=true. The peek-only fields isLive / pendingMessageId / alreadyTracked describe an in-flight generation; gate a re-trigger on isLive (alreadyTracked only reflects whether a chat row holds a handle and is null for web/MCP-started runs).",
           "Requires AI opt-in consent and AI enablement; source-fenced groups get AI_FEATURE_FENCED. Resolves the caller's BrowserStack username/access key server-side and 400s if missing.",
-          "To register an https callback instead of polling, use the POST twin trigger_test_rca_via_public_api."
+          "To register an https callback instead of polling, use the POST twin trigger_test_rca_via_public_api.",
+          "peek=true on a run with NO RCA returns 200 with every field null (id, state, isAgentic, ...), not a 404 - check id/state for null. isAgentic can read false on the first (Pending) response and true once generation starts."
         ]
       },
       {
@@ -26614,7 +26641,7 @@
             "description": "The 40-char build uuid."
           }
         ],
-        "intent": "Get the build's execution timeline \u2014 per-status series (passed / failed / running) bucketed over the build's lifetime \u2014 for the timeline visualisation on the build page.",
+        "intent": "Get the build's execution timeline \u2014 per-status series (passed / failed / pending=running) over the build's lifetime \u2014 for the timeline visualisation on the build page.",
         "returns": [
           "data"
         ],
@@ -26638,7 +26665,7 @@
         "guidance": [
           "No filters apply on this route \u2014 it takes only the uuid; any query params are ignored.",
           "Plan-locked builds return HTTP 403; an unknown uuid is BUILD_NOT_FOUND.",
-          "The payload is a single top-level `data` array of chart series (one per status), each carrying `[time, value]` point pairs suitable for a column chart \u2014 not a list of discrete lifecycle events."
+          "The payload is a single top-level `data` array of three series (ids passed, failed, pending - pending is the running count), each carrying `[x, value]` pairs where x is milliseconds since the first test started, not an epoch timestamp. Only passed/failed runs are counted."
         ]
       },
       {
@@ -28199,9 +28226,9 @@
         "guidance": [
           "`key` is required and must be one of the six UserFilterKey values; a value outside the enum is a 400, and omitting `key` entirely fails the request.",
           "`buildStatus` and `sources` are computed purely from enums with no backend call, so they always return the full option set.",
-          "`frameworks` FAILS OPEN: on any internal error (ES or the fence setup) it returns the full hardcoded framework list rather than erroring - so a framework in the list may not correspond to any current build. It also unions in the user's saved framework selection so an aged-out saved value still appears.",
+          "`frameworks` FAILS OPEN: on an internal error (ES or the fence setup) it returns the full hardcoded framework list rather than erroring. On success it lists only frameworks seen in the caller's builds (plus the saved selection), which can be EMPTY.",
           "The build-backed keys (`buildTags`, `uniqueBuildNames`, `folders`) aggregate Elasticsearch scoped to the caller's sub-group, and to visible projects only when UDAC is enabled, returning up to 10000 values. There is no paging - the whole set comes back in one call.",
-          "Each element is {label, value, meta}; `meta` is an empty string on this route."
+          "Each element is {id, label, value, count, pId, meta, projectId, projectName, thProjectId}; meta and the project fields are null here. `folders` labels embed the count ('Language(45)') and can repeat a value across projects, and folders span every project in scope, not one."
         ]
       },
       {
@@ -28498,7 +28525,7 @@
         "guidance": [
           "The value set returned depends entirely on `type`. Only build_name, build_tag, test_name, test_tag, folder, failure_category, alert_name, os, browser, device and test_status are wired; the remaining enum values (qg_status, build_status, smart_tags, alert_severity) return empty `data`.",
           "`projectIds` in the query is IGNORED here - scope is the path `projectName`. This is the opposite of the group-level route, which reads projectIds and ignores any project path.",
-          "Cursor-paged via a composite aggregation: read `afterKey` from the response and pass it back as the `afterKey` query param for the next page; a null/absent `afterKey` means the last page.",
+          "Cursor-paged via a composite aggregation: pass the response's `afterKey` back as the `afterKey` query param for the next page. afterKey is set even on the final page, so stop when a page returns fewer rows than the page size or none.",
           "Per-page size is 10 for most types and up to 1000 for `folder`. `query` and `afterKey` are each capped at 100 characters.",
           "Each element is {label, value, pId, count}. For `folder`, `label` is 'name(count)', `value` is the full path, and `pId` is the parent path; for other types `pId` echoes the value."
         ]
@@ -28536,7 +28563,7 @@
           {
             "name": "projectIds",
             "type": "string",
-            "description": "Comma-separated Test Management project ids to scope the aggregation to; each is translated to a TO project id before the query. A non-numeric entry throws and fails the request; a blank/empty value resolves to no projects and empty `data`."
+            "description": "Comma-separated TestHub/Test Management project ids (thProjectId, NOT the TRA project id - a TRA id gives an empty 200). Each is translated to a TO project id before the query. A non-numeric entry fails the request; blank resolves to no projects and empty `data`."
           },
           {
             "name": "query",
@@ -28574,9 +28601,9 @@
         },
         "guidance": [
           "Gated by a controller-wide entitlement: WEBHOOKS (non-TM groups) or GROUP_WEBHOOKS (TM groups) must be accessible, otherwise the whole controller is refused as feature-inaccessible.",
-          "`projectIds` is a comma-separated string of Test Management project ids mapped to TO project ids before the aggregation. A non-numeric entry throws (parse failure) and fails the call; an empty/blank value yields no projects and empty `data`.",
+          "`projectIds` is a comma-separated string of TestHub/Test Management project ids (a project's thProjectId, not the TRA id - a TRA id silently yields empty `data`), mapped to TO project ids before the aggregation. A non-numeric entry throws (parse failure) and fails the call; an empty/blank value yields no projects and empty `data`.",
           "The value set returned depends entirely on `type`; qg_status, build_status, smart_tags and alert_severity return empty `data`.",
-          "Cursor-paged like the project route: read `afterKey` and pass it back for the next page; null/absent means last page. Per-page size is 10 for most types and up to 1000 for `folder`. `query` and `afterKey` are capped at 100 characters.",
+          "Cursor-paged like the project route: pass the response's `afterKey` back for the next page. afterKey is set even on the last page, so stop when a page has fewer than the page size (10 for most types, 1000 for `folder`) or is empty. `query` and `afterKey` are capped at 100 characters.",
           "Each element is {label, value, pId, count}; for `folder`, `pId` is the parent path and `label` is 'name(count)'."
         ]
       },
@@ -29272,17 +29299,17 @@
           {
             "name": "queryStr",
             "type": "string",
-            "description": "Optional name search. Filters the page by project name substring."
+            "description": "Optional case-insensitive project-name substring (ILIKE)."
           },
           {
             "name": "projects",
             "type": "array",
-            "description": "Optional list of selected project ids (Long) to PIN into the result, so the currently selected project(s) appear even if they would fall outside the page. Nulls in the list are dropped.",
+            "description": "Optional list of project ids (Long) to EXCLUDE from the page - the already-selected projects the picker shows separately (SQL `p.id NOT IN (:selectedProjectIds)`). It does not pin them in. Nulls are dropped.",
             "fields": [
               {
                 "name": "(item)",
                 "type": "integer",
-                "description": "A selected project id to include."
+                "description": "A selected project id to leave out."
               }
             ]
           },
@@ -29293,7 +29320,7 @@
             "description": "1-based page number. Values <= 0 (and absent) default to 1."
           }
         ],
-        "intent": "Populate the build-list sidebar project picker: a page of lightweight project records for the group ordered by most recent build activity, with optional name search and the ability to pin the currently selected project ids into the page.",
+        "intent": "Populate the build-list sidebar project picker: a page of lightweight project records for the group ordered by most recent build activity, with optional name search and the ability to exclude the already-selected project ids from the page.",
         "returns": [
           "data",
           "pagingParams"
@@ -29301,9 +29328,10 @@
         "guidance": [
           "POST but READ-ONLY \u2014 the body is only search/paging/selection state; nothing is mutated.",
           "hasNext is inferred from 'the page came back non-empty', so the last full page still reports has_next=true and next_page = pageNumber+1; the empty page after it is how you learn you are past the end. Stop when data is empty, not when has_next flips.",
-          "Page size is fixed server-side at 10 records and cannot be changed from the request.",
+          "Page size is fixed server-side at 10 records and cannot be changed; a short page (under 10 rows) is the last one, even though has_next is still true.",
           "Pagination keys are snake_case here (has_next, next_page under pagingParams) \u2014 different from the GET lite/aggregate routes which use hasNext/searchAfter.",
-          "Each row is the sidebar-lite shape (thProjectId, id, displayName, normalisedName) \u2014 note displayName, not name. This is distinct from list_projects_lite_paginated (a GET with offset paging and no id-pinning)."
+          "Each row is the sidebar-lite shape (thProjectId, id, displayName, normalisedName) \u2014 note displayName, not name. This is distinct from list_projects_lite_paginated (a GET with offset paging and no id-pinning).",
+          "`projects[]` EXCLUDES the listed ids from the result (the picker renders selected projects itself); pass it only to leave those out. Combining a search with a selected id that matches it returns an empty page."
         ],
         "responses": {
           "200": {
@@ -30275,7 +30303,8 @@
           "`alertRules` is a MAP keyed by severity level (CRITICAL / WARNING) -> {value (1\u201332 chars), condition (<=32 chars)}. This differs from the older numeric-id surface, where alertRules is a flat set with the level as a field.",
           "Build scoping is `buildNames` (PLURAL); `alertType` is a string (not the older integer `alertTypeId`). To edit by numeric project id use update_project_alert_by_integer_id.",
           "Returns 200 {success:true, id:'<new alert id>'}.",
-          "`alertType` is REQUIRED and must be one of buildStability | buildPerformance | flakinessPercentage | mutedDays | numberOfAlwaysFailingTests | spanOfAlwaysFailingTests \u2014 omitting it returns a 500, not a validation error."
+          "`alertType` is REQUIRED and must be one of buildStability | buildPerformance | flakinessPercentage | mutedDays | numberOfAlwaysFailingTests | spanOfAlwaysFailingTests \u2014 omitting it returns a 500, not a validation error.",
+          "KNOWN BEHAVIOUR (live 2026-09-29): `enabled:false` is ignored on update as on create - the new row reads back enabled:true - and the superseded row still lists as enabled:true in list_project_alerts. Scope with buildNames if an alert must not fire, and delete the old id if it should go."
         ],
         "path_params": [
           {
@@ -31550,7 +31579,7 @@
         "intent": "Get the test-detail Logs payload as URLs \u2014 pointers to the BrowserStack session logs (plus SDK and hook-run log URLs) instead of inlined content, with failure and step logs still inline, the framework name and the test's start/finish times.",
         "guidance": [
           "This is the URL-returning counterpart of the merged-logs read (get_test_run_merged_logs): browserstackLogs, sdkLogs and hookRunLogs are URLs the browser fetches itself, while failureLogs and stepLogs are returned INLINE. Use the merged-logs read when you need the log text assembled server-side.",
-          "browserstackLogs is a per-channel object (text, console, selenium, appium, playwright, performance, network, device, video, audio, terminal, \u2026); channels with no data are omitted, and each present channel is a URL/descriptor rather than content.",
+          "browserstackLogs is a per-channel object (text, console, selenium, appium, playwright, performance, network, device, video, terminal, telemetry, browserprofiling, ...); each present channel is a presigned URL/descriptor, not content, and presence does not prove the artefact exists. Null fields are serialised as explicit nulls (testStartedAt/testFinishedAt can be null).",
           "Retention-locked builds are refused with FORBIDDEN_OPERATION / PLAN_FEATURE_NOT_ALLOWED, not an empty body.",
           "Whether logs are served from S3 or the BrowserStack session API is decided internally by a Redis flag and the framework \u2014 the caller cannot influence it."
         ],
@@ -31573,11 +31602,13 @@
               "properties": {
                 "testStartedAt": {
                   "type": "string",
-                  "format": "date-time"
+                  "format": "date-time",
+                  "nullable": true
                 },
                 "testFinishedAt": {
                   "type": "string",
-                  "format": "date-time"
+                  "format": "date-time",
+                  "nullable": true
                 },
                 "browserstackLogs": {
                   "$schema": "ObsSessionLogs"
@@ -31770,13 +31801,13 @@
                 },
                 "testStartedAt": {
                   "type": "string",
-                  "format": "date-time",
-                  "description": "Present only when trim=true."
+                  "nullable": true,
+                  "description": "Present only when trim=true. Java Date.toString format (e.g. 'Tue Sep 29 18:35:02 UTC 2026'), NOT ISO-8601."
                 },
                 "testFinishedAt": {
                   "type": "string",
-                  "format": "date-time",
-                  "description": "Present only when trim=true; null when the run has not finished."
+                  "nullable": true,
+                  "description": "Present only when trim=true; null when the run has not finished. Java Date.toString format (e.g. 'Tue Sep 29 18:35:02 UTC 2026'), NOT ISO-8601."
                 },
                 "meta": {
                   "type": "object",
@@ -31918,7 +31949,8 @@
                     },
                     "nextRoot": {
                       "type": "object",
-                      "description": "Opaque paging token map."
+                      "description": "Opaque paging token map.",
+                      "nullable": true
                     }
                   }
                 },
@@ -31926,7 +31958,7 @@
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "description": "BtcerTestCases entry \u2014 a TM test case linked to the run."
+                    "description": "BtcerTestCases entry \u2014 a TM test case linked to the run (identifier, name, status and TM links; keys vary)."
                   }
                 }
               }
@@ -31964,7 +31996,7 @@
         "guidance": [
           "The `url` deep link depends on VCS-integration data captured on the build; without it only `filename` is meaningful and `url` may be empty.",
           "TEST_RUN_NOT_FOUND / BUILD_NOT_FOUND on bad ids; a retention-locked build is refused with FORBIDDEN_OPERATION.",
-          "`code` is populated only when the source is actually available; do not assume the body of the test is always returned."
+          "`code`, `language` and `type` are populated only when the source was captured; often only `filename` is set. `testRunId` comes back null - keep the id you asked with."
         ],
         "returns": [
           "language",
@@ -31981,11 +32013,13 @@
               "type": "object",
               "properties": {
                 "language": {
-                  "type": "string"
+                  "type": "string",
+                  "nullable": true
                 },
                 "code": {
                   "type": "string",
-                  "description": "Source of the test, when available."
+                  "description": "Source of the test, when available.",
+                  "nullable": true
                 },
                 "filename": {
                   "type": "string"
@@ -31995,10 +32029,13 @@
                   "description": "VCS deep link; empty when the build has no VCS integration."
                 },
                 "testRunId": {
-                  "type": "integer"
+                  "type": "integer",
+                  "nullable": true,
+                  "description": "Null on this route (not an echo of the requested id)."
                 },
                 "type": {
-                  "type": "string"
+                  "type": "string",
+                  "nullable": true
                 }
               }
             }
@@ -32035,7 +32072,7 @@
         "guidance": [
           "Despite the /testDetails route this returns the MEDIA + session-link block (videoLogs, audioLogs, browserstackSessionUrl, percyBuildUrl, framework, isSdk, customMetadata), NOT the run's metadata \u2014 use get_test_run_meta for identity/status/history.",
           "videoLogs carries startOffset/finishOffset/startTimeStamp for aligning playback with the log timeline; audioLogs and percyBuildUrl are present only when the run actually has them.",
-          "testStartedAt drives the FE's 30-day-expired empty state and buildId feeds the long-session cURL fallback \u2014 they are context flags, not log content.",
+          "testStartedAt drives the FE's 30-day-expired empty state and buildId feeds the long-session cURL fallback \u2014 they are context flags, not log content. buildId can be null even for a real SDK run.",
           "TEST_RUN_NOT_FOUND / BUILD_NOT_FOUND on bad ids; a retention-locked build returns FORBIDDEN_OPERATION / PLAN_FEATURE_NOT_ALLOWED rather than partial data."
         ],
         "returns": [
@@ -32060,14 +32097,16 @@
                   "$schema": "ObsSessionVideo"
                 },
                 "audioLogs": {
-                  "description": "Audio-log descriptor; null when absent."
+                  "description": "Audio-log descriptor; null when absent.",
+                  "nullable": true
                 },
                 "browserstackSessionUrl": {
                   "type": "string"
                 },
                 "percyBuildUrl": {
                   "type": "string",
-                  "description": "Percy build URL; null when the run has no Percy build."
+                  "description": "Percy build URL; null when the run has no Percy build.",
+                  "nullable": true
                 },
                 "isSdk": {
                   "type": "boolean"
@@ -32079,15 +32118,18 @@
                   "type": "string"
                 },
                 "customMetadata": {
-                  "description": "Opaque custom metadata attached to the run."
+                  "description": "Opaque custom metadata attached to the run.",
+                  "nullable": true
                 },
                 "testStartedAt": {
                   "type": "string",
-                  "description": "Drives the FE 30-day-expired empty state for network logs."
+                  "description": "Drives the FE 30-day-expired empty state for network logs.",
+                  "nullable": true
                 },
                 "buildId": {
                   "type": "string",
-                  "description": "Hashed BrowserStack build id; feeds the long-session REST-API cURL fallback."
+                  "description": "Hashed BrowserStack build id for the long-session cURL fallback; can be null even for an SDK Automate run with a session.",
+                  "nullable": true
                 }
               }
             }
@@ -32409,7 +32451,7 @@
           "This is a POST that only carries a filter body \u2014 it reads and changes nothing (routed to a read replica), so it is safe to call freely.",
           "`isHook: true` switches the ENTIRE lookup to hook runs: the ids you send are then hook run ids, not test run ids. Sending test run ids with isHook=true returns history for the hook runs (if any) with those ids, not your tests.",
           "The response is a JSON OBJECT keyed by the id you asked for (`{ \"<id>\": {\u2026history\u2026} }`), not an array. An id with no history is simply absent from the map \u2014 iterate the ids you sent rather than assuming every one comes back.",
-          "Each entry's `logs` is an object with only the keys that exist for that run: `TEST_FAILURE` (backtrace), `TEST_LOG` (an array of screenshot/attachment URLs the caller fetches directly from storage), and `BROWSERSTACK_ERROR`. All three are omitted when absent.",
+          "Each entry's `logs` is an object with only the keys that exist for that run: `TEST_FAILURE` (an ARRAY of strings - message then stack), `TEST_LOG` (an array of screenshot/attachment URLs the caller fetches directly from storage), and `BROWSERSTACK_ERROR`. `logs` is {} for passed runs. Several flags (isNewlyFailed, isPerformanceAnomaly, flakySetting) can be null.",
           "Scoped to the caller's group in the repository query \u2014 ids outside the caller's group are dropped from the result, not errored."
         ],
         "returns": [
@@ -33458,7 +33500,7 @@
         "guidance": [
           "Handle the not-ready state: while the auto-analyser is still running you get ready:false with only a `message` ('Unique Errors are being detected') and the default 'Analysis yet to run' overview \u2014 not an error and not the final data.",
           "While clustering is incomplete the panel comes back with an empty `data` set; poll again rather than concluding there are no errors.",
-          "`data` is sorted by count descending; each row carries the cluster id, title (the error), count, impactedTests and the contributing testRuns.",
+          "`data` is sorted by count descending; each row carries the cluster id, title (the error, often a full stack trace), count, testRuns and aiRcaTestRunIds. impactedTests can be null and testRuns can be empty even for a ready panel - use aiRcaTestRunIds (populated) to reach the runs.",
           "Build lookup is group-scoped, so a build uuid from another group reads as not found."
         ]
       },
@@ -34481,20 +34523,52 @@
       },
       "BuildGroupAggResult": {
         "type": "object",
-        "description": "One build-group aggregation row in a grouped build listing (summary for the group's latest build). Stub pending the build_group entity.",
+        "description": "One build-group row in the grouped build listing (models/BuildGroupAggResult).",
         "properties": {
           "buildGroupId": {
-            "type": "string"
+            "type": "integer",
+            "description": "Build group id."
+          },
+          "id": {
+            "type": "integer",
+            "nullable": true
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
-          "latestBuildUuid": {
-            "type": "string"
+          "description": {
+            "type": "string",
+            "nullable": true
           },
-          "statusStats": {
+          "buildCount": {
+            "type": "integer"
+          },
+          "closedBuildCount": {
+            "type": "integer"
+          },
+          "closingBuildCount": {
+            "type": "integer",
+            "nullable": true
+          },
+          "isGroupClosing": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "manualBuildCount": {
+            "type": "integer"
+          },
+          "automationBuildCount": {
+            "type": "integer"
+          },
+          "latestCreatedAt": {
+            "type": "number",
+            "description": "Epoch millis of the group's newest build (a double)."
+          },
+          "buildGroup": {
             "type": "object",
-            "description": "Per-status counts for the group."
+            "nullable": true,
+            "description": "The TestHub build-group record (id, name, closedBy, closedByName, ...), when the group exists in TestHub."
           }
         }
       },
@@ -34675,15 +34749,15 @@
       },
       "IntegrationScorePreferences": {
         "type": "object",
-        "description": "Per-category integration preferences. Each category object carries only its own boolean signals plus an optional notApplicable reason (and, for the build categories, cannotIntegrate/otherReason).",
+        "description": "Per-category integration preferences. Each category object carries only its own boolean signals plus an optional notApplicable reason (and, for the build categories, cannotIntegrate/otherReason). Wire keys follow Jackson bean naming: bstackBuilds (not bStackBuilds), and boolean isX fields drop the `is` prefix.",
         "properties": {
           "lastCalculated": {
             "type": "integer",
             "description": "Unix epoch millis of the last recalculation."
           },
-          "bStackBuilds": {
+          "bstackBuilds": {
             "type": "object",
-            "description": "{totalBuilds, bStackSdkBuilds, isAutomate, isAppAutomate, cannotIntegrate?, notApplicable?, otherReason?}"
+            "description": "{totalBuilds, bstackSdkBuilds, automate, appAutomate, cannotIntegrate?, notApplicable?, otherReason?} - note the lower-case `bstack` and the un-prefixed `automate`/`appAutomate` booleans."
           },
           "nonBStackBuilds": {
             "type": "object",
@@ -35063,7 +35137,7 @@
       },
       "BuildSummary": {
         "type": "object",
-        "description": "Full build summary used in daily-summary email bodies.",
+        "description": "Build summary (models/response/BuildSummary). Every field except uuid/id/name/status can be null - nulls are serialised, not omitted. About 30 further keys are also returned (alertCount, buildError, creationType, workflowStatusStats, aiHealingMeta, origins, testCaseCount, parallelsUsed, ...); only the ones agents normally need are declared.",
         "properties": {
           "uuid": {
             "type": "string"
@@ -35075,113 +35149,219 @@
             "type": "string"
           },
           "derivedName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "originalName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "isAutoDetectedName": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "normalisedName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "Lifecycle status (e.g. finished); the pass/fail verdict is displayStatus."
           },
           "duration": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "consolidatedDuration": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "finishedAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "nullable": true
           },
           "startedAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "nullable": true
           },
           "sessionCount": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "hostInfo": {
-            "type": "object"
+            "type": "object",
+            "nullable": true
           },
           "observabilityVersion": {
-            "type": "object"
+            "type": "object",
+            "nullable": true
           },
           "ciBuildData": {
-            "type": "object"
+            "type": "object",
+            "nullable": true
           },
           "user": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "userId": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "closedBy": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "closedAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "nullable": true
           },
           "metaData": {
-            "type": "string"
+            "type": "string",
+            "nullable": true,
+            "description": "JSON-encoded string."
           },
           "percyBuildUrl": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "requestlyRunUrl": {
-            "type": "string"
+            "type": "string",
+            "nullable": true,
+            "description": "Not serialised on every route (absent from the daily-summary by-ids listing)."
           },
           "source": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "tags": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "nullable": true
           },
           "issueTypes": {
-            "type": "array"
+            "type": "array",
+            "nullable": true
           },
           "statusStats": {
             "type": "object",
-            "description": "StatusAggregate: pending/passed/failed/skipped/unknown counts."
+            "description": "StatusAggregate: pending/passed/failed/skipped/unknown counts, plus an integer `aggregate` total.",
+            "nullable": true
           },
           "aiRcaCompletedCount": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "selfHealedCount": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "showHealingReport": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "showAuthoringReport": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "appAccessibilityEnabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "issueTypeAggregate": {
-            "type": "object"
+            "type": "object",
+            "nullable": true
           },
           "historyAggregate": {
-            "type": "object"
+            "type": "object",
+            "nullable": true
           },
           "buildNumber": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "sdKVersion": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
+          },
+          "displayStatus": {
+            "type": "string",
+            "nullable": true,
+            "description": "Build verdict shown in the UI (passed/failed/...); prefer this over status."
+          },
+          "state": {
+            "type": "string",
+            "nullable": true,
+            "description": "Build lifecycle state, e.g. NEW or CLOSED."
+          },
+          "projectId": {
+            "type": "integer",
+            "nullable": true,
+            "description": "TRA project id."
+          },
+          "thProjectId": {
+            "type": "integer",
+            "nullable": true,
+            "description": "TestHub project id."
+          },
+          "projectName": {
+            "type": "string",
+            "nullable": true
+          },
+          "qualityGateStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "isArchived": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "reRun": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "tcmTestRunIdentifier": {
+            "type": "string",
+            "nullable": true,
+            "description": "Linked Test Management run identifier (TR-...), when any."
+          },
+          "runInfos": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "object"
+            }
+          },
+          "versionControlInfo": {
+            "type": "object",
+            "description": "{url, name, commitId, branch}; always an object, fields null when no VCS data.",
+            "properties": {
+              "url": {
+                "type": "string",
+                "nullable": true
+              },
+              "name": {
+                "type": "string",
+                "nullable": true
+              },
+              "commitId": {
+                "type": "string",
+                "nullable": true
+              },
+              "branch": {
+                "type": "string",
+                "nullable": true
+              }
+            }
           }
         }
       },
@@ -35310,10 +35490,13 @@
             "type": "integer"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "nullable": true,
+            "description": "Can be null in the daily-summary payload; key projects by id."
           },
           "normalisedName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "buildRunsSummary": {
             "$schema": "BuildRunsSummary"
@@ -35832,26 +36015,36 @@
             "type": "string"
           },
           "meta": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "count": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "pId": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "projectId": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "projectName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "thProjectId": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "displayName": {
             "type": "string",
             "description": "Present only when set (JSON include NON_NULL)."
+          },
+          "id": {
+            "type": "string",
+            "description": "Option id (duplicates value)."
           }
         }
       },
@@ -35867,17 +36060,19 @@
           },
           "afterKey": {
             "type": "string",
-            "description": "Cursor to pass back as `afterKey` for the next page; null/absent when no more values."
+            "description": "The last key of this page. Still set on a final short page, so stop when fewer than the page size come back.",
+            "nullable": true
           },
           "query": {
             "type": "string",
-            "description": "Echo of the search prefix used."
+            "description": "Echo of the search prefix; null when not sent.",
+            "nullable": true
           }
         }
       },
       "TrendTimelineDataPoint": {
         "type": "object",
-        "description": "One point of a Testing Trends timeline series. `y` is the serialised metric value (derived from the internal string value; null when the bucket had no runs). `t` is the total unique tests in the bucket (present on the percent-timeline cards, null elsewhere). `pointRange` is [bucketStart, bucketStart+interval] epoch ms and is omitted on some series (e.g. performance-chart lineData).",
+        "description": "One point of a Testing Trends timeline series. `y` is the metric value (null - or 0 on count cards - when the bucket had no runs). `t` is the total unique tests in the bucket, null on most cards. `pointRange` is [bucketStart, bucketStart+interval] epoch ms, or null on series that do not set it (e.g. performance-chart lineData) - the key is always present.",
         "properties": {
           "x": {
             "type": "integer",
@@ -35885,18 +36080,21 @@
           },
           "y": {
             "type": "number",
-            "description": "Metric value for the bucket (count, percentage or duration depending on the card). Null when no tests ran in the bucket."
+            "description": "Metric value for the bucket (count, percentage or duration depending on the card) as a JSON number. Null (percent/duration cards) or 0 (count cards such as test executions) for an empty bucket.",
+            "nullable": true
           },
           "t": {
             "type": "integer",
-            "description": "Total unique tests in the bucket; set only on the flakiness/new-failures/always-failing/test-growth/test-executions cards, null otherwise."
+            "description": "Total unique tests in the bucket; null on most cards (observed null on the test-executions and performance cards).",
+            "nullable": true
           },
           "pointRange": {
             "type": "array",
             "items": {
               "type": "integer"
             },
-            "description": "[bucketStart, bucketEnd] epoch ms. Absent on series that do not emit it (e.g. performance-chart lineData)."
+            "description": "[bucketStart, bucketEnd] epoch ms; null (not omitted) on series that do not set it, e.g. performance-chart lineData.",
+            "nullable": true
           }
         }
       },
@@ -35906,11 +36104,13 @@
         "properties": {
           "metric": {
             "type": "string",
-            "description": "Metric label (e.g. 'flaky', 'new failures'); null when not applicable."
+            "description": "Metric label (e.g. 'flaky', 'new failures'); null when not applicable.",
+            "nullable": true
           },
           "meta": {
             "type": "string",
-            "description": "Human summary sentence; null when there is no metric."
+            "description": "Human summary sentence; null when there is no metric.",
+            "nullable": true
           },
           "count": {
             "type": "string",
@@ -35966,7 +36166,7 @@
       },
       "CbtDataPoint": {
         "type": "object",
-        "description": "A cross-browser coverage slice. Primary (top-level) points carry name/value/percentage/drilldown/color; secondary (drill-down) points additionally carry os/browser/device.",
+        "description": "A cross-browser coverage slice. Every point carries name/value/percentage/drilldown/color/os/browser/device; os/browser/device are null on primary points, drilldown is null on secondary points.",
         "properties": {
           "name": {
             "type": "string"
@@ -35981,22 +36181,26 @@
           },
           "drilldown": {
             "type": "string",
-            "description": "Key linking a primary slice to its drill-down entry; null on secondary points."
+            "description": "Key linking a primary slice to its drill-down entry; null on secondary points.",
+            "nullable": true
           },
           "color": {
             "type": "string"
           },
           "os": {
             "type": "string",
-            "description": "Present only on secondary points."
+            "description": "Set only on secondary points; the key is present as null on primary points.",
+            "nullable": true
           },
           "browser": {
             "type": "string",
-            "description": "Present only on secondary points."
+            "description": "Set only on secondary points; the key is present as null on primary points.",
+            "nullable": true
           },
           "device": {
             "type": "string",
-            "description": "Present only on secondary points."
+            "description": "Set only on secondary points; the key is present as null on primary points.",
+            "nullable": true
           }
         }
       },
@@ -36263,16 +36467,18 @@
           },
           "projectSelection": {
             "type": "string",
-            "description": "current | specific | all."
+            "description": "current | specific | all.",
+            "nullable": true
           },
           "projectMapping": {
-            "$schema": "WebhookProjectMapping"
+            "$schema": "WebhookProjectMapping",
+            "nullable": true
           }
         }
       },
       "WebhookRuleDetail": {
         "type": "object",
-        "description": "Full webhook rule definition (WebhookRuleDto). No data wrapper \u2014 the fields sit at the top level of the response.",
+        "description": "Full webhook rule definition (WebhookRuleDto). No data wrapper \u2014 the fields sit at the top level. Unset fields are returned as explicit null (projectSelection, projectMapping, eventRules, reTrigger, and payload body/headers/params/auth credentials).",
         "properties": {
           "uuid": {
             "type": "string",
@@ -36289,14 +36495,16 @@
           },
           "projectSelection": {
             "type": "string",
-            "description": "current | specific | all."
+            "description": "current | specific | all.",
+            "nullable": true
           },
           "projectMapping": {
-            "$schema": "WebhookProjectMapping"
+            "$schema": "WebhookProjectMapping",
+            "nullable": true
           },
           "projectId": {
             "type": "integer",
-            "description": "Legacy single-project id; populated for a rule with no mapping rows (e.g. a project-scoped rule)."
+            "description": "Legacy single-project id - the TestHub project id (thProjectId), not the TRA id; populated for a rule with no mapping rows (e.g. a project-scoped rule)."
           },
           "groupId": {
             "type": "integer"
@@ -36316,14 +36524,16 @@
             "type": "array",
             "items": {
               "$schema": "WebhookEventRule"
-            }
+            },
+            "nullable": true
           },
           "payload": {
             "$schema": "WebhookPayload"
           },
           "reTrigger": {
             "$schema": "WebhookPayload",
-            "description": "Re-trigger payload; null when not configured."
+            "description": "Re-trigger payload; null when not configured.",
+            "nullable": true
           },
           "reTriggerEnabled": {
             "type": "boolean"
@@ -36347,13 +36557,16 @@
                 "description": "noAuth | basicAuth | bearerToken."
               },
               "username": {
-                "type": "string"
+                "type": "string",
+                "nullable": true
               },
               "password": {
-                "type": "string"
+                "type": "string",
+                "nullable": true
               },
               "token": {
-                "type": "string"
+                "type": "string",
+                "nullable": true
               }
             }
           },
@@ -36362,7 +36575,8 @@
           },
           "body": {
             "type": "object",
-            "description": "Arbitrary JSON body sent to the target."
+            "description": "Arbitrary JSON body sent to the target.",
+            "nullable": true
           },
           "headers": {
             "type": "array",
@@ -36379,7 +36593,8 @@
                   "type": "string"
                 }
               }
-            }
+            },
+            "nullable": true
           },
           "params": {
             "type": "array",
@@ -36396,7 +36611,8 @@
                   "type": "string"
                 }
               }
-            }
+            },
+            "nullable": true
           },
           "method": {
             "type": "string",
@@ -36647,7 +36863,7 @@
           },
           "severityBreakdown": {
             "type": "object",
-            "description": "Per-severity issue counts; only severities that were present are included.",
+            "description": "Per-severity issue counts as the build summary reports them (zero counts included when reported).",
             "properties": {
               "critical": {
                 "type": "integer"
@@ -37104,16 +37320,19 @@
             "type": "integer"
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "The leg's integer build id, as a string."
           },
           "buildSdkLogs": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "nullable": true
           },
           "meta": {
-            "type": "object"
+            "type": "object",
+            "nullable": true
           }
         }
       },
@@ -37251,11 +37470,13 @@
           },
           "count": {
             "type": "integer",
-            "description": "Match count for this option; usually null on these facet lists."
+            "description": "Match count for this option; usually null on these facet lists.",
+            "nullable": true
           },
           "pId": {
             "type": "string",
-            "description": "Optional parent-id grouping token; empty string on these lists."
+            "description": "Optional parent-id grouping token; empty string on these lists.",
+            "nullable": true
           }
         }
       },
@@ -37297,30 +37518,42 @@
       },
       "BuildFilterApplied": {
         "type": "object",
-        "description": "The caller's applied build-listing filter, echoed back in resolved form (ids turned into name-bearing objects).",
+        "description": "The caller's applied build-listing filter, echoed back in resolved form (ids turned into name-bearing objects). Anything not sent comes back null (not an empty list).",
         "properties": {
           "uniqueBuildNames": {
             "type": "array",
             "items": {
               "$schema": "FilterField"
-            }
+            },
+            "nullable": true
           },
           "statuses": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "nullable": true
           },
           "dateRange": {
             "type": "object",
-            "description": "Resolved start/end range."
+            "nullable": true,
+            "description": "Resolved range {lowerBound, upperBound} (epoch ms); null when not sent.",
+            "properties": {
+              "lowerBound": {
+                "type": "integer"
+              },
+              "upperBound": {
+                "type": "integer"
+              }
+            }
           },
           "frameworks": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Raw framework values echoed back."
+            "description": "Raw framework values echoed back.",
+            "nullable": true
           },
           "users": {
             "type": "array",
@@ -37334,43 +37567,87 @@
                   "type": "string"
                 }
               }
-            }
+            },
+            "nullable": true
           },
           "assignees": {
-            "type": "array"
+            "type": "array",
+            "nullable": true
           },
           "teams": {
-            "type": "array"
+            "type": "array",
+            "nullable": true
           },
           "buildGroupIds": {
-            "type": "array"
+            "type": "array",
+            "nullable": true
           },
           "tags": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "nullable": true,
+            "description": "Echo of the request's buildTags (build-level tags)."
           },
           "branches": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "nullable": true
           },
           "search": {
-            "type": "string"
+            "type": "string",
+            "nullable": true,
+            "description": "Echo of the request's `search` field (not `query`)."
           },
           "isArchived": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "state": {
             "type": "string"
           },
           "types": {
-            "type": "array"
+            "type": "array",
+            "nullable": true
           },
           "sources": {
-            "type": "array"
+            "type": "array",
+            "nullable": true
+          },
+          "excludeLocked": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "isCiRun": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "selfHealed": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiAuthored": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "appCrash": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "selfHosted": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "creationType": {
+            "type": "array",
+            "nullable": true
+          },
+          "testCasesStatuses": {
+            "type": "array",
+            "nullable": true
           }
         }
       },
@@ -37406,14 +37683,16 @@
           },
           "filters": {
             "type": "object",
-            "description": "Saved global filters (DashboardFilters shape)."
+            "description": "Saved global filters (DashboardFilters shape).",
+            "nullable": true
           },
           "widgets": {
             "type": "array",
             "items": {
               "type": "object"
             },
-            "description": "Widget definitions with id/name/type/config/layout."
+            "description": "Widget definitions with id/name/type/config/layout.",
+            "nullable": true
           },
           "totalWidget": {
             "type": "integer"
@@ -37429,10 +37708,12 @@
             "type": "integer"
           },
           "modifiedBy": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "modifiedByName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "createdAt": {
             "type": "string",
@@ -37447,24 +37728,28 @@
           },
           "source": {
             "type": "string",
-            "description": "TO or TCM."
+            "description": "TO or TCM.",
+            "nullable": true
           },
           "type": {
             "type": "string",
             "description": "Dashboard | View | TABULAR_TEST_RUNS | BUILD_COMPARISON."
           },
           "isDefault": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "isAutomation": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "reports": {
             "type": "array",
             "items": {
               "type": "object"
             },
-            "description": "Report-widget definitions (present for report-type dashboards)."
+            "description": "Report-widget definitions (present for report-type dashboards).",
+            "nullable": true
           }
         }
       },
@@ -37617,7 +37902,8 @@
             "description": "{id, full_name, email, browserstack_user_id}."
           },
           "project_id": {
-            "type": "integer"
+            "type": "integer",
+            "description": "The TestHub project id (thProjectId), not the TRA project id."
           },
           "project_name": {
             "type": "string"
@@ -37639,10 +37925,12 @@
             "type": "integer"
           },
           "next": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "prev": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "count": {
             "type": "integer"
@@ -37660,7 +37948,9 @@
             "type": "number"
           },
           "prev": {
-            "type": "number"
+            "type": "number",
+            "nullable": true,
+            "description": "Previous-window value; null (time-savings cards) or 0 when the prior 7 days have no data."
           }
         }
       },
@@ -37845,7 +38135,8 @@
             "description": "Comparison/condition (max 32 chars)."
           },
           "hooksVisibility": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -37904,7 +38195,7 @@
           },
           "notificationRules": {
             "type": "object",
-            "description": "Map keyed by notifier type (SLACK / EMAIL) \u2192 channel-key \u2192 list of AlertNotifierResource."
+            "description": "Map keyed by notifier type (SLACK / EMAIL) \u2192 channel-key \u2192 list of AlertNotifierResource. Omitted when the alert has no notifiers."
           },
           "buildName": {
             "type": "array",
@@ -37916,7 +38207,8 @@
             "type": "boolean"
           },
           "hooksVisibility": {
-            "type": "string"
+            "type": "string",
+            "description": "Omitted when unset."
           }
         }
       },
@@ -38019,23 +38311,39 @@
           "threadId": {
             "type": "string",
             "format": "uuid",
-            "description": "Owning build-chat thread. Populated in the build flow (always set on a create reply, including lazy-create); null in the test-run flow."
+            "description": "Owning build-chat thread. Populated in the build flow (always set on a create reply, including lazy-create); null in the test-run flow.",
+            "nullable": true
           },
           "threadTitle": {
             "type": "string",
-            "description": "Server-derived thread title (<=60 chars from the first user message). Build flow only; null before the first message, and null in the test-run flow."
+            "description": "Server-derived thread title (<=60 chars from the first user message). Build flow only; null before the first message, and null in the test-run flow.",
+            "nullable": true
           },
           "userMessage": {
             "type": "string",
-            "description": "The user's typed instruction for this turn (may be null for a pure workflow-action turn)."
+            "description": "The user's typed instruction for this turn (may be null for a pure workflow-action turn).",
+            "nullable": true
           },
           "userAction": {
             "type": "object",
-            "description": "Structured workflow-card action the turn was submitted with. Build flow only; null for plain message turns and in the test-run flow."
+            "description": "Structured workflow-card action the turn was submitted with. Build flow only; null for plain message turns and in the test-run flow.",
+            "nullable": true
           },
           "assistantMessage": {
             "type": "object",
-            "description": "The agent's answer payload (arbitrary JSON). Null until the turn reaches COMPLETED."
+            "nullable": true,
+            "description": "The agent's answer; null until COMPLETED. Test-run turns carry rca_data {unique_id, root_cause, description, failure_type, failure_sub_type, possible_fix, related_prs, alternatives_considered} and thinking_data (array of {type, data} narration).",
+            "properties": {
+              "rca_data": {
+                "type": "object"
+              },
+              "thinking_data": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "state": {
             "type": "string",
@@ -38049,7 +38357,7 @@
           },
           "metadata": {
             "type": "object",
-            "description": "Sanitised metadata: at most thinking_data (agent narration) and user_approval (accepted/discarded). Model/provider/token/cost/raw-failure fields are stripped and never returned. Null when there is nothing to expose.",
+            "description": "Sanitised metadata: on test-run turns only user_approval (accepted/discarded) - the agent narration is in assistantMessage.thinking_data, not here. Model/provider/token/cost fields are stripped. Null when there is nothing to expose.",
             "properties": {
               "thinking_data": {
                 "type": "object"
@@ -38061,7 +38369,8 @@
                   "discarded"
                 ]
               }
-            }
+            },
+            "nullable": true
           },
           "userAttachments": {
             "type": "array",
@@ -38072,11 +38381,11 @@
           },
           "createdAt": {
             "type": "string",
-            "format": "date-time"
+            "description": "Java ZonedDateTime string, e.g. 2026-09-29T15:16:48.828910Z[Etc/UTC] - strip the [zone] suffix before parsing as RFC 3339."
           },
           "updatedAt": {
             "type": "string",
-            "format": "date-time"
+            "description": "Java ZonedDateTime string, e.g. 2026-09-29T15:16:48.828910Z[Etc/UTC] - strip the [zone] suffix before parsing as RFC 3339."
           }
         }
       },
@@ -38141,11 +38450,13 @@
           },
           "count": {
             "type": "integer",
-            "description": "Occurrence count; null on suggestion routes that do not compute it."
+            "description": "Occurrence count; null on suggestion routes that do not compute it.",
+            "nullable": true
           },
           "pId": {
             "type": "string",
-            "description": "Parent id, used for hierarchical options (e.g. folders); empty when not applicable."
+            "description": "Parent id for hierarchical options (e.g. folders); null or empty when not applicable.",
+            "nullable": true
           }
         }
       },
@@ -38403,7 +38714,8 @@
             "type": "object"
           },
           "performance": {
-            "type": "object"
+            "type": "object",
+            "description": "{urls: [], count}."
           },
           "network": {
             "$schema": "SessionNetwork"
@@ -38412,7 +38724,8 @@
             "type": "object"
           },
           "video": {
-            "type": "object"
+            "type": "object",
+            "description": "{url, offsetUrl, status_code, startTime, startTimeStamp, startOffset, finishOffset, launchingAppTime, isIos, isV2}."
           },
           "audio": {
             "type": "object"
@@ -38424,10 +38737,12 @@
             }
           },
           "terminal": {
-            "type": "object"
+            "type": "object",
+            "description": "{session: {url}, build: {url}}."
           },
           "telemetry": {
-            "type": "object"
+            "type": "object",
+            "description": "{isSupported, url?}."
           },
           "crash": {
             "type": "object"
@@ -38517,7 +38832,7 @@
             "items": {
               "$schema": "GenericLog"
             },
-            "description": "Populated only when the session was manually marked failed with a reason."
+            "description": "Failure entries for the session (assertion failures included), with content as a JSON-encoded string."
           }
         }
       },
@@ -38591,18 +38906,20 @@
         "properties": {
           "testCode": {
             "$schema": "TestCodeResponse",
-            "description": "The test's source code / file info."
+            "description": "The hook's source/file info; null for SDK-ingested hooks without captured code.",
+            "nullable": true
           },
           "testMetadata": {
             "type": "object",
-            "description": "Opaque test-run metadata."
+            "description": "Test-run metadata: type (BEFORE_ALL/AFTER_ALL...), testName, status, isFlaky, buildId, origin, issueType, observabilityVersion, scopes, isNewFailure, isAlwaysFailing, plus many null keys."
           },
           "hooksCode": {
             "type": "array",
             "items": {
               "$schema": "TestCodeResponse"
             },
-            "description": "Source for each associated hook."
+            "description": "Source for each associated hook.",
+            "nullable": true
           }
         }
       },
@@ -38655,18 +38972,21 @@
         "description": "Full detail of a single test run: its captured code, its metadata, and the code of the hooks that ran around it.",
         "properties": {
           "testCode": {
-            "$schema": "TestRunCode"
+            "$schema": "TestRunCode",
+            "nullable": true,
+            "description": "Captured code; null when nothing was captured (e.g. JUnit-report builds)."
           },
           "testMetadata": {
             "type": "object",
-            "description": "Metadata for the run. In get_test_run_details this is the internal test-meta object (broad, includes history/RCA/test-case links); in the baseline and similar-error MAP reads it is a flatter meta object (type, testName, status [lowercased], buildId, issueType, device/cbtBrowser/cbtPlatform, scopes, isFlaky/isNewFailure/isAlwaysFailing). Read keys off the actual response."
+            "description": "Metadata for the run - the broad internal test-meta object (testName, status, buildId, history, retries, testCase, projectId, device/cbtBrowser/cbtPlatform, observabilityVersion, origin, workflowStatus*, errorClusterId, isAutoAnalyzed*, ... many null). Read keys off the actual response."
           },
           "hooksCode": {
             "type": "array",
-            "description": "Code of before/after hooks related to this run. Present on get_test_run_details; absent from the map reads.",
+            "description": "Code of before/after hooks. Populated on get_test_run_details; the key is present but null on the baseline map read.",
             "items": {
               "$schema": "TestRunCode"
-            }
+            },
+            "nullable": true
           }
         }
       },
@@ -39537,11 +39857,14 @@
           },
           "created_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "nullable": true,
+            "description": "Null in the create (201) response; populated on later reads."
           },
           "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "nullable": true
           }
         }
       },
@@ -39665,15 +39988,18 @@
           },
           "filters": {
             "type": "object",
-            "description": "Saved global filters (DashboardFilters shape)."
+            "description": "Saved global filters (DashboardFilters shape); null in the listing.",
+            "nullable": true
           },
           "widgets": {
             "type": "array",
-            "description": "Widget list for a dashboard-typed record; empty for a report-typed one."
+            "description": "Widget list for a dashboard-typed record; null for a report-typed one.",
+            "nullable": true
           },
           "reports": {
             "type": "array",
-            "description": "Widget list for a report-typed record."
+            "description": "Widget list for a report-typed record ({id, name, type, config, layout, reportType}); null in the listing.",
+            "nullable": true
           },
           "totalWidget": {
             "type": "integer"
@@ -39688,13 +40014,16 @@
             "type": "integer"
           },
           "modifiedBy": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "modifiedByName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "createdByName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "createdAt": {
             "type": "string",
@@ -39706,16 +40035,19 @@
           },
           "source": {
             "type": "string",
-            "description": "TO or TCM."
+            "description": "TO or TCM.",
+            "nullable": true
           },
           "type": {
             "type": "string"
           },
           "isDefault": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "isAutomation": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           }
         }
       },
@@ -40132,26 +40464,36 @@
             "type": "string"
           },
           "meta": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "count": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "pId": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "projectId": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "projectName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "thProjectId": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "displayName": {
             "type": "string",
             "description": "Present only when non-null."
+          },
+          "id": {
+            "type": "string",
+            "description": "Option id (duplicates value)."
           }
         }
       },
@@ -40182,7 +40524,8 @@
             }
           },
           "fullList": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "info": {
             "type": "object",
@@ -40202,15 +40545,18 @@
               "next": {
                 "type": "integer"
               }
-            }
+            },
+            "nullable": true
           },
           "suggestedAfterKey": {
             "type": "string",
-            "description": "Cursor to continue the suggested bucket."
+            "description": "Cursor to continue the suggested bucket.",
+            "nullable": true
           },
           "othersAfterKey": {
             "type": "string",
-            "description": "Cursor to continue the others bucket."
+            "description": "Cursor to continue the others bucket.",
+            "nullable": true
           }
         }
       },
@@ -40394,12 +40740,36 @@
         "description": "Aggregated mobile device-tier usage and device list for a product. Both fields are raw JSON trees from the backend.",
         "properties": {
           "tierInfo": {
-            "type": "object",
-            "description": "Per-tier device/parallel limits and current usage (mobile tiers only)."
+            "type": "array",
+            "description": "One row per mobile tier: {id, name, maxUsed, maxAvailable}.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Tier id, e.g. Tier1."
+                },
+                "name": {
+                  "type": "string"
+                },
+                "maxUsed": {
+                  "type": "integer"
+                },
+                "maxAvailable": {
+                  "type": "integer"
+                }
+              }
+            }
           },
           "devices": {
             "type": "object",
-            "description": "Devices per tier."
+            "description": "Map of tier id (Tier1..Tier4) to the array of devices in that tier (each carrying maxParallels and parallelsUsed).",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
           }
         }
       },
@@ -40668,7 +41038,9 @@
               "percentHealedBuilds": {
                 "type": "number"
               }
-            }
+            },
+            "nullable": true,
+            "description": "Build-level roll-up; null on a single-build read without healing data."
           }
         }
       },
@@ -40695,7 +41067,8 @@
             "type": "integer"
           },
           "sourceFencingFlags": {
-            "$schema": "SourceFencingFlags"
+            "$schema": "SourceFencingFlags",
+            "description": "Present only on a fenced (cross-source) pair; OMITTED (not null/false) on a normal pair."
           }
         }
       },
@@ -40742,7 +41115,8 @@
             "$schema": "BuildSummary"
           },
           "sourceFencingFlags": {
-            "$schema": "SourceFencingFlags"
+            "$schema": "SourceFencingFlags",
+            "description": "Present only on a fenced pair; omitted otherwise."
           }
         }
       },
@@ -40907,17 +41281,19 @@
             "description": "CommentPageType name."
           },
           "commentNode": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "content": {
             "type": "string",
-            "description": "Sanitised HTML body (this is where the request's commentHtml lands)."
+            "description": "Sanitised body (this is where the request's commentHtml lands). Sanitising strips markup such as <p>, so plain text comes back."
           },
           "mentions": {
             "type": "array",
             "items": {
               "type": "integer"
-            }
+            },
+            "nullable": true
           },
           "userId": {
             "type": "integer"
@@ -40966,7 +41342,9 @@
             "type": "string"
           },
           "type": {
-            "type": "string"
+            "type": "string",
+            "nullable": true,
+            "description": "Comment page type; null in list reads even when filtered by type."
           },
           "threadId": {
             "type": "string"
@@ -40978,7 +41356,8 @@
             "type": "integer"
           },
           "commentNode": {
-            "type": "string"
+            "type": "string",
+            "description": "May be the literal STRING \"null\" (not JSON null) when unset."
           },
           "projectId": {
             "type": "integer"
@@ -40990,10 +41369,12 @@
             "type": "integer"
           },
           "runUuid": {
-            "type": "string"
+            "type": "string",
+            "description": "May be the literal STRING \"null\" (not JSON null) when unset."
           },
           "testHash": {
-            "type": "string"
+            "type": "string",
+            "description": "May be the literal STRING \"null\" (not JSON null) when unset."
           },
           "mentions": {
             "type": "array",
@@ -41066,11 +41447,13 @@
           },
           "count": {
             "type": "integer",
-            "description": "Occurrence count for the option; frequently null on typeahead results."
+            "description": "Occurrence count for the option; usually populated, may be null.",
+            "nullable": true
           },
           "pId": {
             "type": "string",
-            "description": "Parent grouping key (JSON key is `pId`), often an empty string."
+            "description": "Parent grouping key (JSON key is `pId`); null or empty for non-hierarchical options.",
+            "nullable": true
           }
         }
       },
@@ -41361,22 +41744,35 @@
       },
       "TestRunsRcaData": {
         "type": "object",
-        "description": "The stored AI RCA for a test run. Peek-only fields (pendingMessageId, alreadyTracked, isLive) and NON_NULL fields (failureTypeDisplayName, conversation, trialQuota) appear only when set. rcaData/thinkingData are opaque model output populated once state is Completed.",
+        "description": "The stored AI RCA for a test run. Peek-only fields (pendingMessageId, alreadyTracked, isLive) and NON_NULL fields (failureTypeDisplayName, conversation, trialQuota) appear only when set. rcaData/thinkingData are model output populated once state is Completed. A peek on a run with no RCA returns 200 with every field null.",
         "properties": {
           "id": {
             "type": "integer",
-            "description": "The stored RCA row id."
+            "description": "The stored RCA row id.",
+            "nullable": true
           },
           "testRunId": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "rcaData": {
             "type": "object",
-            "description": "Opaque generated analysis; populated when state is Completed, otherwise typically null."
+            "description": "Generated analysis {root_cause, description, failure_type, failure_sub_type, possible_fix, related_prs, alternatives_considered, unique_id}; {} while Pending.",
+            "nullable": true
           },
           "thinkingData": {
-            "type": "object",
-            "description": "Opaque reasoning/thinking trace."
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "data": {}
+              }
+            },
+            "description": "Reasoning/thinking trace: an ARRAY of {type, data}."
           },
           "state": {
             "type": "string",
@@ -41394,25 +41790,31 @@
               "UNKNOWN_ERROR",
               "TIMEOUT",
               "Completed"
-            ]
+            ],
+            "nullable": true
           },
           "bulkRcaId": {
             "type": "string",
-            "description": "UUID linking runs analysed together via a bulk RCA request; null for a singly-generated RCA."
+            "description": "UUID linking runs analysed together via a bulk RCA request; null for a singly-generated RCA.",
+            "nullable": true
           },
           "createdAt": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "updatedAt": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "isAgentic": {
             "type": "boolean",
-            "description": "Whether this RCA used the agentic flow. Forced false for LTS-product callers."
+            "description": "Whether this RCA used the agentic flow. Forced false for LTS-product callers.",
+            "nullable": true
           },
           "isMcpDriven": {
             "type": "boolean",
-            "description": "True when the RCA is owned by the MCP-powered chat agent (the web composer is then disabled)."
+            "description": "True when the RCA is owned by the MCP-powered chat agent (the web composer is then disabled).",
+            "nullable": true
           },
           "failureTypeDisplayName": {
             "type": "string",
@@ -41420,19 +41822,22 @@
           },
           "pendingMessageId": {
             "type": "string",
-            "description": "Peek-only: messageId of the in-flight PENDING conversation row, if any."
+            "description": "Peek-only: messageId of the in-flight PENDING conversation row, if any.",
+            "nullable": true
           },
           "alreadyTracked": {
             "type": "boolean",
-            "description": "Peek-only: whether a build-chat row already tracks pendingMessageId. Null for web/MCP-started generations."
+            "description": "Peek-only: whether a build-chat row already tracks pendingMessageId. Null for web/MCP-started generations.",
+            "nullable": true
           },
           "isLive": {
             "type": "boolean",
-            "description": "Peek-only: true when a generation is genuinely running right now \u2014 the field to gate a re-trigger on."
+            "description": "Peek-only: true when a generation is genuinely running right now \u2014 the field to gate a re-trigger on.",
+            "nullable": true
           },
           "conversation": {
             "type": "object",
-            "description": "Present only for a chat-driven RCA turn."
+            "description": "Present only for a chat-driven RCA turn; its `state` uses the UPPER-CASE conversation enum (COMPLETED) while the top-level state uses the RCA enum (Completed)."
           },
           "trialQuota": {
             "type": "object",
@@ -41713,7 +42118,7 @@
       },
       "BuildDetails": {
         "type": "object",
-        "description": "Full single-build detail object (BuildSummary DTO). Large flat object; only the non-obvious / gating fields are described. `vcsInfo` is write-only and never serialised.",
+        "description": "Full single-build detail object (BuildSummary DTO). Large flat object (~80 keys); only the non-obvious / gating fields are declared. Nulls ARE serialised (derivedName, originalName, ciBuildData, versionControlInfo, ... often null) - the NON_NULL notes on the nested aggregates do not apply to this object. `vcsInfo` is write-only and never serialised.",
         "properties": {
           "uuid": {
             "type": "string"
@@ -41740,10 +42145,13 @@
             "$schema": "StatusAggregate"
           },
           "issueTypeAggregate": {
-            "$schema": "IssueTypeAggregate"
+            "$schema": "IssueTypeAggregate",
+            "nullable": true,
+            "description": "Null when no failures have been categorised yet."
           },
           "historyAggregate": {
-            "$schema": "HistoryAggregate"
+            "$schema": "HistoryAggregate",
+            "description": "Smart-tag roll-up; all zeros (not null) when nothing is tagged."
           },
           "showHealingReport": {
             "type": "boolean",
@@ -41787,10 +42195,50 @@
             }
           },
           "isArchived": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "isLocked": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
+          },
+          "buildNumber": {
+            "type": "integer",
+            "nullable": true
+          },
+          "thProjectId": {
+            "type": "integer",
+            "nullable": true,
+            "description": "TestHub project id."
+          },
+          "tcmTestRunIdentifier": {
+            "type": "string",
+            "nullable": true,
+            "description": "Linked Test Management run (TR-...), when any."
+          },
+          "issueTypes": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "object"
+            }
+          },
+          "aiRcaCompletedCount": {
+            "type": "integer",
+            "nullable": true
+          },
+          "selfHealedCount": {
+            "type": "integer",
+            "nullable": true
+          },
+          "testCaseCount": {
+            "type": "integer",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true,
+            "description": "Lifecycle state, e.g. NEW or CLOSED."
           }
         }
       },
@@ -42002,13 +42450,13 @@
         "properties": {
           "data": {
             "type": "array",
-            "description": "One chart series per status (passed/failed/running).",
+            "description": "Three chart series with ids `passed`, `failed` and `pending` (pending = tests still running at that instant). Each point is [x, count] where x is MILLISECONDS since the build's first test started (relative, not epoch time).",
             "items": {
               "type": "object",
               "properties": {
                 "id": {
                   "type": "string",
-                  "description": "Status key."
+                  "description": "Series key: passed, failed or pending."
                 },
                 "name": {
                   "type": "string"
@@ -42022,7 +42470,7 @@
                 },
                 "data": {
                   "type": "array",
-                  "description": "Array of [time, value] point pairs.",
+                  "description": "Array of [msSinceFirstTestStart, count] pairs.",
                   "items": {
                     "type": "array",
                     "items": {
@@ -42347,6 +42795,11 @@
           },
           "unknown": {
             "type": "integer"
+          },
+          "aggregate": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Aggregate (total) count across statuses."
           }
         }
       },
@@ -42437,7 +42890,7 @@
       },
       "FilterStruct__w4_build2": {
         "type": "object",
-        "description": "A single filter dropdown option.",
+        "description": "A single filter dropdown option. Folder labels embed the count, e.g. 'auth.test.js(3)'.",
         "properties": {
           "label": {
             "type": "string"
@@ -42446,11 +42899,17 @@
             "type": "string"
           },
           "meta": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "pId": {
             "type": "string",
-            "description": "Serialised from the DTO's `pid` field via @JsonProperty(\"pId\")."
+            "description": "Serialised from the DTO's `pid` field via @JsonProperty(\"pId\").",
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "description": "Option id (same as value)."
           }
         }
       },
@@ -43502,7 +43961,7 @@
       },
       "ObsSessionLogs": {
         "type": "object",
-        "description": "Per-channel session-log descriptor map. Serialized with NON_NULL, so only channels with data appear. In get_test_run_log_urls each present channel is a URL/descriptor rather than inlined content. Sourced from SessionLogs in observability-api.",
+        "description": "Per-channel session-log descriptor map. In get_test_run_log_urls each channel is a URL/descriptor (presigned) rather than content; channels can be present even when that artefact type does not apply. Sourced from SessionLogs in observability-api.",
         "properties": {
           "text": {
             "description": "Text log descriptor/URL."
@@ -43543,40 +44002,49 @@
       },
       "ObsSessionVideo": {
         "type": "object",
-        "description": "Session video descriptor with playback offsets. Sourced from SessionVideo in observability-api.",
+        "description": "Session video descriptor with playback offsets. Sourced from SessionVideo in observability-api. Offsets/flags can be null when the video is not yet processed; status_code 0 is normal.",
         "properties": {
           "status_code": {
             "type": "integer"
           },
           "url": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "offsetUrl": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "startTime": {
-            "type": "number"
+            "type": "number",
+            "nullable": true
           },
           "startTimeStamp": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "nullable": true
           },
           "startOffset": {
             "type": "integer",
-            "description": "ms offset of video start relative to the test/session, for aligning playback with the log timeline."
+            "description": "ms offset of video start relative to the test/session, for aligning playback with the log timeline.",
+            "nullable": true
           },
           "finishOffset": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "launchingAppTime": {
             "type": "integer",
-            "description": "VM/browser boot lead-in in seconds."
+            "description": "VM/browser boot lead-in in seconds.",
+            "nullable": true
           },
           "isIos": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "isV2": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           }
         }
       },
@@ -43631,30 +44099,38 @@
             "type": "string"
           },
           "issueType": {
-            "$schema": "TestRunIssueType"
+            "$schema": "TestRunIssueType",
+            "nullable": true,
+            "description": "Null on passed runs."
           },
           "duration": {
             "type": "integer",
             "description": "Run duration."
           },
           "isFlaky": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "isAlwaysFailing": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "isNewlyFailed": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "isPerformanceAnomaly": {
-            "type": "boolean"
+            "type": "boolean",
+            "nullable": true
           },
           "flakyReason": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true
           },
           "flakySetting": {
             "type": "object",
-            "description": "Flaky configuration for the run (opaque)."
+            "description": "Flaky configuration for the run (opaque).",
+            "nullable": true
           },
           "creationType": {
             "type": "string"
@@ -43670,14 +44146,17 @@
             "$schema": "TestRunRetryLogStruct"
           },
           "workflowStatus": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "workflowStatusEditedBy": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "workflowStatusEditedAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "nullable": true
           }
         }
       },
@@ -43686,8 +44165,11 @@
         "description": "Serialized log/attachment structure for a run or retry attempt. Each key is present only when that evidence exists.",
         "properties": {
           "TEST_FAILURE": {
-            "type": "object",
-            "description": "Failure backtrace (the `backtrace` of the first failure log)."
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Failure text: the message followed by the stack, as an array of strings."
           },
           "TEST_LOG": {
             "type": "array",
@@ -43915,7 +44397,8 @@
           },
           "message": {
             "type": "string",
-            "description": "Set (e.g. 'Unique Errors are being detected') when not ready; the only meaningful field in the not-ready state."
+            "description": "Set (e.g. 'Unique Errors are being detected') when not ready; the only meaningful field in the not-ready state.",
+            "nullable": true
           }
         }
       },
@@ -44295,18 +44778,24 @@
               "description": "Map of referenced secret name to its DECODED plaintext value. Returned to any caller who can see the trigger."
             },
             "jenkinsUsername": {
-              "type": "string"
+              "type": "string",
+              "nullable": true,
+              "description": "Stored Jenkins username; null when the trigger has none."
             },
             "jenkinsApiToken": {
               "type": "string",
-              "description": "Decoded stored Jenkins token in plaintext; non-null only for the trigger's owner."
+              "description": "Decoded stored Jenkins token in plaintext; null for a non-owner AND whenever the trigger stores none.",
+              "nullable": true
             },
             "authUsername": {
-              "type": "string"
+              "type": "string",
+              "nullable": true,
+              "description": "Stored auth username; null when the trigger has none."
             },
             "authToken": {
               "type": "string",
-              "description": "Decoded stored auth token in plaintext; non-null only for the trigger's owner."
+              "description": "Decoded stored auth token in plaintext; null for a non-owner AND whenever the trigger stores none.",
+              "nullable": true
             }
           }
         }
@@ -44355,7 +44844,7 @@
         }
       },
       "IntegrationAccessTokenResponse": {
-        "description": "A JSON-ENCODED STRING body that, when parsed, yields {access_token, expires_at, success}. On upstream auth failure the string is \"{}\"; in demo-sandbox it is an empty string.",
+        "description": "A JSON-ENCODED STRING body that, when parsed, yields {access_token, expires_at (integer), success (the string \"true\")}. On upstream auth failure the string is \"{}\"; in demo-sandbox it is an empty string.",
         "schema": {
           "type": "string"
         }
@@ -44836,7 +45325,7 @@
         }
       },
       "PerformanceChartResponse": {
-        "description": "Performance-over-time: barData is average duration per bucket, lineData is test count per bucket (lineData points omit pointRange).",
+        "description": "Performance-over-time: barData is average duration per bucket, lineData is test count per bucket (lineData pointRange is null).",
         "schema": {
           "type": "object",
           "properties": {
@@ -45111,6 +45600,15 @@
             "message": {
               "type": "string",
               "description": "\"Build Closed successfully\"."
+            },
+            "qgResult": {
+              "nullable": true,
+              "description": "Quality-gate result; null here because evaluation is asynchronous."
+            },
+            "state": {
+              "type": "string",
+              "nullable": true,
+              "description": "Null in the acknowledgement; re-read the build for state=CLOSED."
             }
           }
         }
@@ -45290,7 +45788,7 @@
         }
       },
       "RunGroupFilterOptionsResponse": {
-        "description": "Run-group (build-group) sidebar facet. `data` is a list of full build-group objects; `info` is page metadata but paging is fixed at page 1, size 100 and cannot be advanced through this endpoint.",
+        "description": "Run-group (build-group) sidebar facet. `data` is a list of slim build-group rows; `info` is page metadata but paging is fixed at page 1, size 100 and cannot be advanced through this endpoint.",
         "schema": {
           "type": "object",
           "properties": {
@@ -45298,12 +45796,53 @@
               "type": "array",
               "items": {
                 "type": "object",
-                "description": "Build group: id, name, description, projectId, groupId, createdBy, createdAt, updatedAt, isClosed, closedAt, closedBy, closedByName."
+                "description": "Slim build-group row. Casing is mixed: `updated_at` is snake_case.",
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "isClosed": {
+                    "type": "boolean"
+                  },
+                  "state": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  }
+                }
               }
             },
             "info": {
               "type": "object",
-              "description": "Page metadata (fixed page 1 / size 100)."
+              "description": "Page metadata (fixed page 1 / size 100).",
+              "properties": {
+                "page": {
+                  "type": "integer"
+                },
+                "pageSize": {
+                  "type": "integer"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "prev": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "next": {
+                  "type": "integer",
+                  "nullable": true
+                }
+              }
             }
           }
         }
@@ -45519,7 +46058,7 @@
         }
       },
       "HomeTakeawaysResponse": {
-        "description": "Older Home takeaways variant: aggregate time-saved metric. The v2 timeSavingV2Metric field is absent on this path.",
+        "description": "Older Home takeaways variant: aggregate time-saved metric. The v2 timeSavingV2Metric key is present but null on this path.",
         "schema": {
           "type": "object",
           "properties": {
@@ -45528,6 +46067,10 @@
             },
             "takeAwayData": {
               "$schema": "TakeAwayData"
+            },
+            "timeSavingV2Metric": {
+              "description": "Always null on this older variant (the key is present, the value is not).",
+              "nullable": true
             }
           }
         }
@@ -45646,8 +46189,11 @@
             "productRole": {},
             "IAAMRole": {},
             "permissions": {
-              "type": "object",
-              "description": "Computed RBAC permission map."
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Permission-key strings granted by the caller's product role. An EMPTY array when the group's globalRBAC is off."
             },
             "accessDetails": {
               "type": "object",
@@ -45655,7 +46201,8 @@
             },
             "bannerDetails": {
               "type": "object",
-              "description": "Usage banner details."
+              "description": "Usage banner details; null when there is no banner to show.",
+              "nullable": true
             },
             "subGroupId": {
               "type": "integer",
@@ -45714,7 +46261,9 @@
               "type": "array",
               "items": {
                 "$schema": "BuildSummary"
-              }
+              },
+              "nullable": true,
+              "description": "Never populated on this route (always null); the per-group rows are in buildGroupAggResult."
             },
             "buildGroupAggResult": {
               "type": "array",
@@ -45732,13 +46281,34 @@
                 "searchAfter": {
                   "description": "Cursor (array or integer) to carry into the next request."
                 }
-              }
+              },
+              "nullable": true,
+              "description": "Never populated on this route (always null); all groups come back in one response."
             },
             "activeCount": {
               "type": "integer"
             },
             "closedCount": {
               "type": "integer"
+            },
+            "isArchiving": {
+              "type": "boolean"
+            },
+            "isClosing": {
+              "type": "boolean"
+            },
+            "manualBuildCount": {
+              "type": "integer"
+            },
+            "automationBuildCount": {
+              "type": "integer"
+            },
+            "invalidQgBuildCount": {
+              "type": "integer"
+            },
+            "currentQGOverrideStatus": {
+              "type": "boolean",
+              "nullable": true
             }
           }
         }
@@ -45853,7 +46423,7 @@
         }
       },
       "SettingsResponseV2": {
-        "description": "Newer-surface write acknowledgement. Note `id` is a STRING.",
+        "description": "Newer-surface write acknowledgement: {success} plus, for alert create/update, a STRING `id`. NON_NULL, so `id` is absent on plain settings writes.",
         "schema": {
           "type": "object",
           "properties": {
@@ -45861,7 +46431,8 @@
               "type": "boolean"
             },
             "id": {
-              "type": "string"
+              "type": "string",
+              "description": "Only returned when the write mints an entity (alert create/update: the NEW alert id). Plain settings writes (general, re-run, display names, sub-type update) return {success:true} only."
             }
           }
         }
@@ -46086,11 +46657,11 @@
           "properties": {
             "applied": {
               "type": "object",
-              "description": "The currently applied filters, each resolved into Field objects (buildTags, uniqueBuildNames, folders, testTags, status, hostNames, users, lastExecutedBy, teams, failureCategories, deviceList/osList/browserList, branches, pmToolStatus) plus scalar/tri-state flags (search, isFlaky, isNewFailure, isAlwaysFailing, hasPmToolDefects, isManuallyOverridden, isCiRun, isLatest), a dateRange, isMuted and hooksVisibility."
+              "description": "The currently applied filters echoed back: list filters resolved into Field objects (buildTags, uniqueBuildNames, folders, testTags, status, hostNames, users, lastExecutedBy, teams, failureCategories, deviceList/osList/browserList, branches, pmToolStatus), scalar/tri-state flags (search, isFlaky, isNewFailure, isAlwaysFailing, hasPmToolDefects, isManuallyOverridden, isCiRun, isLatest), dateRange as {lowerBound, upperBound}, isMuted and hooksVisibility. Filters you did not send come back null or [] (inconsistently per key)."
             },
             "staticFilters": {
               "type": "object",
-              "description": "The choosable option catalogue: osList, browserList, deviceList, status, folders, failureCategories, pmToolStatus, customMetaData, sources, lastExecutedBy, typeOfRun, assignedTo, state, testPlan \u2014 each a set of Field objects. The run-level lists (typeOfRun, assignedTo, state, testPlan) come from an upstream service and are EMPTY on upstream timeout rather than erroring."
+              "description": "The choosable option catalogue: osList, browserList, deviceList, status, folders, failureCategories, pmToolStatus, customMetaData, sources, lastExecutedBy, typeOfRun, assignedTo, state, testPlan - each a list of Field objects. The run-level lists (typeOfRun, assignedTo, state, testPlan) come from an upstream service and are null or [] when it has nothing or times out, rather than erroring."
             },
             "hooksVisibility": {
               "type": "string",
@@ -46294,36 +46865,43 @@
               "type": "string"
             },
             "buildId": {
-              "type": "integer"
+              "type": "integer",
+              "description": "The build NUMBER (e.g. 1), not the numeric build_id."
             },
             "ciInfo": {
-              "type": "object"
+              "type": "object",
+              "nullable": true
             },
             "testDetails": {
               "type": "string",
               "description": "Composed test hierarchy/description text for the ticket body."
             },
             "testUrl": {
-              "type": "string"
+              "type": "string",
+              "nullable": true
             },
             "videoUrl": {
-              "type": "string"
+              "type": "string",
+              "nullable": true
             },
             "status": {
               "type": "string"
             },
             "platform": {
-              "type": "string"
+              "type": "string",
+              "nullable": true
             },
             "browser": {
-              "type": "string"
+              "type": "string",
+              "nullable": true
             },
             "hostInfo": {
-              "type": "object"
+              "type": "object",
+              "nullable": true
             },
             "logStruct": {
               "type": "object",
-              "description": "Image/log attachment references; empty when the run has no screenshots."
+              "description": "Image/log attachment references keyed by log type (e.g. TEST_FAILURE: array of strings); empty when the run has no screenshots."
             },
             "retries": {
               "type": "array",
@@ -46332,7 +46910,8 @@
               }
             },
             "issueType": {
-              "type": "string"
+              "type": "string",
+              "nullable": true
             },
             "isAutoAnalyzed": {
               "type": "boolean"
@@ -46342,7 +46921,8 @@
             },
             "aiRca": {
               "type": "object",
-              "description": "AI RCA snippet; absent when no RCA is available."
+              "description": "AI RCA snippet ({data: ...}); null when no RCA is available.",
+              "nullable": true
             }
           }
         }
@@ -46593,7 +47173,7 @@
         }
       },
       "FlatAIFailureTestRunsResponse": {
-        "description": "Flat, cursor-paginated list of the test runs behind an AI failure cluster (or an explicit id set). Serialized from FlatTestResponse.",
+        "description": "Flat, cursor-paginated list of the test runs behind an AI failure cluster (or an explicit id set). Serialized from FlatTestResponse. Detail fields are null when the run has no such data (os/browser/issueType on SDK-less runs, the analyser flags before analysis).",
         "schema": {
           "type": "object",
           "properties": {
@@ -46635,7 +47215,8 @@
                           "version": {
                             "type": "string"
                           }
-                        }
+                        },
+                        "nullable": true
                       },
                       "browser": {
                         "type": "object",
@@ -46646,52 +47227,68 @@
                           "version": {
                             "type": "string"
                           }
-                        }
+                        },
+                        "nullable": true
                       },
                       "device": {
-                        "type": "string"
+                        "type": "string",
+                        "nullable": true
                       },
                       "isRealDevice": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "nullable": true
                       },
                       "filePath": {
-                        "type": "string"
+                        "type": "string",
+                        "nullable": true
                       },
                       "vcFileUrl": {
-                        "type": "string"
+                        "type": "string",
+                        "nullable": true
                       },
                       "issueType": {
-                        "type": "object"
+                        "type": "object",
+                        "nullable": true
                       },
                       "aiRcaState": {
-                        "type": "string"
+                        "type": "string",
+                        "nullable": true
                       },
                       "isFlaky": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "nullable": true
                       },
                       "isPerformanceAnomaly": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "nullable": true
                       },
                       "isNewFailure": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "nullable": true
                       },
                       "isAlwaysFailing": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "nullable": true
                       },
                       "isMuted": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "nullable": true
                       },
                       "isAutoAnalyzed": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "nullable": true
                       },
                       "isAutoAnalyzerRunning": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "nullable": true
                       },
                       "isUniqueErrorsRunning": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "nullable": true
                       },
                       "isFailingLast5Builds": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "nullable": true
                       },
                       "tags": {
                         "type": "array",
@@ -46713,7 +47310,8 @@
                 },
                 "nextRoot": {
                   "type": "object",
-                  "description": "Opaque map, may be null."
+                  "description": "Opaque map, may be null.",
+                  "nullable": true
                 },
                 "searchAfter": {
                   "description": "Opaque cursor: an array (or integer) to pass back as the searchAfter query param."
@@ -46792,12 +47390,14 @@
           "type": "object",
           "properties": {
             "videoLogs": {
-              "type": "object",
-              "description": "Session video handle (url, offsetUrl, offsets); null if the media fetch failed."
+              "$schema": "ObsSessionVideo",
+              "nullable": true,
+              "description": "Session video handle (url, offsetUrl, status_code, startTime/startTimeStamp, startOffset/finishOffset, launchingAppTime, isIos, isV2); null if the media fetch failed."
             },
             "audioLogs": {
               "type": "object",
-              "description": "Opaque audio log node; null if unavailable."
+              "description": "Opaque audio log node; null if unavailable.",
+              "nullable": true
             },
             "browserstackSessionUrl": {
               "type": "string",
@@ -46805,7 +47405,8 @@
             },
             "percyBuildUrl": {
               "type": "string",
-              "description": "Linked Percy build URL, extracted from build metadata; may be null."
+              "description": "Linked Percy build URL, extracted from build metadata; may be null.",
+              "nullable": true
             },
             "isSdk": {
               "type": "boolean",
@@ -46813,23 +47414,26 @@
             },
             "device": {
               "type": "string",
-              "description": "Device name, or \"NA\" when not a real-device session."
+              "description": "Device name; an EMPTY string for desktop sessions (\"NA\" on some other routes)."
             },
             "framework": {
               "type": "string",
-              "description": "Full framework name of the build."
+              "description": "Short framework name, e.g. \"mocha\" (not the build's full framework/version string)."
             },
             "customMetadata": {
               "type": "object",
-              "description": "Always null through this path."
+              "description": "Always null through this path.",
+              "nullable": true
             },
             "testStartedAt": {
               "type": "string",
-              "description": "ISO-8601 session start time; drives the network-logs 30-day-expired empty state. May be null."
+              "description": "ISO-8601 session start time; drives the network-logs 30-day-expired empty state. May be null.",
+              "nullable": true
             },
             "buildId": {
               "type": "string",
-              "description": "Always null through this path despite the field name."
+              "description": "Always null through this path despite the field name.",
+              "nullable": true
             }
           }
         }
@@ -46952,21 +47556,31 @@
           "properties": {
             "data": {
               "type": "object",
-              "description": "Map keyed by filter, each value a list of selectable value structs (label/value, counts)."
+              "description": "Map keyed by bucket - `suggested` and `others` - each a list of value structs (not keyed by filter name).",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "$schema": "WidgetFilterValue"
+                }
+              }
             },
             "fullList": {
               "type": "boolean",
-              "description": "True when the whole value set fit in this page."
+              "description": "True when the whole value set fit in this page.",
+              "nullable": true
             },
             "info": {
               "type": "object",
-              "description": "Page metadata (PageInfo)."
+              "description": "Page metadata (PageInfo).",
+              "nullable": true
             },
             "suggestedAfterKey": {
-              "type": "string"
+              "type": "string",
+              "nullable": true
             },
             "othersAfterKey": {
-              "type": "string"
+              "type": "string",
+              "nullable": true
             }
           }
         }
@@ -47175,15 +47789,12 @@
         }
       },
       "SettingsResponseV2__w3_repo_setting": {
-        "description": "Minimal write acknowledgement for project-settings updates. Non-null fields only. Does NOT echo the saved settings.",
+        "description": "Minimal write acknowledgement {success:true}. Does NOT echo the saved settings.",
         "schema": {
           "type": "object",
           "properties": {
             "success": {
               "type": "boolean"
-            },
-            "id": {
-              "type": "string"
             }
           }
         }
@@ -48185,7 +48796,33 @@
                   },
                   "meta": {
                     "type": "string",
-                    "description": "Empty string on this route."
+                    "nullable": true,
+                    "description": "Null on this route."
+                  },
+                  "id": {
+                    "type": "string",
+                    "description": "Option id (duplicates value)."
+                  },
+                  "projectId": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "projectName": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "thProjectId": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "count": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "Occurrence count; null for buildStatus/sources."
+                  },
+                  "pId": {
+                    "type": "string",
+                    "nullable": true
                   }
                 }
               }
@@ -48374,14 +49011,36 @@
                   },
                   "count": {
                     "type": "integer",
-                    "description": "Matching document count for the value."
+                    "description": "Matching document count for the value.",
+                    "nullable": true
+                  },
+                  "id": {
+                    "type": "string",
+                    "description": "Option id (duplicates value)."
+                  },
+                  "meta": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "projectId": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "projectName": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "thProjectId": {
+                    "type": "integer",
+                    "nullable": true
                   }
                 }
               }
             },
             "afterKey": {
               "type": "string",
-              "description": "Cursor for the next page; null/absent on the last page."
+              "description": "The last key of this page. It is still set on the final page, so stop when a page returns fewer rows than the page size (10; 1000 for folder) or an empty `data`.",
+              "nullable": true
             }
           }
         }

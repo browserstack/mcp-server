@@ -19244,7 +19244,8 @@
         "guidance": [
           "Pass-through proxy: the body is the downstream code-tag service's JSON unmodified, so the tag/list shape is owned by that service and not fixed by this API.",
           "Pagination clamps happen at this service (`per_page` 1..500), but the internal page ceiling and total-count shape come from the downstream response \u2014 read whatever paging fields that body carries to know when to stop.",
-          "Returns nothing meaningful until a generation run has produced tags; before that the downstream response may be empty. Trigger generation and confirm via the status poll first."
+          "Returns nothing meaningful until a generation run has produced tags; before that the downstream response may be empty. Trigger generation and confirm via the status poll first.",
+          "Live 2026-09-30: before any generation run has registered the configuration downstream, this is a 404 whose message wraps the downstream JSON {errorCode:NOT_FOUND, errorMessage:'Repository not found for this group/project/build'} \u2014 not an empty body. Trigger generation first."
         ],
         "responses": {
           "200": {
@@ -19289,7 +19290,8 @@
         "guidance": [
           "Despite 'download' in the path this returns a normal JSON body with NO file/attachment headers \u2014 it is JSON, not a byte stream. The caller is responsible for turning it into a file; there is nothing to save as-is.",
           "Pass-through proxy: the body is the downstream code-tag service's JSON unmodified and its shape is owned by that service.",
-          "Unpaginated and returns everything at once, so it can be large and slow. Use the paginated generated-tags read for interactive review and this one only for a full export."
+          "Unpaginated and returns everything at once, so it can be large and slow. Use the paginated generated-tags read for interactive review and this one only for a full export.",
+          "Live 2026-09-30: before any generation run has registered the configuration downstream, this is a 404 whose message wraps the downstream JSON {errorCode:NOT_FOUND, errorMessage:'Repository not found for this group/project/build'} \u2014 not an empty body. Trigger generation first."
         ],
         "responses": {
           "200": {
@@ -28127,6 +28129,7 @@
           }
         },
         "guidance": [
+          "A request body is REQUIRED even when every field is optional: calling with no body is a 400 'Invalid request payload'. Send at least {} (or {projects:[...]}).",
           "POST but read-only - the body is a build filter but nothing is created or changed.",
           "Two-step and `query` does NOT filter at the Elasticsearch stage: the sub-group ids that own matching builds are aggregated first (capped at 100), then the BrowserStack teams service resolves those ids to team names and applies `query` to the names. So a very large group can have owning sub-groups beyond the 100 aggregated that never appear.",
           "Each element is an object {id, name} (team id + team name) - NOT a bare string. Names come from central/rails team data, not the builds index.",

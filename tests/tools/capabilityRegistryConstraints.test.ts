@@ -260,6 +260,51 @@ describe("empty bodies", () => {
   });
 });
 
+describe("bodies keyed by id", () => {
+  const entry: WireParam = {
+    name: "{notifierId}",
+    type: "object",
+    required: true,
+    json_path: "/{notifierId}",
+    fields: [{ name: "teamId", type: "string", required: true }],
+  };
+
+  it("places each supplied id as its own top-level key", () => {
+    expect(
+      call(withBody(entry), {
+        "123": { teamId: "a" },
+        "456": { teamId: "b" },
+      }).body,
+    ).toEqual({ "123": { teamId: "a" }, "456": { teamId: "b" } });
+  });
+
+  it("still requires at least one entry", () => {
+    expect(() => call(withBody(entry), {})).toThrow(
+      "missing required parameter(s): {notifierId}",
+    );
+  });
+
+  it("refuses keys that would nest or reach the prototype", () => {
+    for (const key of ["a/b", "__proto__", "", "../x"]) {
+      expect(() => call(withBody(entry), { [key]: { teamId: "a" } })).toThrow(
+        "is not a usable {notifierId} key",
+      );
+    }
+  });
+
+  it("checks each entry against the declared fields", () => {
+    expect(() => call(withBody(entry), { "1": {} })).toThrow(
+      "missing required parameter(s): {notifierId}.teamId",
+    );
+  });
+
+  it("leaves capabilities without a keyed param rejecting unknown keys", () => {
+    expect(() =>
+      call(withBody({ name: "x", type: "string" }), { "123": {} }),
+    ).toThrow("unknown body: 123");
+  });
+});
+
 describe("integers beyond 2^53", () => {
   const id: WireParam = { name: "errorId", type: "integer" };
 

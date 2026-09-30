@@ -2341,6 +2341,7 @@
           "message"
         ],
         "guidance": [
+          "Call shape through invokeCapability: put each notifier id directly as a body key \u2014 body: {\"1234\": {workspaceId, teamId, visibility}}. Do NOT send the literal key '{notifierId}'. Keys must be plain ids (letters/digits/._-).",
           "The body is a MAP keyed by notifier id, not an object with a fixed field - e.g. `{\"1234\": {workspaceId, teamId, visibility}}`.",
           "Every entry must supply all three of workspaceId, teamId and visibility, or the whole request is 400. Do NOT send email fields here; only the Slack value blob is accepted.",
           "Notifier ids are resolved globally by id: an id not present in your map is left untouched, and an id that does not exist is silently ignored rather than erroring - so a typo'd id is a no-op, not a 400.",
@@ -15555,12 +15556,12 @@
               {
                 "name": "organisationId",
                 "type": "string",
-                "description": "VCS organisation id. Used (with repositoryId + group) to match existing check configurations; a mismatch means no config is found and the whole call is a 400."
+                "description": "VCS organisation/owner NAME as stored on the check configuration (vcs_org_name, e.g. 'my-org'), NOT GitHub's numeric org id. Matched with repositoryId + group; a mismatch means no config is found and the whole call is a 400."
               },
               {
                 "name": "repositoryId",
                 "type": "string",
-                "description": "VCS repository id. Used to match existing check configurations for the caller's group."
+                "description": "Repository NAME as stored on the check configuration (repo_name, e.g. 'my-repo'), NOT GitHub's numeric repository id. Matched with organisationId + group."
               },
               {
                 "name": "number",
@@ -15671,7 +15672,8 @@
           "A non-numeric pr_checks[].id throws (Long.parseLong) before bean validation, so it fails the whole request rather than returning a clean per-field error.",
           "If none of the pr_checks ids match an existing check configuration for the caller's group + repositoryId + organisationId, the whole call is 400 'Check Configurations not found...' and nothing is created; register the check configuration first.",
           "One vcs_ingestion row is created per MATCHED configuration; ids that match nothing are silently skipped rather than erroring individually. Read the returned array to see exactly which were registered, and take each row's integer id to look the mapping up later.",
-          "pr_data.date must be an ISO-8601 instant; an unparseable value fails the call with a 400 naming the check, and omitting it just leaves the commit timestamp unset."
+          "pr_data.date must be an ISO-8601 instant; an unparseable value fails the call with a 400 naming the check, and omitting it just leaves the commit timestamp unset.",
+          "Live 2026-09-30: organisationId/repositoryId are compared to the configuration's stored owner/repo NAMES (VcsIngestionService findByIdInAndRepoNameAndVcsOrgNameAndGroupId); numeric GitHub ids never match. Creating a mapping only stores a 'Not Started' ingestion row \u2014 it posts nothing to GitHub itself."
         ]
       },
       {
@@ -15784,7 +15786,8 @@
           "Gated by the CHECKS_EVALUATION entitlement (contrary to what one might assume for a read); without it the call is refused as feature-inaccessible.",
           "Rows are scoped to the caller's group AND user, so you only see check configs you created \u2014 not the whole repository's.",
           "When nothing is configured you get HTTP 200 with an empty checks list, not a 404; and if the lookup throws internally it also returns 200 with an EMPTY response object (null repoName/ownerName and no checks), so treat an all-null body as an error, not as 'no checks'.",
-          "filter accepts only 'enabled'; any other token is ignored rather than rejected, so a mistyped filter silently returns everything."
+          "filter accepts only 'enabled'; any other token is ignored rather than rejected, so a mistyped filter silently returns everything.",
+          "PRODUCT BUG (live 2026-09-30): when the repository has NO checks, the empty response swaps the envelope \u2014 repoName carries the OWNER and ownerName carries the REPO (controller builds CheckConfigurationResponse(owner, repo, \u2026) against a (repoName, ownerName, \u2026) constructor). Non-empty listings are correct. Trust the path you sent, not the envelope, on an empty list."
         ]
       },
       {

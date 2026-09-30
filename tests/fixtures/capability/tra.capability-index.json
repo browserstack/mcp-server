@@ -26284,7 +26284,8 @@
           "The summary fields are FLATTENED to the TOP LEVEL (state, verdict, totalPrs, faultyPrNumbers, workflowsState, ...), NOT nested under a 'summary' key; the PR inventory is the top-level 'prs' array.",
           "If no COMPLETED report exists you still get 200 with prs:[] and a status-only summary carrying state = IN_PROGRESS / FAILED (+failureReason) / NOT_STARTED. An empty 'prs' therefore means 'not ready', not 'no PRs' \u2014 branch on state, not on prs being empty.",
           "verdict is 'go' only for a COMPLETED report with no suspect PRs, 'partial-go' whenever any suspect PR exists (every PR in 'prs' is a revert candidate), and absent otherwise. faultyPrNumbers is the revert list.",
-          "Each PR carries a confidence band ('high' | 'medium' | 'low'), defaulting to 'medium' when the agent did not grade it."
+          "Each PR carries a confidence band ('high' | 'medium' | 'low'), defaulting to 'medium' when the agent did not grade it.",
+          "Live 2026-09-30: once the report is COMPLETED this route returns the FULL summary object (state, verdict, counts, prs[] AND workflows[]), identical to get_release_readiness_summary \u2014 not just its own list. Before completion it returns {state, prs|workflows:[]}."
         ],
         "returns": [
           "state",
@@ -26333,7 +26334,8 @@
           "Pure read; never triggers generation.",
           "The summary fields are FLATTENED to the TOP LEVEL; the workflow inventory is the top-level 'workflows' array.",
           "If no COMPLETED report exists you still get 200 with workflows:[] and a status-only summary (state = IN_PROGRESS / FAILED+failureReason / NOT_STARTED). An empty 'workflows' means 'not ready', not 'no workflows' \u2014 branch on state.",
-          "Plan+flag gated (AI-TFA fence + release_readiness), 403 otherwise."
+          "Plan+flag gated (AI-TFA fence + release_readiness), 403 otherwise.",
+          "Live 2026-09-30: once the report is COMPLETED this route returns the FULL summary object (state, verdict, counts, prs[] AND workflows[]), identical to get_release_readiness_summary \u2014 not just its own list. Before completion it returns {state, prs|workflows:[]}."
         ],
         "returns": [
           "state",
@@ -26382,7 +26384,7 @@
           "state NOT_STARTED is returned as 200, not 404 \u2014 it means 'no analysis yet' (show the Generate CTA), distinct from FAILED.",
           "verdictProvisional is true while workflowsState = PENDING (build-level RCA not finished); the verdict may still change once workflows fill in. Legacy reports without workflowsState resolve to AVAILABLE.",
           "Plan+flag gated (AI-TFA fence + release_readiness), 403 otherwise.",
-          "Live 2026-09-30: a generation that dies does not always surface FAILED \u2014 a /ext-triggered run on a build with no repo went IN_PROGRESS then back to NOT_STARTED (status key expired) with no report. Treat IN_PROGRESS\u2192NOT_STARTED as a failed run and re-trigger."
+          "Live 2026-09-30: generation needs a repo configured on the build's project. With no repo, an /ext-triggered run went IN_PROGRESS then back to NOT_STARTED (status key expired) with no report and no FAILED state \u2014 treat that as a failed run. With a repo setting present, the report COMPLETED ~14s after the trigger."
         ],
         "returns": [
           "state",

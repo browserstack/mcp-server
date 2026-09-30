@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { trackMCP } from "../index.js";
 import logger from "../logger.js";
+import globalConfig from "../config.js";
 
 export function sanitizeUrlParam(param: string): string {
   // Remove any characters that could be used for command injection
@@ -12,6 +13,7 @@ export function sanitizeUrlParam(param: string): string {
 }
 
 const ONE_MB = 1048576;
+let sharpConfigured = false;
 
 //Compresses a base64 image intelligently to keep it under 1 MB if needed.
 export async function maybeCompressBase64(base64: string): Promise<string> {
@@ -27,6 +29,12 @@ export async function maybeCompressBase64(base64: string): Promise<string> {
 
   try {
     const { default: sharp } = await import("sharp");
+    if (!sharpConfigured && globalConfig.REMOTE_MCP) {
+      // Bound memory on constrained hosted pods: no libvips cache, single worker thread.
+      sharp.cache(false);
+      sharp.concurrency(1);
+      sharpConfigured = true;
+    }
     const compressedBuffer = await sharp(buffer).png({ quality }).toBuffer();
     return compressedBuffer.toString("base64");
   } catch (err) {

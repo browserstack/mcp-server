@@ -3,6 +3,7 @@ import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
+import globalConfig from "../../config.js";
 
 async function extractScreenshotUrls(
   sessionId: string,
@@ -53,30 +54,30 @@ async function extractScreenshotUrls(
   return urls;
 }
 
+async function fetchAndCompress(
+  url: string,
+): Promise<{ url: string; base64: string }> {
+  const response = await apiClient.get({ url, responseType: "arraybuffer" });
+  // Axios returns response.data as a Buffer for binary data
+  const base64 = Buffer.from(response.data).toString("base64");
+  return { url, base64: await maybeCompressBase64(base64) };
+}
+
 //Converts screenshot URLs to base64 encoded images
 async function convertUrlsToBase64(
   urls: string[],
 ): Promise<Array<{ url: string; base64: string }>> {
-  const screenshots = await Promise.all(
-    urls.map(async (url) => {
-      const response = await apiClient.get({
-        url,
-        responseType: "arraybuffer",
-      });
-      // Axios returns response.data as a Buffer for binary data
-      const base64 = Buffer.from(response.data).toString("base64");
+  // Hosted pods are memory-constrained: process one image at a time. Local runs
+  // keep the concurrent path.
+  if (globalConfig.REMOTE_MCP) {
+    const screenshots: Array<{ url: string; base64: string }> = [];
+    for (const url of urls) {
+      screenshots.push(await fetchAndCompress(url));
+    }
+    return screenshots;
+  }
 
-      // Compress the base64 image if needed
-      const compressedBase64 = await maybeCompressBase64(base64);
-
-      return {
-        url,
-        base64: compressedBase64,
-      };
-    }),
-  );
-
-  return screenshots;
+  return Promise.all(urls.map(fetchAndCompress));
 }
 
 //Fetches and converts screenshot URLs to base64 encoded images

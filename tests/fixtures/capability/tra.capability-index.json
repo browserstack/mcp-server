@@ -2752,7 +2752,8 @@
           "Looks like a read but HAS side effects, which is why it is a write: for every resolved in-group user it inserts a user-integration row and, if none exists, creates a DAILY_SUMMARY_EMAIL integration (plus disabled build-finish/alerts/comment integrations). Do not call it as a harmless lookup.",
           "Addresses that resolve to a user in ANOTHER group are silently dropped from the response.",
           "Response is `{data: [ {userId, groupId, teamId, fullName, email, username}, ... ]}`.",
-          "Unlike the neighbouring recipient-save endpoint this one has NO permission gate. Returns canned validation results in the demo-sandbox environment."
+          "Unlike the neighbouring recipient-save endpoint this one has NO permission gate. Returns canned validation results in the demo-sandbox environment.",
+          "Side effect is conditional (source: EmailPreferencesService.getValidEmails): only users WITHOUT an existing DAILY_SUMMARY_EMAIL integration get the user row + DAILY_SUMMARY(on)/BUILD_FINISH/ALERTS/COMMENT(off) integrations created and a Kafka push \u2014 resolving an already-set-up user writes nothing. Calling it on a colleague's email can subscribe them to daily summary emails."
         ],
         "responses": {
           "200": {
@@ -3461,7 +3462,8 @@
           "Every rule needs a client-generated UUID `id`; the server does not fill it in.",
           "Take the returned `uuid` as the profile's identifier \u2014 the body carries no other id.",
           "Duplicate profile names within the group/project are rejected; plan-gated (feature-inaccessible when the plan lacks Quality Gates).",
-          "In-product surface (obs/session token, no username+access-key). For access-key/CI use `create_quality_profile_via_public_api`."
+          "In-product surface (obs/session token, no username+access-key). For access-key/CI use `create_quality_profile_via_public_api`.",
+          "Live 2026-09-30: the profile validator can accept a rule the evaluator cannot run (a TEST_STATUS_THRESHOLD rule with lhs {value:ALL_TESTS, with:failed}, operator greater_than, rhs {number,0}); while such a profile is enabled, recalculation leaves the build's per-profile results EMPTY for every profile. Disabling it restored the default profile's result on the next recalc."
         ]
       },
       {
@@ -5263,7 +5265,8 @@
         "guidance": [
           "SIDE EFFECT despite being a GET: this marks the project as subscribed for the calling user - a persisted user-preference write. Do not call it merely to peek at recent runs if you must avoid changing the user's subscriptions; there is no read-only variant on this route.",
           "Takes NO date range; results are just the latest builds. Fixed page of 5 builds via the zero-based `pageNumber`; stop when `pagingParams.hasNext` is false. Here the response key is `pagingParams` (PLURAL) - unlike the leaderboards' singular `pagingParam`.",
-          "`data` is an array of full build summaries (not trend series), and `currentQGOverrideStatus` is the project's quality-gate override flag."
+          "`data` is an array of full build summaries (not trend series), and `currentQGOverrideStatus` is the project's quality-gate override flag.",
+          "The subscription side effect is observable: when the caller has no email preference on the project, it creates their EMAIL notifier/preferences (daily summary ON by default), visible via list_project_notification_recipients type=EMAIL. Only fires once per user+project."
         ]
       },
       {
@@ -14627,7 +14630,8 @@
           "Idempotent on the issue key: if that bug name is already tracked on the run (checked in both quoted-legacy and unquoted forms) you get 204 No Content with no body \u2014 treat that as 'already linked', not a failure.",
           "On a fresh link it returns 200 with { id } \u2014 the created integration id. The caller must have permission to create defects on the run's project (403 otherwise).",
           "Linking also fires the PM-Tools integration trigger as a side effect; if that trigger fails it is only logged and does not fail the link.",
-          "Reversible: an unlink route removes the association, so this is a write, not a destructive op. Send the issue KEY in `name` (not in `url`)."
+          "Reversible: an unlink route removes the association, so this is a write, not a destructive op. Send the issue KEY in `name` (not in `url`).",
+          "Read-back: the link is written to the test run's search document and appears as details.pm_tool_details[] ({id,name,url,type,status}) in list_build_test_runs \u2014 the returned id is that entry's id."
         ],
         "returns": [
           "id"
@@ -25569,7 +25573,8 @@
           "Permissions are per action (no blanket controller gate): 'BulkAssignTestPlan' and 'BulkAssignAssignee' need TEST_RUN_AUTOMATED_EDIT; 'LinkToBuildGroup' needs BUILD_ADD_TO_RUN_GROUP. The check runs before validation, so an unauthorized caller gets a 403 with no validation feedback.",
           "Selection rules: with selectAll=true you MUST send `filter` (else 400) and buildIds/selectedBuildGroupIds are ignored; without it you must send buildIds OR selectedBuildGroupIds. The action-specific id (testPlanId / assignee / linkToBuildGroupId) is also required for its action.",
           "A sync run that resolves to zero builds returns `{success:true, async:false, totalUpdated:0}` \u2014 not an error.",
-          "Linking moves builds: a build belongs to at most one group. Updates are reversible, so this is write, not destructive."
+          "Linking moves builds: a build belongs to at most one group. Updates are reversible, so this is write, not destructive.",
+          "Explicit buildIds are still filtered through the default build-listing filter (active tab): CLOSED or archived builds are silently skipped and the call returns totalUpdated:0. Live 2026-09-30: a closed build \u2192 0; an active build \u2192 1. Read membership back with list_project_builds_by_group (buildGroupIds=[id] \u2192 buildGroupAggResult[].buildCount)."
         ]
       },
       {
@@ -33600,7 +33605,8 @@
           "Asynchronous: responds immediately with 200 {message:'Quality Gate result will be available after recalculation finishes'} \u2014 the result is NOT ready yet. Poll the build's quality-gate summary read for the outcome.",
           "This OVERWRITES the build's previous quality-gate result; there is no undo for the prior result.",
           "A request body must be sent (an object; {} is fine) even though its fields are ignored \u2014 the handler forces the recalculation.",
-          "403 PLAN_FEATURE_NOT_ALLOWED when the build is plan-locked."
+          "403 PLAN_FEATURE_NOT_ALLOWED when the build is plan-locked.",
+          "Live 2026-09-30: results can take a few minutes to reappear; if they stay empty, one enabled profile in the project may be un-evaluable (see create_quality_profile) \u2014 it blanks every profile's result, not just its own."
         ]
       },
       {

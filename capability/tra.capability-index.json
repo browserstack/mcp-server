@@ -10338,10 +10338,10 @@
             "name": "feature",
             "type": "string",
             "required": true,
-            "description": "A known Features name. Only RERUN and DOWNLOAD_REPORT actually increment usage; other recognised names are accepted as no-ops. An UNKNOWN name returns 404 with an empty body.",
+            "description": "Feature name in its camelCase form (Features.fromName matches the name, not the enum constant). Only rerun and downloadReport increment usage; other known names (e.g. mute, buildComparison) are 200 no-ops. An unknown name, including the constant spelling RERUN/DOWNLOAD_REPORT, is 404 with an empty body.",
             "values": [
-              "RERUN",
-              "DOWNLOAD_REPORT"
+              "rerun",
+              "downloadReport"
             ]
           }
         ],
@@ -10358,9 +10358,9 @@
           }
         },
         "guidance": [
-          "Fire-and-forget: a success is an empty 200 with NO counter in the body - re-read plan details (planDetails.features.<name>.used) to see the new count.",
+          "Fire-and-forget: a success is an empty 200 with NO counter in the body. rerun and downloadReport are unmetered (isMetered false), so plan details do not show a `used` count for them \u2014 the increment lands only in the per-user usage store.",
           "Super users are short-circuited with 200 and no metering; public-link guests are skipped inside FeatureService so a guest never burns the link owner's quota.",
-          "The `values` list is the set that actually meters; passing another KNOWN Features name is a silent 200 no-op, while an UNKNOWN name is a 404 (empty body), not a 400.",
+          "The `values` list is the set that actually increments; another KNOWN camelCase name is a silent 200 no-op, while an unknown name (including the upper-case enum spelling) is a 404 with an empty body, not a 400.",
           "This only increments a counter (recoverable state), so it is a write, not destructive - but there is no decrement endpoint here to undo an over-count."
         ]
       },
@@ -22151,26 +22151,12 @@
           {
             "name": "newUsers",
             "type": "array",
-            "description": "Emails of recipients NOT yet in the group: each is INVITED to the group and then emailed the link. Every address must be a valid email or the request is rejected.",
-            "fields": [
-              {
-                "name": "email",
-                "type": "string",
-                "description": "Recipient email address."
-              }
-            ]
+            "description": "Emails of recipients NOT yet in the group: each is INVITED to the group and then emailed the link. Every address must be a valid email or the request is rejected. A plain array of email strings (ShareReportEmailRequest is List<String>); objects like {email} are a 400 'Invalid request payload'."
           },
           {
             "name": "existingUsers",
             "type": "array",
-            "description": "Emails of recipients already in the group: emailed the link only, not invited.",
-            "fields": [
-              {
-                "name": "email",
-                "type": "string",
-                "description": "Recipient email address."
-              }
-            ]
+            "description": "Emails of recipients already in the group: emailed the link only, not invited. A plain array of email strings (ShareReportEmailRequest is List<String>); objects like {email} are a 400 'Invalid request payload'."
           }
         ],
         "intent": "Share a report link by email - invite any not-yet-registered recipients into the BrowserStack group and email the report link to both the newly invited and the existing recipients, returning per-recipient invite/share status.",
@@ -33324,7 +33310,8 @@
           "Success path returns 200 {created:true}; the Maestro/App-Automate direct path returns created:true with username/authToken/paramUrl/buildUrl all null.",
           "Fallback path: when the CI is unreachable or the trigger fails you get 200 {created:false} but WITH username, authToken, paramUrl and buildUrl populated \u2014 that is the signal for the caller to trigger the CI itself, not an error. The body carries CI credentials.",
           "CI_NOT_CONFIGURED / CI_PARAMS_NOT_FOUND are thrown (not created:false) when the CI integration is missing or the build has no stored re-run params.",
-          "testOpsParams is always {BROWSERSTACK_RERUN_TESTS:<files|null>, BROWSERSTACK_RERUN:\"true\"}."
+          "testOpsParams is always {BROWSERSTACK_RERUN_TESTS:<files|null>, BROWSERSTACK_RERUN:\"true\"}.",
+          "Observed live on a group with no CI integration: HTTP 200 {created:false} with username/authToken/paramUrl/buildUrl all null \u2014 NOT a thrown CI_NOT_CONFIGURED. All-null fields plus created:false means nothing can be triggered; only a populated fallback is a hand-off."
         ]
       },
       {

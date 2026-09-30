@@ -6,6 +6,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  actions: write
 
 jobs:
   publish:
@@ -116,3 +117,12 @@ jobs:
             --notes "$PR_LIST
 
           Published by $ACTOR"
+
+      - name: "Publish to MCP Registry"
+        # Tags pushed with GITHUB_TOKEN never trigger other workflows, so the
+        # registry publish must be dispatched explicitly (workflow_dispatch is
+        # exempt from that restriction).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: gh workflow run mcp-registry-publish.yml --ref "$VERSION"

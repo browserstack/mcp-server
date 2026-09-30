@@ -2652,6 +2652,7 @@
         "intent": "Set which notification types each listed user receives for this project - the save action of the notification-recipients table; upserts one preference row per (user, notification type).",
         "returns": [],
         "guidance": [
+          "No name-based twin exists and this route cannot succeed today (permission check needs a numeric projectId, handler looks the project up by name). Per recipient, use add_notification_recipients + update_notifier_subscriptions, or set_email_preferences_by_project for the caller's own preferences.",
           "BROKEN ROUTE (product bug): @PreAuthorize passes the path value to hasProjectPermission(Long projectId), while the handler resolves it as a normalised NAME. A name fails the SpEL conversion (400 'Failed to evaluate expression'); an integer passes that step, but the name lookup then fails. Expect this call to fail until the product fixes it.",
           "Despite the name it both adds and updates. The one `notificationType` map is applied to EVERY user id, so a batch cannot express per-user differences - split into multiple calls for that.",
           "Unknown notification-type keys are silently dropped, not rejected, so a mis-typed type just does nothing.",
@@ -10929,6 +10930,7 @@
           "id"
         ],
         "guidance": [
+          "DUPLICATE (legacy integer-id route) of `create_project_alert`, which the dashboard uses and which works \u2014 prefer `create_project_alert` (it takes the project's normalisedName and a different body shape). This route 403s for every caller when globalRBAC is on (ProjectSettingsController @PreAuthorize checks TestHub roles with the Observability id).",
           "`{projectId}` here is the NUMERIC observability project id, not the normalized name. To create an alert by the project's normalized name use `create_project_alert`.",
           "Requires the PROJECT_SETTING_ALERTS permission on the project \u2014 403 otherwise.",
           "`name` is required; an empty name is a 400.",
@@ -11057,6 +11059,7 @@
           "locator"
         ],
         "guidance": [
+          "DUPLICATE (legacy integer-id route) of `create_failure_category_sub_type`, which the dashboard uses and which works \u2014 prefer `create_failure_category_sub_type` (it takes the project's normalisedName and a different body shape). This route 403s for every caller when globalRBAC is on (ProjectSettingsController @PreAuthorize checks TestHub roles with the Observability id).",
           "`{projectId}` is the NUMERIC observability project id. To create by normalized name (and with the newer `category`/`name` body) use `create_failure_category_sub_type`.",
           "Requires the PROJECT_SETTING_FAILURE_CATEGORIES permission \u2014 403 otherwise.",
           "All four fields are required. `shortName` is max 4 characters, `longName` max 64, and `color` must match a hex colour (#RGB or #RRGGBB).",
@@ -11169,6 +11172,7 @@
           "id"
         ],
         "guidance": [
+          "DUPLICATE (legacy integer-id route) of `update_project_alert`, which the dashboard uses and which works \u2014 prefer `update_project_alert` (it takes the project's normalisedName and a different body shape). This route 403s for every caller when globalRBAC is on (ProjectSettingsController @PreAuthorize checks TestHub roles with the Observability id).",
           "The alert to update is taken from the body's `id`, NOT from the path. Omitting `id` does not target by path \u2014 supply it in the body.",
           "`{projectId}` is the NUMERIC project id; requires the PROJECT_SETTING_ALERTS permission.",
           "Responds 201 CREATED (not 200) on a successful update \u2014 a quirk of the handler; do not read the non-200 status as a failure.",
@@ -11259,6 +11263,7 @@
           "message"
         ],
         "guidance": [
+          "DUPLICATE (legacy integer-id route) of `update_failure_category_sub_type`, which the dashboard uses and which works \u2014 prefer `update_failure_category_sub_type` (it takes the project's normalisedName and a different body shape). This route 403s for every caller when globalRBAC is on (ProjectSettingsController @PreAuthorize checks TestHub roles with the Observability id).",
           "`{projectId}` is the NUMERIC project id; requires the PROJECT_SETTING_FAILURE_CATEGORIES permission.",
           "The body's top-level key is `ids`, but despite the name it is a NON-EMPTY list of full sub-type OBJECTS, not a list of bare ids. An empty list is rejected.",
           "Each item must carry its string `locator` (which sub-type to update) and `typeRef`, plus longName / shortName / color. shortName max 4, longName max 64, color must be hex.",
@@ -34201,6 +34206,7 @@
           }
         },
         "guidance": [
+          "DUPLICATE (legacy integer-id route) of `delete_project_alert`, which the dashboard uses and which works \u2014 prefer `delete_project_alert` (it takes the project's normalisedName and a different body shape). This route 403s for every caller when globalRBAC is on (ProjectSettingsController @PreAuthorize checks TestHub roles with the Observability id).",
           "This is a SOFT delete: the alert row is not physically removed \u2014 it is disabled and retired (enabled=false, latest=false) so it stops firing and disappears from the active alert list. Classed as `write` because the record survives, but there is NO API to re-enable it, so treat it as effectively permanent.",
           "Its notifier mappings ARE hard-removed as part of the delete, so re-creating the alert later also means re-adding all of its recipients; use create_project_alert_by_integer_id to make a fresh one.",
           "Path takes the INTEGER project id and the numeric alert id. An alert whose id does not belong to this project, or an unknown id, returns not-found.",
@@ -34298,6 +34304,7 @@
           }
         },
         "guidance": [
+          "DUPLICATE (legacy integer-id route) of `delete_failure_category_sub_type`, which the dashboard uses and which works \u2014 prefer `delete_failure_category_sub_type` (it takes the project's normalisedName and a different body shape). This route 403s for every caller when globalRBAC is on (ProjectSettingsController @PreAuthorize checks TestHub roles with the Observability id).",
           "HARD delete with reclassification: every test run currently classified with this sub-type is first moved to the group's DEFAULT issue type, then the sub-type row is deleted and the search index updated. Both the removal and the reclassification are irreversible.",
           "Only custom sub-types owned by your group can be removed; predefined/global issue types are refused with a forbidden error.",
           "Path takes the INTEGER project id and the numeric sub-type id. An id not present in the project, or belonging to another group, returns not-found.",

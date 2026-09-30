@@ -987,7 +987,8 @@
           "The body is read flat ({username, authToken}); unknown keys are ignored silently.",
           "The token is only base64-encoded at rest, not encrypted; reading the integration back returns it decoded to plaintext.",
           "Per-user scope: this connects the tool only for the signed-in user, not for the whole group.",
-          "The 200 body is just {message:\"Stored information successfully!\"}; it does not echo the stored username or token."
+          "The 200 body is just {message:\"Stored information successfully!\"}; it does not echo the stored username or token.",
+          "Live 2026-09-30: OAuth-backed tools (e.g. LINEAR) return 500 here \u2014 this route only stores token-based connections (CI tools such as GITLAB_CI/CIRCLE_CI worked)."
         ]
       },
       {
@@ -26371,7 +26372,8 @@
           "On a COMPLETED report the summary also carries the inline prs[] and workflows[] detail (the whole report renders from this one fetch). On a non-completed build you get a status-only summary: state = IN_PROGRESS / FAILED (+failureReason) / NOT_STARTED.",
           "state NOT_STARTED is returned as 200, not 404 \u2014 it means 'no analysis yet' (show the Generate CTA), distinct from FAILED.",
           "verdictProvisional is true while workflowsState = PENDING (build-level RCA not finished); the verdict may still change once workflows fill in. Legacy reports without workflowsState resolve to AVAILABLE.",
-          "Plan+flag gated (AI-TFA fence + release_readiness), 403 otherwise."
+          "Plan+flag gated (AI-TFA fence + release_readiness), 403 otherwise.",
+          "Live 2026-09-30: a generation that dies does not always surface FAILED \u2014 a /ext-triggered run on a build with no repo went IN_PROGRESS then back to NOT_STARTED (status key expired) with no report. Treat IN_PROGRESS\u2192NOT_STARTED as a failed run and re-trigger."
         ],
         "returns": [
           "state",
@@ -29126,7 +29128,8 @@
           "Not a drop-in for list_projects_lite: it runs Elasticsearch aggregations over all of the group's builds, so it is considerably more expensive \u2014 use it only when you actually need the per-project activity numbers.",
           "Only projects with at least one build are returned \u2014 projects with buildCount 0 are dropped from the list, so the count here can be smaller than the plain lite list.",
           "Unpaged: the whole (filtered) group is returned in one array. For a paged version of the same shape use list_projects_with_build_aggregates_paginated.",
-          "Applies product-source fencing, and outside TM also the manually-overridden filter, so counts reflect the caller's product context rather than raw totals."
+          "Applies product-source fencing, and outside TM also the manually-overridden filter, so counts reflect the caller's product context rather than raw totals.",
+          "Live 2026-09-30: returns 403 'Insufficient access. Reach out to your admin' for BOTH a group member and a group owner/product Admin \u2014 the handler has no permission gate, so this is an internal failure rewritten to 403 by the global exception handler, not an access rule. Use the paginated project listings instead."
         ],
         "responses": {
           "200": {

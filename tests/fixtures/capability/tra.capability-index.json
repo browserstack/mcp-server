@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.0",
-  "build_id": "tra-wave5",
+  "version": "1.2",
+  "build_id": "tra-v1.2-add-archive-unlink",
   "tra": {
     "summary": "BrowserStack Test Reporting & Analytics (TRA, aka Test Observability): ingest, investigate and report on automated test runs. A build groups the test runs of one CI/SDK execution; each run carries status, logs, errors, hooks and AI root-cause analysis. Everything is scoped to a project. Read builds and runs; filter and search them; manage dashboards, custom views and saved reports; configure quality gates, webhooks, notifications, CI triggers and integrations; and read stability, performance, flakiness and unique-error analytics. Tests are REPORTED here, not executed here - execution happens in your runner or another BrowserStack product and is pushed in via the SDK. Access-key auth reaches only the /ext/v1 external API; everything else needs a session or service credential. Destructive capabilities need explicit human approval.",
     "auth": {
@@ -14866,149 +14866,6 @@
         }
       },
       {
-        "name": "list_build_ai_failure_cluster_test_runs",
-        "method": "GET",
-        "path": "/api/v1/ai/failures/{buildUUID}/flat",
-        "mode": "read",
-        "entity": "ai_failure",
-        "path_params": [
-          {
-            "name": "buildUUID",
-            "type": "string",
-            "required": true,
-            "description": "Build UUID (opaque string)."
-          }
-        ],
-        "query": [
-          {
-            "name": "buildFailureThemeId",
-            "type": "integer",
-            "required": false,
-            "description": "Integer id of the failure theme to drill into, from a build AI-failures read. Give this OR buildFailureWorkflowId to scope to one cluster. One of theme/workflow id is required."
-          },
-          {
-            "name": "buildFailureWorkflowId",
-            "type": "integer",
-            "required": false,
-            "description": "Integer id of the failure workflow to drill into, from a build AI-failures read. One of theme/workflow id is required."
-          },
-          {
-            "name": "limit",
-            "type": "integer",
-            "required": false,
-            "description": "ACCEPTED BUT IGNORED. Page size is fixed by the backend's Elasticsearch default and this value is not applied; do not rely on it to cap or size the result. Use searchAfter to page."
-          },
-          {
-            "name": "searchAfter",
-            "type": "string",
-            "required": false,
-            "description": "Opaque search-after cursor. Pass the pagingParams.searchAfter (JSON-encoded) from the previous response to fetch the next page."
-          }
-        ],
-        "intent": "Drill into one AI failure theme or workflow of a build and list the individual test runs behind it, with their details, going from a failure cluster to the actual failing tests.",
-        "returns": [
-          "testRuns",
-          "pagingParams"
-        ],
-        "guidance": [
-          "Send buildFailureThemeId OR buildFailureWorkflowId (integer ids from get_build_ai_failures). One of them is REQUIRED: with neither, the TestHub lookup 400s 'At least one of build_failure_theme_id or build_failure_workflow_id must be provided' (there is no whole-build mode).",
-          "limit is accepted but IGNORED; the backend uses its own default page size. Do not treat limit as a cap.",
-          "Paginate with the cursor: pass pagingParams.searchAfter back as searchAfter and stop when pagingParams.hasNext is false.",
-          "An empty testRuns with hasNext=false means the cluster resolved to no runs, not an error.",
-          "Adding a testRunIds query param routes to a DIFFERENT operation (list_build_ai_failure_test_runs_by_ids); omit it here."
-        ],
-        "responses": {
-          "200": {
-            "$response": "FlatAIFailureTestRunsResponse"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "404": {
-            "$response": "NotFound"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        }
-      },
-      {
-        "name": "list_build_ai_failure_test_runs_by_ids",
-        "method": "GET",
-        "path": "/api/v1/ai/failures/{buildUUID}/flat",
-        "mode": "read",
-        "entity": "ai_failure",
-        "path_params": [
-          {
-            "name": "buildUUID",
-            "type": "string",
-            "required": true,
-            "description": "Build UUID (opaque string)."
-          }
-        ],
-        "query": [
-          {
-            "name": "testRunIds",
-            "type": "array",
-            "required": true,
-            "description": "Comma-separated list of integer test-run ids to fetch directly (skips the theme/workflow lookup). Max 200 ids; more returns 400. Presence of this param is what selects this operation over the theme/workflow variant.",
-            "fields": [
-              {
-                "name": "item",
-                "type": "integer"
-              }
-            ]
-          },
-          {
-            "name": "limit",
-            "type": "integer",
-            "required": false,
-            "description": "ACCEPTED BUT IGNORED. Page size is fixed by the backend default; use searchAfter to page."
-          },
-          {
-            "name": "searchAfter",
-            "type": "string",
-            "required": false,
-            "description": "Opaque search-after cursor from the previous response's pagingParams.searchAfter."
-          }
-        ],
-        "intent": "List flat test-run details for an explicit set of test-run ids under a build, e.g. the specific runs a Release Readiness PR card cites, skipping the theme/workflow lookup entirely.",
-        "returns": [
-          "testRuns",
-          "pagingParams"
-        ],
-        "guidance": [
-          "This variant is selected by sending testRunIds; without that param the same path routes to list_build_ai_failure_cluster_test_runs instead.",
-          "At most 200 ids; over that is a 400 naming testRunIds.",
-          "Group-scoped and IDOR-safe: the query filters on buildId AND testRunIds, so ids outside the caller's build simply do not match (no error). A result shorter than the id list can mean some ids were foreign, not an error.",
-          "limit is ignored (fixed backend page size); paginate via searchAfter and pagingParams.hasNext.",
-          "Intentionally not plan-fenced; a plan-downgraded account can still read prior content."
-        ],
-        "responses": {
-          "200": {
-            "$response": "FlatAIFailureTestRunsResponse"
-          },
-          "400": {
-            "$response": "BadRequest"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "404": {
-            "$response": "NotFound"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        }
-      },
-      {
         "name": "get_build_ai_failures_via_public_api",
         "method": "GET",
         "path": "/ext/v1/ai/failures/{buildUUID}",
@@ -18750,114 +18607,6 @@
           },
           "401": {
             "$response": "Unauthorized"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        }
-      },
-      {
-        "name": "list_repo_settings",
-        "method": "GET",
-        "path": "/api/v1/projects/{projectName}/repo-setting",
-        "mode": "read",
-        "entity": "repo_setting",
-        "path_params": [
-          {
-            "name": "projectName",
-            "type": "string",
-            "required": true,
-            "description": "The project's normalised name. De-normalised to the internal project name server-side."
-          }
-        ],
-        "query": [
-          {
-            "name": "page",
-            "type": "integer",
-            "default": 0,
-            "minimum": 0,
-            "description": "Zero-indexed page number. Negative values are clamped to 0. NOTE this route is 0-indexed and uses `pageSize`; the generated-tags read is 1-indexed and uses `per_page` instead."
-          },
-          {
-            "name": "pageSize",
-            "type": "integer",
-            "default": 50,
-            "minimum": 1,
-            "maximum": 200,
-            "description": "Rows per page. Clamped server-side to the range 1..200; a larger value is silently reduced to 200, not rejected."
-          }
-        ],
-        "intent": "List a project's source-repository configurations (which Git repos are linked to which build names for AI test-tag generation), newest first, paginated \u2014 the call that gives you each configuration's integer id.",
-        "returns": [
-          "result",
-          "total_count",
-          "page",
-          "page_size"
-        ],
-        "guidance": [
-          "Rows come back under `result`, each a summary row: `id`, `build_name`, `test_repo_count`, `app_repo_count`, `test_repo_name` and timestamps \u2014 NOT the full `repo_details`. To see the repo entries of one configuration, read it by build name or use the id from here with the other calls.",
-          "This is the source of the integer `id` every other repo-setting call needs; the build name alone is not enough for edit, delete, generation or tag reads.",
-          "Shares its exact path and method with the read-by-build-name call. Sending a `build_name` query param routes to that one instead; omit `build_name` to get this list.",
-          "`total_count` is the atomic total across all pages, so page through until you have collected `total_count` rows."
-        ],
-        "responses": {
-          "200": {
-            "$response": "RepoSettingListEnvelope"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        }
-      },
-      {
-        "name": "get_repo_setting_by_build_name",
-        "method": "GET",
-        "path": "/api/v1/projects/{projectName}/repo-setting",
-        "mode": "read",
-        "entity": "repo_setting",
-        "path_params": [
-          {
-            "name": "projectName",
-            "type": "string",
-            "required": true,
-            "description": "The project's normalised name."
-          }
-        ],
-        "query": [
-          {
-            "name": "build_name",
-            "type": "string",
-            "required": true,
-            "description": "The build name whose single repo configuration you want. Presence of this param is what selects this handler over the plain list on the same path \u2014 omit it and you get the paginated list instead."
-          }
-        ],
-        "intent": "Fetch the one repo configuration attached to a given build name, with its full repository details \u2014 use this to show which repository backs a build's AI tag generation.",
-        "returns": [
-          "result"
-        ],
-        "guidance": [
-          "Same path and method as the list call; it is the presence of `build_name` that routes here. Without `build_name` you silently get the list envelope, not this single detail.",
-          "Returns one configuration under `result`, including the full `repo_details` array (repo name, type, provider, identifier, branch, folder path, custom prompt). Take `result.id` to address the configuration in edit/delete/generation calls.",
-          "Resolves a configuration by build name; the other single-configuration operations take the integer id, so carry `result.id` forward rather than the build name."
-        ],
-        "responses": {
-          "200": {
-            "$response": "RepoSettingDetailEnvelope"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "404": {
-            "$response": "NotFound"
           },
           "500": {
             "$response": "InternalServerError"
@@ -34505,6 +34254,368 @@
           "Requires the PROJECT_SETTING_NOTIFICATIONS permission (modify_project_settings), checked at group level.",
           "Returns {message: \"Deleted slack notifiers\"}."
         ]
+      },
+      {
+        "name": "list_build_ai_failure_test_runs_flat",
+        "method": "GET",
+        "path": "/api/v1/ai/failures/{buildUUID}/flat",
+        "mode": "read",
+        "entity": "ai_failure",
+        "path_params": [
+          {
+            "name": "buildUUID",
+            "type": "string",
+            "required": true,
+            "description": "Build UUID (opaque string)."
+          }
+        ],
+        "query": [
+          {
+            "name": "testRunIds",
+            "type": "array",
+            "required": false,
+            "description": "Comma-separated integer test-run ids to fetch directly, skipping the theme/workflow lookup. Max 200 (more => 400). Sending this selects the by-ids behaviour; omit it to scope by cluster or whole build.",
+            "fields": [
+              {
+                "name": "item",
+                "type": "integer"
+              }
+            ]
+          },
+          {
+            "name": "buildFailureThemeId",
+            "type": "integer",
+            "required": false,
+            "description": "Integer id of a failure THEME to drill into (from get_build_ai_failures). Give this OR buildFailureWorkflowId to scope to one cluster. Ignored if testRunIds is sent."
+          },
+          {
+            "name": "buildFailureWorkflowId",
+            "type": "integer",
+            "required": false,
+            "description": "Integer id of a failure WORKFLOW to drill into (from get_build_ai_failures). Ignored if testRunIds is sent."
+          },
+          {
+            "name": "limit",
+            "type": "integer",
+            "required": false,
+            "description": "ACCEPTED BUT IGNORED. Page size is fixed by the backend's Elasticsearch default; do not rely on it. Use searchAfter to page."
+          },
+          {
+            "name": "searchAfter",
+            "type": "string",
+            "required": false,
+            "description": "Opaque search-after cursor. Pass the previous response's pagingParams.searchAfter (JSON-encoded) to fetch the next page."
+          }
+        ],
+        "intent": "List a build's AI-failure test runs as a flat, cursor-paginated list with full details \u2014 fetch an explicit set of test-run ids, drill into one failure theme or workflow cluster, or omit both to span the whole build.",
+        "returns": [
+          "testRuns",
+          "pagingParams"
+        ],
+        "guidance": [
+          "ONE route, three modes chosen by which query params you send: testRunIds -> fetch exactly those runs (skips the theme/workflow lookup); buildFailureThemeId OR buildFailureWorkflowId -> drill into one cluster (ids from get_build_ai_failures); neither -> the whole build.",
+          "testRunIds is comma-separated integer ids, capped at 200; more returns 400 naming testRunIds.",
+          "Group-scoped / IDOR-safe: results filter on buildId, so ids or clusters outside the caller's build simply do not match \u2014 a short or empty testRuns (with hasNext=false) is not an error.",
+          "limit is ACCEPTED BUT IGNORED (fixed backend page size). Paginate with searchAfter and stop when pagingParams.hasNext is false.",
+          "Not plan-fenced; a plan-downgraded account can still read prior content."
+        ],
+        "responses": {
+          "200": {
+            "$response": "FlatAIFailureTestRunsResponse"
+          },
+          "400": {
+            "$response": "BadRequest"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "list_repo_settings",
+        "method": "GET",
+        "path": "/api/v1/projects/{projectName}/repo-setting",
+        "mode": "read",
+        "entity": "repo_setting",
+        "path_params": [
+          {
+            "name": "projectName",
+            "type": "string",
+            "required": true,
+            "description": "The project's normalised name. De-normalised to the internal project name server-side."
+          }
+        ],
+        "query": [
+          {
+            "name": "build_name",
+            "type": "string",
+            "required": false,
+            "description": "Omit for the paginated LIST of all configurations; give a build name to fetch that build's SINGLE configuration with full repo_details. Presence of this param switches the response shape."
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "default": 0,
+            "minimum": 0,
+            "description": "List mode only. Zero-indexed page number; negatives clamp to 0. (This route is 0-indexed with pageSize; the generated-tags read is 1-indexed with per_page.)"
+          },
+          {
+            "name": "pageSize",
+            "type": "integer",
+            "default": 50,
+            "minimum": 1,
+            "maximum": 200,
+            "description": "List mode only. Rows per page, clamped 1..200 (a larger value is silently reduced, not rejected)."
+          }
+        ],
+        "intent": "List a project's source-repository configurations (which Git repos are linked to which build names for AI test-tag generation), paginated \u2014 or, with build_name, fetch the single configuration for that build with its full repo details.",
+        "returns": [
+          "result",
+          "total_count",
+          "page",
+          "page_size"
+        ],
+        "guidance": [
+          "ONE route, two shapes decided by build_name. WITHOUT build_name -> paginated LIST: rows under `result` are summary rows (id, build_name, test_repo_count, app_repo_count, test_repo_name, timestamps \u2014 NOT repo_details), plus total_count/page/page_size. WITH build_name -> a SINGLE configuration under `result` including the full repo_details array (repo name, type, provider, identifier, branch, folder path, custom prompt); total_count/page/page_size are then absent.",
+          "This is the source of the integer `id` every other repo-setting call needs (edit / delete / tag generation / tag reads); the build name alone is not enough \u2014 carry `result.id` (single mode) or `result[].id` (list mode) forward.",
+          "total_count is the atomic total across all pages; page through until you have collected total_count rows.",
+          "With build_name, an unknown build returns 404."
+        ],
+        "responses": {
+          "200": {
+            "$response": "RepoSettingListOrDetailEnvelope"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "archive_project_builds",
+        "method": "PATCH",
+        "path": "/api/v1/projects/{normalisedName}/builds",
+        "mode": "destructive",
+        "entity": "build",
+        "path_params": [
+          {
+            "name": "normalisedName",
+            "type": "string",
+            "required": true,
+            "description": "The project's normalised name; de-normalised to the internal project server-side."
+          }
+        ],
+        "body": [
+          {
+            "name": "builds",
+            "type": "array",
+            "required": false,
+            "description": "Build UUIDs to archive or delete. Omit and use selectAll/filter to act on a whole selection.",
+            "fields": [
+              {
+                "name": "item",
+                "type": "string"
+              }
+            ]
+          },
+          {
+            "name": "isDelete",
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "false (default) ARCHIVES the builds (reversible). true PERMANENTLY DELETES them and all their test data (irreversible). This is the flag that makes the call destructive."
+          },
+          {
+            "name": "selectAll",
+            "type": "boolean",
+            "required": false,
+            "description": "Act on every build in the project (optionally narrowed by filter), instead of an explicit builds list."
+          },
+          {
+            "name": "hasSelectedAll",
+            "type": "boolean",
+            "required": false,
+            "description": "UI select-all marker; pair with excludedBuildUuids to act on all-except."
+          },
+          {
+            "name": "buildGroups",
+            "type": "array",
+            "required": false,
+            "description": "Build-group ids to act on.",
+            "fields": [
+              {
+                "name": "item",
+                "type": "integer"
+              }
+            ]
+          },
+          {
+            "name": "excludedBuildUuids",
+            "type": "array",
+            "required": false,
+            "description": "Build UUIDs to exclude from a selectAll/filter selection.",
+            "fields": [
+              {
+                "name": "item",
+                "type": "string"
+              }
+            ]
+          },
+          {
+            "name": "excludedBuildGroupIds",
+            "type": "array",
+            "required": false,
+            "description": "Build-group ids to exclude from a selectAll selection.",
+            "fields": [
+              {
+                "name": "item",
+                "type": "integer"
+              }
+            ]
+          },
+          {
+            "name": "filter",
+            "type": "object",
+            "required": false,
+            "description": "Build-filter object (GetBuildFilterRqV2 shape) narrowing which builds a selectAll acts on."
+          },
+          {
+            "name": "creationType",
+            "type": "string",
+            "required": false,
+            "description": "Optional creation-type scope (e.g. only automation or manual builds)."
+          }
+        ],
+        "intent": "Archive or permanently delete a project's builds in bulk \u2014 by an explicit UUID list, by build groups, or across a whole filtered selection. isDelete=false archives (reversible); isDelete=true deletes irreversibly.",
+        "returns": [
+          "success",
+          "jobId"
+        ],
+        "guidance": [
+          "DESTRUCTIVE because of isDelete: with isDelete=true the builds and ALL their test data are permanently removed, no undo. With isDelete=false (default) it ARCHIVES them, which is reversible \u2014 send isDelete explicitly so you know which you are doing.",
+          "Asynchronous: returns {success, jobId} immediately and processes over Kafka (one job per group+project via a Redis intent blob). There is no completion-status endpoint to poll through this API.",
+          "Requires the BUILD_ARCHIVE project permission (archive_builds); 403 otherwise.",
+          "Select builds one of three ways: an explicit `builds` UUID list, `buildGroups` ids, or `selectAll` (optionally narrowed by `filter`) with `excludedBuildUuids`/`excludedBuildGroupIds` to carve out exceptions.",
+          "Distinct from the service-key-only internal archive on `{normalisedName}/internal/builds` and from the reversible `bulk_close_builds` on `{normalisedName}/builds/bulk-close`."
+        ],
+        "responses": {
+          "200": {
+            "$response": "BulkArchiveJobResponse"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "unlink_bug_from_test_run",
+        "method": "PUT",
+        "path": "/api/v1/builds/{buildId}/testRuns/{testRunId}/unlink/{integrationId}",
+        "mode": "write",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "buildId",
+            "type": "string",
+            "required": true,
+            "description": "Build id in the URL. DECLARED but NOT read by the handler \u2014 any value routes; the run is resolved by testRunId alone. Pass the run's build id for correctness."
+          },
+          {
+            "name": "testRunId",
+            "type": "string",
+            "required": true,
+            "description": "Test-run id whose linked bug/PM-tool issue is being unlinked."
+          },
+          {
+            "name": "integrationId",
+            "type": "integer",
+            "required": true,
+            "description": "Integer id of the PM-tool integration / linked bug to remove from the test run."
+          }
+        ],
+        "body": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": false,
+            "description": "Display name of the bug/issue being unlinked (used for the notification, not for lookup)."
+          },
+          {
+            "name": "type",
+            "type": "string",
+            "required": false,
+            "description": "PM-tool type (e.g. jira) of the issue being unlinked."
+          },
+          {
+            "name": "url",
+            "type": "string",
+            "required": false,
+            "description": "URL of the linked issue."
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "required": false,
+            "description": "Issue status carried through to the notification."
+          },
+          {
+            "name": "uniqueUserId",
+            "type": "integer",
+            "required": false,
+            "description": "Acting user id, for the bug-reported notification."
+          }
+        ],
+        "intent": "Unlink a previously linked bug / PM-tool issue (Jira etc.) from a test run \u2014 the reverse of linking a bug to a run.",
+        "returns": [],
+        "guidance": [
+          "Reversible (write, not destructive): it removes the link between the run and the issue, not any record; you can re-link afterwards.",
+          "The success body is the PLAIN STRING \"Bug details unlinked successfully!\", not JSON \u2014 do not parse it as an object.",
+          "The {buildId} path segment is declared but the handler ignores it; the run is located by testRunId, and integrationId selects which linked issue to remove.",
+          "Also fires a bug-reported notification refresh from Elasticsearch as a side effect."
+        ],
+        "responses": {
+          "200": {
+            "$response": "UnlinkBugResponse"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "404": {
+            "$response": "NotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
       }
     ],
     "schemas": {
@@ -49599,6 +49710,68 @@
         "schema": {
           "$schema": "BuildHistoryWithDefectCounts"
         }
+      },
+      "RepoSettingListOrDetailEnvelope": {
+        "description": "One route, two shapes: WITHOUT build_name a paginated list of repo configurations; WITH build_name a single configuration under `result`.",
+        "schema": {
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "List mode (no build_name).",
+              "properties": {
+                "result": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "RepoSettingListItem"
+                  }
+                },
+                "total_count": {
+                  "type": "integer",
+                  "description": "Atomic total across all pages."
+                },
+                "page": {
+                  "type": "integer",
+                  "description": "Zero-indexed page served (after clamping)."
+                },
+                "page_size": {
+                  "type": "integer",
+                  "description": "Page size served (after clamping to 1..200)."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "description": "Single-config mode (build_name given).",
+              "properties": {
+                "result": {
+                  "$schema": "RepoSettingDetail"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "BulkArchiveJobResponse": {
+        "description": "Async acknowledgement for a bulk build archive/delete: the job is queued, not completed synchronously.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "description": "Always true on a successful enqueue."
+            },
+            "jobId": {
+              "type": "string",
+              "description": "Id of the queued archive/delete job (one per group+project); nothing to poll through this API."
+            }
+          }
+        }
+      },
+      "UnlinkBugResponse": {
+        "description": "Plain-text body (the literal string \"Bug details unlinked successfully!\"), NOT JSON.",
+        "schema": {
+          "type": "string"
+        }
       }
     },
     "paging": {
@@ -50376,6 +50549,7 @@
           }
         ],
         "capabilities": [
+          "archive_project_builds",
           "bulk_close_builds",
           "close_build",
           "delete_build_via_public_api",
@@ -50949,6 +51123,7 @@
           "list_build_test_runs_with_attachments",
           "list_test_run_attachment_urls",
           "list_test_runs_sharing_error",
+          "unlink_bug_from_test_run",
           "update_test_run_mute_status"
         ],
         "key_facts": [
@@ -51000,9 +51175,8 @@
         "capabilities": [
           "get_build_ai_failures",
           "get_build_ai_failures_via_public_api",
-          "list_build_ai_failure_cluster_test_runs",
           "list_build_ai_failure_cluster_test_runs_via_public_api",
-          "list_build_ai_failure_test_runs_by_ids",
+          "list_build_ai_failure_test_runs_flat",
           "trigger_build_ai_failure_analysis",
           "trigger_build_ai_failure_analysis_via_public_api"
         ],
@@ -51294,7 +51468,6 @@
           "create_repo_setting",
           "delete_repo_setting",
           "export_repo_setting_generated_tags",
-          "get_repo_setting_by_build_name",
           "get_repo_setting_tag_generation_status",
           "get_smart_tag_settings",
           "list_repo_setting_generated_tags",
@@ -51895,6 +52068,6 @@
         ]
       }
     },
-    "version": "1.0"
+    "version": "1.2"
   }
 }

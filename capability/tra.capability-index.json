@@ -19144,7 +19144,8 @@
           "This is where the configuration first reaches the downstream code-tag service \u2014 if you created it and never triggered generation, status and generated-tags reads will find nothing upstream.",
           "Asynchronous: the response is the downstream service's own JSON acknowledgement passed through verbatim, NOT the finished tags. Observe completion by polling the tag-generation-status call; do not treat this response as the result.",
           "The response shape is owned by the downstream service and is not fixed by this API. A blank or unparseable upstream response surfaces as TCS_SERVICE_ERROR rather than an empty success.",
-          "The `custom_prompt` is persisted onto the configuration (on the test-type repo entry) only after the downstream service accepts the call \u2014 a rejected call does not store it."
+          "The `custom_prompt` is persisted onto the configuration (on the test-type repo entry) only after the downstream service accepts the call \u2014 a rejected call does not store it.",
+          "Live 2026-09-30: needs the GitHub 'Source Code View' integration connected for the CALLING user (integrations page \u2192 Source Code View \u2192 GitHub, with access to the repo). Without it the trigger still acks {status:ok} but the status stays {} forever. With it: status went IN_PROGRESS {total_files:1} \u2192 COMPLETED {processed_files:1,total_generated_tags:1} within ~2 min."
         ],
         "responses": {
           "200": {
@@ -19296,9 +19297,11 @@
           }
         ],
         "intent": "Fetch the complete, unpaginated set of AI-generated tags for a repo configuration in one call, for export.",
-        "returns": [],
+        "returns": [
+          "download_url"
+        ],
         "guidance": [
-          "Despite 'download' in the path this returns a normal JSON body with NO file/attachment headers \u2014 it is JSON, not a byte stream. The caller is responsible for turning it into a file; there is nothing to save as-is.",
+          "SECRET-BEARING (live 2026-09-30): once tags exist this returns {download_url} \u2014 a presigned S3 URL (~1h) whose query string carries temporary AWS credentials (AWSAccessKeyId, Signature, x-amz-security-token) \u2014 NOT the tags as JSON. Treat the body as a credential; use list_repo_setting_generated_tags to read tags. Before any generation run it is a 404 NOT_FOUND wrapper.",
           "Pass-through proxy: the body is the downstream code-tag service's JSON unmodified and its shape is owned by that service.",
           "Unpaginated and returns everything at once, so it can be large and slow. Use the paginated generated-tags read for interactive review and this one only for a full export.",
           "Live 2026-09-30: before any generation run has registered the configuration downstream, this is a 404 whose message wraps the downstream JSON {errorCode:NOT_FOUND, errorMessage:'Repository not found for this group/project/build'} \u2014 not an empty body. Trigger generation first."
@@ -22433,7 +22436,8 @@
           "Rate limited per user (25/hr) and per group (100/hr). Over-limit calls are rejected; a transient downstream failure refunds the token rather than burning your quota.",
           "This is GitHub-only. A non-GitHub origin remote is silently skipped during auto-derivation (you then get an unparseable-remote error) \u2014 pass `repository` explicitly for those.",
           "Each selector's locator uses `using`/`value`. Do not send `type` here (that is the verdict endpoint's field); an object missing `using` or `value` fails validation.",
-          "No API undo: this opens a real PR in the customer's repo. Closing/reverting is done in GitHub, not here."
+          "No API undo: this opens a real PR in the customer's repo. Closing/reverting is done in GitHub, not here.",
+          "Live 2026-09-30: the healing worker's integration key 'github-scm' is the GitHub 'Source Code View' integration (integrations page \u2192 Source Code View \u2192 GitHub), connected per user. Without it the job FAILS at fetch_files with 401 'Invalid credentials for the integration'. The account-wide GitHub (issues) connection does not satisfy it."
         ],
         "responses": {
           "202": {

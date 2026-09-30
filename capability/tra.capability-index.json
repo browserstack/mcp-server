@@ -15197,7 +15197,8 @@
           "Ownership-checked: the session's group (resolved from the search index) must equal the caller's group, otherwise 401.",
           "Pass-through to the Automate/App-Automate stop API; the upstream status code and body are relayed verbatim.",
           "Unlike other build controls, its error bodies are PLAIN STRINGS (e.g. \"Unauthorized\", \"An error occurred while stopping the session\"), not the structured error envelope; do not parse them as JSON.",
-          "Stops the live run and cannot be undone, but does not delete the session; the session and its logs remain."
+          "Stops the live run and cannot be undone, but does not delete the session; the session and its logs remain.",
+          "PRODUCT BUG (live 2026-09-30): the ownership lookup reads the session's group from the TRA search index by sessionId, but a RUNNING test run's session_id is still null there, so stopping a live session returns 401 'Unauthorized' even for its owner. After the run finishes the lookup succeeds and Automate answers 400 'The session has already ended'. To stop a live run, use stop_build on its build_uuid instead."
         ],
         "responses": {
           "200": {
@@ -18252,7 +18253,8 @@
           "Note the route prefix is /api/v1/internal/log-redaction, not /internal/v1/....",
           "Keyed on the TestHub project id, not the internal project id or normalised name.",
           "Returns a BARE JSON ARRAY of rule objects at the top level \u2014 NOT wrapped in a {rules:[...]} envelope, unlike the user-facing list_log_redaction_rules.",
-          "A project that does not resolve returns an empty array with 200, so an empty result does not distinguish 'no rules' from 'unknown project'."
+          "A project that does not resolve returns an empty array with 200, so an empty result does not distinguish 'no rules' from 'unknown project'.",
+          "Live 2026-09-30: a customer user call returns 500 'Internal System Exception' (not 401/403) \u2014 the service-key refusal surfaces as a generic 500."
         ],
         "returns": [],
         "responses": {

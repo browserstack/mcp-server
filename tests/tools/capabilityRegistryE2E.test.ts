@@ -239,14 +239,20 @@ describe("capability registry, end to end through the server factory", () => {
       expect((await run({ query })).blocked, query).toBe(false);
     }
 
-    // Two ways out, both explicit: the user answered, or the caller was already specific.
+    // One way out, and it is explicit: the user answered.
     expect(
       (await run({ query: "list all projects", product_choice: "user_confirmed" }))
         .blocked,
     ).toBe(false);
+
+    // `entity` IS NOT A WAY OUT, and used to be. It narrows within a product and says
+    // nothing about which product — and the four names both products carry (project,
+    // report, test_run, comment) are exactly the ones being asked about, so naming one
+    // alongside a guessed product is the silent pick this gate exists to stop, stated
+    // more confidently. It skipped the check at the moment the check mattered.
     expect(
       (await run({ query: "list all projects", entity: "project" })).blocked,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("hands over what it takes to ask the question, not an instruction to go look", async () => {

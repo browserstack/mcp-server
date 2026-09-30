@@ -580,6 +580,9 @@ const IDENTITY_WEIGHT = 6;
 // history at 617b4b9, and the reasoning above is why it was right.
 
 /** Which products a query could plausibly be about, when more than one could. */
+/** Words too common in this domain to settle a product on their own. */
+const GENERIC_ANCHORS = new Set(["test", "tests", "testing"]);
+
 export interface ProductAmbiguity {
   /** The products that claim the query's words. Empty when the query settles itself. */
   products: string[];
@@ -637,14 +640,51 @@ export function ambiguousProducts(
     }
   }
 
+  // THE SUMMARY CAN ADD A CLAIMANT, NEVER A TERM.
+  //
+  // A product that models `view` as an entity and one that only describes views in its
+  // summary both answer questions about views, but only the first was visible here, so
+  // "delete the saved view" read as settled. Letting the summary claim a word the other
+  // product already models catches that, and refusing to mine NEW terms out of it is what
+  // keeps the prose from taking over: a summary is a paragraph of verbs and nouns written
+  // to sell the product, and every word in it would otherwise become routing vocabulary.
+  const summaries = Object.fromEntries(
+    Object.entries(products).map(([product, index]) => [
+      product,
+      ` ${fold(index.summary ?? "")} `,
+    ]),
+  );
+  for (const [key, claimants] of owners) {
+    for (const [product, text] of Object.entries(summaries)) {
+      if (text.includes(` ${key} `)) claimants.add(product);
+    }
+  }
+
   const shared = new Map<string, Set<string>>();
+  const decided = new Set<string>();
   for (const [key, claimants] of owners) {
     if (!asked_.includes(` ${key} `)) continue;
-    // A term only one product claims decides the query outright.
-    if (claimants.size < 2) return none;
+    // A word this domain uses in every other sentence settles nothing and clashes over
+    // nothing: `test` is an alias on one side and appears throughout both summaries, so
+    // counting it would make almost any request look like a clash.
+    if (GENERIC_ANCHORS.has(key)) continue;
+    if (claimants.size < 2) {
+      // A term only one product claims POINTS somewhere; whether it decides the question
+      // depends on what else is in the sentence. It used to end the check outright, and
+      // that is what made this gate almost silent: an agent's paraphrase nearly always
+      // carries some incidental one-product word — `upload`, `saved report` — so the
+      // shared noun the user actually said stopped being examined. Worse, a sentence
+      // carrying one-product words for BOTH products read as settled, which is the case
+      // most in need of asking.
+      if (!GENERIC_ANCHORS.has(key)) decided.add([...claimants][0]);
+      continue;
+    }
     shared.set(key, claimants);
   }
   if (shared.size === 0) return none;
+  // One product, and only one, is pointed at by the unshared words: the sentence answers
+  // itself and there is nothing to ask.
+  if (decided.size === 1) return none;
 
   const claimed = new Set<string>();
   for (const claimants of shared.values())
@@ -852,5 +892,95 @@ export function searchCapabilities(
     top_matched: topMatched,
     coverage,
     weak: wanted.length > 0 && perfect > 0 && coverage < WEAK_COVERAGE,
+  };
+}
+
+export interface ProductAnchor {
+  /** Products the quoted words point at, through a word only that product claims. */
+  products: string[];
+  /** The words that did the anchoring, so a refusal can quote them back. */
+  terms: string[];
+}
+
+/**
+ * Which products the USER'S OWN WORDS name, directly or through vocabulary only one
+ * product claims.
+ *
+ * This is the other half of `ambiguousProducts`. That one asks "is the query a word both
+ * products use?"; this asks "did the user say anything that settles it?" — and it reads
+ * the user's text, not a flag the caller sets about itself. A boolean saying the user
+ * confirmed is answered by whoever wants to proceed; a quote has to come from the
+ * conversation, and the words in it are checked against the index here.
+ *
+ * Anchors are of two kinds and both are needed. A product NAME ("test management",
+ * "observability") is the explicit case. A word only one product's vocabulary claims
+ * ("quality gate", "test plan") is the implicit one, and it is the common one: users say
+ * what they want, not which product owns it.
+ */
+export function productAnchors(
+  products: Record<string, ProductIndex>,
+  text: string | undefined,
+): ProductAnchor {
+  const none: ProductAnchor = { products: [], terms: [] };
+  if (terms(text).length === 0) return none;
+
+  const fold = (s: string): string => terms(s).map(singular).join(" ");
+  const said = ` ${fold(text || "")} `;
+  const found = new Map<string, Set<string>>();
+
+  const claim = (product: string, term: string) => {
+    if (!found.has(product)) found.set(product, new Set());
+    found.get(product)!.add(term);
+  };
+
+  // The product's own name and key, as a user would type them. `summary` is prose, not a
+  // name, so only the leading clause before ':' is used — "BrowserStack Test Management",
+  // "BrowserStack Test Reporting & Analytics (TRA, aka Test Observability)".
+  for (const [product, index] of Object.entries(products)) {
+    const names = [product, ...(index.summary ?? "").split(":")[0].split(/[(),]/)];
+    for (const name of names) {
+      // "aka Test Observability" is the product's other name with a connective in front
+      // of it; the user types the name, not the connective.
+      const key = fold(name.replace(/^\s*(browserstack|aka|formerly)\s+/i, ""));
+      if (key.length < 2) continue;
+      if (said.includes(` ${key} `)) claim(product, key);
+    }
+  }
+
+  // Vocabulary only one product claims. Shared words settle nothing and are skipped —
+  // that is exactly what `ambiguousProducts` flagged in the first place.
+  const owners = new Map<string, Set<string>>();
+  for (const [product, entries] of Object.entries(vocabularyOf(products))) {
+    for (const entry of entries) {
+      for (const word of [entry.entity, ...(entry.aliases ?? [])]) {
+        const key = fold(String(word));
+        if (!key) continue;
+        if (!owners.has(key)) owners.set(key, new Set());
+        owners.get(key)!.add(product);
+      }
+    }
+  }
+  const matched: { key: string; product: string }[] = [];
+  for (const [key, claimants] of owners) {
+    if (claimants.size !== 1) continue;
+    if (!said.includes(` ${key} `)) continue;
+    matched.push({ key, product: [...claimants][0] });
+  }
+  for (const { key, product } of matched) {
+    // A word carried by nearly every request in this domain anchors nothing: tra's
+    // sp_test lists the bare word `test` as an alias, which would make "what test plans
+    // are active" read as tra on the strength of one noun that means nothing on its own.
+    if (GENERIC_ANCHORS.has(key)) continue;
+    // Longest match wins. "test management" and "test" both match the same sentence, and
+    // only the longer one carries the user's meaning — counting both makes a settled
+    // question look ambiguous again.
+    if (matched.some((other) => other.key !== key && ` ${other.key} `.includes(` ${key} `)))
+      continue;
+    claim(product, key);
+  }
+
+  return {
+    products: [...found.keys()].sort(),
+    terms: [...new Set([...found.values()].flatMap((s) => [...s]))].sort(),
   };
 }

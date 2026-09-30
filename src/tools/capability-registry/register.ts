@@ -37,6 +37,7 @@ import {
 import { invoke } from "./resolve.js";
 import {
   ambiguousProducts,
+  productAnchors,
   isBrowseQuery,
   searchCapabilities,
   singular,
@@ -280,8 +281,25 @@ export function addCapabilityRegistryTools(
     "List the BrowserStack products this surface can reach: what each one does, the " +
       "entities it models, and a line saying what each entity is. START HERE — " +
       "searchCapability needs a product, and this is what tells you which one. If two " +
-      "products could both fit the task, ask the user rather than choosing for them.",
-    {},
+      "products could both fit the task, ask the user rather than choosing for them. " +
+      "ALWAYS pass the user's request, in their own words, as `query`: the answer then " +
+      "says outright whether the products clash over the words in it. WHEN IT REPORTS A " +
+      "CLASH — two products claiming the same word for different things — ASK THE USER " +
+      "WHICH PRODUCT THEY MEAN AND WAIT FOR THEIR ANSWER BEFORE SEARCHING OR INVOKING " +
+      "ANYTHING. The response carries the question to put to them and what the shared " +
+      "word means in each product. Choosing for them, or searching each product in turn " +
+      "and merging the results, is the failure this call exists to prevent.",
+    {
+      query: z
+        .string()
+        .optional()
+        .describe(
+          "The user's request, in their own words. With it the response carries a " +
+            "`routing` block saying whether the products share the vocabulary this " +
+            "request uses — and, when they do, the question to put to the user before " +
+            "searching either product.",
+        ),
+    },
     {
       title: "List Capability Products",
       readOnlyHint: true,
@@ -289,9 +307,56 @@ export function addCapabilityRegistryTools(
       idempotentHint: true,
       openWorldHint: false,
     },
-    async () => {
+    async ({ query }) => {
       track("listProducts");
+      // THE CLASH, STATED RATHER THAN LEFT TO BE NOTICED. The entity lists below carry
+      // the evidence — `report` under two products — but reading two lists and spotting
+      // the overlap is work an agent skips when it already has a product in mind. So the
+      // overlap is computed here and put at the top, with the question already written:
+      // the cheap failure is picking one silently, and this is the call that precedes it.
+      const ambiguity = query
+        ? ambiguousProducts(registry.index.products, query)
+        : { products: [], terms: [] };
+      const routing =
+        ambiguity.products.length > 1
+          ? {
+              verdict: "products_clash" as const,
+              note:
+                `These products clash over ${ambiguity.terms.map((t) => `'${t}'`).join(", ")} — ` +
+                `the same word means something different in ${ambiguity.products.join(" and ")}. ` +
+                "ASK THE USER which they mean before searching or invoking anything; do not " +
+                "search each product in turn and merge the results.",
+              shared_terms: ambiguity.terms,
+              products: ambiguity.products,
+              question: `Which product do you mean — ${ambiguity.products.join(" or ")}?`,
+              senses: ambiguity.products.map((name) => ({
+                product: name,
+                means: ambiguity.terms
+                  .map((term) => {
+                    const entities = registry.index.products[name]?.entities ?? {};
+                    const key = Object.keys(entities).find((candidate) =>
+                      [
+                        candidate,
+                        ...((entities[candidate].aliases as string[]) ?? []),
+                      ].some((word) => terms(word).map(singular).join(" ") === term),
+                    );
+                    return key
+                      ? { term, entity: key, description: entities[key].description }
+                      : undefined;
+                  })
+                  .filter(Boolean),
+              })),
+            }
+          : query
+            ? {
+                verdict: "no_clash" as const,
+                note:
+                  "No word in this request is claimed by more than one product, so the " +
+                  "entity lists below settle it without asking.",
+              }
+            : undefined;
       return ok({
+        ...(routing ? { routing } : {}),
         products: registry.productNames().map((name) => ({
           name,
           summary: registry.index.products[name].summary,
@@ -446,6 +511,16 @@ export function addCapabilityRegistryTools(
             "wrong one. Never search each product in turn and merge the results: that is " +
             "the guess this argument exists to prevent.",
         ),
+      user_words: z
+        .string()
+        .optional()
+        .describe(
+          "The USER'S OWN words, verbatim, that settle which product this is — either " +
+            "the product's name or a term only one product uses ('quality gate', 'test " +
+            "plan'). Quote them; do not paraphrase, and do not write words the user did " +
+            "not say. When a query could mean either product this is what lifts the " +
+            "refusal, because it is checked against the index rather than taken on trust.",
+        ),
       mode: z
         .enum(["read", "write", "destructive"])
         .optional()
@@ -466,7 +541,7 @@ export function addCapabilityRegistryTools(
       idempotentHint: true,
       openWorldHint: false,
     },
-    async ({ query, entity, product, product_choice, mode, limit, offset }) => {
+    async ({ query, entity, product, product_choice, user_words, mode, limit, offset }) => {
       // THE GATE. Nothing here can tell whether a human was asked — same as the write
       // gate, which also takes the caller's word. What it can do is refuse to answer a
       // question that is genuinely the user's, so that answering it anyway takes a
@@ -480,13 +555,63 @@ export function addCapabilityRegistryTools(
       // contains no word to be ambiguous about — `*` names nothing — so there is nothing
       // to ask, and asking anyway would block the one query whose whole purpose is to
       // show what a product contains.
-      if (
-        product_choice !== "user_confirmed" &&
-        !entity &&
-        !isBrowseQuery(query)
-      ) {
+      // PROTOTYPE (CAPABILITY_ROUTING_GATE=user_words): adjudicate instead of trusting.
+      //
+      // `product_choice` is the caller describing itself, and a caller that wants to
+      // proceed says user_confirmed — measured at 103 of 183 ambiguous prompts with no
+      // user input behind it, which skipped this gate entirely. So under the flag the
+      // ambiguity check runs whatever the flag says, and what lifts it is `user_words`:
+      // the user's own text, checked here against the index. Quoting the conversation is
+      // a claim the server can test; a boolean is not.
+      // `entity` USED TO BYPASS THIS TOO, and had no business doing so. An entity narrows
+      // WITHIN a product; it says nothing about WHICH product, and the four names both
+      // products carry — project, report, test_run, comment — are precisely the ones the
+      // clash is about. `entity: "report"` alongside a guessed product is the silent pick
+      // this gate exists to stop, stated more confidently, so it skipped the check at the
+      // exact moment the check mattered.
+      const adjudicate = process.env.CAPABILITY_ROUTING_GATE === "user_words";
+      const bypassed = adjudicate ? false : product_choice === "user_confirmed";
+      if (!bypassed && !isBrowseQuery(query)) {
         const ambiguity = ambiguousProducts(registry.index.products, query);
-        if (ambiguity.products.length > 1) {
+        const anchor = adjudicate
+          ? productAnchors(registry.index.products, user_words)
+          : { products: [], terms: [] };
+        // One product anchored, and it is the one being searched: the user settled it.
+        const settled =
+          anchor.products.length === 1 && anchor.products[0] === product;
+        if (adjudicate && ambiguity.products.length > 1 && !settled) {
+          const named = anchor.products.length > 0;
+          return refuse(
+            "searchCapability",
+            "product_ambiguous",
+            `'${query}' could mean ${ambiguity.products.join(" or ")} — ` +
+              `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
+              `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. ` +
+              (named
+                ? `The words you quoted (${anchor.terms.map((t) => `'${t}'`).join(", ")}) ` +
+                  `point at ${anchor.products.join(" and ")}, not ${product}. `
+                : user_words
+                  ? "Nothing in the words you quoted names a product or a term only one " +
+                    "product uses. "
+                  : "Send `user_words` — the user's OWN words naming the product, or a " +
+                    "term only one product uses — or ask them. ") +
+              "Put the choice to the USER in their own terms, wait for an answer, then " +
+              "resend with their words in `user_words`. Do NOT search each product in " +
+              "turn and merge the results.",
+            {
+              clarify: {
+                question: `Which product do you mean — ${ambiguity.products.join(" or ")}?`,
+                shared: ambiguity.terms,
+                options: ambiguity.products.map((name) => ({
+                  product: name,
+                  summary: registry.index.products[name]?.summary,
+                })),
+              },
+            },
+            { product: ambiguity.products.join("+") },
+          );
+        }
+        if (ambiguity.products.length > 1 && !adjudicate) {
           // EVERYTHING NEEDED TO ASK, IN THE REFUSAL. Telling the agent to go and call
           // listProducts costs a round trip and still leaves it composing a question out
           // of nothing — so it tends to guess instead, which is the behaviour being

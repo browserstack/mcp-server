@@ -73,15 +73,6 @@ export const RELAY_OFF_DETAILS: Record<string, string> = {
     "That is a bug on this side, not something you did; everything in `needs_approval` was " +
     "refused because of it.",
 
-  // Neither the human nor the client is the constraint here — the DEPLOYMENT is, and no
-  // change either of them can make will help.
-  remote_mode:
-    "NOBODY DECLINED THIS, AND YOUR CLIENT IS NOT THE PROBLEM. This BrowserStack MCP server " +
-    "is running in its hosted, multi-tenant mode, which has no way to put an approval " +
-    "prompt in front of you, so it ran read-only and everything in `needs_approval` was " +
-    "refused for that reason alone. Mid-run approval works when the server runs locally over stdio; retrying " +
-    "against this deployment will keep failing the same way.",
-
   // Not a refusal by anyone and not a relay problem at all: the account is not on the
   // product's agent flag. The product-specific sentence and what to do about it live in
   // `error`, so this one points there rather than duplicating the plumbing.
@@ -91,6 +82,19 @@ export const RELAY_OFF_DETAILS: Record<string, string> = {
     "refused before the agent started. `error` names the product. This is an entitlement on " +
     "the account, not a problem with your credentials and not a decision anyone made about " +
     "your request.",
+
+  // THE ONE CASE WHERE WE DO NOT KNOW. The decision was put on the wire and the reply
+  // never came back — a timeout, or a proxy cutting an idle connection. Since the
+  // converged gate the decision request carries the whole continuation, so "no reply"
+  // spans everything from "it never arrived" to "the write succeeded and we lost the
+  // answer". `not_reached` claims the first of those, which is exactly the claim that
+  // gets a write done twice, so this exists to stop the two being collapsed.
+  outcome_unknown:
+    "THE ANSWER WAS DELIVERED BUT ITS OUTCOME IS UNKNOWN. The approval reached " +
+    "BrowserStack and the reply was lost before it came back, so the step may or may " +
+    "not have completed. DO NOT repeat this task — a retry could perform the same " +
+    "change a second time. Check the state in the product, and only then decide " +
+    "whether anything still needs doing.",
 
   // The request never got as far as the agent. Distinct from `disabled` (the agent ran, with
   // the relay switched off) and from a decline (someone was asked and said no), because the
@@ -490,16 +494,6 @@ function relayVerdict(
       used: false,
       reason: "not_reached",
       detail: RELAY_OFF_DETAILS.not_reached,
-    };
-  }
-  // BEFORE `no_human`, deliberately, when both are true. In the hosted deployment even a
-  // client that CAN be prompted is of no use, so the deployment is the binding constraint and
-  // the one the reader can act on; telling them to switch clients would waste their time.
-  if (mode === "remote_mode") {
-    return {
-      used: false,
-      reason: "remote_mode",
-      detail: RELAY_OFF_DETAILS.remote_mode,
     };
   }
   if (mode === "no_human") {

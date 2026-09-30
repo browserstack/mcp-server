@@ -56,6 +56,15 @@ export const EVENT_RUN = "run";
 export const EVENT_PERMISSION = "permission";
 export const EVENT_RESULT = "result";
 
+/**
+ * The wire version this client speaks, sent in `permission_relay`. See
+ * `PermissionRelay.contract` for why Atlas cannot infer it.
+ *
+ * Bump only when a change leaves an older client unable to COMPLETE the exchange —
+ * not merely unaware of a new field.
+ */
+export const RELAY_CONTRACT = 2;
+
 /** Atlas's `f"perm-{uuid.uuid4().hex}"`, and nothing else. */
 export const PERM_ID_PATTERN = /^perm-[0-9a-f]{32}$/;
 
@@ -104,12 +113,15 @@ export type AgentStreamTransport = (
   body: AgentRequest,
 ) => AsyncIterable<StreamEvent>;
 
-/** Posts one decision. Separate seam because it is a separate connection. */
-export type DecisionTransport = (
-  url: string,
-  headers: Record<string, string>,
-  body: { perm_id: string; decision: string; reason: string },
-) => Promise<number>;
+/** What a decision POST carries. `product` is required: the run comes back on a fresh
+ *  Agent that has to be scoped to a harness before it can be built, and scoping is the
+ *  one thing that must not be re-derived from persisted state. */
+export interface DecisionBody {
+  perm_id: string;
+  decision: string;
+  reason: string;
+  product: string;
+}
 
 /**
  * Split a buffer into complete SSE frames, returning the leftover.
@@ -248,13 +260,38 @@ export function fetchAgentStreamTransport(
   };
 }
 
-/** The decision POST. 30s, because it is an ordinary short request. */
-export function fetchDecisionTransport(timeoutMs = 30_000): DecisionTransport {
+/** `POST /agent/{run_id}/permission`, built from the base URL the tool already resolved. */
+export function decisionUrl(agentUrl: string, runId: string): string {
+  return `${agentUrl.replace(/\/+$/, "")}/${encodeURIComponent(runId)}/permission`;
+}
+
+/**
+ * One POST, one JSON response, nothing held open.
+ *
+ * Used for BOTH calls of the two-call shape — the start (`POST /agent`) and every
+ * decision (`POST /agent/{run_id}/permission`) — because since the converged gate they
+ * answer the same thing: a parked run, or a finished one. A separate seam from the
+ * streaming transport because it is a different kind of call, not a different URL.
+ */
+export type DeferredTransport = (
+  url: string,
+  headers: Record<string, string>,
+  body: AgentRequest | DecisionBody,
+) => Promise<{ status: number; body: unknown }>;
+
+// Bounded by the WHOLE RUN, like the streaming transport, because that is what these
+// requests now contain. 120s was sized for a request that returned as soon as the run
+// parked; since the converged gate the DECISION request carries everything after the
+// approval — the write and the rest of the task — so the old bound cut off successful
+// runs partway and reported them as unreachable.
+export function fetchDeferredTransport(
+  timeoutMs = WHOLE_RUN_TIMEOUT_MS,
+): DeferredTransport {
   return async (url, headers, body) => {
     try {
-      // Through `apiClient` per rules/security.md. `raise_error: false` because the caller
-      // reads the STATUS: a 404 (run gone) and a 409 (already decided) are both answers,
-      // and a thrown AxiosError would collapse them into the unreachable case below.
+      // `raise_error: false` for the same reason the decision transport does it: the
+      // caller reads the STATUS, and a thrown AxiosError would collapse a 403
+      // (not entitled) and a 503 (delegation off) into the unreachable case below.
       const response = await apiClient.post<unknown>({
         url,
         headers,
@@ -262,17 +299,11 @@ export function fetchDecisionTransport(timeoutMs = 30_000): DecisionTransport {
         timeout: timeoutMs,
         raise_error: false,
       });
-      return response.status;
+      return { status: response.status, body: response.data };
     } catch {
-      // The gate on the far side is still waiting and will deny on its own expiry, so
-      // a lost decision is safe — it is never an approval. 0 says "never delivered" so
-      // the caller can say that rather than implying a human refused.
-      return 0;
+      // Same sentence as the streaming transport, and for the same reason: the upstream
+      // detail names our plumbing rather than anything the reader can act on.
+      throw new AskError("BrowserStack AI could not be reached");
     }
   };
-}
-
-/** `POST /agent/{run_id}/permission`, built from the base URL the tool already resolved. */
-export function decisionUrl(agentUrl: string, runId: string): string {
-  return `${agentUrl.replace(/\/+$/, "")}/${encodeURIComponent(runId)}/permission`;
 }

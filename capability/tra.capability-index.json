@@ -10941,7 +10941,8 @@
           "`name` is required; an empty name is a 400.",
           "Build-name scoping is the field `buildName` (SINGULAR) on this surface \u2014 the newer `create_project_alert` takes `buildNames` (plural). The rule set is `alertRules`, a flat set of rules each carrying its own `level`; the alert type is set by the integer `alertTypeId` (see list_alert_types).",
           "`notificationRules` is keyed by notifier type (SLACK / EMAIL), each mapping to lists of notifier resources.",
-          "Returns 201 CREATED with the new alert's integer `id`."
+          "Returns 201 CREATED with the new alert's integer `id`.",
+          "Live 2026-09-30 (dummy owner/Admin): with the Observability id the permission check 403s; with the TestHub id it passes the check but the handler then treats that TestHub id as an Observability project id and fails with 500 \u2014 so NO id value works on this route. Use the name-based twin."
         ],
         "path_params": [
           {
@@ -11069,7 +11070,8 @@
           "Requires the PROJECT_SETTING_FAILURE_CATEGORIES permission \u2014 403 otherwise.",
           "All four fields are required. `shortName` is max 4 characters, `longName` max 64, and `color` must match a hex colour (#RGB or #RRGGBB).",
           "`typeRef` names the PARENT built-in issue type this sub-type hangs under.",
-          "Returns 201 with {id, locator}. The string `locator` is how `update_failure_category_sub_types_by_integer_id` later identifies this sub-type."
+          "Returns 201 with {id, locator}. The string `locator` is how `update_failure_category_sub_types_by_integer_id` later identifies this sub-type.",
+          "Live 2026-09-30 (dummy owner/Admin): with the Observability id the permission check 403s; with the TestHub id it passes the check but the handler then treats that TestHub id as an Observability project id and fails with 500 \u2014 so NO id value works on this route. Use the name-based twin."
         ],
         "path_params": [
           {
@@ -11182,7 +11184,8 @@
           "`{projectId}` is the NUMERIC project id; requires the PROJECT_SETTING_ALERTS permission.",
           "Responds 201 CREATED (not 200) on a successful update \u2014 a quirk of the handler; do not read the non-200 status as a failure.",
           "Same body shape as create: `name` required, rule set in `alertRules` (flat, each with its own `level`), build scoping via `buildName` (SINGULAR).",
-          "Reversible by editing again; there is no version history to restore a prior state."
+          "Reversible by editing again; there is no version history to restore a prior state.",
+          "Live 2026-09-30 (dummy owner/Admin): with the Observability id the permission check 403s; with the TestHub id it passes the check but the handler then treats that TestHub id as an Observability project id and fails with 500 \u2014 so NO id value works on this route. Use the name-based twin."
         ],
         "path_params": [
           {
@@ -11272,7 +11275,8 @@
           "`{projectId}` is the NUMERIC project id; requires the PROJECT_SETTING_FAILURE_CATEGORIES permission.",
           "The body's top-level key is `ids`, but despite the name it is a NON-EMPTY list of full sub-type OBJECTS, not a list of bare ids. An empty list is rejected.",
           "Each item must carry its string `locator` (which sub-type to update) and `typeRef`, plus longName / shortName / color. shortName max 4, longName max 64, color must be hex.",
-          "Returns 200 with a `message`. Reversible only by updating again."
+          "Returns 200 with a `message`. Reversible only by updating again.",
+          "Live 2026-09-30 (dummy owner/Admin): with the Observability id the permission check 403s; with the TestHub id it passes the check but the handler then treats that TestHub id as an Observability project id and fails with 500 \u2014 so NO id value works on this route. Use the name-based twin."
         ],
         "path_params": [
           {
@@ -34218,7 +34222,8 @@
           "Its notifier mappings ARE hard-removed as part of the delete, so re-creating the alert later also means re-adding all of its recipients; use create_project_alert_by_integer_id to make a fresh one.",
           "Path takes the INTEGER project id and the numeric alert id. An alert whose id does not belong to this project, or an unknown id, returns not-found.",
           "Requires the PROJECT_SETTING_ALERTS permission on the project; otherwise forbidden.",
-          "Returns {message: \"Alert delete operation completed successfully.\"}."
+          "Returns {message: \"Alert delete operation completed successfully.\"}.",
+          "Live 2026-09-30 (dummy owner/Admin): with the Observability id the permission check 403s; with the TestHub id it passes the check but the handler then treats that TestHub id as an Observability project id and fails with 500 \u2014 so NO id value works on this route. Use the name-based twin."
         ]
       },
       {

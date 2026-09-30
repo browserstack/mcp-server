@@ -33543,7 +33543,8 @@
           "No request body is read \u2014 the uuid in the path is the only input.",
           "Sets a Redis flag keyed on the build NAME (<buildName>_RERUN) with a 1-hour (3600s) TTL, so the linking window closes after an hour and the flag applies to any build sharing that name, not just this uuid.",
           "Returns the plain string 'Saved!' (not JSON).",
-          "An unknown uuid throws a raw IllegalArgumentException ('launch doesn't exist') rather than a structured 404."
+          "An unknown uuid throws a raw IllegalArgumentException ('launch doesn't exist') rather than a structured 404.",
+          "PRODUCT FINDING (source + live 2026-09-30): the flag is written but never read \u2014 BuildService.getReRunValue() is the only reader of <buildName>_RERUN and it has no callers in observability-api, and observability-pipeline does not read the key. A build with the same name started within the hour is NOT linked as a re-run (reRun:false, new build number). Treat this call as a no-op."
         ]
       },
       {

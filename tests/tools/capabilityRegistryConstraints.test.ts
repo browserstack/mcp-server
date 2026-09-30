@@ -233,8 +233,51 @@ describe("compatibility with an index that declares no constraints", () => {
     // value the caller never chose on the request, and pin a server-side default that is
     // free to change.
     const withDefault = withBody({ name: "page", type: "integer", default: 1 });
-    expect(bind(withDefault, { body: {} }).body).toBeUndefined();
+    // An explicit empty body stays an empty body — but never gains the default.
+    expect(bind(withDefault, { body: {} }).body).toEqual({});
+    expect(bind(withDefault, {}).body).toBeUndefined();
     expect(bind(withDefault, { body: { page: 5 } }).body).toEqual({ page: 5 });
+  });
+});
+
+describe("empty bodies", () => {
+  it("keeps an explicitly supplied {} on a body-carrying method", () => {
+    // TRA close_build requires a @RequestBody and its guidance says to send {}; dropping
+    // it sent no body and the route answered 400 "Invalid request payload".
+    const post = withBody({ name: "close", type: "boolean" });
+    expect(bind(post, { body: {} }).body).toEqual({});
+  });
+
+  it("still sends no body when the caller supplied none", () => {
+    expect(
+      bind(withBody({ name: "x", type: "string" }), {}).body,
+    ).toBeUndefined();
+  });
+
+  it("never attaches a body to GET", () => {
+    const get = { ...withBody({ name: "x", type: "string" }), method: "GET" };
+    expect(bind(get as Capability, { body: {} }).body).toBeUndefined();
+  });
+});
+
+describe("integers beyond 2^53", () => {
+  const id: WireParam = { name: "errorId", type: "integer" };
+
+  it("keeps the exact digits instead of rounding to a neighbouring id", () => {
+    // A 17-digit TRA unique-error cluster id: Number() would round it.
+    const big = "12345678901234567";
+    expect(String(Number(big))).not.toBe(big); // precondition: Number() really rounds it
+    expect(call(withBody(id), { errorId: big }).body).toEqual({ errorId: big });
+  });
+
+  it("still returns a number for safe integers", () => {
+    expect(call(withBody(id), { errorId: "42" }).body).toEqual({ errorId: 42 });
+  });
+
+  it("still rejects a non-integer", () => {
+    expect(() => call(withBody(id), { errorId: "1.5" })).toThrow(
+      "must be a whole number",
+    );
   });
 });
 
@@ -286,12 +329,14 @@ describe("a path value cannot retarget the request", () => {
   // up a segment and PATCH landed on the PROJECT while the human had approved editing one
   // test case — with the approval already given. Empty and `.` collapse the segment the
   // same way. None of these fail the type check: the parameter is a bare `string`.
-  it.each([["..", "traversal"], [".", "current segment"], ["", "empty"], ["  ..  ", "padded traversal"]])(
-    "refuses %j (%s)",
-    (id) => {
-      expect(() => bindPath(id)).toThrow(/not a usable path value/);
-    },
-  );
+  it.each([
+    ["..", "traversal"],
+    [".", "current segment"],
+    ["", "empty"],
+    ["  ..  ", "padded traversal"],
+  ])("refuses %j (%s)", (id) => {
+    expect(() => bindPath(id)).toThrow(/not a usable path value/);
+  });
 
   it("still binds an ordinary identifier", () => {
     const bound = bind(withPathParam(param), {

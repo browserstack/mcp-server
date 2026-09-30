@@ -275,6 +275,17 @@ function coerceType(
         `'${label}' must be a whole number, not ${JSON.stringify(raw)}`,
       );
     }
+    // Past 2^53 `Number` rounds: TRA's 17-digit unique-error cluster ids came back as a
+    // neighbouring id, so the call silently targeted the wrong cluster. Keep the caller's
+    // exact digits instead — path and query serialise a string identically, and a JSON body
+    // carrying a digit string still binds to a Long on the server.
+    if (
+      expected === "integer" &&
+      !Number.isSafeInteger(parsed) &&
+      /^-?\d+$/.test(raw)
+    ) {
+      return raw;
+    }
     return parsed;
   }
   if (expected === "boolean") {
@@ -437,5 +448,15 @@ export function bind(
       `path placeholder(s) not supplied: ${leftover.join(", ")}`,
     );
   }
-  return { path, query, body: Object.keys(body).length > 0 ? body : undefined };
+  // An explicitly supplied empty body is still a body. Dropping it sent no request body at
+  // all, and a route with a required @RequestBody (TRA close_build, whose guidance says to
+  // send `{}`) answered 400 "Invalid request payload". GET/HEAD never carry one.
+  const sentEmptyBody =
+    args.body !== undefined &&
+    !["GET", "HEAD"].includes(capability.method.toUpperCase());
+  return {
+    path,
+    query,
+    body: Object.keys(body).length > 0 || sentEmptyBody ? body : undefined,
+  };
 }

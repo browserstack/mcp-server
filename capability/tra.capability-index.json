@@ -15316,7 +15316,8 @@
           "The path value is the NUMERIC build id even though the route sits under /sessions and sibling routes there take a session hashed id.",
           "Public-link aware: when a public-link token header (Public-Link-Token or X-Public-Link-Token) is present, RUNNING sessions are excluded from what the viewer can see.",
           "Accepts the full FilterParamsV2 query filter set (search, sessionStatus, browserList, osList, deviceList, testTags, and more) plus SortBy (sortParam/sortOrder) and page; the response is the pass-through TestHub session listing.",
-          "On the demo sandbox environment this returns canned sessions."
+          "On the demo sandbox environment this returns canned sessions.",
+          "SECRET-BEARING: each session carries inputCapabilities exactly as the test sent them, which can include credentials (live 2026-09-30: iOS App Automate caps carried keychainPassword). Treat the body as sensitive; responses on large builds are also very large (31 sessions \u2248 90 KB)."
         ],
         "responses": {
           "200": {
@@ -27929,7 +27930,8 @@
           "Only counts test runs in `pending` status for the caller's group; a build with no pending runs on that device+OS will not appear.",
           "Returns `{data: []}` (empty list) when nothing matches \u2014 that is a normal 'tier not saturated' result, not an error.",
           "Each build in `data` carries `parallelsUsed` \u2014 the count of unique parallel sessions that build is consuming on the combination.",
-          "This route does NOT accept username+access-key auth."
+          "This route does NOT accept username+access-key auth.",
+          "Live 2026-09-30: a running non-SDK App Automate (plain Appium) session on the queried device/OS did NOT appear (data:[]) \u2014 the listing counts TRA test runs in pending status, which non-SDK sessions do not create."
         ],
         "responses": {
           "200": {

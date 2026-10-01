@@ -119,3 +119,28 @@ describe("an unusable config still writes the row", () => {
     expect(recorded[0].error_message).toBe("Failed to list test cases");
   });
 });
+
+describe("redaction stays fast on pathological input", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const { apiClient } = await import("../../src/lib/apiClient.js");
+    (apiClient.post as any).mockClear();
+  });
+
+  it.each([
+    ["a long alphanumeric run", "A".repeat(50000)],
+    ["a long dotted-number run", "1.".repeat(20000)],
+    ["a long jwt-like prefix", "eyJ" + "A".repeat(20000)],
+  ])("handles %s without stalling", async (_label, payload) => {
+    const started = Date.now();
+    await run(() => errorResult(payload));
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(await rows()).toHaveLength(1);
+  });
+
+  it("still redacts once the input is capped", async () => {
+    await run(() => errorResult("x".repeat(3000) + " contact priya@acme.io"));
+    const [row] = await rows();
+    expect(row.error_message).not.toContain("priya@acme.io");
+  });
+});

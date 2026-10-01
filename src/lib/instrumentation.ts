@@ -119,16 +119,25 @@ export function trackMCP(
   sendEvent(event, config);
 }
 
+const MAX_SCRUB_INPUT = 2000;
+
 /**
  * Shape-only redaction, so a product's error text cannot carry a credential or an
  * address into analytics. Mirrors the capability registry's rules; no word lists.
+ * Every quantifier is bounded and the input is capped: an unbounded run of
+ * alphanumerics made this quadratic, and 50KB of them blocked the loop for 2.2s.
  */
 function scrub(text: string): string {
-  return text
-    .replace(/\/\/[^/\s:@]+:[^/\s:@]+@/g, "//[redacted]@")
-    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[email]")
-    .replace(/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[token]")
-    .replace(/\b(?:[A-Z0-9]{20,}|[A-Za-z0-9_-]{32,})\b/g, "[token]")
+  const bounded =
+    text.length > MAX_SCRUB_INPUT ? text.slice(0, MAX_SCRUB_INPUT) : text;
+  return bounded
+    .replace(/\/\/[^/\s:@]{1,64}:[^/\s:@]{1,64}@/g, "//[redacted]@")
+    .replace(/[\w.+-]{1,64}@[\w-]{1,63}\.[\w.-]{1,63}/g, "[email]")
+    .replace(
+      /\beyJ[A-Za-z0-9_-]{8,512}\.[A-Za-z0-9_-]{1,512}\.[A-Za-z0-9_-]{1,512}/g,
+      "[token]",
+    )
+    .replace(/\b(?:[A-Z0-9]{20,128}|[A-Za-z0-9_-]{32,128})\b/g, "[token]")
     .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, "[ip]")
     .replace(/\s+/g, " ")
     .trim();

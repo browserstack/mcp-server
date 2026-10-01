@@ -32,13 +32,13 @@ const RULES: Rule[] = [
   },
   {
     name: "email",
-    pattern: /\b[\w.%+-]+@[\w.-]+\.[a-z]{2,}\b/gi,
+    pattern: /\b[\w.%+-]{1,128}@[\w.-]{1,128}\.[a-z]{2,24}\b/gi,
     replacement: "[email]",
   },
   // JWT: three base64url segments.
   {
     name: "jwt",
-    pattern: /\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}\b/g,
+    pattern: /\beyJ[\w-]{8,1024}\.[\w-]{8,1024}\.[\w-]{8,1024}\b/g,
     replacement: "[token]",
   },
   // A long opaque run — access keys, API keys, session ids. Requires BOTH a digit and a
@@ -49,7 +49,7 @@ const RULES: Rule[] = [
   {
     name: "opaque_token",
     pattern:
-      /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{20,}\b/g,
+      /\b(?=[A-Za-z0-9_-]{0,256}\d)(?=[A-Za-z0-9_-]{0,256}[A-Za-z])[A-Za-z0-9_-]{20,256}\b/g,
     replacement: "[token]",
   },
   {
@@ -62,7 +62,7 @@ const RULES: Rule[] = [
   {
     name: "phone",
     pattern:
-      /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{3,5}[\s.-]\d{3,5}(?:[\s.-]\d{2,5})?\b/g,
+      /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\b\d{3,5}[\s.-]\d{3,5}(?:[\s.-]\d{2,5})?\b/g,
     replacement: "[phone]",
   },
   // Long bare digit runs: account ids, card numbers, unseparated phone numbers.
@@ -91,7 +91,11 @@ export const MAX_LENGTH = 512;
 export function redact(text: unknown): string | undefined {
   try {
     if (typeof text !== "string") return undefined;
-    let out = text.replace(/\s+/g, " ").trim();
+    // Bound the working window before the rules run: they are linear on ordinary text
+    // but a multi-KB run of digits backtracks, and a tool's error text can be a stack
+    // trace. Generous enough that nothing inside MAX_LENGTH is affected.
+    const SCAN_LIMIT = MAX_LENGTH * 8;
+    let out = text.slice(0, SCAN_LIMIT).replace(/\s+/g, " ").trim();
     if (!out) return undefined;
 
     for (const rule of RULES) out = out.replace(rule.pattern, rule.replacement);

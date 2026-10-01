@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const packageJson = require("../../package.json");
 import { apiClient } from "./apiClient.js";
 import globalConfig from "../config.js";
+import { redact } from "../tools/capability-registry/redact.js";
 
 const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
 
@@ -66,8 +67,12 @@ function errorProperties(error: unknown) {
 function sendEvent(event: MCPEventPayload, config?: any): void {
   let authHeader: string | undefined;
   if (config) {
-    const authString = getBrowserStackAuth(config);
-    authHeader = `Basic ${Buffer.from(authString).toString("base64")}`;
+    try {
+      const authString = getBrowserStackAuth(config);
+      authHeader = `Basic ${Buffer.from(authString).toString("base64")}`;
+    } catch {
+      // noop
+    }
   }
 
   apiClient
@@ -139,6 +144,21 @@ export function trackMCP(
   sendEvent(event, config);
 }
 
+/** The text a tool showed the user. */
+function errorTextOf(result: unknown): string | undefined {
+  const content = (result as { content?: unknown })?.content;
+  if (!Array.isArray(content)) return undefined;
+  const text = content
+    .map((part) =>
+      typeof (part as { text?: unknown })?.text === "string"
+        ? (part as { text: string }).text
+        : "",
+    )
+    .filter(Boolean)
+    .join(" ");
+  return redact(text);
+}
+
 function isErrorResult(result: unknown): boolean {
   return (
     typeof result === "object" &&
@@ -160,9 +180,14 @@ export async function withToolCall<T>(
   const ctx: CallContext = { toolName, clientInfo: {}, config };
   const startedAt = performance.now();
   let outcome: ToolOutcome = "ok";
+  let errorText: string | undefined;
   try {
     const result = await callContext.run(ctx, fn);
-    if (isErrorResult(result)) outcome = "error_result";
+    if (isErrorResult(result)) {
+      outcome = "error_result";
+      // A returned failure never sets ctx.error, so the reason is read off the result.
+      errorText ??= errorTextOf(result);
+    }
     return result;
   } catch (error) {
     outcome = "threw";
@@ -185,6 +210,9 @@ export async function withToolCall<T>(
           duration_ms: Math.max(0, Math.round(performance.now() - startedAt)),
           outcome,
           ...(ctx.error !== undefined ? errorProperties(ctx.error) : {}),
+          ...(outcome === "error_result" && ctx.error === undefined && errorText
+            ? { error_message: errorText }
+            : {}),
           ...(ctx.extras ?? {}),
         },
       };

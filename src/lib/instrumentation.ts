@@ -49,8 +49,12 @@ function errorProperties(error: unknown) {
 function sendEvent(event: MCPEventPayload, config?: any): void {
   let authHeader: string | undefined;
   if (config) {
-    const authString = getBrowserStackAuth(config);
-    authHeader = `Basic ${Buffer.from(authString).toString("base64")}`;
+    try {
+      const authString = getBrowserStackAuth(config);
+      authHeader = `Basic ${Buffer.from(authString).toString("base64")}`;
+    } catch {
+      // noop
+    }
   }
 
   apiClient

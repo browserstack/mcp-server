@@ -100,3 +100,22 @@ describe("the recorded message is not truncated", () => {
     expect(row.error_message.length).toBeGreaterThan(1000);
   });
 });
+
+describe("an unusable config still writes the row", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const { apiClient } = await import("../../src/lib/apiClient.js");
+    (apiClient.post as any).mockClear();
+  });
+
+  it("sends unauthenticated rather than dropping the event", async () => {
+    const { withToolCall } = await import("../../src/lib/instrumentation.js");
+    await withToolCall("myTool", () => ({ name: "vitest" }), {} as any, () =>
+      errorResult("Failed to list test cases"),
+    );
+
+    const recorded = await rows();
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].error_message).toBe("Failed to list test cases");
+  });
+});

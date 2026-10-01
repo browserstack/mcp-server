@@ -215,7 +215,7 @@ describe("capability registry, end to end through the server factory", () => {
     const search = server.getTools().searchCapability as any;
     const run = async (args: Record<string, unknown>) => {
       const r = await search.handler(
-        { product: "tm", product_choice: "not_asked", ...args },
+        { product: "tm", ...args },
         {} as any,
       );
       return { blocked: r.isError === true, body: JSON.parse(r.content[0].text) };
@@ -239,11 +239,21 @@ describe("capability registry, end to end through the server factory", () => {
       expect((await run({ query })).blocked, query).toBe(false);
     }
 
-    // One way out, and it is explicit: the user answered.
+    // ONE WAY OUT, AND IT IS NOT A FLAG. `product_choice: 'user_confirmed'` used to open
+    // this gate, which made the gate a formality: the schema published the value, and the
+    // caller wrote it on every ambiguous prompt with nothing behind it. What opens it now
+    // is the user's own words, checked against the index rather than taken on trust.
+    expect(
+      (await run({
+        query: "list all projects",
+        user_words: "the test management one",
+      })).blocked,
+    ).toBe(false);
+    // And a flag by that name buys nothing, because there is no longer such an argument.
     expect(
       (await run({ query: "list all projects", product_choice: "user_confirmed" }))
         .blocked,
-    ).toBe(false);
+    ).toBe(true);
 
     // `entity` IS NOT A WAY OUT, and used to be. It narrows within a product and says
     // nothing about which product — and the four names both products carry (project,

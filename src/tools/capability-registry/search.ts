@@ -588,6 +588,12 @@ export interface ProductAmbiguity {
   products: string[];
   /** The shared vocabulary that caused it — what to put in front of the user. */
   terms: string[];
+  /** The one product the query's own words point at, when they point at exactly one. */
+  settled?: string;
+  /** The words that pointed there — the evidence for `settled`. */
+  because?: string[];
+  /** No word in the request belongs to ANY product: there is nothing to route on. */
+  unknown?: boolean;
 }
 
 /**
@@ -640,6 +646,19 @@ export function ambiguousProducts(
     }
   }
 
+  // WORDS A PRODUCT OWNS WITHOUT MODELLING THEM. `routing_terms` is how a product claims
+  // what its users call it, as opposed to what it contains, and unlike a summary it MAY
+  // introduce a term: that is the whole point of it, since the words most in need of
+  // routing — `flaky` — are the ones no index names an entity after.
+  for (const [product, index] of Object.entries(products)) {
+    for (const word of index.routing_terms ?? []) {
+      const key = fold(String(word));
+      if (!key) continue;
+      if (!owners.has(key)) owners.set(key, new Set());
+      owners.get(key)!.add(product);
+    }
+  }
+
   // THE SUMMARY CAN ADD A CLAIMANT, NEVER A TERM.
   //
   // A product that models `view` as an entity and one that only describes views in its
@@ -662,6 +681,7 @@ export function ambiguousProducts(
 
   const shared = new Map<string, Set<string>>();
   const decided = new Set<string>();
+  const decidedBy = new Map<string, string[]>();
   for (const [key, claimants] of owners) {
     if (!asked_.includes(` ${key} `)) continue;
     // A word this domain uses in every other sentence settles nothing and clashes over
@@ -676,15 +696,36 @@ export function ambiguousProducts(
       // shared noun the user actually said stopped being examined. Worse, a sentence
       // carrying one-product words for BOTH products read as settled, which is the case
       // most in need of asking.
-      if (!GENERIC_ANCHORS.has(key)) decided.add([...claimants][0]);
+      if (!GENERIC_ANCHORS.has(key)) {
+        const owner = [...claimants][0];
+        decided.add(owner);
+        decidedBy.set(owner, [...(decidedBy.get(owner) ?? []), key]);
+      }
       continue;
     }
     shared.set(key, claimants);
   }
+  // NOTHING RECOGNISED IS THE MOST AMBIGUOUS CASE, NOT THE LEAST.
+  //
+  // "Can we ship this?", "What should we fix first?", "Show me the failed tests." — no
+  // word in them is any product's, so the shared-term check finds nothing and used to
+  // report the same calm verdict it gives a request that genuinely settles itself. These
+  // are the requests with the least to go on, and answering them for a product nobody
+  // chose is exactly the guess this whole check exists to stop.
+  if (shared.size === 0 && decided.size === 0)
+    return { ...none, unknown: true };
   if (shared.size === 0) return none;
   // One product, and only one, is pointed at by the unshared words: the sentence answers
-  // itself and there is nothing to ask.
-  if (decided.size === 1) return none;
+  // itself and there is nothing to ask. It is still worth SAYING which one, because the
+  // caller sees only that nothing needs asking — "tell me about this project, including
+  // its settings" settles on the product that models settings, and an answer of silence
+  // let the other one be searched instead, which is the same wrong turn by a quieter route.
+  if (decided.size === 1)
+    return {
+      ...none,
+      settled: [...decided][0],
+      because: (decidedBy.get([...decided][0]) ?? []).sort(),
+    };
 
   const claimed = new Set<string>();
   for (const claimants of shared.values())
@@ -937,7 +978,10 @@ export function productAnchors(
   // name, so only the leading clause before ':' is used — "BrowserStack Test Management",
   // "BrowserStack Test Reporting & Analytics (TRA, aka Test Observability)".
   for (const [product, index] of Object.entries(products)) {
-    const names = [product, ...(index.summary ?? "").split(":")[0].split(/[(),]/)];
+    const names = [
+      product,
+      ...(index.summary ?? "").split(":")[0].split(/[(),]/),
+    ];
     for (const name of names) {
       // "aka Test Observability" is the product's other name with a connective in front
       // of it; the user types the name, not the connective.
@@ -960,6 +1004,17 @@ export function productAnchors(
       }
     }
   }
+  // The same words `ambiguousProducts` routes on, so a term that settles the question
+  // there also anchors the product here — otherwise `flaky` names a product in one half
+  // of the check and nothing at all in the other.
+  for (const [product, index] of Object.entries(products)) {
+    for (const word of index.routing_terms ?? []) {
+      const key = fold(String(word));
+      if (!key) continue;
+      if (!owners.has(key)) owners.set(key, new Set());
+      owners.get(key)!.add(product);
+    }
+  }
   const matched: { key: string; product: string }[] = [];
   for (const [key, claimants] of owners) {
     if (claimants.size !== 1) continue;
@@ -974,7 +1029,11 @@ export function productAnchors(
     // Longest match wins. "test management" and "test" both match the same sentence, and
     // only the longer one carries the user's meaning — counting both makes a settled
     // question look ambiguous again.
-    if (matched.some((other) => other.key !== key && ` ${other.key} `.includes(` ${key} `)))
+    if (
+      matched.some(
+        (other) => other.key !== key && ` ${other.key} `.includes(` ${key} `),
+      )
+    )
       continue;
     claim(product, key);
   }

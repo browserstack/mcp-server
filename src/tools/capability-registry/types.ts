@@ -290,6 +290,19 @@ export interface AuthScheme {
 export interface ProductIndex {
   summary: string;
   /**
+   * Words that route to this product but are not the name of anything in it.
+   *
+   * The entity names and their aliases are what a product CONTAINS; this is what its users
+   * CALL it when they ask for something. `flaky` is the clearest case: both indexes talk
+   * about flakiness and neither models it as an entity, so the word was invisible to
+   * routing and a question about it read as naming no product at all. The other half is
+   * the reverse — `workspace`, `team`, `setting` and `suite` belong to both products and
+   * happen to be modelled by one, which let an incidental word settle a question it had no
+   * business settling. Listing a word here is a claim about vocabulary only; it never adds
+   * a capability and never widens a search.
+   */
+  routing_terms?: string[];
+  /**
    * How to authenticate to this product. Absent means the historical default: the caller's
    * credentials as `Api-Token: {username}:{access_key}`, which is what every shipped index
    * relies on today.

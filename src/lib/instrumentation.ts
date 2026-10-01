@@ -13,6 +13,21 @@ export type ClientInfo = { name?: string; version?: string };
 
 export type ToolOutcome = "ok" | "error_result" | "threw";
 
+/**
+ * Coarse, chartable bucket for why a call failed. Free-text messages differ per tool and
+ * per upstream, so the bucket is what a dashboard groups on; `error_message` carries the
+ * detail behind it.
+ */
+export type ErrorKind =
+  | "auth"
+  | "not_found"
+  | "rate_limited"
+  | "validation"
+  | "timeout"
+  | "network"
+  | "server_error"
+  | "unknown";
+
 interface MCPEventPayload {
   event_type: string;
   event_properties: {
@@ -26,6 +41,7 @@ interface MCPEventPayload {
     is_remote?: boolean;
     duration_ms?: number;
     outcome?: ToolOutcome;
+    error_kind?: ErrorKind;
   };
 }
 
@@ -115,6 +131,73 @@ export function trackMCP(
   sendEvent(event, config);
 }
 
+const MAX_ERROR_MESSAGE = 300;
+
+/**
+ * Shape-only redaction, so a product's error text cannot carry a credential or an
+ * address into analytics. Mirrors the capability registry's rules; no word lists.
+ */
+function scrub(text: string): string {
+  return text
+    .replace(/\/\/[^/\s:@]+:[^/\s:@]+@/g, "//[redacted]@")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[email]")
+    .replace(/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[token]")
+    .replace(/\b(?:[A-Z0-9]{20,}|[A-Za-z0-9_-]{32,})\b/g, "[token]")
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, "[ip]")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** The text a tool showed the user, which is where a returned failure explains itself. */
+function errorTextOf(result: unknown): string | undefined {
+  const content = (result as { content?: unknown })?.content;
+  if (!Array.isArray(content)) return undefined;
+  const text = content
+    .map((part) =>
+      typeof (part as { text?: unknown })?.text === "string"
+        ? (part as { text: string }).text
+        : "",
+    )
+    .filter(Boolean)
+    .join(" ");
+  const cleaned = scrub(text);
+  return cleaned ? cleaned.slice(0, MAX_ERROR_MESSAGE) : undefined;
+}
+
+/** Buckets a failure so it can be charted; the message keeps the detail. */
+export function classifyError(text: string | undefined): ErrorKind {
+  if (!text) return "unknown";
+  const t = text.toLowerCase();
+  if (/\b(429|rate limit|too many requests|throttl)/.test(t))
+    return "rate_limited";
+  if (
+    /\b(401|403|unauthor|forbidden|invalid credential|access denied|permission denied)/.test(
+      t,
+    )
+  )
+    return "auth";
+  if (/\b(404|not found|does not exist|no such )/.test(t)) return "not_found";
+  if (/\b(timed out|timeout|etimedout|deadline exceeded)/.test(t))
+    return "timeout";
+  if (
+    /\b(econnrefused|econnreset|enotfound|socket hang up|network error|getaddrinfo)/.test(
+      t,
+    )
+  )
+    return "network";
+  if (
+    /\b(5\d{2}\b|internal server error|bad gateway|service unavailable)/.test(t)
+  )
+    return "server_error";
+  if (
+    /\b(400|422|invalid|must be|required|unknown (path_params|body|query)|missing )/.test(
+      t,
+    )
+  )
+    return "validation";
+  return "unknown";
+}
+
 function isErrorResult(result: unknown): boolean {
   return (
     typeof result === "object" &&
@@ -136,9 +219,15 @@ export async function withToolCall<T>(
   const ctx: CallContext = { toolName, clientInfo: {}, config };
   const startedAt = performance.now();
   let outcome: ToolOutcome = "ok";
+  let errorText: string | undefined;
   try {
     const result = await callContext.run(ctx, fn);
-    if (isErrorResult(result)) outcome = "error_result";
+    if (isErrorResult(result)) {
+      outcome = "error_result";
+      // A tool that RETURNS its failure never sets ctx.error, so without this the row
+      // records that the call failed and nothing about why.
+      errorText ??= errorTextOf(result);
+    }
     return result;
   } catch (error) {
     outcome = "threw";
@@ -161,6 +250,16 @@ export async function withToolCall<T>(
           duration_ms: Math.max(0, Math.round(performance.now() - startedAt)),
           outcome,
           ...(ctx.error !== undefined ? errorProperties(ctx.error) : {}),
+          ...(outcome === "error_result" && ctx.error === undefined && errorText
+            ? { error_message: errorText, error_type: "ToolError" }
+            : {}),
+          ...(outcome !== "ok"
+            ? {
+                error_kind: classifyError(
+                  ctx.error instanceof Error ? ctx.error.message : errorText,
+                ),
+              }
+            : {}),
         },
       };
       sendEvent(event, ctx.config ?? config);

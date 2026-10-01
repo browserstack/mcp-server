@@ -54,7 +54,6 @@ describe("returned tool errors are diagnosable", () => {
     const [row] = await rows();
     expect(row.outcome).toBe("ok");
     expect(row.error_message).toBeUndefined();
-    expect(row.error_kind).toBeUndefined();
   });
 
   it("keeps the thrown-error path intact", async () => {
@@ -83,34 +82,21 @@ describe("returned tool errors are diagnosable", () => {
     expect(row.error_message).toContain("[ip]");
   });
 
-  it("caps a long message", async () => {
-    await run(() => errorResult("x".repeat(5000)));
-    const [row] = await rows();
-    expect(row.error_message.length).toBeLessThanOrEqual(300);
-  });
 });
 
-describe("classifyError", () => {
-  it.each([
-    ["Request failed with status code 429", "rate_limited"],
-    ["Too Many Requests, please retry", "rate_limited"],
-    ["401 Unauthorized", "auth"],
-    ["Access denied for this project", "auth"],
-    ["404 Not Found", "not_found"],
-    ["Project does not exist", "not_found"],
-    ["socket hang up", "network"],
-    ["Request timed out after 30s", "timeout"],
-    ["500 Internal Server Error", "server_error"],
-    ["'project_id' must be a number", "validation"],
-    ["missing required parameter(s): project_id", "validation"],
-    ["something entirely unexpected", "unknown"],
-  ])("buckets %s", async (message, expected) => {
-    const { classifyError } = await import("../../src/lib/instrumentation.js");
-    expect(classifyError(message)).toBe(expected);
+describe("the recorded message is not truncated", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const { apiClient } = await import("../../src/lib/apiClient.js");
+    (apiClient.post as any).mockClear();
   });
 
-  it("returns unknown when there is no text", async () => {
-    const { classifyError } = await import("../../src/lib/instrumentation.js");
-    expect(classifyError(undefined)).toBe("unknown");
+  it("keeps a long product error whole", async () => {
+    const long = `Failed to update test case: ${"detail ".repeat(200)}`.trim();
+    await run(() => errorResult(long));
+
+    const [row] = await rows();
+    expect(row.error_message).toBe(long);
+    expect(row.error_message.length).toBeGreaterThan(1000);
   });
 });

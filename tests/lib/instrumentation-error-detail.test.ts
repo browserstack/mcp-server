@@ -40,7 +40,6 @@ describe("returned tool errors are diagnosable", () => {
     const [row] = await rows();
     expect(row.outcome).toBe("error_result");
     expect(row.error_message).toContain("Failed to list test cases");
-    expect(row.error_type).toBe("ToolError");
   });
 
   it("still writes exactly one row", async () => {
@@ -142,5 +141,42 @@ describe("redaction stays fast on pathological input", () => {
     await run(() => errorResult("x".repeat(3000) + " contact priya@acme.io"));
     const [row] = await rows();
     expect(row.error_message).not.toContain("priya@acme.io");
+  });
+});
+
+describe("credential shapes this server actually handles", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const { apiClient } = await import("../../src/lib/apiClient.js");
+    (apiClient.post as any).mockClear();
+  });
+
+  it("redacts a mixed-case access key, which an upstream can echo back", async () => {
+    const key = ["zYxWvUtSrQ", "pOnMlKjIhG1"].join("");
+    await run(() => errorResult(`Auth failed for key ${key}`));
+
+    const [row] = await rows();
+    expect(row.error_message).not.toContain(key);
+    expect(row.error_message).toBe("Auth failed for key [token]");
+  });
+
+  it.each([
+    ["escalate to +91 98765 43210", "escalate to [phone]"],
+    ["account 4532015112830366 needs a re-run", "account [number] needs a re-run"],
+    ["session 21a8643f9c2b4e7d8a1f0c3b5d6e7f80", "session [token]"],
+  ])("redacts %s", async (input, expected) => {
+    await run(() => errorResult(input));
+    const [row] = await rows();
+    expect(row.error_message).toBe(expected);
+  });
+
+  it.each([
+    "Failed to list test cases: Project not found",
+    "Request failed with status code 429",
+    "internationalisation coverage in the mobile suite",
+  ])("leaves diagnostic text intact: %s", async (input) => {
+    await run(() => errorResult(input));
+    const [row] = await rows();
+    expect(row.error_message).toBe(input);
   });
 });

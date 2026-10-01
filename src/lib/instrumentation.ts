@@ -122,25 +122,36 @@ export function trackMCP(
 const MAX_SCRUB_INPUT = 2000;
 
 /**
- * Shape-only redaction, so a product's error text cannot carry a credential or an
- * address into analytics. Mirrors the capability registry's rules; no word lists.
- * Every quantifier is bounded and the input is capped: an unbounded run of
- * alphanumerics made this quadratic, and 50KB of them blocked the loop for 2.2s.
+ * Strip the PII and credentials we can identify by SHAPE, before error text is recorded.
+ *
+ * These are the capability registry's rules. A name has no shape and passes through:
+ * this REDUCES exposure, it does not eliminate it. Every quantifier is bounded and the
+ * input is capped, because an unbounded run of alphanumerics made this quadratic and
+ * 50KB of them blocked the event loop for 2.2s.
  */
 function scrub(text: string): string {
   const bounded =
     text.length > MAX_SCRUB_INPUT ? text.slice(0, MAX_SCRUB_INPUT) : text;
-  return bounded
-    .replace(/\/\/[^/\s:@]{1,64}:[^/\s:@]{1,64}@/g, "//[redacted]@")
-    .replace(/[\w.+-]{1,64}@[\w-]{1,63}\.[\w.-]{1,63}/g, "[email]")
-    .replace(
-      /\beyJ[A-Za-z0-9_-]{8,512}\.[A-Za-z0-9_-]{1,512}\.[A-Za-z0-9_-]{1,512}/g,
-      "[token]",
-    )
-    .replace(/\b(?:[A-Z0-9]{20,128}|[A-Za-z0-9_-]{32,128})\b/g, "[token]")
-    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, "[ip]")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    bounded
+      .replace(/\b(https?:\/\/)[^\s/@]{1,64}:[^\s/@]{1,64}@/gi, "$1[redacted]@")
+      .replace(/\b[\w.%+-]{1,64}@[\w.-]{1,63}\.[a-z]{2,24}\b/gi, "[email]")
+      .replace(/\beyJ[\w-]{8,512}\.[\w-]{8,512}\.[\w-]{8,512}\b/g, "[token]")
+      // Needs BOTH a digit and a letter, so a 20-char mixed-case access key is caught
+      // while "internationalisation" is not.
+      .replace(
+        /\b(?=[A-Za-z0-9_-]{0,128}\d)(?=[A-Za-z0-9_-]{0,128}[A-Za-z])[A-Za-z0-9_-]{20,128}\b/g,
+        "[token]",
+      )
+      .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[ip]")
+      .replace(
+        /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{3,5}[\s.-]\d{3,5}(?:[\s.-]\d{2,5})?\b/g,
+        "[phone]",
+      )
+      .replace(/\b\d{9,}\b/g, "[number]")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 /** The text a tool showed the user, which is where a returned failure explains itself. */
@@ -212,7 +223,7 @@ export async function withToolCall<T>(
           outcome,
           ...(ctx.error !== undefined ? errorProperties(ctx.error) : {}),
           ...(outcome === "error_result" && ctx.error === undefined && errorText
-            ? { error_message: errorText, error_type: "ToolError" }
+            ? { error_message: errorText }
             : {}),
         },
       };

@@ -122,39 +122,31 @@ export function trackMCP(
 const MAX_SCRUB_INPUT = 2000;
 
 /**
- * Strip the PII and credentials we can identify by SHAPE, before error text is recorded.
- *
- * These are the capability registry's rules. A name has no shape and passes through:
- * this REDUCES exposure, it does not eliminate it. Every quantifier is bounded and the
- * input is capped, because an unbounded run of alphanumerics made this quadratic and
- * 50KB of them blocked the event loop for 2.2s.
+ * Strip PII and credentials identifiable by shape. A name has no shape and passes
+ * through: this reduces exposure, it does not eliminate it.
  */
 function scrub(text: string): string {
   const bounded =
     text.length > MAX_SCRUB_INPUT ? text.slice(0, MAX_SCRUB_INPUT) : text;
-  return (
-    bounded
-      .replace(/\b(https?:\/\/)[^\s/@]{1,64}:[^\s/@]{1,64}@/gi, "$1[redacted]@")
-      .replace(/\b[\w.%+-]{1,64}@[\w.-]{1,63}\.[a-z]{2,24}\b/gi, "[email]")
-      .replace(/\beyJ[\w-]{8,512}\.[\w-]{8,512}\.[\w-]{8,512}\b/g, "[token]")
-      // Needs BOTH a digit and a letter, so a 20-char mixed-case access key is caught
-      // while "internationalisation" is not.
-      .replace(
-        /\b(?=[A-Za-z0-9_-]{0,128}\d)(?=[A-Za-z0-9_-]{0,128}[A-Za-z])[A-Za-z0-9_-]{20,128}\b/g,
-        "[token]",
-      )
-      .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[ip]")
-      .replace(
-        /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{3,5}[\s.-]\d{3,5}(?:[\s.-]\d{2,5})?\b/g,
-        "[phone]",
-      )
-      .replace(/\b\d{9,}\b/g, "[number]")
-      .replace(/\s+/g, " ")
-      .trim()
-  );
+  return bounded
+    .replace(/\b(https?:\/\/)[^\s/@]{1,64}:[^\s/@]{1,64}@/gi, "$1[redacted]@")
+    .replace(/\b[\w.%+-]{1,64}@[\w.-]{1,63}\.[a-z]{2,24}\b/gi, "[email]")
+    .replace(/\beyJ[\w-]{8,512}\.[\w-]{8,512}\.[\w-]{8,512}\b/g, "[token]")
+    .replace(
+      /\b(?=[A-Za-z0-9_-]{0,128}\d)(?=[A-Za-z0-9_-]{0,128}[A-Za-z])[A-Za-z0-9_-]{20,128}\b/g,
+      "[token]",
+    )
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[ip]")
+    .replace(
+      /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{3,5}[\s.-]\d{3,5}(?:[\s.-]\d{2,5})?\b/g,
+      "[phone]",
+    )
+    .replace(/\b\d{9,}\b/g, "[number]")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-/** The text a tool showed the user, which is where a returned failure explains itself. */
+/** The text a tool showed the user. */
 function errorTextOf(result: unknown): string | undefined {
   const content = (result as { content?: unknown })?.content;
   if (!Array.isArray(content)) return undefined;
@@ -196,8 +188,7 @@ export async function withToolCall<T>(
     const result = await callContext.run(ctx, fn);
     if (isErrorResult(result)) {
       outcome = "error_result";
-      // A tool that RETURNS its failure never sets ctx.error, so without this the row
-      // records that the call failed and nothing about why.
+      // A returned failure never sets ctx.error, so the reason is read off the result.
       errorText ??= errorTextOf(result);
     }
     return result;

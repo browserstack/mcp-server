@@ -62,7 +62,7 @@ describe("searchCapability withholds the product names", () => {
   });
 });
 
-describe("the user_words gate (CAPABILITY_ROUTING_GATE=user_words)", () => {
+describe("the user_words gate", () => {
   const FIXTURE = fileURLToPath(
     new URL("../fixtures/registry-index.json", import.meta.url),
   );
@@ -104,7 +104,13 @@ describe("the user_words gate (CAPABILITY_ROUTING_GATE=user_words)", () => {
     expect(src).toMatch(/const token = mintClashToken\(\)/);
     expect(src).toMatch(/openClashes\.has\(resume_token\)/);
     expect(src).toMatch(/openClashes\.delete\(resume_token!\)/);
-    expect(src).toMatch(/reopened = adjudicate && !settled && openClashes\.size > 0/);
+    expect(src).toMatch(
+      /reopened =\s*\n?\s*routable && !settled && !ambiguity\.settled && openClashes\.size > 0/,
+    );
+    // AND IT IS NOT BEHIND A FLAG. A gate that only ever runs when an env var is set is a
+    // second code path nobody exercises; the one that was measured is the one that ships.
+    expect(src).not.toMatch(/CAPABILITY_ROUTING_GATE/);
+    expect(src).not.toMatch(/\badjudicate\b/);
   });
 });
 

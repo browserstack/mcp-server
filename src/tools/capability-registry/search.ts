@@ -714,7 +714,17 @@ export function ambiguousProducts(
   // chose is exactly the guess this whole check exists to stop.
   if (shared.size === 0 && decided.size === 0)
     return { ...none, unknown: true };
-  if (shared.size === 0) return none;
+  // Decided, with no shared word anywhere in it — "bulk delete test cases". There is
+  // nothing to ask about, and saying WHICH product it landed on matters as much here as
+  // it does below: a caller that only hears "no clash" can still search the other one.
+  if (shared.size === 0)
+    return decided.size === 1
+      ? {
+          ...none,
+          settled: [...decided][0],
+          because: (decidedBy.get([...decided][0]) ?? []).sort(),
+        }
+      : none;
   // One product, and only one, is pointed at by the unshared words: the sentence answers
   // itself and there is nothing to ask. It is still worth SAYING which one, because the
   // caller sees only that nothing needs asking — "tell me about this project, including

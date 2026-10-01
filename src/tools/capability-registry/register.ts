@@ -204,20 +204,6 @@ export function addCapabilityRegistryTools(
   const tools: Record<string, RegisteredTool> = {};
 
   /**
-   * Clashes already raised on this connection, by the shared words that caused them.
-   *
-   * A refusal the caller can walk away from is advice, not a gate: measured, the agent
-   * treated one as a single failed call, reworded the query, and the next phrasing no
-   * longer carried the shared word — so the same request completed on a product nobody
-   * chose. Remembering the WORDS rather than the sentence is what survives the rewording,
-   * since `report` is still `report` however the sentence around it is rebuilt.
-   *
-   * Cleared when the caller names a product the words actually anchor: that is the answer
-   * the refusal asked for, and the question stops being open.
-   */
-  const raisedClashes = new Set<string>();
-
-  /**
    * Tokens minted by a product_ambiguous refusal and not yet spent.
    *
    * Remembering the clashing WORDS catches a reworded retry only while the rewording
@@ -371,7 +357,9 @@ export function addCapabilityRegistryTools(
       // call that raised it, and `user_words` is what closes it.
       if (query) settledByListing = ambiguity.settled;
       const listingToken =
-        query && (ambiguity.products.length > 1 || ambiguity.unknown)
+        query &&
+        registry.productNames().length > 1 &&
+        (ambiguity.products.length > 1 || ambiguity.unknown)
           ? mintClashToken()
           : undefined;
       const routing =
@@ -674,8 +662,6 @@ export function addCapabilityRegistryTools(
       // contains no word to be ambiguous about — `*` names nothing — so there is nothing
       // to ask, and asking anyway would block the one query whose whole purpose is to
       // show what a product contains.
-      // PROTOTYPE (CAPABILITY_ROUTING_GATE=user_words): adjudicate instead of trusting.
-      //
       // `product_choice` is the caller describing itself, and a caller that wants to
       // proceed says user_confirmed — measured at 103 of 183 ambiguous prompts with no
       // user input behind it, which skipped this gate entirely. So under the flag the
@@ -701,7 +687,6 @@ export function addCapabilityRegistryTools(
           { product },
         );
       }
-      const adjudicate = process.env.CAPABILITY_ROUTING_GATE === "user_words";
       if (!isBrowseQuery(query)) {
         // JUDGE THE USER'S WORDS, NOT THE AGENT'S REWRITE.
         //
@@ -743,18 +728,60 @@ export function addCapabilityRegistryTools(
         // A clash raised earlier is still open until it is answered, whatever this call's
         // wording looks like. Without this, a reworded query reads as unambiguous and the
         // refusal is simply routed around.
-        const reopened = adjudicate && !settled && openClashes.size > 0;
+        // NOTHING TO ASK WHEN THERE IS NOTHING TO CHOOSE BETWEEN. A registry serving one
+        // product cannot route a request to the wrong one, so every refusal below is a
+        // question with a single possible answer — pure obstruction.
+        const routable = registry.productNames().length > 1;
+        // AN OPEN CLASH IS ABOUT THE REQUEST THAT RAISED IT, NOT EVERY LATER ONE. It has
+        // to outlive a REWORDING of that request — the escape it exists to close — while
+        // leaving a genuinely different request alone: "bulk delete test cases" names a
+        // thing only one product has, and blocking it because something earlier in the
+        // conversation was ambiguous is obstruction, not routing. A request whose own
+        // words settle it is therefore not the unanswered one.
+        const reopened =
+          routable && !settled && !ambiguity.settled && openClashes.size > 0;
         // NOTHING RECOGNISED IS NOT PERMISSION TO PICK. A request carrying no product's
         // vocabulary is the least settled kind there is, and it used to pass this gate
         // untouched because there was no shared word in it to object to.
-        const blank = adjudicate && ambiguity.unknown && !settled;
+        const blank = routable && ambiguity.unknown && !settled;
         if (
-          adjudicate &&
+          routable &&
           (ambiguity.products.length > 1 || reopened || blank) &&
           !settled
         ) {
-          for (const term of ambiguity.terms) raisedClashes.add(term);
           const token = mintClashToken();
+          // WHAT TO ASK, NOT JUST THAT ASKING IS NEEDED. Sending the caller back to
+          // listProducts costs a round trip and still leaves it composing a question out
+          // of nothing — so it tends to guess instead, which is the behaviour being
+          // stopped. What makes the choice answerable is what each product CALLS the
+          // shared word and what it means there.
+          const choices = ambiguity.products.length
+            ? ambiguity.products
+            : registry.productNames();
+          const options = choices.map((name) => {
+            const entities = registry.index.products[name]?.entities ?? {};
+            const senses = ambiguity.terms
+              .map((term) => {
+                const key = Object.keys(entities).find((candidate) =>
+                  [
+                    candidate,
+                    ...((entities[candidate].aliases as string[]) ?? []),
+                  ].some(
+                    (word) => terms(word).map(singular).join(" ") === term,
+                  ),
+                );
+                const doc = key ? entities[key] : undefined;
+                return doc
+                  ? { term, entity: key as string, means: doc.description }
+                  : undefined;
+              })
+              .filter(Boolean);
+            return {
+              product: name,
+              summary: registry.index.products[name]?.summary,
+              ...(senses.length ? { shared_terms: senses } : {}),
+            };
+          });
           const named = anchor.products.length > 0;
           return refuse(
             "searchCapability",
@@ -781,83 +808,14 @@ export function addCapabilityRegistryTools(
             {
               resume_token: token,
               clarify: {
-                question: `Which product do you mean — ${(ambiguity.products
-                  .length
-                  ? ambiguity.products
-                  : registry.productNames()
-                ).join(" or ")}?`,
+                question: `Which product do you mean — ${choices.join(" or ")}?`,
                 shared: ambiguity.terms,
-                options: (ambiguity.products.length
-                  ? ambiguity.products
-                  : registry.productNames()
-                ).map((name) => ({
-                  product: name,
-                  summary: registry.index.products[name]?.summary,
-                })),
+                options,
               },
             },
             { product: ambiguity.products.join("+") || "none" },
           );
         }
-        if (ambiguity.products.length > 1 && !adjudicate) {
-          // EVERYTHING NEEDED TO ASK, IN THE REFUSAL. Telling the agent to go and call
-          // listProducts costs a round trip and still leaves it composing a question out
-          // of nothing — so it tends to guess instead, which is the behaviour being
-          // stopped. What makes the choice answerable is what each product calls the
-          // shared word and what it means THERE: tm's project owns folders and test
-          // cases, Load Testing's does not.
-          const options = ambiguity.products.map((name) => {
-            const entities = registry.index.products[name]?.entities ?? {};
-            const senses = ambiguity.terms
-              .map((term) => {
-                const key = Object.keys(entities).find((candidate) =>
-                  [
-                    candidate,
-                    ...((entities[candidate].aliases as string[]) ?? []),
-                  ].some(
-                    (word) => terms(word).map(singular).join(" ") === term,
-                  ),
-                );
-                const doc = key ? entities[key] : undefined;
-                return doc
-                  ? { term, entity: key as string, means: doc.description }
-                  : undefined;
-              })
-              .filter(Boolean);
-            return {
-              product: name,
-              summary: registry.index.products[name]?.summary,
-              ...(senses.length ? { shared_terms: senses } : {}),
-            };
-          });
-          return refuse(
-            "searchCapability",
-            "product_ambiguous",
-            `'${subject}' could mean ${ambiguity.products.join(" or ")} — ` +
-              `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
-              `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. ` +
-              "Put the choice in `clarify` to the USER in their own terms, wait for an " +
-              "answer, then resend with their words in `user_words`. Do NOT search " +
-              "each product in turn and merge the results — that answers the question " +
-              "instead of asking it.",
-            {
-              clarify: {
-                question: `Which product do you mean — ${ambiguity.products.join(" or ")}?`,
-                shared: ambiguity.terms,
-                options,
-              },
-            },
-            { product: ambiguity.products.join("+") },
-          );
-        }
-      }
-
-      // The user named a product the words anchor, so the question this gate asked has been
-      // answered; a later search for the same words is no longer the unanswered one.
-      if (adjudicate && user_words?.trim()) {
-        const answered = productAnchors(registry.index.products, user_words);
-        if (answered.products.length === 1 && answered.products[0] === product)
-          for (const term of answered.terms) raisedClashes.delete(term);
       }
 
       const { hits, weak, top_matched, ...rest } = searchCapabilities(

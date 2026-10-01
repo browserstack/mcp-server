@@ -1,0 +1,104 @@
+{
+  "empty_2xx": [
+    "list_test_case_templates",
+    "merge_tags"
+  ],
+  "index": "capability/tm.capability-index.json",
+  "no_2xx": [
+    "generate_test_case_automation"
+  ],
+  "unbacked": {
+    "apply_test_case_review_verdict": [
+      "review_status",
+      "reviewers"
+    ],
+    "create_dataset": [
+      "metadata",
+      "tags"
+    ],
+    "create_exploratory_session_log": [
+      "hashed_id"
+    ],
+    "create_project": [
+      "permissions",
+      "user_role"
+    ],
+    "create_root_folder": [
+      "cases_count",
+      "group_id",
+      "id",
+      "is_automation",
+      "name",
+      "notes",
+      "parent_id",
+      "project_id",
+      "sub_folders_count",
+      "total_cases_count"
+    ],
+    "create_shared_step": [
+      "tags"
+    ],
+    "create_sub_folder": [
+      "cases_count",
+      "group_id",
+      "id",
+      "is_automation",
+      "name",
+      "notes",
+      "parent_id",
+      "project_id",
+      "sub_folders_count",
+      "total_cases_count"
+    ],
+    "delete_folder_and_contents": [
+      "cases_count",
+      "group_id",
+      "id",
+      "is_automation",
+      "links",
+      "name",
+      "parent_id",
+      "project_id",
+      "sub_folders_count",
+      "total_cases_count"
+    ],
+    "delete_folder_and_subtree": [
+      "cases_count",
+      "group_id",
+      "id",
+      "is_automation",
+      "links",
+      "name",
+      "parent_id",
+      "project_id",
+      "sub_folders_count",
+      "total_cases_count"
+    ],
+    "get_test_case_linked_issues": [
+      "test_run_results"
+    ],
+    "list_activity_events": [
+      "actor_id",
+      "actor_name"
+    ],
+    "list_exploratory_session_logs": [
+      "hashed_id"
+    ],
+    "list_test_results_for_test_case_by_integer_id": [
+      "custom_fields_count"
+    ],
+    "search_test_cases_by_folder": [
+      "id",
+      "identifier",
+      "name"
+    ],
+    "submit_test_cases_for_review": [
+      "review_sent_date",
+      "review_status",
+      "reviewers"
+    ],
+    "update_latest_test_result_for_test_case": [
+      "custom_fields_count"
+    ]
+  }
+}

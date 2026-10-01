@@ -76,14 +76,16 @@ interface AtlasCall {
 /**
  * A fake Atlas speaking CONTRACT v2 (A1).
  *
- * The shape change from A2 is the whole point and it is visible right here: this stub no
- * longer dials back into the tool. It streams `run`, then a `permission` frame per
- * scripted ask, then one `result` — and each ask is held open until the tool answers it
- * on a SEPARATE `POST /agent/{run_id}/permission`, which lands on this same stub.
+ * THE STREAM NO LONGER WAITS. It used to hold each ask open until the tool answered it
+ * on a separate POST, because Atlas's gate was a blocked coroutine on the far end of
+ * that socket. The ask parks in a checkpoint now, so the stream emits `run`, the ask it
+ * parked on, and a `needs_approval` result — then ENDS. The decision POST is what
+ * carries the run forward, and it answers 200 with whatever happened next: another park,
+ * or the finished run.
  *
- * Every assertion these tests make is about `relay.ts` and `buildResult`, which A1 does
- * not touch. Repointing this one function is therefore the whole migration: if the
- * behaviour those tests pin were transport-dependent, that would be the bug.
+ * Every assertion these tests make is about `relay.ts` and `buildResult`, which none of
+ * that touches. Repointing this one function is the whole migration: if the behaviour
+ * those tests pin were transport-dependent, that would be the bug.
  */
 function atlas(options: {
   asks?: { perm_id: string; description: string }[];
@@ -91,7 +93,7 @@ function atlas(options: {
   throws?: boolean;
   authStatus?: number;
   authError?: string;
-  /** Answer the decision POST with something other than 204. */
+  /** Answer the decision POST with something other than 200. */
   decisionStatus?: number;
   /** Reply to `POST /agent` with plain JSON, as an Atlas that predates A1 does. */
   json?: boolean;
@@ -101,7 +103,20 @@ function atlas(options: {
   const mints: Record<string, string>[] = [];
   const RUN_ID = "run-" + "a".repeat(32);
   const encoder = new TextEncoder();
-  let answered: ((body: unknown) => void) | null = null;
+
+  /** The finished run's payload — the script's own, or a plain success. */
+  const payloadFor = () =>
+    options.payload
+      ? options.payload(decisions)
+      : { status: "ok", answer: "done", needs_approval: [] };
+
+  /** What Atlas answers with while a run is parked. */
+  const parkPayload = (ask: { perm_id: string; description: string }) => ({
+    ok: false,
+    status: "needs_approval",
+    run_id: RUN_ID,
+    asks: [{ ...ask, product: "tm", mode: "ask-always" }],
+  });
 
   const frame = (event: string, data: unknown) =>
     encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -128,25 +143,23 @@ function atlas(options: {
       );
     }
 
-    // The decision endpoint. Recording it and releasing the stream is what makes this
-    // an A1 round trip rather than a scripted playback.
+    // The decision endpoint, which now CARRIES THE RUN FORWARD: its reply is the next
+    // park or the finished run, so this is where the rest of the script plays out.
     if (/\/agent\/[^/]+\/permission$/.test(String(url))) {
       const body = JSON.parse(init.body);
-      const status = options.decisionStatus ?? 204;
+      const status = options.decisionStatus ?? 200;
       decisions.push({ status, body });
-      answered?.(body);
-      answered = null;
-      return { ok: status < 300, status, headers: { get: () => "" }, json: async () => null };
+      if (status !== 200) {
+        return jsonResponse(status, { detail: "no such run" });
+      }
+      const remaining = (options.asks || []).slice(decisions.length);
+      return jsonResponse(200, remaining.length ? parkPayload(remaining[0]) : payloadFor());
     }
 
     const body = JSON.parse(init.body);
     calls.push({ url: String(url), headers: init.headers, body });
     if (options.throws) throw new Error("connection reset");
 
-    const payloadFor = () =>
-      options.payload
-        ? options.payload(decisions)
-        : { status: "ok", answer: "done", needs_approval: [] };
 
     // No relay asked for, or an Atlas that does not know A1: a plain JSON body. The
     // tool's stream transport degrades to a single `result`, which is exactly how it
@@ -155,25 +168,20 @@ function atlas(options: {
       return jsonResponse(200, payloadFor());
     }
 
+    const first = (options.asks || [])[0];
     const stream = new ReadableStream({
-      async start(controller) {
+      start(controller) {
         controller.enqueue(frame("run", { run_id: RUN_ID }));
-        for (const ask of options.asks || []) {
-          const wait = new Promise<unknown>((resolve) => {
-            answered = resolve;
-          });
+        if (first) {
+          // ONE ask, then the run parks and the stream ends. A second ask cannot exist
+          // yet — the gate is serial — and it arrives on the decision's reply instead.
           controller.enqueue(
-            frame("permission", {
-              ...ask,
-              product: body.product,
-              mode: "ask-always",
-            }),
+            frame("permission", { ...first, product: body.product, mode: "ask-always" }),
           );
-          // Held open deliberately: Atlas's gate blocks here, and a stub that raced
-          // ahead would test a sequence the real server cannot produce.
-          await wait;
+          controller.enqueue(frame("result", parkPayload(first)));
+        } else {
+          controller.enqueue(frame("result", payloadFor()));
         }
-        controller.enqueue(frame("result", payloadFor()));
         controller.close();
       },
     });
@@ -340,7 +348,11 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // there is nothing to dial; no per-run bearer, because there is no inbound
       // connection to authenticate. That absence is the fix — the URL this used to
       // carry was a loopback address a pod could never reach.
-      expect(stub.calls[0].body.permission_relay).toEqual({ mode: "stream" });
+      // `contract` rides along: it is what lets Atlas tell this client from every
+      // published build that cannot complete an approval, and its absence makes Atlas
+      // refuse to park rather than hand back an ask nobody can answer.
+      expect(stub.calls[0].body.permission_relay)
+        .toEqual({ mode: "stream", contract: 2 });
 
       // 2. the prompt: framed with the product, Atlas's description verbatim, boolean confirm
       expect(elicit).toHaveBeenCalledTimes(1);
@@ -361,8 +373,11 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       // 3. the answer on the wire, echoing Atlas's own id
       expect(stub.decisions[0])
-        // 204: v2 §3.3, the decision endpoint has nothing to return.
-        .toEqual({ status: 204, body: { perm_id: PERM_A, decision: "allow", reason: "" } });
+        // 200, and the body carries `product`: the decision request is what resumes the
+        // run, and the run comes back on a fresh Agent that must be scoped before it
+        // can be built.
+        .toEqual({ status: 200, body: {
+          perm_id: PERM_A, decision: "allow", reason: "", product: "tm" } });
 
       // 4. the result
       expect(payload.ok).toBe(true);
@@ -407,7 +422,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(elicit).toHaveBeenCalledTimes(1);
       // On the wire to Atlas: an allow, not a denial.
       expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "allow", reason: "" });
+        .toEqual({ perm_id: PERM_A, decision: "allow", reason: "", product: "tm" });
       // And the two trails agree that it was approved.
       expect(payload.approvals[0]).toMatchObject({ decision: "allow", applied: true });
       expect(payload.elicitations[0]).toMatchObject({ decision: "allow", reason: "" });
@@ -465,7 +480,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const { payload } = await call(server.getTools());
 
       expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "declined" });
+        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "declined", product: "tm" });
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(payload.status).toBe("blocked");
       expect(payload.approvals[0].reason).toBe("declined");
@@ -481,7 +496,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
       expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "declined" });
+        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "declined", product: "tm" });
       expect(payload.approvals[0].decision).toBe("deny");
     });
 
@@ -495,7 +510,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // This is the security property: an unattended run cannot self-approve, and a second
       // prompt would only be an attempt to wear a human down.
       expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "cancelled" });
+        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "cancelled", product: "tm" });
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(payload.approvals[0].reason).toBe("cancelled");
     });
@@ -509,7 +524,8 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
       expect(stub.decisions[0])
-        .toEqual({ status: 204, body: { perm_id: PERM_A, decision: "deny", reason: "timeout" } });
+        .toEqual({ status: 200, body: {
+          perm_id: PERM_A, decision: "deny", reason: "timeout", product: "tm" } });
       expect(payload.approvals[0].reason).toBe("timeout");
     });
 
@@ -555,7 +571,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // out its 300s gate. The invariant is the same and it is the one that matters: a
       // broken channel never becomes an approval.
       expect(stub.decisions[0].body).toEqual({
-        perm_id: PERM_A, decision: "deny", reason: "error",
+        perm_id: PERM_A, decision: "deny", reason: "error", product: "tm",
       });
       expect(payload.approvals[0]).toEqual({
         description: "Archive the plan.", decision: "deny", reason: "error",
@@ -563,16 +579,16 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       });
     });
 
-    it("does not retry or fail the run when a decision is refused", async () => {
-      // The A1 replacement for A2's "a stray local process cannot present the run's
-      // token". That hazard is GONE: nothing dials in, so there is no inbound
+    it("never re-sends a decision Atlas refused, and never calls it a success", async () => {
+      // The A1 hazard this replaces is GONE: nothing dials in, so there is no inbound
       // connection to authenticate and no per-run bearer to steal. Atlas authorises the
-      // decision instead, on the attested JWT plus an unguessable run_id (v2 §3.1).
+      // decision on the attested JWT plus an unguessable run_id (v2 §3.1).
       //
-      // What remains on this side is the opposite risk: a decision Atlas refuses (409
-      // already-decided, 404 stale) must not be re-sent. A retry could land an approval
-      // on a step the run has already moved past. Losing it is safe — Atlas's gate
-      // denies on its own expiry — so we log and carry on.
+      // What remains is that a refused decision must not be RE-SENT — a retry could land
+      // an approval on a step the run has already moved past. What CHANGED is that it can
+      // no longer be shrugged off: the decision request is the one that carries the run
+      // forward, so if it was refused the run did not advance, and reporting "ok" would
+      // claim an answer nobody produced.
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [
         { action: "accept" },
@@ -585,7 +601,8 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const { payload } = await call(server.getTools());
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(stub.decisions).toHaveLength(1);      // sent once, never re-sent
-      expect(payload.status).toBe("ok");           // and the run still completed
+      expect(payload.ok).toBe(false);
+      expect(payload.status).not.toBe("ok");
     });
 
     it("says some steps applied before it stopped", async () => {
@@ -1178,106 +1195,33 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
   });
 
   describe("REMOTE_MCP — the hosted deployment must not attempt the relay", () => {
-    /**
-     * `appConfig` reads `process.env.REMOTE_MCP` once at module load, so the whole graph is
-     * re-imported with the env in place — the same trick `tests/lib/tm-base-url.test.ts` uses.
-     */
-    async function buildRemoteServer() {
-      vi.resetModules();
-      process.env.REMOTE_MCP = "true";
-      const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
-      return new BrowserStackMcpServer(CONFIG);
-    }
+    // `buildRemoteServer` lived here. It built a whole server with REMOTE_MCP set, for
+    // the two tests that asserted the hosted deployment REFUSES — both gone with
+    // `remote_mode`. What remains reaches into `addAskBrowserStackAITool` directly,
+    // which is cheaper and asserts the transport rather than the refusal.
 
     afterEach(() => {
       delete process.env.REMOTE_MCP;
       vi.resetModules();
     });
 
-    it("never binds a listener, omits permission_relay, and says why", async () => {
-      const server = await buildRemoteServer();
-      // A client that CAN be prompted — this is the case where remote_mode has to beat
-      // no_human, because switching clients would not help.
-      const elicit = fakeClient(server.getInstance(), { roots: {}, elicitation: {} }, []);
-      const stub = atlas({
-        payload: () => ({
-          ok: true, status: "blocked", answer: "I could not create the folder.", steps: [],
-          needs_approval: ["Create folder \"Regression\"."],
-        }),
-      });
+    // The two tests that stood here asserted the OPPOSITE behaviour: that the hosted
+    // deployment refuses, omits `permission_relay` entirely and explains that mid-run
+    // approval only works over stdio. That was true while relaying meant elicitation,
+    // which needs one live McpServer per session. The hosted deployment defers now, so
+    // it asks like any other — and `remote_mode` is gone with the sentence.
 
-      const { result, payload } = await call(server.getTools());
-
-      // 1. nothing was offered to Atlas
-      expect("permission_relay" in stub.calls[0].body).toBe(false);
-      expect(Object.keys(stub.calls[0].body).sort())
-        .toEqual(["product", "task", "user_id"]);
-      // 2. nothing was ever asked
-      expect(elicit).not.toHaveBeenCalled();
-      // 3. the result blames the deployment, not the human and not the client
-      expect(payload.permission_relay).toEqual({
-        used: false,
-        reason: "remote_mode",
-        detail: expect.stringContaining("hosted, multi-tenant mode"),
-      });
-      expect(payload.permission_relay.detail)
-        .not.toMatch(/does not support MCP elicitation/);
-      // 4. a read-only run is not a tool failure
-      expect(result.isError).toBeUndefined();
-      expect(payload.needs_approval).toEqual(["Create folder \"Regression\"."]);
-    });
-
-    it("offers no relay at all — `permission_relay` is never put on the body", async () => {
-      // Not "offered and left to fail on an ask nobody can be shown": never offered. The
-      // ask channel A1 uses needs a server-initiated elicitation, which the stateless
-      // hosted `/mcp` cannot do across replicas (v2 §5).
+    it("sends the deferred block on the request/response transport", async () => {
+      // The refusal above is about the HOST: a stateless host cannot deliver an
+      // elicitation answer to the instance waiting for it. The fix is NOT to make the
+      // host stateful and elicit anyway — that is what forced sessions, ingress affinity
+      // and a session cap onto the hosted deployment. It is to stop suspending: Atlas
+      // returns at its first ask, and the caller comes back with the decision.
       //
-      // Asserted through the injected seam rather than a module spy, so a negative result
-      // means the code did not send it — not that the spy failed to attach. The positive
-      // control below is what makes this assertion mean anything.
+      // So remote mode selects `deferred`, and the request goes over the
+      // REQUEST/RESPONSE transport rather than the stream — there is no stream to hold.
       vi.resetModules();
       process.env.REMOTE_MCP = "true";
-      const { addAskBrowserStackAITool } = await import(
-        "../../src/tools/ask-browserstack/register.js"
-      );
-      const { McpServer: RemoteMcpServer } = await import(
-        "@modelcontextprotocol/sdk/server/mcp.js"
-      );
-
-      const streamed = vi.fn(() => ({
-        async *[Symbol.asyncIterator]() {
-          yield { event: "result", data: { status: "ok", answer: "" } };
-        },
-      }));
-
-      const remote = new RemoteMcpServer({ name: "t", version: "0" });
-      vi.spyOn(remote.server, "getClientCapabilities")
-        .mockReturnValue({ elicitation: {} } as never);
-      const tools = addAskBrowserStackAITool(remote, {
-        agentUrl: () => "https://atlas.example/agent",
-        mintToken: async () => MINTED,
-        credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
-        streamTransport: streamed as never,
-      });
-
-      const { payload } = await call(tools);
-      // A1 binds nothing anywhere, so "never bound a port" is no longer the property to
-      // assert — it is now true by construction. What still matters, and is what this
-      // guarded all along, is that the hosted deployment OFFERS no relay: the ask
-      // channel it would get cannot survive being spread across replicas (v2 §5).
-      expect("permission_relay" in (streamed.mock.calls[0] as never as unknown[])[2]!).toBe(false);
-      expect(payload.permission_relay.reason).toBe("remote_mode");
-    });
-
-    it("DOES offer the relay in remote mode once the operator opts in", async () => {
-      // The refusal above is about the HOST, not this tool: a stateless host cannot
-      // deliver an elicitation answer to the instance waiting for it. Once the host keeps
-      // one server per session (verified against the hosted Streamable HTTP server,
-      // browserstack/remote-mcp-server#96) the refusal is wrong, so it is opt-in rather
-      // than absolute.
-      vi.resetModules();
-      process.env.REMOTE_MCP = "true";
-      process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY = "true";
       try {
         const { addAskBrowserStackAITool } = await import(
           "../../src/tools/ask-browserstack/register.js"
@@ -1293,29 +1237,63 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         const remote = new RemoteMcpServer({ name: "t", version: "0" });
         vi.spyOn(remote.server, "getClientCapabilities")
           .mockReturnValue({ elicitation: {} } as never);
+        const deferred = vi.fn(async () => ({
+          status: 200,
+          body: {
+            status: "needs_approval",
+            run_id: "run-abc",
+            asks: [{
+              perm_id: "perm-" + "a".repeat(32),
+              product: "tm",
+              mode: "ask-always",
+              description: "Creating the new project",
+            }],
+          },
+        }));
         const tools = addAskBrowserStackAITool(remote, {
           agentUrl: () => "https://atlas.example/agent",
           mintToken: async () => MINTED,
           credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
           streamTransport: streamed as never,
+          deferredTransport: deferred as never,
         });
 
         const { payload } = await call(tools);
-        expect((streamed.mock.calls[0] as never as unknown[])[2])
-          .toMatchObject({ permission_relay: { mode: "stream" } });
-        expect(payload.permission_relay.reason).not.toBe("remote_mode");
+        // The deferred transport carried it; the stream was never opened.
+        expect((deferred.mock.calls[0] as never as unknown[])[2])
+          .toMatchObject({ permission_relay: { mode: "deferred" } });
+        expect(streamed).not.toHaveBeenCalled();
+        // Parked, not finished, and carrying what the second call needs.
+        expect(payload.status).toBe("needs_approval");
+        expect(payload.run_id).toBe("run-abc");
+        expect(payload.perm_id).toBe("perm-" + "a".repeat(32));
+        expect(payload.applied_before_stop).toBe(false);
+        // No refusal reason at all: the hosted deployment relays now. This used to
+        // read `remote_mode` — "this server has no way to ask you" — which is the
+        // sentence the deferred flow made untrue.
+        expect(payload.permission_relay.used).toBe(true);
+        expect(payload.permission_relay.reason).toBe("");
       } finally {
-        delete process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
+        vi.resetModules();
       }
     });
 
-    it("the opt-in does NOT force the relay onto a client that cannot be asked", async () => {
-      // The flag only lifts the blanket refusal. Whether a human can actually be reached
-      // is still per-client, and a client that never declared `elicitation` must still get
-      // a read-only run — otherwise the hosted server would stream asks nobody can see.
+    it("deferred reaches a client that cannot be elicited, which elicitation never could", async () => {
+      // THIS PROPERTY IS DELIBERATELY INVERTED from what it was.
+      //
+      // It used to assert that a client without `elicitation` still got a read-only run
+      // even with the opt-in, because the only relay we had streamed asks nobody could
+      // see. Deferred does not stream an ask at all — it returns it, and approval rides
+      // the CLIENT's own permission prompt on the second call. Client elicitation support
+      // therefore stops being the gate.
+      //
+      // That is a widening, and worth naming: Claude Desktop declares no `elicitation`
+      // but does prompt before a tool call, so it gains writes it could never have had.
+      // The cost is the other half of the same fact — a client configured not to prompt
+      // (`--permission-mode auto`) now approves with no human, where elicitation failed
+      // closed by construction. stdio keeps elicitation for exactly that reason.
       vi.resetModules();
       process.env.REMOTE_MCP = "true";
-      process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY = "true";
       try {
         const { addAskBrowserStackAITool } = await import(
           "../../src/tools/ask-browserstack/register.js"
@@ -1331,19 +1309,34 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         const remote = new RemoteMcpServer({ name: "t", version: "0" });
         vi.spyOn(remote.server, "getClientCapabilities")
           .mockReturnValue({ roots: {} } as never);      // no elicitation
+        const deferred = vi.fn(async () => ({
+          status: 200,
+          body: {
+            status: "needs_approval",
+            run_id: "run-xyz",
+            asks: [{
+              perm_id: "perm-" + "b".repeat(32),
+              product: "tm",
+              mode: "ask-always",
+              description: "Creating the new project",
+            }],
+          },
+        }));
         const tools = addAskBrowserStackAITool(remote, {
           agentUrl: () => "https://atlas.example/agent",
           mintToken: async () => MINTED,
           credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
           streamTransport: streamed as never,
+          deferredTransport: deferred as never,
         });
 
         const { payload } = await call(tools);
-        expect("permission_relay" in (streamed.mock.calls[0] as never as unknown[])[2]!)
-          .toBe(false);
-        expect(payload.permission_relay.reason).toBe("no_human");
+        expect((deferred.mock.calls[0] as never as unknown[])[2])
+          .toMatchObject({ permission_relay: { mode: "deferred" } });
+        expect(payload.status).toBe("needs_approval");
+        expect(payload.permission_relay.reason).not.toBe("no_human");
       } finally {
-        delete process.env.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
+        vi.resetModules();
       }
     });
 
@@ -1392,7 +1385,11 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Create folder." }] });
 
       const { payload } = await call(server.getTools());
-      expect(stub.calls[0].body.permission_relay).toEqual({ mode: "stream" });
+      // `contract` rides along: it is what lets Atlas tell this client from every
+      // published build that cannot complete an approval, and its absence makes Atlas
+      // refuse to park rather than hand back an ask nobody can answer.
+      expect(stub.calls[0].body.permission_relay)
+        .toEqual({ mode: "stream", contract: 2 });
       expect(payload.permission_relay.used).toBe(true);
       expect(payload.permission_relay.reason).toBe("");
     });
@@ -1504,4 +1501,179 @@ describe("askBrowserStackAI, against the injected seam", () => {
     expect(payload.error).toBe("boom");
     expect(payload.ok).toBe(false);
   });
+});
+
+describe("next_step can be followed exactly as written", () => {
+  beforeEach(() => {
+    process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = AUTH_URL;
+    process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "deferred";
+    resetTokenCache();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
+    delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
+    delete process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT;
+    resetTokenCache();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("a resume carrying no query is accepted", async () => {
+    // `next_step` says to call again "with exactly these params" — product, run_id,
+    // perm_id, decision — and `query` was a required string, so a model that did
+    // exactly what it was told got InvalidParams from the SDK before the handler ran.
+    // The task lives in Atlas's checkpoint on a resume; there is nothing for a query
+    // to say.
+    const { decisions } = atlas({ asks: [] });
+    const server = await buildServer();
+    fakeClient(server.getInstance(), undefined, []);
+
+    const { payload } = await call(server.getTools(), {
+      product: "tm",
+      run_id: "run-" + "a".repeat(32),
+      perm_id: PERM_A,
+      decision: "allow",
+    } as never);
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0].body).toMatchObject({ perm_id: PERM_A, decision: "allow" });
+    expect(payload.status).toBe("ok");
+  });
+
+  it("starting a run with no query is refused in words, not in a schema error", async () => {
+    // Optional in the schema so a resume can omit it, required by the handler so the
+    // model gets a sentence it can act on rather than an SDK InvalidParams.
+    atlas({});
+    const server = await buildServer();
+    fakeClient(server.getInstance(), undefined, []);
+
+    const { payload } = await call(server.getTools(), { product: "tm" } as never);
+
+    expect(payload.status).toBe("error");
+    expect(String(payload.error)).toMatch(/`query` is required to start a run/);
+    expect(String(payload.error)).toMatch(/[Nn]othing was sent/);
+  });
+});
+
+/**
+ * COMPATIBILITY BOTH WAYS.
+ *
+ * An Atlas that predates the converged gate holds the stream OPEN until the decision
+ * arrives and acknowledges it with a bare 204, continuing on the same socket. A
+ * converged one emits its ask as the stream ENDS and carries the run forward on the
+ * decision's own reply.
+ *
+ * Collecting asks and answering only after the stream closed worked against the second
+ * and DEADLOCKED against the first — both sides waiting, until the server's own
+ * five-minute gate denied an ask nobody had seen. That made the deploy order
+ * load-bearing in a way it should not be, so both shapes are pinned here.
+ */
+describe("the client works against both server generations", () => {
+  const RUN = "run-" + "a".repeat(32);
+  const ASK = { perm_id: PERM_A, description: "Creating the project" };
+
+  beforeEach(() => {
+    process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
+    process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = AUTH_URL;
+    resetTokenCache();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
+    delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
+    resetTokenCache();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /** An Atlas that predates the converged gate: 204, and the run finishes on the stream. */
+  function legacyAtlas() {
+    const decisions: any[] = [];
+    const encoder = new TextEncoder();
+    let answered: () => void = () => {};
+    const decisionArrived = new Promise<void>((r) => (answered = r));
+
+    const stub = async (url: string, init: any) => {
+      if (String(url) === AUTH_URL) {
+        return {
+          ok: true, status: 200,
+          headers: { get: () => "application/json" },
+          json: async () => ({ access_token: MINTED, expires_in: 3600 }),
+        };
+      }
+      if (/\/agent\/[^/]+\/permission$/.test(String(url))) {
+        decisions.push(JSON.parse(init.body));
+        answered();
+        // 204 — acknowledged, nothing carried. The run continues on the stream.
+        return {
+          ok: true, status: 204,
+          headers: { get: () => "" },
+          json: async () => null,
+        };
+      }
+      const frame = (event: string, data: unknown) =>
+        encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      const stream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue(frame("run", { run_id: RUN }));
+          controller.enqueue(
+            frame("permission", { ...ASK, product: "tm", mode: "ask-always" }),
+          );
+          // THE OLD BEHAVIOUR: nothing more until the decision lands. A client that
+          // waits for the stream to end before answering never gets past this line.
+          await decisionArrived;
+          controller.enqueue(
+            frame("result", { ok: true, status: "ok", answer: "created it" }),
+          );
+          controller.close();
+        },
+      });
+      return {
+        ok: true, status: 200,
+        headers: {
+          get: (k: string) => (k === "content-type" ? "text/event-stream" : ""),
+        },
+        body: stream,
+        json: async () => null,
+      };
+    };
+    vi.stubGlobal("fetch", stub);
+    return { decisions };
+  }
+
+  it("answers on the stream when the server is still waiting on it", async () => {
+    const { decisions } = legacyAtlas();
+    const server = await buildServer();
+    fakeClient(server.getInstance(), { elicitation: {} }, [
+      { action: "accept", content: { decision: "allow" } },
+    ]);
+
+    const { payload } = await call(server.getTools());
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({ perm_id: PERM_A, decision: "allow" });
+    // The run finished ON THE STREAM, and that result is what the caller gets.
+    expect(payload.status).toBe("ok");
+    expect(payload.answer).toBe("created it");
+  }, 10_000);
+
+  it("takes the continuation from the reply when the server sends one", async () => {
+    // The converged shape, for contrast: the same client, the same prompt, but the
+    // decision's own reply carries the finished run and the stream's `needs_approval`
+    // result is stale by the time it is read.
+    atlas({ asks: [ASK] });
+    const server = await buildServer();
+    fakeClient(server.getInstance(), { elicitation: {} }, [
+      { action: "accept", content: { decision: "allow" } },
+    ]);
+
+    const { payload } = await call(server.getTools());
+
+    expect(payload.status).toBe("ok");
+    expect(payload.answer).toBe("done");
+  }, 10_000);
 });

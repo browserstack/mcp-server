@@ -202,15 +202,18 @@ export async function getSubTestPlan(
         { type: "text", text: header + runsBlock },
         {
           type: "text",
-          text: JSON.stringify(
-            {
-              sub_test_plan: plan,
-              linked_test_runs: runs,
-              status_summary: statusSummary,
-              total_test_cases: totalCases,
-            },
-            null,
-            2,
+          text: wrapUntrusted(
+            "sub-test-plan (structured data)",
+            JSON.stringify(
+              {
+                sub_test_plan: plan,
+                linked_test_runs: runs,
+                status_summary: statusSummary,
+                total_test_cases: totalCases,
+              },
+              null,
+              2,
+            ),
           ),
         },
       ],

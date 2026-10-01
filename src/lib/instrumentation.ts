@@ -6,12 +6,30 @@ const require = createRequire(import.meta.url);
 const packageJson = require("../../package.json");
 import { apiClient } from "./apiClient.js";
 import globalConfig from "../config.js";
+import { redact } from "../tools/capability-registry/redact.js";
 
 const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
 
 export type ClientInfo = { name?: string; version?: string };
 
 export type ToolOutcome = "ok" | "error_result" | "threw";
+
+/**
+ * Extra fields a caller may attach to its own row (the capability registry records what
+ * it invoked and how the product answered). Values are scalars so every field stays one
+ * queryable column.
+ *
+ * SOME OF IT IS FREE TEXT, and this comment used to claim the opposite. The registry
+ * records `search_query` and `change_summary`, both written by the agent from what the
+ * user asked for, and both leave the machine on every search and every write. They go
+ * through `capability-registry/redact.ts` first, which strips PII it can identify by
+ * SHAPE and caps the length — it cannot strip a person's name, and says so. Anything
+ * added here that carries user text must go through the same filter.
+ */
+export type MCPEventExtras = Record<
+  string,
+  string | number | boolean | undefined
+>;
 
 interface MCPEventPayload {
   event_type: string;
@@ -26,7 +44,7 @@ interface MCPEventPayload {
     is_remote?: boolean;
     duration_ms?: number;
     outcome?: ToolOutcome;
-  };
+  } & MCPEventExtras;
 }
 
 function baseProperties(toolName: string, clientInfo: ClientInfo) {
@@ -77,6 +95,7 @@ interface CallContext {
   clientInfo: ClientInfo;
   config?: any;
   error?: unknown;
+  extras?: MCPEventExtras;
 }
 
 const callContext = new AsyncLocalStorage<CallContext>();
@@ -91,12 +110,15 @@ export function trackMCP(
   clientInfo: ClientInfo,
   error?: unknown,
   config?: any,
+  extras?: MCPEventExtras,
 ): void {
   const ctx = callContext.getStore();
   if (ctx) {
     if (clientInfo?.name && !ctx.clientInfo?.name) ctx.clientInfo = clientInfo;
     if (config && !ctx.config) ctx.config = config;
     if (error) ctx.error = error;
+    // Later calls win, so a handler can record an identity first and the outcome after.
+    if (extras) ctx.extras = { ...ctx.extras, ...extras };
     return;
   }
 
@@ -114,36 +136,12 @@ export function trackMCP(
       ...baseProperties(toolName, clientInfo),
       success: !error,
       ...(error ? errorProperties(error) : {}),
+      // Undefined entries are dropped by JSON.stringify, so an absent extra is an
+      // absent column rather than a null one.
+      ...(extras ?? {}),
     },
   };
   sendEvent(event, config);
-}
-
-const MAX_SCRUB_INPUT = 2000;
-
-/**
- * Strip PII and credentials identifiable by shape. A name has no shape and passes
- * through: this reduces exposure, it does not eliminate it.
- */
-function scrub(text: string): string {
-  const bounded =
-    text.length > MAX_SCRUB_INPUT ? text.slice(0, MAX_SCRUB_INPUT) : text;
-  return bounded
-    .replace(/\b(https?:\/\/)[^\s/@]{1,64}:[^\s/@]{1,64}@/gi, "$1[redacted]@")
-    .replace(/\b[\w.%+-]{1,64}@[\w.-]{1,63}\.[a-z]{2,24}\b/gi, "[email]")
-    .replace(/\beyJ[\w-]{8,512}\.[\w-]{8,512}\.[\w-]{8,512}\b/g, "[token]")
-    .replace(
-      /\b(?=[A-Za-z0-9_-]{0,128}\d)(?=[A-Za-z0-9_-]{0,128}[A-Za-z])[A-Za-z0-9_-]{20,128}\b/g,
-      "[token]",
-    )
-    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[ip]")
-    .replace(
-      /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{3,5}[\s.-]\d{3,5}(?:[\s.-]\d{2,5})?\b/g,
-      "[phone]",
-    )
-    .replace(/\b\d{9,}\b/g, "[number]")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 /** The text a tool showed the user. */
@@ -158,8 +156,7 @@ function errorTextOf(result: unknown): string | undefined {
     )
     .filter(Boolean)
     .join(" ");
-  const cleaned = scrub(text);
-  return cleaned || undefined;
+  return redact(text);
 }
 
 function isErrorResult(result: unknown): boolean {
@@ -216,6 +213,7 @@ export async function withToolCall<T>(
           ...(outcome === "error_result" && ctx.error === undefined && errorText
             ? { error_message: errorText }
             : {}),
+          ...(ctx.extras ?? {}),
         },
       };
       sendEvent(event, ctx.config ?? config);

@@ -77,6 +77,16 @@ export interface PermissionDecision {
  */
 export interface PermissionRelay {
   mode?: string;
+  /**
+   * The wire this client speaks. Atlas reads an absent or lower value as a build that
+   * CANNOT complete an approval and refuses to park rather than offering one.
+   *
+   * Declared, not inferred, because the two are identical on the way in: this client's
+   * stdio path sends `{"mode": "stream"}` exactly as 1.5.1 does. Measured against
+   * 1.5.1 talking to a converged Atlas — it answers a decision without `product`, gets
+   * a 400, logs it to stderr and then reports `ok: true` for a run that did nothing.
+   */
+  contract?: number;
 }
 
 /**
@@ -145,10 +155,34 @@ export type RelayMode =
   | "offered"
   /** The client declares no `elicitation` capability, so nobody could be prompted. */
   | "no_human"
-  /** This process is the hosted multi-tenant server, which cannot prompt a human. */
-  | "remote_mode";
+  /**
+   * The hosted server, relaying WITHOUT holding anything open.
+   *
+   * Elicitation is what makes this process stateful: a suspended `elicitation/create`
+   * pins an McpServer in one pod's heap until the answer arrives, which is why the
+   * hosted deployment needs sessions, ingress affinity and a session cap. `deferred`
+   * removes the suspension instead of routing around it — Atlas returns at its first
+   * ask, this tool hands that ask back, and the caller returns with the decision in a
+   * second call. Nothing is held between the two, so any pod can serve either.
+   *
+   * The trade, stated because it is real: approval rides the CLIENT's own permission
+   * prompt on that second call rather than an elicitation, so a client configured not
+   * to prompt (`--permission-mode auto`) approves without a human. Elicitation fails
+   * closed by construction; this fails closed only if the client asks.
+   */
+  | "deferred";
 
-export const ASK_STATUSES = ["ok", "blocked", "error", "rate_limited"] as const;
+export const ASK_STATUSES = [
+  "ok",
+  "blocked",
+  "error",
+  "rate_limited",
+  // Deferred only: the run reached an ask and is PARKED, not finished. Distinct from
+  // `blocked` (a human said no) and from `error` (nothing is waiting) — this one is the
+  // only status a caller is invited to come back from, and the only one carrying a
+  // `run_id`.
+  "needs_approval",
+] as const;
 export type AskStatus = (typeof ASK_STATUSES)[number];
 
 /** CONTRACT §5 — the single tool result. */
@@ -210,6 +244,33 @@ export interface AskResult {
    * side would otherwise silently become `null` here rather than reaching the caller.
    */
   atlas_response: unknown;
+  /**
+   * Deferred only: the parked run, and the ask waiting on it.
+   *
+   * Present exactly when `status === "needs_approval"`. Both are echoed back on the
+   * caller's second call — `perm_id` alongside `run_id` so the answer names WHICH ask it
+   * answers, which matters the moment a task needs more than one.
+   */
+  run_id?: string;
+  perm_id?: string;
+  /**
+   * Deferred only: what the caller must do next, and with what.
+   *
+   * Carried as its own field rather than buried in prose because the model reads this
+   * result and decides what to do from it. The first version explained the TRANSPORT
+   * ("this deployment cannot hold a prompt open…") which is true and useless: it told
+   * the model how the plumbing works, not that a person has to answer. Measured
+   * consequence — the model read the ask, judged it matched the user's request, and
+   * answered `allow` itself in the same turn without asking anyone.
+   *
+   * This cannot MAKE a model ask; nothing in the protocol can, which is the standing
+   * argument for elicitation. It removes the excuse.
+   */
+  next_step?: {
+    instruction: string;
+    call: string;
+    params: Record<string, string>;
+  };
   /**
    * Why the call failed, when it did.
    *

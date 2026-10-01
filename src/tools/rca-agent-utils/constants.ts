@@ -19,12 +19,12 @@ export const GET_BUILD_ID_PARAMS = {
   browserStackProjectName: z
     .string()
     .describe(
-      "The BrowserStack project name used during test run creation. Action: First, check browserstack.yml or any equivalent project configuration files. If the project name is found, extract and return it. If it is not found or if there is any uncertainty, immediately prompt the user to provide the value. Do not infer, guess, or assume a default.",
+      "BrowserStack project name from the test run config (e.g. browserstack.yml). Exact match; no default.",
     ),
   browserStackBuildName: z
     .string()
     .describe(
-      "The BrowserStack build name used during test run creation. Action: First, check browserstack.yml or any equivalent project configuration files. If the build name is found, extract and return it. If it is not found or if there is any uncertainty, immediately prompt the user to provide the value. Do not infer, guess, or assume a default.",
+      "BrowserStack build name from the test run config (e.g. browserstack.yml). Exact match; no default.",
     ),
 };
 

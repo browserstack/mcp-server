@@ -83,20 +83,20 @@ describe("returned tool errors are diagnosable", () => {
 
 });
 
-describe("the recorded message is not truncated", () => {
+describe("the recorded message is capped by the shared redactor", () => {
   beforeEach(async () => {
     vi.resetModules();
     const { apiClient } = await import("../../src/lib/apiClient.js");
     (apiClient.post as any).mockClear();
   });
 
-  it("keeps a long product error whole", async () => {
+  it("keeps the diagnostic head of a long product error", async () => {
     const long = `Failed to update test case: ${"detail ".repeat(200)}`.trim();
     await run(() => errorResult(long));
 
     const [row] = await rows();
-    expect(row.error_message).toBe(long);
-    expect(row.error_message.length).toBeGreaterThan(1000);
+    expect(row.error_message).toContain("Failed to update test case");
+    expect(row.error_message.length).toBeLessThanOrEqual(513);
   });
 });
 

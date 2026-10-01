@@ -175,8 +175,8 @@ export interface EntityDoc {
    * answer it for all of them at once.
    *
    * Capped at 140 characters by the build, and dropped rather than truncated when longer.
-   * Often absent: a product that has not authored these emits none (loadtesting has 0 of
-   * 9 today), and absence means "unwritten", never an error.
+   * Often absent: a product that has not authored these emits none (loadtesting authors
+   * all 9 of its entities), and absence means "unwritten", never an error.
    */
   description?: string;
   aliases?: string[];

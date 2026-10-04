@@ -14,11 +14,11 @@
  * read/write tool pair was buying.
  */
 
-import { randomUUID } from "node:crypto";
 import {
   McpServer,
   RegisteredTool,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { signRouting, readRouting } from "./routing-token.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
@@ -203,36 +203,6 @@ export function addCapabilityRegistryTools(
   const transport = deps.transport || fetchTransport();
   const tools: Record<string, RegisteredTool> = {};
 
-  /**
-   * Tokens minted by a product_ambiguous refusal and not yet spent.
-   *
-   * Remembering the clashing WORDS catches a reworded retry only while the rewording
-   * keeps one of them; a paraphrase that drops the word reads as a fresh, unambiguous
-   * request. A token cannot be paraphrased around, and cannot be guessed — the only way
-   * to hold one is to have been refused, which is the round trip the gate is asking for.
-   *
-   * What it proves is bounded, and worth stating plainly: it shows the refusal was seen,
-   * NOT that a human answered it. Nothing a caller can transmit shows that. It is spent
-   * on use, so one refusal buys one retry, and `user_words` still has to anchor.
-   */
-  const openClashes = new Set<string>();
-  const mintClashToken = (): string => {
-    const token = `clash_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
-    openClashes.add(token);
-    return token;
-  };
-
-  /**
-   * The product the last routing call settled on, when the user's words settled it.
-   *
-   * listProducts judges the whole request; the gate on a later search judges whatever
-   * fragment the caller quotes, and the two disagreed — a request that settled on one
-   * product was refused a moment later over the one shared noun the caller quoted out of
-   * it. The settlement is the better evidence of the two, having seen the whole sentence,
-   * so it stands until a listing finds a real clash and withdraws it.
-   */
-  let settledByListing: string | undefined;
-
   /** Instrumentation in the house style, and never fatal to the call it wraps. */
   const track = (name: string, extras?: MCPEventExtras) => {
     try {
@@ -355,13 +325,18 @@ export function addCapabilityRegistryTools(
       // are quoted, and a paraphrase carries none of the shared words that caused this —
       // so the refusal never fired. Opening a token here makes the question outlive the
       // call that raised it, and `user_words` is what closes it.
-      if (query) settledByListing = ambiguity.settled;
-      const listingToken =
-        query &&
-        registry.productNames().length > 1 &&
-        (ambiguity.products.length > 1 || ambiguity.unknown)
-          ? mintClashToken()
-          : undefined;
+      // THE VERDICT TRAVELS WITH THE CALLER. Signed here, read back by the search — which
+      // is how the search can know what this call concluded about the whole request
+      // without the server keeping a note between the two.
+      const listingToken = query
+        ? signRouting(
+            ambiguity.products.length > 1
+              ? { verdict: "clash", terms: ambiguity.terms }
+              : ambiguity.unknown
+                ? { verdict: "blank" }
+                : { verdict: "settled", product: ambiguity.settled },
+          )
+        : undefined;
       const routing =
         ambiguity.products.length > 1
           ? {
@@ -372,8 +347,8 @@ export function addCapabilityRegistryTools(
                 "ASK THE USER which they mean before searching or invoking anything; do not " +
                 "search each product in turn and merge the results. Searching before you " +
                 "ask will be refused: send the user's answer in `user_words` with this " +
-                "`resume_token`.",
-              resume_token: listingToken,
+                "`routing_token`.",
+              routing_token: listingToken,
               shared_terms: ambiguity.terms,
               products: ambiguity.products,
               question: `Which product do you mean — ${ambiguity.products.join(" or ")}?`,
@@ -411,8 +386,8 @@ export function addCapabilityRegistryTools(
                   "is the LEAST settled a request can be, not the most. ASK THE USER " +
                   "which product they mean before searching or invoking anything. " +
                   "Searching before you ask will be refused: send their answer in " +
-                  "`user_words` with this `resume_token`.",
-                resume_token: listingToken,
+                  "`user_words` with this `routing_token`.",
+                routing_token: listingToken,
                 question: `Which product do you mean — ${registry
                   .productNames()
                   .join(" or ")}?`,
@@ -429,6 +404,7 @@ export function addCapabilityRegistryTools(
                       `${ambiguity.settled}; the other products do not answer this request.`
                     : "No word in this request is claimed by more than one product, so the " +
                       "entity lists below settle it without asking.",
+                  routing_token: listingToken,
                   ...(ambiguity.settled ? { product: ambiguity.settled } : {}),
                   ...(ambiguity.because?.length
                     ? { deciding_terms: ambiguity.because }
@@ -600,14 +576,14 @@ export function addCapabilityRegistryTools(
       // flag the caller fills in about itself can always be filled in; there is no wording
       // of it that makes it true. What replaced it is a token this server mints and the
       // caller cannot guess, plus `user_words`, which is a claim the index can test.
-      resume_token: z
+      routing_token: z
         .string()
         .optional()
         .describe(
-          "The token from a product_ambiguous refusal, sent back with the user's answer. " +
-            "You cannot obtain one without being refused first, which is the point: it " +
-            "shows the question reached the user rather than being reworded around. Send " +
-            "it together with `user_words`; neither works alone.",
+          "The `routing_token` from the last listProducts call or product_ambiguous " +
+            "refusal — it carries what that step concluded about the user's request, " +
+            "signed. Always pass the most recent one. When it reports a clash, send the " +
+            "user's answer in `user_words` alongside it; neither works alone.",
         ),
       user_words: z
         .string()
@@ -643,7 +619,7 @@ export function addCapabilityRegistryTools(
       query,
       entity,
       product,
-      resume_token,
+      routing_token,
       user_words,
       mode,
       limit,
@@ -705,41 +681,39 @@ export function addCapabilityRegistryTools(
         // flag now governs the stricter refusals (a blank request, a clash still open),
         // not whether the user's own words count.
         const anchor = productAnchors(registry.index.products, user_words);
-        // One product anchored, and it is the one being searched: the user settled it.
-        // A listing that already settled on this product counts the same way: it read the
-        // user's whole request, which is more than the fragment quoted here.
-        // A VALID TOKEN IS WHAT CLEARS AN OPEN CLASH, and it has to arrive WITH the
-        // user's words: the token shows the question was put, the words say what came
-        // back. Spent on use, so it buys exactly the one retry it was minted for.
-        const redeemed = Boolean(
-          resume_token &&
-          openClashes.has(resume_token) &&
+        // WHAT THE ROUTING STEP CONCLUDED, READ BACK OFF THE CALLER. The token is signed
+        // here and verified by recomputation, so the server keeps no note between the two
+        // calls — and the caller cannot write one, edit the product inside it, or hold one
+        // without having made the routing call that issues it.
+        const routed = readRouting(routing_token);
+        // A clash the routing step already reported is only cleared by the user's own
+        // words: the token shows the question was put, `user_words` says what came back.
+        // Neither works alone — a token on its own is just proof of having been refused.
+        const answered =
+          routed?.verdict !== "settled" &&
           anchor.products.length === 1 &&
-          anchor.products[0] === product,
-        );
-        if (redeemed) openClashes.delete(resume_token!);
+          anchor.products[0] === product;
         // One product anchored, and it is the one being searched: the user settled it.
-        // A listing that already settled on this product counts the same way: it read the
-        // user's whole request, which is more than the fragment quoted here.
+        // A routing step that already settled on this product counts the same way — it
+        // read the user's whole request, which is more than the fragment quoted here.
         const settled =
-          redeemed ||
           (anchor.products.length === 1 && anchor.products[0] === product) ||
-          settledByListing === product;
-        // A clash raised earlier is still open until it is answered, whatever this call's
-        // wording looks like. Without this, a reworded query reads as unambiguous and the
-        // refusal is simply routed around.
+          (routed?.verdict === "settled" && routed.product === product);
         // NOTHING TO ASK WHEN THERE IS NOTHING TO CHOOSE BETWEEN. A registry serving one
         // product cannot route a request to the wrong one, so every refusal below is a
         // question with a single possible answer — pure obstruction.
         const routable = registry.productNames().length > 1;
-        // AN OPEN CLASH IS ABOUT THE REQUEST THAT RAISED IT, NOT EVERY LATER ONE. It has
-        // to outlive a REWORDING of that request — the escape it exists to close — while
-        // leaving a genuinely different request alone: "bulk delete test cases" names a
-        // thing only one product has, and blocking it because something earlier in the
-        // conversation was ambiguous is obstruction, not routing. A request whose own
-        // words settle it is therefore not the unanswered one.
+        // A CLASH THE CALLER IS CARRYING IS STILL OPEN UNTIL IT IS ANSWERED, whatever this
+        // call's wording looks like. It has to outlive a REWORDING of the request — the
+        // escape it exists to close — while leaving a genuinely different request alone:
+        // "bulk delete test cases" names a thing only one product has, and blocking it
+        // because something earlier was ambiguous is obstruction, not routing.
         const reopened =
-          routable && !settled && !ambiguity.settled && openClashes.size > 0;
+          routable &&
+          !settled &&
+          !answered &&
+          !ambiguity.settled &&
+          (routed?.verdict === "clash" || routed?.verdict === "blank");
         // NOTHING RECOGNISED IS NOT PERMISSION TO PICK. A request carrying no product's
         // vocabulary is the least settled kind there is, and it used to pass this gate
         // untouched because there was no shared word in it to object to.
@@ -747,9 +721,14 @@ export function addCapabilityRegistryTools(
         if (
           routable &&
           (ambiguity.products.length > 1 || reopened || blank) &&
-          !settled
+          !settled &&
+          !answered
         ) {
-          const token = mintClashToken();
+          const token = signRouting(
+            ambiguity.products.length > 1
+              ? { verdict: "clash", terms: ambiguity.terms }
+              : { verdict: "blank" },
+          );
           // WHAT TO ASK, NOT JUST THAT ASKING IS NEEDED. Sending the caller back to
           // listProducts costs a round trip and still leaves it composing a question out
           // of nothing — so it tends to guess instead, which is the behaviour being
@@ -802,11 +781,11 @@ export function addCapabilityRegistryTools(
                   : "Send `user_words` — the user's OWN words naming the product, or a " +
                     "term only one product uses — or ask them. ") +
               "Put the choice to the USER in their own terms, wait for an answer, then " +
-              "resend with their words in `user_words` AND `resume_token` set to the " +
+              "resend with their words in `user_words` AND `routing_token` set to the " +
               "token below. Rewording this query will not get past here. Do NOT search " +
               "each product in turn and merge the results.",
             {
-              resume_token: token,
+              routing_token: token,
               clarify: {
                 question: `Which product do you mean — ${choices.join(" or ")}?`,
                 shared: ambiguity.terms,

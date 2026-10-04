@@ -42,7 +42,7 @@ describe("searchCapability withholds the product names", () => {
       "utf8",
     );
     const search = src.slice(src.indexOf("tools.searchCapability = server.tool"));
-    const arg = search.slice(0, search.indexOf("resume_token:"));
+    const arg = search.slice(0, search.indexOf("routing_token:"));
     expect(arg).toMatch(/product: z\s*\.string\(\)/);
     expect(arg).not.toMatch(/product: productArg\(\)/);
   });
@@ -56,7 +56,7 @@ describe("searchCapability withholds the product names", () => {
     // Slice WITHIN searchCapability: `resume_token` is named in listProducts too, and
     // from the top of the file that match comes first.
     const start = src.indexOf("tools.searchCapability = server.tool");
-    const search = src.slice(start, src.indexOf("resume_token:", start));
+    const search = src.slice(start, src.indexOf("routing_token:", start));
     expect(search).toMatch(/CALL listProducts FIRST/);
     expect(search).toMatch(/exactly as listProducts spells it/);
   });
@@ -99,14 +99,17 @@ describe("the user_words gate", () => {
       "src/tools/capability-registry/register.ts",
       "utf8",
     );
-    // Minted on refusal, required back on the retry, and spent on use — a reworded
-    // query cannot walk around a token the way it could walk around a remembered word.
-    expect(src).toMatch(/const token = mintClashToken\(\)/);
-    expect(src).toMatch(/openClashes\.has\(resume_token\)/);
-    expect(src).toMatch(/openClashes\.delete\(resume_token!\)/);
-    expect(src).toMatch(
-      /reopened =\s*\n?\s*routable && !settled && !ambiguity\.settled && openClashes\.size > 0/,
-    );
+    // Signed on refusal, read back on the retry, and verified by recomputation — the
+    // server keeps no note between the two calls, so there is nothing to grow and
+    // nothing to leak between sessions.
+    expect(src).toMatch(/const token = signRouting\(/);
+    expect(src).toMatch(/const routed = readRouting\(routing_token\)/);
+    expect(src).toMatch(/routed\?\.verdict === "clash" \|\| routed\?\.verdict === "blank"/);
+    // AND NOTHING IS REMEMBERED. A set of live tokens and a last-verdict variable are
+    // both per-connection state; under one process serving several sessions the second
+    // lets one client's listing satisfy another client's gate.
+    expect(src).not.toMatch(/openClashes/);
+    expect(src).not.toMatch(/settledByListing/);
     // AND IT IS NOT BEHIND A FLAG. A gate that only ever runs when an env var is set is a
     // second code path nobody exercises; the one that was measured is the one that ships.
     expect(src).not.toMatch(/CAPABILITY_ROUTING_GATE/);
@@ -198,9 +201,9 @@ describe("a clash announced by listProducts binds the next search", () => {
       src.indexOf("tools.listProducts = server.tool("),
       src.indexOf("tools.searchCapability = server.tool("),
     );
-    expect(listing).toMatch(/ambiguity\.products\.length > 1 \|\| ambiguity\.unknown/);
-    expect(listing).toMatch(/\? mintClashToken\(\)/);
-    expect(listing).toMatch(/resume_token: listingToken/);
+    expect(listing).toMatch(/const listingToken = query/);
+    expect(listing).toMatch(/signRouting\(/);
+    expect(listing).toMatch(/routing_token: listingToken/);
     expect(listing).toMatch(/Searching before you ask will be refused/);
   });
 });

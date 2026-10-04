@@ -230,14 +230,26 @@ describe("capability registry, end to end through the server factory", () => {
     // And it must name the failure mode it exists to stop.
     expect(refused.body.error).toMatch(/search each product in turn and merge/);
 
-    // A word only one product claims settles the query, so there is nothing to ask.
+    // A word only one product claims settles the query, so there is nothing to ask —
+    // PROVIDED it settles on the product being searched.
     for (const query of [
       "list the test cases in a folder", // `folder` is shared, `test case` is not
-      "check my quota",
       "bulk delete test cases",
     ]) {
       expect((await run({ query })).blocked, query).toBe(false);
     }
+
+    // AND WHEN IT SETTLES ON THE OTHER ONE, THAT IS EVIDENCE, NOT NOISE. `quota` belongs
+    // to secondproduct and to nothing in tm, so asking tm for it is the silent wrong pick
+    // the gate exists to catch. It used to pass: the check asked whether the request
+    // settled, never whether it settled on what was being asked for.
+    const crossed = await run({ query: "check my quota" });
+    expect(crossed.blocked).toBe(true);
+    expect(crossed.body.error).toMatch(/points at secondproduct, not tm/);
+    expect(crossed.body.error).toMatch(/only secondproduct claims \('quota'\)/);
+    expect(
+      (await run({ query: "check my quota", product: "secondproduct" })).blocked,
+    ).toBe(false);
 
     // ONE WAY OUT, AND IT IS NOT A FLAG. `product_choice: 'user_confirmed'` used to open
     // this gate, which made the gate a formality: the schema published the value, and the

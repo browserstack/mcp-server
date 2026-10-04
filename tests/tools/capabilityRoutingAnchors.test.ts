@@ -207,3 +207,33 @@ describe("a clash announced by listProducts binds the next search", () => {
     expect(listing).toMatch(/Searching before you ask will be refused/);
   });
 });
+
+describe("words that point at another product are evidence, not noise", () => {
+  // THE CALLER'S `product` IS ITS CONCLUSION, NEVER ITS EVIDENCE. A request whose own
+  // vocabulary settles on one product, sent as a search of the other, is the silent wrong
+  // pick this whole gate exists to catch — and it passed, because every check above asked
+  // whether the request settled and none asked whether it settled on what was asked for.
+  it("settles on the product its words name, not the one in the argument", () => {
+    const verdict = ambiguousProducts(products, "list saved reports");
+    expect(verdict.settled).toBe("tra");
+    // Reached as `mismatch` when the caller sends product: "tm" with these words.
+    expect(verdict.settled).not.toBe("tm");
+  });
+
+  it("guards the mismatch on the product, not merely on settling at all", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("src/tools/capability-registry/register.ts", "utf8");
+    expect(src).toMatch(
+      /const mismatch =\s*\n?\s*routable && !!ambiguity\.settled && ambiguity\.settled !== product/,
+    );
+    expect(src).toMatch(/\|\| blank \|\| mismatch\)/);
+    // The exemption that let a reworded request through must be product-aware too: it
+    // used to read `!ambiguity.settled`, which exempted settling on ANY product.
+    const reopened = src.slice(
+      src.indexOf("const reopened ="),
+      src.indexOf("const mismatch ="),
+    );
+    expect(reopened).toMatch(/ambiguity\.settled !== product &&/);
+    expect(reopened).not.toMatch(/!ambiguity\.settled &&/);
+  });
+});

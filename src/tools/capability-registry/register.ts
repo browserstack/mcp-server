@@ -712,22 +712,34 @@ export function addCapabilityRegistryTools(
           routable &&
           !settled &&
           !answered &&
-          !ambiguity.settled &&
+          ambiguity.settled !== product &&
           (routed?.verdict === "clash" || routed?.verdict === "blank");
+        // THE WORDS POINT SOMEWHERE ELSE, WHICH IS EVIDENCE, NOT NOISE. A request whose
+        // own vocabulary settles on one product, sent as a search of the OTHER one, is the
+        // silent wrong pick this gate exists to catch — and it used to pass, because the
+        // checks above only ask whether the request settles, never whether it settles on
+        // what is being asked for. `product` is the caller's conclusion; the words are the
+        // evidence, and when they disagree the evidence is the thing to go on. The refusal
+        // already had the sentence for it ("the words you quoted point at X, not Y") and
+        // nothing could reach it.
+        const mismatch =
+          routable && !!ambiguity.settled && ambiguity.settled !== product;
         // NOTHING RECOGNISED IS NOT PERMISSION TO PICK. A request carrying no product's
         // vocabulary is the least settled kind there is, and it used to pass this gate
         // untouched because there was no shared word in it to object to.
         const blank = routable && ambiguity.unknown && !settled;
         if (
           routable &&
-          (ambiguity.products.length > 1 || reopened || blank) &&
+          (ambiguity.products.length > 1 || reopened || blank || mismatch) &&
           !settled &&
           !answered
         ) {
           const token = signRouting(
             ambiguity.products.length > 1
               ? { verdict: "clash", terms: ambiguity.terms }
-              : { verdict: "blank" },
+              : mismatch
+                ? { verdict: "settled", product: ambiguity.settled }
+                : { verdict: "blank" },
           );
           // WHAT TO ASK, NOT JUST THAT ASKING IS NEEDED. Sending the caller back to
           // listProducts costs a round trip and still leaves it composing a question out
@@ -736,7 +748,9 @@ export function addCapabilityRegistryTools(
           // shared word and what it means there.
           const choices = ambiguity.products.length
             ? ambiguity.products
-            : registry.productNames();
+            : mismatch
+              ? [ambiguity.settled as string, product]
+              : registry.productNames();
           const options = choices.map((name) => {
             const entities = registry.index.products[name]?.entities ?? {};
             const senses = ambiguity.terms
@@ -769,9 +783,17 @@ export function addCapabilityRegistryTools(
               ? `Nothing in '${subject}' names a product, or any word that belongs to ` +
                 "one, so there is no evidence here about which one is meant — that is " +
                 "the least settled a request can be, not the most. "
-              : `'${subject}' could mean ${ambiguity.products.join(" or ")} — ` +
-                `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
-                `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. `) +
+              : mismatch
+                ? `'${subject}' names words only ${ambiguity.settled} claims` +
+                  (ambiguity.because?.length
+                    ? ` (${ambiguity.because.map((t) => `'${t}'`).join(", ")})`
+                    : "") +
+                  `, so the request points at ${ambiguity.settled}, not ${product}. ` +
+                  "Search the product the words name, or — if the user meant " +
+                  `${product} — get them to say so and quote them. `
+                : `'${subject}' could mean ${ambiguity.products.join(" or ")} — ` +
+                  `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
+                  `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. `) +
               (named
                 ? `The words you quoted (${anchor.terms.map((t) => `'${t}'`).join(", ")}) ` +
                   `point at ${anchor.products.join(" and ")}, not ${product}. `

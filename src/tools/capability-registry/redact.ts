@@ -91,9 +91,7 @@ export const MAX_LENGTH = 512;
 export function redact(text: unknown): string | undefined {
   try {
     if (typeof text !== "string") return undefined;
-    // Bound the working window before the rules run: they are linear on ordinary text
-    // but a multi-KB run of digits backtracks, and a tool's error text can be a stack
-    // trace. Generous enough that nothing inside MAX_LENGTH is affected.
+    // Slice before the rules run; a multi-KB digit run makes them backtrack.
     const SCAN_LIMIT = MAX_LENGTH * 8;
     let out = text.slice(0, SCAN_LIMIT).replace(/\s+/g, " ").trim();
     if (!out) return undefined;

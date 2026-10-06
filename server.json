@@ -32,5 +32,11 @@
         }
       ]
     }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.browserstack.com/mcp"
+    }
   ]
 }

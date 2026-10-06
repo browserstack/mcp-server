@@ -41,9 +41,6 @@ Click on the buttons below to install MCP in your respective IDE:
 
 <a href="http://mcp.browserstack.com/one-click-setup?client=vscode"><img src="assets/one-click-vs-code.png" alt="Install in VS Code" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="http://mcp.browserstack.com/one-click-setup?client=cursor"><img src="assets/one-click-cursor.png" alt="Install in Cursor" width="150" height="70"></a>
 
-
-Using **Kiro**? [Add to Kiro (hosted, OAuth)](https://kiro.dev/launch/mcp/add?name=browserstack&config=%7B%22url%22%3A%22https%3A%2F%2Fmcp.browserstack.com%2Fmcp%22%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D) &nbsp;·&nbsp; [Add to Kiro (local npx, needs credentials)](https://kiro.dev/launch/mcp/add?name=browserstack&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40browserstack%2Fmcp-server%40latest%22%5D%2C%22env%22%3A%7B%22BROWSERSTACK_USERNAME%22%3A%22%3Cusername%3E%22%2C%22BROWSERSTACK_ACCESS_KEY%22%3A%22%3Caccess-key%3E%22%7D%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D)
-
 > **Note:** The hosted Remote MCP server (`mcp.browserstack.com`) is now fully stateless over Streamable HTTP — any Streamable-HTTP client (Claude, Cursor, VS Code, ChatGPT) connects with no configuration change.
 
 #### Note : Ensure you are using Node version >= `20.9` 
@@ -170,9 +167,6 @@ Click on the buttons below to install MCP in your respective IDE:
 
 <a href="http://mcp.browserstack.com/one-click-setup?client=vscode"><img src="assets/one-click-vs-code.png" alt="Install in VS Code" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="http://mcp.browserstack.com/one-click-setup?client=cursor"><img src="assets/one-click-cursor.png" alt="Install in Cursor" width="150" height="70"></a>
 
-
-Using **Kiro**? [Add to Kiro (hosted, OAuth)](https://kiro.dev/launch/mcp/add?name=browserstack&config=%7B%22url%22%3A%22https%3A%2F%2Fmcp.browserstack.com%2Fmcp%22%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D) &nbsp;·&nbsp; [Add to Kiro (local npx, needs credentials)](https://kiro.dev/launch/mcp/add?name=browserstack&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40browserstack%2Fmcp-server%40latest%22%5D%2C%22env%22%3A%7B%22BROWSERSTACK_USERNAME%22%3A%22%3Cusername%3E%22%2C%22BROWSERSTACK_ACCESS_KEY%22%3A%22%3Caccess-key%3E%22%7D%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D)
-
 ### **Alternate ways to Setup MCP server**
 
 1. **Create a BrowserStack Account**
@@ -293,25 +287,6 @@ Select the “Installed” tab. Click the “Configure MCP Servers” button at 
            "BROWSERSTACK_USERNAME": "<username>",
            "BROWSERSTACK_ACCESS_KEY": "<access_key>"
          }
-       }
-     }
-   }
-   ```
-
-   - Kiro: `.kiro/settings/mcp.json` (or use the [Add to Kiro](https://kiro.dev/launch/mcp/add?name=browserstack&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40browserstack%2Fmcp-server%40latest%22%5D%2C%22env%22%3A%7B%22BROWSERSTACK_USERNAME%22%3A%22%3Cusername%3E%22%2C%22BROWSERSTACK_ACCESS_KEY%22%3A%22%3Caccess-key%3E%22%7D%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D) link above)
-
-   ```json
-   {
-     "mcpServers": {
-       "browserstack": {
-         "command": "npx",
-         "args": ["-y", "@browserstack/mcp-server@latest"],
-         "env": {
-           "BROWSERSTACK_USERNAME": "<username>",
-           "BROWSERSTACK_ACCESS_KEY": "<access_key>"
-         },
-         "disabled": false,
-         "autoApprove": []
        }
      }
    }

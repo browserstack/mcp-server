@@ -39,7 +39,7 @@
     "node": ">=20.9.0"
   },
   "author": "",
-  "license": "ISC",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/form-data": "^2.5.2",

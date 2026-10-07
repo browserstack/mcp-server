@@ -182,14 +182,11 @@ Generate test cases from PRDs, convert manual tests to low-code automation, and 
 ## 🛠️ Installation
 
 ### 📋 Prerequisites for MCP Setup
-#### Note : Ensure you are using Node version >= `20.9` 
-- Check your node version using `node --version`. Recommended version: `v22.15.0` (LTS)
-   
-### **One Click MCP Setup**
 
-Click on the buttons below to install MCP in your respective IDE:
+- Node.js version >= `20.9` (see the note under [One Click MCP Setup](#️-one-click-mcp-setup) above).
+- A BrowserStack account (steps below).
 
-<a href="http://mcp.browserstack.com/one-click-setup?client=vscode"><img src="assets/one-click-vs-code.png" alt="Install in VS Code" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="http://mcp.browserstack.com/one-click-setup?client=cursor"><img src="assets/one-click-cursor.png" alt="Install in Cursor" width="150" height="70"></a>
+To install with one click, use the **Install in VS Code** / **Install in Cursor** buttons under [One Click MCP Setup](#️-one-click-mcp-setup) at the top of this page.
 
 ### **Alternate ways to Setup MCP server**
 
@@ -202,11 +199,7 @@ Click on the buttons below to install MCP in your respective IDE:
 
    - Once you have an account (and purchased appropriate plan), note down your `username` and `access_key` from [Account Settings](https://www.browserstack.com/accounts/profile/details).
 
-2. #### Note : Ensure you are using Node version >= `20.9` 
-    - Check your node version using `node --version`. Recommended version: `v22.15.0` (LTS)
-   
-
-3. **Install the MCP Server**
+2. **Install the MCP Server**
 
    - VSCode (Copilot - Agent Mode): `.vscode/mcp.json`:
     

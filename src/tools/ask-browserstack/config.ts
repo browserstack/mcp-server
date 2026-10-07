@@ -39,23 +39,6 @@ export function isEnabled(): boolean {
 }
 
 /**
- * May the relay be offered in the hosted (`REMOTE_MCP`) deployment?
- *
- * OFF BY DEFAULT, because it depends on something outside this package: the host has to
- * keep one `McpServer` alive per session. Stateless hosts build a fresh server per POST,
- * and an elicitation answer — which arrives as a SEPARATE POST — then reaches an instance
- * that never asked anything, leaving the real one suspended until it times out. So this
- * must stay opt-in per deployment rather than become a default that silently hangs.
- *
- * Turning it on does NOT force the relay on: `relayMode` still asks whether THIS client
- * declared the `elicitation` capability, and a client that did not still gets a read-only
- * run. This flag only removes the blanket refusal.
- */
-export function allowRemoteRelay(): boolean {
-  return appConfig.ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY;
-}
-
-/**
  * ============================================================================
  * PRODUCTION DEFAULTS
  * ============================================================================

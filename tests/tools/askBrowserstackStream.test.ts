@@ -21,7 +21,7 @@ import {
   WHOLE_RUN_TIMEOUT_MS,
   decisionUrl,
   fetchAgentStreamTransport,
-  fetchDecisionTransport,
+  fetchDeferredTransport,
   parseFrame,
   splitFrames,
 } from "../../src/tools/ask-browserstack/stream.js";
@@ -41,9 +41,14 @@ import {
 const DELEGATED_TO_FETCH = (url: string) =>
   /\/oauth2\/v2\/token$/.test(url) || /\/agent\/[^/]+\/permission$/.test(url);
 
+/** Every apiClient.post argument set, so a transport's own options are assertable. */
+const apiPosts = vi.hoisted(() => [] as any[]);
+
 vi.mock("../../src/lib/apiClient.js", () => ({
   apiClient: {
-    post: async ({ url, headers, body }: any) => {
+    post: async (opts: any) => {
+      apiPosts.push(opts);
+      const { url, headers, body } = opts;
       const target = String(url);
       if (!DELEGATED_TO_FETCH(target)) {
         return { status: 200, data: null, ok: true };
@@ -231,31 +236,54 @@ describe("fetchAgentStreamTransport", () => {
   });
 });
 
-describe("fetchDecisionTransport", () => {
-  it("returns the status so the caller can tell 204 from 409", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(null, { status: 204 })),
-    );
-    const status = await fetchDecisionTransport()(
-      "https://atlas.test/agent/run-1/permission",
-      {},
-      { perm_id: "perm-1", decision: "allow", reason: "" },
-    );
-    expect(status).toBe(204);
+// `fetchDecisionTransport` and its tests are gone. It returned a bare status because
+// the decision POST answered 204 and the run's continuation came back on a reattached
+// stream. It answers 200 WITH that continuation now — the same shape the start answers
+// with — so both calls use `fetchDeferredTransport`, whose tests cover the reading.
+
+describe("fetchDeferredTransport", () => {
+  const DECISION = "https://atlas.example/agent/run-1/permission";
+
+  it("hands back the status and body without interpreting either", async () => {
+    // The CALLER reads the status: a 403 (not entitled), a 404 (no such run) and a 200
+    // mean completely different things, and a transport that threw on a non-2xx would
+    // collapse them all into "unreachable".
+    vi.stubGlobal("fetch", async () => ({
+      status: 403,
+      json: async () => ({ detail: "nope" }),
+    }));
+    const out = await fetchDeferredTransport()(DECISION, {}, {} as never);
+
+    expect(out).toEqual({ status: 403, body: { detail: "nope" } });
+    expect(apiPosts.at(-1)).toMatchObject({ raise_error: false });
     vi.unstubAllGlobals();
   });
 
-  it("reports 0 when the decision never left, rather than implying a refusal", async () => {
-    // The gate on the far side is still waiting and denies on its own expiry, so a
-    // lost decision is safe. But it must not be reported as "the human said no".
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("socket closed")));
-    const status = await fetchDecisionTransport()(
-      "https://atlas.test/agent/run-1/permission",
-      {},
-      { perm_id: "perm-1", decision: "allow", reason: "" },
+  it("bounds the WHOLE run, because that is what these requests now carry", async () => {
+    // 120s was sized for a request that returned as soon as the run parked. Since the
+    // converged gate the DECISION request carries everything after the approval, so the
+    // old bound cut successful runs off partway and reported them as unreachable.
+    vi.stubGlobal("fetch", async () => ({ status: 200, json: async () => ({}) }));
+    await fetchDeferredTransport()(DECISION, {}, {} as never);
+
+    expect(apiPosts.at(-1).timeout).toBe(WHOLE_RUN_TIMEOUT_MS);
+    expect(WHOLE_RUN_TIMEOUT_MS).toBeGreaterThan(120_000);
+    vi.unstubAllGlobals();
+  });
+
+  it("turns a transport failure into an AskError, naming nothing internal", async () => {
+    const { AskError } = await import(
+      "../../src/tools/ask-browserstack/config.js"
     );
-    expect(status).toBe(0);
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("ECONNREFUSED 10.0.0.1:443");
+    });
+
+    const attempt = () => fetchDeferredTransport()(DECISION, {}, {} as never);
+    await expect(attempt()).rejects.toBeInstanceOf(AskError);
+    // The upstream detail names our plumbing, not anything a reader can act on.
+    await expect(attempt()).rejects.toThrow(/could not be reached/);
+    await expect(attempt()).rejects.not.toThrow(/ECONNREFUSED/);
     vi.unstubAllGlobals();
   });
 });
@@ -407,5 +435,181 @@ describe("an auth outage is not a credential problem", () => {
         transport as never,
       ),
     ).rejects.toThrow(/credentials were rejected/);
+  });
+});
+
+describe("deferred — the two-call shape", () => {
+  const HEADERS = { authorization: "Bearer t" };
+  const ASK = {
+    perm_id: "perm-" + "c".repeat(32),
+    product: "tm",
+    mode: "ask-always",
+    description: "Creating the new project",
+  };
+
+  it("parks on the first ask and hands back what the second call needs", async () => {
+    const { runDeferred } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const transport = vi.fn(async () => ({
+      status: 200,
+      body: { status: "needs_approval", run_id: "run-1", asks: [ASK] },
+    }));
+    const result = await runDeferred(
+      "https://atlas.example/agent", HEADERS,
+      { task: "make one", product: "tm" },
+      transport as never, "deferred", "tm",
+    );
+    expect(result.status).toBe("needs_approval");
+    expect(result.ok).toBe(false);
+    expect(result.run_id).toBe("run-1");
+    expect(result.perm_id).toBe(ASK.perm_id);
+    expect(result.applied_before_stop).toBe(false);
+    // The answer must tell the model to ASK A HUMAN — not merely to come back. The
+    // first version explained the transport instead, and the measured result was the
+    // model approving on the user's behalf in the same turn.
+    expect(String(result.answer)).toContain("A HUMAN MUST APPROVE THIS");
+    expect(String(result.answer)).toContain("Do NOT decide on their behalf");
+    // Points at a structured affordance WITHOUT naming one: the tool differs per
+    // client, and a name here would be wrong everywhere else and would rot.
+    expect(String(result.answer)).toContain("structured question");
+    expect(String(result.answer)).not.toMatch(/AskUserQuestion|Claude Code|elicit/i);
+    // `next_step` carries the arguments, so "I did not know what to send" is not a
+    // reason to improvise.
+    expect(result.next_step?.call).toBe("askBrowserStackAI");
+    expect(result.next_step?.params).toMatchObject({
+      product: "tm", run_id: "run-1", perm_id: ASK.perm_id,
+    });
+    expect(result.next_step?.params.decision).toContain("the user's answer");
+    expect(result.next_step?.instruction).toContain("AFTER the user has answered");
+  });
+
+  it("a decision whose reply never came back is not reported as never sent", async () => {
+    // The decision request carries the whole continuation now, so a lost reply spans
+    // everything from "it never arrived" to "the write landed and the answer was lost".
+    // Reporting `not_reached` — "NOTHING WAS ASKED AND NOTHING WAS REFUSED" — is the
+    // claim that gets the same change made a second time.
+    const { runResumed } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const post = vi.fn(async () => {
+      throw new Error("socket hang up");
+    });
+    const result = await runResumed(
+      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
+      post as never, "deferred", "tm",
+    );
+    expect(result.permission_relay.reason).toBe("outcome_unknown");
+    expect(result.permission_relay.reason).not.toBe("not_reached");
+    // `null`, not false: nobody measured it, which is not the same as measuring nothing.
+    expect(result.applied_before_stop).toBeNull();
+    expect(result.permission_relay.detail).toMatch(/OUTCOME IS UNKNOWN/);
+    expect(result.permission_relay.detail).toMatch(/DO NOT repeat this task/);
+    // And it must never say the thing that invites the retry.
+    expect(result.permission_relay.detail).not.toMatch(/nothing was changed/i);
+    expect(String(result.error)).toMatch(/no reply came back/);
+  });
+
+  it("a read-only task still costs one call, not two", async () => {
+    const { runDeferred } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const transport = vi.fn(async () => ({
+      status: 200,
+      body: { ok: true, status: "ok", answer: "you have 3 projects" },
+    }));
+    const result = await runDeferred(
+      "https://atlas.example/agent", HEADERS,
+      { task: "list them", product: "tm" },
+      transport as never, "deferred", "tm",
+    );
+    expect(result.status).toBe("ok");
+    expect(result.run_id).toBeUndefined();
+  });
+
+  it("delivers the decision and returns the continuation, in ONE call", async () => {
+    const { runResumed } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const post = vi.fn(async () => ({
+      status: 200,
+      body: { ok: true, status: "ok", answer: "made it" },
+    }));
+    const result = await runResumed(
+      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
+      post as never, "deferred", "tm",
+    );
+    // ONE request, to the run's own endpoint, naming WHICH ask — and carrying the
+    // product, because the run resumes on a fresh Agent that must be scoped first.
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith(
+      "https://atlas.example/agent/run-1/permission",
+      HEADERS,
+      { perm_id: ASK.perm_id, decision: "allow", reason: "", product: "tm" },
+    );
+    expect(result.status).toBe("ok");
+    expect(result.answer).toBe("made it");
+  });
+
+  it("parks AGAIN when the resumed run needs a second approval", async () => {
+    const { runResumed } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const second = { ...ASK, perm_id: "perm-" + "d".repeat(32),
+                     description: "Adding the first test run" };
+    const post = vi.fn(async () => ({
+      status: 200,
+      body: { ok: false, status: "needs_approval", run_id: "run-1", asks: [second] },
+    }));
+    const result = await runResumed(
+      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
+      post as never, "deferred", "tm",
+    );
+    // Handed straight back, not answered here: each approval is a human's to give.
+    expect(result.status).toBe("needs_approval");
+    expect(result.perm_id).toBe(second.perm_id);
+    expect(result.next_step?.params.perm_id).toBe(second.perm_id);
+  });
+
+  it("a 404 says the approval did not apply, and never reads as one", async () => {
+    const { runResumed } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const post = vi.fn(async () => ({ status: 404, body: { detail: "no such run" } }));
+    const result = await runResumed(
+      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
+      post as never, "deferred", "tm",
+    );
+    expect(result.status).toBe("error");
+    expect(result.ok).toBe(false);
+    expect(result.approvals).toEqual([]);
+    expect(result.applied_before_stop).toBe(false);
+    expect(String(result.error)).toContain("could not be applied");
+  });
+
+  it("a denial is delivered as faithfully as an approval", async () => {
+    const { runResumed } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const post = vi.fn(async () => ({
+      status: 200, body: { ok: false, status: "blocked", error: "not approved" },
+    }));
+    await runResumed(
+      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "deny",
+      post as never, "deferred", "tm",
+    );
+    expect((post.mock.calls[0] as never as unknown[])[2]).toMatchObject(
+      { decision: "deny" },
+    );
+  });
+
+  it("a resume missing its arguments changes nothing and says which", async () => {
+    const { incompleteResume } = await import(
+      "../../src/tools/ask-browserstack/deferred.js"
+    );
+    const result = incompleteResume();
+    expect(result.ok).toBe(false);
+    expect(String(result.error)).toContain("`perm_id`");
+    expect(result.applied_before_stop).toBe(false);
   });
 });

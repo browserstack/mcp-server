@@ -116,7 +116,9 @@ export class AccessibilityScanner {
       });
       const data = response.data;
       if (!data.success)
-        throw new Error(`Unable to start scan: ${data.errors?.join(", ")}`);
+        throw new Error(
+          `Unable to start scan: ${data.errors?.join(", ") || JSON.stringify(data)}`,
+        );
       return data;
     } catch (err: any) {
       // apiClient throws generic errors, try to extract message

@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
@@ -104,7 +105,7 @@ export async function fetchTestCodeBySession(
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
-  const url = `${OBSERVABILITY_API_BASE}/sessions/${encodeURIComponent(sessionId)}/testCode`;
+  const url = `${OBSERVABILITY_API_BASE}/sessions/${encodePathSegment(sessionId)}/testCode`;
 
   try {
     const response = await apiClient.get<TestCodeApiResponse | TestCodeEntry[]>(

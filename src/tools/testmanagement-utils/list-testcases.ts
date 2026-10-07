@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -53,7 +54,7 @@ export async function listTestCases(
     if (args.p !== undefined) params.append("p", args.p.toString());
 
     const tmBaseUrl = await getTMBaseURL(config);
-    const url = `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
+    const url = `${tmBaseUrl}/api/v2/projects/${encodePathSegment(
       args.project_identifier,
     )}/test-cases?${params.toString()}`;
 

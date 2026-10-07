@@ -1,4 +1,5 @@
 import { apiClient } from "../../lib/apiClient.js";
+import { encodePathSegment } from "../../lib/url-path.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import {
   getO11yBaseUrl,
@@ -183,7 +184,11 @@ export async function submitTfaRcaTurn(
   // Submit only when we are not resuming an existing turn.
   if (!turnId) {
     const submitUrl =
-      baseUrl + RCA_CHAT_SUBMIT_PATH.replace("{testRunId}", args.testRunId);
+      baseUrl +
+      RCA_CHAT_SUBMIT_PATH.replace(
+        "{testRunId}",
+        encodePathSegment(args.testRunId),
+      );
 
     await notify(context, "Submitting RCA turn to TFA agent...", 5);
 

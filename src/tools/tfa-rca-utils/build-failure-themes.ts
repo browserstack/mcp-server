@@ -1,4 +1,5 @@
 import { apiClient } from "../../lib/apiClient.js";
+import { encodePathSegment } from "../../lib/url-path.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import {
   AI_FAILURES_FLAT_PATH,
@@ -92,7 +93,7 @@ function asObject(data: unknown): Record<string, any> {
 function failuresUrl(buildUuid: string): string {
   return (
     getO11yBaseUrl() +
-    AI_FAILURES_PATH.replace("{buildUuid}", encodeURIComponent(buildUuid))
+    AI_FAILURES_PATH.replace("{buildUuid}", encodePathSegment(buildUuid))
   );
 }
 
@@ -208,7 +209,7 @@ export async function fetchTestsInFailureTheme(
     getO11yBaseUrl() +
     AI_FAILURES_FLAT_PATH.replace(
       "{buildUuid}",
-      encodeURIComponent(args.buildUuid),
+      encodePathSegment(args.buildUuid),
     );
 
   const response = await apiClient.get({

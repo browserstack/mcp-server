@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 /**
  * CONTRACT v2 (A1) — read the ask off the response, send the decision separately.
  *
@@ -262,7 +263,7 @@ export function fetchAgentStreamTransport(
 
 /** `POST /agent/{run_id}/permission`, built from the base URL the tool already resolved. */
 export function decisionUrl(agentUrl: string, runId: string): string {
-  return `${agentUrl.replace(/\/+$/, "")}/${encodeURIComponent(runId)}/permission`;
+  return `${agentUrl.replace(/\/+$/, "")}/${encodePathSegment(runId)}/permission`;
 }
 
 /**

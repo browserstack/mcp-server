@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -61,8 +62,8 @@ export async function getTestPlan(
 ): Promise<CallToolResult> {
   try {
     const tmBaseUrl = await getTMBaseURL(config);
-    const projectId = encodeURIComponent(args.project_identifier);
-    const planId = encodeURIComponent(args.test_plan_identifier);
+    const projectId = encodePathSegment(args.project_identifier);
+    const planId = encodePathSegment(args.test_plan_identifier);
 
     const authString = getBrowserStackAuth(config);
     const [username, password] = authString.split(":");

@@ -6,6 +6,7 @@ import { BrowserStackConfig } from "../lib/types.js";
 import { fetchFromBrowserStackAPI, handleMCPError } from "../lib/utils.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { resolveHashedBuildId } from "./automate-utils/resolve-hashed-build-id.js";
+import { encodePathSegment } from "../lib/url-path.js";
 
 // Tool function that fetches build insights from two APIs
 export async function fetchBuildInsightsTool(
@@ -13,8 +14,8 @@ export async function fetchBuildInsightsTool(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const buildUrl = `https://api-automation.browserstack.com/ext/v1/builds/${args.buildId}`;
-    const qualityGateUrl = `https://api-automation.browserstack.com/ext/v1/quality-gates/${args.buildId}`;
+    const buildUrl = `https://api-automation.browserstack.com/ext/v1/builds/${encodePathSegment(args.buildId)}`;
+    const qualityGateUrl = `https://api-automation.browserstack.com/ext/v1/quality-gates/${encodePathSegment(args.buildId)}`;
 
     // Quality gate data is optional — a failure there should not block build insights
     const [buildData, qualityData] = await Promise.all([

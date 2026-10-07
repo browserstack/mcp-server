@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -38,7 +39,7 @@ export async function listTestRuns(
 
     const tmBaseUrl = await getTMBaseURL(config);
     const url =
-      `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
+      `${tmBaseUrl}/api/v2/projects/${encodePathSegment(
         args.project_identifier,
       )}/test-runs?` + params.toString();
 

@@ -3,6 +3,7 @@ import { filterLinesByKeywords, validateLogResponse } from "./utils.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { encodePathSegment } from "../../lib/url-path.js";
 
 // DEVICE LOGS
 export async function retrieveDeviceLogs(
@@ -10,7 +11,7 @@ export async function retrieveDeviceLogs(
   buildId: string,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/deviceLogs`;
+  const url = `https://api.browserstack.com/app-automate/builds/${encodePathSegment(buildId)}/sessions/${encodePathSegment(sessionId)}/deviceLogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -42,7 +43,7 @@ export async function retrieveAppiumLogs(
   buildId: string,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/appiumlogs`;
+  const url = `https://api.browserstack.com/app-automate/builds/${encodePathSegment(buildId)}/sessions/${encodePathSegment(sessionId)}/appiumlogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -74,7 +75,7 @@ export async function retrieveCrashLogs(
   buildId: string,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/crashlogs`;
+  const url = `https://api.browserstack.com/app-automate/builds/${encodePathSegment(buildId)}/sessions/${encodePathSegment(sessionId)}/crashlogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 

@@ -3,8 +3,8 @@
 This page lists everything the BrowserStack MCP Server exposes, in three layers:
 
 1. **[Core tools](#-core-tools)** — five tools that find and run any BrowserStack capability from a catalog. This is the recommended path and the one the [BrowserStack MCP docs](https://www.browserstack.com/docs/browserstack-mcp-server/tools) describe.
-2. **[Named tools](#-named-tools)** — the 46 product-specific tools that predate the core tools. They are still registered and supported, and remain in your client's tool list until they are deprecated in favour of the core tools. Prefer the core tools for new workflows.
-3. **[Test Management capabilities](#-test-management-capabilities)** — the 198 Test Management operations reachable through the core tools, grouped by the entity they act on.
+2. **[Legacy tools](#-legacy-tools)** — the 46 product-specific tools that predate the core tools. They are still registered and supported, and remain in your client's tool list until they are deprecated in favour of the core tools. Prefer the core tools for new workflows.
+3. **[Tools](#-tools)** — the 198 Test Management tools reachable through the core tools, grouped by the entity they act on.
 
 Each group below is collapsed; click a heading to expand it.
 
@@ -76,7 +76,7 @@ Two things worth knowing before you start:
 
 ---
 
-## 🗂️ Named Tools
+## 🗂️ Legacy Tools
 
 The 46 tools below are registered alongside the core tools. Each entry gives the tool name, what it does, and a prompt that triggers it.
 
@@ -449,16 +449,16 @@ The 46 tools below are registered alongside the core tools. Each entry gives the
 
 ---
 
-## 🧩 Test Management Capabilities
+## 🧩 Tools
 
-The 198 Test Management operations below are what the core tools reach: `searchCapability` finds them, `describeCapability` returns each one's parameters and response shape, and `invokeCapability` runs it. 109 are reads and 89 are writes; writes ask for your confirmation before anything changes, and destructive operations are withheld from this surface entirely. Capability names are the handles `searchCapability` returns — pass one to `describeCapability` to see its full contract.
+### TM Tools
 
-Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "tm"`, `query: "*"`). Grouped by the entity each capability acts on.
+The 198 Test Management tools below are what the core tools reach: `searchCapability` finds them, `describeCapability` returns each one's parameters and response shape, and `invokeCapability` runs it. 109 are reads and 89 are writes; writes ask for your confirmation before anything changes, and destructive operations are not exposed. Each name is the handle `searchCapability` returns — pass it to `describeCapability` to see the full contract.
 
 <details>
-<summary><b>attachment</b> — 2 capabilities (2 read · 0 write)</summary>
+<summary><b>attachment</b> — 2 tools (2 read · 0 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `list_entity_attachments` | read | List the files attached to one test case, test result or test plan - use this to see what screenshots, logs or evidence are on the item and to get the URL for reading each file |
 | `list_folder_attachments` | read | List the files attached to a folder itself. |
@@ -466,9 +466,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>comment</b> — 4 capabilities (2 read · 2 write)</summary>
+<summary><b>comment</b> — 4 tools (2 read · 2 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `list_test_case_comments` | read | Read the comments on a test case. |
 | `list_test_run_test_case_comments` | read | List the comments left on a test case inside a specific test run — use this to read the discussion or review feedback on that execution, find who said what and when, or discover a comment's id |
@@ -478,9 +478,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>configuration</b> — 3 capabilities (2 read · 1 write)</summary>
+<summary><b>configuration</b> — 3 tools (2 read · 1 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `list_configuration_groups` | read | List the account's configuration groups and their ids. |
 | `list_configurations` | read | List the configurations a project's test runs can execute against — search by name or fetch specific ids, to resolve the configuration_id a run needs |
@@ -489,9 +489,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>custom_field</b> — 17 capabilities (9 read · 8 write)</summary>
+<summary><b>custom_field</b> — 17 tools (9 read · 8 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_custom_field` | read | Read one custom field by its numeric id — confirm its name, type, placeholder, default and whether it is mandatory, and pick up the ids of the datasets that hold its option values |
 | `get_custom_field_dataset` | read | Read one dataset of a custom field — which projects it covers and, on request, the option values it holds |
@@ -514,9 +514,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>dataset</b> — 6 capabilities (4 read · 2 write)</summary>
+<summary><b>dataset</b> — 6 tools (4 read · 2 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_dataset` | read | Read one dataset in full — its columns, every row of data, tags and metadata — by dataset uuid |
 | `get_dataset_variables` | read | List every dataset column defined anywhere in the project, each with the dataset it belongs to — use this to find which dataset holds a variable name you saw in a test case |
@@ -528,9 +528,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>duplicate</b> — 4 capabilities (4 read · 0 write)</summary>
+<summary><b>duplicate</b> — 4 tools (4 read · 0 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_dedupe_status` | read | Check whether duplicate detection has ever run for a project and where the latest scan got to — the only way to tell 'dedupe is off or has never run' from 'it ran and found nothing' |
 | `get_duplicate` | read | Read one suggested duplicate pair — the two test cases side by side with their titles, descriptions, folders and owners, plus the confidence score and the model's reason — so a human can decide how to resolve it |
@@ -540,9 +540,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>exploratory_session</b> — 11 capabilities (5 read · 6 write)</summary>
+<summary><b>exploratory_session</b> — 11 tools (5 read · 6 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_exploratory_session` | read | Read one exploratory session in full — its charter, state, timings, assignee, tags, configurations, linked test plan, linked issues, custom fields and how many logs it holds — before reading its logs or changing it |
 | `list_exploratory_session_defects` | read | List the defects and issues raised during an exploratory session — the external tracker tickets linked to the session and to its individual log entries — to review what the exploration found |
@@ -559,9 +559,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>filter</b> — 3 capabilities (1 read · 2 write)</summary>
+<summary><b>filter</b> — 3 tools (1 read · 2 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `list_filters` | read | List the saved filter views available in a project — yours and the project-wide ones — to find the filter_id to read, apply, update or delete |
 | `create_filter` | write | Save a reusable named filter view on a project — the condition set behind a test case, test run, test plan or exploratory-session list — so the same selection can be reapplied later or shared with everyone on the project |
@@ -570,9 +570,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>folder</b> — 13 capabilities (4 read · 9 write)</summary>
+<summary><b>folder</b> — 13 tools (4 read · 9 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_folder_remove_summary` | read | Dry-run a folder deletion — count the test cases, subfolders and cross-product recordings that would be destroyed — before committing to it |
 | `get_folder_tree` | read | Fetch a project's entire folder tree in one call — every root folder with its children nested under `contents` — to resolve a folder name to the integer id every other folder and test-case call needs |
@@ -591,9 +591,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>issue</b> — 4 capabilities (1 read · 3 write)</summary>
+<summary><b>issue</b> — 4 tools (1 read · 3 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_linked_test_case_selection` | read | Preview the test cases a tracker ticket would link. |
 | `link_entities_to_jira_issue` | write | Link test cases or runs to a tracker ticket. |
@@ -603,9 +603,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>project</b> — 21 capabilities (17 read · 4 write)</summary>
+<summary><b>project</b> — 21 tools (17 read · 4 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_active_test_runs_info` | read | Chart the result-status breakdown across the project's currently active test runs — how many results are passed / failed / blocked / untested right now |
 | `get_automation_stats` | read | Get the project's automation coverage — what percentage of its test cases are automated, with the automated / manual / total counts behind it |
@@ -632,9 +632,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>report</b> — 13 capabilities (8 read · 5 write)</summary>
+<summary><b>report</b> — 13 tools (8 read · 5 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_exploratory_session_summary` | read | Get exploratory-session testing figures for a project directly — sessions, outcomes and top testers over a date range or a chosen set of sessions, with no saved report needed |
 | `get_report` | read | Read one report's setup by its SC-NNN identifier — what it covers (type, time window, the runs/plans/sessions it is scoped to), whether it is on a schedule and when it next runs, who receives it, and whether a generated file exists; configuration only, no figures |
@@ -653,9 +653,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>result</b> — 7 capabilities (3 read · 4 write)</summary>
+<summary><b>result</b> — 7 tools (3 read · 4 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `list_test_results_for_test_case` | read | Read what was recorded for one test case in one test run — every execution logged against it, with status, notes, linked defects, custom fields and configuration |
 | `list_test_results_for_test_case_by_integer_id` | read | Read the result history for one test case inside one test run — every attempt logged against that case with its status, author, note, attachments, linked defects and custom fields; the read for 'what happened when we executed this case?' |
@@ -668,9 +668,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>shared_field</b> — 3 capabilities (1 read · 2 write)</summary>
+<summary><b>shared_field</b> — 3 tools (1 read · 2 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `list_shared_components` | read | List or search a project's shared fields. |
 | `create_shared_component` | write | Create a reusable shared field - a step sequence, a Gherkin background block, or a precondition - that many test cases can then reference. |
@@ -679,9 +679,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>shared_step</b> — 4 capabilities (2 read · 2 write)</summary>
+<summary><b>shared_step</b> — 4 tools (2 read · 2 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_shared_step` | read | Read one shared step with its full ordered step/result rows — the block that every referencing test case renders, and the row ids those references point at |
 | `get_shared_steps` | read | List a project's shared steps with how many steps each holds and how many test cases embed it — use this to find a shared_step_id and to size the blast radius before editing or deleting a block |
@@ -691,9 +691,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>tag</b> — 6 capabilities (4 read · 2 write)</summary>
+<summary><b>tag</b> — 6 tools (4 read · 2 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_test_case_tags` | read | List the tag names currently on one test case — to see what it is labelled with before filtering, grouping or re-tagging |
 | `list_test_case_tags` | read | List a project's test-case tag vocabulary with usage counts — the set of tag names to pick from when tagging a case or filtering a list by tag |
@@ -705,9 +705,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>template</b> — 4 capabilities (2 read · 2 write)</summary>
+<summary><b>template</b> — 4 tools (2 read · 2 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `list_templates` | read | List the workspace's test-case templates — start here to find a template's id before creating a test case from it or before editing the template itself. |
 | `list_test_case_templates` | read | List the workspace's test-case (or test-result) templates with their ids — the lookup to run before creating a case from a template or editing a template's field layout |
@@ -717,9 +717,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>test_case</b> — 24 capabilities (10 read · 14 write)</summary>
+<summary><b>test_case</b> — 24 tools (10 read · 14 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `count_binned_test_cases` | read | Return just the number of test cases currently in a project's recycle bin — the cheap way to answer 'how many binned/deleted cases are there?' without pulling any rows into context (use list_binned_test_cases when you need the cases themselves) |
 | `get_system_field_values` | read | List the option ids and display names a project defines for one system field (priority, status, case type, automation state) — resolve these before writing any of them. |
@@ -749,9 +749,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>test_plan</b> — 18 capabilities (10 read · 8 write)</summary>
+<summary><b>test_plan</b> — 18 tools (10 read · 8 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_archived_test_plan_count` | read | How many test plans in this project are archived — the badge number for the archived view; use the archived-plans listing when you need the plans themselves |
 | `get_test_plan` | read | Read one test plan or sub-plan — dates, status, owner-facing description, tags, linked issues, how many runs and sub-plans it holds, and a first glimpse of the runs inside it |
@@ -775,9 +775,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>test_run</b> — 23 capabilities (11 read · 12 write)</summary>
+<summary><b>test_run</b> — 23 tools (11 read · 12 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `count_run_selection` | read | Ask how many test cases a folder/case selection will actually resolve to — including the multiplication by configurations — before committing it to a run create or edit |
 | `get_test_run` | read | Look up one test run — its state, owner, tags, configurations, linked plan and per-status progress counts |
@@ -806,9 +806,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>user</b> — 3 capabilities (3 read · 0 write)</summary>
+<summary><b>user</b> — 3 tools (3 read · 0 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `list_group_users` | read | List or look up the people in this workspace — search by name, resolve an exact email, or read your own identity — to get the user id that owner and assignee fields take |
 | `list_users` | read | List the account's active users, for assigning a case or run. |
@@ -817,9 +817,9 @@ Listed from the live catalog on 2026-10-07 (`searchCapability` with `product: "t
 </details>
 
 <details>
-<summary><b>version</b> — 5 capabilities (4 read · 1 write)</summary>
+<summary><b>version</b> — 5 tools (4 read · 1 write)</summary>
 
-| Capability | Mode | What it does |
+| Tool | Mode | What it does |
 |---|---|---|
 | `get_test_case_histories` | read | See what changed on a test case, when, and who changed it — the revision trail, newest first, naming the fields touched in each edit; the read to answer 'what did this case look like before that edit?' or 'which revision should we roll back to?' |
 | `get_test_case_history` | read | Read one revision of a test case in full — the per-field before/after for that single change and who made it; the follow-up read after finding a revision in the trail |

@@ -73,12 +73,7 @@ describe("searchCapability's vocabulary hand-off", () => {
     const { BrowserStackMcpServer } =
       await import("../../src/server-factory.js");
     const tools = new BrowserStackMcpServer(CONFIG).getTools() as any;
-    // `product` is a free string on this tool now, so the handler validates it rather
-    // than the schema — a direct call has to name one, exactly as a client would.
-    const raw = await tools.searchCapability.handler(
-      { query, product: "tm" },
-      {} as any,
-    );
+    const raw = await tools.searchCapability.handler({ query }, {} as any);
     return JSON.parse(raw.content[0].text);
   }
 

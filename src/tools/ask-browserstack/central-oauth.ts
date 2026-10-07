@@ -1,15 +1,5 @@
 /**
- * Atlas's view of the central-OAuth mint.
- *
- * The MECHANISM — the form, the transport, the classification, the cache — moved to
- * `src/lib/central-oauth.ts` when the capability registry needed the same exchange for
- * products whose APIs take a Bearer JWT rather than `Api-Token`. Two minters would have
- * drifted, and the one that drifted would have been the one with fewer tests.
- *
- * What stays here is everything ATLAS-SPECIFIC and nothing else: the scope pair, the skew
- * that exists because Atlas holds the token for a whole run, and the messages — which say
- * "nothing reached the agent" and name `ai_agent_notify`, and would be actively wrong in
- * front of a capability-registry user.
+ * Mint a BrowserStack central-OAuth JWT from the caller's username and access key.
  *
  * This replaces a shared delegation token, and the upgrade is not cosmetic.
  * `validate_delegation_token` refuses any token without `user.user_id`/`user.group_id`, so
@@ -17,37 +7,28 @@
  * user from signed claims rather than from anything we put in the request body, and reuses
  * this same JWT as its `egress_token` — so the product call a human approves runs as that
  * human, not as a shared service account.
+ *
+ * SECRET HYGIENE IS THE WHOLE POINT OF THIS MODULE, and Atlas's `central_oauth.py` learned
+ * it the hard way: "The body can echo the credential back on some errors, so it is NOT
+ * logged or raised — only the status." Neither the access key nor the minted token is ever
+ * logged, returned, or put in an error message. Only a status code is.
  */
 
-import {
-  CentralAuthError,
-  Credentials,
-  mintCentralToken as mintShared,
-  mintForm as mintFormShared,
-  REQUESTED_EXPIRES_IN,
-} from "../../lib/central-oauth.js";
+import { createHash } from "node:crypto";
+
+import { apiClient } from "../../lib/apiClient.js";
 import appConfig from "../../config.js";
 import logger from "../../logger.js";
 import { AGENT_TIMEOUT_MS, AskError } from "./config.js";
-
-export {
-  fetchTokenTransport,
-  refusalIsAboutScope,
-  REQUESTED_EXPIRES_IN,
-  resetTokenCache,
-  TOKEN_TIMEOUT_MS,
-  type TokenResponse,
-  type TokenTransport,
-} from "../../lib/central-oauth.js";
+import { Credentials } from "./egress.js";
 
 /**
  * BOTH PARTS ARE REQUIRED, AND THERE IS NO FALLBACK TO ANOTHER SCOPE.
  *
  * `oauth_user_profile` stays because it is what makes the pair obtainable through the
- * username+access_key flow at all — measured, not assumed: the paired scope mints, and the
- * other half alone comes back `400 invalid_request`. `ai_agent_notify` is what Atlas matches
- * on (`delegation.required_scope`, checked as exact membership of the token's `scopes` claim
- * in `web/oauth.py`); both halves move together with Atlas.
+ * username+access_key flow at all. `ai_agent_notify` is what Atlas matches on
+ * (`delegation.required_scope`, checked as exact membership of the token's `scopes` claim in
+ * `web/oauth.py`); both halves move together with Atlas.
  *
  * THIS SCOPE MAY SIMPLY NOT BE ISSUABLE TO US, and the reasons are worth stating rather than
  * discovering. From the merged `browserstack/railsApp#175367` (2026-08-24):
@@ -69,11 +50,11 @@ export {
  * application — and it is reported as one, naming the scope. It is never retried with a
  * different scope: a silent downgrade to a different authorization is exactly the kind of
  * thing nobody notices until it matters.
- *
- * Named here rather than taken from the shared default, so that changing the registry's
- * scopes can never silently change what Atlas is authorised for.
  */
 export const CENTRAL_SCOPE = "oauth_user_profile ai_agent_notify";
+
+/** What we ask for. The endpoint clamps to its own maximum, so the response wins. */
+export const REQUESTED_EXPIRES_IN = 3600;
 
 /**
  * Treat a token as stale this long before it actually expires.
@@ -85,6 +66,63 @@ export const CENTRAL_SCOPE = "oauth_user_profile ai_agent_notify";
  * expired credential, which is the exact mid-flight expiry this cache exists to prevent.
  */
 export const REFRESH_SKEW_MS = AGENT_TIMEOUT_MS + 60_000;
+
+/** The token endpoint gets its own, much shorter budget than `/agent`. */
+export const TOKEN_TIMEOUT_MS = 15_000;
+
+export interface TokenResponse {
+  status: number;
+  body: unknown;
+  /** Only when there was no response at all to speak for itself. */
+  error?: string;
+}
+
+export type TokenTransport = (
+  url: string,
+  form: Record<string, string>,
+) => Promise<TokenResponse>;
+
+/**
+ * The OAuth2 error codes we are willing to read out of a failure body.
+ *
+ * `error` is a fixed enum token in the spec, so it cannot carry a credential; `error_description`
+ * is free text and demonstrably CAN ("access_key <key> is invalid"), which is why only the
+ * code is ever looked at and only when it is one of these. Anything else is ignored entirely
+ * and the classification falls back to the status.
+ */
+const SCOPE_ERROR_CODES = [
+  "invalid_scope",
+  "unauthorized_client",
+  "invalid_request",
+];
+const CREDENTIAL_ERROR_CODES = [
+  "invalid_client",
+  "invalid_grant",
+  "access_denied",
+];
+
+/**
+ * Was this refusal about the SCOPE or about the CREDENTIAL?
+ *
+ * The two need completely different fixes — provisioning versus a password — so collapsing
+ * them into one message sends someone to the wrong place entirely. Our form has five fields
+ * and four of them are constants, so a refusal of the REQUEST (as opposed to the caller) can
+ * only really be about the scope.
+ *
+ * Nothing from the body is ever surfaced; the code is used to classify and then discarded.
+ */
+export function refusalIsAboutScope(status: number, body: unknown): boolean {
+  const payload =
+    typeof body === "object" && body !== null
+      ? (body as Record<string, unknown>)
+      : {};
+  const code = typeof payload.error === "string" ? payload.error : "";
+  if (SCOPE_ERROR_CODES.includes(code)) return true;
+  if (CREDENTIAL_ERROR_CODES.includes(code)) return false;
+  // No usable code. OAuth2 answers a bad REQUEST with 400 and a bad CLIENT with 401/403, so
+  // the status is the next best evidence.
+  return status === 400;
+}
 
 /**
  * The ways authentication can fail, kept apart because a user cannot act on them otherwise.
@@ -134,63 +172,175 @@ export const AUTH_UNUSABLE_DETAIL = (status: number): string =>
   `BrowserStack auth answered HTTP ${status} without issuing a token. NOTHING REACHED THE ` +
   `AGENT — no request was made, no prompt appeared and nothing was changed.`;
 
-/** The exact form body of the `client_credentials` grant, at Atlas's scope. */
-export function mintForm(credentials: Credentials): Record<string, string> {
-  return mintFormShared(credentials, CENTRAL_SCOPE, REQUESTED_EXPIRES_IN);
+interface CacheEntry {
+  token: string;
+  expiresAt: number;
+  /** Shared so N concurrent tool calls mint ONCE rather than N times. */
+  inflight?: Promise<string>;
 }
 
-/** Every failure kind gets Atlas's own sentence; none of them carries the response body. */
-function toAskError(error: unknown): unknown {
-  if (!(error instanceof CentralAuthError)) return error;
-  switch (error.kind) {
-    case "no_credentials":
-      return new AskError(
-        "BrowserStack AI is not authenticated: BROWSERSTACK_USERNAME and " +
-          "BROWSERSTACK_ACCESS_KEY are required to sign in",
-      );
-    case "unreachable":
-      return new AskError(AUTH_UNREACHABLE_DETAIL);
-    case "server_error":
-      return new AskError(AUTH_SERVER_ERROR_DETAIL(error.status));
-    case "refused_scope":
-      return new AskError(AUTH_SCOPE_REFUSED_DETAIL(error.status));
-    case "refused_credentials":
-      return new AskError(AUTH_REJECTED_DETAIL(error.status));
-    default:
-      return new AskError(AUTH_UNUSABLE_DETAIL(error.status));
+const cache = new Map<string, CacheEntry>();
+
+/** Drop every cached token. For tests, and for a credential rotation. */
+export function resetTokenCache(): void {
+  cache.clear();
+}
+
+/**
+ * The cache key.
+ *
+ * Keyed on the access key so that ROTATING it mints immediately rather than leaving a
+ * revoked credential working until expiry — but on a SHA-256 of it, never the value, so the
+ * secret is not left sitting in a map key for the life of the process.
+ */
+function cacheKey(url: string, credentials: Credentials): string {
+  const digest = createHash("sha256")
+    .update(credentials.accessKey)
+    .digest("hex");
+  return `${url} ${credentials.username} ${CENTRAL_SCOPE} ${digest}`;
+}
+
+/**
+ * The token endpoint, through `apiClient` per rules/security.md — no bare `fetch`.
+ *
+ * `raise_error: false` keeps the status-first contract this transport has always had: the
+ * caller distinguishes a 400 scope refusal from a 401 rejection from an unreachable host,
+ * so a thrown AxiosError on any non-2xx would destroy the only signal it reads.
+ */
+export function fetchTokenTransport(
+  timeoutMs = TOKEN_TIMEOUT_MS,
+): TokenTransport {
+  return async (url, form) => {
+    try {
+      const response = await apiClient.post<unknown>({
+        url,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body: new URLSearchParams(form).toString(),
+        timeout: timeoutMs,
+        raise_error: false,
+      });
+      return { status: response.status, body: response.data ?? null };
+    } catch {
+      // DNS, TLS, timeout — all of them mean "no token". The reason is deliberately not
+      // carried: it can name the URL and, on some stacks, echo the request body.
+      return { status: 0, body: null, error: "auth could not be reached" };
+    }
+  };
+}
+
+/** The exact form body of the `client_credentials` grant. */
+export function mintForm(credentials: Credentials): Record<string, string> {
+  return {
+    grant_type: "client_credentials",
+    username: credentials.username,
+    access_key: credentials.accessKey,
+    scope: CENTRAL_SCOPE,
+    expires_in: String(REQUESTED_EXPIRES_IN),
+  };
+}
+
+async function mintOnce(
+  url: string,
+  credentials: Credentials,
+  transport: TokenTransport,
+): Promise<{ token: string; lifetimeMs: number }> {
+  const response = await transport(url, mintForm(credentials));
+
+  if (response.status === 0) throw new AskError(AUTH_UNREACHABLE_DETAIL);
+  // 5xx BEFORE the refusal branch: a server error is not a refusal, and reading it as one
+  // is worse than saying nothing — it names the caller's credentials as the fault.
+  if (response.status >= 500) {
+    throw new AskError(AUTH_SERVER_ERROR_DETAIL(response.status));
   }
+  if (response.status !== 200) {
+    // ONLY THE STATUS CROSSES. The body is read solely to tell a provisioning problem from a
+    // credential one, and nothing out of it is ever put in the message — a non-200 body can
+    // echo the access key straight back.
+    throw new AskError(
+      refusalIsAboutScope(response.status, response.body)
+        ? AUTH_SCOPE_REFUSED_DETAIL(response.status)
+        : AUTH_REJECTED_DETAIL(response.status),
+    );
+  }
+
+  const body =
+    typeof response.body === "object" && response.body !== null
+      ? (response.body as Record<string, unknown>)
+      : {};
+  const token = body.access_token;
+  if (typeof token !== "string" || !token) {
+    throw new AskError(AUTH_UNUSABLE_DETAIL(response.status));
+  }
+
+  // Trust the SERVER's lifetime over what we asked for — it clamps to its own maximum, and
+  // caching for the requested hour when it granted less would hand out a dead token.
+  const granted = Number(body.expires_in);
+  const seconds =
+    Number.isFinite(granted) && granted > 0 ? granted : REQUESTED_EXPIRES_IN;
+  return { token, lifetimeMs: seconds * 1000 };
 }
 
 /**
  * Return a valid token, minting one only when the cache has nothing fresh.
  *
- * NOT CACHED IN HOSTED MODE. These tokens are per-user, attested credentials, and the
- * process is shared by every tenant — `rules/multi-tenant-safety.md` forbids holding user
- * data in module-level state there, so remote mode mints per call.
+ * Minting per tool call would add a round trip to every request and make the token endpoint
+ * a hot dependency of the whole surface.
  */
 export async function mintCentralToken(
   url: string,
   credentials: Credentials,
-  transport: Parameters<typeof mintShared>[0]["transport"],
+  transport: TokenTransport,
   now: number = Date.now(),
 ): Promise<string> {
-  try {
-    return await mintShared({
-      url,
-      scope: CENTRAL_SCOPE,
-      credentials,
-      transport,
-      refreshSkewMs: REFRESH_SKEW_MS,
-      cacheEnabled: !appConfig.REMOTE_MCP,
-      now,
-      onMinted: (lifetimeMs) =>
-        logger.info(
-          "askBrowserStackAI: signed in as %s (lifetime %ss)",
-          credentials.username,
-          Math.round(lifetimeMs / 1000),
-        ),
-    });
-  } catch (error) {
-    throw toAskError(error);
+  // Refused before any network call, and by name: these ARE the auth credential now, not
+  // merely attribution, so an empty one is our missing configuration rather than the user's
+  // rejected password, and must not read like one.
+  if (!credentials?.username || !credentials?.accessKey) {
+    throw new AskError(
+      "BrowserStack AI is not authenticated: BROWSERSTACK_USERNAME and " +
+        "BROWSERSTACK_ACCESS_KEY are required to sign in",
+    );
   }
+
+  // NOT CACHED IN HOSTED MODE. These tokens are per-user, attested credentials, and the
+  // process is shared by every tenant — `rules/multi-tenant-safety.md` forbids holding user
+  // data in module-level state there, so remote mode mints per call. Keying on
+  // username + sha256(accessKey) already means one user can never be SERVED another's token,
+  // but containment is not the contract; not holding it at all is.
+  if (appConfig.REMOTE_MCP) {
+    return mintOnce(url, credentials, transport).then(({ token }) => {
+      logger.info("askBrowserStackAI: signed in as %s", credentials.username);
+      return token;
+    });
+  }
+
+  const key = cacheKey(url, credentials);
+  const entry = cache.get(key);
+  if (entry && entry.token && now < entry.expiresAt - REFRESH_SKEW_MS) {
+    return entry.token;
+  }
+  // Double-checked through a shared promise: concurrent callers await the same mint.
+  if (entry?.inflight) return entry.inflight;
+
+  const pending = mintOnce(url, credentials, transport)
+    .then(({ token, lifetimeMs }) => {
+      cache.set(key, { token, expiresAt: now + lifetimeMs });
+      logger.info(
+        "askBrowserStackAI: signed in as %s (lifetime %ss)",
+        credentials.username,
+        Math.round(lifetimeMs / 1000),
+      );
+      return token;
+    })
+    .catch((error) => {
+      // Never leave a rejected promise cached, or every later call inherits this failure.
+      cache.delete(key);
+      throw error;
+    });
+
+  cache.set(key, { token: "", expiresAt: 0, inflight: pending });
+  return pending;
 }

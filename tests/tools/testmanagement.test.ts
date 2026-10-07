@@ -1666,11 +1666,11 @@ describe('listTemplates', () => {
   });
 });
 
-describe("test-plan tools point writes at the capability functions", () => {
+describe("test-plan tools point writes at askBrowserStackAI", () => {
   // There is no createTestPlan tool and no link/unlink tool — the plan surface here is four
-  // READ tools. The capability functions can do the writes (Test Management's own API covers
-  // creating, updating, cloning and deleting a plan, and linking or unlinking its runs), so
-  // without a pointer the model finds no create and reports the capability as absent. A QA eval concluded exactly
+  // READ tools. Atlas can do the writes (the tm harness allows POST .../test-plans plus
+  // /update, /delete, /clone, /test-runs and /test-runs/unlink), so without a pointer the
+  // model finds no create and reports the capability as absent. A QA eval concluded exactly
   // that, which is why this is pinned rather than left to the description prose.
   //
   // Registrations are captured into a fresh fake server rather than read off the
@@ -1695,18 +1695,15 @@ describe("test-plan tools point writes at the capability functions", () => {
     "getSubTestPlan",
   ];
 
-  it.each(PLAN_TOOLS)("%s names the capability functions as the way to write a plan", (name) => {
+  it.each(PLAN_TOOLS)("%s names the agent as the way to write a plan", (name) => {
     const d = descriptionOf(name);
     expect(d).toMatch(/not available as tools here/);
-    expect(d).toMatch(/use the capability functions/);
-    // As a GROUP, never an individual name: a function named here goes stale on the next
-    // rename, and which one to call is the registry's business, not this description's.
-    expect(d).not.toMatch(/searchCapability|invokeCapability|describeCapability/);
+    expect(d).toMatch(/askBrowserStackAI with product "tm"/);
     // The consent property matters: nobody should think this happens silently.
-    expect(d).toMatch(/ask you to confirm/);
+    expect(d).toMatch(/asks you to confirm/);
   });
 
-  it("names the missing OPERATIONS, so it is not a general invitation to route plans away", () => {
+  it("names the missing OPERATIONS, so it is not a general invitation to use the agent", () => {
     // If this ever broadens to "use the agent for plans", the routing advantage of the
     // specific read tools is lost — the descriptions elsewhere say to prefer a real tool.
     const d = descriptionOf("listTestPlans");

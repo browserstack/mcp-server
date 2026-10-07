@@ -275,17 +275,6 @@ function coerceType(
         `'${label}' must be a whole number, not ${JSON.stringify(raw)}`,
       );
     }
-    // Past 2^53 `Number` rounds: TRA's 17-digit unique-error cluster ids came back as a
-    // neighbouring id, so the call silently targeted the wrong cluster. Keep the caller's
-    // exact digits instead — path and query serialise a string identically, and a JSON body
-    // carrying a digit string still binds to a Long on the server.
-    if (
-      expected === "integer" &&
-      !Number.isSafeInteger(parsed) &&
-      /^-?\d+$/.test(raw)
-    ) {
-      return raw;
-    }
     return parsed;
   }
   if (expected === "boolean") {
@@ -342,16 +331,6 @@ function place(
   cursor[segments[segments.length - 1]] = value;
 }
 
-const MAP_KEY = /^[A-Za-z0-9][\w.-]*$/;
-
-function keyedParam(
-  group: keyof GroupedArguments,
-  params: WireParam[],
-): WireParam | undefined {
-  if (group !== "body") return undefined;
-  return params.find((param) => /^\{\w+\}$/.test(param.name));
-}
-
 const GROUPS: { group: keyof GroupedArguments; declared: keyof Capability }[] =
   [
     { group: "path_params", declared: "path_params" },
@@ -378,13 +357,10 @@ export function bind(
     }
     const params = (capability[declared] as WireParam[] | undefined) || [];
     const byName = new Map(params.map((param) => [param.name, param]));
-    const keyed = keyedParam(group, params);
 
     // Unknown arguments are an error rather than being dropped: silently ignoring a
     // misspelled filter would return a larger result set that looks like a correct answer.
-    const unknown = Object.keys(supplied).filter(
-      (name) => !byName.has(name) && !keyed,
-    );
+    const unknown = Object.keys(supplied).filter((name) => !byName.has(name));
     if (unknown.length > 0) {
       // A CALLER WHO SENT THE WRAPPER WE BUILD DESERVES TO BE TOLD SO.
       //
@@ -420,12 +396,7 @@ export function bind(
     }
 
     for (const [name, raw] of Object.entries(supplied)) {
-      const param = byName.get(name) ?? keyed!;
-      if (param === keyed && !MAP_KEY.test(name)) {
-        throw new InvocationError(
-          `'${name}' is not a usable ${keyed.name} key: use the id exactly as a read returned it`,
-        );
-      }
+      const param = byName.get(name)!;
       const value = coerce(raw, param);
       if (group === "path_params") {
         // Encode with nothing exempt: a `/` inside a path value would otherwise rewrite the
@@ -435,14 +406,7 @@ export function bind(
           encodeURIComponent(pathSegment(value, name)),
         );
       } else if (group === "body") {
-        const pointer = param.json_path || `/${param.name}`;
-        place(
-          body,
-          param === keyed && !byName.has(name)
-            ? pointer.replace(keyed.name, name)
-            : pointer,
-          value,
-        );
+        place(body, param.json_path || `/${name}`, value);
       } else {
         query[name] = value;
       }
@@ -456,15 +420,9 @@ export function bind(
   for (const { group, declared } of GROUPS) {
     if (group === "query") continue;
     const supplied = args[group] || {};
-    const params = (capability[declared] as WireParam[] | undefined) || [];
-    const keyed = keyedParam(group, params);
-    const declaredNames = new Set(params.map((param) => param.name));
-    for (const param of params) {
-      const present =
-        param.name in supplied ||
-        (param === keyed &&
-          Object.keys(supplied).some((name) => !declaredNames.has(name)));
-      if (param.required && !present) missing.push(param.name);
+    for (const param of (capability[declared] as WireParam[] | undefined) ||
+      []) {
+      if (param.required && !(param.name in supplied)) missing.push(param.name);
     }
   }
   if (missing.length > 0) {
@@ -479,15 +437,5 @@ export function bind(
       `path placeholder(s) not supplied: ${leftover.join(", ")}`,
     );
   }
-  // An explicitly supplied empty body is still a body. Dropping it sent no request body at
-  // all, and a route with a required @RequestBody (TRA close_build, whose guidance says to
-  // send `{}`) answered 400 "Invalid request payload". GET/HEAD never carry one.
-  const sentEmptyBody =
-    args.body !== undefined &&
-    !["GET", "HEAD"].includes(capability.method.toUpperCase());
-  return {
-    path,
-    query,
-    body: Object.keys(body).length > 0 || sentEmptyBody ? body : undefined,
-  };
+  return { path, query, body: Object.keys(body).length > 0 ? body : undefined };
 }

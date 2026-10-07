@@ -6,12 +6,12 @@
     "url": "https://github.com/browserstack/mcp-server",
     "source": "github"
   },
-  "version": "2.1.0",
+  "version": "2.1.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@browserstack/mcp-server",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "transport": {
         "type": "stdio"
       },
@@ -31,6 +31,12 @@
           "name": "BROWSERSTACK_ACCESS_KEY"
         }
       ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.browserstack.com/mcp"
     }
   ]
 }

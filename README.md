@@ -137,6 +137,30 @@ Create and manage test cases, create test plans and trigger test runs using natu
 "update test results as passed for Login tests test run from My Demo Project"
 ```
 
+### ⚡ Load Testing
+
+Run and analyse load tests at scale without leaving your IDE or chat — find tests, start and stop runs, read reports and AI Insights, compare runs, and check your VU-hours. Works with API (JMeter, k6, Gatling, Locust), browser (Playwright, Selenium, WebdriverIO, Nightwatch) and hybrid load tests on BrowserStack's [Load Testing](https://www.browserstack.com/load-testing). These go through the [core tools](#-core-tools).
+
+```bash
+# Find a test
+"find my load test called checkout-api"
+
+# Run it
+"run checkout-api for 5 minutes with 100 virtual users"
+
+# Check on it
+"is my checkout-api run finished yet?"
+
+# Read the results
+"what was the p95 response time and error rate of the last checkout-api run?"
+
+# Compare two runs of the same test
+"did the latest checkout-api run regress compared with the previous one?"
+
+# Check quota before a big run
+"how many VU-hours do I have left, and what would a 30-minute run with 500 VUs cost?"
+```
+
 ### 🧪 Access BrowserStack AI agents 
 
 Generate test cases from PRDs, convert manual tests to low-code automation, and auto-heal flaky scripts powered by BrowserStack’s AI agents, seamlessly integrated into your workflow.  Below are few example prompts to access Browserstack AI agents

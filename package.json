@@ -1,6 +1,6 @@
 {
   "name": "@browserstack/mcp-server",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "BrowserStack's Official MCP Server",
   "mcpName": "io.github.browserstack/mcp-server",
   "main": "dist/index.js",
@@ -16,7 +16,7 @@
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "check:contract": "python3 scripts/check-contract.py capability/tm.capability-index.json --baseline scripts/contract-baseline/tm.json --quiet",
+    "check:contract": "python3 scripts/check-contract.py capability/tm.capability-index.json --baseline scripts/contract-baseline/tm.json --quiet && python3 scripts/check-contract.py capability/loadtesting.capability-index.json --baseline scripts/contract-baseline/loadtesting.json --quiet",
     "eval:index": "tsx scripts/eval-index.mts",
     "seed:live": "tsx scripts/seed-live.mts",
     "plan:tests": "tsx scripts/plan-capability-tests.mts",
@@ -39,7 +39,7 @@
     "node": ">=20.9.0"
   },
   "author": "",
-  "license": "ISC",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/form-data": "^2.5.2",

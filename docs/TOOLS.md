@@ -240,6 +240,35 @@ searchCapability  →  describeCapability  →  invokeCapability
 </details>
 
 <details>
+<summary><b>⚡ Load Testing</b></summary>
+
+| Tool | What it does |
+|---|---|
+| `compareLoadTestRuns` | Compare two executions (runs) of the SAME load test and surface the deltas — the regression check ('did the latest run regress vs the previous one?'). Not for comparing different tests: runs of different tests are rejected (DIFFERENT_TESTS). For a trend across more than two runs use getLoadTestHistoricalTrends. |
+| `createLoadTest` | Create a new load test in a project — use this to define a test before running it. JSON body only (no multipart). |
+| `estimateLoadTestRunCost` | Estimate the VU-hour cost of running a test before starting it — use this to answer 'how much will this run cost / will it fit in my quota?' |
+| `getLoadTest` | Get the full configuration of a single load test — use this to inspect a test's settings, script reference, SLA thresholds and children. |
+| `getLoadTestHistoricalTrends` | Show how one test's metrics trend across its recent runs — use this for 'is this test getting slower over time?' |
+| `getLoadTestInsightSummary` | Get the AI insight (summary, root cause, recommendations) for a completed run — use this for 'why did this run regress or fail?' |
+| `getLoadTestMetricsManifest` | Discover which metrics, @ aliases and groupBy options a test supports — call this before requesting a report, trend or comparison so metric names are valid. |
+| `getLoadTestPlatformStatus` | Check whether the Load Testing service is operational — use this if calls are failing or to confirm availability before starting work. |
+| `getLoadTestProjectTrends` | Show how a project's load-test metrics trend across recent runs — use this for 'is performance getting better or worse across this project?' |
+| `getLoadTestQuota` | Check the account's remaining VU-hours and concurrency headroom — use this before starting runs to confirm capacity. |
+| `getLoadTestRunReport` | Get the full metrics report for a completed run — KPIs, SLA verdicts, per-transaction and error breakdowns. Use this to answer 'how did this run perform?' |
+| `getLoadTestRunStatus` | Poll the live status and progress of a run — use this to wait for a run to finish or check elapsed/remaining time. |
+| `listActiveLoadTestRuns` | List load-test runs currently executing — use this for 'what's running right now?' or to find a runId to stop or monitor. |
+| `listLoadTestProjects` | List the caller's load-testing projects, most recently active first — use this to find a projectId or answer 'what projects do I have?' |
+| `listLoadTestRuns` | List the execution history of a test — use this to find past runs of a specific test or to get a runId. |
+| `listLoadTests` | List the load tests in a project — use this to find a testId or browse tests, optionally filtered by type, framework, tag or recent activity. |
+| `listProjectLoadTestRuns` | List the execution history across every load test in a project — newest first, paginated. Use for 'what ran last week in this project?'. |
+| `searchLoadTests` | Find a load test by name across ALL of the caller's projects — use this to resolve a named test to a testId without knowing which project it is in. |
+| `startLoadTestRun` | Start a run of an existing load test — use this to execute a test, optionally overriding VUs, duration or locations. |
+| `stopLoadTestRun` | Stop a running load test — use this to abort an execution that is running or queued. |
+| `updateLoadTest` | Update an existing load test's name or configuration — use this to change tags, SLA thresholds, script or settings; also tags a specific run when runId is set. |
+
+</details>
+
+<details>
 <summary><b>🧪 Automate</b></summary>
 
 | Tool | What it does |

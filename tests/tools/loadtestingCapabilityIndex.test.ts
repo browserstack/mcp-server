@@ -88,4 +88,43 @@ describe("loadtesting capability index — resolution contract", () => {
     expect(nameField.maxLength).toBe(255);
     expect((create.body || []).some((f: any) => f.name === "children")).toBe(true);
   });
+
+  // The framework options must be scoped to the chosen testType: picking API must
+  // never surface Browser frameworks and vice-versa. The flat `values` enum alone
+  // let clients render all nine across every type, so the per-type map is the
+  // authoritative option set a client presents.
+  it("createLoadTest framework is scoped by testType and keeps the full enum for validation", () => {
+    const create = byName("createLoadTest");
+    const framework = (create.body || []).find(
+      (f: any) => f.name === "framework",
+    );
+    expect(framework.scopedBy).toBe("testType");
+    expect(framework.valuesByTestType.plu).toEqual([
+      "k6",
+      "jmeter",
+      "gatling",
+      "locust",
+    ]);
+    expect(framework.valuesByTestType.blu).toEqual([
+      "playwright",
+      "selenium",
+      "webdriverio",
+      "nightwatch",
+      "lcncnightwatch",
+    ]);
+    // hybrid's top-level framework is the Browser leg; the API leg lives in children[]
+    expect(framework.valuesByTestType.hybrid).toEqual(
+      framework.valuesByTestType.blu,
+    );
+    // no framework appears under both types
+    const api = new Set<string>(framework.valuesByTestType.plu);
+    expect(
+      framework.valuesByTestType.blu.some((f: string) => api.has(f)),
+    ).toBe(false);
+    // the flat enum still carries every value so invoke-time validation accepts any valid framework
+    expect(framework.values).toEqual([
+      ...framework.valuesByTestType.plu,
+      ...framework.valuesByTestType.blu,
+    ]);
+  });
 });

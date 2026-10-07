@@ -306,7 +306,7 @@ Five core tools let your AI assistant find and run any BrowserStack workflow. Yo
 
 See [Core tools](https://www.browserstack.com/docs/browserstack-mcp-server/tools/core-tools) for parameters and how changes to data are approved.
 
-**All tools** — The core tools sit alongside 46 named tools for Test Management, Automate, App Automate, Live, Accessibility, Percy and the BrowserStack AI agents. See [docs/TOOLS.md](docs/TOOLS.md) for the full list with prompt examples and the Test Management tools the core tools reach, or [BrowserStack MCP tools & workflows](https://www.browserstack.com/docs/browserstack-mcp-server/tools) for product workflows.
+**All tools** — The core tools sit alongside 46 named tools for Test Management, Automate, App Automate, Live, Accessibility, Percy and the BrowserStack AI agents. See [docs/TOOLS.md](docs/TOOLS.md) for the tools the core tools reach, organised by product, plus the legacy tools with prompt examples, or [BrowserStack MCP tools & workflows](https://www.browserstack.com/docs/browserstack-mcp-server/tools) for product workflows.
 
 > **File & app uploads:** tools that upload a local file/app (`uploadProductRequirementFile`, `takeAppScreenshot`, `runAppTestsOnBrowserStack`, `runAppLiveSession`) require the `MCP_UPLOAD_BASE_DIR` env var set to a directory containing those files; uploads are restricted to it.
 

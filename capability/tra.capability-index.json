@@ -22058,7 +22058,7 @@
           "Page size is NOT caller-controlled: overlay=true fixes it to 10 and omits `pagingParams`/`totalCount`; overlay off fixes it to 30 and includes them. Page through with `pageNumber` and `pagingParams.has_next`.",
           "This is a thin pass-through to the backend global-search API; TRA only validates/sanitises the query, fixes the sort, and sets the page size.",
           "Each result row carries its own `id`, entity `type` discriminator, and a `userName` resolved from the record's user id.",
-          "Keep `days` small (<=90): large windows such as 365 or 3650 make the backend return HTTP 500 'Internal System Exception' instead of results.",
+          "Keep `days` at or below 90: on a large group, windows of 365 or more returned HTTP 500 'Internal System Exception' instead of results.",
           "entity=\"Build\" is the only cross-project way to find a build by NAME or by CI run id: each hit carries `projectName`/`projectNormalizedName`, `uuid`, `serialId` (the #N) and `buildRunId` (the CI run id). Use it when a user names a build or a run number without a project.",
           "entity=\"Project\" is unreliable for name lookup (an existing project can return zero hits); find projects by name with list_projects_lite_paginated `search` instead."
         ]
@@ -27369,7 +27369,7 @@
           "Requires automated-test-run view permission on the project.",
           "Each build carries an `observability_url` deep link and `tcmTestRunIdentifier`; use `build_id` (the hashed uuid; there is no `uuid` key) for follow-up per-build calls.",
           "For 'the latest / last N builds' prefer list_project_builds (newest-first, `pageLimit`, project-scoped `search`): this route is oldest-first within a page, 10 per page and defaults to the last 7 days, so 'last 10 builds' can cost several calls.",
-          "Each item carries `build_number` (the serial #N) and, when the CI set one, the CI run id; a user's 'run 1042' may be the CI run id rather than `build_number`."
+          "Each item carries `build_number` (the serial #N) and, when the CI set one, the CI run id; a user's 'run <number>' may be the CI run id rather than `build_number`."
         ],
         "responses": {
           "200": {
@@ -27605,7 +27605,7 @@
           "closedCount"
         ],
         "guidance": [
-          "PREFERRED build listing for agents: newest-first, `pageLimit` up to the whole history, `search` filters by build name, and rows carry buildNumber, `buildRunId` (CI run id), statusStats, historyAggregate (flaky / newFailure / alwaysFailing counts) and qualityGateStatus, so one call answers 'last N builds with status'.",
+          "PREFERRED build listing for agents: newest-first, `pageLimit` sets the page size (keep it at or below 50 \u2014 each row is large and a big page overflows the tool output), `search` filters by build name, and rows carry buildNumber, `buildRunId` (CI run id), statusStats, historyAggregate (flaky / newFailure / alwaysFailing counts) and qualityGateStatus, so one call answers 'last N builds with status'.",
           "Takes the project's NORMALISED NAME in the path, not a numeric id. Uses the same large filter object as the build-groups listing.",
           "SIDE EFFECT: this call marks the project as subscribed for the calling user \u2014 a read that quietly changes the user's subscription state. It also applies the group's custom data-retention window for the duration of the request, so builds older than the retention window will not appear regardless of `dateRange`.",
           "Cursor pagination via `pagingParams` / `searchAfter`; page through until the paging params report no next cursor. `pageLimit` defaults to 10.",
@@ -50554,12 +50554,10 @@
           "test build",
           "build run",
           "launch",
-          "run id",
           "ci run id",
-          "build run id",
-          "run number"
+          "build run id"
         ],
-        "id_convention": "Addressed by build UUID (an opaque string) on most routes. A few reads take the internal NUMERIC build id instead (e.g. the AI failure summary), and the two are not interchangeable. A build can also be located by its human coordinates (project normalised name + build normalised name + build serial number), which resolve to the UUID. There is no prefixed display identifier. A build ALSO carries a CI run id (`buildRunId`, a string such as \"1042\" set by the CI/upload client), which is NOT the serial number (#N): users often say \"run 1042\" meaning buildRunId. Resolve a bare run number with search_entities (entity=\"Build\", days<=90): each hit carries both `buildRunId` and `serialId` plus the project; get_build_id_from_build_coordinates only understands the serial.",
+        "id_convention": "Addressed by build UUID (an opaque string) on most routes. A few reads take the internal NUMERIC build id instead (e.g. the AI failure summary), and the two are not interchangeable. A build can also be located by its human coordinates (project normalised name + build normalised name + build serial number), which resolve to the UUID. There is no prefixed display identifier. A build ALSO carries a CI run id (`buildRunId`, a string set by the CI/upload client), which is NOT the serial number (#N): users often say \"run <number>\" meaning buildRunId. Resolve a bare run number with search_entities (entity=\"Build\", days<=90): each hit carries both `buildRunId` and `serialId` plus the project; get_build_id_from_build_coordinates only understands the serial.",
         "parents": [
           "project"
         ],

@@ -327,30 +327,28 @@ describe("search", () => {
 });
 
 describe("auth", () => {
-  // `authHeaders` is async because one scheme (oauth2) has to mint a token first. The
-  // string-building schemes below never await anything real.
-  it("forwards the caller's credentials as Api-Token", async () => {
+  it("forwards the caller's credentials as Api-Token", () => {
     // HTTP Basic is not usable on /api/v1; Api-Token is what the whole surface accepts.
-    const headers = await authHeaders({ username: "ing_Xx", accessKey: "SECRET" });
+    const headers = authHeaders({ username: "ing_Xx", accessKey: "SECRET" });
     expect(headers["Api-Token"]).toBe("ing_Xx:SECRET");
     expect(headers["request-source"]).toBe("ai-chatbot");
   });
 
-  it("refuses rather than sending unauthenticated", async () => {
-    await expect(authHeaders({ username: "u", accessKey: "" })).rejects.toThrow(InvocationError);
+  it("refuses rather than sending unauthenticated", () => {
+    expect(() => authHeaders({ username: "u", accessKey: "" })).toThrow(InvocationError);
   });
 });
 
 describe("auth schemes", () => {
   const CREDS = { username: "ing_Xx", accessKey: "SECRET" };
 
-  it("defaults to Api-Token when a product declares nothing", async () => {
+  it("defaults to Api-Token when a product declares nothing", () => {
     // Every shipped index relies on this; the default must survive the mechanism.
-    expect((await authHeaders(CREDS))["Api-Token"]).toBe("ing_Xx:SECRET");
+    expect(authHeaders(CREDS)["Api-Token"]).toBe("ing_Xx:SECRET");
   });
 
-  it("honours a declared header name and template", async () => {
-    const headers = await authHeaders(CREDS, {
+  it("honours a declared header name and template", () => {
+    const headers = authHeaders(CREDS, {
       type: "apiKey", in: "header", name: "X-Agent-Key",
       template: "{username}_{access_key}",
     });
@@ -359,49 +357,48 @@ describe("auth schemes", () => {
     expect(headers["Api-Token"]).toBeUndefined();
   });
 
-  it("encodes HTTP Basic, which is what Load Testing is reported to want", async () => {
-    const headers = await authHeaders(CREDS, { type: "http", scheme: "basic" });
+  it("encodes HTTP Basic, which is what Load Testing is reported to want", () => {
+    const headers = authHeaders(CREDS, { type: "http", scheme: "basic" });
     expect(headers.Authorization).toBe(
       `Basic ${Buffer.from("ing_Xx:SECRET").toString("base64")}`,
     );
   });
 
-  it("keeps the attribution headers whatever the scheme", async () => {
+  it("keeps the attribution headers whatever the scheme", () => {
     for (const auth of [undefined, { type: "http" as const, scheme: "basic" }]) {
-      expect((await authHeaders(CREDS, auth))["request-source"]).toBe("ai-chatbot");
+      expect(authHeaders(CREDS, auth)["request-source"]).toBe("ai-chatbot");
     }
   });
 
-  it("refuses a placeholder it cannot fill instead of sending it literally", async () => {
+  it("refuses a placeholder it cannot fill instead of sending it literally", () => {
     // The harness really carries `{user_id}_{group_id}`. Emitting that verbatim would be a
     // well-formed header that 401s, indistinguishable from bad credentials.
-    await expect(authHeaders(CREDS, {
+    expect(() => authHeaders(CREDS, {
       type: "apiKey", in: "header", name: "X-Auth-Override",
       template: "{user_id}_{group_id}",
-    })).rejects.toThrow(/cannot fill: group_id, user_id/);
+    })).toThrow(/cannot fill: group_id, user_id/);
   });
 
-  it("refuses to put a credential anywhere but a header", async () => {
+  it("refuses to put a credential anywhere but a header", () => {
     // A query parameter would leave the credential in access logs and proxies.
-    await expect(authHeaders(CREDS, {
+    expect(() => authHeaders(CREDS, {
       type: "apiKey", in: "query", name: "token",
-    })).rejects.toThrow(/can only send credentials in a header/);
-    await expect(authHeaders(CREDS, {
+    })).toThrow(/can only send credentials in a header/);
+    expect(() => authHeaders(CREDS, {
       type: "apiKey", in: "cookie", name: "session",
-    })).rejects.toThrow(/unsupported auth location/);
+    })).toThrow(/unsupported auth location/);
   });
 
-  it("refuses a scheme it does not implement, by name", async () => {
-    // `oauth2` used to be in this list and is now implemented — its own refusals and its
-    // bearer presentation live in capabilityRegistryOAuth.test.ts, which can inject a
-    // token transport. Asserting it here would reach the real auth endpoint.
-    await expect(authHeaders(CREDS, { type: "http", scheme: "bearer" }))
-      .rejects.toThrow(/unsupported auth scheme/);
+  it("refuses a scheme it does not implement, by name", () => {
+    expect(() => authHeaders(CREDS, { type: "http", scheme: "bearer" }))
+      .toThrow(/unsupported auth scheme/);
+    expect(() => authHeaders(CREDS, { type: "oauth2" as never }))
+      .toThrow(/unsupported auth scheme/);
   });
 
-  it("still refuses to send anything unauthenticated", async () => {
-    await expect(authHeaders({ username: "", accessKey: "" }, { type: "http", scheme: "basic" }))
-      .rejects.toThrow(/not authenticated/);
+  it("still refuses to send anything unauthenticated", () => {
+    expect(() => authHeaders({ username: "", accessKey: "" }, { type: "http", scheme: "basic" }))
+      .toThrow(/not authenticated/);
   });
 });
 

@@ -17,16 +17,13 @@
  * credentials are wrong.
  */
 
-import {
-  fetchTokenTransport,
-  TokenTransport,
-} from "../../lib/central-oauth.js";
 import { InvocationError } from "./index-loader.js";
-import { bearerToken } from "./oauth.js";
 import { AuthScheme } from "./types.js";
 
-export type { Credentials } from "../../lib/central-oauth.js";
-import type { Credentials } from "../../lib/central-oauth.js";
+export interface Credentials {
+  username: string;
+  accessKey: string;
+}
 
 export interface HttpResponse {
   status: number;
@@ -84,20 +81,10 @@ export function renderTemplate(
     .replaceAll("{access_key}", credentials.accessKey);
 }
 
-/**
- * The headers for one outbound call.
- *
- * ASYNC BECAUSE ONE SCHEME NEEDS A ROUND TRIP. `apiKey` and `http` are pure string work, but
- * `oauth2` exchanges the caller's credentials for a JWT before anything can be sent, and
- * there was nowhere to put that while this was synchronous. Both call sites were already
- * inside async functions, so the cost is two `await`s.
- */
-export async function authHeaders(
+export function authHeaders(
   credentials: Credentials,
   auth: AuthScheme = DEFAULT_AUTH,
-  product = "this product",
-  tokenTransport: TokenTransport = fetchTokenTransport(),
-): Promise<Record<string, string>> {
+): Record<string, string> {
   if (!credentials?.username || !credentials?.accessKey) {
     // Refusing here beats sending unauthenticated and surfacing the product's 401, which
     // reads like the user's problem when it is our missing configuration.
@@ -111,24 +98,6 @@ export async function authHeaders(
     "request-source": "ai-chatbot",
     "Content-Type": "application/json",
   };
-  if (auth.type === "oauth2") {
-    // Refused rather than ignored, which is the same call `in: cookie` and `in: query` get
-    // below: a field that looks like it selects behaviour and does not is how someone
-    // spends an afternoon on a 401 they were never going to be able to explain.
-    const stray = (["in", "name", "template"] as const).filter(
-      (field) => auth[field] !== undefined,
-    );
-    if (stray.length > 0) {
-      throw new InvocationError(
-        `oauth2 auth does not take ${stray.join(", ")}: a bearer token's presentation is ` +
-          `fixed at 'Authorization: Bearer' (RFC 6750). Remove ${stray.length > 1 ? "them" : "it"}, ` +
-          `or use apiKey if this product really does read a different header.`,
-      );
-    }
-    const token = await bearerToken(product, auth, credentials, tokenTransport);
-    return { Authorization: `Bearer ${token}`, ...common };
-  }
-
   const value = renderTemplate(
     auth.template || DEFAULT_AUTH.template!,
     credentials,

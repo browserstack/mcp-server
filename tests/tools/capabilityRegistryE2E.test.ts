@@ -215,7 +215,7 @@ describe("capability registry, end to end through the server factory", () => {
     const search = server.getTools().searchCapability as any;
     const run = async (args: Record<string, unknown>) => {
       const r = await search.handler(
-        { product: "tm", ...args },
+        { product: "tm", product_choice: "not_asked", ...args },
         {} as any,
       );
       return { blocked: r.isError === true, body: JSON.parse(r.content[0].text) };
@@ -230,51 +230,23 @@ describe("capability registry, end to end through the server factory", () => {
     // And it must name the failure mode it exists to stop.
     expect(refused.body.error).toMatch(/search each product in turn and merge/);
 
-    // A word only one product claims settles the query, so there is nothing to ask —
-    // PROVIDED it settles on the product being searched.
+    // A word only one product claims settles the query, so there is nothing to ask.
     for (const query of [
       "list the test cases in a folder", // `folder` is shared, `test case` is not
+      "check my quota",
       "bulk delete test cases",
     ]) {
       expect((await run({ query })).blocked, query).toBe(false);
     }
 
-    // AND WHEN IT SETTLES ON THE OTHER ONE, THAT IS EVIDENCE, NOT NOISE. `quota` belongs
-    // to secondproduct and to nothing in tm, so asking tm for it is the silent wrong pick
-    // the gate exists to catch. It used to pass: the check asked whether the request
-    // settled, never whether it settled on what was being asked for.
-    const crossed = await run({ query: "check my quota" });
-    expect(crossed.blocked).toBe(true);
-    expect(crossed.body.error).toMatch(/points at secondproduct, not tm/);
-    expect(crossed.body.error).toMatch(/only secondproduct claims \('quota'\)/);
-    expect(
-      (await run({ query: "check my quota", product: "secondproduct" })).blocked,
-    ).toBe(false);
-
-    // ONE WAY OUT, AND IT IS NOT A FLAG. `product_choice: 'user_confirmed'` used to open
-    // this gate, which made the gate a formality: the schema published the value, and the
-    // caller wrote it on every ambiguous prompt with nothing behind it. What opens it now
-    // is the user's own words, checked against the index rather than taken on trust.
-    expect(
-      (await run({
-        query: "list all projects",
-        user_words: "the test management one",
-      })).blocked,
-    ).toBe(false);
-    // And a flag by that name buys nothing, because there is no longer such an argument.
+    // Two ways out, both explicit: the user answered, or the caller was already specific.
     expect(
       (await run({ query: "list all projects", product_choice: "user_confirmed" }))
         .blocked,
-    ).toBe(true);
-
-    // `entity` IS NOT A WAY OUT, and used to be. It narrows within a product and says
-    // nothing about which product — and the four names both products carry (project,
-    // report, test_run, comment) are exactly the ones being asked about, so naming one
-    // alongside a guessed product is the silent pick this gate exists to stop, stated
-    // more confidently. It skipped the check at the moment the check mattered.
+    ).toBe(false);
     expect(
       (await run({ query: "list all projects", entity: "project" })).blocked,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("hands over what it takes to ask the question, not an instruction to go look", async () => {

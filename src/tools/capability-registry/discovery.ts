@@ -110,9 +110,7 @@ export async function discoverBaseUrl(
   }
 
   // The same scheme the invocation will use, so a host that answers here answers there.
-  // Minted ONCE for the whole probe, not per candidate: the token is the caller's identity
-  // and does not vary by which region answers.
-  const headers = await authHeaders(credentials, source.auth, product);
+  const headers = authHeaders(credentials, source.auth);
   const failures: string[] = [];
   for (const candidate of candidates) {
     const response = await transport("GET", `${candidate}${path}`, headers, {});

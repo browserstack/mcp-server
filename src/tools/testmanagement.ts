@@ -93,7 +93,7 @@ import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import {
   NEEDS_PROJECT_ID,
   NEEDS_TEST_PLAN_ID,
-  PLAN_WRITES_VIA_CAPABILITIES,
+  PLAN_WRITES_VIA_AGENT,
   PROJECT_ID_ONLY_FOR_FOLDER,
 } from "./tool-handoff.js";
 
@@ -935,7 +935,7 @@ export default function addTestManagementTools(
     "listTestPlans",
     "List test plans in a BrowserStack Test Management project. Returns each plan's identifier (TP-*), name, status, description, dates, and active/closed test-run counts. Supports pagination." +
       NEEDS_PROJECT_ID +
-      PLAN_WRITES_VIA_CAPABILITIES,
+      PLAN_WRITES_VIA_AGENT,
     ListTestPlansSchema.shape,
     {
       title: "List Test Plans",
@@ -952,7 +952,7 @@ export default function addTestManagementTools(
     "Fetch a test plan by identifier (TP-*) from BrowserStack Test Management. Returns plan metadata, the full list of linked test runs, total test-case count across runs, and a status summary — suitable for generating test documentation or QA status reports." +
       NEEDS_PROJECT_ID +
       NEEDS_TEST_PLAN_ID +
-      PLAN_WRITES_VIA_CAPABILITIES,
+      PLAN_WRITES_VIA_AGENT,
     GetTestPlanSchema.shape,
     {
       title: "Get Test Plan",
@@ -969,7 +969,7 @@ export default function addTestManagementTools(
     "List sub-test-plans under a parent test plan (TP-*) in a Test Management project. Supports pagination." +
       NEEDS_PROJECT_ID +
       NEEDS_TEST_PLAN_ID +
-      PLAN_WRITES_VIA_CAPABILITIES,
+      PLAN_WRITES_VIA_AGENT,
     ListSubTestPlansSchema.shape,
     {
       title: "List Sub Test Plans",
@@ -986,7 +986,7 @@ export default function addTestManagementTools(
     "Fetch a sub-test-plan (STP-*) under a parent plan (TP-*). Returns metadata and linked test runs." +
       NEEDS_PROJECT_ID +
       NEEDS_TEST_PLAN_ID +
-      PLAN_WRITES_VIA_CAPABILITIES,
+      PLAN_WRITES_VIA_AGENT,
     GetSubTestPlanSchema.shape,
     {
       title: "Get Sub Test Plan",

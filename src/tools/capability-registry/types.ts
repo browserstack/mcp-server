@@ -249,59 +249,20 @@ export interface PagingRule {
  * harness's `{ env: … }` value sources must NOT cross the boundary into the artifact.
  */
 export interface AuthScheme {
-  /**
-   * "apiKey" puts the rendered template in a header; "http" with scheme "basic" encodes it;
-   * "oauth2" exchanges the caller's credentials for a JWT and sends `Authorization: Bearer`.
-   *
-   * Each value fixes BOTH where the value comes from and how it is presented. Only `apiKey`
-   * carries `in`/`name`, because it is the only one with no convention for where it goes —
-   * RFC 6750 settles that for a bearer token, which is why OpenAPI's own `oauth2` scheme has
-   * no location fields either. `in`, `name` and `template` are REFUSED on `oauth2` rather
-   * than ignored, so an author who writes one gets an error instead of a silent 401.
-   */
-  type: "apiKey" | "http" | "oauth2";
+  /** "apiKey" puts the rendered template in a header; "http" with scheme "basic" encodes it. */
+  type: "apiKey" | "http";
   /** apiKey only. Header is the sole supported location — see `egress.authHeaders`. */
   in?: "header" | "cookie" | "query";
   /** apiKey only: the header name, e.g. "Api-Token". */
   name?: string;
   /** http only. */
   scheme?: string;
-  /** apiKey/http only. Defaults to `{username}:{access_key}`. */
+  /** Defaults to `{username}:{access_key}`. */
   template?: string;
-  /**
-   * oauth2 only: override the endpoint the JWT is minted at.
-   *
-   * Optional, and most products want the default. Bounded by an allowlist in `oauth.ts` —
-   * this field decides where the caller's credentials are POSTed, and an index is a data
-   * file that ships to public npm.
-   */
-  token_url?: string;
-  /**
-   * oauth2 only: override the scope set. Order is not significant; it is sorted and deduped
-   * before it reaches the grant or the token cache.
-   *
-   * There is deliberately no `flow` beside this. The server implements one grant, so a field
-   * with one legal value could distinguish nothing — and an unvalidated one would read as
-   * though it selected behaviour while selecting nothing.
-   */
-  scopes?: string[];
 }
 
 export interface ProductIndex {
   summary: string;
-  /**
-   * Words that route to this product but are not the name of anything in it.
-   *
-   * The entity names and their aliases are what a product CONTAINS; this is what its users
-   * CALL it when they ask for something. `flaky` is the clearest case: both indexes talk
-   * about flakiness and neither models it as an entity, so the word was invisible to
-   * routing and a question about it read as naming no product at all. The other half is
-   * the reverse — `workspace`, `team`, `setting` and `suite` belong to both products and
-   * happen to be modelled by one, which let an incidental word settle a question it had no
-   * business settling. Listing a word here is a claim about vocabulary only; it never adds
-   * a capability and never widens a search.
-   */
-  routing_terms?: string[];
   /**
    * How to authenticate to this product. Absent means the historical default: the caller's
    * credentials as `Api-Token: {username}:{access_key}`, which is what every shipped index

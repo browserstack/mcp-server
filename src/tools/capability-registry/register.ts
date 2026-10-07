@@ -18,6 +18,7 @@ import {
   McpServer,
   RegisteredTool,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { signRouting, readRouting } from "./routing-token.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
@@ -37,6 +38,7 @@ import {
 import { invoke } from "./resolve.js";
 import {
   ambiguousProducts,
+  productAnchors,
   isBrowseQuery,
   searchCapabilities,
   singular,
@@ -231,7 +233,11 @@ export function addCapabilityRegistryTools(
     if (message.startsWith("unknown_endpoint:")) return "unknown_endpoint";
     // The outcome this PR turns on: 46 of 244 capabilities are withheld, so this is the
     // likeliest refusal of all, and it was landing in the generic bucket.
-    if (message.startsWith("capability_disabled:")) return "capability_disabled";
+    if (message.startsWith("capability_disabled:"))
+      return "capability_disabled";
+    // Auth failed before the product was ever called, so it is not the product's 401 and
+    // must not be counted as one. oauth.ts prefixes every one of these.
+    if (message.startsWith("token_mint_failed:")) return "token_mint_failed";
     if (message.startsWith("missing required parameter"))
       return "missing_parameter";
     if (/is not a usable path value/.test(message)) return "bad_path_value";
@@ -276,8 +282,25 @@ export function addCapabilityRegistryTools(
     "List the BrowserStack products this surface can reach: what each one does, the " +
       "entities it models, and a line saying what each entity is. START HERE — " +
       "searchCapability needs a product, and this is what tells you which one. If two " +
-      "products could both fit the task, ask the user rather than choosing for them.",
-    {},
+      "products could both fit the task, ask the user rather than choosing for them. " +
+      "ALWAYS pass the user's request, in their own words, as `query`: the answer then " +
+      "says outright whether the products clash over the words in it. WHEN IT REPORTS A " +
+      "CLASH — two products claiming the same word for different things — ASK THE USER " +
+      "WHICH PRODUCT THEY MEAN AND WAIT FOR THEIR ANSWER BEFORE SEARCHING OR INVOKING " +
+      "ANYTHING. The response carries the question to put to them and what the shared " +
+      "word means in each product. Choosing for them, or searching each product in turn " +
+      "and merging the results, is the failure this call exists to prevent.",
+    {
+      query: z
+        .string()
+        .optional()
+        .describe(
+          "The user's request, in their own words. With it the response carries a " +
+            "`routing` block saying whether the products share the vocabulary this " +
+            "request uses — and, when they do, the question to put to the user before " +
+            "searching either product.",
+        ),
+    },
     {
       title: "List Capability Products",
       readOnlyHint: true,
@@ -285,9 +308,111 @@ export function addCapabilityRegistryTools(
       idempotentHint: true,
       openWorldHint: false,
     },
-    async () => {
+    async ({ query }) => {
       track("listProducts");
+      // THE CLASH, STATED RATHER THAN LEFT TO BE NOTICED. The entity lists below carry
+      // the evidence — `report` under two products — but reading two lists and spotting
+      // the overlap is work an agent skips when it already has a product in mind. So the
+      // overlap is computed here and put at the top, with the question already written:
+      // the cheap failure is picking one silently, and this is the call that precedes it.
+      const ambiguity = query
+        ? ambiguousProducts(registry.index.products, query)
+        : { products: [], terms: [] };
+      // A CLASH ANNOUNCED HERE BINDS THE NEXT SEARCH. Reporting it and then letting the
+      // very next call through was the gap the measured runs walked through: the agent
+      // read the clash, searched one product and then the other, and asked only
+      // afterwards. The gate downstream judges the caller's paraphrase when no user words
+      // are quoted, and a paraphrase carries none of the shared words that caused this —
+      // so the refusal never fired. Opening a token here makes the question outlive the
+      // call that raised it, and `user_words` is what closes it.
+      // THE VERDICT TRAVELS WITH THE CALLER. Signed here, read back by the search — which
+      // is how the search can know what this call concluded about the whole request
+      // without the server keeping a note between the two.
+      const listingToken = query
+        ? signRouting(
+            ambiguity.products.length > 1
+              ? { verdict: "clash", terms: ambiguity.terms }
+              : ambiguity.unknown
+                ? { verdict: "blank" }
+                : { verdict: "settled", product: ambiguity.settled },
+          )
+        : undefined;
+      const routing =
+        ambiguity.products.length > 1
+          ? {
+              verdict: "products_clash" as const,
+              note:
+                `These products clash over ${ambiguity.terms.map((t) => `'${t}'`).join(", ")} — ` +
+                `the same word means something different in ${ambiguity.products.join(" and ")}. ` +
+                "ASK THE USER which they mean before searching or invoking anything; do not " +
+                "search each product in turn and merge the results. Searching before you " +
+                "ask will be refused: send the user's answer in `user_words` with this " +
+                "`routing_token`.",
+              routing_token: listingToken,
+              shared_terms: ambiguity.terms,
+              products: ambiguity.products,
+              question: `Which product do you mean — ${ambiguity.products.join(" or ")}?`,
+              senses: ambiguity.products.map((name) => ({
+                product: name,
+                means: ambiguity.terms
+                  .map((term) => {
+                    const entities =
+                      registry.index.products[name]?.entities ?? {};
+                    const key = Object.keys(entities).find((candidate) =>
+                      [
+                        candidate,
+                        ...((entities[candidate].aliases as string[]) ?? []),
+                      ].some(
+                        (word) => terms(word).map(singular).join(" ") === term,
+                      ),
+                    );
+                    return key
+                      ? {
+                          term,
+                          entity: key,
+                          description: entities[key].description,
+                        }
+                      : undefined;
+                  })
+                  .filter(Boolean),
+              })),
+            }
+          : query && ambiguity.unknown
+            ? {
+                verdict: "no_vocabulary" as const,
+                note:
+                  "Nothing in this request names a product, or any word that belongs to " +
+                  "one — so there is no evidence here about which product is meant. This " +
+                  "is the LEAST settled a request can be, not the most. ASK THE USER " +
+                  "which product they mean before searching or invoking anything. " +
+                  "Searching before you ask will be refused: send their answer in " +
+                  "`user_words` with this `routing_token`.",
+                routing_token: listingToken,
+                question: `Which product do you mean — ${registry
+                  .productNames()
+                  .join(" or ")}?`,
+              }
+            : query
+              ? {
+                  verdict: "no_clash" as const,
+                  note: ambiguity.settled
+                    ? `This request names words only ${ambiguity.settled} claims` +
+                      (ambiguity.because?.length
+                        ? ` (${ambiguity.because.map((t) => `'${t}'`).join(", ")})`
+                        : "") +
+                      `, so it settles on ${ambiguity.settled} without asking. SEARCH ` +
+                      `${ambiguity.settled}; the other products do not answer this request.`
+                    : "No word in this request is claimed by more than one product, so the " +
+                      "entity lists below settle it without asking.",
+                  routing_token: listingToken,
+                  ...(ambiguity.settled ? { product: ambiguity.settled } : {}),
+                  ...(ambiguity.because?.length
+                    ? { deciding_terms: ambiguity.because }
+                    : {}),
+                }
+              : undefined;
       return ok({
+        ...(routing ? { routing } : {}),
         products: registry.productNames().map((name) => ({
           name,
           summary: registry.index.products[name].summary,
@@ -376,10 +501,11 @@ export function addCapabilityRegistryTools(
   tools.searchCapability = server.tool(
     "searchCapability",
     "Find endpoints this surface can call, by plain language, within ONE product. " +
-      `You must say which: ${productList}. If the task does not name it unambiguously, ` +
-      "call listProducts first — it returns what each product does, the entities each " +
-      "models, and what every entity means, which is what settles the choice. Where two " +
-      "products use the same word for different things, ask the user rather than picking. " +
+      "CALL listProducts FIRST, passing the user's request as its `query`: it names the " +
+      "products, says whether they clash over the words in that request, and gives you " +
+      "the question to ask when they do. You need it anyway — `product` here takes a name " +
+      "exactly as listProducts spells it. Where two products use the same word for " +
+      "different things, ask the USER and wait for an answer rather than picking. " +
       "Search matches the product's OWN words, not synonyms. When your words are not the " +
       "product's, the response says so: `weak_match: true` with a `suggested_vocabulary` " +
       "map of the product's entities and their aliases. Results are still returned, but " +
@@ -425,22 +551,49 @@ export function addCapabilityRegistryTools(
       // not (run, project, report, result, folder, workspace, execution, history), where
       // the old behaviour was to silently pick whichever product ranked higher. A wasted
       // round trip against a silent wrong-product answer is not a close trade.
-      product: productArg().describe(
-        `Which product to search: ${productList}. Call listProducts if the task does ` +
-          `not make it obvious, and ask the user when two products could both fit.`,
-      ),
-      // REQUIRED, and self-reported, exactly like `user_permission` on a write. The
-      // server cannot see whether you asked anyone; what it can do is refuse to answer a
-      // question only the user can settle, and make claiming otherwise an explicit act
-      // rather than an omission.
-      product_choice: z
-        .enum(PRODUCT_CHOICE_VALUES)
+      // A FREE STRING, NOT AN ENUM, AND DELIBERATELY SO — this is the only argument on
+      // this surface that is. An enum publishes the product names in the schema, which
+      // every client shows the model before it calls anything, so a model that has never
+      // called listProducts already knows `tm` and `tra` exist and picks one. Measured:
+      // on the requests that still routed silently, listProducts was never called at all
+      // — there was nothing left to learn from it. Withholding the names makes the
+      // discovery call the only way to obtain one, and discovery is where the clash gets
+      // reported. The cost is losing client-side validation of a typo; an unknown name is
+      // refused here instead, by a message that names listProducts.
+      product: z
+        .string()
         .describe(
-          "'user_confirmed' only when the user named the product, or the task names it " +
-            "unmistakably. 'not_asked' otherwise — then a query that could mean either " +
-            "product is refused and told what to ask, instead of being answered for the " +
-            "wrong one. Never search each product in turn and merge the results: that is " +
-            "the guess this argument exists to prevent.",
+          "Which product to search, named exactly as listProducts spells it. Call " +
+            "listProducts with the user's request to get the name — and to find out " +
+            "whether the products clash over it, in which case ask the user first.",
+        ),
+      // `product_choice` USED TO LIVE HERE, AND WAS ITS OWN DEFEAT.
+      //
+      // A required enum of 'user_confirmed' | 'not_asked' publishes, in the schema every
+      // client shows the model before it calls anything, the exact string that opens the
+      // gate. Measured on the prompts that still routed silently: the caller wrote
+      // `user_confirmed` on every single one, with no user input behind any of them. A
+      // flag the caller fills in about itself can always be filled in; there is no wording
+      // of it that makes it true. What replaced it is a token this server mints and the
+      // caller cannot guess, plus `user_words`, which is a claim the index can test.
+      routing_token: z
+        .string()
+        .optional()
+        .describe(
+          "The `routing_token` from the last listProducts call or product_ambiguous " +
+            "refusal — it carries what that step concluded about the user's request, " +
+            "signed. Always pass the most recent one. When it reports a clash, send the " +
+            "user's answer in `user_words` alongside it; neither works alone.",
+        ),
+      user_words: z
+        .string()
+        .optional()
+        .describe(
+          "The USER'S OWN words, verbatim, that settle which product this is — either " +
+            "the product's name or a term only one product uses ('quality gate', 'test " +
+            "plan'). Quote them; do not paraphrase, and do not write words the user did " +
+            "not say. When a query could mean either product this is what lifts the " +
+            "refusal, because it is checked against the index rather than taken on trust.",
         ),
       mode: z
         .enum(["read", "write", "destructive"])
@@ -462,7 +615,16 @@ export function addCapabilityRegistryTools(
       idempotentHint: true,
       openWorldHint: false,
     },
-    async ({ query, entity, product, product_choice, mode, limit, offset }) => {
+    async ({
+      query,
+      entity,
+      product,
+      routing_token,
+      user_words,
+      mode,
+      limit,
+      offset,
+    }) => {
       // THE GATE. Nothing here can tell whether a human was asked — same as the write
       // gate, which also takes the caller's word. What it can do is refuse to answer a
       // question that is genuinely the user's, so that answering it anyway takes a
@@ -476,20 +638,120 @@ export function addCapabilityRegistryTools(
       // contains no word to be ambiguous about — `*` names nothing — so there is nothing
       // to ask, and asking anyway would block the one query whose whole purpose is to
       // show what a product contains.
-      if (
-        product_choice !== "user_confirmed" &&
-        !entity &&
-        !isBrowseQuery(query)
-      ) {
-        const ambiguity = ambiguousProducts(registry.index.products, query);
-        if (ambiguity.products.length > 1) {
-          // EVERYTHING NEEDED TO ASK, IN THE REFUSAL. Telling the agent to go and call
+      // `product_choice` is the caller describing itself, and a caller that wants to
+      // proceed says user_confirmed — measured at 103 of 183 ambiguous prompts with no
+      // user input behind it, which skipped this gate entirely. So under the flag the
+      // ambiguity check runs whatever the flag says, and what lifts it is `user_words`:
+      // the user's own text, checked here against the index. Quoting the conversation is
+      // a claim the server can test; a boolean is not.
+      // `entity` USED TO BYPASS THIS TOO, and had no business doing so. An entity narrows
+      // WITHIN a product; it says nothing about WHICH product, and the four names both
+      // products carry — project, report, test_run, comment — are precisely the ones the
+      // clash is about. `entity: "report"` alongside a guessed product is the silent pick
+      // this gate exists to stop, stated more confidently, so it skipped the check at the
+      // exact moment the check mattered.
+      // `product` is a free string now, so an unknown name reaches the handler. Refuse it
+      // where the caller can act on it: naming listProducts, which is where the real names
+      // come from, rather than returning an empty search that reads as "nothing matched".
+      if (!registry.index.products[product]) {
+        return refuse(
+          "searchCapability",
+          "unknown_product",
+          `No product named '${product}'. Call listProducts — passing the user's request ` +
+            "as `query` — for the names, and for whether the products clash over it.",
+          {},
+          { product },
+        );
+      }
+      if (!isBrowseQuery(query)) {
+        // JUDGE THE USER'S WORDS, NOT THE AGENT'S REWRITE.
+        //
+        // `query` is the caller's paraphrase into product vocabulary, so the caller
+        // decides, through its own phrasing, whether this check fires: "what did the last
+        // report say?" became "list saved reports", and `saved report` is tra-only, so the
+        // shared word the user actually said stopped being examined. It is also the escape
+        // from a refusal — reword and try again, which is what the measured runs did. The
+        // user's text is the one input the caller cannot rewrite without quoting something
+        // different, and `productAnchors` checks what it quotes against this index.
+        const subject = user_words?.trim() ? user_words : query;
+        const ambiguity = ambiguousProducts(registry.index.products, subject);
+        // ALWAYS, NOT ONLY UNDER THE FLAG. With the self-reported flag gone, quoting the
+        // user is the only way past a clash, so the check that reads the quote has to run
+        // on both paths — otherwise the default path refuses with no way out at all. The
+        // flag now governs the stricter refusals (a blank request, a clash still open),
+        // not whether the user's own words count.
+        const anchor = productAnchors(registry.index.products, user_words);
+        // WHAT THE ROUTING STEP CONCLUDED, READ BACK OFF THE CALLER. The token is signed
+        // here and verified by recomputation, so the server keeps no note between the two
+        // calls — and the caller cannot write one, edit the product inside it, or hold one
+        // without having made the routing call that issues it.
+        const routed = readRouting(routing_token);
+        // A clash the routing step already reported is only cleared by the user's own
+        // words: the token shows the question was put, `user_words` says what came back.
+        // Neither works alone — a token on its own is just proof of having been refused.
+        const answered =
+          routed?.verdict !== "settled" &&
+          anchor.products.length === 1 &&
+          anchor.products[0] === product;
+        // One product anchored, and it is the one being searched: the user settled it.
+        // A routing step that already settled on this product counts the same way — it
+        // read the user's whole request, which is more than the fragment quoted here.
+        const settled =
+          (anchor.products.length === 1 && anchor.products[0] === product) ||
+          (routed?.verdict === "settled" && routed.product === product);
+        // NOTHING TO ASK WHEN THERE IS NOTHING TO CHOOSE BETWEEN. A registry serving one
+        // product cannot route a request to the wrong one, so every refusal below is a
+        // question with a single possible answer — pure obstruction.
+        const routable = registry.productNames().length > 1;
+        // A CLASH THE CALLER IS CARRYING IS STILL OPEN UNTIL IT IS ANSWERED, whatever this
+        // call's wording looks like. It has to outlive a REWORDING of the request — the
+        // escape it exists to close — while leaving a genuinely different request alone:
+        // "bulk delete test cases" names a thing only one product has, and blocking it
+        // because something earlier was ambiguous is obstruction, not routing.
+        const reopened =
+          routable &&
+          !settled &&
+          !answered &&
+          ambiguity.settled !== product &&
+          (routed?.verdict === "clash" || routed?.verdict === "blank");
+        // THE WORDS POINT SOMEWHERE ELSE, WHICH IS EVIDENCE, NOT NOISE. A request whose
+        // own vocabulary settles on one product, sent as a search of the OTHER one, is the
+        // silent wrong pick this gate exists to catch — and it used to pass, because the
+        // checks above only ask whether the request settles, never whether it settles on
+        // what is being asked for. `product` is the caller's conclusion; the words are the
+        // evidence, and when they disagree the evidence is the thing to go on. The refusal
+        // already had the sentence for it ("the words you quoted point at X, not Y") and
+        // nothing could reach it.
+        const mismatch =
+          routable && !!ambiguity.settled && ambiguity.settled !== product;
+        // NOTHING RECOGNISED IS NOT PERMISSION TO PICK. A request carrying no product's
+        // vocabulary is the least settled kind there is, and it used to pass this gate
+        // untouched because there was no shared word in it to object to.
+        const blank = routable && ambiguity.unknown && !settled;
+        if (
+          routable &&
+          (ambiguity.products.length > 1 || reopened || blank || mismatch) &&
+          !settled &&
+          !answered
+        ) {
+          const token = signRouting(
+            ambiguity.products.length > 1
+              ? { verdict: "clash", terms: ambiguity.terms }
+              : mismatch
+                ? { verdict: "settled", product: ambiguity.settled }
+                : { verdict: "blank" },
+          );
+          // WHAT TO ASK, NOT JUST THAT ASKING IS NEEDED. Sending the caller back to
           // listProducts costs a round trip and still leaves it composing a question out
           // of nothing — so it tends to guess instead, which is the behaviour being
-          // stopped. What makes the choice answerable is what each product calls the
-          // shared word and what it means THERE: tm's project owns folders and test
-          // cases, Load Testing's does not.
-          const options = ambiguity.products.map((name) => {
+          // stopped. What makes the choice answerable is what each product CALLS the
+          // shared word and what it means there.
+          const choices = ambiguity.products.length
+            ? ambiguity.products
+            : mismatch
+              ? [ambiguity.settled as string, product]
+              : registry.productNames();
+          const options = choices.map((name) => {
             const entities = registry.index.products[name]?.entities ?? {};
             const senses = ambiguity.terms
               .map((term) => {
@@ -513,24 +775,46 @@ export function addCapabilityRegistryTools(
               ...(senses.length ? { shared_terms: senses } : {}),
             };
           });
+          const named = anchor.products.length > 0;
           return refuse(
             "searchCapability",
             "product_ambiguous",
-            `'${query}' could mean ${ambiguity.products.join(" or ")} — ` +
-              `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
-              `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. ` +
-              "Put the choice in `clarify` to the USER in their own terms, wait for an " +
-              "answer, then resend with product_choice='user_confirmed'. Do NOT search " +
-              "each product in turn and merge the results — that answers the question " +
-              "instead of asking it.",
+            (blank
+              ? `Nothing in '${subject}' names a product, or any word that belongs to ` +
+                "one, so there is no evidence here about which one is meant — that is " +
+                "the least settled a request can be, not the most. "
+              : mismatch
+                ? `'${subject}' names words only ${ambiguity.settled} claims` +
+                  (ambiguity.because?.length
+                    ? ` (${ambiguity.because.map((t) => `'${t}'`).join(", ")})`
+                    : "") +
+                  `, so the request points at ${ambiguity.settled}, not ${product}. ` +
+                  "Search the product the words name, or — if the user meant " +
+                  `${product} — get them to say so and quote them. `
+                : `'${subject}' could mean ${ambiguity.products.join(" or ")} — ` +
+                  `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
+                  `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. `) +
+              (named
+                ? `The words you quoted (${anchor.terms.map((t) => `'${t}'`).join(", ")}) ` +
+                  `point at ${anchor.products.join(" and ")}, not ${product}. `
+                : user_words
+                  ? "Nothing in the words you quoted names a product or a term only one " +
+                    "product uses. "
+                  : "Send `user_words` — the user's OWN words naming the product, or a " +
+                    "term only one product uses — or ask them. ") +
+              "Put the choice to the USER in their own terms, wait for an answer, then " +
+              "resend with their words in `user_words` AND `routing_token` set to the " +
+              "token below. Rewording this query will not get past here. Do NOT search " +
+              "each product in turn and merge the results.",
             {
+              routing_token: token,
               clarify: {
-                question: `Which product do you mean — ${ambiguity.products.join(" or ")}?`,
+                question: `Which product do you mean — ${choices.join(" or ")}?`,
                 shared: ambiguity.terms,
                 options,
               },
             },
-            { product: ambiguity.products.join("+") },
+            { product: ambiguity.products.join("+") || "none" },
           );
         }
       }
@@ -930,6 +1214,7 @@ export function addCapabilityRegistryTools(
           deps.credentialsFor(),
           transport,
           registry.index.products[product]?.auth,
+          product,
         );
         // The one row for a completed invoke. invoke() returns a 4xx/5xx rather than
         // throwing, so `success` keeps its tool-level meaning and these two fields carry

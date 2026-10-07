@@ -137,6 +137,30 @@ Create and manage test cases, create test plans and trigger test runs using natu
 "update test results as passed for Login tests test run from My Demo Project"
 ```
 
+### ⚡ Load Testing
+
+Run and analyse load tests at scale without leaving your IDE or chat — find tests, start and stop runs, read reports and AI Insights, compare runs, and check your VU-hours. Works with API (JMeter, k6, Gatling, Locust), browser (Playwright, Selenium, WebdriverIO, Nightwatch) and hybrid load tests on BrowserStack's [Load Testing](https://www.browserstack.com/load-testing). These go through the [Capability Registry](#-capability-registry-test-management--load-testing) tools.
+
+```bash
+# Find a test
+"find my load test called checkout-api"
+
+# Run it
+"run checkout-api for 5 minutes with 100 virtual users"
+
+# Check on it
+"is my checkout-api run finished yet?"
+
+# Read the results
+"what was the p95 response time and error rate of the last checkout-api run?"
+
+# Compare two runs of the same test
+"did the latest checkout-api run regress compared with the previous one?"
+
+# Check quota before a big run
+"how many VU-hours do I have left, and what would a 30-minute run with 500 VUs cost?"
+```
+
 ### 🧪 Access BrowserStack AI agents 
 
 Generate test cases from PRDs, convert manual tests to low-code automation, and auto-heal flaky scripts powered by BrowserStack’s AI agents, seamlessly integrated into your workflow.  Below are few example prompts to access Browserstack AI agents
@@ -661,9 +685,12 @@ As of now we support 51 tools.
 
 ---
 
-## 🧭 Capability Registry (Test Management)
+## 🧭 Capability Registry (Test Management & Load Testing)
 
-Five generic tools that reach **198 Test Management endpoints** from a prebuilt index, instead of one hand-written tool per endpoint. Use them when the task needs something the named tools above do not cover — shared steps, templates, custom fields, exploratory sessions, review workflows, bulk edits, reports and so on.
+Five generic tools that reach **198 Test Management endpoints** and **21 Load Testing capabilities** from prebuilt indexes, instead of one hand-written tool per endpoint.
+
+- **Test Management** — use them when the task needs something the named tools above do not cover: shared steps, templates, custom fields, exploratory sessions, review workflows, bulk edits, reports and so on.
+- **Load Testing** — this is how Load Testing is reached: find projects, tests and runs; create and update tests; start, monitor and stop runs; read run reports and AI Insights; compare two runs of the same test; see trends; and check VU-hour quota and cost estimates.
 
 The flow is always the same: **find it, read its contract, then call it.**
 
@@ -674,13 +701,14 @@ searchCapability  →  describeCapability  →  invokeCapability
 Two things worth knowing before you start:
 
 - **`searchCapability` needs a product.** Call `listProducts` first if the task does not name one — asking is cheaper than guessing, and the tool will refuse a query that two products could both answer.
-- **Writes ask first.** Anything that changes data needs your confirmation, and deletes are not reachable at all: they are withheld from this surface rather than refused after the fact, so they never appear in search results.
+- **Writes ask first.** Anything that changes data — including starting or stopping a load test run — needs your confirmation, and deletes are not reachable at all: they are withheld from this surface rather than refused after the fact, so they never appear in search results.
 
  47. `listProducts` — List the products this surface can reach, what each one does, and what every entity in it means. **Start here** when you do not already know which product the task belongs to.
   **Prompt example**
 
   ```text
   What can you reach in BrowserStack Test Management?
+  What can I do with BrowserStack Load Testing from here?
   ```
 
  48. `describeEntity` — Describe one entity: what it is, what identifies it, what it relates to, and the vocabulary the product uses for it. Read this before filtering or writing, because ids and field values usually have to be resolved first.
@@ -688,6 +716,7 @@ Two things worth knowing before you start:
 
   ```text
   What is a shared step in Test Management, and how is it identified?
+  What is a run in Load Testing, and how is it different from a load test?
   ```
 
  49. `searchCapability` — Find endpoints by plain language within one product. Returns a shortlist, not the whole catalogue. Pass `query: "*"` to browse everything, with `offset` to page through it.
@@ -695,6 +724,7 @@ Two things worth knowing before you start:
 
   ```text
   Find a way to move test cases between folders in bulk in project PR-53617
+  Find a way to compare two runs of a load test
   ```
 
  50. `describeCapability` — The full contract for one capability: required parameters, body shape including any nesting, what the response actually returns, and the traps specific to that endpoint. Read this before invoking anything you have not called before.
@@ -702,6 +732,7 @@ Two things worth knowing before you start:
 
   ```text
   Show me exactly what I need to send to create a shared step
+  Show me what I need to send to start a load test run
   ```
 
  51. `invokeCapability` — Call the endpoint. Writes require explicit confirmation and a summary of what will change; destructive operations are not available through this surface.
@@ -709,6 +740,7 @@ Two things worth knowing before you start:
 
   ```text
   Add the 'regression' tag to every test case in the Checkout folder of PR-53617
+  Start my checkout-api load test with 100 VUs for 5 minutes
   ```
 
 

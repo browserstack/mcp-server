@@ -2,7 +2,7 @@
 
 This page lists everything the BrowserStack MCP Server exposes, in two layers:
 
-1. **[Core tools](#-core-tools)** — five tools that find and run any BrowserStack capability from a catalog. This is the recommended path and the one the [BrowserStack MCP docs](https://www.browserstack.com/docs/browserstack-mcp-server/tools) describe. The [Products](#products) list under it shows every tool the core tools reach, by product.
+1. **[Core tools](#-core-tools)** — five tools that find and run any BrowserStack capability from a catalog. This is the recommended path and the one the [BrowserStack MCP docs](https://www.browserstack.com/docs/browserstack-mcp-server/tools) describe. The [Products](#products) list under it holds the tools the core tools reach, organised by product; expand a product to see its full list.
 2. **[Legacy tools](#-legacy-tools)** — the 46 product-specific tools that predate the core tools. They are still registered and supported, and remain in your client's tool list until they are deprecated in favour of the core tools. Prefer the core tools for new workflows.
 
 Each group below is collapsed; click a heading to expand it.

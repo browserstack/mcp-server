@@ -1,10 +1,9 @@
 # BrowserStack MCP Server — Tool Reference
 
-This page lists everything the BrowserStack MCP Server exposes, in three layers:
+This page lists everything the BrowserStack MCP Server exposes, in two layers:
 
-1. **[Core tools](#-core-tools)** — five tools that find and run any BrowserStack capability from a catalog. This is the recommended path and the one the [BrowserStack MCP docs](https://www.browserstack.com/docs/browserstack-mcp-server/tools) describe.
-2. **[Tools](#-tools)** — the tools the core tools reach, organised by product. Expand a product to see its full list.
-3. **[Legacy tools](#-legacy-tools)** — the 46 product-specific tools that predate the core tools. They are still registered and supported, and remain in your client's tool list until they are deprecated in favour of the core tools. Prefer the core tools for new workflows.
+1. **[Core tools](#-core-tools)** — five tools that find and run any BrowserStack capability from a catalog. This is the recommended path and the one the [BrowserStack MCP docs](https://www.browserstack.com/docs/browserstack-mcp-server/tools) describe. The [Products](#products) list under it shows every tool the core tools reach, by product.
+2. **[Legacy tools](#-legacy-tools)** — the 46 product-specific tools that predate the core tools. They are still registered and supported, and remain in your client's tool list until they are deprecated in favour of the core tools. Prefer the core tools for new workflows.
 
 Each group below is collapsed; click a heading to expand it.
 
@@ -73,13 +72,9 @@ Two things worth knowing before you start:
 
 </details>
 
----
-
-## 🧩 Tools
-
-Tools are organised by product. Expand a product to see every tool the core tools reach there: `searchCapability` finds the tool, `describeCapability` returns its parameters and response shape, and `invokeCapability` runs it. Writes ask for your confirmation before anything changes, and destructive operations are not exposed. Each name is the handle `searchCapability` returns — pass it to `describeCapability` to see the full contract. More products will appear here as they join the catalog.
-
 ### Products
+
+The core tools reach the product tools below. Expand a product to see its full list: `searchCapability` finds the tool, `describeCapability` returns its parameters and response shape, and `invokeCapability` runs it. Each name is the handle `searchCapability` returns — pass it to `describeCapability` to see the full contract. More products will appear here as they join the catalog.
 
 <details>
 <summary><b>🧾 Test Management</b></summary>

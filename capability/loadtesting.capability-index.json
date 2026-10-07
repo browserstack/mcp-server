@@ -1195,7 +1195,30 @@
             "name": "framework",
             "type": "string",
             "required": true,
-            "description": "PLU (API) frameworks: k6, jmeter, gatling, locust. BLU (browser) frameworks: playwright, selenium, webdriverio, nightwatch, lcncnightwatch. Must match testType — a PLU framework for testType plu, a BLU framework for testType blu (the backend rejects a mismatched pair).",
+            "description": "The framework MUST match testType (the backend rejects a mismatched pair). Offer ONLY the frameworks for the already-chosen testType — read them from valuesByTestType[testType] below — and NEVER present the full `values` list across types. API (plu): k6, jmeter, gatling, locust. Browser (blu): playwright, selenium, webdriverio, nightwatch, lcncnightwatch. For a hybrid test this top-level framework is the Browser leg; the API leg's framework goes in children[].",
+            "scopedBy": "testType",
+            "valuesByTestType": {
+              "plu": [
+                "k6",
+                "jmeter",
+                "gatling",
+                "locust"
+              ],
+              "blu": [
+                "playwright",
+                "selenium",
+                "webdriverio",
+                "nightwatch",
+                "lcncnightwatch"
+              ],
+              "hybrid": [
+                "playwright",
+                "selenium",
+                "webdriverio",
+                "nightwatch",
+                "lcncnightwatch"
+              ]
+            },
             "values": [
               "k6",
               "jmeter",
@@ -1258,7 +1281,7 @@
         "guidance": [
           "PRECONDITION — do NOT call this endpoint until THREE things are known: (1) testType (plu/blu/hybrid), (2) framework, (3) the script (a built-in sample or the user's own upload). These are MANDATORY and NOT defaultable — never infer or default them. If the user's request does not state one of the three, ASK the user for the missing ones and WAIT for their answer before creating. 'create a test' with no type/framework/script named means all three are missing → ask all three; do not silently pick k6/plu/sample. Only vus, duration, region and load profile are defaultable (see the DEFAULTS line) — the three above are not.",
           "'plu' / 'blu' / 'hybrid' are INTERNAL wire values — send them in the request, but NEVER show them to the user. Do not print them in questions, option labels, confirmations, summaries, or prose (no 'Browser (BLU)', no '(plu+blu)'). User-facing labels are: plu → 'API', blu → 'Browser', hybrid → 'Hybrid (both API and Browser)'. Frameworks (k6, jmeter, selenium, playwright, …) are real product names and ARE shown to the user.",
-          "When you ASK the user to pick testType or framework, present the FULL, exact option set — never drop, merge, or cross-contaminate options. testType: offer all THREE, using the user-facing labels above — 'API', 'Browser', and 'Hybrid'; do not omit Hybrid. framework (ask AFTER testType is chosen, and show only that type's frameworks, each as its OWN separate option): for an API test offer exactly k6, jmeter, gatling AND locust (all four — do not drop locust); for a Browser test offer exactly playwright, selenium, webdriverio AND nightwatch (all four — never list the API frameworks under a Browser test, and never merge selenium and playwright into one option). For a Hybrid test, collect an API leg (its framework + script) AND a Browser leg (its framework + script) and assemble them per the children field — Hybrid needs both legs, so it takes more than the three questions a single-type test does.",
+          "When you ASK the user to pick testType or framework, present the FULL, exact option set — never drop, merge, or cross-contaminate options. testType: offer all THREE, using the user-facing labels above — 'API', 'Browser', and 'Hybrid'; do not omit Hybrid. framework (ask AFTER testType is chosen, and show only that type's frameworks — the authoritative per-type list is the `framework.valuesByTestType[testType]` array; present exactly those, each as its OWN separate option, and NEVER the full cross-type `values` list): for an API test offer exactly k6, jmeter, gatling AND locust (all four — do not drop locust); for a Browser test offer exactly playwright, selenium, webdriverio AND nightwatch (all four — never list the API frameworks under a Browser test, and never merge selenium and playwright into one option). For a Hybrid test, collect an API leg (its framework + script) AND a Browser leg (its framework + script) and assemble them per the children field — Hybrid needs both legs, so it takes more than the three questions a single-type test does.",
           "Provide exactly one of projectId or projectName; projectName creates the project if absent.",
           "Script upload is two-phase: send pendingScriptUpload to get a presigned uploadUrl + s3Key, PUT the file, then call create again with the scriptRef source and s3Key returned in the response's nextStep.",
           "To spin up a test from a built-in sample with NO file handling (the dashboard's 'use sample script'), pass scriptRef:{source:'sample'} — the platform's bundled sample for the given framework is used. For Selenium, also pass scriptRef.subType (testng|junit|vanillajava|python|pytest|jest|serenity-cucumber) to pick the binding. testType and framework are still needed; the load profile defaults to constant 1 VU / 30s (see below).",

@@ -1,9 +1,7 @@
 import type { ApiResponse } from "../../lib/apiClient.js";
 import appConfig from "../../config.js";
 
-export const MAX_LOG_BYTES = appConfig.REMOTE_MCP
-  ? 10 * 1024 * 1024
-  : undefined;
+export const MAX_LOG_BYTES = appConfig.REMOTE_MCP ? 5 * 1024 * 1024 : undefined;
 
 export interface LogResponse {
   logs?: any[];
@@ -39,7 +37,7 @@ export function validateLogResponse(
   if (!response.ok) {
     if (response.status === 413) {
       return {
-        message: `The ${logType} for this session are too large (over 10 MB) to analyze here. Open the session in the BrowserStack dashboard to view them.`,
+        message: `The ${logType} for this session are too large (over 5 MB) to analyze here. Open the session in the BrowserStack dashboard to view them.`,
       };
     }
     if (response.status === 404) {

@@ -8,6 +8,11 @@ vi.mock("../../src/lib/get-auth", () => ({
   getBrowserStackAuth: vi.fn(() => "user:key"),
 }));
 
+vi.mock("../../src/config", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return { default: { ...actual.default, REMOTE_MCP: true } };
+});
+
 const config = {
   "browserstack-username": "user",
   "browserstack-access-key": "key",
@@ -78,5 +83,17 @@ describe("getFailureLogs with oversized logs", () => {
     await expect(
       apiClient.get({ url: `${base}/huge`, maxContentLength: 1024 }),
     ).rejects.toThrow(/maxContentLength/);
+  });
+
+  it("does not cap log downloads for local (non-remote) servers", async () => {
+    vi.resetModules();
+    vi.doMock("../../src/config", async (importOriginal) => {
+      const actual: any = await importOriginal();
+      return { default: { ...actual.default, REMOTE_MCP: false } };
+    });
+    const { MAX_LOG_BYTES } = await import(
+      "../../src/tools/failurelogs-utils/utils"
+    );
+    expect(MAX_LOG_BYTES).toBeUndefined();
   });
 });

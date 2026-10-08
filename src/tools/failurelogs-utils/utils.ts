@@ -1,6 +1,9 @@
 import type { ApiResponse } from "../../lib/apiClient.js";
+import appConfig from "../../config.js";
 
-export const MAX_LOG_BYTES = 10 * 1024 * 1024;
+export const MAX_LOG_BYTES = appConfig.REMOTE_MCP
+  ? 10 * 1024 * 1024
+  : undefined;
 
 export interface LogResponse {
   logs?: any[];

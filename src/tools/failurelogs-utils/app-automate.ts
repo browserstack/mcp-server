@@ -1,5 +1,9 @@
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
-import { filterLinesByKeywords, validateLogResponse } from "./utils.js";
+import {
+  filterLinesByKeywords,
+  MAX_LOG_BYTES,
+  validateLogResponse,
+} from "./utils.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
@@ -20,6 +24,7 @@ export async function retrieveDeviceLogs(
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
     },
+    maxContentLength: MAX_LOG_BYTES,
     raise_error: false,
   });
 
@@ -52,6 +57,7 @@ export async function retrieveAppiumLogs(
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
     },
+    maxContentLength: MAX_LOG_BYTES,
     raise_error: false,
   });
 
@@ -84,6 +90,7 @@ export async function retrieveCrashLogs(
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
     },
+    maxContentLength: MAX_LOG_BYTES,
     raise_error: false,
   });
 

@@ -13,6 +13,7 @@ type RequestOptions = {
   body?: any;
   timeout?: number;
   responseType?: AxiosRequestConfig["responseType"];
+  maxContentLength?: number;
   raise_error?: boolean; // default: true
 };
 
@@ -153,6 +154,12 @@ class ApiClient {
       if (error.response && !raise_error) {
         return new ApiResponse<T>(error.response);
       }
+      if (!raise_error && /maxContentLength/.test(error.message ?? "")) {
+        return new ApiResponse<T>({
+          status: 413,
+          statusText: "Payload Too Large",
+        } as AxiosResponse<T>);
+      }
       throw error;
     }
   }
@@ -163,6 +170,7 @@ class ApiClient {
     params,
     timeout,
     responseType,
+    maxContentLength,
     raise_error = true,
   }: RequestOptions): Promise<ApiResponse<T>> {
     const config: AxiosRequestConfig = {
@@ -170,6 +178,7 @@ class ApiClient {
       params,
       timeout,
       responseType,
+      maxContentLength,
       httpsAgent: this.axiosAgent,
     };
     return this.requestWrapper<T>(

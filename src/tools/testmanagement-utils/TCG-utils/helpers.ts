@@ -57,7 +57,7 @@ export function createTestCasePayload(
     template: "test_case_steps",
     metadata: JSON.stringify({
       ai_prompt: {
-        attachment_id: documentId,
+        attachment_ids: [documentId],
         rich_text_id: null,
         scenario: scenarioId,
         test_case_count: tc.test_case_count || 1,

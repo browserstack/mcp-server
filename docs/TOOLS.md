@@ -1,6 +1,6 @@
 # BrowserStack MCP Server — Tool Reference
 
-Every tool the BrowserStack MCP Server exposes, organised by product the same way as the [BrowserStack MCP docs](https://www.browserstack.com/docs/browserstack-mcp-server/tools). Expand a product to see its full list.
+Every tool the BrowserStack MCP Server exposes, organised by product the same way as the [BrowserStack MCP docs](https://www.browserstack.com/docs/browserstack-mcp-server/tools). Expand a product to see its full list. A tool appears under every product whose docs page lists it, so some tools appear more than once.
 
 Two kinds of tool appear side by side. Tools with camelCase names, such as `createTestCase`, are registered directly in your client and are called by name. Tools with snake_case names, such as `create_shared_step`, live in the catalog and are reached through the five **core tools**: `listProducts`, `describeEntity`, `searchCapability`, `describeCapability` and `invokeCapability`. The flow is always the same: find it, read its contract, then call it.
 
@@ -19,25 +19,51 @@ searchCapability  →  describeCapability  →  invokeCapability
 ## 🧰 Tools
 
 <details>
+<summary><b>💬 Ask AI</b></summary>
+
+| Tool | What it does |
+|---|---|
+| `askBrowserStackAI` | *(Alpha, limited availability)* Hand a multi-step task to BrowserStack's agent in plain language; it decides which calls to make and returns the answer plus the steps it took. Covers Test Management and Test Reporting & Analytics. Anything that would change data pauses for your confirmation in your own client; deletes are refused outright. Requires the account to be enrolled — otherwise it returns an entitlement error and nothing runs. |
+
+</details>
+
+<details>
+<summary><b>🤖 AI Agents</b></summary>
+
+| Tool | What it does |
+|---|---|
+| `fetchSelfHealedSelectors` | Retrieve AI self-healed selectors (plus test source) to fix flaky tests caused by DOM changes. |
+| `createLCASteps` | Generate Low Code Automation (LCA) steps from a manual test case in Test Management. |
+| `createTestCasesFromFile` | Generate test cases in bulk from an uploaded file using the Test Case Generator AI Agent. _(not available in Remote MCP)_ |
+| `uploadProductRequirementFile` | Upload a PRD/screenshot/PDF and get a file mapping ID (used with `createTestCasesFromFile`). _(not available in Remote MCP)_ |
+| `percyVisualTestIntegrationAgent` | Integrate Percy visual testing into a new project and demonstrate visual change detection with a step-by-step simulation. |
+| `fetchPercyChanges` | Retrieve and summarize visual changes detected by Percy AI between the latest and previous builds. |
+| `prepareSelfHealingPlan` | Build a self-healing edit plan that bundles locator pairs with test source for your LLM to apply. Does NOT modify files itself. |
+
+</details>
+
+<details>
 <summary><b>🧾 Test Management</b></summary>
 
 | Tool | What it does |
 |---|---|
 | `createProjectOrFolder` | Create a Test Management project and/or folders to organize test cases. Returns with Folder ID, Project ID and Test Management Link to access the TM Project Dashboard. |
 | `createTestCase` | Add a manual test case under a specific project/folder (uses project identifier like PR-xxxxx and a folder ID). |
-| `updateTestCase` | Update an existing test case. Any subset of fields may be changed (name, priority, status, steps, tags, etc.); only supplied fields are modified. |
 | `listTestCases` | List test cases for a project, optionally scoped to a folder (supports filters like case_type, priority, and pagination). |
-| `listFolders` | List folders in a Test Management project (returns each folder's id, name, case counts, and sub-folder counts). Pass a parent_id to list sub-folders. |
-| `listTestCaseTemplates` | List test-case templates with their numeric template_id, for use with `createTestCase` to apply a custom template. |
+| `uploadProductRequirementFile` | Upload a PRD/screenshot/PDF and get a file mapping ID (used with `createTestCasesFromFile`). _(not available in Remote MCP)_ |
+| `createTestCasesFromFile` | Generate test cases in bulk from an uploaded file using the Test Case Generator AI Agent. _(not available in Remote MCP)_ |
+| `createLCASteps` | Generate Low Code Automation (LCA) steps from a manual test case in Test Management. |
 | `createTestRun` | Create a test run (suite) for selected test cases in a project. |
 | `listTestRuns` | List test runs for a project (filter by dates, assignee, state). |
-| `updateTestRun` | Update a test run's name/state and/or add test cases to it. |
 | `addTestResult` | Add a manual execution result (passed/failed/blocked/skipped) for a test case within a run. |
-| `createTestCasesFromFile` | Generate test cases in bulk from an uploaded file using the Test Case Generator AI Agent. _(not available in Remote MCP)_ |
+| `updateTestRun` | Update a test run's name/state and/or add test cases to it. |
+| `getSubTestPlan` | Fetch a sub-test-plan (STP-*) under a parent plan, with its metadata and linked test runs. |
+| `listSubTestPlans` | List sub-test-plans (STP-*) under a parent test plan (TP-*). Supports pagination. |
+| `updateTestCase` | Update an existing test case. Any subset of fields may be changed (name, priority, status, steps, tags, etc.); only supplied fields are modified. |
+| `listFolders` | List folders in a Test Management project (returns each folder's id, name, case counts, and sub-folder counts). Pass a parent_id to list sub-folders. |
+| `listTestCaseTemplates` | List test-case templates with their numeric template_id, for use with `createTestCase` to apply a custom template. |
 | `listTestPlans` | List test plans (TP-*) in a project, with name, status, dates, and active/closed run counts. Supports pagination. |
 | `getTestPlan` | Fetch a test plan by identifier (TP-*) with its metadata, linked test runs, total test-case count, and status summary. |
-| `listSubTestPlans` | List sub-test-plans (STP-*) under a parent test plan (TP-*). Supports pagination. |
-| `getSubTestPlan` | Fetch a sub-test-plan (STP-*) under a parent plan, with its metadata and linked test runs. |
 | `assign_test_run_owner` | Assign a owner to the test run |
 | `assign_test_run_test_cases` | Hand specific test cases inside a run to the people who should execute them (or clear their assignee) |
 | `bulk_archive_test_cases_by_project` | Bulk Archive Test Cases |
@@ -269,24 +295,11 @@ searchCapability  →  describeCapability  →  invokeCapability
 </details>
 
 <details>
-<summary><b>🧪 Automate</b></summary>
+<summary><b>📱 App Live</b></summary>
 
 | Tool | What it does |
 |---|---|
-| `setupBrowserStackAutomateTests` | Integrate BrowserStack SDK and run web tests on BrowserStack. For visual testing/Percy, use the dedicated Percy tools. |
-| `fetchAutomationScreenshots` | Fetch screenshots captured during a given Automate/App Automate session. |
-| `listSessions` | List the sessions in an Automate/App Automate build. Each record carries `sessionId`, `name`, `status`, `os`, `osVersion`, `browser`, `device`, `browserUrl` (dashboard link), and `videoUrl`, with optional `limit` / `offset` paging and a client-side `status` filter. Takes either the **hashed** build ID from the dashboard URL or the observability build id returned by `getBuildId` / `listBuildId` — an observability id is resolved to the hashed id automatically via the build's sessions. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`. |
-
-</details>
-
-<details>
-<summary><b>📲 App Automate</b></summary>
-
-| Tool | What it does |
-|---|---|
-| `takeAppScreenshot` | Launch the app on a specified device and capture a quick verification screenshot to confirm your app has launched. |
-| `runAppTestsOnBrowserStack` | Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files. |
-| `setupBrowserStackAppAutomateTests` | Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. |
+| `runAppLiveSession` | Start a manual app testing session on a real device in the cloud. |
 
 </details>
 
@@ -300,11 +313,25 @@ searchCapability  →  describeCapability  →  invokeCapability
 </details>
 
 <details>
-<summary><b>📱 App Live</b></summary>
+<summary><b>📲 App Automate</b></summary>
 
 | Tool | What it does |
 |---|---|
-| `runAppLiveSession` | Start a manual app testing session on a real device in the cloud. |
+| `takeAppScreenshot` | Launch the app on a specified device and capture a quick verification screenshot to confirm your app has launched. |
+| `listTestIds` | List the tests in a BrowserStack build (Automate or App Automate) with each test's `status` and `session_id`, optionally filtered by status (passed/failed/pending/skipped). The `session_id` feeds `getFailureLogs` and `fetchAutomationScreenshots` directly. |
+| `setupBrowserStackAppAutomateTests` | Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. |
+| `runAppTestsOnBrowserStack` | Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files. |
+
+</details>
+
+<details>
+<summary><b>🧪 Automate</b></summary>
+
+| Tool | What it does |
+|---|---|
+| `setupBrowserStackAutomateTests` | Integrate BrowserStack SDK and run web tests on BrowserStack. For visual testing/Percy, use the dedicated Percy tools. |
+| `fetchAutomationScreenshots` | Fetch screenshots captured during a given Automate/App Automate session. |
+| `listSessions` | List the sessions in an Automate/App Automate build. Each record carries `sessionId`, `name`, `status`, `os`, `osVersion`, `browser`, `device`, `browserUrl` (dashboard link), and `videoUrl`, with optional `limit` / `offset` paging and a client-side `status` filter. Takes either the **hashed** build ID from the dashboard URL or the observability build id returned by `getBuildId` / `listBuildId` — an observability id is resolved to the hashed id automatically via the build's sessions. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`. |
 
 </details>
 
@@ -313,26 +340,11 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 | Tool | What it does |
 |---|---|
-| `accessibilityExpert` | Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices). |
 | `startAccessibilityScan` | Start a web accessibility scan and retrieve a local CSV report path. |
+| `accessibilityExpert` | Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices). |
 | `createAccessibilityAuthConfig` | Create an authentication configuration (form-based or basic) for accessibility scans behind a login. |
 | `getAccessibilityAuthConfig` | Retrieve an existing accessibility authentication configuration by ID. |
 | `fetchAccessibilityIssues` | Fetch accessibility issues from a completed scan, with pagination support. |
-
-</details>
-
-<details>
-<summary><b>🎨 Percy Visual Testing</b></summary>
-
-| Tool | What it does |
-|---|---|
-| `percyVisualTestIntegrationAgent` | Integrate Percy visual testing into a new project and demonstrate visual change detection with a step-by-step simulation. |
-| `expandPercyVisualTesting` | Set up or expand Percy visual testing coverage for existing projects (Percy Web Standalone and Percy Automate). |
-| `addPercySnapshotCommands` | Add Percy snapshot commands to the specified test files. _(not available in Remote MCP)_ |
-| `listTestFiles` | List all test files for a given set of directories. _(not available in Remote MCP)_ |
-| `runPercyScan` | Run a Percy visual test scan. _(not available in Remote MCP)_ |
-| `fetchPercyChanges` | Retrieve and summarize visual changes detected by Percy AI between the latest and previous builds. |
-| `managePercyBuildApproval` | Approve or reject a Percy build. |
 
 </details>
 
@@ -342,23 +354,25 @@ searchCapability  →  describeCapability  →  invokeCapability
 | Tool | What it does |
 |---|---|
 | `getFailureLogs` | Retrieve error logs for Automate/App Automate sessions. App Automate log endpoints are build-scoped, so a hashed build ID is required there — pass one if you have it, otherwise it is resolved from the session automatically. |
+| `getBuildId` | Get the BrowserStack build ID for a given project and build name, scoped to your builds. |
 | `fetchBuildInsights` | Fetch insights about a BrowserStack build by combining build details and quality-gate results. Includes `hashed_id` (the hashed build id `listSessions` takes) and `session_type`, resolved through the build's sessions when the build ran on Automate / App Automate. |
+| `fetchRCA` | Fetch AI Root Cause Analysis for your failed Automate/App-Automate tests (by numeric test ID). Suggests fixes only; never auto-applies. |
+| `listTestIds` | List the tests in a BrowserStack build (Automate or App Automate) with each test's `status` and `session_id`, optionally filtered by status (passed/failed/pending/skipped). The `session_id` feeds `getFailureLogs` and `fetchAutomationScreenshots` directly. |
+| `listBuildId` | Get the latest build ID for a project and build name, across all users (no user filter). |
 
 </details>
 
 <details>
-<summary><b>🤖 BrowserStack AI Agents</b></summary>
+<summary><b>🎨 Percy</b></summary>
 
 | Tool | What it does |
 |---|---|
-| `uploadProductRequirementFile` | Upload a PRD/screenshot/PDF and get a file mapping ID (used with `createTestCasesFromFile`). _(not available in Remote MCP)_ |
-| `createLCASteps` | Generate Low Code Automation (LCA) steps from a manual test case in Test Management. |
-| `fetchSelfHealedSelectors` | Retrieve AI self-healed selectors (plus test source) to fix flaky tests caused by DOM changes. |
-| `prepareSelfHealingPlan` | Build a self-healing edit plan that bundles locator pairs with test source for your LLM to apply. Does NOT modify files itself. |
-| `fetchRCA` | Fetch AI Root Cause Analysis for your failed Automate/App-Automate tests (by numeric test ID). Suggests fixes only; never auto-applies. |
-| `getBuildId` | Get the BrowserStack build ID for a given project and build name, scoped to your builds. |
-| `listBuildId` | Get the latest build ID for a project and build name, across all users (no user filter). |
-| `listTestIds` | List the tests in a BrowserStack build (Automate or App Automate) with each test's `status` and `session_id`, optionally filtered by status (passed/failed/pending/skipped). The `session_id` feeds `getFailureLogs` and `fetchAutomationScreenshots` directly. |
-| `askBrowserStackAI` | *(Alpha, limited availability)* Hand a multi-step task to BrowserStack's agent in plain language; it decides which calls to make and returns the answer plus the steps it took. Covers Test Management and Test Reporting & Analytics. Anything that would change data pauses for your confirmation in your own client; deletes are refused outright. Requires the account to be enrolled — otherwise it returns an entitlement error and nothing runs. |
+| `addPercySnapshotCommands` | Add Percy snapshot commands to the specified test files. _(not available in Remote MCP)_ |
+| `expandPercyVisualTesting` | Set up or expand Percy visual testing coverage for existing projects (Percy Web Standalone and Percy Automate). |
+| `runPercyScan` | Run a Percy visual test scan. _(not available in Remote MCP)_ |
+| `fetchPercyChanges` | Retrieve and summarize visual changes detected by Percy AI between the latest and previous builds. |
+| `listTestFiles` | List all test files for a given set of directories. _(not available in Remote MCP)_ |
+| `managePercyBuildApproval` | Approve or reject a Percy build. |
+| `percyVisualTestIntegrationAgent` | Integrate Percy visual testing into a new project and demonstrate visual change detection with a step-by-step simulation. |
 
 </details>

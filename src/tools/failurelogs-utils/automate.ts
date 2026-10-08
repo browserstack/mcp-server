@@ -4,6 +4,7 @@ import {
   HarEntry,
   HarFile,
   filterLinesByKeywords,
+  MAX_LOG_BYTES,
   validateLogResponse,
 } from "./utils.js";
 import { BrowserStackConfig } from "../../lib/types.js";
@@ -24,6 +25,7 @@ export async function retrieveNetworkFailures(
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
     },
+    maxContentLength: MAX_LOG_BYTES,
     raise_error: false,
   });
 
@@ -31,7 +33,7 @@ export async function retrieveNetworkFailures(
   if (validationError) return validationError.message!;
 
   const networklogs: HarFile = response.data;
-  const failureEntries: HarEntry[] = networklogs.log.entries.filter(
+  const failureEntries: HarEntry[] = (networklogs?.log?.entries ?? []).filter(
     (entry: HarEntry) =>
       entry.response.status === 0 ||
       entry.response.status >= 400 ||
@@ -79,6 +81,7 @@ export async function retrieveSessionFailures(
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
     },
+    maxContentLength: MAX_LOG_BYTES,
     raise_error: false,
   });
 
@@ -110,6 +113,7 @@ export async function retrieveConsoleFailures(
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
     },
+    maxContentLength: MAX_LOG_BYTES,
     raise_error: false,
   });
 

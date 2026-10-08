@@ -454,12 +454,12 @@ async function builds(projectId: number): Promise<any[]> {
       date_range: [now - 90 * 86400_000, now + 3600_000],
     };
     if (next) query.next_page = next;
-    const r = await call("list_project_builds_via_public_api", {
+    const r = await call("list_project_builds_by_project_id", {
       path_params: { project_id: projectId },
       query,
     });
     if (r.status !== 200)
-      die("list_project_builds_via_public_api", r.error ?? r.body, r.status);
+      die("list_project_builds_by_project_id", r.error ?? r.body, r.status);
     // The live listing is snake_case (build_id, original_name, build_number, ...) although the
     // index declares camelCase (uuid, originalName, buildNumber). Accept both.
     out.push(
@@ -652,7 +652,7 @@ async function main() {
       };
       continue;
     }
-    const details = await call("get_build_details_via_public_api", {
+    const details = await call("get_build_summary", {
       path_params: { build_id: b.uuid },
     });
     const d = details.body ?? {};

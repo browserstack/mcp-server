@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.4",
-  "build_id": "tra-v1.4-scope-trim-268",
+  "version": "1.7",
+  "build_id": "tra-v1.7-ai-failure-naming",
   "tra": {
     "routing_terms": [
       "flaky",
@@ -317,81 +317,6 @@
         }
       },
       {
-        "name": "get_project_quality_gate_settings",
-        "method": "GET",
-        "path": "/api/v1/projects/{projectName}/settings/quality-gates",
-        "mode": "read",
-        "entity": "quality_gate",
-        "path_params": [
-          {
-            "name": "projectName",
-            "type": "string",
-            "required": true,
-            "description": "Project's normalised name."
-          }
-        ],
-        "intent": "Load a project's Quality Gates settings: whether gates are enabled, whether a failed gate overrides the build status, and the list of profiles mapped to the project with their enabled state. Use this to see how a project is configured before editing a profile or toggling the feature.",
-        "returns": [
-          "enabled",
-          "shouldOverrideBuildStatus",
-          "qualityProfiles"
-        ],
-        "responses": {
-          "200": {
-            "$response": "QualityGateSettings"
-          }
-        },
-        "guidance": [
-          "The `enabled` / `shouldOverrideBuildStatus` flags come from project attributes, not from the profile rows, so a project can have profiles listed while the feature itself is off.",
-          "Plan-gated: refused as feature-inaccessible when the plan lacks Quality Gates \u2014 that is a plan gap, not an empty project.",
-          "This is the in-product (settings UI) surface, authenticated with an obs/session token; it does not accept a username+access-key. For access-key/CI use `get_project_quality_gate_settings_via_public_api`.",
-          "Each profile carries `rulesCount` and its `isGlobalProfile` flag; the default profile is sorted to the front of the list."
-        ]
-      },
-      {
-        "name": "get_quality_profile",
-        "method": "GET",
-        "path": "/api/v1/projects/{projectName}/settings/quality-gates/profile/{profileId}",
-        "mode": "read",
-        "entity": "quality_gate",
-        "path_params": [
-          {
-            "name": "projectName",
-            "type": "string",
-            "required": true,
-            "description": "Project's normalised name."
-          },
-          {
-            "name": "profileId",
-            "type": "string",
-            "format": "uuid",
-            "required": true,
-            "description": "Profile UUID. A non-UUID value 400s before the handler runs."
-          }
-        ],
-        "intent": "Fetch one quality profile in full \u2014 its rules, thresholds and build filters \u2014 for the profile editor, with failure-category rule operands resolved to their human display names.",
-        "returns": [
-          "uuid",
-          "name",
-          "ruleStatus",
-          "rules",
-          "applicableBuilds",
-          "isGlobalProfile",
-          "hooksVisibility"
-        ],
-        "responses": {
-          "200": {
-            "$response": "QualityProfileDetail"
-          }
-        },
-        "guidance": [
-          "`displayWith` on a rule's lhs is populated only for FAILURE_CATEGORY / FAILURE_CATEGORY_THRESHOLD rules; other rule types have no displayWith.",
-          "The profile is loaded by UUID and is not re-checked against the named project, so the project in the path is used for permission and display-name resolution, not to scope the lookup.",
-          "Plan-gated (feature-inaccessible when the plan lacks Quality Gates). The response omits null fields (JSON include NON_NULL).",
-          "In-product surface (obs/session token). For access-key/CI use `get_quality_profile_via_public_api`."
-        ]
-      },
-      {
         "name": "list_quality_profile_filter_values",
         "method": "GET",
         "path": "/api/v1/projects/{projectName}/settings/quality-gates/filters",
@@ -458,7 +383,7 @@
         ]
       },
       {
-        "name": "get_project_quality_gate_settings_via_public_api",
+        "name": "get_project_quality_gate_settings",
         "method": "GET",
         "path": "/ext/v1/quality-gates/{project_name}/settings",
         "mode": "read",
@@ -490,7 +415,7 @@
         ]
       },
       {
-        "name": "get_quality_profile_via_public_api",
+        "name": "get_quality_profile",
         "method": "GET",
         "path": "/ext/v1/quality-gates/{project_name}/profiles/{profile_id}",
         "mode": "read",
@@ -725,7 +650,7 @@
           }
         },
         "guidance": [
-          "ALWAYS pass lowerBound/upperBound: omitting them returns the full retention window (tens of thousands of characters) and blows the tool output limit. For a single build's flaky/new-failure/muted/re-run counts read the build row (historyAggregate) via list_project_builds or get_build_details instead; this card is per build NAME over a window, not per run.",
+          "ALWAYS pass lowerBound/upperBound: omitting them returns the full retention window (tens of thousands of characters) and blows the tool output limit. For a single build's flaky/new-failure/muted/re-run counts read the build row (historyAggregate) via list_project_builds_by_name or get_build_details instead; this card is per build NAME over a window, not per run.",
           "Plan-feature-gated: if the flakiness widget is not in the caller's plan the call fails with 403 (FEATURE_INACCESSIBLE), NOT a 200 with empty data - do not treat that as 'no flaky tests'.",
           "The window is clamped to plan retention silently, and the bucket interval is derived from the width of the window you asked for, so a wider range yields coarser buckets.",
           "`insights.count` is the headline percentage as a STRING (one decimal), and `insights.meta` is a human sentence like 'N of M unique tests are flaky'; the per-bucket series is in `data`, each point's `y` being the flaky count for that bucket (null when no tests ran).",
@@ -2220,7 +2145,7 @@
           "When no build matches you get a bare HTTP 404 with an EMPTY body (not a structured error object) \u2014 handle the status code, there is nothing to parse.",
           "The lookup is scoped to the caller's group, so a build in another group reads as not-found.",
           "Returns just `{buildId}` (the resolved UUID); use `get_build_coordinates_from_uuid` for the inverse.",
-          "`buildSerialId` is the UI #N only. If the user's number does not match (404) it may be the CI run id (`buildRunId`): resolve that with search_entities (entity Build) or list_project_builds, which return both ids."
+          "`buildSerialId` is the UI #N only. If the user's number does not match (404) it may be the CI run id (`buildRunId`): resolve that with search_entities (entity Build) or list_project_builds_by_name, which return both ids."
         ],
         "responses": {
           "200": {
@@ -2989,431 +2914,6 @@
         }
       },
       {
-        "name": "list_dashboards",
-        "method": "GET",
-        "path": "/api/v1/dashboards",
-        "mode": "read",
-        "entity": "dashboard",
-        "intent": "List the custom dashboards visible to the caller (their own plus group-shared ones) for the dashboard switcher and dashboards landing page \u2014 the source of the UUID ids the read/update/clone/delete calls need.",
-        "query": [
-          {
-            "name": "source",
-            "type": "string",
-            "required": false,
-            "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
-            "description": "Product source to list. Defaults to TO (Test Observability). TCM (Test Management) dashboards are hidden unless this is TCM, or the group has GCD enabled."
-          }
-        ],
-        "returns": [
-          "data"
-        ],
-        "responses": {
-          "200": {
-            "$response": "DashboardsListResponse"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        },
-        "guidance": [
-          "Requires the Custom Dashboard feature entitlement; without it the call is refused (feature-inaccessible), which is not the same as an empty dashboard set.",
-          "Scheduled reports are excluded here \u2014 use list_reports for those. Visibility follows the group's enterprise-data-access (UDAC) setting and sub-group membership, not a simple owner check, so two users in one group can see different sets.",
-          "Each row under `data[]` is a SUMMARY: widgets, filters and reports come back null (only totalWidget is counted), and source/isDefault/isAutomation/modifiedBy/modifiedByName are often null. Read one dashboard by id for its widget definitions. There is no pagination on this route."
-        ]
-      },
-      {
-        "name": "get_dashboard",
-        "method": "GET",
-        "path": "/api/v1/dashboards/{id}",
-        "mode": "read",
-        "entity": "dashboard",
-        "intent": "Fetch one custom dashboard's definition \u2014 name, visibility level, saved global filters and full widget configuration \u2014 to render or edit the dashboard.",
-        "path_params": [
-          {
-            "name": "id",
-            "type": "string",
-            "format": "uuid",
-            "required": true,
-            "description": "Dashboard UUID (from list_dashboards)."
-          }
-        ],
-        "query": [
-          {
-            "name": "source",
-            "type": "string",
-            "required": false,
-            "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
-            "description": "Product source the dashboard belongs to. Defaults to TO."
-          }
-        ],
-        "returns": [
-          "data"
-        ],
-        "responses": {
-          "200": {
-            "$response": "DashboardResponse"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "404": {
-            "$response": "NotFound"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        },
-        "guidance": [
-          "The lookup is permission-filtered to rows the caller owns or that are group-visible, so a dashboard that exists but is not visible to the caller reads as not-found.",
-          "Returns the dashboard definition only; each widget's data is fetched separately per widget."
-        ]
-      },
-      {
-        "name": "create_dashboard",
-        "method": "POST",
-        "path": "/api/v1/dashboards",
-        "mode": "write",
-        "entity": "dashboard",
-        "intent": "Create a new custom dashboard with its widget layout, global filters and visibility level (private vs shared with the group).",
-        "query": [
-          {
-            "name": "source",
-            "type": "string",
-            "required": false,
-            "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
-            "description": "Product source the new dashboard belongs to. Defaults to TO."
-          }
-        ],
-        "body": [
-          {
-            "name": "name",
-            "type": "string",
-            "required": true,
-            "minLength": 1,
-            "maxLength": 100,
-            "description": "Dashboard name, 1-100 characters. Checked for uniqueness within the group."
-          },
-          {
-            "name": "level",
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 2,
-            "description": "Visibility level: 1 or 2 (private vs group-shared). Values outside 1-2 are rejected."
-          },
-          {
-            "name": "type",
-            "type": "string",
-            "minLength": 4,
-            "maxLength": 100,
-            "values": [
-              "Dashboard",
-              "View",
-              "TABULAR_TEST_RUNS",
-              "BUILD_COMPARISON"
-            ],
-            "description": "Dashboard type; use `Dashboard` for an ordinary custom dashboard. Free string validated to 4-100 chars, but only the listed enum names are meaningful."
-          },
-          {
-            "name": "desc",
-            "type": "string",
-            "maxLength": 100,
-            "description": "Optional description. Max 100 characters (the validation message misstates the limit as 200)."
-          },
-          {
-            "name": "filters",
-            "type": "object",
-            "description": "Global dashboard filters applied to every widget. See fields for the several keys whose wire name differs from the obvious one.",
-            "fields": [
-              {
-                "name": "projects",
-                "type": "array",
-                "description": "TRA project ids (Long)."
-              },
-              {
-                "name": "buildName",
-                "type": "array",
-                "description": "Build-name filter. The wire key is `buildName` (singular), NOT `buildNames`."
-              },
-              {
-                "name": "branches",
-                "type": "array",
-                "description": "Branch filter. The wire key is `branches`, NOT `branchList`."
-              },
-              {
-                "name": "tcmTestPlanIds",
-                "type": "array",
-                "description": "Test-plan ids (Long). Wire key `tcmTestPlanIds`; the legacy name `testPlanIds` is accepted as an alias for old persisted blobs."
-              },
-              {
-                "name": "tags",
-                "type": "array",
-                "description": "Test-execution tag names."
-              },
-              {
-                "name": "buildTags",
-                "type": "array",
-                "description": "Build tag names."
-              },
-              {
-                "name": "folders",
-                "type": "array",
-                "description": "Folder filter."
-              },
-              {
-                "name": "users",
-                "type": "array",
-                "description": "User ids (Long)."
-              },
-              {
-                "name": "teams",
-                "type": "array",
-                "description": "Team ids (Long)."
-              },
-              {
-                "name": "dateRange",
-                "type": "object",
-                "description": "Date-range filter."
-              },
-              {
-                "name": "match",
-                "type": "object",
-                "description": "Per-field AND/OR match mode map (e.g. match.tags)."
-              }
-            ]
-          },
-          {
-            "name": "widgets",
-            "type": "array",
-            "description": "Widget definitions, at the BODY ROOT (there is no `data` wrapper on the request \u2014 the inventory's `data.widgets` is wrong). Each widget's config is validated for render-safety before saving.",
-            "fields": [
-              {
-                "name": "id",
-                "type": "string",
-                "description": "Client widget id, max 100 chars."
-              },
-              {
-                "name": "name",
-                "type": "string",
-                "description": "Widget title, 1-100 chars."
-              },
-              {
-                "name": "type",
-                "type": "string",
-                "description": "Widget type enum (e.g. TEST_CASE_TREND, FAILURE_RATE_BY_FOLDERS)."
-              },
-              {
-                "name": "config",
-                "type": "object",
-                "description": "Widget configuration (chart/display/filter/segments options). Validated for render-safety."
-              },
-              {
-                "name": "layout",
-                "type": "object",
-                "description": "Grid layout (position/size) of the widget."
-              },
-              {
-                "name": "globalFilters",
-                "type": "object",
-                "description": "Per-widget filter overrides; wire key `globalFilters` (maps to the widget's dashboardFilters)."
-              }
-            ]
-          }
-        ],
-        "returns": [
-          "data"
-        ],
-        "responses": {
-          "200": {
-            "$response": "DashboardResponse"
-          },
-          "400": {
-            "$response": "BadRequest"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        },
-        "guidance": [
-          "Widgets and filters sit at the body ROOT (`widgets`, `filters`), not under a `data` object. Widget configs are validated for render-safety; a config that would crash at render is rejected up front.",
-          "Names are unique within the group \u2014 a duplicate name is rejected.",
-          "Unlike the public-API create, this internal route does NOT normalize widget configs (e.g. it does not strip an incompatible treemap visualization override) \u2014 send a clean config."
-        ]
-      },
-      {
-        "name": "update_dashboard",
-        "method": "PUT",
-        "path": "/api/v1/dashboards/{id}",
-        "mode": "write",
-        "entity": "dashboard",
-        "intent": "Save edits to an existing dashboard \u2014 rename it, change its visibility level, or persist a new widget layout / filter set.",
-        "path_params": [
-          {
-            "name": "id",
-            "type": "string",
-            "format": "uuid",
-            "required": true,
-            "description": "Dashboard UUID to update."
-          }
-        ],
-        "body": [
-          {
-            "name": "name",
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100,
-            "description": "New name, 1-100 chars."
-          },
-          {
-            "name": "level",
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 2,
-            "description": "Visibility level 1 or 2."
-          },
-          {
-            "name": "type",
-            "type": "string",
-            "minLength": 4,
-            "maxLength": 100,
-            "values": [
-              "Dashboard",
-              "View",
-              "TABULAR_TEST_RUNS",
-              "BUILD_COMPARISON"
-            ],
-            "description": "Dashboard type."
-          },
-          {
-            "name": "filters",
-            "type": "object",
-            "description": "Replacement global filters (same shape as create; note buildName / branches / tcmTestPlanIds wire names)."
-          },
-          {
-            "name": "widgets",
-            "type": "array",
-            "description": "Replacement widget set at the body root (no `data` wrapper). This is a FULL replace of the layout, not a merge."
-          }
-        ],
-        "returns": [
-          "data"
-        ],
-        "responses": {
-          "200": {
-            "$response": "DashboardResponse"
-          },
-          "400": {
-            "$response": "BadRequest"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "404": {
-            "$response": "NotFound"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        },
-        "guidance": [
-          "This is a FULL replace, not a patch \u2014 the whole widget/filter set you send overwrites what was stored. Omitted collections are treated as the new value, so read the dashboard first and send back everything you want to keep.",
-          "There is NO undo: dashboards keep no version history, so an overwritten layout/name/filters cannot be restored.",
-          "In demo-sandbox environments updating the default dashboard (07c9f7be-0cd7-4669-8d3d-a1adff0b2aec) is rejected with 400, and that error body's shape differs from a success body.",
-          "Unlike the public-API update, this route does NOT backfill omitted name/type/level from the stored dashboard \u2014 a null name here can trip the edit path; send the fields explicitly."
-        ]
-      },
-      {
-        "name": "clone_dashboard",
-        "method": "POST",
-        "path": "/api/v1/dashboards/{id}/clone",
-        "mode": "write",
-        "entity": "dashboard",
-        "intent": "Duplicate an existing dashboard under a new name/visibility, copying the source dashboard's widgets and filters verbatim \u2014 the 'Duplicate dashboard' action.",
-        "path_params": [
-          {
-            "name": "id",
-            "type": "string",
-            "format": "uuid",
-            "required": true,
-            "description": "SOURCE dashboard UUID to copy from."
-          }
-        ],
-        "body": [
-          {
-            "name": "name",
-            "type": "string",
-            "required": true,
-            "minLength": 1,
-            "maxLength": 100,
-            "description": "Name for the new copy, 1-100 chars, must be unique in the group."
-          },
-          {
-            "name": "level",
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 2,
-            "description": "Visibility level 1 or 2 for the copy."
-          }
-        ],
-        "returns": [
-          "data"
-        ],
-        "responses": {
-          "200": {
-            "$response": "DashboardResponse"
-          },
-          "400": {
-            "$response": "BadRequest"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "404": {
-            "$response": "NotFound"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        },
-        "guidance": [
-          "Only `name` and `level` are read from the body \u2014 widgets and filters are always copied from the SOURCE dashboard, so any widgets you send are ignored.",
-          "The source dashboard's widget config is validated for render-safety before the clone is written, so a broken source can fail the clone.",
-          "The clone is owned by the caller regardless of who owned the source."
-        ]
-      },
-      {
         "name": "list_widget_custom_field_filters",
         "method": "GET",
         "path": "/api/v1/dashboards/filters/{widgetType}",
@@ -3667,7 +3167,7 @@
         ]
       },
       {
-        "name": "list_dashboards_via_public_api",
+        "name": "list_dashboards",
         "method": "GET",
         "path": "/ext/v1/dashboards",
         "mode": "read",
@@ -3709,7 +3209,7 @@
         ]
       },
       {
-        "name": "get_dashboard_via_public_api",
+        "name": "get_dashboard",
         "method": "GET",
         "path": "/ext/v1/dashboards/{id}",
         "mode": "read",
@@ -3763,7 +3263,7 @@
         ]
       },
       {
-        "name": "create_dashboard_via_public_api",
+        "name": "create_dashboard",
         "method": "POST",
         "path": "/ext/v1/dashboards",
         "mode": "write",
@@ -3882,7 +3382,7 @@
         ]
       },
       {
-        "name": "update_dashboard_via_public_api",
+        "name": "update_dashboard",
         "method": "PUT",
         "path": "/ext/v1/dashboards/{id}",
         "mode": "write",
@@ -3967,7 +3467,7 @@
         ]
       },
       {
-        "name": "clone_dashboard_via_public_api",
+        "name": "clone_dashboard",
         "method": "POST",
         "path": "/ext/v1/dashboards/{id}/clone",
         "mode": "write",
@@ -4036,7 +3536,7 @@
         ]
       },
       {
-        "name": "get_project_automation_coverage_via_public_api",
+        "name": "get_project_automation_coverage",
         "method": "GET",
         "path": "/ext/v1/projects/automation-coverage",
         "mode": "read",
@@ -4083,7 +3583,7 @@
         ]
       },
       {
-        "name": "list_projects_via_public_api",
+        "name": "list_projects",
         "method": "GET",
         "path": "/ext/v1/projects",
         "mode": "read",
@@ -4291,85 +3791,6 @@
           "Same takeAwayData block (stability, unique executions, new failures, always-failing, flakiness, failures; each value vs prev 7-day) as the older variant.",
           "Cached in Redis per (filter-hash + CAD product + sub-group), so the cache is SHARED across users with identical filters - unlike the per-user cache of the older variant. TTL ~1 hour.",
           "When there are zero failures in the window, timeSavingV2Metric collapses to just {totalFailures: 0} with the per-category objects omitted."
-        ]
-      },
-      {
-        "name": "create_project",
-        "method": "POST",
-        "path": "/api/v1/projects",
-        "mode": "write",
-        "entity": "project",
-        "intent": "Provision the Test Observability mirror of a TestHub project (creating the user row on first sight) and return the new observability project id.",
-        "body": [
-          {
-            "name": "user",
-            "type": "object",
-            "required": true,
-            "description": "The acting/owning user to attach the project to; the user row is created if this id is unseen.",
-            "fields": [
-              {
-                "name": "id",
-                "type": "integer",
-                "required": true,
-                "description": "BrowserStack user id; becomes the project owner and is created if it does not exist."
-              },
-              {
-                "name": "groupId",
-                "type": "integer",
-                "required": true,
-                "description": "The user's group id; scopes the project."
-              },
-              {
-                "name": "username",
-                "type": "string",
-                "description": "Used only when creating the user row."
-              },
-              {
-                "name": "fullName",
-                "type": "string",
-                "description": "Used only when creating the user row."
-              }
-            ]
-          },
-          {
-            "name": "project",
-            "type": "object",
-            "required": true,
-            "description": "The TestHub project to mirror. Idempotency is keyed on thProjectId.",
-            "fields": [
-              {
-                "name": "thProjectId",
-                "type": "integer",
-                "required": true,
-                "description": "TestHub project id. If a mirror already exists for it, that existing project_id is returned instead of a new one."
-              },
-              {
-                "name": "name",
-                "type": "string",
-                "description": "Project display name for the new mirror."
-              }
-            ]
-          }
-        ],
-        "returns": [
-          "project_id"
-        ],
-        "responses": {
-          "200": {
-            "$response": "CreateProjectResponse"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        },
-        "guidance": [
-          "Service-to-service ONLY: authenticated by X-Service-API-Key (@ObsServiceAuthRequired). A customer username + access key CANNOT call this even though the path prefix would otherwise permit a session - this is not a customer-facing 'new project' API.",
-          "Idempotent on thProjectId: an existing mirror for the same TestHub project id is returned rather than duplicated.",
-          "The response body is a raw JSON STRING like {\"project_id\": 123}, not a typed object - parse it as JSON text.",
-          "First creation seeds the project (quality-profile mappings, issue types, default attributes) and, when UDAC is enabled, clears the group's cached project-id list."
         ]
       },
       {
@@ -6387,105 +5808,6 @@
       {
         "name": "get_build_ai_failures",
         "method": "GET",
-        "path": "/api/v1/ai/failures/{buildUUID}",
-        "mode": "read",
-        "entity": "ai_failure",
-        "path_params": [
-          {
-            "name": "buildUUID",
-            "type": "string",
-            "required": true,
-            "description": "Build UUID (opaque string), not a numeric build id."
-          }
-        ],
-        "intent": "Get a build's AI failure analysis: the clustered failure themes and the workflows they map to, sorted by share of failures, to explain why a build failed.",
-        "returns": [
-          "buildId",
-          "buildThemes",
-          "buildWorkflows",
-          "buildThemeWorkflow",
-          "stats",
-          "trialQuota"
-        ],
-        "guidance": [
-          "Read-only: returns whatever analysis already exists and never starts a new one. If nothing has been computed the themes/workflows come back empty; use trigger_build_ai_failure_analysis to kick it off.",
-          "buildThemes and buildWorkflows are pre-sorted by failure share, highest first.",
-          "buildThemeWorkflow.status tells you where the analysis stands (e.g. SUCCESS, PENDING); a non-terminal status means results are still being produced.",
-          "trialQuota is present only for accounts on the build-level AI trial; its absence means the account is not on a trial, not that usage is zero.",
-          "This read is intentionally not plan-fenced, so a plan-downgraded account can still read prior analysis."
-        ],
-        "responses": {
-          "200": {
-            "$response": "BuildAIFailuresResponse"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "404": {
-            "$response": "NotFound"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        }
-      },
-      {
-        "name": "trigger_build_ai_failure_analysis",
-        "method": "POST",
-        "path": "/api/v1/ai/failures/{buildUUID}",
-        "mode": "write",
-        "entity": "ai_failure",
-        "path_params": [
-          {
-            "name": "buildUUID",
-            "type": "string",
-            "required": true,
-            "description": "Build UUID (opaque string)."
-          }
-        ],
-        "intent": "Start build-level AI failure analysis for a build (get-or-trigger): returns existing themes/workflows if ready, otherwise enqueues the clustering and flags that it was triggered.",
-        "returns": [
-          "triggered",
-          "buildId",
-          "buildThemes",
-          "buildWorkflows",
-          "buildThemeWorkflow",
-          "stats",
-          "trialQuota"
-        ],
-        "guidance": [
-          "Get-or-trigger: if analysis already exists in a terminal state it is returned with triggered=false; otherwise it is enqueued and you get triggered=true. When freshly triggered the themes/workflows are NOT in the response (they may be null) and arrive later, so poll get_build_ai_failures.",
-          "Asynchronous: a triggered=true response is an acknowledgement, not results.",
-          "Requires AI opt-in consent, a non-disabled AI-enabled flag, and the build-level RCA feature on the account; missing any of these fails with an AI-feature error, not a plain validation error.",
-          "Trial accounts over their build-level quota are refused with a 403 plan-not-allowed error, and every fresh trigger consumes one unit of the trial quota.",
-          "A build excluded by source-fencing is rejected.",
-          "Takes NO request body; the build is identified entirely by the path.",
-          "Not reversible in the destructive sense, but there is no undo for the analysis run it starts (it only produces data, never removes it)."
-        ],
-        "responses": {
-          "200": {
-            "$response": "BuildAIFailureTriggerResponse"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "404": {
-            "$response": "NotFound"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        }
-      },
-      {
-        "name": "get_build_ai_failures_via_public_api",
-        "method": "GET",
         "path": "/ext/v1/ai/failures/{buildUUID}",
         "mode": "read",
         "entity": "ai_failure",
@@ -6508,7 +5830,7 @@
         ],
         "guidance": [
           "Public endpoint: authenticate with your BrowserStack username + access key.",
-          "Read-only: returns whatever has already been computed and never triggers analysis; use trigger_build_ai_failure_analysis_via_public_api to start it.",
+          "Read-only: returns whatever has already been computed and never triggers analysis; use trigger_build_ai_failure_analysis to start it.",
           "Themes and workflows are sorted by failure share, highest first.",
           "trialQuota appears only for build-level trial accounts.",
           "The build is resolved within the caller's group; a build in another group reads as not found."
@@ -6532,7 +5854,7 @@
         }
       },
       {
-        "name": "trigger_build_ai_failure_analysis_via_public_api",
+        "name": "trigger_build_ai_failure_analysis",
         "method": "POST",
         "path": "/ext/v1/ai/failures/{buildUUID}",
         "mode": "write",
@@ -6557,7 +5879,7 @@
         ],
         "guidance": [
           "Public endpoint: authenticate with your BrowserStack username + access key.",
-          "Get-or-trigger and asynchronous: triggered=true means analysis was enqueued and results are NOT in the response yet; poll get_build_ai_failures_via_public_api.",
+          "Get-or-trigger and asynchronous: triggered=true means analysis was enqueued and results are NOT in the response yet; poll get_build_ai_failures.",
           "Gated by the AI-TFA plan fence plus AI consent, the build-level RCA feature, source-fencing and a trial quota; a blocked account gets a 403 plan-not-allowed error.",
           "Runs only the theme/workflow clustering pipeline; this is NOT per-test RCA.",
           "Takes no request body.",
@@ -6582,7 +5904,7 @@
         }
       },
       {
-        "name": "list_build_ai_failure_cluster_test_runs_via_public_api",
+        "name": "list_ai_failure_theme_test_runs",
         "method": "GET",
         "path": "/ext/v1/ai/failures/{buildUUID}/flat",
         "mode": "read",
@@ -6621,14 +5943,14 @@
             "description": "Opaque search-after cursor from the previous response's pagingParams.searchAfter."
           }
         ],
-        "intent": "Public API: drill into one AI failure theme or workflow of a build and list the flat, paginated test runs behind it, going from a cluster to its tests.",
+        "intent": "Drill into one AI failure theme or workflow of a build and list the flat, paginated test runs behind it. Takes a theme or workflow id only \u2014 to fetch an explicit set of test-run ids instead, use list_build_ai_failure_cluster_test_runs, which accepts testRunIds.",
         "returns": [
           "testRuns",
           "pagingParams"
         ],
         "guidance": [
           "Public endpoint: authenticate with your BrowserStack username + access key.",
-          "Send buildFailureThemeId OR buildFailureWorkflowId (integer ids from get_build_ai_failures_via_public_api). One of them is REQUIRED: with neither, the TestHub lookup 400s 'At least one of build_failure_theme_id or build_failure_workflow_id must be provided' (there is no whole-build mode).",
+          "Send buildFailureThemeId OR buildFailureWorkflowId (integer ids from get_build_ai_failures). One of them is REQUIRED: with neither, the TestHub lookup 400s 'At least one of build_failure_theme_id or build_failure_workflow_id must be provided' (there is no whole-build mode).",
           "There is no explicit-testRunIds variant on the public flat endpoint.",
           "limit is ignored; page with searchAfter until pagingParams.hasNext is false."
         ],
@@ -6835,7 +6157,7 @@
         }
       },
       {
-        "name": "get_session_test_code_via_public_api",
+        "name": "get_session_test_code",
         "method": "GET",
         "path": "/ext/v1/sessions/{session_id}/testCode",
         "mode": "read",
@@ -7527,141 +6849,6 @@
         ]
       },
       {
-        "name": "list_views",
-        "entity": "view",
-        "method": "GET",
-        "path": "/api/v1/views/{viewType}",
-        "mode": "read",
-        "intent": "List the saved views (named filter presets) available to the caller for a screen \u2014 their own private views plus the group's public ones \u2014 to render the view switcher.",
-        "path_params": [
-          {
-            "name": "viewType",
-            "type": "string",
-            "required": true,
-            "values": [
-              "builds",
-              "testRuns",
-              "testHealth",
-              "uniqueErrors",
-              "buildInsights"
-            ],
-            "description": "Screen the views belong to. An unrecognised value is a 400 BAD_REQUEST ('Invalid view creation <value>'), not a 404."
-          }
-        ],
-        "query": [],
-        "returns": [
-          "id",
-          "type",
-          "query",
-          "level",
-          "name",
-          "description",
-          "createdBy",
-          "groupId"
-        ],
-        "responses": {
-          "200": {
-            "$response": "ViewListResponse"
-          },
-          "400": {
-            "$response": "BadRequest"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          }
-        },
-        "guidance": [
-          "Returns a bare JSON ARRAY of view objects (not wrapped in a data/success envelope) and is NOT paginated \u2014 the whole set for that screen comes back at once.",
-          "By default you get the caller's own views plus the group's public ones. If a Public-Link-Token / X-Public-Link-Token header is present, ONLY the group's public (level 2) views are returned \u2014 private views are never exposed on a shared link.",
-          "An unrecognised viewType is a 400, not a 404 \u2014 the valid set is builds, testRuns, testHealth, uniqueErrors, buildInsights.",
-          "Each row's id is the view UUID you carry into update_view / delete_view; level is 1 (private) or 2 (public)."
-        ]
-      },
-      {
-        "name": "create_view",
-        "entity": "view",
-        "method": "POST",
-        "path": "/api/v1/views/{viewType}",
-        "mode": "write",
-        "intent": "Save the caller's current filter selection as a named view for a screen, either private to them or public to the whole group, and return the stored view.",
-        "path_params": [
-          {
-            "name": "viewType",
-            "type": "string",
-            "required": true,
-            "values": [
-              "builds",
-              "testRuns",
-              "testHealth",
-              "uniqueErrors",
-              "buildInsights"
-            ],
-            "description": "Screen the view is for; sets the view's type. An unrecognised value is a 400."
-          }
-        ],
-        "body": [
-          {
-            "name": "name",
-            "type": "string",
-            "required": true,
-            "json_path": "/name",
-            "description": "View name. Required (@NotNull); note the internal surface does NOT reject a blank or over-long name (only the external surface does). Must be unique per screen type within the group (public) or within the creator (private)."
-          },
-          {
-            "name": "query",
-            "type": "string",
-            "required": true,
-            "json_path": "/query",
-            "description": "The serialised filter this view stores, as a string. Required (@NotNull)."
-          },
-          {
-            "name": "level",
-            "type": "integer",
-            "required": true,
-            "json_path": "/level",
-            "values": [
-              1,
-              2
-            ],
-            "description": "Visibility: 1 = private (only the creator), 2 = public (whole group). Required (@NotNull)."
-          }
-        ],
-        "returns": [
-          "id",
-          "type",
-          "query",
-          "level",
-          "name",
-          "description",
-          "createdBy",
-          "groupId"
-        ],
-        "responses": {
-          "200": {
-            "$response": "ViewResponse"
-          },
-          "400": {
-            "$response": "BadRequest"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          }
-        },
-        "guidance": [
-          "Requires the manage-custom-views permission (BUILD_MANAGE_VIEWS).",
-          "createdBy and groupId are taken from the session and cannot be set from the body \u2014 anything you send for them is overwritten.",
-          "Name uniqueness is enforced per screen type: within the group for public (level 2) views and within the creator for private (level 1) views. A clash returns a VIEW_NAME_EXISTS error (not an HTTP 409).",
-          "The internal surface only checks name/query are non-null \u2014 it accepts a blank or very long name. Use create_view_via_public_api if you want the stricter length limits enforced.",
-          "Returns the stored view (with its new UUID id) as a single object; take id for later update/delete."
-        ]
-      },
-      {
         "name": "update_view",
         "entity": "view",
         "method": "PUT",
@@ -7742,7 +6929,7 @@
         ]
       },
       {
-        "name": "list_views_via_public_api",
+        "name": "list_views",
         "entity": "view",
         "method": "GET",
         "path": "/ext/v1/views/{viewType}",
@@ -7796,7 +6983,7 @@
         ]
       },
       {
-        "name": "create_view_via_public_api",
+        "name": "create_view",
         "entity": "view",
         "method": "POST",
         "path": "/ext/v1/views/{viewType}",
@@ -7881,12 +7068,12 @@
         ]
       },
       {
-        "name": "update_view_via_public_api",
+        "name": "replace_view",
         "entity": "view",
         "method": "PUT",
         "path": "/ext/v1/views/{viewType}/{id}",
         "mode": "write",
-        "intent": "External/public API to rename a saved view or replace its stored filter query / visibility level.",
+        "intent": "Rename a saved view or replace its stored filter query and visibility level. Name, query and level are all REQUIRED here \u2014 this replaces the view rather than patching it, so send the whole object; update_view is the partial-update route.",
         "path_params": [
           {
             "name": "viewType",
@@ -12189,7 +11376,7 @@
         }
       },
       {
-        "name": "list_test_run_comments_via_public_api",
+        "name": "list_test_run_comments",
         "entity": "comment",
         "method": "GET",
         "path": "/ext/v1/testRun/{test_run_id}/comments",
@@ -13631,58 +12818,6 @@
         ]
       },
       {
-        "name": "get_test_rca",
-        "method": "GET",
-        "path": "/api/v1/ai/testRuns/{testRunId}/testRca",
-        "mode": "write",
-        "entity": "test_rca",
-        "path_params": [
-          {
-            "name": "testRunId",
-            "type": "integer",
-            "required": true,
-            "description": "Integer test-run id (the numeric uuid of the run, not its TR-NNN identifier)."
-          }
-        ],
-        "intent": "Fetch the AI root-cause analysis for a failed test run \u2014 the Test Details AI panel's main call; if none exists yet it creates the record and queues a generation so the answer streams in later.",
-        "returns": [
-          "id",
-          "testRunId",
-          "rcaData",
-          "thinkingData",
-          "state",
-          "bulkRcaId",
-          "isAgentic",
-          "isMcpDriven",
-          "createdAt",
-          "updatedAt"
-        ],
-        "responses": {
-          "200": {
-            "$response": "TestRunsRcaDataResponse"
-          },
-          "400": {
-            "$response": "BadRequest"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "403": {
-            "$response": "Forbidden"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        },
-        "guidance": [
-          "This is get-or-create despite being a GET: on a run with no RCA it PERSISTS a record and QUEUES an AI generation, so it is not a safe/idempotent read. When you only want to read an existing analysis without triggering anything, use get_test_rca_data.",
-          "The reply carries a state, not necessarily a finished analysis: a freshly queued run comes back Pending / FETCHING_LOGS / GENERATING_RCA, and rcaData is only populated once state reaches Completed. Terminal error states are LLM_SERVICE_ERROR / LOG_FETCH_ERROR / AI_SYSTEM_ERROR / UNKNOWN_ERROR / TIMEOUT.",
-          "Requires AI opt-in consent and the test-runs-RCA feature on the AI token; a source-fenced build gives AI_FEATURE_FENCED. Resolves the caller's BrowserStack username + Selenium access key server-side and 400s ('User details are not available') if they are missing.",
-          "LTS-product callers are forced onto the non-agentic path (isAgentic false), regardless of group settings.",
-          "This is the internal-cookie/session route; the same operation for public-API (username+access-key) callers is get_test_rca_via_public_api."
-        ]
-      },
-      {
         "name": "get_test_rca_data",
         "method": "GET",
         "path": "/api/v1/ai/testRuns/{testRunId}/testRca/data",
@@ -13729,73 +12864,11 @@
           "Pure read: no AI consent/feature checks and no generation queued. Use this to poll for a result after triggering one elsewhere.",
           "When nothing has been generated yet this is a 400 (BAD_REQUEST, 'Test Run RCA not found for the given test run ID'), NOT a 404 or an empty 200 \u2014 treat that 400 as 'not generated yet', not as a bad request.",
           "Group-scoped: the run is looked up within the caller's group, so a foreign run id also surfaces as not-found.",
-          "404 'RCA not found' means no RCA has been generated for this test run yet (not a bad id): generating one is a write (get_test_rca / trigger_test_rca_via_public_api) and needs user confirmation."
+          "404 'RCA not found' means no RCA has been generated for this test run yet (not a bad id): generating one is a write (get_test_rca / trigger_test_rca) and needs user confirmation."
         ]
       },
       {
-        "name": "save_test_rca",
-        "method": "POST",
-        "path": "/api/v1/ai/testRuns/{testRunId}/testRca",
-        "mode": "write",
-        "entity": "test_rca",
-        "path_params": [
-          {
-            "name": "testRunId",
-            "type": "integer",
-            "required": true,
-            "description": "Integer test-run id the RCA payload belongs to."
-          }
-        ],
-        "body": [
-          {
-            "name": "success",
-            "type": "boolean",
-            "description": "Whether the generation succeeded. A success payload MUST also carry `data` or the call 500s (AI_SERVICE_ERROR) and the AI worker retries; a failure payload legitimately omits `data`."
-          },
-          {
-            "name": "data",
-            "type": "object",
-            "description": "The generated analysis payload (RCA data, thinking data, resulting state). Required when success is true. Overwrites the run's existing RCA."
-          },
-          {
-            "name": "error",
-            "type": "string",
-            "description": "Error detail for a failed generation."
-          },
-          {
-            "name": "origin",
-            "type": "string",
-            "description": "When set to 'tfa_chat' the payload is treated as a chat turn and a conversation event is published instead of a plain RCA overwrite.",
-            "values": [
-              "tfa_chat"
-            ]
-          }
-        ],
-        "intent": "Ingestion callback used by the AI service to write back a finished (or failed) root-cause analysis for a test run \u2014 this is what makes the analysis appear in the UI.",
-        "returns": [],
-        "responses": {
-          "200": {
-            "$response": "PlainStringOk"
-          },
-          "400": {
-            "$response": "BadRequest"
-          },
-          "401": {
-            "$response": "Unauthorized"
-          },
-          "500": {
-            "$response": "InternalServerError"
-          }
-        },
-        "guidance": [
-          "This is effectively a webhook/callback from the AI service, not a user-facing write. It OVERWRITES the test run's existing RCA \u2014 there is no prior version to restore.",
-          "Returns a plain string body ('Test Run RCA Saved Successfully'), NOT JSON \u2014 do not try to parse the 200 as an object.",
-          "The body is arbitrary JSON (unknown keys are ignored). The only hard rule: success=true without a `data` object is a 500, which the worker interprets as retryable.",
-          "No extra role check beyond the standard auth chain \u2014 any authenticated caller for the group can write an RCA payload for a run, so this is not the read path; use get_test_rca_data to read."
-        ]
-      },
-      {
-        "name": "get_test_rca_via_public_api",
+        "name": "get_test_rca",
         "method": "GET",
         "path": "/ext/v1/testRun/{test_run_id}/testRca",
         "mode": "write",
@@ -13850,12 +12923,12 @@
           "This is the public-API twin of get_test_rca and accepts username + access-key auth. Behaviour splits on peek: peek=true is safe (never enqueues); peek=false (the default) is get-or-create and has a side effect.",
           "To poll without triggering, always pass peek=true. The peek-only fields isLive / pendingMessageId / alreadyTracked describe an in-flight generation; gate a re-trigger on isLive (alreadyTracked only reflects whether a chat row holds a handle and is null for web/MCP-started runs).",
           "Requires AI opt-in consent and AI enablement; source-fenced groups get AI_FEATURE_FENCED. Resolves the caller's BrowserStack username/access key server-side and 400s if missing.",
-          "To register an https callback instead of polling, use the POST twin trigger_test_rca_via_public_api.",
+          "To register an https callback instead of polling, use the POST twin trigger_test_rca.",
           "peek=true on a run with NO RCA returns 200 with every field null (id, state, isAgentic, ...), not a 404 - check id/state for null. isAgentic can read false on the first (Pending) response and true once generation starts."
         ]
       },
       {
-        "name": "trigger_test_rca_via_public_api",
+        "name": "trigger_test_rca",
         "method": "POST",
         "path": "/ext/v1/testRun/{test_run_id}/testRca",
         "mode": "write",
@@ -13905,7 +12978,7 @@
           }
         },
         "guidance": [
-          "With no body this behaves exactly like get_test_rca_via_public_api with peek=false (get-or-queue). The only added capability is registering webhook_url.",
+          "With no body this behaves exactly like get_test_rca with peek=false (get-or-queue). The only added capability is registering webhook_url.",
           "The callback fires ONLY when a generation is actually queued \u2014 if the RCA already exists (or is already in flight) no callback is sent, so still read the 200 body's state.",
           "webhook_url must be https and pass the SSRF host checks both at accept time and again at dispatch; a URL that resolves to a blocked host is rejected with a 400 naming the reason.",
           "The field is named webhook_url on the wire (snake_case), not webhookUrl."
@@ -14329,7 +13402,7 @@
         }
       },
       {
-        "name": "retrigger_rca_analysis_via_public_api",
+        "name": "improve_test_rca",
         "method": "POST",
         "path": "/ext/v1/ai/testRuns/{test_run_id}/rcaContext/retrigger",
         "mode": "write",
@@ -15323,7 +14396,7 @@
         }
       },
       {
-        "name": "list_project_builds_via_public_api",
+        "name": "list_project_builds_by_project_id",
         "method": "GET",
         "path": "/ext/v1/projects/{project_id}/builds",
         "mode": "read",
@@ -15418,8 +14491,9 @@
           "Within a page builds come back OLDEST-first: the handler reverses the fetched page (Lists.reverse) before returning.",
           "Requires automated-test-run view permission on the project.",
           "Each build carries an `observability_url` deep link and `tcmTestRunIdentifier`; use `build_id` (the hashed uuid; there is no `uuid` key) for follow-up per-build calls.",
-          "For 'the latest / last N builds' prefer list_project_builds (newest-first, `pageLimit`, project-scoped `search`): this route is oldest-first within a page, 10 per page and defaults to the last 7 days, so 'last 10 builds' can cost several calls.",
-          "Each item carries `build_number` (the serial #N) and, when the CI set one, the CI run id; a user's 'run <number>' may be the CI run id rather than `build_number`."
+          "For 'the latest / last N builds' prefer list_project_builds_by_name (newest-first, `pageLimit`, project-scoped `search`): this route is oldest-first within a page, 10 per page and defaults to the last 7 days, so 'last 10 builds' can cost several calls.",
+          "Each item carries `build_number` (the serial #N) and, when the CI set one, the CI run id; a user's 'run <number>' may be the CI run id rather than `build_number`.",
+          "The filters are NOT the UI set: this route takes users, build_tags, unique_build_names, is_ci_run_only and exclude_lock, while list_project_builds_by_name takes search, sortOrder, statuses, sources and types. Pick the route by the filter you need."
         ],
         "responses": {
           "200": {
@@ -15440,7 +14514,7 @@
         }
       },
       {
-        "name": "list_project_builds",
+        "name": "list_project_builds_by_name",
         "method": "GET",
         "path": "/api/v1/projects/{normalisedName}/builds/v2",
         "mode": "read",
@@ -19732,7 +18806,7 @@
           }
         },
         "guidance": [
-          "OBSERVED LIVE: `buildNames` and `query` are IGNORED by the product (200 with the unfiltered page, even when `projects` is set). Do not use this route to find a build by name; use list_project_builds (project-scoped, `search`) or search_entities (cross-project).",
+          "OBSERVED LIVE: `buildNames` and `query` are IGNORED by the product (200 with the unfiltered page, even when `projects` is set). Do not use this route to find a build by name; use list_project_builds_by_name (project-scoped, `search`) or search_entities (cross-project).",
           "Only the body fields declared here are sent; the inherited filter surface mentioned in the field description (users, teams, statuses, tags, dateRange, search...) is not bindable through this capability.",
           "POST but a pure READ \u2014 the body is a filter; nothing is written.",
           "Page size is fixed server-side (BUILDS_PAGESIZE); it is NOT caller-controllable, so there is no page-size body field. Page with the afterKey/beforeKey cursors from pagingParams (hasNext/hasPrev tell you when to stop).",
@@ -19742,7 +18816,7 @@
         ]
       },
       {
-        "name": "generate_build_report_via_public_api",
+        "name": "generate_build_report",
         "method": "POST",
         "path": "/ext/v1/builds/buildReport",
         "mode": "read",
@@ -19831,7 +18905,7 @@
         ]
       },
       {
-        "name": "get_build_details_via_public_api",
+        "name": "get_build_summary",
         "method": "GET",
         "path": "/ext/v1/builds/{build_id}",
         "mode": "read",
@@ -19844,7 +18918,7 @@
             "description": "Build uuid. A re-run uuid resolves through its parent, so you get the parent build's aggregate."
           }
         ],
-        "intent": "Get the full public build record for one build uuid \u2014 identity and naming, resolved status, duration, timestamps, owner, framework/SDK metadata, per-status test counts, alerts, re-run stats and top-error insights \u2014 the payload CI plugins and API consumers report on.",
+        "intent": "Get one build's public record by uuid \u2014 identity and naming, status and per-status test counts, plus the pro-plan smart tags and unique errors. Narrower than get_build_details, which is the same build seen from inside the product.",
         "returns": [
           "build_id",
           "id",
@@ -19877,11 +18951,14 @@
           "Passing a re-run uuid returns the PARENT build's aggregate, not the re-run's own numbers.",
           "A build in 'deleted' state raises BUILD_ID_DELETED, not a plain 404 \u2014 distinguish 'deleted' from 'never existed'.",
           "The response SHAPE is feature-flagged: when new build listing is enabled it is the V2 build-details shape, otherwise the legacy one \u2014 do not hard-code one envelope.",
-          "Pro-only fields (smart_tags, unique_errors, failure_categories, alerts) are stripped by JsonView for non-pro plans, so their absence reflects the plan, not the build."
+          "Pro-only fields (smart_tags, unique_errors, failure_categories, alerts) are stripped by JsonView for non-pro plans, so their absence reflects the plan, not the build.",
+          "`status` here is the build's LIFECYCLE ('finished'), not its outcome ('failed') as get_build_details reports it \u2014 the two routes answer different questions with the same field name.",
+          "project_id, project_name and created_at can come back null on this route even when get_build_details has them; read those from the internal route when they matter.",
+          "Each route carries what the other lacks: this one has smart_tags and unique_errors, while get_build_details has the quality-gate status and AI RCA counts."
         ]
       },
       {
-        "name": "get_build_history_via_public_api",
+        "name": "list_build_history_with_defect_counts",
         "method": "GET",
         "path": "/ext/v1/builds/{build_id}/history",
         "mode": "read",
@@ -19935,7 +19012,7 @@
         ]
       },
       {
-        "name": "list_build_ai_failure_test_runs_flat",
+        "name": "list_build_ai_failure_cluster_test_runs",
         "method": "GET",
         "path": "/api/v1/ai/failures/{buildUUID}/flat",
         "mode": "read",
@@ -28578,17 +27655,6 @@
           }
         }
       },
-      "CreateProjectResponse": {
-        "description": "Raw JSON string body carrying the (new or existing) observability project id.",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "project_id": {
-              "type": "integer"
-            }
-          }
-        }
-      },
       "ProjectBuildGroupListingResponse": {
         "description": "A project's builds consolidated by build group, plus per-group aggregates and cursor pagination.",
         "schema": {
@@ -30028,12 +29094,6 @@
               }
             }
           }
-        }
-      },
-      "PlainStringOk": {
-        "description": "Plain string (text/plain) 200 body, not JSON. e.g. 'Test Run RCA Saved Successfully'.",
-        "schema": {
-          "type": "string"
         }
       },
       "TestRunsRcaDataResponse": {
@@ -32644,6 +31704,6 @@
         ]
       }
     },
-    "version": "1.4"
+    "version": "1.7"
   }
 }

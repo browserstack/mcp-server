@@ -13,6 +13,7 @@ type RequestOptions = {
   body?: any;
   timeout?: number;
   responseType?: AxiosRequestConfig["responseType"];
+  maxContentLength?: number; // response size cap in bytes; axios aborts past it
   raise_error?: boolean; // default: true
 };
 
@@ -163,6 +164,7 @@ class ApiClient {
     params,
     timeout,
     responseType,
+    maxContentLength,
     raise_error = true,
   }: RequestOptions): Promise<ApiResponse<T>> {
     const config: AxiosRequestConfig = {
@@ -170,6 +172,7 @@ class ApiClient {
       params,
       timeout,
       responseType,
+      maxContentLength,
       httpsAgent: this.axiosAgent,
     };
     return this.requestWrapper<T>(

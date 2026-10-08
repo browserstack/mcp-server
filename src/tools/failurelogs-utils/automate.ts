@@ -1,13 +1,12 @@
-import { getBrowserStackAuth } from "../../lib/get-auth.js";
-import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import {
   HarEntry,
   HarFile,
+  fetchLog,
   filterLinesByKeywords,
-  validateLogResponse,
+  formatFailures,
+  logDataToText,
 } from "./utils.js";
 import { BrowserStackConfig } from "../../lib/types.js";
-import { apiClient } from "../../lib/apiClient.js";
 
 // NETWORK LOGS
 export async function retrieveNetworkFailures(
@@ -15,23 +14,11 @@ export async function retrieveNetworkFailures(
   config: BrowserStackConfig,
 ): Promise<string> {
   const url = `https://api.browserstack.com/automate/sessions/${sessionId}/networklogs`;
-  const authString = getBrowserStackAuth(config);
-  const auth = Buffer.from(authString).toString("base64");
+  const result = await fetchLog(url, "network logs", config);
+  if ("message" in result) return result.message;
 
-  const response = await apiClient.get({
-    url,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Basic ${auth}`,
-    },
-    raise_error: false,
-  });
-
-  const validationError = validateLogResponse(response, "network logs");
-  if (validationError) return validationError.message!;
-
-  const networklogs: HarFile = response.data;
-  const failureEntries: HarEntry[] = networklogs.log.entries.filter(
+  const networklogs: HarFile = result.data;
+  const failureEntries: HarEntry[] = (networklogs?.log?.entries ?? []).filter(
     (entry: HarEntry) =>
       entry.response.status === 0 ||
       entry.response.status >= 400 ||
@@ -39,28 +26,25 @@ export async function retrieveNetworkFailures(
   );
 
   return failureEntries.length > 0
-    ? `Network Failures (${failureEntries.length} found):\n${wrapUntrusted(
+    ? formatFailures(
+        "Network Failures",
         "network logs",
-        JSON.stringify(
-          failureEntries.map((entry: any) => ({
-            startedDateTime: entry.startedDateTime,
-            request: {
-              method: entry.request?.method,
-              url: entry.request?.url,
-              queryString: entry.request?.queryString,
-            },
-            response: {
-              status: entry.response?.status,
-              statusText: entry.response?.statusText,
-              _error: entry.response?._error,
-            },
-            serverIPAddress: entry.serverIPAddress,
-            time: entry.time,
-          })),
-          null,
-          2,
-        ),
-      )}`
+        failureEntries.map((entry: any) => ({
+          startedDateTime: entry.startedDateTime,
+          request: {
+            method: entry.request?.method,
+            url: entry.request?.url,
+            queryString: entry.request?.queryString,
+          },
+          response: {
+            status: entry.response?.status,
+            statusText: entry.response?.statusText,
+            _error: entry.response?._error,
+          },
+          serverIPAddress: entry.serverIPAddress,
+          time: entry.time,
+        })),
+      )
     : "No network failures found";
 }
 
@@ -70,28 +54,12 @@ export async function retrieveSessionFailures(
   config: BrowserStackConfig,
 ): Promise<string> {
   const url = `https://api.browserstack.com/automate/sessions/${sessionId}/logs`;
-  const authString = getBrowserStackAuth(config);
-  const auth = Buffer.from(authString).toString("base64");
+  const result = await fetchLog(url, "session logs", config);
+  if ("message" in result) return result.message;
 
-  const response = await apiClient.get({
-    url,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Basic ${auth}`,
-    },
-    raise_error: false,
-  });
-
-  const validationError = validateLogResponse(response, "session logs");
-  if (validationError) return validationError.message!;
-
-  const logText =
-    typeof response.data === "string"
-      ? response.data
-      : JSON.stringify(response.data);
-  const logs = filterSessionFailures(logText);
+  const logs = filterSessionFailures(logDataToText(result.data));
   return logs.length > 0
-    ? `Session Failures (${logs.length} found):\n${wrapUntrusted("session logs", JSON.stringify(logs, null, 2))}`
+    ? formatFailures("Session Failures", "session logs", logs)
     : "No session failures found";
 }
 
@@ -101,28 +69,12 @@ export async function retrieveConsoleFailures(
   config: BrowserStackConfig,
 ): Promise<string> {
   const url = `https://api.browserstack.com/automate/sessions/${sessionId}/consolelogs`;
-  const authString = getBrowserStackAuth(config);
-  const auth = Buffer.from(authString).toString("base64");
+  const result = await fetchLog(url, "console logs", config);
+  if ("message" in result) return result.message;
 
-  const response = await apiClient.get({
-    url,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Basic ${auth}`,
-    },
-    raise_error: false,
-  });
-
-  const validationError = validateLogResponse(response, "console logs");
-  if (validationError) return validationError.message!;
-
-  const logText =
-    typeof response.data === "string"
-      ? response.data
-      : JSON.stringify(response.data);
-  const logs = filterConsoleFailures(logText);
+  const logs = filterConsoleFailures(logDataToText(result.data));
   return logs.length > 0
-    ? `Console Failures (${logs.length} found):\n${wrapUntrusted("console logs", JSON.stringify(logs, null, 2))}`
+    ? formatFailures("Console Failures", "console logs", logs)
     : "No console failures found";
 }
 

@@ -18182,7 +18182,7 @@
             "description": "Force compact mode for test-cases: id-only stub rows grouped by folder, empty filter_details. This is the same mode per_page>300 triggers implicitly."
           }
         ],
-        "intent": "Search and filter a project's test cases, test runs, or the test cases inside one run — the general-purpose finder: free text plus status / priority / type / owner / folder / tag / date filters, with an id-only count mode",
+        "intent": "Search WITHIN ONE PROJECT — its test cases, test runs, or the test cases inside one run. The general-purpose finder: free text plus status / priority / type / owner / folder / tag / date filters, with an id-only count mode. When the project is known, this is the one; search_all_projects cannot be narrowed to a project.",
         "shape": "discovered",
         "max_page_size": 300,
         "paginated": true,
@@ -27229,7 +27229,7 @@
             "description": "Rows per entity type per page, ceiling 30. A larger value is silently reduced to 30 rather than refused. `count` is accepted as an alias."
           }
         ],
-        "intent": "Search every entity type across the account at once.",
+        "intent": "Search every entity type across the WHOLE ACCOUNT at once. Use only when the project is not known or the search deliberately spans projects — when a project is given, search_project_entities scopes to it and takes filters this one does not.",
         "guidance": [
           "Account-wide by default. There is no project path segment; narrow it with the numeric project-ids filter when the user did name a project, otherwise every project the caller can see is searched.",
           "Entity tokens here are snake_case and singular (test_case, test_run, test_plan, project, shared_step, report). This is a different vocabulary from the project-scoped searches, which take hyphenated plurals - passing those gets a 400 that names the invalid token.",

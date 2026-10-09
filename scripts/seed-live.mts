@@ -542,6 +542,41 @@ async function main() {
     console.log(`  scratch case CREATED  ${pool.scratch.case}`);
   }
 
+  // 3c. RESET WHAT THE WRITE CASES CHANGE, so their asserts keep their teeth.
+  //
+  // The update-a-test-case eval sets this case's priority to Critical and asserts a follow-up
+  // read shows Critical. After one run that is already true, so on every run after the first
+  // the assert is satisfied by LAST run's write and cannot tell a landed write from a silent
+  // no-op — the same defect as asserting on a comment's text when an identical comment is
+  // already there. Only the field-preservation half would still have teeth.
+  //
+  // Resetting here rather than asserting on a diff is the cheaper fix for an UPDATE: unlike a
+  // comment or a result, a field has one value, so putting it back costs one call and restores
+  // the plain assert. Sweeping state the write cases depend on is as much the seeder's job as
+  // creating it.
+  // `priority` reads back as an OBJECT — {id, internal_name, field_name, name} — while the
+  // update takes the display string. Comparing the object to "Medium" is never equal, so the
+  // reset fired on every run and logged the word priorities never carry: "[object Object]".
+  const scratchNow = byName(await listCases(pool.scratch.folder), SCRATCH_CASE);
+  const scratchPriority = scratchNow?.priority?.name ?? scratchNow?.priority;
+  if (scratchNow && scratchPriority !== "Medium") {
+    const reset = await write(
+      "update_test_case",
+      {
+        path_params: { project_id: pref, test_case_id: pool.scratch.case },
+        body: { priority: "Medium" },
+      },
+      "reset the scratch case's priority, so the update eval asserts on its own write rather than the previous run's",
+    );
+    console.log(
+      ok(reset.status)
+        ? `  scratch prio RESET    ${scratchPriority} -> Medium on ${pool.scratch.case}`
+        : `  scratch prio FAILED   ${reset.status}`,
+    );
+  } else if (scratchNow) {
+    console.log(`  scratch prio FOUND    Medium on ${pool.scratch.case}`);
+  }
+
   // 4. A PLAN, then 5. A RUN inside it — `test_run` declares `parents: [test_plan, project]`.
   const plans = await call("list_test_plans", {
     path_params: { project_id: pref },

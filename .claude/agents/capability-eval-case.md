@@ -7,7 +7,12 @@ hooks:
     - matcher: "Read"
       hooks:
         - type: command
-          command: "/Users/evendead/Developer/BS/mcp-server/.claude/hooks/eval-slave-read-guard.sh"
+          # Resolved at run time, never hardcoded: an absolute developer path would simply
+          # not exist on a CI agent, and a hook whose command cannot be found is reported as
+          # an error rather than a block — so the guard would vanish and the read would
+          # proceed. CLAUDE_PROJECT_DIR is the checkout; the `.` fallback is the cwd, which
+          # is the same directory in every way this agent is spawned.
+          command: "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/eval-slave-read-guard.sh\""
 ---
 
 # Answering one eval case

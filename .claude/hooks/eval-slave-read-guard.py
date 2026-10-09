@@ -2,7 +2,8 @@
 
 WHY THIS EXISTS. The slave needs Read for exactly one thing: recovering a tool result too
 large to return inline, which Claude Code spills to
-~/.claude/projects/<project>/<session>/tool-results/<file>. Without it an oversized response
+$CLAUDE_CONFIG_DIR/projects/<project>/<session>/tool-results/<file> (~/.claude when that is
+unset). Without it an oversized response
 (tm's list_configurations returns ~196KB whatever you pass for count/per_page) is a total
 loss rather than something a real caller could work around.
 
@@ -15,7 +16,7 @@ one directory shape and refuses everything else, so a path nobody thought of is 
 rather than permitted.
 
 THE TRANSCRIPTS ARE THE TRAP. Session transcripts sit at
-~/.claude/projects/<project>/<session>.jsonl — siblings of the allowed directory — and hold
+<config dir>/projects/<project>/<session>.jsonl — siblings of the allowed directory — and hold
 the full text of every fixture read during a session. The allowed pattern requires a literal
 `tool-results` path component, which a transcript can never have.
 
@@ -48,7 +49,12 @@ def main() -> None:
     try:
         # realpath, because /tmp resolves to /private/tmp and a symlink must not be a way out.
         real = os.path.realpath(os.path.expanduser(str(path)))
-        root = os.path.realpath(os.path.expanduser("~/.claude/projects"))
+        # CLAUDE_CONFIG_DIR, because a CI run points the config dir at the workspace rather
+        # than $HOME. Hardcoding ~/.claude there would refuse every spilled result — the one
+        # thing this guard is supposed to allow — and the refusal would read like the agent
+        # giving up on an oversized response.
+        config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or "~/.claude"
+        root = os.path.realpath(os.path.join(os.path.expanduser(config_dir), "projects"))
     except Exception as exc:  # noqa: BLE001
         block(f"could not resolve path ({exc})")
 

@@ -15,17 +15,27 @@ by the time the pipeline could ask for the code, the thing waiting for it is gon
 THE SHAPE. This script is the process that waits. The pipeline launches it detached, then
 talks to it through files in a state directory:
 
-    <state>/url    written by us  — the login URL, as soon as the child prints one
-    <state>/code   written by the pipeline, from the `input` step — the authorization code
-    <state>/token  written by us  — the oauth token, mode 0600, if the child printed one
-    <state>/done   written by us  — "ok" or "failed:<reason>"; the pipeline waits on this
-    <state>/log    written by us  — the child's output, REDACTED, safe to echo to console
+    <state>/url       written by us  — the login URL, as soon as the child prints one
+    <state>/code      written by the pipeline, from `input` — the authorization code
+    <state>/token     written by us  — the oauth token, mode 0600, if the child printed one
+    <state>/done      written by us  — "ok" or "failed:<reason>"; the pipeline waits on this
+    <state>/log       written by us  — the whole transcript, REDACTED, written once at exit
+    <state>/progress  written by us  — our own notes only, live, never any child output
 
 SECRETS. The console log of a Jenkins build is readable by everyone who can see the job,
 and `claude setup-token` prints the token it just minted. Anything matching an Anthropic
 key shape is replaced with a placeholder in <state>/log and written only to <state>/token,
 which the pipeline reads with `set +x` and never archives. The authorization code the
-operator pastes is a secret too, so it is never echoed back into the log.
+operator pastes is a secret too, so it is never echoed back into the log — the pty echoes
+typed input, so that one is not hypothetical.
+
+REDACTION RUNS ONCE, OVER THE WHOLE TRANSCRIPT. A pty read returns whatever has arrived,
+so a token written in two flushes lands in two reads, and a pattern checked per read
+matches neither half — which published the credential in pieces. Everything the child
+writes is accumulated and redacted together at exit, where there is no boundary to
+straddle. For the same reason the token is resolved from the complete output at the end,
+not the first time something looked token-shaped: the first partial match used to latch,
+and the saved token was then a truncated string that authenticated nothing.
 
 NOT A GENERAL EXPECT SCRIPT. It knows one flow and fails fast on anything else: no URL
 within the timeout, or the child exiting without a token, is reported as a failure with
@@ -93,18 +103,44 @@ def main() -> int:
 
     state = os.path.abspath(args.state_dir)
     os.makedirs(state, exist_ok=True)
-    paths = {n: os.path.join(state, n) for n in ("url", "code", "token", "done", "log")}
-    for name in ("url", "token", "done"):
+    paths = {
+        n: os.path.join(state, n)
+        for n in ("url", "code", "token", "done", "log", "progress")
+    }
+    for name in ("url", "token", "done", "log"):
         try:
             os.unlink(paths[name])
         except OSError as exc:
             if exc.errno != errno.ENOENT:
                 raise
 
-    log = open(paths["log"], "w", buffering=1)
+    # Our own notes, live. Only ever strings written here in this file — never a byte the
+    # child produced — so this one needs no redaction and is safe to tail at any moment.
+    progress = open(paths["progress"], "w", buffering=1)
+    # Everything, in order: child output and notes alike. Redacted and written as one piece
+    # when the run ends, because a secret can straddle any two reads.
+    transcript: list[str] = []
 
-    def finish(status: str) -> int:
-        log.flush()
+    def note(text: str) -> None:
+        transcript.append(text)
+        progress.write(text)
+
+    def finish(status: str, seen: str = "") -> int:
+        # The token, decided now rather than mid-stream: the longest token-shaped string in
+        # the complete output. Resolving it per read latched onto a partial and saved a
+        # credential that was quietly too short to work.
+        found = SECRET.findall(seen)
+        if found:
+            token = max(found, key=len)
+            # 0600 before a byte of it lands on disk: the workspace is shared with whatever
+            # else runs in this pod.
+            fd = os.open(paths["token"], os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as fh:
+                fh.write(token)
+            note("\n--- captured an oauth token; written to the state dir ---\n")
+        with open(paths["log"], "w") as fh:
+            fh.write(redact("".join(transcript)))
+        progress.flush()
         with open(paths["done"], "w") as fh:
             fh.write(status)
         return 0 if status == "ok" else 1
@@ -129,7 +165,7 @@ def main() -> int:
             start_new_session=True,
         )
     except OSError as exc:
-        log.write(f"could not start {args.claude!r}: {exc}\n")
+        note(f"could not start {args.claude!r}: {exc}\n")
         return finish("failed:claude-not-found")
     os.close(slave)
 
@@ -137,17 +173,16 @@ def main() -> int:
     url_written = False
     code_sent = False
     nudged = False
-    token = None
     started = time.monotonic()
 
     while True:
         if time.monotonic() - started > args.timeout:
-            log.write(f"\n--- timed out after {args.timeout}s ---\n")
+            note(f"\n--- timed out after {args.timeout}s ---\n")
             try:
                 os.killpg(os.getpgid(child.pid), signal.SIGTERM)
             except OSError:
                 pass
-            return finish("failed:timeout")
+            return finish("failed:timeout", seen)
 
         rlist, _, _ = select.select([master], [], [], 1.0)
         if rlist:
@@ -159,18 +194,9 @@ def main() -> int:
                 break
             text = ANSI.sub("", chunk.decode("utf-8", "replace"))
             seen += text
-            log.write(redact(text))
-
-            if token is None:
-                found = SECRET.search(seen)
-                if found:
-                    token = found.group(0)
-                    # 0600 before a byte of it lands on disk: the workspace is shared with
-                    # whatever else runs in this pod.
-                    fd = os.open(paths["token"], os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                    with os.fdopen(fd, "w") as fh:
-                        fh.write(token)
-                    log.write("\n--- captured an oauth token; written to the state dir ---\n")
+            # Buffered, never written through: redaction happens once at the end, over all
+            # of it, so no secret can hide in the seam between two reads.
+            transcript.append(text)
 
             if not url_written:
                 url = pick_url(seen)
@@ -178,7 +204,7 @@ def main() -> int:
                     with open(paths["url"], "w") as fh:
                         fh.write(url)
                     url_written = True
-                    log.write(f"\n--- login URL published to the pipeline ---\n")
+                    note("\n--- login URL published to the pipeline ---\n")
 
         # The operator has pasted the code into the `input` step.
         if url_written and not code_sent and os.path.exists(paths["code"]):
@@ -189,14 +215,14 @@ def main() -> int:
                 _ECHOED.append(code)
                 os.write(master, code.encode() + b"\r")
                 code_sent = True
-                log.write("\n--- authorization code submitted ---\n")
+                note("\n--- authorization code submitted ---\n")
 
         # Some builds of the CLI open on a confirmation screen and print the URL only
         # after an Enter. One nudge, once, and only while nothing has appeared yet.
         if not url_written and not nudged and time.monotonic() - started > args.nudge_after:
             os.write(master, b"\r")
             nudged = True
-            log.write("\n--- no URL yet; sent one Enter in case a prompt is waiting ---\n")
+            note("\n--- no URL yet; sent one Enter in case a prompt is waiting ---\n")
 
         if child.poll() is not None and not rlist:
             break
@@ -210,13 +236,15 @@ def main() -> int:
             pass
 
     if not url_written:
-        return finish("failed:no-login-url")
-    if token is None:
+        return finish("failed:no-login-url", seen)
+    if not SECRET.search(seen):
         # The CLI may store the credential in the config dir without printing it. That is
         # still a usable login for a later stage in the same pod, so it is not a failure —
         # but say which happened, because the two are debugged differently.
-        log.write("\n--- no token in the output; relying on the CLI's stored credential ---\n")
-    return finish("ok" if child.returncode == 0 else f"failed:exit-{child.returncode}")
+        note("\n--- no token in the output; relying on the CLI's stored credential ---\n")
+    return finish(
+        "ok" if child.returncode == 0 else f"failed:exit-{child.returncode}", seen
+    )
 
 
 if __name__ == "__main__":

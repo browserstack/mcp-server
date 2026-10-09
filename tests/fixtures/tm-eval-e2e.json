@@ -1,0 +1,186 @@
+{
+  "product": "tm",
+  "description": "End-to-end eval cases for Test Management. Unlike search-eval.json (ranking only) and routing-eval.json (query -> capability), each case here carries what the Automated Evals page calls the missing three: the fixture the query assumes, what the agent should have validated, and assertions on the response. A case that only pairs a query with a capability measures routing and silently ignores whether the answer was right.",
+  "fixture": {
+    "source": "tests/live/.id-pool.json",
+    "seeded_by": "npm run seed:live",
+    "note": "Every {{placeholder}} below is resolved from the pool at run time, never hardcoded. Project ids on a shared account are transient; the fixture PROJECT NAME is the stable handle, and the seeder is idempotent on it. Run the seeder against the account under test before the eval, or every case fails for the wrong reason. Every one of these is found by NAME, not by position in a listing: readonly.cases used to be the first two rows the folder returned, which slid as soon as anything else was added to __readonly__, so cases pinned to readonly.cases.0 silently changed target between runs.",
+    "requires": [
+      "project.identifier",
+      "readonly.folder",
+      "readonly.cases",
+      "readonly.run",
+      "readonly.plan",
+      "scratch.folder",
+      "scratch.case",
+      "gaps.binned_case"
+    ]
+  },
+  "cases": [
+    {
+      "id": "TM-E2E-01",
+      "query": "what folders are at the top level of project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "source": "seeded"
+      },
+      "expects": "list_root_folders",
+      "validates": "Scoped to the given project. The agent must not list every project first — the project is in the query.",
+      "asserts": [
+        "response contains a folder named __mcp-readonly__",
+        "response contains a folder named __mcp-scratch__"
+      ],
+      "why": "The plainest scoped read. If this fails, nothing below is interpretable."
+    },
+    {
+      "id": "TM-E2E-02",
+      "query": "what's sitting in the recycle bin for project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "source": "seeded"
+      },
+      "expects": "list_binned_test_cases",
+      "validates": "Reaches the bin listing rather than filtering list_test_cases by a deleted flag.",
+      "asserts": [
+        "response contains at least one binned test case",
+        "the case id {{gaps.binned_case}} is present"
+      ],
+      "why": "Pure vocabulary gap: 'recycle bin' shares no word with list_binned_test_cases. This is what aliases exist to close."
+    },
+    {
+      "id": "TM-E2E-03",
+      "query": "how many are in there",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "conversation": "asked immediately after TM-E2E-02, in the same session",
+        "source": "seeded"
+      },
+      "expects": "count_binned_test_cases",
+      "validates": "Carries the project and the 'bin' subject forward from the previous turn rather than asking again or re-listing.",
+      "asserts": [
+        "response carries a numeric count",
+        "count is greater than zero"
+      ],
+      "why": "Tests whether context survives a turn. A single-shot eval never exercises this, and it is how people actually talk."
+    },
+    {
+      "id": "TM-E2E-04",
+      "query": "show me everything on {{readonly.cases.0}} in project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "test_case": "{{readonly.cases.0}}",
+        "folder": "{{readonly.folder}}",
+        "source": "seeded"
+      },
+      "expects": "get_test_case",
+      "validates": "Fetches the one case by id. Listing the folder and filtering client-side is a miss even when the right case comes back.",
+      "asserts": [
+        "response is a single test case, not a list",
+        "its identifier equals {{readonly.cases.0}}"
+      ],
+      "why": "The cheapest way for an agent to look correct while doing the wrong thing is to list and filter."
+    },
+    {
+      "id": "TM-E2E-05",
+      "query": "which cases are in run {{readonly.run}} in project {{project.identifier}}, and who owns each one",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "test_run": "{{readonly.run}}",
+        "source": "seeded"
+      },
+      "expects": "list_test_run_test_cases",
+      "validates": "Uses the run-scoped listing, not list_test_cases for the whole project.",
+      "asserts": [
+        "every returned case belongs to run {{readonly.run}}",
+        "the answer names an owner or assignee field, or says plainly that none is set"
+      ],
+      "why": "Two-part question. An agent that answers the first half and drops the second passes routing and fails the user."
+    },
+    {
+      "id": "TM-E2E-06",
+      "query": "read the notes people left on {{readonly.cases.0}} in project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "folder": "{{readonly.folder}}",
+        "test_case": "{{readonly.cases.0}}",
+        "source": "seeded"
+      },
+      "expects": "list_test_case_comments",
+      "validates": "Supplies folder_id as well as project and case — the path requires it, and it is not in the query. The agent must resolve it rather than guess.",
+      "asserts": [
+        "the call carries a folder_id",
+        "an empty thread is reported as empty, not as an error"
+      ],
+      "why": "The parameter the query does not give is the one that catches guessing. An empty result must also be read correctly."
+    },
+    {
+      "id": "TM-E2E-07",
+      "query": "what browsers and devices can I run project {{project.identifier}} against",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "source": "seeded"
+      },
+      "expects": "list_configurations",
+      "validates": "Reaches configurations rather than answering from the model's own knowledge of BrowserStack platforms.",
+      "asserts": [
+        "the answer is drawn from the response, not from general knowledge",
+        "a configuration name or id from the response appears in the answer"
+      ],
+      "why": "A question the model can plausibly answer without calling anything. Scoring the text alone would score a hallucination as a pass."
+    },
+    {
+      "id": "TM-E2E-08",
+      "query": "find everything in project {{project.identifier}} to do with checkout",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "source": "seeded"
+      },
+      "expects": "search_project_entities",
+      "validates": "Scoped search within the given project. Walking every folder and filtering client-side is the wandering behaviour this eval exists to catch; refining a search two or three times is not.",
+      "asserts": [
+        "no folder-by-folder enumeration appears in the transcript",
+        "the answer names the checkout-related entity found in {{project.identifier}}, drawn from a search response"
+      ],
+      "why": "Under-specified queries do not fail, they wander — and every run wanders differently. This asserts on the PATH as well as the answer. It deliberately does NOT cap the number of search calls: a first run scored PARTIAL for making three searches while reaching the right capability, scoping every call to the project and never enumerating folders. If the ask is satisfied, the call count is the agent's business — a cap measures style, and style varies run to run, which is exactly the kind of assert that makes a suite noisy without making it stricter. Enumeration is still a fail, because that is wandering rather than refining."
+    },
+    {
+      "id": "TM-E2E-09",
+      "query": "leave a comment on {{scratch.case}} in project {{project.identifier}} saying the third step needs a clearer expected result",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "folder": "{{scratch.folder}}",
+        "test_case": "{{scratch.case}}",
+        "source": "seeded",
+        "writes": true
+      },
+      "expects": "create_test_case_comment",
+      "validates": "Asks for confirmation BEFORE writing — the registry requires user_permission='granted' and a change_summary. A run that writes without pausing is a fail regardless of the result.",
+      "asserts": [
+        "the agent requested approval before the write",
+        "a comment EXISTS THAT DID NOT EXIST BEFORE THIS RUN — compare comment ids with the pre-run read, do not merely find a matching comment",
+        "that new comment's text contains 'expected result'"
+      ],
+      "why": "The only write in the set. It tests the approval gate, and the read-back proves the write landed rather than merely returning 200. It targets __scratch__ ON PURPOSE: pointed at a __readonly__ case, the agent read the fixture project's own 'contents are asserted against' warning and hesitated over that rather than over the write, so the case measured the warning label instead of the gate.",
+      "cleanup": "The comment stays: tm exposes no comment delete, so every run of this case leaves one more on {{scratch.case}}. That is why the assert is on a NEW id rather than on matching text — after two runs the same sentence is already there, and a silently failed write would satisfy a text match using the previous run's comment.",
+      "pre_run": "Read the comments on {{scratch.case}} BEFORE spawning the slave and keep the set of comment ids. The write assert is the difference, not the presence."
+    },
+    {
+      "id": "TM-E2E-10",
+      "query": "what did the last report say",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "source": "seeded"
+      },
+      "expects": "__ask_the_user__",
+      "validates": "'report' means a Test Management report and a TRA dashboard. The agent must put the choice to the user and stop, not pick one.",
+      "asserts": [
+        "no capability is invoked",
+        "the reply names both products and asks which is meant"
+      ],
+      "why": "The expected outcome is a question, not a call. This one deliberately names NO product and no project: every other case states the product so the clash gate does not stand in for the capability routing being measured, and this one withholds it so the gate is what gets measured. An eval with no such case cannot tell a confident wrong answer from a correct refusal."
+    }
+  ],
+  "note_on_queries": "Queries are the customer's words and name NO product. The master answers when a slave asks which product is meant, which is the behaviour half these cases exist to measure. Naming the product up front suppresses the clash gate entirely; so does smuggling context into a preamble — 'In BrowserStack project PR-20' injects `browserstack` and `pr` as routing vocabulary, and `pr` is an alias on tm's project entity, so the gate stops firing and every ambiguous case passes for the wrong reason.",
+  "runner": "Master/slave: the capability-eval skill spawns one `capability-eval-case` subagent per case and answers the questions it hands back. Single-turn runners cannot score a write case, because a write that is never approved never happens.",
+  "repeat_runs": "__readonly__ is never mutated, so read cases are stable indefinitely and re-seeding between runs is unnecessary — the seeder is idempotent and cheap, but it only fills what is missing. __scratch__ ACCUMULATES: the write case adds a comment every run and tm has no comment delete. Expect that residue, assert on the difference rather than on presence, and if the scratch folder ever needs a clean slate, create a new scratch case rather than trying to delete the old one."
+}

@@ -6,17 +6,22 @@ full of regex backslashes that a Groovy literal either eats or refuses to compil
 keeping it here means the branch under test carries its own login driver, so changing it
 is the same review as changing the eval it serves.
 
-THE PROBLEM. `claude login` is an interactive terminal UI: it prints a login URL, waits
+THE PROBLEM. `claude auth login` is an interactive terminal UI: it prints a login URL, waits
 for the human to approve in a browser, and then reads the authorization code from a
 terminal prompt. A Jenkins `sh` step gives it neither a TTY nor a human, and a pipeline
 `input` step cannot type into a running process — `sh` blocks until the process exits, so
 by the time the pipeline could ask for the code, the thing waiting for it is gone.
 
-WHY `login` AND NOT `setup-token`. setup-token mints a long-lived credential; the whole
-point of it is to keep working after the session that made it has gone, which is the
+WHY `auth login` AND NOT `setup-token`. setup-token mints a long-lived credential; the
+whole point of it is to keep working after the session that made it has gone, which is the
 opposite of what a build wants. A login is a session this run uses and the job revokes on
-its way out. The subcommand is an argument rather than a constant because which one you
-want is a property of the run, not of this file.
+its way out with `claude auth logout`.
+
+MIND THE SUBCOMMAND. The CLI treats an unrecognised first argument as a prompt, so a typo
+does not fail — it opens an interactive session and waits forever. `claude login` (no such
+command) cost a five-minute CI timeout sitting on the first-run theme picker. --command
+therefore takes the whole subcommand, and a caller that cannot afford the hang should run
+`claude <subcommand> --help` first: a real subcommand exits 0, a prompt does not.
 
 THE SHAPE. This script is the process that waits. The pipeline launches it detached, then
 talks to it through files in a state directory:
@@ -100,9 +105,9 @@ def main() -> int:
     ap.add_argument("--claude", default="claude", help="path to the claude CLI")
     ap.add_argument(
         "--command",
-        default="login",
-        help="claude subcommand to drive; `login` for a session this build gives back, "
-        "`setup-token` for a long-lived credential",
+        default="auth login",
+        help="claude subcommand to drive, space-separated; `auth login` for a session this "
+        "build gives back, `setup-token` for a long-lived credential",
     )
     ap.add_argument("--timeout", type=int, default=900, help="seconds for the whole flow")
     ap.add_argument(
@@ -185,7 +190,7 @@ def main() -> int:
 
     try:
         child = subprocess.Popen(
-            [args.claude, args.command],
+            [args.claude, *args.command.split()],
             stdin=slave,
             stdout=slave,
             stderr=slave,

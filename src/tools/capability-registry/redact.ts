@@ -83,16 +83,19 @@ const RULES: Rule[] = [
 export const MAX_LENGTH = 512;
 
 /**
- * Returns the text with shape-identifiable PII replaced, capped at `MAX_LENGTH`.
+ * Returns the text with shape-identifiable PII replaced, capped at `maxLength`.
  *
  * FAILS CLOSED: any throw returns undefined, so the caller records no field rather than
  * the raw value. Non-string and empty input yields undefined for the same reason.
  */
-export function redact(text: unknown): string | undefined {
+export function redact(
+  text: unknown,
+  maxLength: number = MAX_LENGTH,
+): string | undefined {
   try {
     if (typeof text !== "string") return undefined;
     // Slice before the rules run; a multi-KB digit run makes them backtrack.
-    const SCAN_LIMIT = MAX_LENGTH * 8;
+    const SCAN_LIMIT = maxLength * 8;
     let out = text.slice(0, SCAN_LIMIT).replace(/\s+/g, " ").trim();
     if (!out) return undefined;
 
@@ -100,7 +103,7 @@ export function redact(text: unknown): string | undefined {
 
     // Truncate AFTER redacting, so a value that would have been replaced cannot be split
     // across the boundary and leave its first half in the clear.
-    return out.length > MAX_LENGTH ? `${out.slice(0, MAX_LENGTH)}…` : out;
+    return out.length > maxLength ? `${out.slice(0, maxLength)}…` : out;
   } catch {
     return undefined;
   }
@@ -108,3 +111,58 @@ export function redact(text: unknown): string | undefined {
 
 /** The rule names, for documenting what is covered. */
 export const REDACTED_TYPES = RULES.map((r) => r.name);
+
+interface FeedbackRule {
+  name: string;
+  pattern: RegExp;
+  replacement: string | ((match: string, ...groups: string[]) => string);
+}
+
+const BARE_SECRET_LABEL = /^(password|passwd|pwd|passphrase|bearer)$/i;
+
+const FEEDBACK_RULES: FeedbackRule[] = [
+  {
+    name: "labelled_secret",
+    pattern:
+      /\b(password|passwd|pwd|passphrase|bearer|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret|auth[_-]?token|session[_-]?id)(\s*[:=]\s*|\s+)("[^"]*"|'[^']*'|\S+)/gi,
+    replacement: (match, label, sep, value) => {
+      const explicit = /[:=]/.test(sep);
+      const bare =
+        BARE_SECRET_LABEL.test(label) && /[\d!@#$%^&*_+~]/.test(value);
+      return explicit || bare ? `${label}${sep}[secret]` : match;
+    },
+  },
+  {
+    name: "card",
+    pattern: /\b\d(?:[ -]?\d){12,18}\b/g,
+    replacement: "[card]",
+  },
+  {
+    name: "otp",
+    pattern:
+      /\b(otp|pin|passcode|(?<!(?:status|error|exit|response|http)\s)code)(\s*[:=]?\s*)\d{4,8}\b/gi,
+    replacement: "$1$2[code]",
+  },
+  {
+    name: "url_query",
+    pattern: /\b(https?:\/\/[^\s?#]+)[?#]\S*/gi,
+    replacement: "$1?[query]",
+  },
+];
+
+export const FEEDBACK_REDACTED_TYPES = FEEDBACK_RULES.map((r) => r.name);
+
+export function redactFeedback(
+  text: unknown,
+  maxLength: number = MAX_LENGTH,
+): string | undefined {
+  try {
+    if (typeof text !== "string") return undefined;
+    let out = text.slice(0, maxLength * 8);
+    for (const rule of FEEDBACK_RULES)
+      out = out.replace(rule.pattern, rule.replacement as never);
+    return redact(out, maxLength);
+  } catch {
+    return undefined;
+  }
+}

@@ -53,6 +53,9 @@ const SCRATCH_CASE = "Checkout flow";
 const BIN_CASE_PREFIX = "__probe-bin-";
 const PLAN_NAME = "probe plan";
 const RUN_NAME = "probe run";
+/** A SECOND run, in __scratch__, for the cases that write results or edit run metadata.
+ *  The __readonly__ run cannot serve: a read case asserts on its exact membership. */
+const SCRATCH_RUN_NAME = "probe scratch run";
 
 // Preprod, with the credentials already configured for the local MCP server. Pinned here
 // rather than read from the environment so a stray shell variable cannot point a seeding
@@ -133,7 +136,7 @@ interface Pool {
    *  mix them — resolving it once here is five failed calls nobody else has to make. */
   project: { id: number; identifier: string; name: string };
   readonly: { folder?: number; cases?: string[]; plan?: string; run?: string };
-  scratch: { folder?: number; case?: string };
+  scratch: { folder?: number; case?: string; run?: string; result_logged?: boolean };
   /** The objects no ordinary create can reach — each one closed a capability that probed
    *  UNVERIFIED. Optional because some cannot be seeded with every account's permissions. */
   gaps?: {
@@ -532,6 +535,81 @@ async function main() {
       ok(filled.status)
         ? `  run cases    CREATED  ${(pool.readonly.cases ?? []).join(", ")} in ${pool.readonly.run}`
         : `  run cases    FAILED   update returned ${filled.status} ${JSON.stringify(filled.error ?? filled.body).slice(0, 120)}`,
+    );
+  }
+
+  // 5b. A SECOND RUN, IN __scratch__, AND ONE RECORDED RESULT.
+  //
+  // The __readonly__ run cannot serve the cases that edit run metadata or log results: a read
+  // case asserts on its exact membership, so a write case pointed at it would break a read
+  // case on the next run and the suite would start failing in a way that looks like routing.
+  // Writes get their own run for the same reason writes get their own folder.
+  //
+  // The result matters as much as the run. "Show me the failed results from this run" has no
+  // answer on a run whose cases are all untested, and an agent handed an empty list reports it
+  // as empty — correctly — so the case passes while measuring nothing. Seeding one execution
+  // is what makes the read assertable.
+  const scratchRuns = await call("list_test_runs", {
+    path_params: { project_id: pref },
+  });
+  const scratchRun = (scratchRuns.body?.test_runs ?? []).find(
+    (r: any) => r.name === SCRATCH_RUN_NAME,
+  );
+  if (scratchRun) {
+    pool.scratch.run = scratchRun.identifier;
+    console.log(`  scratch run  FOUND    ${pool.scratch.run}`);
+  } else {
+    const made = await write(
+      "create_test_run",
+      {
+        path_params: { project_id: pref },
+        body: {
+          name: SCRATCH_RUN_NAME,
+          run_state: "new_run",
+          test_cases: pool.scratch.case ? [pool.scratch.case] : [],
+        },
+      },
+      "seed a scratch test run, so write probes never touch the run read probes assert on",
+    );
+    if (!ok(made.status)) die("create_test_run scratch", made.error ?? made.body);
+    pool.scratch.run =
+      made.body?.test_run?.identifier ?? made.body?.identifier;
+    console.log(`  scratch run  CREATED  ${pool.scratch.run}`);
+  }
+
+  // One recorded execution, so "read the results" has something to read. Logging a result is
+  // idempotent in the sense that matters here: it appends to the case's execution history
+  // rather than creating another entity, so the fixture does not grow an object per run.
+  const existingResults = await call("list_test_results_for_test_case", {
+    path_params: {
+      project_id: pref,
+      test_run_id: pool.scratch.run,
+      test_case_id: pool.scratch.case,
+    },
+  });
+  const resultRows =
+    existingResults.body?.test_results ?? existingResults.body?.results ?? [];
+  if (resultRows.length > 0) {
+    pool.scratch.result_logged = true;
+    console.log(`  run result   FOUND    ${resultRows.length} on ${pool.scratch.case}`);
+  } else {
+    const logged = await write(
+      "create_test_results_for_test_run",
+      {
+        path_params: { project_id: pref, test_run_id: pool.scratch.run },
+        body: {
+          test_case_id: pool.scratch.case,
+          status: "failed",
+          description: "Seeded execution, so result reads have something to return.",
+        },
+      },
+      "record one test result, so read probes for results are not asserting against an empty list",
+    );
+    pool.scratch.result_logged = ok(logged.status);
+    console.log(
+      ok(logged.status)
+        ? `  run result   CREATED  failed on ${pool.scratch.case} in ${pool.scratch.run}`
+        : `  run result   FAILED   ${logged.status} ${JSON.stringify(logged.error ?? logged.body).slice(0, 140)}`,
     );
   }
 

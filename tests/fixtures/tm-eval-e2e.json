@@ -13,7 +13,9 @@
       "readonly.plan",
       "scratch.folder",
       "scratch.case",
-      "gaps.binned_case"
+      "scratch.run",
+      "gaps.binned_case",
+      "gaps.shared_step"
     ]
   },
   "cases": [
@@ -179,6 +181,157 @@
       ],
       "why": "The expected outcome is a question, not a call. This one deliberately names NO product and no project: every other case states the product so the clash gate does not stand in for the capability routing being measured, and this one withholds it so the gate is what gets measured. An eval with no such case cannot tell a confident wrong answer from a correct refusal.",
       "query_history": "It was 'what did the last report say', and it measured nothing: the slave made ZERO registry calls, read 'the last report' as a back-reference to the conversation, found no antecedent — it is spawned fresh with one sentence — and asked which TASK the report came from. Restraint held by accident rather than by routing. A phrase built from 'the last ... say' asks about prior discourse, which a context-free eval prompt can never supply; run headless against a session with history instead, the same query drew an offer to check Obsidian logs and Jenkins builds. The rewrite makes 'report' a thing to FETCH rather than a thing already said: 'show me' forces a lookup and 'latest' is a selector, not a back-reference. 'browserstack' is safe to name here precisely because no product claims it — it appears in no entity, alias or routing term for tm, tra or loadtesting, so it cannot settle the clash or create one, while 'report' stays claimed by both tm and tra. Naming the PRODUCT would have destroyed the case; naming the COMPANY does not."
+    },
+    {
+      "id": "TM-E2E-11",
+      "workflow": "List projects",
+      "query": "show me all the projects in our workspace",
+      "setup": {
+        "source": "seeded"
+      },
+      "expects": "list_projects",
+      "validates": "Reaches the project listing directly. Naming no project is the point — this is the one read that legitimately has no scope.",
+      "asserts": [
+        "the response is a list of projects",
+        "the fixture project {{project.identifier}} appears in it"
+      ],
+      "why": "P0 workflow with no scope to get wrong, which makes it the control for the scoped reads. A miss here means the listing itself is unreachable, not that scoping failed."
+    },
+    {
+      "id": "TM-E2E-12",
+      "workflow": "Find test runs",
+      "query": "what test runs are there in project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "source": "seeded"
+      },
+      "expects": "list_test_runs",
+      "validates": "Lists runs scoped to the given project rather than searching cases and inferring runs from them.",
+      "asserts": [
+        "the response lists test runs",
+        "both {{readonly.run}} and {{scratch.run}} appear"
+      ],
+      "why": "P0. Pairs with the next case: finding runs and reading one are different capabilities, and an agent that can only do the first answers 'which runs exist' when asked 'how is this one doing'."
+    },
+    {
+      "id": "TM-E2E-13",
+      "workflow": "Get a test run",
+      "query": "how is run {{readonly.run}} in project {{project.identifier}} doing",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "test_run": "{{readonly.run}}",
+        "source": "seeded"
+      },
+      "expects": "get_test_run",
+      "validates": "Fetches the one run by id. Listing all runs and filtering is a miss even when the right run comes back.",
+      "asserts": [
+        "the response is a single run, not a list",
+        "its identifier equals {{readonly.run}}",
+        "the answer reports the run's state rather than inventing a percentage"
+      ],
+      "why": "P0. 'How is it doing' invites a progress summary the API does not return; the assert is that the answer comes from the run's actual state."
+    },
+    {
+      "id": "TM-E2E-14",
+      "workflow": "Read test results",
+      "query": "what happened when {{scratch.case}} was run in {{scratch.run}}, in project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "test_run": "{{scratch.run}}",
+        "test_case": "{{scratch.case}}",
+        "source": "seeded"
+      },
+      "expects": "list_test_results_for_test_case",
+      "validates": "Reads the executions recorded for that case in that run, rather than reporting the case's own status field.",
+      "asserts": [
+        "at least one recorded result is returned",
+        "the answer states the recorded status rather than 'untested'"
+      ],
+      "why": "P0. The seeder logs one failed execution precisely so this is assertable: on a run where nothing has been executed the agent correctly reports an empty list, and the case would pass while measuring nothing."
+    },
+    {
+      "id": "TM-E2E-15",
+      "workflow": "Find shared fields",
+      "query": "list the shared steps in project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "source": "seeded"
+      },
+      "expects": "get_shared_steps",
+      "validates": "Reaches the shared-step listing rather than searching test cases for steps that look shared.",
+      "asserts": [
+        "the response lists shared steps",
+        "shared step {{gaps.shared_step}} is present"
+      ],
+      "why": "P0, and a vocabulary test: 'shared step' and 'shared field' are the same thing to the product and different words to a user."
+    },
+    {
+      "id": "TM-E2E-16",
+      "workflow": "Update a test case",
+      "query": "set the priority of {{scratch.case}} in project {{project.identifier}} to critical",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "folder": "{{scratch.folder}}",
+        "source": "seeded",
+        "writes": true,
+        "test_case": "{{scratch.case}}"
+      },
+      "expects": "update_test_case",
+      "validates": "Asks before writing. Sends ONLY the priority — the partial update replaces what it names, so a payload carrying re-stated fields can silently revert them.",
+      "asserts": [
+        "the agent requested approval before the write",
+        "a follow-up read shows priority critical on {{scratch.case}}",
+        "FIELD PRESERVATION: the case's name and its three steps are unchanged from the pre-run read"
+      ],
+      "why": "P0, and the first case asserting field preservation. A write that sets the right field and quietly clears another passes every assert that only checks the field it set.",
+      "pre_run": "Read {{scratch.case}} in full BEFORE spawning, and keep its name and steps. The preservation assert is the comparison.",
+      "cleanup": "Priority is idempotent — setting it to critical twice leaves one value, so this case adds no residue. Prefer updates over creates for exactly that reason."
+    },
+    {
+      "id": "TM-E2E-17",
+      "workflow": "Log a test result",
+      "query": "mark {{scratch.case}} as passed in run {{scratch.run}}, project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "folder": "{{scratch.folder}}",
+        "source": "seeded",
+        "writes": true,
+        "test_run": "{{scratch.run}}",
+        "test_case": "{{scratch.case}}"
+      },
+      "expects": "create_test_results_for_test_run",
+      "validates": "Records against the SCRATCH run. A result logged into {{readonly.run}} would change what the read cases assert on.",
+      "asserts": [
+        "the agent requested approval before the write",
+        "a result EXISTS THAT DID NOT EXIST BEFORE THIS RUN — compare result ids with the pre-run read",
+        "that new result's status is passed"
+      ],
+      "why": "P0. Logging a result appends to execution history rather than creating an entity, so repeated runs grow a list rather than littering the project — which is why this is a safe write to run unattended.",
+      "pre_run": "Read the results on {{scratch.case}} in {{scratch.run}} BEFORE spawning and keep the ids. The assert is the difference, not the presence — the seeder already logged one failed execution, so a run that silently wrote nothing would still find a result.",
+      "cleanup": "The execution history grows by one per run. That is bounded and expected; the assert is on a new id for the same reason the comment case asserts on one."
+    },
+    {
+      "id": "TM-E2E-18",
+      "workflow": "Update a test run",
+      "query": "rename run {{scratch.run}} in project {{project.identifier}} to 'probe scratch run'",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "folder": "{{scratch.folder}}",
+        "source": "seeded",
+        "writes": true,
+        "test_run": "{{scratch.run}}",
+        "test_case": "{{scratch.case}}"
+      },
+      "expects": "update_test_run",
+      "validates": "Asks before writing, and sends only the name. `test_cases` on this endpoint REPLACES membership rather than adding to it, so a payload that re-states it can empty the run.",
+      "asserts": [
+        "the agent requested approval before the write",
+        "a follow-up read shows the run still named 'probe scratch run'",
+        "FIELD PRESERVATION: the run still contains {{scratch.case}} and its recorded results survive"
+      ],
+      "why": "P0. The dangerous one: the update endpoint's own guidance warns that `test_cases` is the complete intended membership, so an agent that helpfully re-sends it from a stale read drops cases and their results. Renaming to the name it already has makes the case idempotent while still exercising the write path.",
+      "pre_run": "Read {{scratch.run}}'s membership and the results on {{scratch.case}} BEFORE spawning.",
+      "cleanup": "Idempotent: the new name equals the existing one, so the run is unchanged whatever the agent sends — only the preservation assert can fail."
     }
   ],
   "note_on_queries": "Queries are the customer's words and name NO product. The master answers when a slave asks which product is meant, which is the behaviour half these cases exist to measure. Naming the product up front suppresses the clash gate entirely; so does smuggling context into a preamble — 'In BrowserStack project PR-20' injects `browserstack` and `pr` as routing vocabulary, and `pr` is an alias on tm's project entity, so the gate stops firing and every ambiguous case passes for the wrong reason.",

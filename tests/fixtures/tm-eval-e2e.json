@@ -332,6 +332,83 @@
       "why": "P0. The dangerous one: the update endpoint's own guidance warns that `test_cases` is the complete intended membership, so an agent that helpfully re-sends it from a stale read drops cases and their results. Renaming to the name it already has makes the case idempotent while still exercising the write path.",
       "pre_run": "Read {{scratch.run}}'s membership and the results on {{scratch.case}} BEFORE spawning.",
       "cleanup": "Idempotent: the new name equals the existing one, so the run is unchanged whatever the agent sends — only the preservation assert can fail."
+    },
+    {
+      "id": "TM-E2E-19",
+      "workflow": "Create a folder",
+      "query": "create a folder called 'Sprint 42 Tests' in project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "source": "swept",
+        "writes": true
+      },
+      "expects": "create_root_folder",
+      "validates": "Asks before writing, and creates a ROOT folder rather than nesting it under an existing one, which the query does not ask for.",
+      "asserts": [
+        "the agent requested approval before the write",
+        "a follow-up read of the root folders shows one named 'Sprint 42 Tests'",
+        "the existing __readonly__ and __scratch__ folders are both still present"
+      ],
+      "why": "P0 create workflow. Omitting creates to keep the fixture tidy would test the fixture rather than the product. The last assert is the real one: a create that works and a create that quietly replaces the folder list look identical if you only check that your folder exists.",
+      "cleanup": "Swept by the seeder before the next run, by exact name, inside a project that holds nothing anybody authored. The eval agent cannot clean up after itself — the registry refuses destructive capabilities outright — so creates are only safe to test because the fixture builder removes them out of band."
+    },
+    {
+      "id": "TM-E2E-20",
+      "workflow": "Create a test case",
+      "query": "add a test case called 'Login Happy Path' to the 'Sprint 42 Tests' folder in project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "conversation": "runs after TM-E2E-19, which creates the folder it names",
+        "source": "swept",
+        "writes": true
+      },
+      "expects": "create_test_case",
+      "validates": "Resolves the folder BY NAME from the previous step rather than being handed its id, then creates the case inside it.",
+      "asserts": [
+        "the agent requested approval before the write",
+        "the case is created inside the 'Sprint 42 Tests' folder, not at the project root",
+        "a follow-up read of that folder shows 'Login Happy Path'"
+      ],
+      "why": "P0, and the only case that chains on another's output. The sheet's own multi-turn case does the same, because creating a thing and then putting something in it is how people actually work — and resolving the folder by name is where an agent that only understands ids falls down.",
+      "cleanup": "Removed with its parent folder when the seeder sweeps 'Sprint 42 Tests'."
+    },
+    {
+      "id": "TM-E2E-21",
+      "workflow": "Create a test run",
+      "query": "start a new test run called 'Sprint 42 Regression' in project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "source": "swept",
+        "writes": true
+      },
+      "expects": "create_test_run",
+      "validates": "Creates the run and does not silently populate it: the query names no cases, so a run created with a filter rule or with every case in the project is wrong.",
+      "asserts": [
+        "the agent requested approval before the write",
+        "a follow-up read shows a run named 'Sprint 42 Regression'",
+        "the existing runs {{readonly.run}} and {{scratch.run}} are untouched"
+      ],
+      "why": "P0. `create_test_run`'s own guidance warns that a create whose only case-bearing field is a filter rule succeeds and produces an EMPTY run, so this exercises the shape most likely to half-work.",
+      "cleanup": "Swept by the seeder before the next run, by exact name, inside a project that holds nothing anybody authored. The eval agent cannot clean up after itself — the registry refuses destructive capabilities outright — so creates are only safe to test because the fixture builder removes them out of band."
+    },
+    {
+      "id": "TM-E2E-22",
+      "workflow": "Create a shared field",
+      "query": "create a shared step called 'Login as Admin' in project {{project.identifier}}, covering navigating to login, entering admin credentials, and checking the dashboard loads",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "source": "swept",
+        "writes": true
+      },
+      "expects": "create_shared_step",
+      "validates": "Sends the three steps as structured step rows rather than as one blob of prose in the title.",
+      "asserts": [
+        "the agent requested approval before the write",
+        "a follow-up read of the shared steps shows one titled 'Login as Admin'",
+        "it carries three separate steps, not one step containing all three sentences"
+      ],
+      "why": "P0, and a shape test. The body field is `title` while almost every sibling capability calls it `name`, and the steps are a nested array — an agent that flattens the request into a title produces a shared step that reads correctly and is useless to embed.",
+      "cleanup": "Swept by the seeder before the next run, by exact name, inside a project that holds nothing anybody authored. The eval agent cannot clean up after itself — the registry refuses destructive capabilities outright — so creates are only safe to test because the fixture builder removes them out of band."
     }
   ],
   "note_on_queries": "Queries are the customer's words and name NO product. The master answers when a slave asks which product is meant, which is the behaviour half these cases exist to measure. Naming the product up front suppresses the clash gate entirely; so does smuggling context into a preamble — 'In BrowserStack project PR-20' injects `browserstack` and `pr` as routing vocabulary, and `pr` is an alias on tm's project entity, so the gate stops firing and every ambiguous case passes for the wrong reason.",

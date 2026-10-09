@@ -57,6 +57,25 @@ const RUN_NAME = "probe run";
  *  The __readonly__ run cannot serve: a read case asserts on its exact membership. */
 const SCRATCH_RUN_NAME = "probe scratch run";
 
+/**
+ * CHURN: the objects the CREATE-shaped eval cases make, and this script removes.
+ *
+ * Creating is a P0 workflow in its own right — create a folder, a case, a run, a shared step —
+ * and leaving it untested to keep the fixture tidy tests the fixture instead of the product.
+ * So the create cases run, and their output is swept before the next run rather than left to
+ * pile up. Sweeping BEFORE rather than after is deliberate: a run that crashes half way leaves
+ * its objects for inspection, and the next run still starts from a known state, which an
+ * after-the-fact cleanup cannot promise.
+ *
+ * Removal is by EXACT name, and only inside `__mcp-capability-fixture__` — a project that
+ * holds nothing anybody authored. The eval agent cannot do this itself: the registry refuses
+ * destructive capabilities outright, which is the right default and the reason cleanup belongs
+ * to the fixture builder talking to the product directly.
+ */
+const CHURN_FOLDER = "Sprint 42 Tests";
+const CHURN_RUN = "Sprint 42 Regression";
+const CHURN_SHARED_STEP = "Login as Admin";
+
 // Preprod, with the credentials already configured for the local MCP server. Pinned here
 // rather than read from the environment so a stray shell variable cannot point a seeding
 // run — which CREATES data — at production.
@@ -231,8 +250,20 @@ async function raw(
   const accessKey =
     process.env.TM_LIVE_ACCESS_KEY || process.env.BROWSERSTACK_ACCESS_KEY || "";
   const base = requireBaseUrl();
+  // AWAITED. `authHeaders` is async, and spreading the Promise yields {} — a Promise has no
+  // own enumerable properties — so every raw() call went out UNAUTHENTICATED and came back
+  // 401. Both gaps this script could never close were blamed on the account for it: the
+  // recycle-bin case was reported as "delete returns 401 on this account", and the attachment
+  // likewise, which in turn excluded two eval cases as unrunnable. The compiler had said so
+  // all along, in the one type error this file carried:
+  //
+  //   Type '{ "Content-Type"?: string; then<...>; catch<...> }' is not assignable to
+  //   'Record<string, string>'. Property 'then' is incompatible with index signature.
+  //
+  // `then` appearing in a spread IS the diagnosis. A 401 that is really a missing await is
+  // indistinguishable from a permissions problem from the outside, which is how it survived.
   const headers: Record<string, string> = {
-    ...authHeaders({ username, accessKey }),
+    ...(await authHeaders({ username, accessKey })),
     ...(contentType ? { "Content-Type": contentType } : {}),
   };
 
@@ -376,6 +407,63 @@ async function main() {
   // do not agree on which they publish. Accept either rather than guess.
   const byName = (rows: any[], name: string) =>
     rows.find((c: any) => (c.title ?? c.name) === name);
+
+  // 2b. SWEEP THE CHURN from whatever the last eval run created. See CHURN_* above.
+  //
+  // Each removal reports what it did. A cleanup that fails silently is worse than none: the
+  // next create case would meet an object that already exists, the agent would either refuse
+  // or make a duplicate, and the case would fail for a reason that has nothing to do with the
+  // behaviour under test.
+  const sweptFolder = findFolder(CHURN_FOLDER);
+  if (sweptFolder) {
+    const gone = await raw(
+      "POST",
+      `/api/v1/projects/${pid}/folder/${sweptFolder.id}/rm`,
+    );
+    console.log(
+      ok(gone.status)
+        ? `  churn folder SWEPT    ${CHURN_FOLDER} (${sweptFolder.id}) and its contents`
+        : `  churn folder FAILED   rm returned ${gone.status}`,
+    );
+  }
+
+  const churnRuns = await call("list_test_runs", {
+    path_params: { project_id: pref },
+  });
+  for (const r of (churnRuns.body?.test_runs ?? []).filter(
+    (r: any) => r.name === CHURN_RUN,
+  )) {
+    const gone = await raw(
+      "POST",
+      `/api/v1/projects/${pid}/test-runs/${r.id ?? r.identifier}/delete`,
+    );
+    console.log(
+      ok(gone.status)
+        ? `  churn run    SWEPT    ${r.identifier}`
+        : `  churn run    FAILED   delete returned ${gone.status}`,
+    );
+  }
+
+  const churnSteps = await call("get_shared_steps", {
+    path_params: { project_id: pid },
+  });
+  for (const step of (
+    churnSteps.body?.shared_steps ??
+    churnSteps.body?.data?.shared_steps ??
+    []
+    // `create_shared_step` takes `title`; the listing is not consistent about which it
+    // publishes, and a sweep that matches the wrong key is a cleanup that quietly does nothing.
+  ).filter((s: any) => (s.title ?? s.name) === CHURN_SHARED_STEP)) {
+    const gone = await raw(
+      "DELETE",
+      `/api/v1/projects/${pid}/shared-steps/${step.id}`,
+    );
+    console.log(
+      ok(gone.status)
+        ? `  churn step   SWEPT    ${step.id}`
+        : `  churn step   FAILED   delete returned ${gone.status}`,
+    );
+  }
 
   // 3. READ-ONLY TEST CASES, ADDRESSED BY NAME.
   //
@@ -636,7 +724,33 @@ async function main() {
   // more piece of permanent litter in a production project per night. A fixed prefix makes
   // the leftover findable, so a later run with working credentials bins the one that already
   // exists instead of adding to the pile.
-  if (!pool.gaps.binned_case) {
+  // Same correction as the attachment below: ask the bin what is in it rather than trust a
+  // pool field that is rebuilt empty every run. A case already in the recycle bin satisfies
+  // this gap completely, and binning another one each run grows the bin without end.
+  const bin = await call("list_binned_test_cases", {
+    path_params: { project_id: pool.project.id },
+  });
+  const alreadyBinned = (
+    bin.body?.test_cases ??
+    bin.body?.data?.test_cases ??
+    []
+  )[0];
+  if (alreadyBinned?.id) pool.gaps.binned_case = alreadyBinned.id;
+
+  // ASK WHETHER THE BIN EXISTS BEFORE FEEDING IT. The read answers
+  // 403 {"error":"Move to Bin feature is not enabled for this user"} on accounts without the
+  // feature, and an unreadable bin cannot satisfy the gap no matter how much goes into it —
+  // so without this check the seeder DELETED A TEST CASE ON EVERY RUN to populate something
+  // nothing can list. That was invisible while the delete itself was failing on a missing
+  // auth header; fixing the auth turned a silent no-op into silent destruction.
+  const binUnavailable = bin.status === 403 || bin.status === 404;
+  if (binUnavailable) {
+    pool.gaps.binned_case = null;
+    console.log(
+      `  binned case  SKIPPED  the recycle bin is not enabled for this account ` +
+        `(${bin.status}), so nothing can read what is put in it`,
+    );
+  } else if (!pool.gaps.binned_case) {
     const scratchRows = await listCases(pool.scratch.folder);
     const leftover = scratchRows.find((r: any) =>
       String(r.title ?? r.name ?? "").startsWith(BIN_CASE_PREFIX),
@@ -814,6 +928,25 @@ async function main() {
   // Field name is `file`. `attachments[]`, `attachment`, `files[]` and sending no file at
   // all all produce the SAME 422 — the error cannot distinguish a wrong field name from a
   // missing one.
+  // GUARDED ON THE LIVE STATE, like everything else here. `pool.gaps` is rebuilt empty on
+  // every run — nothing reads the previous pool file back — so `if (!pool.gaps.attachment)`
+  // was always true, and this block uploaded another attachment to a __readonly__ case every
+  // single run. The 401 hid it until the missing await was fixed; the first authenticated run
+  // was also the first run that could accumulate.
+  const priorAttachments = await call("list_entity_attachments", {
+    path_params: {
+      project_id: pool.project.identifier,
+      entity_type: "test-cases",
+      entity_id: pool.readonly.cases?.[0],
+    },
+  });
+  const priorAttachment = (
+    priorAttachments.body?.attachments ??
+    priorAttachments.body?.data?.attachments ??
+    []
+  )[0];
+  if (priorAttachment?.id) pool.gaps.attachment = priorAttachment.id;
+
   if (!pool.gaps.attachment) {
     const target = (
       await call("list_folder_test_cases", {

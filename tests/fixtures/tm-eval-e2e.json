@@ -166,18 +166,19 @@
     },
     {
       "id": "TM-E2E-10",
-      "query": "what did the last report say",
+      "query": "show me the latest browserstack report",
       "setup": {
         "project": "{{project.identifier}}",
         "source": "seeded"
       },
       "expects": "__ask_the_user__",
-      "validates": "'report' means a Test Management report and a TRA dashboard. The agent must put the choice to the user and stop, not pick one.",
+      "validates": "'report' is claimed by more than one product — a Test Management report, a TRA dashboard or report view, and a Load Testing report. The agent must put the choice to the user and stop, not pick one.",
       "asserts": [
-        "no capability is invoked",
-        "the reply names both products and asks which is meant"
+        "no capability is invoked before the user answers",
+        "the reply names the products that clash and asks which is meant"
       ],
-      "why": "The expected outcome is a question, not a call. This one deliberately names NO product and no project: every other case states the product so the clash gate does not stand in for the capability routing being measured, and this one withholds it so the gate is what gets measured. An eval with no such case cannot tell a confident wrong answer from a correct refusal."
+      "why": "The expected outcome is a question, not a call. This one deliberately names NO product and no project: every other case states the product so the clash gate does not stand in for the capability routing being measured, and this one withholds it so the gate is what gets measured. An eval with no such case cannot tell a confident wrong answer from a correct refusal.",
+      "query_history": "It was 'what did the last report say', and it measured nothing: the slave made ZERO registry calls, read 'the last report' as a back-reference to the conversation, found no antecedent — it is spawned fresh with one sentence — and asked which TASK the report came from. Restraint held by accident rather than by routing. A phrase built from 'the last ... say' asks about prior discourse, which a context-free eval prompt can never supply; run headless against a session with history instead, the same query drew an offer to check Obsidian logs and Jenkins builds. The rewrite makes 'report' a thing to FETCH rather than a thing already said: 'show me' forces a lookup and 'latest' is a selector, not a back-reference. 'browserstack' is safe to name here precisely because no product claims it — it appears in no entity, alias or routing term for tm, tra or loadtesting, so it cannot settle the clash or create one, while 'report' stays claimed by both tm and tra. Naming the PRODUCT would have destroyed the case; naming the COMPANY does not."
     }
   ],
   "note_on_queries": "Queries are the customer's words and name NO product. The master answers when a slave asks which product is meant, which is the behaviour half these cases exist to measure. Naming the product up front suppresses the clash gate entirely; so does smuggling context into a preamble — 'In BrowserStack project PR-20' injects `browserstack` and `pr` as routing vocabulary, and `pr` is an alias on tm's project entity, so the gate stops firing and every ambiguous case passes for the wrong reason.",

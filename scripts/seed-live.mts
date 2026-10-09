@@ -928,7 +928,10 @@ async function main() {
             shared_step_id: pool.gaps.shared_step,
           },
           body: {
-            shared_step_details: [{ step: "probe step", result: "probe result" }],
+            title: "__probe-shared-step",
+            shared_step_details: [
+              { step: "probe step", result: "probe result", order: 1 },
+            ],
           },
         },
         "reset the shared step's text, so the update eval asserts on its own write",

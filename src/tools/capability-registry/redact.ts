@@ -85,10 +85,6 @@ export const MAX_LENGTH = 512;
 /**
  * Returns the text with shape-identifiable PII replaced, capped at `maxLength`.
  *
- * `maxLength` exists for agent feedback, whose value is its repro detail; every other
- * caller keeps the default. A larger cap lets more unshaped detail through, so raise it
- * only where the field is useless without the length.
- *
  * FAILS CLOSED: any throw returns undefined, so the caller records no field rather than
  * the raw value. Non-string and empty input yields undefined for the same reason.
  */
@@ -116,29 +112,15 @@ export function redact(
 /** The rule names, for documenting what is covered. */
 export const REDACTED_TYPES = RULES.map((r) => r.name);
 
-/**
- * Extra rules for agent feedback, run BEFORE `RULES`.
- *
- * Feedback is a free-form report, so the agent copies whatever blocked it: a failed login
- * from an auth config, a log line, a scanned URL. Those carry secrets too short for
- * `opaque_token` and card numbers the `phone` rule half-matches. Unlike `RULES` these do
- * use a few labels (`password`, `api_key`, `otp`): a short secret has no shape, only the
- * word in front of it.
- */
 interface FeedbackRule {
   name: string;
   pattern: RegExp;
   replacement: string | ((match: string, ...groups: string[]) => string);
 }
 
-/** Labels that may take a bare space before the value ("password Hunter2!"). */
 const BARE_SECRET_LABEL = /^(password|passwd|pwd|passphrase|bearer)$/i;
 
 const FEEDBACK_RULES: FeedbackRule[] = [
-  // A value after a secret label, at any length. After `:` or `=` any value goes. After a
-  // bare space only `password`/`bearer`-style labels count, and only when the value has a
-  // digit or symbol — so "password Hunter2!" is redacted but "password reset page" and
-  // "token expired" survive. A letters-only password after a bare space still passes.
   {
     name: "labelled_secret",
     pattern:
@@ -150,23 +132,17 @@ const FEEDBACK_RULES: FeedbackRule[] = [
       return explicit || bare ? `${label}${sep}[secret]` : match;
     },
   },
-  // 13–19 digits with optional space/dash groups: card numbers. Before `phone`, which
-  // would otherwise take the first groups and leave the tail.
   {
     name: "card",
     pattern: /\b\d(?:[ -]?\d){12,18}\b/g,
     replacement: "[card]",
   },
-  // One-time codes. 4–8 digits after the label; "status code 500" keeps its 3 digits and
-  // "error code 1001" is spared by the lookbehind.
   {
     name: "otp",
     pattern:
       /\b(otp|pin|passcode|(?<!(?:status|error|exit|response|http)\s)code)(\s*[:=]?\s*)\d{4,8}\b/gi,
     replacement: "$1$2[code]",
   },
-  // Query strings and fragments carry customer ids and tokens; scheme, host and path stay
-  // so the report still says which page failed.
   {
     name: "url_query",
     pattern: /\b(https?:\/\/[^\s?#]+)[?#]\S*/gi,
@@ -174,13 +150,8 @@ const FEEDBACK_RULES: FeedbackRule[] = [
   },
 ];
 
-/** The feedback-only rule names, for documenting what is covered. */
 export const FEEDBACK_REDACTED_TYPES = FEEDBACK_RULES.map((r) => r.name);
 
-/**
- * `redact` plus `FEEDBACK_RULES`. Same guarantees: fails closed to undefined, capped at
- * `maxLength`. Names, addresses and internal hostnames still pass, as with `redact`.
- */
 export function redactFeedback(
   text: unknown,
   maxLength: number = MAX_LENGTH,

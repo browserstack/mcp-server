@@ -33,7 +33,6 @@ const rows = () =>
     (c: any) => c[0].body.event_properties,
   );
 
-/** Runs submitFeedback the way the server does: inside the latency wrapper. */
 async function callFeedback(args: any) {
   const tools = {
     submitFeedback: {
@@ -101,7 +100,6 @@ describe("submitFeedback", () => {
   it("omits absent optional fields instead of sending nulls", async () => {
     await callFeedback({ message: "Positive: worked well.", category: "positive" });
 
-    // What actually goes on the wire.
     const sent = JSON.parse(JSON.stringify(rows()[0]));
     expect(sent).not.toHaveProperty("feedback_tool");
     expect(sent).not.toHaveProperty("feedback_intent");

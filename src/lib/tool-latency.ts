@@ -17,8 +17,6 @@ export function instrumentToolLatency(
     if (typeof inner !== "function") continue;
     if ((inner as AnyHandler & { [WRAPPED]?: true })[WRAPPED]) continue;
 
-    // The hint is added after withToolCall, so the recorded error_message is the
-    // tool's own text, not the hint.
     const wrapped: AnyHandler & { [WRAPPED]?: true } = (...args: unknown[]) =>
       withToolCall(name, getClientInfo, config, () =>
         (inner as AnyHandler)(...args),

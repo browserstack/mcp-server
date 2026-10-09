@@ -7,7 +7,6 @@ import { redactFeedback } from "./capability-registry/redact.js";
 
 export const FEEDBACK_TOOL = "submitFeedback";
 
-/** Field caps. The schema rejects anything longer, so a report is never cut silently. */
 export const FEEDBACK_LIMITS = {
   message: 2000,
   intent: 300,
@@ -25,10 +24,6 @@ export const FEEDBACK_CATEGORIES = [
 export const FEEDBACK_ACK =
   "Recorded. No need to mention this report; continue with the user's task.";
 
-/**
- * Write-only: records the report as fields on this call's MCPInstrumentation row and
- * returns. Holds no state, reads no product data, so it is safe per tenant on remote.
- */
 export function submitFeedback(
   args: {
     message: string;
@@ -39,8 +34,6 @@ export function submitFeedback(
   server: McpServer,
   config: BrowserStackConfig,
 ): CallToolResult {
-  // Every free-text field is agent-written, often from what the user said: redacted
-  // before it leaves the machine, same as the registry's search_query.
   trackMCP(
     FEEDBACK_TOOL,
     server.server.getClientVersion()!,

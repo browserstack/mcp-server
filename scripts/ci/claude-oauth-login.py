@@ -25,7 +25,7 @@ talks to it through files in a state directory:
     <state>/code      written by the pipeline, from `input` — the authorization code
     <state>/token     written by us  — the oauth token, mode 0600, if the child printed one
     <state>/done      written by us  — "ok" or "failed:<reason>"; the pipeline waits on this
-    <state>/log       written by us  — the whole transcript, REDACTED, written once at exit
+    <state>/log       written by us  — the whole transcript, REDACTED, rewritten as it goes
     <state>/progress  written by us  — our own notes only, live, never any child output
 
 SECRETS. The console log of a Jenkins build is readable by everyone who can see the job,
@@ -35,11 +35,12 @@ which the pipeline reads with `set +x` and never archives. The authorization cod
 operator pastes is a secret too, so it is never echoed back into the log — the pty echoes
 typed input, so that one is not hypothetical.
 
-REDACTION RUNS ONCE, OVER THE WHOLE TRANSCRIPT. A pty read returns whatever has arrived,
-so a token written in two flushes lands in two reads, and a pattern checked per read
-matches neither half — which published the credential in pieces. Everything the child
-writes is accumulated and redacted together at exit, where there is no boundary to
-straddle. For the same reason the token is resolved from the complete output at the end,
+REDACTION RUNS OVER THE WHOLE TRANSCRIPT, EVERY TIME. A pty read returns whatever has
+arrived, so a token written in two flushes lands in two reads, and a pattern checked per
+read matches neither half — which published the credential in pieces. So nothing is ever
+appended: the log file is REWRITTEN from the complete buffer, redacted in one pass, every
+couple of seconds and once more at exit. There is no boundary to straddle, and a driver
+that gets killed still leaves everything it saw. For the same reason the token is resolved from the complete output at the end,
 not the first time something looked token-shaped: the first partial match used to latch,
 and the saved token was then a truncated string that authenticated nothing.
 
@@ -133,9 +134,18 @@ def main() -> int:
     # when the run ends, because a secret can straddle any two reads.
     transcript: list[str] = []
 
+    def write_log() -> None:
+        """The whole buffer, redacted in one pass. Never an append — see the module docstring."""
+        try:
+            with open(paths["log"], "w") as fh:
+                fh.write(redact("".join(transcript)))
+        except OSError:
+            pass  # a transcript we could not write must not end the login
+
     def note(text: str) -> None:
         transcript.append(text)
         progress.write(text)
+        write_log()
 
     def finish(status: str, seen: str = "") -> int:
         # The token, decided now rather than mid-stream: the longest token-shaped string in
@@ -150,12 +160,19 @@ def main() -> int:
             with os.fdopen(fd, "w") as fh:
                 fh.write(token)
             note("\n--- captured an oauth token; written to the state dir ---\n")
-        with open(paths["log"], "w") as fh:
-            fh.write(redact("".join(transcript)))
+        write_log()
         progress.flush()
         with open(paths["done"], "w") as fh:
             fh.write(status)
         return 0 if status == "ok" else 1
+
+    # failFast in the job kills this process when the operator side gives up, and that is
+    # exactly when its transcript matters most. Flush and go.
+    def on_term(_signum: int, _frame: object) -> None:
+        note("\n--- terminated by signal; transcript flushed ---\n")
+        raise SystemExit(143)
+
+    signal.signal(signal.SIGTERM, on_term)
 
     master, slave = pty.openpty()
     # A narrow terminal wraps the login URL across lines and the regex then picks up half
@@ -186,6 +203,7 @@ def main() -> int:
     code_sent = False
     nudged = False
     started = time.monotonic()
+    last_flush = 0.0
 
     while True:
         if time.monotonic() - started > args.timeout:
@@ -206,9 +224,12 @@ def main() -> int:
                 break
             text = ANSI.sub("", chunk.decode("utf-8", "replace"))
             seen += text
-            # Buffered, never written through: redaction happens once at the end, over all
-            # of it, so no secret can hide in the seam between two reads.
+            # Buffered. The log is rewritten from the whole buffer below rather than
+            # appended to, so no secret can hide in the seam between two reads.
             transcript.append(text)
+            if time.monotonic() - last_flush > 2.0:
+                write_log()
+                last_flush = time.monotonic()
 
             if not url_written:
                 url = pick_url(seen)

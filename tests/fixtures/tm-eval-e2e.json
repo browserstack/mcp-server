@@ -137,8 +137,11 @@
         "project": "{{project.identifier}}",
         "source": "seeded"
       },
-      "expects": "search_project_entities",
-      "validates": "Scoped search within the given project. Walking every folder and filtering client-side is the wandering behaviour this eval exists to catch; refining a search two or three times is not.",
+      "expects": [
+        "search_project_entities",
+        "search_all_projects"
+      ],
+      "validates": "One scoped search. Either finder is acceptable PROVIDED the search is confined to the given project — search_all_projects with a project filter reaches the same answer by another route. Walking every folder and filtering client-side is the wandering behaviour this eval exists to catch; refining a search two or three times is not.",
       "asserts": [
         "no folder-by-folder enumeration appears in the transcript",
         "the answer names the checkout-related entity found in {{project.identifier}}, drawn from a search response"
@@ -342,8 +345,11 @@
         "source": "swept",
         "writes": true
       },
-      "expects": "create_root_folder",
-      "validates": "Asks before writing, and creates a ROOT folder rather than nesting it under an existing one, which the query does not ask for.",
+      "expects": [
+        "create_root_folder",
+        "create_folder"
+      ],
+      "validates": "Asks before writing, and creates a ROOT folder rather than nesting it under an existing one, which the query does not ask for. Either create reaches that: the v1 capability only makes root folders, and the v2 one makes a root folder when no parent is given. What matters is where the folder ends up, not which route.",
       "asserts": [
         "the agent requested approval before the write",
         "a follow-up read of the root folders shows one named 'Sprint 42 Tests'",
@@ -421,14 +427,17 @@
         "source": "seeded",
         "writes": true
       },
-      "expects": "update_test_run",
-      "validates": "Sends the run's COMPLETE intended membership — the case already in the run PLUS the one being added. The endpoint replaces membership rather than appending to it, so an agent that sends only the new case silently removes the other.",
+      "expects": [
+        "bulk_update_test_run_test_cases",
+        "update_test_run"
+      ],
+      "validates": "Either route is acceptable; what is asserted is that nothing already in the run is lost. bulk_update_test_run_test_cases ADDS, and is the safer choice. update_test_run replaces: its `test_cases` is the run's complete intended membership, so reaching the same outcome through it means sending the existing case AND the new one. An agent that sends only the new case through the replacing route silently removes the other, along with its run row and recorded results.",
       "asserts": [
         "the agent requested approval before the write",
         "a follow-up read shows the run contains BOTH {{scratch.case}} and {{readonly.cases.0}}",
         "FIELD PRESERVATION: the result already recorded against {{scratch.case}} in this run survives"
       ],
-      "why": "P0, and the sharpest trap in the suite. 'Add' is the user's word; the API has no add — `test_cases` is the complete intended list, and anything missing from it is removed along with its run row and recorded results. An agent that reads the word 'add' literally destroys data and returns 200. The middle assert alone would pass if the agent replaced membership with both ids; the preservation assert is what catches a remove-then-re-add.",
+      "why": "P0, and the case most likely to catch a destructive mistake. The user's word is 'add'; one capability adds and one replaces, and they are neighbours in the index. The first run of this case found the fixture wrong rather than the agent: it asserted 'the API has no add', which is false — the slave chose the incremental capability, kept everything, and was marked down for not using the one that could have destroyed data. Scoring the safer choice as a miss is how an eval teaches the wrong lesson. The asserts are on the OUTCOME, so either route passes when nothing is lost, and the trap only springs on the replacing route used carelessly.",
       "pre_run": "Read the run's membership and the results recorded on {{scratch.case}} BEFORE spawning.",
       "cleanup": "The seeder resets this run's membership to the scratch case alone before each run, so 'both are present' can only be true if THIS run added one."
     },
@@ -456,5 +465,6 @@
   ],
   "note_on_queries": "Queries are the customer's words and name NO product. The master answers when a slave asks which product is meant, which is the behaviour half these cases exist to measure. Naming the product up front suppresses the clash gate entirely; so does smuggling context into a preamble — 'In BrowserStack project PR-20' injects `browserstack` and `pr` as routing vocabulary, and `pr` is an alias on tm's project entity, so the gate stops firing and every ambiguous case passes for the wrong reason.",
   "runner": "Master/slave: the capability-eval skill spawns one `capability-eval-case` subagent per case and answers the questions it hands back. Single-turn runners cannot score a write case, because a write that is never approved never happens.",
-  "repeat_runs": "__readonly__ is never mutated, so read cases are stable indefinitely and re-seeding between runs is unnecessary — the seeder is idempotent and cheap, but it only fills what is missing. __scratch__ ACCUMULATES: the write case adds a comment every run and tm has no comment delete. Expect that residue, assert on the difference rather than on presence, and if the scratch folder ever needs a clean slate, create a new scratch case rather than trying to delete the old one."
+  "repeat_runs": "__readonly__ is never mutated, so read cases are stable indefinitely and re-seeding between runs is unnecessary — the seeder is idempotent and cheap, but it only fills what is missing. __scratch__ ACCUMULATES: the write case adds a comment every run and tm has no comment delete. Expect that residue, assert on the difference rather than on presence, and if the scratch folder ever needs a clean slate, create a new scratch case rather than trying to delete the old one.",
+  "note_on_expects": "`expects` may be a single capability or a LIST of genuine siblings. Three cases in the first full run of the expanded set reached the right outcome through a neighbouring capability and were scored PARTIAL for it — including one where the agent picked the SAFER of two routes. A capability name is a proxy for the behaviour being measured, and when two names are both correct, insisting on one measures the fixture's opinion rather than the agent. Where only one capability is right, `expects` stays a single name."
 }

@@ -36,6 +36,10 @@ const PUBLISHED = new Set<string>(
 );
 const cases: any[] = FIXTURE.cases;
 
+/** `expects` is one capability, or a list of siblings that are all correct for the case. */
+const expectedNames = (c: any): string[] =>
+  Array.isArray(c.expects) ? c.expects : [c.expects];
+
 describe("the tm eval fixture describes things that exist", () => {
   it("has cases", () => {
     expect(cases.length).toBeGreaterThan(0);
@@ -44,9 +48,13 @@ describe("the tm eval fixture describes things that exist", () => {
   it("expects a capability the registry actually publishes", () => {
     // `__ask_the_user__` is the one legitimate non-capability: some cases are passed by
     // asking rather than by calling anything.
-    const unknown = cases
-      .filter((c) => c.expects !== "__ask_the_user__" && !PUBLISHED.has(c.expects))
-      .map((c) => `${c.id} -> ${c.expects}`);
+    // `expects` may be a LIST where two capabilities are genuine siblings — see
+    // note_on_expects in the fixture. Every name in it still has to exist.
+    const unknown = cases.flatMap((c) =>
+      expectedNames(c)
+        .filter((n) => n !== "__ask_the_user__" && !PUBLISHED.has(n))
+        .map((n) => `${c.id} -> ${n}`),
+    );
     expect(unknown).toEqual([]);
   });
 
@@ -71,7 +79,11 @@ describe("the tm eval fixture describes things that exist", () => {
 
   it("gives every case an id, a query, and something to check", () => {
     const thin = cases
-      .filter((c) => !c.id || !c.query || !c.expects || !(c.asserts?.length > 0))
+      .filter(
+        (c) =>
+          !c.id || !c.query || expectedNames(c).length === 0 || !c.expects ||
+          !(c.asserts?.length > 0),
+      )
       .map((c) => c.id ?? "<no id>");
     expect(thin).toEqual([]);
   });
@@ -86,8 +98,11 @@ describe("the tm eval fixture describes things that exist", () => {
   });
 
   it("marks every write case as one, so the master knows to expect an approval", () => {
-    const writes = cases.filter((c) => PUBLISHED.has(c.expects) &&
-      INDEX.tm.capabilities.find((x: any) => x.name === c.expects)?.mode === "write");
+    const modeOf = (n: string) =>
+      INDEX.tm.capabilities.find((x: any) => x.name === n)?.mode;
+    const writes = cases.filter((c) =>
+      expectedNames(c).some((n) => modeOf(n) === "write"),
+    );
     for (const c of writes) {
       expect(c.setup?.writes, `${c.id} invokes a write capability`).toBe(true);
       expect(
@@ -102,7 +117,10 @@ describe("the tm eval fixture describes things that exist", () => {
     // discover otherwise. Three P0 workflows in the source sheet are destructive — bulk
     // delete cases, bulk delete results, delete a folder — and are deliberately not here.
     const destructive = cases.filter((c) =>
-      INDEX.tm.capabilities.find((x: any) => x.name === c.expects)?.mode === "destructive",
+      expectedNames(c).some(
+        (n) =>
+          INDEX.tm.capabilities.find((x: any) => x.name === n)?.mode === "destructive",
+      ),
     );
     expect(destructive.map((c) => c.id)).toEqual([]);
   });

@@ -1,4 +1,4 @@
-"""Drive `claude setup-token` from CI, where there is a TTY-less runner and a human.
+"""Drive an interactive `claude` login from CI, where there is a TTY-less runner and a human.
 
 It lives beside the eval runner rather than in the CI repo for two reasons. A Jenkinsfile
 cannot carry it inline — Groovy unescapes its own triple-quoted strings, and this file is
@@ -6,11 +6,17 @@ full of regex backslashes that a Groovy literal either eats or refuses to compil
 keeping it here means the branch under test carries its own login driver, so changing it
 is the same review as changing the eval it serves.
 
-THE PROBLEM. `claude setup-token` is an interactive terminal UI: it prints a login URL,
-waits for the human to approve in a browser, and then reads the authorization code from a
+THE PROBLEM. `claude login` is an interactive terminal UI: it prints a login URL, waits
+for the human to approve in a browser, and then reads the authorization code from a
 terminal prompt. A Jenkins `sh` step gives it neither a TTY nor a human, and a pipeline
 `input` step cannot type into a running process — `sh` blocks until the process exits, so
 by the time the pipeline could ask for the code, the thing waiting for it is gone.
+
+WHY `login` AND NOT `setup-token`. setup-token mints a long-lived credential; the whole
+point of it is to keep working after the session that made it has gone, which is the
+opposite of what a build wants. A login is a session this run uses and the job revokes on
+its way out. The subcommand is an argument rather than a constant because which one you
+want is a property of the run, not of this file.
 
 THE SHAPE. This script is the process that waits. The pipeline launches it detached, then
 talks to it through files in a state directory:
@@ -23,7 +29,7 @@ talks to it through files in a state directory:
     <state>/progress  written by us  — our own notes only, live, never any child output
 
 SECRETS. The console log of a Jenkins build is readable by everyone who can see the job,
-and `claude setup-token` prints the token it just minted. Anything matching an Anthropic
+and a login can print a credential on its way through. Anything matching an Anthropic
 key shape is replaced with a placeholder in <state>/log and written only to <state>/token,
 which the pipeline reads with `set +x` and never archives. The authorization code the
 operator pastes is a secret too, so it is never echoed back into the log — the pty echoes
@@ -91,6 +97,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--state-dir", required=True)
     ap.add_argument("--claude", default="claude", help="path to the claude CLI")
+    ap.add_argument(
+        "--command",
+        default="login",
+        help="claude subcommand to drive; `login` for a session this build gives back, "
+        "`setup-token` for a long-lived credential",
+    )
     ap.add_argument("--timeout", type=int, default=900, help="seconds for the whole flow")
     ap.add_argument(
         "--nudge-after",
@@ -156,7 +168,7 @@ def main() -> int:
 
     try:
         child = subprocess.Popen(
-            [args.claude, "setup-token"],
+            [args.claude, args.command],
             stdin=slave,
             stdout=slave,
             stderr=slave,
@@ -238,9 +250,10 @@ def main() -> int:
     if not url_written:
         return finish("failed:no-login-url", seen)
     if not SECRET.search(seen):
-        # The CLI may store the credential in the config dir without printing it. That is
-        # still a usable login for a later stage in the same pod, so it is not a failure —
-        # but say which happened, because the two are debugged differently.
+        # `login` normally stores the credential in the config dir rather than printing
+        # it, so this is the usual path, not an error: the later stages in this pod are
+        # authenticated by that stored session. Say which happened all the same, because
+        # a missing token and a stored one are debugged differently.
         note("\n--- no token in the output; relying on the CLI's stored credential ---\n")
     return finish(
         "ok" if child.returncode == 0 else f"failed:exit-{child.returncode}", seen

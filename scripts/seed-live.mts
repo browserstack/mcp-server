@@ -75,6 +75,8 @@ const SCRATCH_RUN_NAME = "probe scratch run";
 const CHURN_FOLDER = "Sprint 42 Tests";
 const CHURN_RUN = "Sprint 42 Regression";
 const CHURN_SHARED_STEP = "Login as Admin";
+/** The seeded shared step, addressed by title like everything else — see below. */
+const SHARED_STEP_NAME = "__probe-shared-step";
 
 // Preprod, with the credentials already configured for the local MCP server. Pinned here
 // rather than read from the environment so a stray shell variable cannot point a seeding
@@ -448,8 +450,11 @@ async function main() {
     path_params: { project_id: pid },
   });
   for (const step of (
+    // The listing publishes a BARE ARRAY under `data`, not `data.shared_steps` as every
+    // sibling listing does. Reading the wrong key made this sweep match nothing, so the
+    // create-a-shared-field case's output was never removed.
+    churnSteps.body?.data ??
     churnSteps.body?.shared_steps ??
-    churnSteps.body?.data?.shared_steps ??
     []
     // `create_shared_step` takes `title`; the listing is not consistent about which it
     // publishes, and a sweep that matches the wrong key is a cleanup that quietly does nothing.
@@ -736,6 +741,40 @@ async function main() {
     );
   }
 
+  // 5c. RESET THE SCRATCH RUN'S MEMBERSHIP, for the add-cases-to-a-run case.
+  //
+  // That case asks for a case to be ADDED and asserts both it and the original are present.
+  // Left alone, the second run starts with both already there and the assert passes without
+  // the agent doing anything — the same way the priority assert decayed. The run is reset to
+  // exactly the scratch case so "both are present" can only be true if this run added one.
+  //
+  // Removing a case removes its run row, so the reset is ordered BEFORE nothing else depends
+  // on it and the scratch case — which carries the seeded result — is always the one kept.
+  const runMembers = await call("list_test_run_test_cases", {
+    path_params: { project_id: pref, test_run_id: pool.scratch.run },
+  });
+  const memberIds = (runMembers.body?.test_cases ?? []).map(
+    (c: any) => c.identifier,
+  );
+  const wanted = pool.scratch.case ? [pool.scratch.case] : [];
+  if (memberIds.length !== wanted.length || memberIds.some((m: string) => !wanted.includes(m))) {
+    const reset = await write(
+      "update_test_run",
+      {
+        path_params: { project_id: pref, test_run_id: pool.scratch.run },
+        body: { test_cases: wanted },
+      },
+      "reset the scratch run's membership, so the add-cases eval asserts on its own write",
+    );
+    console.log(
+      ok(reset.status)
+        ? `  run members  RESET    ${memberIds.join(", ") || "(empty)"} -> ${wanted.join(", ")}`
+        : `  run members  FAILED   ${reset.status}`,
+    );
+  } else {
+    console.log(`  run members  FOUND    ${memberIds.join(", ")} in ${pool.scratch.run}`);
+  }
+
   // ---- the three gaps that left four capabilities UNVERIFIED -------------------------
   //
   // Each is a capability the probes could reach but could not JUDGE: a clean 200 with an
@@ -858,10 +897,50 @@ async function main() {
   const steps = await call("get_shared_steps", {
     path_params: { project_id: pool.project.id },
   });
-  const existingStep = (steps.body?.shared_steps ?? steps.body?.data ?? [])[0];
+  // BY TITLE, not by position. `[0]` meant this gap pointed at whichever shared step sorted
+  // first — and once the create-a-shared-field case had run, that was ITS output rather than
+  // the seeded one, so the reset below rewrote the wrong object and the pool recorded an id
+  // the next sweep would delete.
+  const allSteps = (steps.body?.data ?? steps.body?.shared_steps ?? []) as any[];
+  const existingStep = allSteps.find(
+    (st: any) => (st.title ?? st.name) === SHARED_STEP_NAME,
+  );
   if (existingStep) {
     pool.gaps.shared_step = existingStep.id ?? existingStep.identifier;
     console.log(`  shared step  FOUND    ${pool.gaps.shared_step}`);
+
+    // Reset its one step, for the update-a-shared-field case — which rewrites that text and
+    // asserts the rewrite landed. Without a reset the assert is satisfied by the previous
+    // run's write, exactly as the priority and run-membership asserts were.
+    const current = await call("get_shared_step", {
+      path_params: {
+        project_id: pool.project.id,
+        shared_step_id: pool.gaps.shared_step,
+      },
+    });
+    const detail = (current.body?.data?.shared_step_details ?? [])[0];
+    if (detail && (detail.step !== "probe step" || detail.result !== "probe result")) {
+      const reset = await write(
+        "update_shared_step",
+        {
+          path_params: {
+            project_id: pool.project.id,
+            shared_step_id: pool.gaps.shared_step,
+          },
+          body: {
+            shared_step_details: [{ step: "probe step", result: "probe result" }],
+          },
+        },
+        "reset the shared step's text, so the update eval asserts on its own write",
+      );
+      console.log(
+        ok(reset.status)
+          ? `  shared text  RESET    -> "probe step" on ${pool.gaps.shared_step}`
+          : `  shared text  FAILED   ${reset.status}`,
+      );
+    } else if (detail) {
+      console.log(`  shared text  FOUND    "probe step" on ${pool.gaps.shared_step}`);
+    }
   } else {
     const made = await write(
       "create_shared_step",

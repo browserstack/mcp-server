@@ -409,6 +409,49 @@
       ],
       "why": "P0, and a shape test. The body field is `title` while almost every sibling capability calls it `name`, and the steps are a nested array — an agent that flattens the request into a title produces a shared step that reads correctly and is useless to embed.",
       "cleanup": "Swept by the seeder before the next run, by exact name, inside a project that holds nothing anybody authored. The eval agent cannot clean up after itself — the registry refuses destructive capabilities outright — so creates are only safe to test because the fixture builder removes them out of band."
+    },
+    {
+      "id": "TM-E2E-23",
+      "workflow": "Add test cases to a run",
+      "query": "add {{readonly.cases.0}} to the run {{scratch.run}} in project {{project.identifier}}",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "test_run": "{{scratch.run}}",
+        "test_case": "{{readonly.cases.0}}",
+        "source": "seeded",
+        "writes": true
+      },
+      "expects": "update_test_run",
+      "validates": "Sends the run's COMPLETE intended membership — the case already in the run PLUS the one being added. The endpoint replaces membership rather than appending to it, so an agent that sends only the new case silently removes the other.",
+      "asserts": [
+        "the agent requested approval before the write",
+        "a follow-up read shows the run contains BOTH {{scratch.case}} and {{readonly.cases.0}}",
+        "FIELD PRESERVATION: the result already recorded against {{scratch.case}} in this run survives"
+      ],
+      "why": "P0, and the sharpest trap in the suite. 'Add' is the user's word; the API has no add — `test_cases` is the complete intended list, and anything missing from it is removed along with its run row and recorded results. An agent that reads the word 'add' literally destroys data and returns 200. The middle assert alone would pass if the agent replaced membership with both ids; the preservation assert is what catches a remove-then-re-add.",
+      "pre_run": "Read the run's membership and the results recorded on {{scratch.case}} BEFORE spawning.",
+      "cleanup": "The seeder resets this run's membership to the scratch case alone before each run, so 'both are present' can only be true if THIS run added one."
+    },
+    {
+      "id": "TM-E2E-24",
+      "workflow": "Update a shared field",
+      "query": "change the shared step {{gaps.shared_step}} in project {{project.identifier}} so its step reads 'log in as an administrator'",
+      "setup": {
+        "project": "{{project.identifier}}",
+        "shared_step": "{{gaps.shared_step}}",
+        "source": "seeded",
+        "writes": true
+      },
+      "expects": "update_shared_step",
+      "validates": "Rewrites the step text and leaves the title alone. The body field for the title is `title`, not `name`, and sending the step text into the wrong field is the likely failure.",
+      "asserts": [
+        "the agent requested approval before the write",
+        "a follow-up read shows the step text reads 'log in as an administrator'",
+        "FIELD PRESERVATION: the shared step's title is unchanged"
+      ],
+      "why": "P0. A shared step is embedded in every case that uses it, so an edit propagates — which makes a write that lands in the wrong field worse here than almost anywhere else. The seeder resets the text before each run so the assert cannot be satisfied by the previous run's write.",
+      "pre_run": "Read {{gaps.shared_step}} BEFORE spawning and keep its title and step text.",
+      "cleanup": "The seeder resets the step text to 'probe step' before each run."
     }
   ],
   "note_on_queries": "Queries are the customer's words and name NO product. The master answers when a slave asks which product is meant, which is the behaviour half these cases exist to measure. Naming the product up front suppresses the clash gate entirely; so does smuggling context into a preamble — 'In BrowserStack project PR-20' injects `browserstack` and `pr` as routing vocabulary, and `pr` is an alias on tm's project entity, so the gate stops firing and every ambiguous case passes for the wrong reason.",

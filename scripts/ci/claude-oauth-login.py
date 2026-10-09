@@ -89,12 +89,16 @@ def redact(text: str) -> str:
 
 
 def pick_url(text: str) -> str | None:
-    """The login URL, not whatever else the banner happens to print."""
+    """The login URL, not whatever else the banner happens to print.
+
+    Matched on the OAuth authorize path rather than the host. The first version of this
+    required claude.ai or anthropic.com and silently ignored the real one, which is served
+    from claude.com — the URL was right there in the transcript while the job timed out
+    waiting for it. Hosts move; `/oauth/authorize` with a client_id is what the thing IS.
+    """
     for candidate in URL.findall(text):
         candidate = candidate.rstrip(".,)]}")
-        if ("claude.ai" in candidate or "anthropic.com" in candidate) and (
-            "oauth" in candidate or "authorize" in candidate or "login" in candidate
-        ):
+        if "/oauth/authorize" in candidate and "client_id=" in candidate:
             return candidate
     return None
 
@@ -113,9 +117,11 @@ def main() -> int:
     ap.add_argument(
         "--nudge-after",
         type=int,
-        default=10,
-        help="seconds to wait for a URL before sending one Enter, in case the CLI opened "
-        "on a confirmation screen rather than printing straight away",
+        default=0,
+        help="seconds to wait before sending one Enter when the child has printed NOTHING "
+        "AT ALL, for a CLI that opens on a confirmation screen. 0 disables it. Off by "
+        "default: an Enter sent while a code prompt is waiting submits an empty code, "
+        "which is how this broke a login that was otherwise working",
     )
     args = ap.parse_args()
 
@@ -255,9 +261,16 @@ def main() -> int:
                 code_sent = True
                 note("\n--- authorization code submitted ---\n")
 
-        # Some builds of the CLI open on a confirmation screen and print the URL only
-        # after an Enter. One nudge, once, and only while nothing has appeared yet.
-        if not url_written and not nudged and time.monotonic() - started > args.nudge_after:
+        # One nudge, once, and ONLY if the child has said nothing at all. "No URL yet" is
+        # not the same condition: the CLI prints its URL and then waits on a code prompt,
+        # where an Enter is an empty code submission — which is exactly how a nudge meant
+        # to help turned a working login into "Invalid code".
+        if (
+            args.nudge_after > 0
+            and not seen.strip()
+            and not nudged
+            and time.monotonic() - started > args.nudge_after
+        ):
             os.write(master, b"\r")
             nudged = True
             note("\n--- no URL yet; sent one Enter in case a prompt is waiting ---\n")

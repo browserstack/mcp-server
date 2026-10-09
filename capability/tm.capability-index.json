@@ -9539,13 +9539,13 @@
             "type": "integer",
             "minimum": 1,
             "default": 30,
-            "description": "Rows per page. `count` is an accepted alias and `count` WINS when both are sent. Forwarded unchanged to the backing service, which owns the real ceiling — nothing bounds it here."
+            "description": "Rows per page. `count` is an accepted alias and `count` WINS when both are sent. Forwarded unchanged to the backing service, WHICH IGNORES IT — the full catalogue comes back whatever you send. Narrow with `q` or `ids` instead; see guidance."
           },
           {
             "name": "count",
             "type": "integer",
             "minimum": 1,
-            "description": "Alias for `per_page`, and the one that wins when both are sent."
+            "description": "Alias for `per_page`, and the one that wins when both are sent. Ignored downstream exactly as `per_page` is — the full catalogue comes back whatever you send. Narrow with `q` or `ids`."
           },
           {
             "name": "ids",
@@ -9582,7 +9582,7 @@
           "Alias pairs and which one wins: q beats name, p beats page, count beats per_page. Only `p` is validated, so a typo'd `page` is forwarded and ignored rather than rejected.",
           "Rows carry os, os_version, device, browser, browser_version and is_valid_on_bstack in addition to id/name/group_id/record_status/is_suggested — more than the Configuration schema in this index describes. `is_valid_on_bstack` is what tells you the combination is still runnable on BrowserStack.",
           "Carry `id` from the row: the run APIs take configuration ids, not names or objects.",
-          "Paged via `info` {page, page_size, count, prev, next}; stop when `next` is null.",
+          "PAGING DOES NOT BOUND THIS CALL, whatever `info` says. `count` and `per_page` are accepted and ignored: an unfiltered call returns the group's entire configuration catalogue in a single response, which can be large enough to overflow a caller's output limit. `info` then reports `page_size` equal to the total with `next: null`, describing that whole dump as a correctly paged single page — so `next` cannot be used to tell whether more remains. Narrow with `q` or `ids`, which ARE honoured, rather than with a page size.",
           "Requires test_run_view — configurations are gated on the test-run permissions, not the test-case ones."
         ],
         "paginated": true

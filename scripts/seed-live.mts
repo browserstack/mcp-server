@@ -12,8 +12,11 @@
  *   npm run seed:live            resolve, seed, write the pool
  *   npm run seed:live -- --show  print the existing pool and exit
  *
- * IDEMPOTENT. Re-running finds the fixture project by name rather than creating a second
- * one, and only fills in the parts of the scaffold that are missing.
+ * IDEMPOTENT, AND IT HAS TO BE BY NAME. Re-running finds every fixture object by its name
+ * and only creates what is genuinely absent. The pool file is NOT the source of truth for
+ * what exists: it is gitignored, so a fresh checkout (CI) starts with no pool, and anything
+ * guarded only by `if (!pool.x)` gets created a second time on that account. Objects this
+ * seeder cannot delete then accumulate forever. Guard on a name lookup, not on the pool.
  *
  * THE PROJECT IS PERMANENT. tm exposes no project delete or rename — `update_project_settings`
  * is the only project write — so whatever this creates stays forever. That is why it is a
@@ -41,6 +44,16 @@ const PROJECT_NOTE =
 const READONLY = "__readonly__";
 const SCRATCH = "__scratch__";
 
+/** EVERY FIXTURE OBJECT IS ADDRESSED BY NAME, never by position in a listing. See section 3. */
+const CASE_A = "probe case A";
+const CASE_B = "probe case B";
+const BDD_CASE = "__probe-bdd-case";
+const SCRATCH_CASE = "Checkout flow";
+/** FIXED, not time-stamped: the throwaway has to be findable on the next run. */
+const BIN_CASE_PREFIX = "__probe-bin-";
+const PLAN_NAME = "probe plan";
+const RUN_NAME = "probe run";
+
 // Preprod, with the credentials already configured for the local MCP server. Pinned here
 // rather than read from the environment so a stray shell variable cannot point a seeding
 // run — which CREATES data — at production.
@@ -63,8 +76,26 @@ function requireBaseUrl(): string {
   return url;
 }
 
-const ENV = "preprod";
+/**
+ * Which environment this run is seeding, derived from the host rather than assumed.
+ *
+ * It used to be pinned to "preprod" so a stray shell variable could not point a run that
+ * CREATES data at production. That guard was right about the risk and wrong about the
+ * remedy: it mislabelled any other host as preprod rather than refusing it, so the pool
+ * recorded an environment the data was never in. Pointing at production is now possible
+ * and must be DELIBERATE — an explicit opt-in on top of the host, so no single misspelled
+ * variable is enough.
+ */
 const BASE_URL = requireBaseUrl();
+const PRODUCTION = /(^|\/\/)(test-management|api)\.browserstack\.com/.test(BASE_URL);
+if (PRODUCTION && process.env.TM_LIVE_ALLOW_PRODUCTION !== "1") {
+  throw new Error(
+    `${BASE_URL} is production. This script CREATES data, and the project it creates ` +
+      "cannot be deleted or renamed afterwards. Set TM_LIVE_ALLOW_PRODUCTION=1 to say so " +
+      "deliberately.",
+  );
+}
+const ENV = PRODUCTION ? "production" : "preprod";
 // NO DEFAULTS. Seeding creates data with whoever's credentials it is handed, so a
 // hardcoded fallback is both a committed secret and a way to write to an account nobody
 // chose. Falls back to the names the server itself already uses, so a shell that can run
@@ -102,7 +133,15 @@ interface Pool {
    *  mix them — resolving it once here is five failed calls nobody else has to make. */
   project: { id: number; identifier: string; name: string };
   readonly: { folder?: number; cases?: string[]; plan?: string; run?: string };
-  scratch: { folder?: number };
+  scratch: { folder?: number; case?: string };
+  /** The objects no ordinary create can reach — each one closed a capability that probed
+   *  UNVERIFIED. Optional because some cannot be seeded with every account's permissions. */
+  gaps?: {
+    binned_case?: number | string | null;
+    shared_step?: number | string | null;
+    bdd_case?: string | null;
+    attachment?: number | string | null;
+  };
   seeded_at: string;
 }
 
@@ -216,6 +255,11 @@ async function raw(
   return fetchTransport()(method, `${base}${path}`, headers, {}, body);
 }
 
+/** Hoisted to module scope: the find-or-create steps above run long before the gap-seeding
+ *  block where this used to be declared, and a `const` read from earlier in the same scope
+ *  is a temporal-dead-zone crash, not a type complaint. */
+const ok = (status: number) => status >= 200 && status < 300;
+
 function die(step: string, detail: unknown, status?: number): never {
   console.error(
     `\nseed failed at: ${step}${status !== undefined ? `  (HTTP ${status})` : ""}`,
@@ -318,63 +362,102 @@ async function main() {
     console.log(`  ${name.padEnd(12)} CREATED  id ${id}`);
   }
 
-  // 3. READ-ONLY TEST CASES. `create_test_case_by_integer_id` publishes no body at all — its spec
-  //    declares no requestBody — so the bulk endpoint is the only usable create.
-  // SCOPED TO __readonly__, NOT all_folders. Listing every folder picked up whatever was
-  // newest in the project — which, once this seeder started creating a throwaway case per
-  // run to populate the recycle bin, meant `readonly.cases` was routinely a DELETED case
-  // from a previous run sitting in __scratch__. Everything downstream inherited it: the
-  // attachment seed attached a blob to a deleted case, got a 200, and the listing
-  // correctly showed nothing. The pool's own guarantee — that these two cases live in
-  // __readonly__ and are never written to — was quietly untrue.
-  const cases = await call("list_folder_test_cases", {
-    path_params: { project_id: pid, folder_id: pool.readonly.folder },
-  });
-  const have: any[] = cases.body?.test_cases ?? cases.body?.data?.test_cases ?? [];
-  if (have.length >= 2) {
-    pool.readonly.cases = have.slice(0, 2).map((c: any) => c.identifier);
-    console.log(`  cases        FOUND    ${pool.readonly.cases.join(", ")}`);
+  // A LISTING HELPER, because every find-or-create below needs the same two shapes.
+  const listCases = async (folderId?: number) => {
+    const r = await call("list_folder_test_cases", {
+      path_params: { project_id: pid, folder_id: folderId },
+    });
+    return (r.body?.test_cases ?? r.body?.data?.test_cases ?? []) as any[];
+  };
+  // `name` on the way in comes back as `title` on the way out, and the v1 and v2 listings
+  // do not agree on which they publish. Accept either rather than guess.
+  const byName = (rows: any[], name: string) =>
+    rows.find((c: any) => (c.title ?? c.name) === name);
+
+  // 3. READ-ONLY TEST CASES, ADDRESSED BY NAME.
+  //
+  // These used to be "the first two rows the folder listing returns". That is stable only
+  // while nothing else is ever added to __readonly__ — and the BDD case further down is
+  // created in this same folder, so as soon as it appeared the window slid and
+  // `readonly.cases` began pointing at a different pair from one run to the next. Nothing
+  // looked wrong: the pool was well-formed, both ids were real, every probe got its two
+  // cases. But eval cases pinned to `readonly.cases.0` were quietly asserting against
+  // whichever case happened to come back first that day, so a passing run proved nothing.
+  // Names are the only stable handle here, exactly as the project itself is found by name.
+  //
+  // Created one at a time through v2 `create_test_case` rather than the v1 bulk endpoint:
+  // bulk creates the whole batch or nothing, so it cannot repair a fixture that is missing
+  // only one of the two.
+  const readonlyCases: string[] = [];
+  for (const name of [CASE_A, CASE_B]) {
+    const found = byName(await listCases(pool.readonly.folder), name);
+    if (found) {
+      readonlyCases.push(found.identifier);
+      console.log(`  ${name.padEnd(12)} FOUND    ${found.identifier}`);
+      continue;
+    }
+    const made = await write(
+      "create_test_case",
+      {
+        path_params: { project_id: pref, folder_id: pool.readonly.folder },
+        body: { name, template: "test_case_steps" },
+      },
+      `seed the stable read-probe case "${name}"`,
+    );
+    if (!ok(made.status)) die(`create_test_case ${name}`, made.error ?? made.body);
+    // Re-list rather than trust the create response: the identifier is what everything
+    // downstream keys on, and the create body nests it differently between versions.
+    const now = byName(await listCases(pool.readonly.folder), name);
+    if (!now) die(`create_test_case ${name}`, "created, but absent from the folder listing");
+    readonlyCases.push(now.identifier);
+    console.log(`  ${name.padEnd(12)} CREATED  ${now.identifier}`);
+  }
+  pool.readonly.cases = readonlyCases;
+
+  // 3b. THE SCRATCH CASE — the one object write probes and the write eval are allowed to mutate.
+  //
+  // This was previously made by hand, so the pool carried no `scratch.case` and a seeder run
+  // against a clean account produced a fixture the write eval had nothing to target. It lives
+  // in __scratch__ because it gets written to; no read probe asserts on its contents, which is
+  // what makes the accumulating comments it collects harmless.
+  //
+  // Three steps, because the eval's write case asks for a comment about "the third step".
+  const scratchFound = byName(await listCases(pool.scratch.folder), SCRATCH_CASE);
+  if (scratchFound) {
+    pool.scratch.case = scratchFound.identifier;
+    console.log(`  scratch case FOUND    ${pool.scratch.case}`);
   } else {
     const made = await write(
-      "create_bulk_test_cases",
+      "create_test_case",
       {
-        path_params: { project_id: pid, folder_id: pool.readonly.folder },
+        path_params: { project_id: pref, folder_id: pool.scratch.folder },
         body: {
-          test_cases: [
-            {
-              name: "probe case A",
-              test_case_folder_id: String(pool.readonly.folder),
-              template: "test_case_text",
-            },
-            {
-              name: "probe case B",
-              test_case_folder_id: String(pool.readonly.folder),
-              template: "test_case_text",
-            },
+          name: SCRATCH_CASE,
+          template: "test_case_steps",
+          test_case_steps: [
+            { step: "Add an item to the basket", result: "The basket shows one item" },
+            { step: "Open the checkout page", result: "Payment and delivery fields are shown" },
+            { step: "Submit the order", result: "It works" },
           ],
         },
       },
-      "seed two stable test cases for read probes to assert against",
+      "seed the scratch test case that write probes and the write eval mutate",
     );
-    if (made.status >= 300)
-      die("create_bulk_test_cases", made.error ?? made.body);
-    const after = await call("list_test_cases", {
-      path_params: { project_id: pid },
-      query: { all_folders: true },
-    });
-    pool.readonly.cases = (after.body?.test_cases ?? [])
-      .slice(0, 2)
-      .map((c: any) => c.identifier);
-    console.log(
-      `  cases        CREATED  ${(pool.readonly.cases ?? []).join(", ")}`,
-    );
+    if (!ok(made.status))
+      die("create_test_case scratch", made.error ?? made.body);
+    const now = byName(await listCases(pool.scratch.folder), SCRATCH_CASE);
+    if (!now) die("create_test_case scratch", "created, but absent from the folder listing");
+    pool.scratch.case = now.identifier;
+    console.log(`  scratch case CREATED  ${pool.scratch.case}`);
   }
 
   // 4. A PLAN, then 5. A RUN inside it — `test_run` declares `parents: [test_plan, project]`.
   const plans = await call("list_test_plans", {
     path_params: { project_id: pref },
   });
-  const plan = (plans.body?.test_plans ?? [])[0];
+  const plan = (plans.body?.test_plans ?? []).find(
+    (p: any) => p.name === PLAN_NAME,
+  );
   if (plan) {
     pool.readonly.plan = plan.identifier ?? plan.id;
     console.log(`  plan         FOUND    ${pool.readonly.plan}`);
@@ -393,7 +476,9 @@ async function main() {
   const runs = await call("list_test_runs", {
     path_params: { project_id: pref },
   });
-  const run = (runs.body?.test_runs ?? [])[0];
+  const run = (runs.body?.test_runs ?? []).find(
+    (r: any) => r.name === RUN_NAME,
+  );
   if (run) {
     pool.readonly.run = run.identifier;
     console.log(`  run          FOUND    ${pool.readonly.run}`);
@@ -418,6 +503,38 @@ async function main() {
     console.log(`  run          CREATED  ${pool.readonly.run}`);
   }
 
+  // FINDING AN OBJECT IS NOT CHECKING IT STILL MEANS WHAT THE POOL CLAIMS. TR-61 was found by
+  // the lookup above on every single run and reported FOUND while holding zero cases: its
+  // create had carried an empty `test_cases`, and nothing ever looked inside again. The eval
+  // case that asks "which cases are in this run, and who owns each one" then had nothing to
+  // answer from and scored as an agent failure, for a defect that was entirely in the fixture.
+  // Every other find-or-create here checks existence only because existence is all those
+  // objects have; a run also has contents, so the contents get checked too.
+  const inRun = await call("list_test_run_test_cases", {
+    path_params: { project_id: pref, test_run_id: pool.readonly.run },
+  });
+  const inRunCount =
+    inRun.body?.info?.count ?? (inRun.body?.test_cases ?? []).length;
+  if (inRunCount > 0) {
+    console.log(`  run cases    FOUND    ${inRunCount} in ${pool.readonly.run}`);
+  } else {
+    // `test_cases` is the run's COMPLETE intended membership, not an append — which is what
+    // we want here, since the run is empty and the pool's two cases are the whole intent.
+    const filled = await write(
+      "update_test_run",
+      {
+        path_params: { project_id: pref, test_run_id: pool.readonly.run },
+        body: { test_cases: pool.readonly.cases ?? [] },
+      },
+      "populate the empty probe run, so run-scoped read probes have something to read",
+    );
+    console.log(
+      ok(filled.status)
+        ? `  run cases    CREATED  ${(pool.readonly.cases ?? []).join(", ")} in ${pool.readonly.run}`
+        : `  run cases    FAILED   update returned ${filled.status} ${JSON.stringify(filled.error ?? filled.body).slice(0, 120)}`,
+    );
+  }
+
   // ---- the three gaps that left four capabilities UNVERIFIED -------------------------
   //
   // Each is a capability the probes could reach but could not JUDGE: a clean 200 with an
@@ -428,34 +545,51 @@ async function main() {
   // failure, and `status < 300` quietly counts both as a win — which is how this seeder
   // reported "attachment CREATED" for a call that never left the process, having been
   // refused for sending TC-NNN where an integer was required.
-  const ok = (status: number) => status >= 200 && status < 300;
 
   pool.gaps = pool.gaps ?? {};
 
   // A BINNED CASE, for list_binned_test_cases and count_binned_test_cases.
   // Make one to delete rather than deleting anything that already exists.
+  // REUSE THE THROWAWAY, DO NOT MINT ONE PER RUN. The name used to carry `Date.now()`, so it
+  // was unique by construction and could never be found again; the only guard was
+  // `!pool.gaps.binned_case`, which stays falsy forever on an account whose delete returns
+  // 401. Every run therefore created one more undeletable case in __scratch__ — five of them
+  // (TC-468, 470, 472, 474, 475) before this was caught, and in a nightly job that is one
+  // more piece of permanent litter in a production project per night. A fixed prefix makes
+  // the leftover findable, so a later run with working credentials bins the one that already
+  // exists instead of adding to the pile.
   if (!pool.gaps.binned_case) {
-    const made = await write(
-      "create_test_case",
-      {
-        path_params: { project_id: pref, folder_id: pool.scratch.folder },
-        body: { name: `__probe-bin-${Date.now()}` },
-      },
-      "seed a throwaway case, to be deleted so the recycle bin is non-empty",
+    const scratchRows = await listCases(pool.scratch.folder);
+    const leftover = scratchRows.find((r: any) =>
+      String(r.title ?? r.name ?? "").startsWith(BIN_CASE_PREFIX),
     );
-    // v2 creates answer with the TC-NNN identifier and no integer id; bulk-delete takes
-    // `ids` as INTEGERS. The folder listing is what maps one to the other.
-    const ident =
-      made.body?.data?.test_case?.identifier ?? made.body?.test_case?.identifier;
-    let id: number | undefined;
-    if (ident) {
-      const listed = await call("list_folder_test_cases", {
-        path_params: { project_id: pool.project.id, folder_id: pool.scratch.folder },
-      });
-      const rows = listed.body?.test_cases ?? listed.body?.data?.test_cases ?? [];
-      id = rows.find((r: any) => r.identifier === ident)?.id;
+    let ident: string | undefined = leftover?.identifier;
+    let id: number | undefined = leftover?.id;
+    if (leftover) {
+      console.log(`  bin victim   REUSED   ${ident}`);
+    } else {
+      const made = await write(
+        "create_test_case",
+        {
+          path_params: { project_id: pref, folder_id: pool.scratch.folder },
+          body: { name: `${BIN_CASE_PREFIX}victim` },
+        },
+        "seed a throwaway case, to be deleted so the recycle bin is non-empty",
+      );
+      // v2 creates answer with the TC-NNN identifier and no integer id; bulk-delete takes
+      // `ids` as INTEGERS. The folder listing is what maps one to the other.
+      ident =
+        made.body?.data?.test_case?.identifier ?? made.body?.test_case?.identifier;
+      if (ident)
+        id = (await listCases(pool.scratch.folder)).find(
+          (r: any) => r.identifier === ident,
+        )?.id;
+      if (!ok(made.status) || !id)
+        console.log(
+          `  bin victim   SKIPPED  create ${made.status}, identifier ${ident ?? "none"}`,
+        );
     }
-    if (ok(made.status) && id) {
+    if (id) {
       const gone = await raw(
         "POST",
         `/api/v1/projects/${pool.project.id}/test-cases/bulk-delete`,
@@ -472,7 +606,7 @@ async function main() {
       );
     } else {
       console.log(
-        `  binned case  SKIPPED  create ${made.status}, identifier ${ident ?? "none"}, id ${id ?? "unresolved"}`,
+        `  binned case  SKIPPED  no victim resolved (identifier ${ident ?? "none"})`,
       );
     }
   } else {
@@ -542,6 +676,14 @@ async function main() {
   // `feature` and `scenario` (422 if either is blank) while refusing `test_case_steps`
   // rows outright. The two shapes cannot be mixed, which is why this is a separate case
   // rather than a third entry in the bulk call.
+  // GUARDED BY A NAME LOOKUP, NOT BY THE POOL. `if (!pool.gaps.bdd_case)` is only a guard on
+  // an account that already has a pool file — and the pool is gitignored, so CI never does.
+  // Every unattended run therefore minted another BDD case: two runs produced TC-471 and
+  // TC-473 on the shared account, and since tm's delete returns 401 for these credentials,
+  // they cannot be cleaned up. Find it the same way the project is found.
+  const bddFound = byName(await listCases(pool.readonly.folder), BDD_CASE);
+  if (bddFound) pool.gaps.bdd_case = bddFound.identifier;
+
   if (!pool.gaps.bdd_case) {
     const bdd = await write(
       "create_test_case",
@@ -551,7 +693,7 @@ async function main() {
           folder_id: pool.readonly.folder,
         },
         body: {
-          name: "__probe-bdd-case",
+          name: BDD_CASE,
           template: "test_case_bdd",
           feature: "Feature: capability probe\n  Exercises the BDD export validator.",
           scenario:

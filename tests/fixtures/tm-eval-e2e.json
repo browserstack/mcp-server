@@ -27,10 +27,10 @@
       "expects": "list_root_folders",
       "validates": "Scoped to the given project. The agent must not list every project first — the project is in the query.",
       "asserts": [
-        "response contains a folder named __mcp-readonly__",
-        "response contains a folder named __mcp-scratch__"
+        "response contains a folder named __readonly__",
+        "response contains a folder named __scratch__"
       ],
-      "why": "The plainest scoped read. If this fails, nothing below is interpretable."
+      "why": "The plainest scoped read. If this fails, nothing below is interpretable. It asserted on folders named __mcp-readonly__ and __mcp-scratch__ for two full runs and was scored PASS both times — no such folders have ever existed, because the seeder names them __readonly__ and __scratch__. An assert nobody checks is worse than no assert: it reads as coverage. Both figures those runs produced were inflated by one case."
     },
     {
       "id": "TM-E2E-02",

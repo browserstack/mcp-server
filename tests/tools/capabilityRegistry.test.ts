@@ -296,6 +296,29 @@ describe("binding", () => {
     expect(() => coerce("nope", { name: "s", type: "string", values: ["low", "high"] }))
       .toThrow(/must be one of: low, high/);
   });
+
+  it("refuses an object for a declared string instead of writing [object Object]", () => {
+    // This is not hypothetical. An agent sent an object as a comment body, it was coerced
+    // to the literal text "[object Object]", the API returned 200, and the comment is still
+    // on the case — tm exposes no comment delete. A 400 here is recoverable; that was not.
+    expect(() => coerce({ text: "hi" }, { name: "comment", type: "string" }))
+      .toThrow(/must be a string, and was an object/);
+    expect(() => coerce(["a", "b"], { name: "comment", type: "string" }))
+      .toThrow(/must be a string, and was a list/);
+  });
+
+  it("still coerces the scalars a declared string can losslessly carry", () => {
+    // Refusing objects must not break an id arriving as a number, which is routine.
+    expect(coerce(464, { name: "id", type: "string" })).toBe("464");
+    expect(coerce(true, { name: "flag", type: "string" })).toBe("true");
+  });
+
+  it("passes null through rather than sending the text 'null'", () => {
+    // Several string parameters document null as the way to CLEAR a field — test_plan_id
+    // says "send null or '' to unlink" — so stringifying it sent a value where the caller
+    // meant an absence.
+    expect(coerce(null, { name: "test_plan_id", type: "string" })).toBeNull();
+  });
 });
 
 describe("search", () => {

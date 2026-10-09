@@ -312,6 +312,34 @@ function coerceType(
     return value;
   }
 
+  // A DECLARED STRING IS NOT A LICENCE TO STRINGIFY ANYTHING.
+  //
+  // The untyped case above was fixed because `String(value)` destroyed objects the spec had
+  // declined to describe. A DECLARED string was left stringifying whatever arrived, and it
+  // is the worse of the two: an object sent for `create_test_case_comment`'s `comment` was
+  // serialised to the literal text "[object Object]", the API accepted it, the write
+  // returned 200, and the agent reported success in good faith. tm exposes no comment
+  // delete, so that text is now permanently on the case.
+  //
+  // A 400 teaches the caller what it got wrong. A 200 that stores "[object Object]" teaches
+  // it nothing and cannot be undone, so refuse here rather than let it reach the wire.
+  //
+  // `null` passes through instead of becoming the five characters "null", which no API has
+  // ever wanted: several string parameters document null as the way to CLEAR a field —
+  // `test_plan_id` says "send null or '' to unlink" — and stringifying it silently sent a
+  // value where the caller meant to send an absence.
+  if (expected === "string") {
+    if (value === null || value === undefined) return value;
+    if (typeof value === "object") {
+      throw new InvocationError(
+        `'${label}' must be a string, and was ${Array.isArray(value) ? "a list" : "an object"}. ` +
+          `Serialising it would send the text ` +
+          `${JSON.stringify(Array.isArray(value) ? "[object Array]" : "[object Object]")} ` +
+          `rather than its contents, and the call would succeed with that stored.`,
+      );
+    }
+  }
+
   const text = String(value);
   if (param.values && param.values.length > 0) {
     const allowed = param.values.map((v) => String(v));

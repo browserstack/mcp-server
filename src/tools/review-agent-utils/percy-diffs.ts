@@ -1,3 +1,5 @@
+import { encodePathSegment } from "../../lib/url-path.js";
+
 export interface PercySnapshotDiff {
   id: string;
   name: string | null;
@@ -10,7 +12,7 @@ export async function getPercySnapshotDiff(
   snapshotId: string,
   percyToken: string,
 ): Promise<PercySnapshotDiff[]> {
-  const apiUrl = `https://percy.io/api/v1/snapshots/${snapshotId}`;
+  const apiUrl = `https://percy.io/api/v1/snapshots/${encodePathSegment(snapshotId)}`;
 
   const response = await fetch(apiUrl, {
     headers: {

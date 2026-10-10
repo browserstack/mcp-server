@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { encodePathSegment } from "../../lib/url-path.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import {
@@ -87,7 +88,7 @@ export async function createLCASteps(
     );
 
     const tmBaseUrl = await getTMBaseURL(config);
-    const url = `${tmBaseUrl}/api/v1/projects/${projectId}/test-cases/${testCaseId}/lcnc`;
+    const url = `${tmBaseUrl}/api/v1/projects/${encodePathSegment(projectId)}/test-cases/${encodePathSegment(testCaseId)}/lcnc`;
 
     const payload = {
       base_url: args.base_url,
@@ -96,7 +97,7 @@ export async function createLCASteps(
       test_name: args.test_name,
       test_case_details: args.test_case_details,
       version: "v2",
-      webhook_path: `${tmBaseUrl}/api/v1/projects/${projectId}/test-cases/${testCaseId}/webhooks/lcnc`,
+      webhook_path: `${tmBaseUrl}/api/v1/projects/${encodePathSegment(projectId)}/test-cases/${encodePathSegment(testCaseId)}/webhooks/lcnc`,
     };
 
     await apiClient.post({

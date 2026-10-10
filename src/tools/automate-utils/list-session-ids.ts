@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
@@ -53,7 +54,7 @@ export function sessionsListUrl(
   sessionType: SessionType,
   buildId: string,
 ): string {
-  const encodedBuildId = encodeURIComponent(buildId);
+  const encodedBuildId = encodePathSegment(buildId);
   switch (sessionType) {
     case SessionType.Automate:
       return `https://api.browserstack.com/automate/builds/${encodedBuildId}/sessions.json`;

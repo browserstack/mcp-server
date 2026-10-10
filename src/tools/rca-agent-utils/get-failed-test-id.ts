@@ -1,5 +1,6 @@
 import logger from "../../logger.js";
 import { getAutomationBaseUrl } from "./constants.js";
+import { encodePathSegment } from "../../lib/url-path.js";
 import {
   TestStatus,
   FailedTestInfo,
@@ -21,7 +22,7 @@ export async function getTestIds(
   includeFailureDetail = false,
 ): Promise<FailedTestInfo[]> {
   // No `status` → returns ALL tests; a `status` narrows the query.
-  const baseUrl = `${getAutomationBaseUrl()}/ext/v1/builds/${buildId}/testRuns`;
+  const baseUrl = `${getAutomationBaseUrl()}/ext/v1/builds/${encodePathSegment(buildId)}/testRuns`;
   let url = status ? `${baseUrl}?test_statuses=${status}` : baseUrl;
   let allTests: FailedTestInfo[] = [];
   let requestNumber = 0;

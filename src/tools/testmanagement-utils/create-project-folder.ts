@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -99,7 +100,7 @@ export async function createProjectOrFolder(
     try {
       const tmBaseUrl = await getTMBaseURL(config);
       const res = await apiClient.post({
-        url: `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
+        url: `${tmBaseUrl}/api/v2/projects/${encodePathSegment(
           projId,
         )}/folders`,
         headers: {

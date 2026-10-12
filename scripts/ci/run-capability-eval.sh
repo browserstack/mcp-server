@@ -20,6 +20,7 @@
 #   MCP_CONFIG    --mcp-config file naming the eval server  (required)
 #   RESULTS       where the master writes its verdicts      (default eval-results.json)
 #   EVAL_LOG      where to tee the session transcript       (default eval-console.log)
+#   REPORT_ZIP    CSV + evidence bundle for humans           (default eval-report.zip)
 #   CLAUDE_MODEL  model pin; empty means the CLI's default  (optional)
 #   CLAUDE_CODE_OAUTH_TOKEN  passed through when set        (optional)
 #
@@ -139,3 +140,12 @@ echo "claude exited ${status}"
   || die "the eval produced no $RESULTS (claude exited ${status}) — it did not finish, so there is no rate to read into it"
 
 echo "wrote:   $RESULTS"
+
+# A CSV and a zip, for the people who read the result rather than run it. Built here and
+# not by the master: a dropped row or a comma inside a diagnosis would break a spreadsheet
+# silently, and both are easy for a model writing CSV by hand. This walks the FIXTURE, so a
+# case the master failed to score appears as MISSING instead of vanishing from the count.
+REPORT_ZIP="${REPORT_ZIP:-eval-report.zip}" \
+EVAL_PROMPT="${EVAL_PROMPT:-eval-prompt.txt}" \
+  python3 "$(dirname "$0")/eval-report.py" \
+  || echo "WARNING: could not build $REPORT_ZIP — the verdicts are still in $RESULTS"

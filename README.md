@@ -37,9 +37,9 @@ Stay in flow—keep all project context in one place and trigger actions directl
 
 ## ⚡️ One Click MCP Setup  
 
-Click on the buttons below to install MCP in your respective IDE:
+Click on the buttons below to install MCP in your respective IDE or assistant:
 
-<a href="http://mcp.browserstack.com/one-click-setup?client=vscode"><img src="assets/one-click-vs-code.png" alt="Install in VS Code" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="http://mcp.browserstack.com/one-click-setup?client=cursor"><img src="assets/one-click-cursor.png" alt="Install in Cursor" width="150" height="70"></a>
+<a href="http://mcp.browserstack.com/one-click-setup?client=vscode"><img src="assets/one-click-vs-code.png" alt="Install in VS Code" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="http://mcp.browserstack.com/one-click-setup?client=cursor"><img src="assets/one-click-cursor.png" alt="Install in Cursor" width="150" height="70"></a>&nbsp;&nbsp;&nbsp;<a href="https://chatgpt.com/plugins/plugin_asdk_app_6a8bf7703f1881918317add0244840a8"><img src="assets/one-click-chatgpt.png" alt="Install in ChatGPT" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="#-agent-assisted-setup"><img src="assets/one-click-claude.png" alt="Add to Claude" width="150" height="70"></a>
 
 > **Note:** The hosted Remote MCP server (`mcp.browserstack.com`) is now fully stateless over Streamable HTTP — any Streamable-HTTP client (Claude, Cursor, VS Code, ChatGPT) connects with no configuration change.
 
@@ -58,6 +58,30 @@ For manual setup in any MCP client, see [Install the MCP server locally](https:/
 
 .
         
+## 🪄 Agent-assisted setup
+
+Most AI agents can add the BrowserStack MCP server, connect to it, and walk you through sign-in without manual config. Paste this prompt into your agent:
+
+```text
+Add the BrowserStack MCP server to this agent, following the setup guide at
+https://www.browserstack.com/docs/browserstack-mcp-server/get-started/remote-mcp-server
+and using the server URL https://mcp.browserstack.com/mcp. Once it is added, start the
+BrowserStack sign-in flow so I can log in.
+```
+
+To add it yourself, use your client's command or menu:
+
+| Client | Command or configuration |
+|---|---|
+| Claude Code | `claude mcp add --transport http browserstack https://mcp.browserstack.com/mcp`, then run `/mcp` in a session and sign in |
+| Claude Desktop / claude.ai | Settings → Connectors → Add custom connector, with the URL `https://mcp.browserstack.com/mcp` |
+| ChatGPT | Install the [BrowserStack plugin](https://chatgpt.com/plugins/plugin_asdk_app_6a8bf7703f1881918317add0244840a8) |
+| Codex | `codex mcp add browserstack --url https://mcp.browserstack.com/mcp` |
+| VS Code / GitHub Copilot | [Install in VS Code](http://mcp.browserstack.com/one-click-setup?client=vscode) |
+| Cursor | [BrowserStack in the Cursor marketplace](https://cursor.com/marketplace/browserstack) |
+| Windsurf | Cascade → MCP servers → Add Server → Add custom server, with `serverUrl` set to `https://mcp.browserstack.com/mcp` |
+| Any other MCP client | Point it at `https://mcp.browserstack.com/mcp` |
+
 ## 💡 Usage Examples
 
 ### 📱 Manual App Testing
@@ -217,10 +241,6 @@ Remote MCP comes with all the functionalities of an MCP server without the hassl
 
 - ❌ No Local Testing support (cannot test apps behind VPNs, firewalls, or localhost). If you have to do Local Testing, you would have to use a BrowserStack Local MCP server.
 - ❌ Latency can be slightly higher, but nothing considerable — you generally won’t notice it in normal use.
-
-### Installation
-
-See [Set up the remote MCP server](https://www.browserstack.com/docs/browserstack-mcp-server/get-started/remote-mcp-server).
 
 ## ⚠️ Important Notes
 

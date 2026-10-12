@@ -71,12 +71,12 @@ To add it yourself, use your client's command or menu:
 
 | Client | Command or configuration |
 |---|---|
-| Claude Code | `claude mcp add --transport http browserstack https://mcp.browserstack.com/mcp`, then run `/mcp` in a session and sign in |
+| Claude Code | `claude mcp add --scope user --transport http browserstack https://mcp.browserstack.com/mcp`, then run `/mcp` in a session and sign in |
 | Claude Desktop / claude.ai | Settings → Connectors → Add custom connector, with the URL `https://mcp.browserstack.com/mcp` |
 | ChatGPT | Install the [BrowserStack plugin](https://chatgpt.com/plugins/plugin_asdk_app_6a8bf7703f1881918317add0244840a8) |
-| Codex | `codex mcp add browserstack --url https://mcp.browserstack.com/mcp` |
+| Codex | `codex mcp add browserstack --url https://mcp.browserstack.com/mcp`, then `codex mcp login browserstack` to sign in |
 | VS Code / GitHub Copilot | [Install in VS Code](http://mcp.browserstack.com/one-click-setup?client=vscode) |
-| Cursor | [BrowserStack in the Cursor marketplace](https://cursor.com/marketplace/browserstack) |
+| Cursor | Add `"browserstack": { "url": "https://mcp.browserstack.com/mcp" }` under `mcpServers` in `~/.cursor/mcp.json`, then sign in from Cursor Settings → MCP |
 | Any other MCP client | Point it at `https://mcp.browserstack.com/mcp` |
 
 ## 💡 Usage Examples

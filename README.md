@@ -56,8 +56,6 @@ For manual setup in any MCP client, see [Install the MCP server locally](https:/
 - 2. On Windows `(nvm-windows) : nvm install 22.15.0 && nvm use 22.15.0`
 - 👉 <a href="https://nodejs.org/en/download" target="_blank">Or directly download the Node.js LTS Installer</a>
 
-.
-        
 ## 🪄 Agent-assisted setup
 
 Most AI agents can add the BrowserStack MCP server, connect to it, and walk you through sign-in without manual config. Paste this prompt into your agent:
@@ -79,7 +77,6 @@ To add it yourself, use your client's command or menu:
 | Codex | `codex mcp add browserstack --url https://mcp.browserstack.com/mcp` |
 | VS Code / GitHub Copilot | [Install in VS Code](http://mcp.browserstack.com/one-click-setup?client=vscode) |
 | Cursor | [BrowserStack in the Cursor marketplace](https://cursor.com/marketplace/browserstack) |
-| Windsurf | Cascade → MCP servers → Add Server → Add custom server, with `serverUrl` set to `https://mcp.browserstack.com/mcp` |
 | Any other MCP client | Point it at `https://mcp.browserstack.com/mcp` |
 
 ## 💡 Usage Examples

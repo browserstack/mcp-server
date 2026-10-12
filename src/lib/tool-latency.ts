@@ -1,5 +1,6 @@
 import { RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ClientInfo, withToolCall } from "./instrumentation.js";
+import { withFeedbackHint } from "./feedback-hint.js";
 
 const WRAPPED = Symbol.for("browserstack.mcp.latencyWrapped");
 
@@ -19,7 +20,7 @@ export function instrumentToolLatency(
     const wrapped: AnyHandler & { [WRAPPED]?: true } = (...args: unknown[]) =>
       withToolCall(name, getClientInfo, config, () =>
         (inner as AnyHandler)(...args),
-      );
+      ).then((result) => withFeedbackHint(name, result));
     wrapped[WRAPPED] = true;
 
     // Direct assignment: tool.update() would also fire tools/list_changed.

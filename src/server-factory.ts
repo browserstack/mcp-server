@@ -24,6 +24,8 @@ import addAskBrowserStackAITool from "./tools/ask-browserstack/register.js";
 import addCapabilityRegistryTools from "./tools/capability-registry/register.js";
 import { instrumentToolLatency } from "./lib/tool-latency.js";
 import { nodeUpgradeNotice } from "./lib/node-version-notice.js";
+import { FEEDBACK_INSTRUCTION } from "./lib/feedback-hint.js";
+import addFeedbackTools from "./tools/feedback.js";
 
 /**
  * Wrapper class for BrowserStack MCP Server
@@ -44,7 +46,11 @@ export class BrowserStackMcpServer {
         name: "BrowserStack MCP Server",
         version: packageJson.version,
       },
-      { instructions: nodeUpgradeNotice() || undefined },
+      {
+        instructions: [nodeUpgradeNotice(), FEEDBACK_INSTRUCTION]
+          .filter(Boolean)
+          .join("\n"),
+      },
     );
 
     setupOnInitialized(this.server, this.config);
@@ -76,6 +82,7 @@ export class BrowserStackMcpServer {
       // nothing (and logs why) when the artifact is absent, so a packaging problem cannot
       // take the other products' tools down with it.
       addCapabilityRegistryTools,
+      addFeedbackTools,
     ];
 
     toolAdders.forEach((adder) => {

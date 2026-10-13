@@ -37,11 +37,17 @@ Stay in flow—keep all project context in one place and trigger actions directl
 
 ## ⚡️ One Click MCP Setup  
 
-Click on the buttons below to install MCP in your respective IDE:
+Click on the buttons below to install MCP in your respective IDE or assistant:
 
-<a href="http://mcp.browserstack.com/one-click-setup?client=vscode"><img src="assets/one-click-vs-code.png" alt="Install in VS Code" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="http://mcp.browserstack.com/one-click-setup?client=cursor"><img src="assets/one-click-cursor.png" alt="Install in Cursor" width="150" height="70"></a>
+<a href="http://mcp.browserstack.com/one-click-setup?client=vscode"><img src="assets/one-click-vs-code.png" alt="Install in VS Code" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="http://mcp.browserstack.com/one-click-setup?client=cursor"><img src="assets/one-click-cursor.png" alt="Install in Cursor" width="150" height="70"></a>&nbsp;&nbsp;&nbsp;<a href="https://chatgpt.com/plugins/plugin_asdk_app_6a8bf7703f1881918317add0244840a8"><img src="assets/one-click-chatgpt.png" alt="Install in ChatGPT" width="160" height="80"></a>&nbsp;&nbsp;&nbsp;<a href="#-agent-assisted-setup"><img src="assets/one-click-claude.png" alt="Add to Claude" width="150" height="70"></a>
 
 > **Note:** The hosted Remote MCP server (`mcp.browserstack.com`) is now fully stateless over Streamable HTTP — any Streamable-HTTP client (Claude, Cursor, VS Code, ChatGPT) connects with no configuration change.
+
+#### Prerequisites
+- A BrowserStack account. [Sign up](https://www.browserstack.com/users/sign_up) if you don't have one; open-source projects can get a [free plan](https://www.browserstack.com/open-source).
+- Your `username` and `access_key` from [Account Settings](https://www.browserstack.com/accounts/profile/details).
+
+For manual setup in any MCP client, see [Install the MCP server locally](https://www.browserstack.com/docs/browserstack-mcp-server/get-started/local-mcp) or [Set up the remote MCP server](https://www.browserstack.com/docs/browserstack-mcp-server/get-started/remote-mcp-server).
 
 #### Note : Ensure you are using Node version >= `20.9` 
 - Check your node version using `node --version`. Recommended version: `v22.15.0` (LTS)
@@ -50,8 +56,29 @@ Click on the buttons below to install MCP in your respective IDE:
 - 2. On Windows `(nvm-windows) : nvm install 22.15.0 && nvm use 22.15.0`
 - 👉 <a href="https://nodejs.org/en/download" target="_blank">Or directly download the Node.js LTS Installer</a>
 
-.
-        
+## 🪄 Agent-assisted setup
+
+Most AI agents can add the BrowserStack MCP server, connect to it, and walk you through sign-in without manual config. Paste this prompt into your agent:
+
+```text
+Add the BrowserStack MCP server to this agent, following the setup guide at
+https://www.browserstack.com/docs/browserstack-mcp-server/get-started/remote-mcp-server
+and using the server URL https://mcp.browserstack.com/mcp. Once it is added, start the
+BrowserStack sign-in flow so I can log in.
+```
+
+To add it yourself, use your client's command or menu:
+
+| Client | Command or configuration |
+|---|---|
+| Claude Code | `claude mcp add --scope user --transport http browserstack https://mcp.browserstack.com/mcp`, then run `/mcp` in a session and sign in |
+| Claude Desktop / claude.ai | Settings → Connectors → Add custom connector, with the URL `https://mcp.browserstack.com/mcp` |
+| ChatGPT | Install the [BrowserStack plugin](https://chatgpt.com/plugins/plugin_asdk_app_6a8bf7703f1881918317add0244840a8) |
+| Codex | `codex mcp add browserstack --url https://mcp.browserstack.com/mcp`, then `codex mcp login browserstack` to sign in |
+| VS Code / GitHub Copilot | [Install in VS Code](http://mcp.browserstack.com/one-click-setup?client=vscode) |
+| Cursor | Add `"browserstack": { "url": "https://mcp.browserstack.com/mcp" }` under `mcpServers` in `~/.cursor/mcp.json`, then sign in from Cursor Settings → MCP |
+| Any other MCP client | Point it at `https://mcp.browserstack.com/mcp` |
+
 ## 💡 Usage Examples
 
 ### 📱 Manual App Testing
@@ -179,136 +206,6 @@ Generate test cases from PRDs, convert manual tests to low-code automation, and 
 ```
 
 
-## 🛠️ Installation
-
-### 📋 Prerequisites for MCP Setup
-
-- Node.js version >= `20.9` (see the note under [One Click MCP Setup](#️-one-click-mcp-setup) above).
-- A BrowserStack account (steps below).
-
-To install with one click, use the **Install in VS Code** / **Install in Cursor** buttons under [One Click MCP Setup](#️-one-click-mcp-setup) at the top of this page.
-
-### **Alternate ways to Setup MCP server**
-
-1. **Create a BrowserStack Account**
-
-   - Sign up for [BrowserStack](https://www.browserstack.com/users/sign_up) if you don't have an account already.
-
-   - ℹ️ If you have an open-source project, we'll be able to provide you with a [free plan](https://www.browserstack.com/open-source).
-   
-
-   - Once you have an account (and purchased appropriate plan), note down your `username` and `access_key` from [Account Settings](https://www.browserstack.com/accounts/profile/details).
-
-2. **Install the MCP Server**
-
-   - VSCode (Copilot - Agent Mode): `.vscode/mcp.json`:
-    
-      - Locate or Create the Configuration File: 
-        In the root directory of your project, look for a folder named .vscode. This folder is usually hidden so you will need to find it as mentioned in the expand.
-    
-      - If this folder doesn't exist, create it.
-    
-      - Inside the .vscode folder, create a new file named mcp.json
-      
-      - Add the Configuration: Open the mcp.json file and then add the  following JSON content. 
-      
-      - Replace the username and <access_key> with your BrowserStack   credentials.
-
-   ```json
-   {
-     "servers": {
-       "browserstack": {
-         "command": "npx",
-         "args": ["-y", "@browserstack/mcp-server@latest"],
-         "env": {
-           "BROWSERSTACK_USERNAME": "<username>",
-           "BROWSERSTACK_ACCESS_KEY": "<access_key>"
-         }
-       }
-     }
-   }
-   ```
-
-   - In VSCode, make sure to click on `Start` button in the MCP Server to start the server.
-     ![Start MCP Server](assets/vscode_install.png)
-
-   
-   #### ** Alternate way to setup MCP on VSCode Copilot
-
-   1.Click on the gear icon to Select Tools
-    <div align="center">
-      <img src="assets/select_tools.png" alt="Select Tools" height="100"> 
-    </div>
-   2. A tool menu would appear at the top-centre, scroll down on the     menu at the top and then Click on Add MCP Server
-    <div align="center">
-      <img src="assets/add_mcp_server.png" alt="Add MCP Server" height="100"> 
-    </div>
-   3. Select NPM package option (Install fron an NPM package) - 3rd in the list
-    <div align="center">
-      <img src="assets/select_npm_package.png" alt="Select NPM Package" height="100"> 
-    </div>
-   4. Enter NPM Package Name (@browserstack/mcp-server)
-    <div align="center">
-      <img src="assets/enter_npm_package.png" alt="Enter NPM Package" height="100"> 
-    </div>
-   5. Enter browserstack user name and access key
-   
-   
-   
-   
-   * For Cursor: `.cursor/mcp.json`:
-
-   ```json
-   {
-     "mcpServers": {
-       "browserstack": {
-         "command": "npx",
-         "args": ["-y", "@browserstack/mcp-server@latest"],
-         "env": {
-           "BROWSERSTACK_USERNAME": "<username>",
-           "BROWSERSTACK_ACCESS_KEY": "<access_key>"
-         }
-       }
-     }
-   }
-   ```
-
-   - For Claude Desktop: `~/claude_desktop_config.json`:
-
-   ```json
-   {
-     "mcpServers": {
-       "browserstack": {
-         "command": "npx",
-         "args": ["-y", "@browserstack/mcp-server@latest"],
-         "env": {
-           "BROWSERSTACK_USERNAME": "<username>",
-           "BROWSERSTACK_ACCESS_KEY": "<access_key>"
-         }
-       }
-     }
-   }
-   ```
-   - For Cline
-     
-Click the “MCP Servers” icon in the navigation bar
-Select the “Installed” tab. Click the “Configure MCP Servers” button at the bottom of the pane.
-
-   ```json
-   {
-     "mcpServers": {
-       "browserstack": {
-         "command": "npx",
-         "args": ["-y", "@browserstack/mcp-server@latest"],
-         "env": {
-           "BROWSERSTACK_USERNAME": "<username>",
-           "BROWSERSTACK_ACCESS_KEY": "<access_key>"
-         }
-       }
-     }
-   }
-   ```
-
 ## 🧭 Core Tools
 
 Five core tools let your AI assistant find and run any BrowserStack workflow. Your assistant loads every tool an MCP server exposes at the start of each session, so one tool per workflow would fill your context window and slow down the whole session. Instead, your assistant uses the core tools to search a catalog of BrowserStack tools in plain language and run the one it needs.
@@ -341,65 +238,6 @@ Remote MCP comes with all the functionalities of an MCP server without the hassl
 
 - ❌ No Local Testing support (cannot test apps behind VPNs, firewalls, or localhost). If you have to do Local Testing, you would have to use a BrowserStack Local MCP server.
 - ❌ Latency can be slightly higher, but nothing considerable — you generally won’t notice it in normal use.
-
-### Installation Steps: 
-
-   - On VSCode (Copilot - Agent Mode): `.vscode/mcp.json`:
-    
-      - Locate or Create the Configuration File:
-      - In the root directory of your project, look for a folder named .vscode. This folder is usually hidden so you will need to find it as            mentioned in the expand.
-      - If this folder doesn't exist, create it.
-      - Inside the .vscode folder, create a new file named mcp.json
-      - To setup Remote BrowserStack MCP instead of local BrowserStack MCP you can add the following JSON content :
-         <div align="center">
-         <img src="assets/remotemcp_json_file.png" alt="Remote MCP JSON file" height="300" width="300">
-         </div>
-        
-        ### Alternative way to Setup Remote MCP
-
-      -  Step 1.Click on the gear icon to Select Tools
-      
-          <div align="center">
-          <img src="assets/select_tools.png" alt="Select Tools" height="300" width="300"> 
-          </div>
-          
-      -  Step 2. A tool menu would appear at the top-centre, scroll down on the menu at the top and then Click on Add MCP Server
-      
-        <div align="center">
-        <img src="assets/add_mcp_server.png" alt="Add MCP Server" height="300" width="300"> 
-        </div>
-
-      - Step 3. Click on HTTP option
-         <div align="center">
-         <img src="assets/http_option.png" alt="HTTP Option" height="300" width="300">
-         </div>
-         
-      - Step 4. Paste Remote MCP Server URL : https://mcp.browserstack.com/mcp
-         <div align="center">
-         <img src="assets/server_url.png" alt="Remote MCP Server URL" height="300" width="300">
-         </div>
-         
-      - Step 5. Give server id as : browserstack
-      
-          <div align="center">
-          <img src="assets/server_id.png" alt="Remote MCP Server ID" height="300" width="300">
-          </div>
-          
-      - Step 6. In VSCode Click on start MCP Server and then click on "Allow"
-      
-          <div align="center">
-          <img src="assets/authentication1.png" alt="authentication1" height="300" width="300">
-          </div>
-          
-          <div align="center">
-          <img src="assets/authentication2.png" alt="authentication2" height="300" width="300">
-          </div>
-          
-          <div align="center">
-          <img src="assets/signin_success.png" alt="Sign_in_success" height="300" width="300">
-          </div>
-
-     
 
 ## ⚠️ Important Notes
 

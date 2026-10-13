@@ -58,10 +58,6 @@ function isTrustedScreenshotUrl(value: string): boolean {
   }
 }
 
-// Collects, in log order, screenshots requested by the test (REQUEST GET
-// /screenshot followed by its RESPONSE) and visual-log screenshots captured
-// with browserstack.debug (DEBUG <url>). Patterns are anchored to the log
-// line prefix so URLs echoed inside request or response payloads are ignored.
 export function parseScreenshotUrls(text: string): string[] {
   const urls: string[] = [];
   const lines = text.split("\n").map((line) => line.trimEnd());

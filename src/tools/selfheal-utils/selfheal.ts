@@ -1,4 +1,5 @@
 import { assertOkResponse } from "../../lib/utils.js";
+import { encodePathSegment } from "../../lib/url-path.js";
 
 interface SelectorMapping {
   originalSelector: string;
@@ -72,7 +73,7 @@ export async function fetchSelfHealingReportByBuild(
   const auth = Buffer.from(authString).toString("base64");
 
   const presignedResp = await apiClient.get<Record<string, unknown>>({
-    url: `${SELF_HEAL_REPORT_BASE}/${encodeURIComponent(buildUuid)}/selfHealingReport`,
+    url: `${SELF_HEAL_REPORT_BASE}/${encodePathSegment(buildUuid)}/selfHealingReport`,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
@@ -135,7 +136,7 @@ export async function getSelfHealSelectors(
   const auth = Buffer.from(authString).toString("base64");
   const productPath =
     sessionType === "app-automate" ? "app-automate" : "automate";
-  const url = `https://api.browserstack.com/${productPath}/sessions/${sessionId}/logs`;
+  const url = `https://api.browserstack.com/${productPath}/sessions/${encodePathSegment(sessionId)}/logs`;
 
   const response = await apiClient.get({
     url,

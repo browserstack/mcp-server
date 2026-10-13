@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -47,8 +48,8 @@ export async function listSubTestPlans(
     if (args.p !== undefined) params.append("p", args.p.toString());
 
     const tmBaseUrl = await getTMBaseURL(config);
-    const projectId = encodeURIComponent(args.project_identifier);
-    const parentPlanId = encodeURIComponent(args.parent_test_plan_identifier);
+    const projectId = encodePathSegment(args.project_identifier);
+    const parentPlanId = encodePathSegment(args.parent_test_plan_identifier);
     const url = `${tmBaseUrl}/api/v2/projects/${projectId}/test-plans/${parentPlanId}/sub-test-plans?${params.toString()}`;
 
     const authString = getBrowserStackAuth(config);

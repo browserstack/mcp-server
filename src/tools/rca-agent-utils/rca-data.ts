@@ -1,4 +1,5 @@
 import { RCAState, RCATestCase, RCAResponse } from "./types.js";
+import { encodePathSegment } from "../../lib/url-path.js";
 
 interface ScanProgressContext {
   sendNotification: (notification: any) => Promise<void>;
@@ -101,7 +102,7 @@ async function fetchInitialRCA(
   headers: Record<string, string>,
   baseUrl: string,
 ): Promise<RCATestCase> {
-  const url = baseUrl.replace("{testId}", testId.toString());
+  const url = baseUrl.replace("{testId}", encodePathSegment(testId));
 
   try {
     const response = await fetch(url, { headers });
@@ -179,7 +180,10 @@ async function pollRCAResults(
       await Promise.allSettled(
         inProgressCases.map(async (tc) => {
           try {
-            const pollUrl = baseUrl.replace("{testId}", tc.id.toString());
+            const pollUrl = baseUrl.replace(
+              "{testId}",
+              encodePathSegment(tc.id),
+            );
             const response = await fetch(pollUrl, { headers });
             if (!response.ok) {
               const errorText = await response.text();

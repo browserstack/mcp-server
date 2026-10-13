@@ -1,5 +1,6 @@
 import { apiClient } from "../../lib/apiClient.js";
 import { z } from "zod";
+import { encodePathSegment } from "../../lib/url-path.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { formatAxiosError } from "../../lib/error.js";
 import {
@@ -244,7 +245,7 @@ async function fetchAppliedTemplateId(
   try {
     const tmBaseUrl = await getTMBaseURL(config);
     const resp = await apiClient.get({
-      url: `${tmBaseUrl}/api/v1/projects/${encodeURIComponent(
+      url: `${tmBaseUrl}/api/v1/projects/${encodePathSegment(
         numericProjectId,
       )}/test-cases/search?q%5Bquery%5D=${encodeURIComponent(identifier)}`,
       headers: {
@@ -384,7 +385,7 @@ export async function createTestCase(
         );
       }
       request = {
-        url: `${tmBaseUrl}/api/v1/projects/${encodeURIComponent(
+        url: `${tmBaseUrl}/api/v1/projects/${encodePathSegment(
           numericProjectId,
         )}/test-cases`,
         headers: {
@@ -395,9 +396,9 @@ export async function createTestCase(
       };
     } else {
       request = {
-        url: `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
+        url: `${tmBaseUrl}/api/v2/projects/${encodePathSegment(
           params.project_identifier,
-        )}/folders/${encodeURIComponent(params.folder_id)}/test-cases`,
+        )}/folders/${encodePathSegment(params.folder_id)}/test-cases`,
         headers: {
           "Content-Type": "application/json",
           Authorization:

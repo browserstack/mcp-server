@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -217,9 +218,9 @@ export async function updateTestCase(
   try {
     const tmBaseUrl = await getTMBaseURL(config);
     const response = await apiClient.patch({
-      url: `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
+      url: `${tmBaseUrl}/api/v2/projects/${encodePathSegment(
         params.project_identifier,
-      )}/test-cases/${encodeURIComponent(params.test_case_identifier)}`,
+      )}/test-cases/${encodePathSegment(params.test_case_identifier)}`,
       headers: {
         "Content-Type": "application/json",
         Authorization:

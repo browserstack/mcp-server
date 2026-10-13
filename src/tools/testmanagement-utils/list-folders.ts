@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -47,13 +48,13 @@ export async function listFolders(
     if (args.p !== undefined) params.append("p", args.p.toString());
 
     const tmBaseUrl = await getTMBaseURL(config);
-    const projectId = encodeURIComponent(args.project_identifier);
+    const projectId = encodePathSegment(args.project_identifier);
 
     // GET /api/v2/projects/{projectIdentifier}/folders
     // or  /api/v2/projects/{projectIdentifier}/folders/{parent_id}/sub-folders
     const path =
       args.parent_id !== undefined
-        ? `folders/${args.parent_id}/sub-folders`
+        ? `folders/${encodePathSegment(String(args.parent_id))}/sub-folders`
         : `folders`;
     const url = `${tmBaseUrl}/api/v2/projects/${projectId}/${path}?${params.toString()}`;
 

@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { z } from "zod";
@@ -39,9 +40,9 @@ export async function addTestResult(
   try {
     const args = AddTestResultSchema.parse(rawArgs);
     const tmBaseUrl = await getTMBaseURL(config);
-    const url = `${tmBaseUrl}/api/v2/projects/${encodeURIComponent(
+    const url = `${tmBaseUrl}/api/v2/projects/${encodePathSegment(
       args.project_identifier,
-    )}/test-runs/${encodeURIComponent(args.test_run_id)}/results`;
+    )}/test-runs/${encodePathSegment(args.test_run_id)}/results`;
 
     const body = {
       test_result: args.test_result,

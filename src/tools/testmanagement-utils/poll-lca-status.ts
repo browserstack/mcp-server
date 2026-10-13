@@ -1,4 +1,5 @@
 import { apiClient } from "../../lib/apiClient.js";
+import { encodePathSegment } from "../../lib/url-path.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
@@ -41,7 +42,7 @@ export async function pollLCAStatus(
   config: BrowserStackConfig,
 ): Promise<{ resource_path: string; status: string } | null> {
   const tmBaseUrl = await getTMBaseURL(config);
-  const url = `${tmBaseUrl}/api/v1/projects/${projectId}/folder/${folderId}/test-cases/${testCaseId}`;
+  const url = `${tmBaseUrl}/api/v1/projects/${encodePathSegment(projectId)}/folder/${encodePathSegment(folderId)}/test-cases/${encodePathSegment(testCaseId)}`;
 
   const startTime = Date.now();
 

@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
@@ -31,7 +32,7 @@ export function sessionDetailsUrl(
   sessionType: SessionType,
   sessionId: string,
 ): string {
-  const encoded = encodeURIComponent(sessionId);
+  const encoded = encodePathSegment(sessionId);
   switch (sessionType) {
     case SessionType.Automate:
       return `https://api.browserstack.com/automate/sessions/${encoded}.json`;
@@ -91,7 +92,7 @@ export async function findSessionIdForObservabilityBuild(
 ): Promise<string | undefined> {
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
-  const baseUrl = `${getAutomationBaseUrl()}/ext/v1/builds/${encodeURIComponent(observabilityBuildId)}/testRuns`;
+  const baseUrl = `${getAutomationBaseUrl()}/ext/v1/builds/${encodePathSegment(observabilityBuildId)}/testRuns`;
 
   let nextPage: string | undefined;
   for (let page = 0; page < MAX_TEST_RUN_PAGES; page++) {

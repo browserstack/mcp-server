@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
@@ -11,7 +12,7 @@ export async function retrieveSessionVideo(
 ): Promise<string> {
   const product =
     sessionType === SessionType.AppAutomate ? "app-automate" : "automate";
-  const url = `https://api.browserstack.com/${product}/sessions/${encodeURIComponent(sessionId)}.json`;
+  const url = `https://api.browserstack.com/${product}/sessions/${encodePathSegment(sessionId)}.json`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 

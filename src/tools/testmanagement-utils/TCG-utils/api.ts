@@ -1,4 +1,5 @@
 import { apiClient } from "../../../lib/apiClient.js";
+import { encodePathSegment } from "../../../lib/url-path.js";
 import {
   TCG_TRIGGER_URL,
   TCG_POLL_URL,
@@ -139,7 +140,7 @@ export async function triggerTestCaseGeneration(
       folderId,
       projectId,
       source,
-      webhookUrl: `${tmBaseUrl}/api/v1/projects/${projectId}/folder/${folderId}/webhooks/tcg`,
+      webhookUrl: `${tmBaseUrl}/api/v1/projects/${encodePathSegment(projectId)}/folder/${encodePathSegment(folderId)}/webhooks/tcg`,
     },
   });
   if (res.status !== 200) {
@@ -467,7 +468,7 @@ export async function projectIdentifierToId(
   config: BrowserStackConfig,
 ): Promise<string> {
   const tmBaseUrl = await getTMBaseURL(config);
-  const url = `${tmBaseUrl}/api/v1/projects/?q=${projectId}`;
+  const url = `${tmBaseUrl}/api/v1/projects/?q=${encodeURIComponent(projectId)}`;
 
   const response = await apiClient.get({
     url,
@@ -495,7 +496,7 @@ export async function testCaseIdentifierToDetails(
   config: BrowserStackConfig,
 ): Promise<{ testCaseId: string; folderId: string }> {
   const tmBaseUrl = await getTMBaseURL(config);
-  const url = `${tmBaseUrl}/api/v1/projects/${projectId}/test-cases/search?q[query]=${testCaseIdentifier}`;
+  const url = `${tmBaseUrl}/api/v1/projects/${encodePathSegment(projectId)}/test-cases/search?q[query]=${encodeURIComponent(testCaseIdentifier)}`;
 
   const response = await apiClient.get({
     url,

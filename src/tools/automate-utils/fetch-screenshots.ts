@@ -4,6 +4,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import globalConfig from "../../config.js";
+import { encodePathSegment } from "../../lib/url-path.js";
 
 async function extractScreenshotUrls(
   sessionId: string,
@@ -15,7 +16,7 @@ async function extractScreenshotUrls(
 
   const baseUrl = `https://api.browserstack.com/${sessionType === SessionType.Automate ? "automate" : "app-automate"}`;
 
-  const url = `${baseUrl}/sessions/${sessionId}/logs`;
+  const url = `${baseUrl}/sessions/${encodePathSegment(sessionId)}/logs`;
   const response = await apiClient.get({
     url,
     headers: {

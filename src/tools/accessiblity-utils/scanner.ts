@@ -7,6 +7,7 @@ import {
   killExistingBrowserStackLocalProcesses,
 } from "../../lib/local.js";
 import config from "../../config.js";
+import { encodePathSegment } from "../../lib/url-path.js";
 
 export interface AccessibilityScanResponse {
   success: boolean;
@@ -142,7 +143,7 @@ export class AccessibilityScanner {
   ): Promise<AccessibilityScanStatus> {
     try {
       const response = await apiClient.get<AccessibilityScanStatus>({
-        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
+        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${encodePathSegment(scanId)}/scan_runs/${encodePathSegment(scanRunId)}/status`,
         headers: {
           Authorization:
             "Basic " +

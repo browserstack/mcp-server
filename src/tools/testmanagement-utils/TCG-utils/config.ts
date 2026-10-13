@@ -1,3 +1,5 @@
+import { encodePathSegment } from "../../../lib/url-path.js";
+
 export const TC_DETAILS_MAX_BATCH = 10;
 
 // Wall-clock bounds for the TCG generation polling loops. Without a hard
@@ -16,11 +18,11 @@ export const FETCH_DETAILS_URL = (baseUrl: string) =>
   `${baseUrl}/api/v1/integration/tcg/test-generation/fetch-test-case-details`;
 
 export const FORM_FIELDS_URL = (baseUrl: string, projectId: string) =>
-  `${baseUrl}/api/v1/projects/${projectId}/form-fields-v2`;
+  `${baseUrl}/api/v1/projects/${encodePathSegment(projectId)}/form-fields-v2`;
 
 export const BULK_CREATE_URL = (
   baseUrl: string,
   projectId: string,
   folderId: string,
 ) =>
-  `${baseUrl}/api/v1/projects/${projectId}/folder/${folderId}/bulk-test-cases`;
+  `${baseUrl}/api/v1/projects/${encodePathSegment(projectId)}/folder/${encodePathSegment(folderId)}/bulk-test-cases`;

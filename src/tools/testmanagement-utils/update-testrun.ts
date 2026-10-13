@@ -1,3 +1,4 @@
+import { encodePathSegment } from "../../lib/url-path.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { z } from "zod";
@@ -130,9 +131,9 @@ async function updateTestRunMetadata(
   try {
     const { name, run_state } = args.test_run;
     const body = { test_run: { name, run_state } };
-    const url = `${baseUrl}/api/v2/projects/${encodeURIComponent(
+    const url = `${baseUrl}/api/v2/projects/${encodePathSegment(
       args.project_identifier,
-    )}/test-runs/${encodeURIComponent(args.test_run_id)}/update`;
+    )}/test-runs/${encodePathSegment(args.test_run_id)}/update`;
 
     const resp = await apiClient.patch({
       url,
@@ -189,9 +190,9 @@ async function updateTestRunTestCases(
       },
     };
 
-    const url = `${baseUrl}/api/v2/projects/${encodeURIComponent(
+    const url = `${baseUrl}/api/v2/projects/${encodePathSegment(
       args.project_identifier,
-    )}/test-runs/${encodeURIComponent(args.test_run_id)}/test-cases`;
+    )}/test-runs/${encodePathSegment(args.test_run_id)}/test-cases`;
 
     const resp = await apiClient.patch({
       url,

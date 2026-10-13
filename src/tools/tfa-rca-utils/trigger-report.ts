@@ -1,5 +1,6 @@
 import { apiClient } from "../../lib/apiClient.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
+import { encodePathSegment } from "../../lib/url-path.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import {
   getO11yBaseUrl,
@@ -78,7 +79,7 @@ export async function triggerRcaReport(
     getO11yBaseUrl() +
     RELEASE_READINESS_TRIGGER_PATH.replace(
       "{buildUuid}",
-      encodeURIComponent(args.buildUuid),
+      encodePathSegment(args.buildUuid),
     ) +
     `?force=${args.force === true}`;
 

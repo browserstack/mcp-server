@@ -32,45 +32,74 @@ async function extractScreenshotUrls(
       ? response.data
       : JSON.stringify(response.data);
 
-  const urls: string[] = [];
-  const SCREENSHOT_PATTERN = /REQUEST.*GET.*\/screenshot/;
-  const RESPONSE_VALUE_PATTERN = /"value"\s*:\s*"([^"]+)"/;
+  return parseScreenshotUrls(text);
+}
 
-  // Split logs into lines and process them
+const SCREENSHOT_REQUEST_PATTERN = /REQUEST.*GET.*\/screenshot/;
+const RESPONSE_VALUE_PATTERN = /RESPONSE.*"value"\s*:\s*"([^"]+)"/;
+const DEBUG_SCREENSHOT_PATTERN = /\sDEBUG\s+(https?:\/\/\S+)/;
+
+// Collects, in log order, screenshots requested by the test (REQUEST GET
+// /screenshot followed by its RESPONSE) and visual-log screenshots captured
+// with browserstack.debug (DEBUG <url>).
+export function parseScreenshotUrls(text: string): string[] {
+  const urls: string[] = [];
   const lines = text.split("\n");
 
-  for (let i = 0; i < lines.length - 1; i++) {
-    const currentLine = lines[i];
-    const nextLine = lines[i + 1];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
-    if (SCREENSHOT_PATTERN.test(currentLine)) {
-      const match = nextLine.match(RESPONSE_VALUE_PATTERN);
-      if (match && match[1]) {
-        urls.push(match[1]);
+    const debugMatch = line.match(DEBUG_SCREENSHOT_PATTERN);
+    if (debugMatch) {
+      urls.push(debugMatch[1]);
+      continue;
+    }
+
+    if (!SCREENSHOT_REQUEST_PATTERN.test(line)) {
+      continue;
+    }
+    for (let j = i + 1; j < lines.length; j++) {
+      if (lines[j].includes(" REQUEST ")) {
+        break;
+      }
+      const valueMatch = lines[j].match(RESPONSE_VALUE_PATTERN);
+      if (valueMatch) {
+        urls.push(valueMatch[1]);
+        break;
       }
     }
   }
 
-  return urls;
+  return [...new Set(urls)];
 }
 
-async function fetchAndCompress(
-  url: string,
-): Promise<{ url: string; base64: string }> {
+function detectImageMimeType(buffer: Buffer): string {
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "image/jpeg";
+  }
+  return "image/png";
+}
+
+export type Screenshot = { url: string; base64: string; mimeType: string };
+
+async function fetchAndCompress(url: string): Promise<Screenshot> {
   const response = await apiClient.get({ url, responseType: "arraybuffer" });
   // Axios returns response.data as a Buffer for binary data
-  const base64 = Buffer.from(response.data).toString("base64");
-  return { url, base64: await maybeCompressBase64(base64) };
+  const buffer = Buffer.from(response.data);
+  const base64 = await maybeCompressBase64(buffer.toString("base64"));
+  return {
+    url,
+    base64,
+    mimeType: detectImageMimeType(Buffer.from(base64, "base64")),
+  };
 }
 
 //Converts screenshot URLs to base64 encoded images
-async function convertUrlsToBase64(
-  urls: string[],
-): Promise<Array<{ url: string; base64: string }>> {
+async function convertUrlsToBase64(urls: string[]): Promise<Screenshot[]> {
   // Hosted pods are memory-constrained: process one image at a time. Local runs
   // keep the concurrent path.
   if (globalConfig.REMOTE_MCP) {
-    const screenshots: Array<{ url: string; base64: string }> = [];
+    const screenshots: Screenshot[] = [];
     for (const url of urls) {
       screenshots.push(await fetchAndCompress(url));
     }

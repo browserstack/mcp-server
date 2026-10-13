@@ -35,16 +35,36 @@ async function extractScreenshotUrls(
   return parseScreenshotUrls(text);
 }
 
-const SCREENSHOT_REQUEST_PATTERN = /REQUEST.*GET.*\/screenshot/;
-const RESPONSE_VALUE_PATTERN = /RESPONSE.*"value"\s*:\s*"([^"]+)"/;
-const DEBUG_SCREENSHOT_PATTERN = /\sDEBUG\s+(https?:\/\/\S+)/;
+const LOG_PREFIX = String.raw`^\d{4}-\d{2}-\d{2} \d{1,2}:\d{1,2}:\d{1,2}:\d{1,3} `;
+const LINE_TYPE_PATTERN = new RegExp(`${LOG_PREFIX}([A-Z_]+) `);
+const SCREENSHOT_REQUEST_PATTERN = new RegExp(
+  String.raw`${LOG_PREFIX}REQUEST \[[^\]]+\] GET /session/[^/\s]+/screenshot(\s|$)`,
+);
+const RESPONSE_VALUE_PATTERN = new RegExp(
+  String.raw`${LOG_PREFIX}RESPONSE \{"value"\s*:\s*"(https://[^"]+)"`,
+);
+const DEBUG_SCREENSHOT_PATTERN = new RegExp(
+  String.raw`${LOG_PREFIX}DEBUG (https://\S+)$`,
+);
+const TRUSTED_HOST_PATTERN =
+  /(^|\.)browserstack\.com$|\.s3([.-][a-z0-9-]+)*\.amazonaws\.com$|\.backblazeb2\.com$/;
+
+function isTrustedScreenshotUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && TRUSTED_HOST_PATTERN.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
 
 // Collects, in log order, screenshots requested by the test (REQUEST GET
 // /screenshot followed by its RESPONSE) and visual-log screenshots captured
-// with browserstack.debug (DEBUG <url>).
+// with browserstack.debug (DEBUG <url>). Patterns are anchored to the log
+// line prefix so URLs echoed inside request or response payloads are ignored.
 export function parseScreenshotUrls(text: string): string[] {
   const urls: string[] = [];
-  const lines = text.split("\n");
+  const lines = text.split("\n").map((line) => line.trimEnd());
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -59,18 +79,21 @@ export function parseScreenshotUrls(text: string): string[] {
       continue;
     }
     for (let j = i + 1; j < lines.length; j++) {
-      if (lines[j].includes(" REQUEST ")) {
+      const lineType = lines[j].match(LINE_TYPE_PATTERN)?.[1];
+      if (lineType === "REQUEST") {
         break;
       }
-      const valueMatch = lines[j].match(RESPONSE_VALUE_PATTERN);
-      if (valueMatch) {
-        urls.push(valueMatch[1]);
+      if (lineType === "RESPONSE") {
+        const valueMatch = lines[j].match(RESPONSE_VALUE_PATTERN);
+        if (valueMatch) {
+          urls.push(valueMatch[1]);
+        }
         break;
       }
     }
   }
 
-  return [...new Set(urls)];
+  return [...new Set(urls)].filter(isTrustedScreenshotUrl);
 }
 
 function detectImageMimeType(buffer: Buffer): string {

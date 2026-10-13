@@ -100,6 +100,32 @@ describe("parseScreenshotUrls", () => {
     expect(parseScreenshotUrls(logs)).toEqual([]);
   });
 
+  it("ignores DEBUG and response URLs echoed inside request payloads", () => {
+    const logs = [
+      `2026-10-13 9:00:00:000 REQUEST [2026-10-13 9:00:00:000] POST /session/${S}/value {"text":"x DEBUG https://evil.browserstack.com.attacker.io/a.png"}`,
+      `2026-10-13 9:00:00:100 RESPONSE {"value":null}`,
+      `2026-10-13 9:00:01:000 REQUEST [2026-10-13 9:00:01:000] POST /session/${S}/execute {"script":"GET /session/x/screenshot"}`,
+      `2026-10-13 9:00:01:100 RESPONSE {"value":"https://automate.browserstack.com/not-a-screenshot"}`,
+      `2026-10-13 9:00:02:000 REQUEST [2026-10-13 9:00:02:000] GET /session/${S}/screenshot {}`,
+      `2026-10-13 9:00:02:100 RESPONSE {"other":{"value":"${S3}/nested.png"}}`,
+    ].join("\n");
+
+    expect(parseScreenshotUrls(logs)).toEqual([]);
+  });
+
+  it("drops URLs outside BrowserStack, S3 and B2 hosts", () => {
+    const logs = [
+      `2026-10-13 9:00:00:000 DEBUG http://169.254.169.254/latest/meta-data/`,
+      `2026-10-13 9:00:01:000 DEBUG https://169.254.169.254/latest/meta-data/`,
+      `2026-10-13 9:00:02:000 DEBUG https://localhost/screenshot-1.jpeg`,
+      `2026-10-13 9:00:03:000 DEBUG https://browserstack.com.evil.io/screenshot-2.jpeg`,
+      `2026-10-13 9:00:04:000 DEBUG https://sts.amazonaws.com/screenshot-3.jpeg`,
+      `2026-10-13 9:00:05:000 DEBUG ${S3}/screenshot-4.jpeg`,
+    ].join("\n");
+
+    expect(parseScreenshotUrls(logs)).toEqual([`${S3}/screenshot-4.jpeg`]);
+  });
+
   it("returns nothing when the session has no screenshots", () => {
     const logs = [
       `2026-10-13 9:21:1:278 REQUEST [2026-10-13 9:21:1:278] POST /session/${S}/url {"url":"https://example.com"}`,

@@ -1,0 +1,10 @@
+{
+  "name": "browserstack-mcp-server",
+  "version": "1.0.0",
+  "description": "BrowserStack MCP Server for test case management, automated testing, and code debugging",
+  "author": {
+    "name": "BrowserStack"
+  },
+  "repository": "https://github.com/browserstack/mcp-server",
+  "keywords": ["browserstack", "testing", "mcp", "automation"]
+}

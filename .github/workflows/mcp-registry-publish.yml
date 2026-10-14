@@ -50,8 +50,45 @@ jobs:
           mv server.json.tmp server.json
           cat server.json
 
+      - name: Wait for npm to serve the release
+        # The registry validates that the npm version exists before accepting
+        # the server entry. npm's read API lags publish by up to a minute, so
+        # tag-triggered runs raced it and failed (v2.2.0/2.2.1/2.2.2 all 404'd
+        # seconds before the version appeared). Poll until npm serves it.
+        env:
+          PACKAGE_NAME: "@browserstack/mcp-server"
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          ENCODED="${PACKAGE_NAME/\//%2F}"
+          for attempt in $(seq 1 30); do
+            STATUS="$(curl -sS -o /dev/null -w '%{http_code}' \
+              "https://registry.npmjs.org/${ENCODED}/${VERSION}" || true)"
+            if [ "$STATUS" = "200" ]; then
+              echo "npm is serving ${PACKAGE_NAME}@${VERSION} (attempt ${attempt})."
+              exit 0
+            fi
+            echo "Attempt ${attempt}/30: npm returned ${STATUS} for ${VERSION}; retrying in 10s."
+            sleep 10
+          done
+          echo "::error::npm did not serve ${PACKAGE_NAME}@${VERSION} within 5 minutes."
+          exit 1
+
       - name: Login to MCP Registry
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
-        run: ./mcp-publisher publish
+        # Retry on transient registry/propagation errors so a brief blip does
+        # not cost a whole release cycle.
+        run: |
+          for attempt in 1 2 3; do
+            if ./mcp-publisher publish; then
+              echo "Published to MCP Registry (attempt ${attempt})."
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Publish attempt ${attempt} failed; retrying in 30s."
+              sleep 30
+            fi
+          done
+          echo "::error::Failed to publish to the MCP Registry after 3 attempts."
+          exit 1

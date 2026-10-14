@@ -82,6 +82,21 @@ Similar to the app testing, you can use the following prompts to test your **web
 - Test websites across different browsers and devices. We support [every major browser](https://www.browserstack.com/list-of-browsers-and-platforms/live) across every major OS.
 - Seamlessly test websites hosted locally on your machine, no need to deploy to a remote server!
 
+### 🤖 Agent-Driven Devices and Browsers
+
+Let your AI agent drive a real phone or browser step by step: install the app, read the screen, tap, type, swipe and check the result, with a shareable live view and a recorded video.
+
+```bash
+# Drive a real device
+"start my app on a Google Pixel 8, sign up with a test account, and tell me what you see"
+
+# Drive a real browser
+"open Chrome on Windows 11 at localhost:3000 through BrowserStack Local and test the checkout"
+```
+
+- Works on real Android and iOS devices (App Automate) and desktop or mobile browsers (Automate).
+- See [Agent-driven devices and browsers](docs/AGENT-DEVICE-AND-BROWSER-SESSIONS.md) for what it can do, setup and limits.
+
 ### 🧪 Automated Testing (Playwright, Selenium, A11y and more..)
 
 Auto-analyze, diagnose, and even fix broken test scripts right in your IDE or LLM. Instantly fetch logs, identify root causes, and apply context-aware fixes. No more debugging loops.

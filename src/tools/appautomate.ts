@@ -315,13 +315,11 @@ export default function addAppAutomationTools(
 
   tools.takeAppScreenshot = server.tool(
     "takeAppScreenshot",
-    "Use this tool to take a screenshot of an app running on a BrowserStack device. This is useful for visual testing and debugging.",
+    "Take a screenshot of an app running on a BrowserStack device.",
     {
       desiredPhone: z
         .string()
-        .describe(
-          "The full name of the device to run the app on. Example: 'iPhone 12 Pro' or 'Samsung Galaxy S20'. Always ask the user for the device they want to use.",
-        ),
+        .describe("Exact device name, e.g. 'iPhone 15 Pro Max'. Ask the user."),
       desiredPlatformVersion: z
         .string()
         .describe(
@@ -332,9 +330,7 @@ export default function addAppAutomationTools(
         .describe("Platform to run the app on. Either 'android' or 'ios'."),
       appPath: z
         .string()
-        .describe(
-          "The path to the .apk or .ipa file. Required for app installation. Must be located inside the directory set in MCP_UPLOAD_BASE_DIR.",
-        ),
+        .describe("Local .apk/.ipa path inside MCP_UPLOAD_BASE_DIR."),
     },
     {
       title: "Take App Screenshot",

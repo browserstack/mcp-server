@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { AppTestPlatform } from "./types.js";
 
-export const RUN_APP_AUTOMATE_DESCRIPTION = `Execute pre-built native mobile test suites (Espresso for Android, XCUITest for iOS) by direct upload to BrowserStack. ONLY for compiled .apk/.ipa test files. This is NOT for SDK integration or Appium tests. For Appium-based testing with SDK setup, use 'setupBrowserStackAppAutomateTests' instead.`;
+export const RUN_APP_AUTOMATE_DESCRIPTION = `Run pre-built Espresso (Android) or XCUITest (iOS) suites on BrowserStack by upload. Not for Appium: use setupBrowserStackAppAutomateTests.`;
 
 export const MobileDeviceSchema = z.object({
   platform: z
@@ -19,35 +19,19 @@ export const RUN_APP_AUTOMATE_SCHEMA = {
   appPath: z
     .string()
     .describe(
-      "Path to your application file:\n" +
-        "If in development IDE directory:\n" +
-        "• For Android: 'gradle assembleDebug'\n" +
-        "• For iOS:\n" +
-        "  xcodebuild clean -scheme YOUR_SCHEME && \\\n" +
-        "  xcodebuild archive -scheme YOUR_SCHEME -configuration Release -archivePath build/app.xcarchive && \\\n" +
-        "  xcodebuild -exportArchive -archivePath build/app.xcarchive -exportPath build/ipa -exportOptionsPlist exportOptions.plist\n\n" +
-        "If in other directory, provide existing app path.\n" +
-        "The resolved file must be located inside the directory set in MCP_UPLOAD_BASE_DIR.",
+      "Built .apk/.ipa inside MCP_UPLOAD_BASE_DIR (gradle assembleDebug, or xcodebuild archive and export).",
     ),
   testSuitePath: z
     .string()
     .describe(
-      "Path to your test suite file:\n" +
-        "If in development IDE directory:\n" +
-        "• For Android: 'gradle assembleAndroidTest'\n" +
-        "• For iOS:\n" +
-        "  xcodebuild test-without-building -scheme YOUR_SCHEME -destination 'generic/platform=iOS' && \\\n" +
-        "  cd ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphonesimulator/ && \\\n" +
-        "  zip -r Tests.zip *.xctestrun *-Runner.app\n\n" +
-        "If in other directory, provide existing test file path.\n" +
-        "The resolved file must be located inside the directory set in MCP_UPLOAD_BASE_DIR.",
+      "Built suite inside MCP_UPLOAD_BASE_DIR (gradle assembleAndroidTest, or zipped .xctestrun + Runner.app).",
     ),
   devices: z
     .array(MobileDeviceSchema)
     .max(3)
     .default([])
     .describe(
-      "Tuples describing target mobile devices. Add device only when user asks explicitly for it. Defaults to [] . Example: [['android', 'Samsung Galaxy S24', '14'], ['ios', 'iPhone 15', '17']]",
+      "Only devices the user asked for, e.g. [['android', 'Samsung Galaxy S24', '14']].",
     ),
   project: z
     .string()

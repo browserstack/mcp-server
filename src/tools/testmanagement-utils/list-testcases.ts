@@ -18,9 +18,7 @@ export const ListTestCasesSchema = z.object({
   folder_id: z
     .string()
     .optional()
-    .describe(
-      "Optional. If provided, only return test cases in this folder. If omitted, returns all test cases in the project. Folder ids can be discovered via listFolders.",
-    ),
+    .describe("Only this folder's cases (ids from listFolders). Omit for all."),
   case_type: z
     .string()
     .optional()

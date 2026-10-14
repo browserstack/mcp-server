@@ -73,20 +73,18 @@ export const UpdateTestCaseSchema = z.object({
   priority: z
     .string()
     .optional()
-    .describe(
-      "Updated priority. Accepts either display name (e.g. 'Medium', 'Critical', 'High', 'Low') or internal name (e.g. 'medium'). Valid values are per-project and discoverable via the form-fields endpoint.",
-    ),
+    .describe("Priority, e.g. 'High' or 'medium'; values vary per project."),
   case_type: z
     .string()
     .optional()
     .describe(
-      "Updated test case type. Accepts either display name (e.g. 'Functional', 'Regression', 'Smoke & Sanity') or internal name (e.g. 'functional', 'smoke_sanity'). Valid values are per-project.",
+      "Type, e.g. 'Functional' or 'smoke_sanity'; values vary per project.",
     ),
   automation_status: z
     .string()
     .optional()
     .describe(
-      "Updated automation status. Use internal name such as 'not_automated', 'automated', 'automation_not_required', 'cannot_be_automated', or 'obsolete'.",
+      "e.g. not_automated, automated, automation_not_required, obsolete.",
     ),
   status: z
     .string()

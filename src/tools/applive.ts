@@ -83,18 +83,16 @@ export default function addAppLiveTools(
 
   tools.runAppLiveSession = server.tool(
     "runAppLiveSession",
-    "Use this tool when user wants to manually check their app on a particular mobile device using BrowserStack's cloud infrastructure. Can be used to debug crashes, slow performance, etc.",
+    "Open an app on a real mobile device in App Live for a manual check or crash debugging.",
     {
       desiredPhone: z
         .string()
         .describe(
-          "The full name of the device to run the app on. Example: 'iPhone 12 Pro' or 'Samsung Galaxy S20' or 'Google Pixel 6'. Always ask the user for the device they want to use, do not assume it. ",
+          "Exact device name, e.g. 'iPhone 15 Pro Max'. Ask the user; never assume.",
         ),
       desiredPlatformVersion: z
         .string()
-        .describe(
-          "Specifies the platform version to run the app on. For example, use '12.0' for Android or '16.0' for iOS. If the user says 'latest', 'newest', or similar, normalize it to 'latest'. Likewise, convert terms like 'earliest' or 'oldest' to 'oldest'.",
-        ),
+        .describe("Version number, or 'latest' / 'oldest'."),
       desiredPlatform: z
         .enum(["android", "ios"])
         .describe(
@@ -103,7 +101,7 @@ export default function addAppLiveTools(
       appPath: z
         .string()
         .describe(
-          "The path to the .ipa or .apk file to install on the device. Always ask the user for the app path, do not assume it. Must be located inside the directory set in MCP_UPLOAD_BASE_DIR.",
+          "Local .apk/.ipa path inside MCP_UPLOAD_BASE_DIR. Ask the user; never assume.",
         ),
     },
     {

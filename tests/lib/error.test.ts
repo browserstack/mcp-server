@@ -68,8 +68,19 @@ describe("errorText", () => {
     );
   });
 
+  it("ignores an HTML error page and reports the status instead", () => {
+    const page =
+      "<html><head><title>504 Gateway Time-out</title></head><body>nginx</body></html>";
+    expect(errorText(axiosError(504, page), "d")).toBe(
+      "Request failed with status code 504",
+    );
+    expect(
+      errorText(axiosError(502, "<!DOCTYPE html><html></html>"), "d"),
+    ).toBe("Request failed with status code 502");
+  });
+
   it("caps the surfaced text at 500 characters", () => {
-    expect(errorText(axiosError(504, "<html>".repeat(2000)), "d")).toHaveLength(
+    expect(errorText(axiosError(504, "x".repeat(10000)), "d")).toHaveLength(
       500,
     );
     const big = {

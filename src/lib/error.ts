@@ -8,8 +8,12 @@ function clip(text: string): string {
   return text.length > MAX_ERROR_TEXT ? text.slice(0, MAX_ERROR_TEXT) : text;
 }
 
+const HTML_DOCUMENT = /^\s*<(!doctype|html)\b/i;
+
 function stringify(value: unknown): string {
-  if (typeof value === "string") return value.trim();
+  if (typeof value === "string") {
+    return HTML_DOCUMENT.test(value) ? "" : value.trim();
+  }
   if (value === undefined || value === null) return "";
   try {
     const json = JSON.stringify(value);
@@ -46,8 +50,8 @@ function bodyText(data: unknown): string | undefined {
  * Returns the most specific human-readable text for an error raised by an
  * API call, capped at 500 characters. For an AxiosError with a response body
  * it prefers the body's `message`, `error` or `errors` field, serialising
- * objects, and uses the whole body when none of those fields exist. An empty
- * or whitespace-only body falls back to the error's own message.
+ * objects, and uses the whole body when none of those fields exist. An empty,
+ * whitespace-only or HTML-document body falls back to the error's own message.
  * @param err - The error object to describe
  * @param defaultText - The fallback error message
  */

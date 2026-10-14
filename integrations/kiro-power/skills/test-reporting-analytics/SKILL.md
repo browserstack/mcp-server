@@ -46,14 +46,6 @@ The reference file `references/workflows.md` lists all 58 product workflows by e
 
 `listTestIds` with `includeFailureDetail: true` and `fetchBuildInsights` return `is_flaky`, `is_always_failing`, `is_new_failure` and failure categories. Lead with them: a new failure after a passing history is a regression; an always-failing test is tech debt; a flaky one needs stabilising, not debugging. Then drill in only where the flags point.
 
-## Validated behaviour
-
-- `get_default_project` returned the account's most recent project with `id` and `normalisedName`.
-- `list_project_builds_by_project_id` returned ten builds with `build_id`, status counts, build numbers and observability links, oldest first within the page, with a cursor.
-- `list_projects_lite_paginated` with `search` returned matching projects newest-activity first, 100 per page.
-- `describeCapability` on `list_recent_runs` reported the subscription side effect; it was not invoked.
-- The named tools `listBuildId`, `listTestIds` and `fetchBuildInsights` resolved the same builds without the registry.
-
 ## Result card
 
 - **Build**: name, number, status, pass/fail counts

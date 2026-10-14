@@ -29,7 +29,7 @@ Nothing to run up front. The hosted server authenticates with OAuth; the first t
 
 ## Rules every skill follows
 
-- **Exact names.** Device names, browser names, project names and build names must match BrowserStack's spelling exactly. "iPhone 15" is rejected when the catalogue has "iPhone 15 Pro Max". When a tool returns a "not found, similar: ..." error, pick from the list it gives or ask the user; do not guess.
+- **Exact names.** Device names, browser names, project names and build names must match BrowserStack's spelling exactly. A near miss such as "iPhone 15" for "iPhone 15 Pro Max" is rejected. When a tool returns a "not found, similar: ..." error, pick from the list it gives or ask the user; do not guess.
 - **Narrow before wide.** Prefer a tool that returns one filtered thing over one that returns everything. Never request raw session logs for a web test first; they can be hundreds of thousands of characters.
 - **Writes are proposals.** Root-cause and self-healing tools return suggested fixes. Show the diff and the cause together and apply only after the user says yes.
 - **Never retry an identical failing call.** Change an argument or ask the user.

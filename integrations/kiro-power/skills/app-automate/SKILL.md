@@ -14,7 +14,7 @@ Load this skill when the user has a mobile test suite or a failed mobile build: 
 ### Path 1: Appium project
 
 1. Detect language (java, nodejs, python, ruby, csharp) and runner; confirm in one line.
-2. `setupBrowserStackAppAutomateTests` takes `appPath` as a local .apk or .ipa path and uploads it. It rejected a `bs://` id with "file not found" despite its description; give it a file.
+2. `setupBrowserStackAppAutomateTests` takes `appPath` as a local .apk or .ipa path and uploads it. It does not accept a `bs://` id; give it a file.
 3. Devices only when named, up to three, each with `platform`, `deviceName`, `osVersion`, exact names.
 4. Apply the returned SDK instructions with approval, then run the suite with the project's normal command.
 
@@ -67,11 +67,6 @@ One `logTypes` entry per call. `fetchAutomationScreenshots` returns captures onl
 | App crash | crash log present | the app is wrong; show the crash |
 | Environment | WebDriverAgent or capability error before the first step | report "did not start"; name the capability or app build |
 | Auth or quota | 401, 403, plan text | stop; reconnect or check the plan |
-
-## Validated behaviour
-
-- Setup with a `bs://` id failed with "file not found"; `runAppTestsOnBrowserStack` with invalid ids returned a bare 422; `takeAppScreenshot` with an invalid id failed after a timeout.
-- On a real failed iOS build: `listBuildId` resolved the build by its full name; `listTestIds` gave the test and session ids; `fetchRCA` returned AUTOMATION_BUG with MEDIUM evidence and a wait-based fix; `appiumLogs` returned 11 failure lines; `sessionLogs` and `networkLogs` were rejected; no crash logs, no screenshots, no healed pairs; `listSessions` returned five sessions with devices, versions and video links.
 
 ## Result card
 

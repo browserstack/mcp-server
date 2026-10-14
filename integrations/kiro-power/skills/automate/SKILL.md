@@ -17,7 +17,7 @@ Read the project for the language (nodejs, python, java, csharp, ruby), the brow
 
 ### Step 2: Devices
 
-Only when the user names them, up to three. Each entry has `platform` (windows, macos, android, ios) and `osVersion`, plus `browser` and `browserVersion` for desktop or `deviceName` for mobile. Names must be exact: "iPhone 15 Pro Max" passed, "iPhone 15" was rejected with a suggestion list. Choose from suggestions or ask.
+Only when the user names them, up to three. Each entry has `platform` (windows, macos, android, ios) and `osVersion`, plus `browser` and `browserVersion` for desktop or `deviceName` for mobile. Names must be exact, for example "iPhone 15 Pro Max" rather than "iPhone 15"; a near miss is rejected with a suggestion list. Choose from suggestions or ask.
 
 ### Step 3: Setup
 
@@ -44,7 +44,7 @@ Run the suite with the script the setup added. Then `getBuildId` with the projec
 | `consoleLogs` | JavaScript errors, already filtered |
 | `networkLogs` | failed requests only, with status and URL |
 | `video` | the session recording link |
-| never `sessionLogs` first | the raw driver log: 858,000 characters for a 20-second Playwright test. Request it only by explicit user ask and summarise from the file, never into context |
+| never `sessionLogs` first | the raw driver log, often hundreds of thousands of characters even for a short test. Request it only by explicit user ask and summarise from the file, never into context |
 
 One `logTypes` entry per `getFailureLogs` call. `fetchAutomationScreenshots` returns captures only when the SDK took them; "none found" is normal.
 
@@ -62,12 +62,6 @@ One `logTypes` entry per `getFailureLogs` call. `fetchAutomationScreenshots` ret
 | Product bug | PRODUCT_BUG, console error or 5xx at the step | the test is likely right; show the error |
 | Environment | session never started, capability error | report "did not start"; name the capability |
 | Auth or quota | 401, 403, plan text | stop; reconnect or check the plan |
-
-## Validated behaviour
-
-- Setup for nodejs + playwright with two platforms returned the nine-step guide and a `browserstack.yml` with concrete versions; the handler writes no files.
-- `getBuildId` returned not found for another user's build; `listBuildId` resolved it.
-- On a real failed Playwright build: `listTestIds` gave the test and session ids; `fetchRCA` returned AUTOMATION_BUG with HIGH evidence, the exact failing line and a one-line fix; `consoleLogs` returned 2 entries, `networkLogs` 10, `sessionLogs` 858,223 characters; self-heal returned no pairs but the test source with its GitHub link; no screenshots.
 
 ## Result card
 

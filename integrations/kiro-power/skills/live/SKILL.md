@@ -21,11 +21,6 @@ Load this skill when the user wants to look at a website themselves: "open this 
 - "latest", "newest", "current" become `latest`; "oldest", "earliest" become `oldest`. macOS versions are names such as `Sequoia`, not numbers.
 - Device names must match BrowserStack's catalogue exactly, for example `Samsung Galaxy S23`, `iPhone 14 Pro`, `Google Pixel 8`. On a not-found error with suggestions, choose from them or ask.
 
-## Validated behaviour
-
-- Desktop: Windows 11, Chrome latest returned a dashboard link with the resolved version (155.0).
-- Mobile: Android latest on Samsung Galaxy S23 returned a link; latest resolved to Android 13.
-
 ## Result card
 
 - **Opened**: the URL on the browser or device

@@ -1657,6 +1657,19 @@ describe('updateTestCase — upstream error messages', () => {
     expect(text).not.toContain('[object Object]');
   });
 
+  it('returns the whole body when it has no message, error or errors field', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(
+      axiosError(400, { detail: { hint: 'priority must be one of: low, medium, high' } }),
+    );
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    const text = (result.content[0] as any).text as string;
+    expect(text).toBe(
+      'Failed to update test case (HTTP 400): {"detail":{"hint":"priority must be one of: low, medium, high"}}.',
+    );
+  });
+
   it('adds the credentials hint only on 401', async () => {
     (apiClientMock.patch as Mock).mockRejectedValueOnce(axiosError(401, 'Unauthorized'));
 

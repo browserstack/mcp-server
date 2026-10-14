@@ -5,7 +5,8 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
  * Returns the most specific human-readable text for an error raised by an
  * API call. For an AxiosError with a response body it prefers the body's
  * `message`, `error` or `errors` field, serialising it when the API sent an
- * object instead of a string.
+ * object instead of a string, and falls back to the whole body (capped at 500
+ * chars) when none of those fields exist.
  * @param err - The error object to describe
  * @param defaultText - The fallback error message
  */
@@ -18,6 +19,8 @@ export function errorText(err: unknown, defaultText: string): string {
         : (data?.message ?? data?.error ?? data?.errors);
     if (typeof detail === "string" && detail.trim()) return detail;
     if (detail !== undefined && detail !== null) return JSON.stringify(detail);
+    const body = JSON.stringify(data);
+    if (body && body !== "{}" && body !== '""') return body.slice(0, 500);
     return err.message || defaultText;
   }
   if (err instanceof Error) return err.message || defaultText;

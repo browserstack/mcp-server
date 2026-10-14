@@ -577,8 +577,7 @@ export default function addAccessibilityTools(
 
   tools.getAccessibilityAuthConfig = server.tool(
     "getAccessibilityAuthConfig",
-    "Retrieve an existing authentication configuration by ID." +
-      NEEDS_A11Y_CONFIG_ID,
+    "Get an accessibility auth config by ID." + NEEDS_A11Y_CONFIG_ID,
     {
       configId: z.number().describe("ID of the auth configuration to retrieve"),
     },
@@ -596,7 +595,7 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues from a completed scan with pagination support. Use cursor parameter to get subsequent pages of results." +
+    "Fetch a completed scan's accessibility issues; page with `cursor`." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z

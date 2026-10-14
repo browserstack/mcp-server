@@ -90,14 +90,10 @@ export const customFieldValueSchema = z.union([
 export const CreateTestCaseSchema = z.object({
   project_identifier: z
     .string()
-    .describe(
-      "The ID of the BrowserStack project where the test case should be created. If no project identifier is provided, ask the user if they would like to create a new project using the createProjectOrFolder tool.",
-    ),
+    .describe("Project id (PR-*). If none, offer createProjectOrFolder."),
   folder_id: z
     .string()
-    .describe(
-      "The ID of the folder within the project where the test case should be created. If not provided, ask the user if they would like to create a new folder using the createProjectOrFolder tool.",
-    ),
+    .describe("Folder id. If none, offer createProjectOrFolder."),
   name: z.string().describe("Name of the test case."),
   description: z
     .string()
@@ -158,7 +154,7 @@ export const CreateTestCaseSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Priority of the test case. Accepts either display name (e.g. 'Critical', 'High', 'Medium', 'Low') or internal name (e.g. 'medium'). If omitted, the project default (usually 'Medium') is applied. Valid values are per-project and discoverable via the form-fields endpoint.",
+      "Priority, e.g. 'High' or 'medium'; values vary per project; default Medium.",
     ),
   case_type: z
     .string()

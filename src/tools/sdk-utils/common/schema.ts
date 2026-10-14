@@ -88,7 +88,7 @@ export const RunTestsOnBrowserStackParamsShape = {
     .max(3)
     .default([])
     .describe(
-      "Device objects array. Use the object format directly - no transformation needed. Add only when user explicitly requests devices. Examples: [{ platform: 'windows', osVersion: '11', browser: 'chrome', browserVersion: 'latest' }] or [{ platform: 'android', deviceName: 'Samsung Galaxy S24', osVersion: '14', browser: 'chrome' }].",
+      "Only devices the user asked for, e.g. [{ platform: 'windows', osVersion: '11', browser: 'chrome', browserVersion: 'latest' }].",
     ),
 };
 

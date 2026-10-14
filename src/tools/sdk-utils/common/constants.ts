@@ -12,7 +12,7 @@ export const PERCY_SNAPSHOT_COMMANDS_DESCRIPTION =
   "Adds Percy snapshot commands to the specified test files.";
 
 export const RUN_ON_BROWSERSTACK_DESCRIPTION =
-  "Set up and run automated web-based tests on BrowserStack using the BrowserStack SDK. Use this tool for functional or integration test setup on BrowserStack only. For any visual testing or Percy integration, use the dedicated Percy setup tool. Example prompts: run this test on browserstack; set up this project for browserstack.";
+  "Set up and run web tests on BrowserStack Automate with the SDK (functional or integration). For Percy visual testing use the Percy tool.";
 
 export const SIMULATE_PERCY_CHANGE_DESCRIPTION = `Integrate Percy visual testing into new projects and demonstrate visual change detection through a step-by-step simulation. This tool handles initial Percy integration, setup, and creates a working demonstration for new users. Primary tool for prompts like: "Integrate percy for this project", "Integrate percy in this project {project_name}"`;
 

@@ -290,7 +290,7 @@ async function uncover(
   const r = await dismissKeyboard(session, b, { allowReturn: false });
   if (!r.closed) {
     throw new DeviceToolError(
-      `${describeTarget(target)} is under the on-screen keyboard, and the app offers no way to close it (tried: ${r.tried.join(", ")}). A person on this phone would be blocked too, so report it as an app issue. If the app submits on enter, typeOnDevice with submit: true may still get past this screen.`,
+      `${describeTarget(target)} is under the on-screen keyboard, and the app offers no way to close it (tried: ${r.tried.join(", ")}). If the app submits on enter, typeOnDevice with submit: true may still get past this screen. Otherwise look for a way through that needs no typing (for example, values the app can fill in for you), or leave the screen with the app's own back control, which closes the keyboard. If nothing works, a person on this phone would be blocked too: report it as an app issue.`,
     );
   }
   return {
@@ -567,10 +567,20 @@ async function iosEnter(b: any): Promise<void> {
 // and moves in steps; a start at x = 2 or one long move is ignored. Verified
 // on real iPhone 15s running iOS 17 and iOS 27.
 export const IOS_BACK_STEPS = [0.15, 0.3, 0.45, 0.6, 0.8];
+/** Long enough for the iOS pop animation to finish before comparing screens. */
+export const IOS_BACK_SETTLE_MS = 800;
 
 async function iosBack(b: any): Promise<string> {
   const { width, height } = await windowSize(b);
   const y = Math.round(height / 2);
+  const source = async (): Promise<string | undefined> => {
+    try {
+      return await b.getPageSource();
+    } catch {
+      return undefined;
+    }
+  };
+  const before = await source();
   await touch(b, [
     { type: "pointerMove", duration: 0, x: 0, y },
     { type: "pointerDown", button: 0 },
@@ -582,6 +592,13 @@ async function iosBack(b: any): Promise<string> {
     })),
     { type: "pointerUp", button: 0 },
   ]);
+  await sleep(IOS_BACK_SETTLE_MS);
+  const after = await source();
+  if (before !== undefined && before === after) {
+    // Screens an app draws with its own header instead of an iOS navigation
+    // bar ignore the system swipe; a person's swipe does nothing there too.
+    return "Swiped from the left edge (iOS back gesture), but the screen did not change: this screen does not respond to the iOS back swipe. Tap the app's own back control instead, usually at the top left.";
+  }
   return "Swiped from the left edge (iOS back gesture)";
 }
 
@@ -668,6 +685,18 @@ export async function manageApp(
     }
     if (args.action === "launch" || args.action === "restart") {
       await b.execute("mobile: activateApp", p);
+      // activateApp can return without the app reaching the front (for
+      // example, apps restricted on shared devices); check before claiming it.
+      let front = await foregroundAppId(session, b);
+      for (let i = 0; i < 3 && front && front !== appId; i++) {
+        await sleep(700);
+        front = await foregroundAppId(session, b);
+      }
+      if (front && front !== appId) {
+        throw new DeviceToolError(
+          `${appId} did not come to the front; ${front} is still showing. The app may be restricted on this device. Take a screenshot to check.`,
+        );
+      }
     }
     if (args.action === "uninstall") {
       await b.execute("mobile: removeApp", p);
@@ -702,7 +731,7 @@ export async function setDeviceState(
       const r = await dismissKeyboard(session, b, { allowReturn: true });
       if (!r.closed) {
         throw new DeviceToolError(
-          `The on-screen keyboard is still open: this app offers no way to close it (tried: ${r.tried.join(", ")}). A person on this phone would be blocked too, so report it as an app issue.`,
+          `The on-screen keyboard is still open: this app offers no way to close it (tried: ${r.tried.join(", ")}). Look for a way through that needs no typing (for example, values the app can fill in for you), or leave the screen with the app's own back control, which closes the keyboard. If nothing works, a person on this phone would be blocked too: report it as an app issue.`,
         );
       }
       done.push(

@@ -341,6 +341,16 @@ describe("device actions", () => {
     await expect(pressKey(s, { keycode: 4, settleMs: 0 })).rejects.toThrow(/no numeric keycodes/);
   });
 
+  it("says when the iOS back swipe left the screen unchanged, so the agent uses the app's own back control", async () => {
+    const pages = ["<product/>", "<catalog/>", "<custom-header/>", "<custom-header/>"];
+    const { browser } = fakeBrowser({ sessionId: "ios-back", getPageSource: vi.fn(async () => pages.shift()) });
+    const s = session(browser, "ios");
+    const moved = await pressKey(s, { key: "back", settleMs: 0 });
+    expect(moved).toBe("Swiped from the left edge (iOS back gesture)");
+    const stuck = await pressKey(s, { key: "back", settleMs: 0 });
+    expect(stuck).toMatch(/screen did not change: this screen does not respond to the iOS back swipe\. Tap the app's own back control/);
+  });
+
   it("restarts the app under test with platform-specific ids", async () => {
     const { browser } = fakeBrowser({ sessionId: "ios-2" });
     const s = session(browser, "ios");
@@ -349,7 +359,23 @@ describe("device actions", () => {
     expect(cmds).toEqual([
       ["mobile: terminateApp", { bundleId: "com.app.ios" }],
       ["mobile: activateApp", { bundleId: "com.app.ios" }],
+      ["mobile: activeAppInfo"],
     ]);
+  });
+
+  it("does not claim a launch when the app never reached the front", async () => {
+    const { browser } = fakeBrowser({ sessionId: "ios-3" });
+    browser.execute.mockImplementation(async (cmd: string) =>
+      cmd === "mobile: activeAppInfo" ? { bundleId: "com.apple.springboard" } : undefined,
+    );
+    const s = session(browser, "ios");
+    await expect(manageApp(s, { action: "launch", appId: "com.apple.Preferences", settleMs: 0 })).rejects.toThrow(
+      /com\.apple\.Preferences did not come to the front; com\.apple\.springboard is still showing/,
+    );
+    browser.execute.mockImplementation(async (cmd: string) =>
+      cmd === "mobile: activeAppInfo" ? { bundleId: "com.apple.Preferences" } : undefined,
+    );
+    expect(await manageApp(s, { action: "launch", appId: "com.apple.Preferences", settleMs: 0 })).toBe("Launched com.apple.Preferences");
   });
 
   it("drops a session BrowserStack already ended and says how to recover", async () => {

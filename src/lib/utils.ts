@@ -38,17 +38,15 @@ export async function maybeCompressBase64(base64: string): Promise<string> {
       sharp.concurrency(1);
       sharpConfigured = true;
     }
-    const compressedBuffer = await sharp(buffer, {
-      limitInputPixels: MAX_INPUT_PIXELS,
-    })
-      .resize({
-        width: MAX_IMAGE_DIMENSION,
-        height: MAX_IMAGE_DIMENSION,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .png({ quality })
-      .toBuffer();
+    const image = globalConfig.REMOTE_MCP
+      ? sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).resize({
+          width: MAX_IMAGE_DIMENSION,
+          height: MAX_IMAGE_DIMENSION,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+      : sharp(buffer);
+    const compressedBuffer = await image.png({ quality }).toBuffer();
     return compressedBuffer.toString("base64");
   } catch (err) {
     logger.warn(

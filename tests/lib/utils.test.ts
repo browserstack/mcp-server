@@ -9,13 +9,18 @@ vi.mock("../../src/index", () => ({ trackMCP: vi.fn() }));
 vi.mock("../../src/logger", () => ({
   default: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
+const cfg = vi.hoisted(() => ({ REMOTE_MCP: false }));
+vi.mock("../../src/config", () => ({ default: cfg }));
 
 // sharp itself is globally mocked in tests/setup.ts (native module).
 const ONE_MB = 1048576;
 const overSized = () => Buffer.alloc(ONE_MB + 1, 7).toString("base64");
 
 describe("maybeCompressBase64", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cfg.REMOTE_MCP = false;
+  });
 
   it("returns the input unchanged when already <= 1 MB (never touches sharp)", async () => {
     const small = Buffer.from("small-image").toString("base64");
@@ -30,7 +35,8 @@ describe("maybeCompressBase64", () => {
     expect(sharp as unknown as Mock).toHaveBeenCalledTimes(1);
   });
 
-  it("bounds decoded pixels and downscales large images", async () => {
+  it("on remote, bounds decoded pixels and downscales large images", async () => {
+    cfg.REMOTE_MCP = true;
     await maybeCompressBase64(overSized());
     const sharpMock = sharp as unknown as Mock;
     expect(sharpMock.mock.calls[0][1]).toEqual({
@@ -43,6 +49,13 @@ describe("maybeCompressBase64", () => {
       fit: "inside",
       withoutEnlargement: true,
     });
+  });
+
+  it("locally, keeps full resolution and sharp's default pixel limit", async () => {
+    await maybeCompressBase64(overSized());
+    const sharpMock = sharp as unknown as Mock;
+    expect(sharpMock.mock.calls[0]).toHaveLength(1);
+    expect(sharpMock.mock.results[0].value.resize).not.toHaveBeenCalled();
   });
 
   it("falls back to the uncompressed image (and warns) when sharp fails to load", async () => {

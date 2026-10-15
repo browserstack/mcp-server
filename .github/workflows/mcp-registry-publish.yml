@@ -8,6 +8,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       id-token: write
       contents: read
@@ -58,17 +59,17 @@ jobs:
         run: |
           VERSION="$(node -p 'require("./package.json").version')"
           ENCODED="${PACKAGE_NAME/\//%2F}"
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 90); do
             STATUS="$(curl -sS -o /dev/null -w '%{http_code}' \
               "https://registry.npmjs.org/${ENCODED}/${VERSION}" || true)"
             if [ "$STATUS" = "200" ]; then
               echo "npm is serving ${PACKAGE_NAME}@${VERSION} (attempt ${attempt})."
               exit 0
             fi
-            echo "Attempt ${attempt}/30: npm returned ${STATUS} for ${VERSION}; retrying in 10s."
+            echo "Attempt ${attempt}/90: npm returned ${STATUS} for ${VERSION}; retrying in 10s."
             sleep 10
           done
-          echo "::error::npm did not serve ${PACKAGE_NAME}@${VERSION} within 5 minutes."
+          echo "::error::npm did not serve ${PACKAGE_NAME}@${VERSION} within 15 minutes."
           exit 1
 
       - name: Login to MCP Registry
@@ -82,8 +83,8 @@ jobs:
               exit 0
             fi
             if [ "$attempt" -lt 3 ]; then
-              echo "Publish attempt ${attempt} failed; retrying in 30s."
-              sleep 30
+              echo "Publish attempt ${attempt} failed; retrying in 5m."
+              sleep 300
             fi
           done
           echo "::error::Failed to publish to the MCP Registry after 3 attempts."

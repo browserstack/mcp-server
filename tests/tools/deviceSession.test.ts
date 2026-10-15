@@ -433,7 +433,7 @@ describe("on-screen keyboard", () => {
   it("iOS: says plainly when the app gives no way to close the keyboard, without pressing Return", async () => {
     const { browser, el, s } = keyboardPhone("ios", [true]);
     await expect(tap(s, { text: "Login", waitMs: 0, settleMs: 0 })).rejects.toThrow(
-      /"Login" is under the on-screen keyboard, which did not close \(tried: Done key, swipe down on the keyboard\)\. Return was not pressed because it can submit the form: setDeviceState hideKeyboard also tries Return/,
+      /"Login" is under the on-screen keyboard, which did not close \(tried: Done key, drag down above the keyboard\)\. Return was not pressed because it can submit the form: setDeviceState hideKeyboard also tries Return/,
     );
     expect(el.click).not.toHaveBeenCalled();
     const returnPressed = browser.execute.mock.calls.some((c: any[]) => c[1]?.keys?.includes("Return"));
@@ -475,9 +475,18 @@ describe("on-screen keyboard", () => {
   it("setDeviceState hideKeyboard tries Return as a last resort and fails clearly", async () => {
     const { browser, s } = keyboardPhone("ios", [true]);
     await expect(setDeviceState(s, { hideKeyboard: true, settleMs: 0 })).rejects.toThrow(
-      /keyboard is still open: this app offers no way to close it \(tried: Done key, swipe down on the keyboard, Return key\)/,
+      /keyboard is still open: this app offers no way to close it \(tried: Done key, drag down above the keyboard, Return key\)/,
     );
     expect(browser.execute.mock.calls.some((c: any[]) => c[1]?.keys?.includes("Return"))).toBe(true);
+  });
+
+  it("never puts a finger on the iOS keyboard while closing it, so nothing is swipe-typed into the field", async () => {
+    const { browser, s } = keyboardPhone("ios", [true]);
+    await expect(setDeviceState(s, { hideKeyboard: true, settleMs: 0 })).rejects.toThrow(/still open/);
+    const points = browser.performActions.mock.calls.flatMap((c: any[]) => c[0][0].actions).filter((a: any) => a.type === "pointerMove");
+    expect(points.length).toBeGreaterThan(0);
+    // Keyboard from the helper starts at y = 561.
+    expect(points.every((p: any) => p.y < 561)).toBe(true);
   });
 });
 

@@ -209,19 +209,24 @@ export async function dismissKeyboard(
               }),
           ],
           [
-            "swipe down on the keyboard",
+            // Starts above the keyboard and stops short of it: a drag that
+            // starts on the keys is read as swipe-typing and types a word
+            // into the field (iOS 27 typed "to" / "TV"). Apps whose scroll
+            // view dismisses the keyboard on drag close it this way.
+            "drag down above the keyboard",
             async () => {
               const { rect } = await keyboardState(session, b);
-              if (!rect) return;
+              if (!rect || rect.y < 160) return;
               const x = Math.round(rect.x + rect.width / 2);
+              const top = Math.round(rect.y - 120);
               await touch(b, [
-                { type: "pointerMove", duration: 0, x, y: rect.y + 4 },
+                { type: "pointerMove", duration: 0, x, y: top },
                 { type: "pointerDown", button: 0 },
-                ...[40, 90, 150].map((d) => ({
+                ...[30, 60, 90, 110].map((d) => ({
                   type: "pointerMove",
-                  duration: 60,
+                  duration: 50,
                   x,
-                  y: rect.y + 4 + d,
+                  y: top + d,
                 })),
                 { type: "pointerUp", button: 0 },
               ]);

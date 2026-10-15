@@ -440,7 +440,7 @@ export default function addDeviceSessionTools(
         .boolean()
         .default(false)
         .describe(
-          "Close the on-screen keyboard after typing, e.g. before tapping a button that sits below the field. Tries the Done key and a swipe down, then Return as a last resort (Return can submit the form).",
+          "Close the on-screen keyboard after typing, e.g. before tapping a button that sits below the field. Tries the Done key and a drag above the keyboard, then Return as a last resort (Return can submit the form).",
         ),
       waitMs,
       settleMs,

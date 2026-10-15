@@ -4,6 +4,11 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import globalConfig from "../../config.js";
+import { MAX_LOG_BYTES } from "../failurelogs-utils/utils.js";
+
+export const MAX_SCREENSHOT_BYTES = globalConfig.REMOTE_MCP
+  ? 10 * 1024 * 1024
+  : undefined;
 
 async function extractScreenshotUrls(
   sessionId: string,
@@ -22,9 +27,15 @@ async function extractScreenshotUrls(
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
     },
+    maxContentLength: MAX_LOG_BYTES,
     raise_error: false,
   });
 
+  if (response.status === 413) {
+    throw new Error(
+      "The logs for this session are too large (over 5 MB) to find screenshots here. Open the session in the BrowserStack dashboard to view them.",
+    );
+  }
   await assertOkResponse(response, "Session");
 
   const text =
@@ -54,30 +65,50 @@ async function extractScreenshotUrls(
   return urls;
 }
 
-async function fetchAndCompress(
-  url: string,
-): Promise<{ url: string; base64: string }> {
-  const response = await apiClient.get({ url, responseType: "arraybuffer" });
+type Screenshot = { url: string; base64: string };
+
+// Returns null for a screenshot over MAX_SCREENSHOT_BYTES so the rest still load.
+async function fetchAndCompress(url: string): Promise<Screenshot | null> {
+  const response = await apiClient.get({
+    url,
+    responseType: "arraybuffer",
+    maxContentLength: MAX_SCREENSHOT_BYTES,
+    raise_error: false,
+  });
+  if (response.status === 413) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download screenshot: ${response.status} ${response.statusText}`,
+    );
+  }
   // Axios returns response.data as a Buffer for binary data
   const base64 = Buffer.from(response.data).toString("base64");
   return { url, base64: await maybeCompressBase64(base64) };
 }
 
 //Converts screenshot URLs to base64 encoded images
-async function convertUrlsToBase64(
-  urls: string[],
-): Promise<Array<{ url: string; base64: string }>> {
+async function convertUrlsToBase64(urls: string[]): Promise<Screenshot[]> {
+  let results: Array<Screenshot | null>;
   // Hosted pods are memory-constrained: process one image at a time. Local runs
   // keep the concurrent path.
   if (globalConfig.REMOTE_MCP) {
-    const screenshots: Array<{ url: string; base64: string }> = [];
+    results = [];
     for (const url of urls) {
-      screenshots.push(await fetchAndCompress(url));
+      results.push(await fetchAndCompress(url));
     }
-    return screenshots;
+  } else {
+    results = await Promise.all(urls.map(fetchAndCompress));
   }
 
-  return Promise.all(urls.map(fetchAndCompress));
+  const screenshots = results.filter((s): s is Screenshot => s !== null);
+  if (urls.length > 0 && screenshots.length === 0) {
+    throw new Error(
+      "The screenshots in this session are too large (over 10 MB each) to fetch here. Open the session in the BrowserStack dashboard to view them.",
+    );
+  }
+  return screenshots;
 }
 
 //Fetches and converts screenshot URLs to base64 encoded images

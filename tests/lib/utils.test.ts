@@ -30,6 +30,21 @@ describe("maybeCompressBase64", () => {
     expect(sharp as unknown as Mock).toHaveBeenCalledTimes(1);
   });
 
+  it("bounds decoded pixels and downscales large images", async () => {
+    await maybeCompressBase64(overSized());
+    const sharpMock = sharp as unknown as Mock;
+    expect(sharpMock.mock.calls[0][1]).toEqual({
+      limitInputPixels: 25_000_000,
+    });
+    const pipeline = sharpMock.mock.results[0].value;
+    expect(pipeline.resize).toHaveBeenCalledWith({
+      width: 1920,
+      height: 1920,
+      fit: "inside",
+      withoutEnlargement: true,
+    });
+  });
+
   it("falls back to the uncompressed image (and warns) when sharp fails to load", async () => {
     (sharp as unknown as Mock).mockImplementationOnce(() => {
       throw new Error("Could not load the sharp module (Node < 20.9)");

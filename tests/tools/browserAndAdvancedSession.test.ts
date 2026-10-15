@@ -11,6 +11,10 @@ vi.mock("webdriverio", () => ({ remote: vi.fn() }));
 vi.mock("../../src/lib/apiClient", () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
 }));
+vi.mock("child_process", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("child_process")>()),
+  execFile: vi.fn(() => ({ unref: vi.fn() })),
+}));
 vi.mock("../../src/lib/local", () => ({
   ensureLocalBinarySetup: vi.fn().mockResolvedValue(undefined),
 }));
@@ -268,14 +272,16 @@ describe("App Automate V2 extras", () => {
     return { s, b };
   }
 
-  it("allows only read-only adb families and no shell operators", () => {
-    expect(checkAdbCommand(" getprop ro.build.version.release ")).toBe("getprop ro.build.version.release");
-    expect(checkAdbCommand("pm list packages -3")).toBe("pm list packages -3");
-    expect(() => checkAdbCommand("rm -rf /sdcard")).toThrow(/not on the allowed list/);
-    expect(() => checkAdbCommand("pm uninstall com.x")).toThrow(/not allowed/);
-    expect(() => checkAdbCommand("settings put global x 1")).toThrow(/not on the allowed list/);
+  it("allows only getprop, so nothing can list apps other customers left on shared phones", () => {
+    expect(checkAdbCommand(" getprop  ro.build.version.release ")).toBe("getprop ro.build.version.release");
+    expect(checkAdbCommand("getprop")).toBe("getprop");
+    for (const leaky of ["pm list packages -3", "pm list packages", "dumpsys location", "dumpsys window displays", "dumpsys package", "cmd package list packages", "ls /data/app"]) {
+      expect(() => checkAdbCommand(leaky), leaky).toThrow(/Only "getprop"/);
+    }
+    expect(() => checkAdbCommand("getprop ro.x extra")).toThrow(/not allowed/);
+    expect(() => checkAdbCommand("rm -rf /sdcard")).toThrow(/not allowed/);
     expect(() => checkAdbCommand("getprop; reboot")).toThrow(/Shell operators/);
-    expect(() => checkAdbCommand("dumpsys $(id)")).toThrow(/Shell operators/);
+    expect(() => checkAdbCommand("getprop $(id)")).toThrow(/Shell operators/);
   });
 
   it("runs adb through the BrowserStack executor, Android only", async () => {
@@ -349,6 +355,36 @@ describe("App Automate V2 extras", () => {
   });
 });
 
+describe("opening the live view", () => {
+  it("opens only https BrowserStack links, only on the local server, without a shell", async () => {
+    const { execFile } = await import("child_process");
+    const spy = execFile as unknown as ReturnType<typeof vi.fn>;
+    spy.mockClear();
+    const { openLiveView } = await import("../../src/tools/device-session-utils/open-url");
+    const original = { remote: appConfig.REMOTE_MCP, open: appConfig.OPEN_LIVE_VIEW };
+    try {
+      (appConfig as any).REMOTE_MCP = false;
+      (appConfig as any).OPEN_LIVE_VIEW = true;
+      expect(openLiveView("https://app-automate.browserstack.com/builds/x/sessions/y?auth_token=z")).toBe(true);
+      const [cmd, args] = spy.mock.calls[0] as any[];
+      expect(Array.isArray(args) && args.includes("https://app-automate.browserstack.com/builds/x/sessions/y?auth_token=z")).toBe(true);
+      expect(["open", "xdg-open", "rundll32"]).toContain(cmd);
+      for (const bad of ["http://app-automate.browserstack.com/x", "https://evil.example.com/x", "https://browserstack.com.evil.io/x", "file:///etc/passwd", "not a url", undefined]) {
+        expect(openLiveView(bad as any), String(bad)).toBe(false);
+      }
+      (appConfig as any).OPEN_LIVE_VIEW = false;
+      expect(openLiveView("https://app-automate.browserstack.com/x")).toBe(false);
+      (appConfig as any).OPEN_LIVE_VIEW = true;
+      (appConfig as any).REMOTE_MCP = true;
+      expect(openLiveView("https://app-automate.browserstack.com/x")).toBe(false);
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      (appConfig as any).REMOTE_MCP = original.remote;
+      (appConfig as any).OPEN_LIVE_VIEW = original.open;
+    }
+  });
+});
+
 describe("live view link", () => {
   it("adds a resource_link only when there is a URL", () => {
     const base = { content: [{ type: "text" as const, text: "x" }] };
@@ -384,7 +420,6 @@ describe("registration", () => {
         "getBrowserSession",
         "listBrowsers",
         "navigateBrowser",
-        "readBrowserPage",
         "scrollBrowser",
         "startBrowserSession",
         "switchBrowserContext",
@@ -392,7 +427,7 @@ describe("registration", () => {
         "typeInBrowser",
       ].sort(),
     );
-    expect(t.readBrowserPage.readOnlyHint).toBe(true);
+    expect(t.readBrowserPage).toBeUndefined();
     expect(t.listBrowsers.readOnlyHint).toBe(true);
     expect(t.clickInBrowser.readOnlyHint).toBe(false);
   });

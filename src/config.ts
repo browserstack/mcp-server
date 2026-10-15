@@ -92,6 +92,8 @@ export class Config {
     public readonly TEAM_DEVICES_FILE: string | undefined = undefined,
     /** Device + browser session starts allowed per user per hour (0 = no limit). */
     public readonly SESSION_STARTS_PER_HOUR: number = 30,
+    /** Open each new session's live view in the local browser (local server only). */
+    public readonly OPEN_LIVE_VIEW: boolean = true,
   ) {}
 }
 
@@ -140,6 +142,9 @@ const config = new Config(
     );
     return Number.isFinite(n) && n >= 0 ? n : 30;
   })(),
+  !["false", "0", "off", "no"].includes(
+    (process.env.BROWSERSTACK_OPEN_LIVE_VIEW || "").trim().toLowerCase(),
+  ),
 );
 
 export default config;

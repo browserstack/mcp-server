@@ -36,7 +36,6 @@ const ADDED = [
   "getDeviceSession",
   "endDeviceSession",
   "takeDeviceScreenshot",
-  "readDeviceScreen",
   "tapOnDevice",
   "typeOnDevice",
   "swipeOnDevice",
@@ -65,8 +64,10 @@ const ADDED = [
   "scrollBrowser",
   "switchBrowserContext",
   "takeBrowserScreenshot",
-  "readBrowserPage",
 ];
+
+// Removed before release: they exposed element locators and page HTML.
+const REMOVED = ["readDeviceScreen", "readBrowserPage"];
 
 describe("server factory with device session tools", () => {
   it("keeps existing tools and adds the new groups without name clashes", () => {
@@ -78,6 +79,9 @@ describe("server factory with device session tools", () => {
     const names = Object.keys(server.getTools());
     for (const name of [...EXISTING, ...ADDED]) {
       expect(names, name).toContain(name);
+    }
+    for (const name of REMOVED) {
+      expect(names, name).not.toContain(name);
     }
   });
 });

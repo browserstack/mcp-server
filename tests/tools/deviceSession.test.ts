@@ -13,11 +13,6 @@ import { remote } from "webdriverio";
 import { apiClient } from "../../src/lib/apiClient";
 import appConfig from "../../src/config";
 import {
-  formatScreenElements,
-  parseScreenElements,
-  redactSecureValues,
-} from "../../src/tools/device-session-utils/screen";
-import {
   errorMessage,
   ownerKey,
   scrubSecrets,
@@ -35,7 +30,7 @@ import {
 } from "../../src/tools/device-session-utils/session";
 import {
   pressKey,
-  readScreen,
+  setDeviceState,
   swipe,
   tap,
   textLocators,
@@ -54,28 +49,6 @@ const otherUser = {
   "browserstack-username": "mallory_Zz99",
   "browserstack-access-key": "other-fake-test-key",
 };
-
-const ANDROID_SOURCE = `<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
-<hierarchy rotation="0">
-  <android.widget.FrameLayout class="android.widget.FrameLayout" text="" clickable="false" bounds="[0,0][1080,2400]" displayed="true">
-    <android.widget.TextView class="android.widget.TextView" text="Welcome &amp; hello" resource-id="com.app:id/title" clickable="false" bounds="[100,200][980,300]" displayed="true" />
-    <android.widget.EditText class="android.widget.EditText" text="secret-pass" password="true" resource-id="com.app:id/pw" clickable="true" focused="true" bounds="[100,400][980,520]" displayed="true" />
-    <android.widget.Button class="android.widget.Button" text="Log in" resource-id="com.app:id/login" clickable="true" bounds="[100,600][980,720]" displayed="true" />
-    <android.widget.ImageView class="android.widget.ImageView" content-desc="Settings" clickable="true" bounds="[900,40][1040,180]" displayed="true" />
-    <android.view.View class="android.view.View" text="" clickable="false" bounds="[0,0][10,10]" displayed="true" />
-  </android.widget.FrameLayout>
-</hierarchy>`;
-
-const IOS_SOURCE = `<?xml version="1.0" encoding="UTF-8"?>
-<AppiumAUT>
-  <XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Sample" label="Sample" enabled="true" visible="true" x="0" y="0" width="390" height="844">
-    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" x="0" y="0" width="390" height="844"/>
-    <XCUIElementTypeButton type="XCUIElementTypeButton" name="Text Button" label="Text" enabled="true" visible="true" x="0" y="73" width="375" height="60"/>
-    <XCUIElementTypeButton type="XCUIElementTypeButton" name="Text Button" label="Text" enabled="true" visible="true" x="0" y="73" width="375" height="60"/>
-    <XCUIElementTypeSecureTextField type="XCUIElementTypeSecureTextField" name="pw" value="typed-x" enabled="true" visible="true" x="10" y="300" width="300" height="40"/>
-    <XCUIElementTypeButton type="XCUIElementTypeButton" name="hidden" label="Hidden" enabled="true" visible="false" x="0" y="0" width="10" height="10"/>
-  </XCUIElementTypeApplication>
-</AppiumAUT>`;
 
 function fakeBrowser(overrides: Record<string, any> = {}) {
   const el = {
@@ -101,7 +74,6 @@ function fakeBrowser(overrides: Record<string, any> = {}) {
         .mockResolvedValue({ "element-6066-11e4-a52e-4f735466cecf": "el-1" }),
       elementSendKeys: vi.fn().mockResolvedValue(undefined),
       elementClear: vi.fn().mockResolvedValue(undefined),
-      getPageSource: vi.fn().mockResolvedValue(ANDROID_SOURCE),
       deleteSession: vi.fn().mockResolvedValue(undefined),
       pressKeyCode: vi.fn(),
       ...overrides,
@@ -135,49 +107,6 @@ function session(
 beforeEach(() => {
   vi.clearAllMocks();
   __clearSessionsForTests();
-});
-
-describe("screen parsing", () => {
-  it("lists actionable Android elements with tap centers and hides password text", () => {
-    const { elements, total } = parseScreenElements(ANDROID_SOURCE, "android", 50);
-    expect(total).toBe(4);
-    expect(elements.map((e) => e.type)).toEqual([
-      "TextView",
-      "EditText",
-      "Button",
-      "ImageView",
-    ]);
-    expect(elements[0].text).toBe("Welcome & hello");
-    expect(elements[1].text).toBeUndefined();
-    expect(elements[1].flags).toEqual(
-      expect.arrayContaining(["password", "editable", "focused"]),
-    );
-    expect(elements[2].center).toEqual({ x: 540, y: 660 });
-    expect(elements[3].desc).toBe("Settings");
-    const formatted = formatScreenElements(elements);
-    expect(formatted).not.toContain("secret-pass");
-    expect(formatted).toContain('[2] Button "Log in" id=com.app:id/login tap=(540,660)');
-  });
-
-  it("dedupes repeated iOS nodes, drops invisible ones and never shows secure values", () => {
-    const { elements } = parseScreenElements(IOS_SOURCE, "ios", 50);
-    const types = elements.map((e) => e.type);
-    expect(types.filter((t) => t === "Button")).toHaveLength(1);
-    expect(elements.some((e) => e.text === "Hidden")).toBe(false);
-    expect(JSON.stringify(elements)).not.toContain("typed-x");
-    expect(elements.find((e) => e.type === "Button")?.center).toEqual({ x: 188, y: 103 });
-  });
-
-  it("caps the list but still reports the total", () => {
-    const { elements, total } = parseScreenElements(ANDROID_SOURCE, "android", 2);
-    expect(elements).toHaveLength(2);
-    expect(total).toBe(4);
-  });
-
-  it("redacts secure values from raw source", () => {
-    expect(redactSecureValues(IOS_SOURCE)).not.toContain("typed-x");
-    expect(redactSecureValues(ANDROID_SOURCE)).not.toContain("secret-pass");
-  });
 });
 
 describe("credential scrubbing", () => {
@@ -400,12 +329,15 @@ describe("device actions", () => {
     await expect(pressKey(s, { key: "launch_rockets", settleMs: 0 })).rejects.toThrow(/Unknown key/);
   });
 
-  it("does the iOS back gesture as a left-edge swipe", async () => {
+  it("does the iOS back gesture from the very edge, in steps (what iOS 17 and 27 respond to)", async () => {
     const { browser } = fakeBrowser({ sessionId: "ios-1" });
     const s = session(browser, "ios");
     expect(await pressKey(s, { key: "back", settleMs: 0 })).toMatch(/left edge/);
-    const move = browser.performActions.mock.calls[0][0][0].actions[0];
-    expect(move).toMatchObject({ x: 2, y: 1000 });
+    const steps = browser.performActions.mock.calls[0][0][0].actions;
+    expect(steps[0]).toMatchObject({ type: "pointerMove", x: 0, y: 1000 });
+    const moves = steps.filter((a: any) => a.type === "pointerMove").slice(1);
+    expect(moves.map((m: any) => m.x)).toEqual([150, 300, 450, 600, 800]);
+    expect(moves.every((m: any) => m.duration > 0)).toBe(true);
     await expect(pressKey(s, { keycode: 4, settleMs: 0 })).rejects.toThrow(/no numeric keycodes/);
   });
 
@@ -422,23 +354,95 @@ describe("device actions", () => {
 
   it("drops a session BrowserStack already ended and says how to recover", async () => {
     const { browser } = fakeBrowser({
-      getPageSource: vi.fn().mockRejectedValue(new Error("invalid session id: session has been terminated")),
+      performActions: vi.fn().mockRejectedValue(new Error("invalid session id: session has been terminated")),
     });
     const s = session(browser);
-    await expect(readScreen(s, { mode: "elements", limit: 10 })).rejects.toThrow(
-      /has ended on BrowserStack/,
-    );
+    await expect(tap(s, { x: 1, y: 1, waitMs: 0, settleMs: 0 })).rejects.toThrow(/has ended on BrowserStack/);
     expect(sessionsOwnedBy(config)).toHaveLength(0);
   });
+});
 
-  it("truncates raw source and redacts secure values", async () => {
-    const { browser } = fakeBrowser({
-      getPageSource: vi.fn().mockResolvedValue(ANDROID_SOURCE + "x".repeat(70_000)),
-    });
-    const s = session(browser);
-    const out = await readScreen(s, { mode: "source", limit: 10 });
-    expect(out).toContain("truncated");
-    expect(out).not.toContain("secret-pass");
+// A phone with an on-screen keyboard: `shown` is read in order from `states`,
+// then stays at the last value. On iOS the keyboard sits at y >= 561.
+function keyboardPhone(platform: "ios" | "android", states: boolean[], target: Record<string, any> = {}) {
+  const el = {
+    isExisting: vi.fn().mockResolvedValue(true),
+    click: vi.fn().mockResolvedValue(undefined),
+    getAttribute: vi.fn().mockResolvedValue(platform === "ios" ? "XCUIElementTypeButton" : "android.widget.Button"),
+    getLocation: vi.fn().mockResolvedValue({ x: 16, y: 692 }),
+    getSize: vi.fn().mockResolvedValue({ width: 361, height: 48 }),
+    elementId: "login",
+    ...target,
+  };
+  const kb = { isExisting: vi.fn().mockResolvedValue(true), elementId: "kb" };
+  let i = 0;
+  const { browser } = fakeBrowser({
+    sessionId: `${platform}-kb`,
+    $: vi.fn(async (sel: string) => (String(sel).includes("XCUIElementTypeKeyboard") ? kb : el)),
+    isKeyboardShown: vi.fn(async () => states[Math.min(i++, states.length - 1)]),
+    getElementRect: vi.fn().mockResolvedValue({ x: 0, y: 561, width: 393, height: 233 }),
+    hideKeyboard: vi.fn().mockRejectedValue(new Error("no")),
+  });
+  return { browser, el, s: session(browser, platform) };
+}
+
+describe("on-screen keyboard", () => {
+  it("iOS: closes the keyboard before tapping an element it covers, then taps it", async () => {
+    const { browser, el, s } = keyboardPhone("ios", [true, true, false]);
+    const msg = await tap(s, { text: "Login", waitMs: 0, settleMs: 0 });
+    expect(msg).toBe('Tapped "Login" (closed the on-screen keyboard first (Done key))');
+    expect(browser.execute).toHaveBeenCalledWith("mobile: hideKeyboard", expect.objectContaining({ keys: expect.arrayContaining(["Done"]) }));
+    expect(el.click).toHaveBeenCalled();
+  });
+
+  it("iOS: says plainly when the app gives no way to close the keyboard, without pressing Return", async () => {
+    const { browser, el, s } = keyboardPhone("ios", [true]);
+    await expect(tap(s, { text: "Login", waitMs: 0, settleMs: 0 })).rejects.toThrow(
+      /"Login" is under the on-screen keyboard, and the app offers no way to close it \(tried: Done key, swipe down on the keyboard\)/,
+    );
+    expect(el.click).not.toHaveBeenCalled();
+    const returnPressed = browser.execute.mock.calls.some((c: any[]) => c[1]?.keys?.includes("Return"));
+    expect(returnPressed).toBe(false);
+  });
+
+  it("iOS: leaves the keyboard alone when it does not cover the element", async () => {
+    const { browser, el, s } = keyboardPhone("ios", [true], { getLocation: vi.fn().mockResolvedValue({ x: 16, y: 286 }) });
+    expect(await tap(s, { text: "User Name", waitMs: 0, settleMs: 0 })).toBe('Tapped "User Name"');
+    expect(browser.execute.mock.calls.some((c: any[]) => c[0] === "mobile: hideKeyboard")).toBe(false);
+    expect(el.click).toHaveBeenCalled();
+  });
+
+  it("Android: closes the keyboard before tapping a non-text element", async () => {
+    const { browser, s } = keyboardPhone("android", [true, true, false]);
+    expect(await tap(s, { text: "Login", waitMs: 0, settleMs: 0 })).toBe(
+      'Tapped "Login" (closed the on-screen keyboard first (hide keyboard))',
+    );
+    expect(browser.execute).toHaveBeenCalledWith("mobile: hideKeyboard", {});
+  });
+
+  it("notes when a coordinate tap lands on the iOS keyboard instead of guessing", async () => {
+    const { s } = keyboardPhone("ios", [true]);
+    expect(await tap(s, { x: 196, y: 716, waitMs: 0, settleMs: 0 })).toMatch(
+      /Tapped \(196,716\)\. Note: this point is on the on-screen keyboard \(it starts at y=561\)/,
+    );
+  });
+
+  it("typeOnDevice: closes the keyboard afterwards when asked, and otherwise says it is open", async () => {
+    const closed = keyboardPhone("android", [false, true, false], { getAttribute: vi.fn().mockResolvedValue("android.widget.EditText") });
+    const msg = await typeText(closed.s, { value: "bob", text: "User", clear: false, submit: false, hideKeyboard: true, waitMs: 0, settleMs: 0 });
+    expect(msg).toBe('Typed 3 character(s) into "User" and closed the on-screen keyboard');
+
+    const open = keyboardPhone("android", [false, true], { getAttribute: vi.fn().mockResolvedValue("android.widget.EditText") });
+    const msg2 = await typeText(open.s, { value: "bob", text: "User", clear: false, submit: false, waitMs: 0, settleMs: 0 });
+    expect(msg2).toMatch(/The on-screen keyboard is open: tapOnDevice closes it automatically/);
+  });
+
+  it("setDeviceState hideKeyboard tries Return as a last resort and fails clearly", async () => {
+    const { browser, s } = keyboardPhone("ios", [true]);
+    await expect(setDeviceState(s, { hideKeyboard: true, settleMs: 0 })).rejects.toThrow(
+      /keyboard is still open: this app offers no way to close it \(tried: Done key, swipe down on the keyboard, Return key\)/,
+    );
+    expect(browser.execute.mock.calls.some((c: any[]) => c[1]?.keys?.includes("Return"))).toBe(true);
   });
 });
 
@@ -517,7 +521,6 @@ describe("tool registration", () => {
         "getDeviceSession",
         "manageDeviceApp",
         "pressDeviceKey",
-        "readDeviceScreen",
         "setDeviceState",
         "startDeviceSession",
         "swipeOnDevice",
@@ -535,7 +538,6 @@ describe("tool registration", () => {
       ].sort(),
     );
     expect(tools.uninstallDeviceApp.annotations.destructiveHint).toBe(true);
-    expect(tools.readDeviceScreen.annotations.readOnlyHint).toBe(true);
     expect(tools.takeDeviceScreenshot.annotations.readOnlyHint).toBe(true);
     expect(tools.tapOnDevice.annotations.readOnlyHint).toBe(false);
     expect(tools.startDeviceSession.annotations.openWorldHint).toBe(true);

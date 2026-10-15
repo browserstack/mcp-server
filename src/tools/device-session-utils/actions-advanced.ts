@@ -32,37 +32,22 @@ export async function simulateBiometric(
   return done;
 }
 
-// Allow-list: the read-only families BrowserStack's own adbShell
-// executor serves (it further restricts exact arguments, and rejects
-// settings/input/am/wm outright — verified live).
-const ADB_ALLOWED: Record<string, RegExp | null> = {
-  getprop: null,
-  dumpsys: null,
-  pm: /^(list)$/,
-};
+// Only device properties. Public phones are shared between customers, and
+// `pm list packages`, `dumpsys location`, `dumpsys window` and similar list the
+// packages of apps other customers left behind, so they are not offered.
+const ADB_ALLOWED = /^getprop(\s+[\w.-]+)?$/;
 
 export function checkAdbCommand(command: string): string {
-  const trimmed = command.trim();
+  const trimmed = command.trim().replace(/\s+/g, " ");
   if (!trimmed) throw new DeviceToolError("command is empty.");
   if (/[;&|`$<>\\\n\r]/.test(trimmed)) {
     throw new DeviceToolError(
       "Shell operators (; & | ` $ < > \\ newlines) are not allowed: run one command at a time.",
     );
   }
-  const [cmd, sub] = trimmed.split(/\s+/);
-  if (!(cmd in ADB_ALLOWED)) {
+  if (!ADB_ALLOWED.test(trimmed)) {
     throw new DeviceToolError(
-      `"${cmd}" is not on the allowed list. Allowed: ${Object.entries(
-        ADB_ALLOWED,
-      )
-        .map(([c, r]) => (r ? `${c} ${r.source.replace(/[\^$()]/g, "")}` : c))
-        .join("; ")}.`,
-    );
-  }
-  const rule = ADB_ALLOWED[cmd];
-  if (rule && !rule.test(sub || "")) {
-    throw new DeviceToolError(
-      `"${cmd} ${sub ?? ""}" is not allowed. Allowed subcommands: ${rule.source.replace(/[\^$()]/g, "")}.`,
+      `"${trimmed.split(" ").slice(0, 2).join(" ")}" is not allowed. Only "getprop" or "getprop <property>" can run (e.g. getprop ro.build.version.release): commands that list apps or system state could show other customers' apps on shared phones.`,
     );
   }
   return trimmed;

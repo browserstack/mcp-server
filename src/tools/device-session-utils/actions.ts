@@ -1,15 +1,6 @@
 import logger from "../../logger.js";
 import { maybeCompressBase64 } from "../../lib/utils.js";
-import {
-  ANDROID_KEYCODES,
-  IOS_BUTTONS,
-  MAX_PAGE_SOURCE_CHARS,
-} from "./constants.js";
-import {
-  formatScreenElements,
-  parseScreenElements,
-  redactSecureValues,
-} from "./screen.js";
+import { ANDROID_KEYCODES, IOS_BUTTONS } from "./constants.js";
 import { DeviceSession, forgetSession } from "./session.js";
 
 /** An error worded for the agent, passed through without extra prefixes. */
@@ -99,7 +90,7 @@ function predicateLiteral(s: string): string {
 /**
  * Locators for an element by its visible text: exact match first, then
  * contains. Deterministic — choosing the right element is the agent's job;
- * it can pass an exact `selector` from readDeviceScreen when text is ambiguous.
+ * it can pass an exact `selector` when text is ambiguous.
  */
 export function textLocators(
   platform: "android" | "ios",
@@ -142,12 +133,170 @@ async function findElement(
     ? `selector ${target.selector}`
     : `text "${target.text}"`;
   throw new DeviceToolError(
-    `No element with ${what} appeared within ${Math.round(waitMs / 1000)}s. Call readDeviceScreen to see what is on screen.`,
+    `No element with ${what} appeared within ${Math.round(waitMs / 1000)}s. Take a screenshot to see what is on screen.`,
   );
 }
 
 function describeTarget(target: ElementTarget): string {
   return target.selector ? `selector ${target.selector}` : `"${target.text}"`;
+}
+
+// -- on-screen keyboard ----------------------------------------------------------
+
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const inside = (r: Rect, x: number, y: number) =>
+  x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
+
+/**
+ * Whether the on-screen keyboard is up, and on iOS where it is. Android does
+ * not report the keyboard's bounds through UiAutomator2, so `rect` is iOS only.
+ */
+async function keyboardState(
+  session: DeviceSession,
+  b: any,
+): Promise<{ shown: boolean; rect?: Rect }> {
+  let shown = false;
+  try {
+    shown = Boolean(await b.isKeyboardShown());
+  } catch {
+    shown = false;
+  }
+  if (!shown || session.platform !== "ios") return { shown };
+  try {
+    const kb = await b.$("-ios class chain:**/XCUIElementTypeKeyboard");
+    if (await kb.isExisting()) {
+      return { shown, rect: await b.getElementRect(kb.elementId) };
+    }
+  } catch {
+    // Shown, position unknown.
+  }
+  return { shown };
+}
+
+/**
+ * Close the on-screen keyboard, trying each way in turn and checking after
+ * each. Return/Go/Next keys can submit a form, so they are only tried when the
+ * caller asked to close the keyboard (not before an automatic tap).
+ */
+export async function dismissKeyboard(
+  session: DeviceSession,
+  b: any,
+  opts: { allowReturn: boolean },
+): Promise<{ closed: boolean; how?: string; tried: string[] }> {
+  const tried: string[] = [];
+  const open = async () => (await keyboardState(session, b)).shown;
+  if (!(await open())) return { closed: true, how: "already closed", tried };
+
+  const steps: Array<[string, () => Promise<unknown>]> =
+    session.platform === "android"
+      ? [
+          ["hide keyboard", () => b.execute("mobile: hideKeyboard", {})],
+          ["legacy hide keyboard", () => b.hideKeyboard()],
+          ["back key", () => pressAndroidKeycode(b, ANDROID_KEYCODES.back)],
+        ]
+      : [
+          [
+            "Done key",
+            () =>
+              b.execute("mobile: hideKeyboard", {
+                keys: ["Done", "done", "Hide keyboard", "Dismiss"],
+              }),
+          ],
+          [
+            "swipe down on the keyboard",
+            async () => {
+              const { rect } = await keyboardState(session, b);
+              if (!rect) return;
+              const x = Math.round(rect.x + rect.width / 2);
+              await touch(b, [
+                { type: "pointerMove", duration: 0, x, y: rect.y + 4 },
+                { type: "pointerDown", button: 0 },
+                ...[40, 90, 150].map((d) => ({
+                  type: "pointerMove",
+                  duration: 60,
+                  x,
+                  y: rect.y + 4 + d,
+                })),
+                { type: "pointerUp", button: 0 },
+              ]);
+            },
+          ],
+          ...(opts.allowReturn
+            ? ([
+                [
+                  "Return key",
+                  () =>
+                    b.execute("mobile: hideKeyboard", {
+                      keys: [
+                        "Return",
+                        "return",
+                        "Go",
+                        "go",
+                        "Next",
+                        "next",
+                        "Search",
+                        "search",
+                      ],
+                    }),
+                ],
+              ] as Array<[string, () => Promise<unknown>]>)
+            : []),
+        ];
+  for (const [name, step] of steps) {
+    tried.push(name);
+    try {
+      await step();
+    } catch (error) {
+      logger.debug("keyboard close via %s failed: %s", name, error);
+    }
+    await sleep(400);
+    if (!(await open())) return { closed: true, how: name, tried };
+  }
+  return { closed: false, tried };
+}
+
+/**
+ * Before tapping or typing into an element, make sure the keyboard is not in
+ * the way. iOS: close it when it covers the element's centre. Android (no
+ * keyboard bounds): close it before tapping anything that is not a text field.
+ * The element is looked up again afterwards, because the layout moves.
+ */
+async function uncover(
+  session: DeviceSession,
+  b: any,
+  target: ElementTarget,
+  el: any,
+  waitMs: number,
+): Promise<{ el: any; note?: string }> {
+  const kb = await keyboardState(session, b);
+  if (!kb.shown) return { el };
+  let covered: boolean;
+  if (session.platform === "ios") {
+    if (!kb.rect) return { el };
+    const loc = await el.getLocation();
+    const size = await el.getSize();
+    covered = inside(kb.rect, loc.x + size.width / 2, loc.y + size.height / 2);
+  } else {
+    const cls = String((await el.getAttribute("class").catch(() => "")) || "");
+    covered = !/EditText|AutoComplete/i.test(cls);
+  }
+  if (!covered) return { el };
+  const r = await dismissKeyboard(session, b, { allowReturn: false });
+  if (!r.closed) {
+    throw new DeviceToolError(
+      `${describeTarget(target)} is under the on-screen keyboard, and the app offers no way to close it (tried: ${r.tried.join(", ")}). A person on this phone would be blocked too, so report it as an app issue. If the app submits on enter, typeOnDevice with submit: true may still get past this screen.`,
+    );
+  }
+  return {
+    el: await findElement(session, target, waitMs),
+    note: `closed the on-screen keyboard first (${r.how})`,
+  };
 }
 
 // -- input -----------------------------------------------------------------------
@@ -181,7 +330,9 @@ export async function tap(
   let done: string;
   if (args.selector || args.text) {
     done = await onDevice(session, "Tap", async (b) => {
-      const el = await findElement(session, args, args.waitMs);
+      const found = await findElement(session, args, args.waitMs);
+      const { el, note } = await uncover(session, b, args, found, args.waitMs);
+      const after = note ? ` (${note})` : "";
       if (hold > 0) {
         const loc = await el.getLocation();
         const size = await el.getSize();
@@ -193,10 +344,10 @@ export async function tap(
           { type: "pause", duration: hold },
           { type: "pointerUp", button: 0 },
         ]);
-        return `Long-pressed ${describeTarget(args)} at (${x},${y}) for ${hold}ms`;
+        return `Long-pressed ${describeTarget(args)} at (${x},${y}) for ${hold}ms${after}`;
       }
       await el.click();
-      return `Tapped ${describeTarget(args)}`;
+      return `Tapped ${describeTarget(args)}${after}`;
     });
   } else {
     if (typeof args.x !== "number" || typeof args.y !== "number") {
@@ -207,15 +358,24 @@ export async function tap(
     const x = Math.round(args.x);
     const y = Math.round(args.y);
     done = await onDevice(session, "Tap", async (b) => {
+      const kb = await keyboardState(session, b);
+      const onKeyboard = kb.rect
+        ? inside(kb.rect, x, y)
+        : kb.shown && session.platform === "android";
       await touch(b, [
         { type: "pointerMove", duration: 0, x, y },
         { type: "pointerDown", button: 0 },
         { type: "pause", duration: Math.max(hold, 50) },
         { type: "pointerUp", button: 0 },
       ]);
-      return hold > 0
-        ? `Long-pressed (${x},${y}) for ${hold}ms`
-        : `Tapped (${x},${y})`;
+      const where =
+        hold > 0
+          ? `Long-pressed (${x},${y}) for ${hold}ms`
+          : `Tapped (${x},${y})`;
+      if (!onKeyboard) return where;
+      return kb.rect
+        ? `${where}. Note: this point is on the on-screen keyboard (it starts at y=${Math.round(kb.rect.y)}). To reach what is under it, tap the element by its text (the keyboard is then closed first) or use setDeviceState hideKeyboard.`
+        : `${where}. Note: the on-screen keyboard is open and may cover this point. Tap elements by their text to have it closed first, or use setDeviceState hideKeyboard.`;
     });
   }
   await annotate(session, done);
@@ -229,6 +389,7 @@ export async function typeText(
     value: string;
     clear: boolean;
     submit: boolean;
+    hideKeyboard?: boolean;
     waitMs: number;
     settleMs: number;
   },
@@ -236,10 +397,12 @@ export async function typeText(
   const into =
     args.selector || args.text ? describeTarget(args) : "the focused field";
   let warning = "";
+  let keyboardNote = "";
   await onDevice(session, "Typing", async (b) => {
     let el: any;
     if (args.selector || args.text) {
-      el = await findElement(session, args, args.waitMs);
+      const found = await findElement(session, args, args.waitMs);
+      el = (await uncover(session, b, args, found, args.waitMs)).el;
       await el.click().catch(() => undefined);
     } else {
       try {
@@ -283,9 +446,17 @@ export async function typeText(
         await iosEnter(b);
       }
     }
+    if (args.hideKeyboard) {
+      const r = await dismissKeyboard(session, b, { allowReturn: false });
+      keyboardNote = r.closed
+        ? ` and closed the on-screen keyboard`
+        : `. The on-screen keyboard could not be closed (tried: ${r.tried.join(", ")}); the app offers no way to close it`;
+    } else if ((await keyboardState(session, b)).shown) {
+      keyboardNote = `. The on-screen keyboard is open: tapOnDevice closes it automatically when it covers the next element, or pass hideKeyboard: true to close it now`;
+    }
   });
   // The typed value is never echoed back: it may be a password or other secret.
-  const done = `Typed ${args.value.length} character(s) into ${into}${args.submit ? " and pressed enter" : ""}${warning}`;
+  const done = `Typed ${args.value.length} character(s) into ${into}${args.submit ? " and pressed enter" : ""}${warning}${keyboardNote}`;
   await annotate(session, done);
   await settle(args.settleMs);
   return done;
@@ -392,14 +563,23 @@ async function iosEnter(b: any): Promise<void> {
 }
 
 /** iOS back: the system back gesture, a left-edge swipe. */
+// The edge-pan recogniser only fires when the touch starts exactly at x = 0
+// and moves in steps; a start at x = 2 or one long move is ignored. Verified
+// on real iPhone 15s running iOS 17 and iOS 27.
+export const IOS_BACK_STEPS = [0.15, 0.3, 0.45, 0.6, 0.8];
+
 async function iosBack(b: any): Promise<string> {
   const { width, height } = await windowSize(b);
   const y = Math.round(height / 2);
   await touch(b, [
-    { type: "pointerMove", duration: 0, x: 2, y },
+    { type: "pointerMove", duration: 0, x: 0, y },
     { type: "pointerDown", button: 0 },
-    { type: "pause", duration: 100 },
-    { type: "pointerMove", duration: 300, x: Math.round(width * 0.7), y },
+    ...IOS_BACK_STEPS.map((f) => ({
+      type: "pointerMove",
+      duration: 60,
+      x: Math.round(width * f),
+      y,
+    })),
     { type: "pointerUp", button: 0 },
   ]);
   return "Swiped from the left edge (iOS back gesture)";
@@ -519,18 +699,17 @@ export async function setDeviceState(
   const done: string[] = [];
   await onDevice(session, "Device state change", async (b) => {
     if (args.hideKeyboard) {
-      try {
-        // WebDriverAgent needs to be told which key dismisses the keyboard.
-        await b.execute(
-          "mobile: hideKeyboard",
-          session.platform === "ios"
-            ? { keys: ["done", "Done", "return", "Return", "go", "Go"] }
-            : {},
+      const r = await dismissKeyboard(session, b, { allowReturn: true });
+      if (!r.closed) {
+        throw new DeviceToolError(
+          `The on-screen keyboard is still open: this app offers no way to close it (tried: ${r.tried.join(", ")}). A person on this phone would be blocked too, so report it as an app issue.`,
         );
-      } catch {
-        await b.hideKeyboard();
       }
-      done.push("Hid the keyboard");
+      done.push(
+        r.how === "already closed"
+          ? "The keyboard was already closed"
+          : `Closed the on-screen keyboard (${r.how})`,
+      );
     }
     if (args.orientation) {
       await b.setOrientation(args.orientation.toUpperCase());
@@ -595,7 +774,7 @@ export async function describeDeviceState(session: DeviceSession) {
 
 /**
  * On iOS the screenshot is downscaled from pixels to points so it
- * shares one coordinate space with readDeviceScreen and the tap/swipe tools.
+ * shares one coordinate space with the tap and swipe tools.
  */
 export async function screenshot(session: DeviceSession): Promise<{
   base64: string;
@@ -631,29 +810,4 @@ export async function screenshot(session: DeviceSession): Promise<{
     }
     return { base64: await maybeCompressBase64(base64), width, height };
   });
-}
-
-export async function readScreen(
-  session: DeviceSession,
-  args: { mode: "elements" | "source"; limit: number },
-): Promise<string> {
-  const source: string = await onDevice(session, "Reading the screen", (b) =>
-    b.getPageSource(),
-  );
-  if (args.mode === "source") {
-    const safe = redactSecureValues(source);
-    return safe.length > MAX_PAGE_SOURCE_CHARS
-      ? `${safe.slice(0, MAX_PAGE_SOURCE_CHARS)}\n<!-- truncated: ${safe.length - MAX_PAGE_SOURCE_CHARS} more characters. Use mode "elements" for a compact view. -->`
-      : safe;
-  }
-  const { elements, total } = parseScreenElements(
-    source,
-    session.platform,
-    args.limit,
-  );
-  const space = session.platform === "ios" ? "points" : "device pixels";
-  const header = `${total} actionable element(s) on screen${total > elements.length ? `, showing the first ${elements.length}` : ""}. Coordinates are ${space}; pass tap=(x,y) to tapOnDevice.`;
-  return elements.length
-    ? `${header}\n${formatScreenElements(elements)}`
-    : `${header}\nNothing actionable was found; the screen may still be loading, or it is a canvas/game view. Take a screenshot to see it.`;
 }

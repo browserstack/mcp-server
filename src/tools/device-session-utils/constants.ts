@@ -39,10 +39,6 @@ export const MAX_SETTLE_MS = 5_000;
 // Local guard on how many device sessions one MCP process holds open.
 export const DEFAULT_MAX_CONCURRENT_SESSIONS = 2;
 
-// readDeviceScreen output caps keep a single call from flooding the context.
-export const MAX_SCREEN_ELEMENTS = 150;
-export const MAX_PAGE_SOURCE_CHARS = 60_000;
-
 // Session start can sit in BrowserStack's queue; give it room.
 export const SESSION_START_TIMEOUT_MS = 300_000;
 export const COMMAND_TIMEOUT_MS = 120_000;

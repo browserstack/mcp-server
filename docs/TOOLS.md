@@ -329,7 +329,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 <details>
 <summary><b>🤳 Mobile Devices &amp; Agent-Driven Device Sessions</b></summary>
 
-Drive a real iOS/Android device step by step from your assistant. Sessions run on App Automate over the Appium hub with your own username and access key (App Live has no input API), show up on the App Automate dashboard with video, and can be watched live through a shareable link. The flow: `listMobileDevices` → `startDeviceSession` → `readDeviceScreen` / `takeDeviceScreenshot` → `tapOnDevice` / `typeOnDevice` / `swipeOnDevice` / `pressDeviceKey` → `endDeviceSession`.
+Drive a real iOS/Android device step by step from your assistant. Sessions run on App Automate over the Appium hub with your own username and access key (App Live has no input API), show up on the App Automate dashboard with video, and open their live view in your browser automatically (also returned as a shareable link). The flow: `listMobileDevices` → `startDeviceSession` → `takeDeviceScreenshot` → `tapOnDevice` / `typeOnDevice` / `swipeOnDevice` / `pressDeviceKey` → `endDeviceSession`.
 
 | Tool | What it does |
 |---|---|
@@ -339,21 +339,20 @@ Drive a real iOS/Android device step by step from your assistant. Sessions run o
 | `uploadMobileApp` | Upload an `.apk`/`.aab`/`.ipa` to App Automate from a local file (inside `MCP_UPLOAD_BASE_DIR`) or a public https link; returns the `bs://` URL. Optional `customId`. Local files are refused on the remote server. |
 | `listUploadedApps` | List builds already uploaded to App Automate (yours or your team's) so they can be reused. |
 | `getAppAutomatePlan` | Plan name and parallel-session usage (running / max / queued). |
-| `startDeviceSession` | Start a drivable device with your app installed and open. Returns `sessionId`, dashboard and shareable live-view links. Options: OS version (`latest`/`oldest`), idle timeout, interactive debugging, video, network logs, language, locale, time zone, GPS. |
+| `startDeviceSession` | Start a drivable device with your app installed and open. Returns `sessionId`, dashboard and shareable live-view links, and opens the live view in your browser (local server; turn off with `BROWSERSTACK_OPEN_LIVE_VIEW=false`). Options: OS version (`latest`/`oldest`), idle timeout, interactive debugging, video, network logs, language, locale, time zone, GPS. |
 | `getDeviceSession` | No id: list sessions this server has open. With id: status, live-view/video links, orientation, foreground app, keyboard, contexts. |
 | `endDeviceSession` | End the session and release the device; optionally mark it passed/failed with a reason. |
 | `takeDeviceScreenshot` | Screenshot of the device (pixels on Android, points on iOS — the same space as taps). |
-| `readDeviceScreen` | Compact list of actionable elements with text, ids, flags and exact tap coordinates; or the raw UI hierarchy (`mode: "source"`). Password values hidden. |
-| `tapOnDevice` | Tap or long-press at coordinates, or on an element by Appium selector or visible text (waited for automatically). |
-| `typeOnDevice` | Type into a field (by selector/text, or the focused one); optional clear and enter. The value is never echoed. |
+| `tapOnDevice` | Tap or long-press at coordinates from a screenshot, or on an element by visible text or Appium selector (waited for automatically). If the on-screen keyboard covers the element it is closed first; if the app gives no way to close it, the tool says so instead of reporting a tap. |
+| `typeOnDevice` | Type into a field (by selector/text, or the focused one); optional clear, enter, and `hideKeyboard` to close the keyboard afterwards. The value is never echoed. |
 | `swipeOnDevice` | Swipe/scroll by direction and distance, or between two points. |
 | `pressDeviceKey` | back, home, enter and more; Android keycodes; iOS back is the left-edge back swipe. |
 | `manageDeviceApp` | Launch, close or restart the app under test (or another installed app). |
 | `uninstallDeviceApp` | Uninstall an app from the session's device. *(destructive — asks first)* |
-| `setDeviceState` | Rotate, hide the keyboard, switch native/web-view context. |
+| `setDeviceState` | Rotate, close the on-screen keyboard, switch native/web-view context. |
 | `uploadMediaFile` | Upload an image/video/document (inside `MCP_UPLOAD_BASE_DIR`) and get a `media://` URL for `uploadMedia` or `injectCameraImage`. |
 | `simulateBiometric` | Pass or fail a fingerprint / Face ID prompt (session started with `enableBiometric`). |
-| `runAdbShellCommand` | Read-only adb (`getprop`, `dumpsys`, `pm list`) on Android; BrowserStack applies its own allow-list. |
+| `runAdbShellCommand` | Read device properties on Android with `getprop` only. Commands that list apps (`pm list`, `dumpsys`) are refused, because public phones are shared between customers. |
 | `pushFileToDevice` / `pullFileFromDevice` | Write a file (local file or text) to the device, or read one back (text, image or base64). |
 | `injectCameraImage` | Make the app's camera see an uploaded image (session started with `enableCameraImageInjection`). |
 | `setDeviceLocation` | Change simulated GPS mid-session. |
@@ -374,7 +373,7 @@ Drive a real desktop or mobile browser step by step on BrowserStack Automate wit
 |---|---|
 | `listBrowsers` | Desktop OS / browser / version combinations, or real mobile devices and their browsers. |
 | `getAutomatePlan` | Automate plan and parallel usage. |
-| `startBrowserSession` | Start a browser (exact os/osVersion/browser, or device). Returns `sessionId` plus dashboard and live-view links. |
+| `startBrowserSession` | Start a browser (exact os/osVersion/browser, or device). Returns `sessionId` plus dashboard and live-view links, and opens the live view in your browser (local server). |
 | `getBrowserSession` / `endBrowserSession` | List or inspect sessions; end one with an optional passed/failed status. |
 | `navigateBrowser` | Open a URL, or go back / forward / refresh. |
 | `clickInBrowser` | Click by CSS/XPath or visible text (auto-wait, scrolled into view). |
@@ -382,7 +381,6 @@ Drive a real desktop or mobile browser step by step on BrowserStack Automate wit
 | `scrollBrowser` | Scroll by direction / pixels, to top or bottom, or bring an element into view. |
 | `switchBrowserContext` | List, switch, open or close tabs and windows; enter or leave frames. |
 | `takeBrowserScreenshot` | Screenshot of the current page. |
-| `readBrowserPage` | Interactive elements with unique selectors, visible text, or the DOM. |
 
 </details>
 

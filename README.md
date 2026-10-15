@@ -84,7 +84,7 @@ Similar to the app testing, you can use the following prompts to test your **web
 
 ### 🤖 Agent-Driven Devices and Browsers
 
-Let your AI agent drive a real phone or browser step by step: install the app, read the screen, tap, type, swipe and check the result, with a shareable live view and a recorded video.
+Let your AI agent drive a real phone or browser step by step: install the app, look at the screen, tap, type, swipe and check the result. The live view opens in your browser, and every session is recorded.
 
 ```bash
 # Drive a real device

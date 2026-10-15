@@ -102,7 +102,7 @@ async function findWebElement(b: any, target: WebTarget, waitMs: number) {
     await sleep(500);
   }
   throw new DeviceToolError(
-    `No element with ${target.selector ? `selector ${target.selector}` : `text "${target.text}"`} appeared within ${Math.round(waitMs / 1000)}s. Call readBrowserPage to see the page.`,
+    `No element with ${target.selector ? `selector ${target.selector}` : `text "${target.text}"`} appeared within ${Math.round(waitMs / 1000)}s. Take a screenshot to see the page.`,
   );
 }
 
@@ -336,74 +336,4 @@ export async function screenshot(session: BrowserSession): Promise<string> {
     b.takeScreenshot(),
   );
   return maybeCompressBase64(raw);
-}
-
-// Runs in the page. Lists interactive, visible elements with a unique CSS selector.
-const LIST_ELEMENTS_JS = `
-const limit = arguments[0];
-const sel = (el) => {
-  if (el.id && document.querySelectorAll('#' + CSS.escape(el.id)).length === 1) return '#' + CSS.escape(el.id);
-  const parts = [];
-  for (let n = el; n && n.nodeType === 1 && n !== document.documentElement; n = n.parentElement) {
-    if (n.id && document.querySelectorAll('#' + CSS.escape(n.id)).length === 1) { parts.unshift('#' + CSS.escape(n.id)); break; }
-    let i = 1; for (let s = n.previousElementSibling; s; s = s.previousElementSibling) if (s.tagName === n.tagName) i++;
-    parts.unshift(n.tagName.toLowerCase() + ':nth-of-type(' + i + ')');
-  }
-  return parts.join(' > ');
-};
-const q = 'a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=tab],[role=checkbox],[role=menuitem],[onclick],[contenteditable=true]';
-const out = []; let total = 0;
-for (const el of document.querySelectorAll(q)) {
-  const r = el.getBoundingClientRect(); const cs = getComputedStyle(el);
-  if (r.width === 0 || r.height === 0 || cs.visibility === 'hidden' || cs.display === 'none') continue;
-  total++; if (out.length >= limit) continue;
-  const type = el.getAttribute('type');
-  const secret = type === 'password';
-  out.push({
-    tag: el.tagName.toLowerCase() + (type ? '[' + type + ']' : ''),
-    text: (el.innerText || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('title') || el.getAttribute('alt') || '').trim().replace(/\\s+/g, ' ').slice(0, 100),
-    value: secret ? undefined : (el.value !== undefined && el.tagName !== 'BUTTON' ? String(el.value).slice(0, 60) : undefined),
-    href: el.getAttribute('href') ? el.href.slice(0, 120) : undefined,
-    selector: sel(el),
-    inView: r.bottom > 0 && r.top < innerHeight,
-    disabled: !!el.disabled,
-  });
-}
-return { total, out, url: location.href, title: document.title };
-`;
-
-/** Read a web page: elements, text, or DOM. */
-export async function readPage(
-  session: BrowserSession,
-  args: { mode: "elements" | "text" | "dom"; limit: number },
-): Promise<string> {
-  return onBrowser(session, "Reading the page", async (b) => {
-    if (args.mode === "text") {
-      const t: string = await b.execute(
-        "return document.body ? document.body.innerText : ''",
-      );
-      const header = `${await b.getTitle()} — ${await b.getUrl()}`;
-      return `${header}\n\n${t.length > 30_000 ? `${t.slice(0, 30_000)}\n… truncated (${t.length - 30_000} more characters)` : t}`;
-    }
-    if (args.mode === "dom") {
-      let html: string = await b.getPageSource();
-      html = html.replace(
-        /(<input\b[^>]*\btype=["']?password["']?[^>]*\bvalue=["'])[^"']*(["'])/gi,
-        "$1•••$2",
-      );
-      return html.length > 60_000
-        ? `${html.slice(0, 60_000)}\n<!-- truncated: ${html.length - 60_000} more characters -->`
-        : html;
-    }
-    const r = await b.execute(LIST_ELEMENTS_JS, args.limit);
-    const lines = (r.out as any[]).map(
-      (e, i) =>
-        `[${i}] ${e.tag}${e.text ? ` "${e.text}"` : ""}${e.value ? ` value="${e.value}"` : ""}${e.href ? ` href=${e.href}` : ""} selector=${e.selector}${e.inView ? "" : " {off-screen}"}${e.disabled ? " {disabled}" : ""}`,
-    );
-    return [
-      `${r.title} — ${r.url}`,
-      `${r.total} interactive element(s)${r.total > lines.length ? `, showing the first ${lines.length}` : ""}. Pass a selector to clickInBrowser / typeInBrowser.`,
-      ...lines,
-    ].join("\n");
-  });
 }

@@ -15,6 +15,7 @@ import {
   getSessionDetails,
   listAutomateBrowsers,
 } from "./device-session-utils/rest.js";
+import { openLiveView } from "./device-session-utils/open-url.js";
 import {
   registerTool,
   text,
@@ -29,7 +30,6 @@ import {
 import {
   click,
   navigate,
-  readPage,
   screenshot,
   scroll,
   switchContext,
@@ -62,10 +62,7 @@ const settleMs = z
   .max(MAX_SETTLE_MS)
   .default(DEFAULT_SETTLE_MS)
   .describe("Pause after the action so the page can settle, in ms.");
-const selector = z
-  .string()
-  .optional()
-  .describe("CSS selector or XPath (from readBrowserPage).");
+const selector = z.string().optional().describe("CSS selector or XPath.");
 const visibleText = z
   .string()
   .optional()
@@ -249,6 +246,7 @@ export default function addBrowserSessionTools(
       } catch {
         // Not fatal.
       }
+      const opened = openLiveView(publicUrl ?? session.dashboardUrl);
       return withLiveView(
         text(
           "Browser session started.",
@@ -259,6 +257,7 @@ export default function addBrowserSessionTools(
           publicUrl
             ? `Live view (shareable, no login): ${publicUrl}`
             : undefined,
+          opened ? "Opened the live view in your browser." : undefined,
         ),
         publicUrl,
         `${label} live view`,
@@ -473,24 +472,6 @@ export default function addBrowserSessionTools(
         },
       ],
     }),
-  });
-
-  tools.readBrowserPage = registerTool(server, config, {
-    name: "readBrowserPage",
-    title: "Read Browser Page",
-    description:
-      "Read the current page. 'elements' (default): visible interactive elements with a unique CSS selector each. 'text': the page's visible text. 'dom': full HTML (truncated). Password values are hidden.",
-    schema: {
-      sessionId,
-      mode: z.enum(["elements", "text", "dom"]).default("elements"),
-      limit: z.number().int().min(1).max(300).default(150),
-    },
-    hints: readHints,
-    failurePrefix: "Failed to read the page",
-    run: async (args) =>
-      text(
-        await readPage(getOwnedBrowserSession(args.sessionId, config), args),
-      ),
   });
 
   return tools;

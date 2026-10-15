@@ -8,14 +8,12 @@ import {
   DEFAULT_SETTLE_MS,
   MAX_ELEMENT_WAIT_MS,
   MAX_IDLE_TIMEOUT_SECONDS,
-  MAX_SCREEN_ELEMENTS,
   MAX_SETTLE_MS,
 } from "./device-session-utils/constants.js";
 import {
   describeDeviceState,
   manageApp,
   pressKey,
-  readScreen,
   screenshot,
   setDeviceState,
   swipe,
@@ -29,6 +27,7 @@ import {
   startDeviceSession,
 } from "./device-session-utils/session.js";
 import { getSessionDetails } from "./device-session-utils/rest.js";
+import { openLiveView } from "./device-session-utils/open-url.js";
 import {
   injectCameraImage,
   pullFile,
@@ -257,6 +256,7 @@ export default function addDeviceSessionTools(
           error,
         );
       }
+      const opened = openLiveView(publicUrl ?? session.dashboardUrl);
       return withLiveView(
         text(
           `Device session started.`,
@@ -267,9 +267,10 @@ export default function addDeviceSessionTools(
           publicUrl
             ? `Live view (shareable, no login): ${publicUrl}`
             : undefined,
+          opened ? "Opened the live view in your browser." : undefined,
           ...notes,
           "",
-          "Next: readDeviceScreen (or takeDeviceScreenshot) to see the screen, then tapOnDevice / typeOnDevice / swipeOnDevice. Call endDeviceSession when done.",
+          "Next: takeDeviceScreenshot to see the screen, then tapOnDevice / typeOnDevice / swipeOnDevice. Call endDeviceSession when done.",
         ),
         publicUrl,
         `${session.device} live view`,
@@ -369,7 +370,7 @@ export default function addDeviceSessionTools(
     name: "takeDeviceScreenshot",
     title: "Take Device Screenshot",
     description:
-      "Take a screenshot of the device in an open session. Image coordinates match tapOnDevice and swipeOnDevice (pixels on Android, points on iOS). For finding things to tap, readDeviceScreen is cheaper and gives exact coordinates.",
+      "Take a screenshot of the device in an open session. Image coordinates match tapOnDevice and swipeOnDevice (pixels on Android, points on iOS).",
     schema: { sessionId },
     hints: readHints,
     failurePrefix: "Failed to take screenshot",
@@ -391,35 +392,11 @@ export default function addDeviceSessionTools(
     },
   });
 
-  tools.readDeviceScreen = registerTool(server, config, {
-    name: "readDeviceScreen",
-    title: "Read Device Screen",
-    description:
-      "Read what is on the device screen. mode 'elements' (default) returns a compact list of actionable elements with text, ids, flags and the exact tap coordinates. mode 'source' returns the raw UI hierarchy XML (large; truncated). Password field values are hidden.",
-    schema: {
-      sessionId,
-      mode: z.enum(["elements", "source"]).default("elements"),
-      limit: z
-        .number()
-        .int()
-        .min(1)
-        .max(MAX_SCREEN_ELEMENTS)
-        .default(MAX_SCREEN_ELEMENTS)
-        .describe("Max elements to list in 'elements' mode."),
-    },
-    hints: readHints,
-    failurePrefix: "Failed to read the screen",
-    run: async (args) => {
-      const session = getOwnedSession(args.sessionId, config);
-      return text(await readScreen(session, args));
-    },
-  });
-
   tools.tapOnDevice = registerTool(server, config, {
     name: "tapOnDevice",
     title: "Tap On Device",
     description:
-      "Tap (or long-press with holdMs) on the device: at x,y coordinates from readDeviceScreen/takeDeviceScreenshot, or on an element by selector or visible text. Element targets are waited for automatically.",
+      "Tap (or long-press with holdMs) on the device: at x,y coordinates from takeDeviceScreenshot, or on an element by its visible text or a selector. Element targets are waited for automatically, and if the on-screen keyboard covers the element it is closed first.",
     schema: {
       sessionId,
       x: z.number().optional(),
@@ -448,7 +425,7 @@ export default function addDeviceSessionTools(
     name: "typeOnDevice",
     title: "Type On Device",
     description:
-      "Type text into a field on the device: the field matching selector/text (tapped first), or the currently focused field. Can clear the field first and press enter after. The typed value is not echoed back.",
+      "Type text into a field on the device: the field matching selector/text (tapped first), or the currently focused field. Can clear the field first, press enter after, or close the on-screen keyboard after (hideKeyboard) so buttons below the field can be tapped. The typed value is not echoed back.",
     schema: {
       sessionId,
       value: z.string().min(1).max(5000).describe("The text to type."),
@@ -459,6 +436,12 @@ export default function addDeviceSessionTools(
         .default(false)
         .describe("Clear the field before typing."),
       submit: z.boolean().default(false).describe("Press enter after typing."),
+      hideKeyboard: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Close the on-screen keyboard after typing, e.g. before tapping a button that sits below the field.",
+        ),
       waitMs,
       settleMs,
     },
@@ -565,7 +548,7 @@ export default function addDeviceSessionTools(
     name: "setDeviceState",
     title: "Set Device State",
     description:
-      "Change device state in an open session: rotate (portrait/landscape), hide the on-screen keyboard, and/or switch between the native app and a web view ('native', 'webview', or an exact context name from getDeviceSession).",
+      "Change device state in an open session: rotate (portrait/landscape), close the on-screen keyboard (hideKeyboard: true; use it when the keyboard covers a field or button), and/or switch between the native app and a web view ('native', 'webview', or an exact context name from getDeviceSession).",
     schema: {
       sessionId,
       orientation: z.enum(["portrait", "landscape"]).optional(),
@@ -601,7 +584,7 @@ export default function addDeviceSessionTools(
     name: "runAdbShellCommand",
     title: "Run adb Shell Command",
     description:
-      "Run one read-only adb shell command on an Android device in an open session and return its output. Only getprop, dumpsys and 'pm list' are accepted, and BrowserStack further limits the exact arguments (e.g. 'getprop ro.build.version.release', 'dumpsys window displays', 'dumpsys location', 'pm list packages -3' work); unsupported ones come back as BROWSERSTACK_UNSUPPORTED_ADB_SHELL_COMMAND. No shell operators.",
+      "Read a device property on an Android phone in an open session with adb getprop, e.g. 'getprop ro.build.version.release' or 'getprop persist.sys.locale'. Only getprop is accepted: commands that list apps or system state could show other customers' apps on shared phones.",
     schema: {
       sessionId,
       command: z.string().min(1).max(500),

@@ -346,8 +346,8 @@ Drive a real iOS/Android device step by step from your assistant. Sessions run o
 | `tapOnDevice` | Tap or long-press at coordinates from a screenshot, or on an element by visible text or Appium selector (waited for automatically). If the on-screen keyboard covers the element it is closed first; if the app gives no way to close it, the tool says so instead of reporting a tap. |
 | `typeOnDevice` | Type into a field (by selector/text, or the focused one); optional clear, enter, and `hideKeyboard` to close the keyboard afterwards. The value is never echoed. |
 | `swipeOnDevice` | Swipe/scroll by direction and distance, or between two points. |
-| `pressDeviceKey` | back, home, enter and more; Android keycodes; iOS back is the left-edge back swipe. |
-| `manageDeviceApp` | Launch, close or restart the app under test (or another installed app). |
+| `pressDeviceKey` | back, home, enter and more; Android keycodes; iOS back is the left-edge back swipe, and the result says when the screen ignored it (use the app's own back control then). |
+| `manageDeviceApp` | Launch, close or restart the app under test (or another installed app). Launch fails if the app did not reach the front, for example an app restricted on a shared device. |
 | `uninstallDeviceApp` | Uninstall an app from the session's device. *(destructive — asks first)* |
 | `setDeviceState` | Rotate, close the on-screen keyboard, switch native/web-view context. |
 | `uploadMediaFile` | Upload an image/video/document (inside `MCP_UPLOAD_BASE_DIR`) and get a `media://` URL for `uploadMedia` or `injectCameraImage`. |

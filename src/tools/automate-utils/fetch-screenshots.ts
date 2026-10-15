@@ -43,29 +43,74 @@ async function extractScreenshotUrls(
       ? response.data
       : JSON.stringify(response.data);
 
+  return parseScreenshotUrls(text);
+}
+
+const LOG_PREFIX = String.raw`^\d{4}-\d{2}-\d{2} \d{1,2}:\d{1,2}:\d{1,2}:\d{1,3} `;
+const LINE_TYPE_PATTERN = new RegExp(`${LOG_PREFIX}([A-Z_]+) `);
+const SCREENSHOT_REQUEST_PATTERN = new RegExp(
+  String.raw`${LOG_PREFIX}REQUEST \[[^\]]+\] GET /session/[^/\s]+/screenshot(\s|$)`,
+);
+const RESPONSE_VALUE_PATTERN = new RegExp(
+  String.raw`${LOG_PREFIX}RESPONSE \{"value"\s*:\s*"(https://[^"]+)"`,
+);
+const DEBUG_SCREENSHOT_PATTERN = new RegExp(
+  String.raw`${LOG_PREFIX}DEBUG (https://\S+)$`,
+);
+const TRUSTED_HOST_PATTERN =
+  /(^|\.)browserstack\.com$|\.s3([.-][a-z0-9-]+)*\.amazonaws\.com$|\.backblazeb2\.com$/;
+
+function isTrustedScreenshotUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && TRUSTED_HOST_PATTERN.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function parseScreenshotUrls(text: string): string[] {
   const urls: string[] = [];
-  const SCREENSHOT_PATTERN = /REQUEST.*GET.*\/screenshot/;
-  const RESPONSE_VALUE_PATTERN = /"value"\s*:\s*"([^"]+)"/;
+  const lines = text.split("\n").map((line) => line.trimEnd());
 
-  // Split logs into lines and process them
-  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
-  for (let i = 0; i < lines.length - 1; i++) {
-    const currentLine = lines[i];
-    const nextLine = lines[i + 1];
+    const debugMatch = line.match(DEBUG_SCREENSHOT_PATTERN);
+    if (debugMatch) {
+      urls.push(debugMatch[1]);
+      continue;
+    }
 
-    if (SCREENSHOT_PATTERN.test(currentLine)) {
-      const match = nextLine.match(RESPONSE_VALUE_PATTERN);
-      if (match && match[1]) {
-        urls.push(match[1]);
+    if (!SCREENSHOT_REQUEST_PATTERN.test(line)) {
+      continue;
+    }
+    for (let j = i + 1; j < lines.length; j++) {
+      const lineType = lines[j].match(LINE_TYPE_PATTERN)?.[1];
+      if (lineType === "REQUEST") {
+        break;
+      }
+      if (lineType === "RESPONSE") {
+        const valueMatch = lines[j].match(RESPONSE_VALUE_PATTERN);
+        if (valueMatch) {
+          urls.push(valueMatch[1]);
+        }
+        break;
       }
     }
   }
 
-  return urls;
+  return [...new Set(urls)].filter(isTrustedScreenshotUrl);
 }
 
-type Screenshot = { url: string; base64: string };
+function detectImageMimeType(buffer: Buffer): string {
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "image/jpeg";
+  }
+  return "image/png";
+}
+
+export type Screenshot = { url: string; base64: string; mimeType: string };
 
 // Returns null for a screenshot over MAX_SCREENSHOT_BYTES so the rest still load.
 async function fetchAndCompress(url: string): Promise<Screenshot | null> {
@@ -84,8 +129,15 @@ async function fetchAndCompress(url: string): Promise<Screenshot | null> {
     );
   }
   // Axios returns response.data as a Buffer for binary data
-  const base64 = Buffer.from(response.data).toString("base64");
-  return { url, base64: await maybeCompressBase64(base64) };
+  const buffer = Buffer.from(response.data);
+  const base64 = await maybeCompressBase64(buffer.toString("base64"));
+  // Detect AFTER compression: sharp re-encodes anything over 1 MB to PNG, so
+  // reading the original bytes would label a large JPEG with the wrong type.
+  return {
+    url,
+    base64,
+    mimeType: detectImageMimeType(Buffer.from(base64, "base64")),
+  };
 }
 
 //Converts screenshot URLs to base64 encoded images

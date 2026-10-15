@@ -30,11 +30,23 @@ const config = {
 
 const HUGE_BYTES = 30 * 1024 * 1024;
 
+// The parser only accepts allowlisted https hosts, so the log carries real
+// BrowserStack URLs and the apiClient spy routes them to the local server.
+const HUGE_URL = "https://automate.browserstack.com/s3-debug/huge.png";
+const SMALL_URL = "https://automate.browserstack.com/s3-debug/small.png";
+
+const LOCAL_PATH: Record<string, string> = {
+  [HUGE_URL]: "/huge.png",
+  [SMALL_URL]: "/small.png",
+};
+
+// Mirrors the SeleniumHub log shape: a timestamped REQUEST followed by its RESPONSE.
 function screenshotLog(urls: string[]): string {
   return urls
     .map(
-      (u) =>
-        `REQUEST [2026-10-15] GET /session/sid/screenshot {}\nRESPONSE {"state":"success","value":"${u}"}`,
+      (u, i) =>
+        `2026-10-15 10:0:${i}:100 REQUEST [abc] GET /session/sid/screenshot\n` +
+        `2026-10-15 10:0:${i}:200 RESPONSE {"value":"${u}"}`,
     )
     .join("\n");
 }
@@ -88,13 +100,15 @@ describe("fetchAutomationScreenshots with oversized downloads", () => {
     vi.spyOn(apiClient, "get").mockImplementation((opts) =>
       realGet({
         ...opts,
-        url: opts.url.endsWith("/logs") ? `${base}${path}` : opts.url,
+        url: opts.url.endsWith("/logs")
+          ? `${base}${path}`
+          : `${base}${LOCAL_PATH[opts.url] ?? opts.url}`,
       }),
     );
   }
 
   it("skips an oversized screenshot, aborts its download, and returns the rest", async () => {
-    logsBody = screenshotLog([`${base}/huge.png`, `${base}/small.png`]);
+    logsBody = screenshotLog([HUGE_URL, SMALL_URL]);
     routeLogsTo("/logs");
 
     const shots = await fetchAutomationScreenshots(
@@ -105,15 +119,16 @@ describe("fetchAutomationScreenshots with oversized downloads", () => {
 
     expect(shots).toEqual([
       {
-        url: `${base}/small.png`,
+        url: SMALL_URL,
         base64: Buffer.from("small-png").toString("base64"),
+        mimeType: "image/png",
       },
     ]);
     expect(bytesSent["/huge.png"]).toBeLessThan(HUGE_BYTES);
   });
 
   it("throws a too-large error when every screenshot is oversized", async () => {
-    logsBody = screenshotLog([`${base}/huge.png`]);
+    logsBody = screenshotLog([HUGE_URL]);
     routeLogsTo("/logs");
 
     await expect(

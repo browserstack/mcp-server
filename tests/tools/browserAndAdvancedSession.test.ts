@@ -274,9 +274,9 @@ describe("App Automate V2 extras", () => {
 
   it("allows only getprop, so nothing can list apps other customers left on shared phones", () => {
     expect(checkAdbCommand(" getprop  ro.build.version.release ")).toBe("getprop ro.build.version.release");
-    expect(checkAdbCommand("getprop")).toBe("getprop");
+    expect(() => checkAdbCommand("getprop")).toThrow(/Only "getprop <property>"/);
     for (const leaky of ["pm list packages -3", "pm list packages", "dumpsys location", "dumpsys window displays", "dumpsys package", "cmd package list packages", "ls /data/app"]) {
-      expect(() => checkAdbCommand(leaky), leaky).toThrow(/Only "getprop"/);
+      expect(() => checkAdbCommand(leaky), leaky).toThrow(/Only "getprop <property>"/);
     }
     expect(() => checkAdbCommand("getprop ro.x extra")).toThrow(/not allowed/);
     expect(() => checkAdbCommand("rm -rf /sdcard")).toThrow(/not allowed/);
@@ -291,7 +291,17 @@ describe("App Automate V2 extras", () => {
       'browserstack_executor: {"action":"adbShell","arguments":{"command":"getprop ro.build.version.release"}}',
     );
     const ios = deviceSession("ios").s;
-    await expect(runAdbShell(ios, "getprop")).rejects.toThrow(/only available on Android/);
+    await expect(runAdbShell(ios, "getprop ro.product.model")).rejects.toThrow(/only available on Android/);
+  });
+
+  it("explains BrowserStack's own refusal of a property instead of passing the raw error on", async () => {
+    const { s, b } = deviceSession("android");
+    b.execute.mockRejectedValueOnce(
+      new Error("Error executing browserstack_executor command. BROWSERSTACK_UNSUPPORTED_ADB_SHELL_COMMAND] getprop ro.product.model is not supported on BrowserStack"),
+    );
+    await expect(runAdbShell(s, "getprop ro.product.model")).rejects.toThrow(
+      /BrowserStack does not allow "getprop ro\.product\.model" on this phone; it accepts only some properties, such as getprop ro\.build\.version\.release/,
+    );
   });
 
   it("returns pulled text files as text and refuses non-media camera URLs", async () => {

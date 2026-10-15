@@ -440,7 +440,7 @@ export default function addDeviceSessionTools(
         .boolean()
         .default(false)
         .describe(
-          "Close the on-screen keyboard after typing, e.g. before tapping a button that sits below the field.",
+          "Close the on-screen keyboard after typing, e.g. before tapping a button that sits below the field. Tries the Done key and a swipe down, then Return as a last resort (Return can submit the form).",
         ),
       waitMs,
       settleMs,
@@ -584,7 +584,7 @@ export default function addDeviceSessionTools(
     name: "runAdbShellCommand",
     title: "Run adb Shell Command",
     description:
-      "Read a device property on an Android phone in an open session with adb getprop, e.g. 'getprop ro.build.version.release' or 'getprop persist.sys.locale'. Only getprop is accepted: commands that list apps or system state could show other customers' apps on shared phones.",
+      "Read a device property on an Android phone in an open session with adb getprop, e.g. 'getprop ro.build.version.release' or 'getprop ro.product.manufacturer'. Only 'getprop <property>' is accepted: commands that list apps or system state could show other customers' apps on shared phones. BrowserStack itself allows only some properties on shared phones; for the device name and OS version, use getDeviceSession.",
     schema: {
       sessionId,
       command: z.string().min(1).max(500),

@@ -318,6 +318,15 @@ describe("device actions", () => {
     );
   });
 
+  it("moves in short steps on iOS, so an edge swipe from x = 0 goes back", async () => {
+    const { browser } = fakeBrowser({ sessionId: "ios-swipe" });
+    const s = session(browser, "ios");
+    await swipe(s, { from: { x: 0, y: 400 }, to: { x: 300, y: 400 }, durationMs: 300, settleMs: 0 });
+    const moves = browser.performActions.mock.calls[0][0][0].actions.filter((a: any) => a.type === "pointerMove").slice(1);
+    expect(moves.map((m: any) => m.x)).toEqual([60, 120, 180, 240, 300]);
+    expect(moves.every((m: any) => m.duration === 60)).toBe(true);
+  });
+
   it("maps Android keys, falls back to the legacy endpoint, and rejects unknown keys", async () => {
     const { browser } = fakeBrowser();
     browser.execute.mockImplementation(async (cmd: string) => {
@@ -424,7 +433,7 @@ describe("on-screen keyboard", () => {
   it("iOS: says plainly when the app gives no way to close the keyboard, without pressing Return", async () => {
     const { browser, el, s } = keyboardPhone("ios", [true]);
     await expect(tap(s, { text: "Login", waitMs: 0, settleMs: 0 })).rejects.toThrow(
-      /"Login" is under the on-screen keyboard, and the app offers no way to close it \(tried: Done key, swipe down on the keyboard\)/,
+      /"Login" is under the on-screen keyboard, which did not close \(tried: Done key, swipe down on the keyboard\)\. Return was not pressed because it can submit the form: setDeviceState hideKeyboard also tries Return/,
     );
     expect(el.click).not.toHaveBeenCalled();
     const returnPressed = browser.execute.mock.calls.some((c: any[]) => c[1]?.keys?.includes("Return"));
@@ -456,7 +465,7 @@ describe("on-screen keyboard", () => {
   it("typeOnDevice: closes the keyboard afterwards when asked, and otherwise says it is open", async () => {
     const closed = keyboardPhone("android", [false, true, false], { getAttribute: vi.fn().mockResolvedValue("android.widget.EditText") });
     const msg = await typeText(closed.s, { value: "bob", text: "User", clear: false, submit: false, hideKeyboard: true, waitMs: 0, settleMs: 0 });
-    expect(msg).toBe('Typed 3 character(s) into "User" and closed the on-screen keyboard');
+    expect(msg).toMatch(/^Typed 3 character\(s\) into "User" and closed the on-screen keyboard \(.+\)$/);
 
     const open = keyboardPhone("android", [false, true], { getAttribute: vi.fn().mockResolvedValue("android.widget.EditText") });
     const msg2 = await typeText(open.s, { value: "bob", text: "User", clear: false, submit: false, waitMs: 0, settleMs: 0 });

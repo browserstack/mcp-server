@@ -35,7 +35,7 @@ export async function simulateBiometric(
 // Only device properties. Public phones are shared between customers, and
 // `pm list packages`, `dumpsys location`, `dumpsys window` and similar list the
 // packages of apps other customers left behind, so they are not offered.
-const ADB_ALLOWED = /^getprop(\s+[\w.-]+)?$/;
+const ADB_ALLOWED = /^getprop\s+[\w.-]+$/;
 
 export function checkAdbCommand(command: string): string {
   const trimmed = command.trim().replace(/\s+/g, " ");
@@ -47,7 +47,7 @@ export function checkAdbCommand(command: string): string {
   }
   if (!ADB_ALLOWED.test(trimmed)) {
     throw new DeviceToolError(
-      `"${trimmed.split(" ").slice(0, 2).join(" ")}" is not allowed. Only "getprop" or "getprop <property>" can run (e.g. getprop ro.build.version.release): commands that list apps or system state could show other customers' apps on shared phones.`,
+      `"${trimmed.split(" ").slice(0, 2).join(" ")}" is not allowed. Only "getprop <property>" can run (e.g. getprop ro.build.version.release): commands that list apps or system state could show other customers' apps on shared phones.`,
     );
   }
   return trimmed;
@@ -62,9 +62,21 @@ export async function runAdbShell(
     throw new DeviceToolError("adb shell is only available on Android.");
   }
   const safe = checkAdbCommand(command);
-  const out = await onDevice(session, "adb shell", (b) =>
-    executor(b, "adbShell", { command: safe }),
-  );
+  const out = await onDevice(session, "adb shell", async (b) => {
+    try {
+      return await executor(b, "adbShell", { command: safe });
+    } catch (e: any) {
+      // BrowserStack's own allow-list accepts only some properties on shared
+      // phones (live: ro.build.version.release and ro.product.manufacturer
+      // pass; a bare getprop, the model and the SDK level are refused).
+      if (/UNSUPPORTED_ADB_SHELL_COMMAND|is not supported/i.test(String(e?.message))) {
+        throw new DeviceToolError(
+          `BrowserStack does not allow "${safe}" on this phone; it accepts only some properties, such as getprop ro.build.version.release or getprop ro.product.manufacturer. getDeviceSession already reports the device name and OS version.`,
+        );
+      }
+      throw e;
+    }
+  });
   await annotate(
     session,
     `adb shell: ${safe.split(/\s+/).slice(0, 2).join(" ")}`,

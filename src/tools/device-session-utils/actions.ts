@@ -290,7 +290,7 @@ async function uncover(
   const r = await dismissKeyboard(session, b, { allowReturn: false });
   if (!r.closed) {
     throw new DeviceToolError(
-      `${describeTarget(target)} is under the on-screen keyboard, and the app offers no way to close it (tried: ${r.tried.join(", ")}). If the app submits on enter, typeOnDevice with submit: true may still get past this screen. Otherwise look for a way through that needs no typing (for example, values the app can fill in for you), or leave the screen with the app's own back control, which closes the keyboard. If nothing works, a person on this phone would be blocked too: report it as an app issue.`,
+      `${describeTarget(target)} is under the on-screen keyboard, which did not close (tried: ${r.tried.join(", ")}). Return was not pressed because it can submit the form: setDeviceState hideKeyboard also tries Return, which closes the keyboard in many apps. If the app submits on enter, typeOnDevice with submit: true may get past this screen. Otherwise look for a way through that needs no typing (for example, values the app can fill in for you), or leave the screen with the app's own back control, which closes the keyboard. If nothing works, a person on this phone would be blocked too: report it as an app issue.`,
     );
   }
   return {
@@ -447,9 +447,10 @@ export async function typeText(
       }
     }
     if (args.hideKeyboard) {
-      const r = await dismissKeyboard(session, b, { allowReturn: false });
+      // Asked for explicitly, so Return is tried last, as setDeviceState does.
+      const r = await dismissKeyboard(session, b, { allowReturn: true });
       keyboardNote = r.closed
-        ? ` and closed the on-screen keyboard`
+        ? ` and closed the on-screen keyboard (${r.how})`
         : `. The on-screen keyboard could not be closed (tried: ${r.tried.join(", ")}); the app offers no way to close it`;
     } else if ((await keyboardState(session, b)).shown) {
       keyboardNote = `. The on-screen keyboard is open: tapOnDevice closes it automatically when it covers the next element, or pass hideKeyboard: true to close it now`;
@@ -461,6 +462,10 @@ export async function typeText(
   await settle(args.settleMs);
   return done;
 }
+
+export const SWIPE_STEPS_IOS = 5;
+const swipeSteps = (n: number) =>
+  Array.from({ length: n }, (_, i) => (i + 1) / n);
 
 export async function swipe(
   session: DeviceSession,
@@ -518,12 +523,16 @@ export async function swipe(
       },
       { type: "pointerDown", button: 0 },
       { type: "pause", duration: 100 },
-      {
-        type: "pointerMove",
-        duration: args.durationMs,
-        x: Math.round(to.x),
-        y: Math.round(to.y),
-      },
+      // iOS ignores some gestures made of one long move (the edge swipe that
+      // goes back is one), so the finger moves there in short steps.
+      ...swipeSteps(session.platform === "ios" ? SWIPE_STEPS_IOS : 1).map(
+        (f, _, all) => ({
+          type: "pointerMove",
+          duration: Math.max(1, Math.round(args.durationMs / all.length)),
+          x: Math.round(from.x + (to.x - from.x) * f),
+          y: Math.round(from.y + (to.y - from.y) * f),
+        }),
+      ),
       { type: "pointerUp", button: 0 },
     ]);
     return `Swiped from (${Math.round(from.x)},${Math.round(from.y)}) to (${Math.round(to.x)},${Math.round(to.y)})`;

@@ -352,7 +352,7 @@ Drive a real iOS/Android device step by step from your assistant. Sessions run o
 | `setDeviceState` | Rotate, close the on-screen keyboard, switch native/web-view context. |
 | `uploadMediaFile` | Upload an image/video/document (inside `MCP_UPLOAD_BASE_DIR`) and get a `media://` URL for `uploadMedia` or `injectCameraImage`. |
 | `simulateBiometric` | Pass or fail a fingerprint / Face ID prompt (session started with `enableBiometric`). |
-| `runAdbShellCommand` | Read device properties on Android with `getprop` only. Commands that list apps (`pm list`, `dumpsys`) are refused, because public phones are shared between customers. |
+| `runAdbShellCommand` | Read a device property on Android with `getprop <property>` only. Commands that list apps (`pm list`, `dumpsys`) are refused, because public phones are shared between customers. BrowserStack itself allows only some properties (for example `ro.build.version.release`, `ro.product.manufacturer`); a refused one gets a clear message. |
 | `pushFileToDevice` / `pullFileFromDevice` | Write a file (local file or text) to the device, or read one back (text, image or base64). |
 | `injectCameraImage` | Make the app's camera see an uploaded image (session started with `enableCameraImageInjection`). |
 | `setDeviceLocation` | Change simulated GPS mid-session. |

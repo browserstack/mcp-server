@@ -117,7 +117,7 @@ Each session uses real device or browser minutes. The agent should end a session
 - **Typed text isn't repeated.** Text the agent types, such as passwords, is never echoed back.
 - **No locators or page HTML.** The agent sees the screen through screenshots; the server does not list element IDs or return a page's HTML.
 - **Destructive actions are flagged.** Uninstalling an app is marked destructive, so MCP clients ask the user first.
-- **Android shell access is limited to `getprop`.** Commands that list installed apps, such as `pm list packages` or `dumpsys`, are refused, because public phones are shared between customers and could show other customers' apps.
+- **Android shell access is limited to `getprop <property>`, and BrowserStack accepts only some properties** (for example `ro.build.version.release`). The device name and OS version are in `getDeviceSession`. Commands that list installed apps, such as `pm list packages` or `dumpsys`, are refused, because public phones are shared between customers and could show other customers' apps.
 - **Limits:** session starts per user per hour and open sessions per process are capped. BrowserStack's own parallel and queue limits still apply.
 
 ## What isn't in this release

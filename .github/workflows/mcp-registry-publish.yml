@@ -51,10 +51,8 @@ jobs:
           cat server.json
 
       - name: Wait for npm to serve the release
-        # The registry validates that the npm version exists before accepting
-        # the server entry. npm's read API lags publish by up to a minute, so
-        # tag-triggered runs raced it and failed (v2.2.0/2.2.1/2.2.2 all 404'd
-        # seconds before the version appeared). Poll until npm serves it.
+        # The registry rejects the entry unless npm already serves the version,
+        # and npm's read API lags publish by up to a minute.
         env:
           PACKAGE_NAME: "@browserstack/mcp-server"
         run: |
@@ -77,8 +75,6 @@ jobs:
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
-        # Retry on transient registry/propagation errors so a brief blip does
-        # not cost a whole release cycle.
         run: |
           for attempt in 1 2 3; do
             if ./mcp-publisher publish; then

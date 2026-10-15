@@ -21,7 +21,7 @@ import { Capability, ProductIndex } from "./types.js";
 /** What the resolver needs from a product's index to find its host. */
 export type HostSource = Pick<
   ProductIndex,
-  "base_url" | "base_urls" | "probe_path" | "auth"
+  "base_url" | "base_urls" | "hosts" | "probe_path" | "auth"
 > & {
   capabilities?: Capability[];
 };

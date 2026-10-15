@@ -132,6 +132,23 @@ export interface Capability {
   name?: string;
   method: string;
   path: string;
+  /**
+   * Which of the product's named `hosts` serves this one capability, when it is not the
+   * product's own `base_url`.
+   *
+   * A product is normally one host. App Automate is not: the account-level API (devices,
+   * app builds, plan, session records) answers on one origin and the Appium hub that
+   * drives the device answers on another, and neither serves the other's paths. Splitting
+   * them into two products would split one entity too — the session a hub capability
+   * creates is the session the account-level API reports on — and a caller holding the id
+   * would have to know it had changed products to use it.
+   *
+   * Unset means the product's own host, so every existing index is unaffected. A name that
+   * `hosts` does not define is refused by name at invocation rather than quietly falling
+   * back, because the fallback would send the call to a host that cannot serve the path and
+   * return a 404 that reads like the caller's mistake.
+   */
+  host?: string;
   mode: Mode;
   entity: string;
   path_params?: WireParam[];
@@ -330,6 +347,18 @@ export interface ProductIndex {
    * (see `discovery.probePath`); declare it when the derived choice would be wrong.
    */
   probe_path?: string;
+  /**
+   * Additional hosts this product is served from, by name, for capabilities that declare
+   * `host`.
+   *
+   * DISTINCT FROM `base_urls`, which is a list of CANDIDATES for one host — probed in turn
+   * so a region-sharded product lands on the account's own region. These are several hosts
+   * that all serve the product at once, each addressing a different part of it, and the
+   * capability says which it needs rather than the server discovering it.
+   *
+   * `base_url` remains the default for every capability that names no host.
+   */
+  hosts?: Record<string, string>;
   capabilities: Capability[];
   entities: Record<string, EntityDoc>;
   paging?: Record<string, PagingRule>;

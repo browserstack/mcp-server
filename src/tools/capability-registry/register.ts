@@ -64,7 +64,7 @@ export interface RegistryDeps {
    * Per-product base URL. Never baked into the artifact — it is environment AND account
    * specific: tm is region-sharded, so this is resolved per call, not once at startup.
    */
-  baseUrlFor: (product: string) => Promise<string>;
+  baseUrlFor: (product: string, host?: string) => Promise<string>;
   credentialsFor: () => Credentials;
   transport?: Transport;
 }
@@ -138,8 +138,14 @@ export function addCapabilityRegistryToolsFromConfig(
       registry,
       // The whole product bundle, not just its host: a region-sharded product declares
       // several candidates and the probe needs an endpoint from its own capabilities.
-      baseUrlFor: (product) =>
-        resolveBaseUrl(product, config, registry.index.products[product]),
+      baseUrlFor: (product, host) =>
+        resolveBaseUrl(
+          product,
+          config,
+          registry.index.products[product],
+          undefined,
+          host,
+        ),
       // Read per call, not captured: the remote server rebuilds config per session, so a
       // captured credential would outlive the session it belongs to.
       credentialsFor: () => ({
@@ -1210,7 +1216,7 @@ export function addCapabilityRegistryTools(
         const result = await invoke(
           capability,
           args,
-          await deps.baseUrlFor(product),
+          await deps.baseUrlFor(product, capability.host),
           deps.credentialsFor(),
           transport,
           registry.index.products[product]?.auth,

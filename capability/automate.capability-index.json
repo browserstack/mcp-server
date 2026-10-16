@@ -246,7 +246,8 @@
      "A session starts in seconds rather than the tens of seconds a device session takes, but it still holds a browser and consumes Automate minutes until it ends: always finish with set_session_status and then delete_session.",
      "The session ends itself after idle_timeout seconds without a command, and after 2 hours in total.",
      "console_logs and network_logs must be asked for here; they cannot be turned on once the session is running, and get_session only links to them when they were.",
-     "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors."
+     "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
+     "resolution takes one of a fixed set of values per operating system, not any width and height: an unsupported pair is refused outright rather than rounded to the nearest one. The browser window is well short of the screen it sits on \u2014 1920x1080 gives a viewport around 930x860 \u2014 so measure it rather than assuming the request was honoured."
     ],
     "body": [
      {
@@ -317,7 +318,7 @@
       "name": "resolution",
       "type": "string",
       "json_path": "/capabilities/alwaysMatch/bstack:options/resolution",
-      "description": "Desktop screen resolution. The browser window is smaller than this; read the real size from get_window_rect.",
+      "description": "Desktop screen resolution, from a fixed set the chosen OS supports \u2014 an unsupported value is refused with \"The specified screen resolution is not compatible with the chosen OS version\" and no session starts. 1920x1080 is accepted on Windows 11; 2560x1440 is not. The browser window is much smaller than the screen either way, so read the real size rather than assuming it.",
       "example": "1920x1080"
      },
      {

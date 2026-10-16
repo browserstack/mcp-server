@@ -356,7 +356,8 @@
      "The element id comes back under the W3C key value[\"element-6066-11e4-a52e-4f735466cecf\"]; pass that string as element_id.",
      "Take the selector from get_page_source rather than guessing: resource-id \u2192 \"id\", content-desc (Android) or name (iOS) \u2192 \"accessibility id\".",
      "No match is a 404 with error \"no such element\" \u2014 re-read the page source; the screen may have changed or the element may be off-screen and need a scroll first.",
-     "\"-android uiautomator\" accepts a UiSelector expression, which can scroll an element into view: new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text(\"Checkout\"))."
+     "\"-android uiautomator\" accepts a UiSelector expression, which can scroll an element into view: new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text(\"Checkout\")).",
+     "find_elements answers the same query with a list and never a 404, which is how to ask whether something is present without treating absence as a failure."
     ],
     "path_params": [
      {
@@ -1808,7 +1809,7 @@
      "Android takes appId and iOS takes bundleId \u2014 send exactly the one for the platform. The wrong name is refused with a 400 \"invalid argument\" that names the parameter it wanted, and no action is taken.",
      "Launching an app that is already in the foreground does nothing and still reports success.",
      "To restart an app from a clean state, call terminate_app first and then this.",
-     "Succeeding means the app was activated, not that it finished drawing; read the page source before acting.",
+     "Succeeding means the app was activated, not that it finished drawing, so give it a moment and confirm before acting. An app that cannot be brought forward at all answers 400 rather than reporting success, and get_app_state reads 4 once it really is in front \u2014 sampled too early it can still report the home screen mid-switch.",
      "The app must be installed \u2014 a package that is not there fails rather than installing it."
     ],
     "path_params": [
@@ -1953,7 +1954,7 @@
      "Android takes appId and iOS takes bundleId \u2014 send exactly the one for the platform. The wrong name is refused with a 400 \"invalid argument\" that names the parameter it wanted, and no action is taken.",
      "The value is a number: 0 not installed, 1 installed but not running, 2 running in the background and suspended, 3 running in the background, 4 running in the foreground.",
      "4 is the only state in which the app is on screen and can be driven.",
-     "The same scale applies on both platforms. Sending an app to the background with press_button home leaves it at 2, and launching it again returns it to 4."
+     "The same scale applies on both platforms. Sending an app to the background leaves it at 3 or 2 \u2014 the system suspends it a moment after it stops being visible \u2014 so treat anything below 4 as not on screen rather than waiting for one number. Launching it again returns it to 4."
     ],
     "path_params": [
      {
@@ -2638,6 +2639,67 @@
      }
     },
     "unavailable_note": "This server does not run on your own machine, so it cannot read a file you name \u2014 a path sent here would point at the machine hosting the server. Upload the build yourself with a multipart request carrying the file to the same endpoint, which the asset-upload helper will write out for you, and then use the bs:// url it returns as the app for create_session. upload_app_build does the same thing from a public download link, if the build is reachable at one."
+   },
+   {
+    "name": "find_elements",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/elements",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Find every element matching a selector \u2014 use this to count matches, work through a list, or check whether something is present at all.",
+    "guidance": [
+     "No match is an EMPTY LIST and a 200, where find_element answers 404. That makes this the way to test whether something is there without handling an error.",
+     "An empty list can be trusted to mean absent: a strategy this surface does not accept is refused before the request is sent, and an iOS strategy aimed at an Android screen comes back as a 400 \"invalid selector\" rather than as nothing found.",
+     "Each entry carries the same element-6066-11e4-a52e-4f735466cecf key as find_element, and the ids go stale when the screen changes just as readily.",
+     "The order is the UI tree's own, so it follows the screen's layout rather than anything meaningful to the app.",
+     "Use find_element when exactly one match is expected: its 404 says plainly that the screen is not what you thought."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "using",
+      "type": "string",
+      "required": true,
+      "values": [
+       "id",
+       "accessibility id",
+       "xpath",
+       "class name",
+       "-android uiautomator",
+       "-ios predicate string",
+       "-ios class chain"
+      ],
+      "example": "accessibility id"
+     },
+     {
+      "name": "value",
+      "type": "string",
+      "required": true,
+      "description": "The selector itself, interpreted according to using.",
+      "example": "nav-cart"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Every matching element, possibly none.",
+      "schema": {
+       "$schema": "ElementListResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
    }
   ],
   "schemas": {
@@ -3065,6 +3127,23 @@
       }
      }
     }
+   },
+   "ElementListResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "element-6066-11e4-a52e-4f735466cecf": {
+         "type": "string",
+         "description": "The element id to pass as element_id."
+        }
+       }
+      }
+     }
+    }
    }
   },
   "responses": {
@@ -3139,7 +3218,8 @@
      "press_button",
      "get_simulated_location",
      "get_active_app_info",
-     "read_device_property"
+     "read_device_property",
+     "find_elements"
     ]
    },
    "device": {

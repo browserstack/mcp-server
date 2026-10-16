@@ -8,6 +8,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       id-token: write
       contents: read
@@ -50,8 +51,41 @@ jobs:
           mv server.json.tmp server.json
           cat server.json
 
+      - name: Wait for npm to serve the release
+        # The registry rejects the entry unless npm already serves the version,
+        # and npm's read API lags publish by up to a minute.
+        env:
+          PACKAGE_NAME: "@browserstack/mcp-server"
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          ENCODED="${PACKAGE_NAME/\//%2F}"
+          for attempt in $(seq 1 90); do
+            STATUS="$(curl -sS -o /dev/null -w '%{http_code}' \
+              "https://registry.npmjs.org/${ENCODED}/${VERSION}" || true)"
+            if [ "$STATUS" = "200" ]; then
+              echo "npm is serving ${PACKAGE_NAME}@${VERSION} (attempt ${attempt})."
+              exit 0
+            fi
+            echo "Attempt ${attempt}/90: npm returned ${STATUS} for ${VERSION}; retrying in 10s."
+            sleep 10
+          done
+          echo "::error::npm did not serve ${PACKAGE_NAME}@${VERSION} within 15 minutes."
+          exit 1
+
       - name: Login to MCP Registry
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
-        run: ./mcp-publisher publish
+        run: |
+          for attempt in 1 2 3; do
+            if ./mcp-publisher publish; then
+              echo "Published to MCP Registry (attempt ${attempt})."
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Publish attempt ${attempt} failed; retrying in 5m."
+              sleep 300
+            fi
+          done
+          echo "::error::Failed to publish to the MCP Registry after 3 attempts."
+          exit 1

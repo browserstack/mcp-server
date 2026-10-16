@@ -4,6 +4,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import globalConfig from "../../config.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 async function extractScreenshotUrls(
   sessionId: string,
@@ -13,7 +14,12 @@ async function extractScreenshotUrls(
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
-  const baseUrl = `https://api.browserstack.com/${sessionType === SessionType.Automate ? "automate" : "app-automate"}`;
+  const isAutomate = sessionType === SessionType.Automate;
+  const host = await getRegionalHost(
+    isAutomate ? "automateApi" : "appAutomateApi",
+    config,
+  );
+  const baseUrl = `${host}/${isAutomate ? "automate" : "app-automate"}`;
 
   const url = `${baseUrl}/sessions/${sessionId}/logs`;
   const response = await apiClient.get({

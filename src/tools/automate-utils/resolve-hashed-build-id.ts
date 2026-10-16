@@ -3,9 +3,9 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
-import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
 import { extractTestIds } from "../rca-agent-utils/get-failed-test-id.js";
 import { TestRun } from "../rca-agent-utils/types.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 // Observability (Test Reporting & Analytics) build ids are usually UUIDs but
 // some are 40-char hex, the same shape as Automate / App Automate "hashed ids".
@@ -30,13 +30,14 @@ export function isHashedBuildId(id: string): boolean {
 export function sessionDetailsUrl(
   sessionType: SessionType,
   sessionId: string,
+  host = "https://api.browserstack.com",
 ): string {
   const encoded = encodeURIComponent(sessionId);
   switch (sessionType) {
     case SessionType.Automate:
-      return `https://api.browserstack.com/automate/sessions/${encoded}.json`;
+      return `${host}/automate/sessions/${encoded}.json`;
     case SessionType.AppAutomate:
-      return `https://api.browserstack.com/app-automate/sessions/${encoded}.json`;
+      return `${host}/app-automate/sessions/${encoded}.json`;
     default: {
       const _exhaustive: never = sessionType;
       throw new Error(`Unsupported session type: ${_exhaustive}`);
@@ -58,7 +59,14 @@ export async function resolveBuildIdFromSession(
   const auth = Buffer.from(authString).toString("base64");
 
   const response = await apiClient.get({
-    url: sessionDetailsUrl(sessionType, sessionId),
+    url: sessionDetailsUrl(
+      sessionType,
+      sessionId,
+      await getRegionalHost(
+        sessionType === SessionType.Automate ? "automateApi" : "appAutomateApi",
+        config,
+      ),
+    ),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
@@ -91,7 +99,7 @@ export async function findSessionIdForObservabilityBuild(
 ): Promise<string | undefined> {
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
-  const baseUrl = `${getAutomationBaseUrl()}/ext/v1/builds/${encodeURIComponent(observabilityBuildId)}/testRuns`;
+  const baseUrl = `${await getRegionalHost("automationApi", config)}/ext/v1/builds/${encodeURIComponent(observabilityBuildId)}/testRuns`;
 
   let nextPage: string | undefined;
   for (let page = 0; page < MAX_TEST_RUN_PAGES; page++) {

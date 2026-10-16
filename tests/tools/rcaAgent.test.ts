@@ -106,6 +106,7 @@ describe("RCA Agent Tools", () => {
         "fake-user:fake-key",
         TestStatus.FAILED,
         undefined,
+        "https://api-automation.browserstack.com",
       );
     });
 
@@ -128,6 +129,7 @@ describe("RCA Agent Tools", () => {
         "fake-user:fake-key",
         TestStatus.FAILED,
         true,
+        "https://api-automation.browserstack.com",
       );
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed[0].failure.category).toBe("Assertion");

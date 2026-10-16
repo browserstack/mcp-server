@@ -11,6 +11,7 @@ import {
   MAX_APP_UPLOAD_BYTES,
 } from "../../../lib/upload-validator.js";
 import appConfig from "../../../config.js";
+import { getRegionalHost } from "../../../lib/regional-host.js";
 
 interface Device {
   device: string;
@@ -156,7 +157,10 @@ export async function uploadApp(
   formData.append("file", fs.createReadStream(safePath));
 
   const response = await apiClient.post<UploadResponse>({
-    url: "https://api-cloud.browserstack.com/app-automate/upload",
+    url: `${await getRegionalHost("appAutomateUpload", {
+      "browserstack-username": username,
+      "browserstack-access-key": password,
+    })}/app-automate/upload`,
     headers: {
       ...formData.getHeaders(),
       Authorization:
@@ -218,7 +222,7 @@ export async function uploadEspressoApp(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     appPath,
-    "https://api-cloud.browserstack.com/app-automate/espresso/v2/app",
+    `${await getRegionalHost("appAutomateUpload", config)}/app-automate/espresso/v2/app`,
     "app_url",
     config,
     { allowedExtensions: [".apk", ".aab"] },
@@ -232,7 +236,7 @@ export async function uploadEspressoTestSuite(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     testSuitePath,
-    "https://api-cloud.browserstack.com/app-automate/espresso/v2/test-suite",
+    `${await getRegionalHost("appAutomateUpload", config)}/app-automate/espresso/v2/test-suite`,
     "test_suite_url",
     config,
     { allowedExtensions: [".apk"] },
@@ -246,7 +250,7 @@ export async function uploadXcuiApp(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     appPath,
-    "https://api-cloud.browserstack.com/app-automate/xcuitest/v2/app",
+    `${await getRegionalHost("appAutomateUpload", config)}/app-automate/xcuitest/v2/app`,
     "app_url",
     config,
     { allowedExtensions: [".ipa"] },
@@ -260,7 +264,7 @@ export async function uploadXcuiTestSuite(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     testSuitePath,
-    "https://api-cloud.browserstack.com/app-automate/xcuitest/v2/test-suite",
+    `${await getRegionalHost("appAutomateUpload", config)}/app-automate/xcuitest/v2/test-suite`,
     "test_suite_url",
     config,
     { allowedExtensions: [".zip"] },
@@ -279,7 +283,7 @@ export async function triggerEspressoBuild(
     "Basic " + Buffer.from(getBrowserStackAuth(config)).toString("base64");
 
   const response = await apiClient.post({
-    url: "https://api-cloud.browserstack.com/app-automate/espresso/v2/build",
+    url: `${await getRegionalHost("appAutomateUpload", config)}/app-automate/espresso/v2/build`,
     headers: {
       Authorization: authHeader,
       "Content-Type": "application/json",
@@ -315,7 +319,7 @@ export async function triggerXcuiBuild(
   };
 
   const response = await apiClient.post({
-    url: "https://api-cloud.browserstack.com/app-automate/xcuitest/v2/build",
+    url: `${await getRegionalHost("appAutomateUpload", config)}/app-automate/xcuitest/v2/build`,
     headers: {
       Authorization:
         "Basic " +

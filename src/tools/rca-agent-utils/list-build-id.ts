@@ -1,4 +1,5 @@
 import { apiClient } from "../../lib/apiClient.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 /**
  * Returns the latest build for a project + build name across all users (not just the caller's).
@@ -12,8 +13,12 @@ export async function listBuildId(
   const authHeader =
     "Basic " + Buffer.from(`${username}:${accessKey}`).toString("base64");
 
+  const host = await getRegionalHost("automationApi", {
+    "browserstack-username": username,
+    "browserstack-access-key": accessKey,
+  });
   const response = await apiClient.get({
-    url: "https://api-automation.browserstack.com/ext/v1/builds/latest",
+    url: `${host}/ext/v1/builds/latest`,
     headers: {
       Authorization: authHeader,
       "Content-Type": "application/json",

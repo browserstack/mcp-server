@@ -19,9 +19,10 @@ export async function getTestIds(
   authString: string,
   status?: TestStatus,
   includeFailureDetail = false,
+  host: string = getAutomationBaseUrl(),
 ): Promise<FailedTestInfo[]> {
   // No `status` → returns ALL tests; a `status` narrows the query.
-  const baseUrl = `${getAutomationBaseUrl()}/ext/v1/builds/${buildId}/testRuns`;
+  const baseUrl = `${host}/ext/v1/builds/${buildId}/testRuns`;
   let url = status ? `${baseUrl}?test_statuses=${status}` : baseUrl;
   let allTests: FailedTestInfo[] = [];
   let requestNumber = 0;

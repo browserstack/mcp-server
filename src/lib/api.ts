@@ -1,13 +1,15 @@
 import { getBrowserStackAuth } from "./get-auth.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { apiClient } from "./apiClient.js";
+import { getRegionalHost } from "./regional-host.js";
 
 export async function getLatestO11YBuildInfo(
   buildName: string,
   projectName: string,
   config: BrowserStackConfig,
 ) {
-  const buildsUrl = `https://api-observability.browserstack.com/ext/v1/builds/latest?build_name=${encodeURIComponent(
+  const host = await getRegionalHost("observabilityApi", config);
+  const buildsUrl = `${host}/ext/v1/builds/latest?build_name=${encodeURIComponent(
     buildName,
   )}&project_name=${encodeURIComponent(projectName)}`;
 

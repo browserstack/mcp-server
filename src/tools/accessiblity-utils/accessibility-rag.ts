@@ -8,6 +8,7 @@ export interface RAGChunk {
 
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 export interface AccessibilityRAGResponse {
   content: Array<{
@@ -20,7 +21,7 @@ export async function queryAccessibilityRAG(
   userQuery: string,
   config: BrowserStackConfig,
 ): Promise<any> {
-  const url = "https://accessibility.browserstack.com/api/tcg-proxy/search";
+  const url = `${await getRegionalHost("accessibilityDashboard", config)}/api/tcg-proxy/search`;
 
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");

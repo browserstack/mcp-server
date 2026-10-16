@@ -130,11 +130,33 @@ export function isBrowseQuery(query?: string): boolean {
   return q === "*" || q === "all";
 }
 
+/**
+ * OUR OWN NAME, WHICH IS NOT ROUTING VOCABULARY.
+ *
+ * Every product here is BrowserStack's, so the word distinguishes none of them — it is a
+ * stopword in the strict sense. It could not be spelled as one, because the camelCase
+ * split above runs first and turns "BrowserStack" into `browser` + `stack`, two words that
+ * ARE vocabulary: `browser` is a devicecontrol entity and an alias on a tm configuration.
+ *
+ * So the company's name claimed a product's noun. "Which Android apps have I uploaded to
+ * BrowserStack?" clashed over `browser` across four products, and the question put to the
+ * user — devicecontrol or mobiledevicecontrol or tm or tra — was unanswerable, because no
+ * word in the request was really about browsers at all. It reached further than queries
+ * that name us: the tm and tra summaries say "BrowserStack", so those two became claimants
+ * of `browser` permanently, and "what browsers can I use" clashed four ways on a word only
+ * devicecontrol models.
+ *
+ * Matched after the split and the fold, so one pattern covers "BrowserStack", "browserstack"
+ * and "browser stack". `bstack` is the same name in the shorthand the logs and repos use.
+ */
+const BRAND = /\bbrowser\s*stack\b|\bbstack\b/g;
+
 export function terms(text: string | undefined): string[] {
   return [
     ...(text || "")
       .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
       .toLowerCase()
+      .replace(BRAND, " ")
       .matchAll(WORD),
   ]
     .map((match) => match[0])
@@ -614,6 +636,25 @@ export interface ProductAmbiguity {
  * answered the question and there is nothing to ask. Only queries whose every recognised
  * word is shared are genuinely undecided.
  */
+/**
+ * The words that do disclaiming work in a product summary.
+ *
+ * Deliberately a list of markers rather than anything resembling negation parsing: the
+ * sentences this has to catch are written to one pattern ("X is not here", "neither is Y",
+ * "unlike Test Management", "rather than a browser"), and a looser rule would start
+ * discarding prose that claims.
+ */
+const DISCLAIMS =
+  /\b(?:not|never|neither|nor|unlike|rather than|instead of|except)\b/i;
+
+/** A summary with its disclaiming sentences removed, for the claimant pass only. */
+function claimingSentences(summary: string | undefined): string {
+  return (summary ?? "")
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !DISCLAIMS.test(sentence))
+    .join(" ");
+}
+
 export function ambiguousProducts(
   products: Record<string, ProductIndex>,
   query: string | undefined,
@@ -667,10 +708,21 @@ export function ambiguousProducts(
   // product already models catches that, and refusing to mine NEW terms out of it is what
   // keeps the prose from taking over: a summary is a paragraph of verbs and nouns written
   // to sell the product, and every word in it would otherwise become routing vocabulary.
+  //
+  // AND ONLY FROM A SENTENCE THAT CLAIMS. These summaries route deliberately — each one
+  // carries a sentence saying what is NOT in it and where to go instead, which is the most
+  // useful sentence in the paragraph and was being read as the opposite of what it says.
+  // "Browsers are not here — those are device control" made mobiledevicecontrol a claimant
+  // of `browser`, and "Mobile APPS are not here" made devicecontrol a claimant of `app`.
+  // Both products were then offered to the user for a word their own summary disowns.
+  //
+  // Dropping a sentence can only ever narrow a clash, never misdirect one: prose cannot
+  // introduce a term, so the worst case is a clash that goes unreported — and a product
+  // that genuinely handles something does not say so in a negated sentence.
   const summaries = Object.fromEntries(
     Object.entries(products).map(([product, index]) => [
       product,
-      ` ${fold(index.summary ?? "")} `,
+      ` ${fold(claimingSentences(index.summary))} `,
     ]),
   );
   for (const [key, claimants] of owners) {

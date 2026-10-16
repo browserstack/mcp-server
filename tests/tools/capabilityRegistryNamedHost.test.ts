@@ -15,19 +15,19 @@ const SOURCE = {
   hosts: { hub: "https://hub-cloud.browserstack.com" },
 };
 
-const OVERRIDE = "CAPABILITY_REGISTRY_BASE_URL_APPAUTOMATE_HOST_HUB";
+const OVERRIDE = "CAPABILITY_REGISTRY_BASE_URL_MOBILEDEVICECONTROL_HOST_HUB";
 
 describe("a capability served from a named host", () => {
   beforeEach(() => {
     delete process.env[OVERRIDE];
-    delete process.env.CAPABILITY_REGISTRY_BASE_URL_APPAUTOMATE;
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_MOBILEDEVICECONTROL;
     delete process.env.CAPABILITY_REGISTRY_ENV;
     vi.resetModules();
   });
 
   afterEach(() => {
     delete process.env[OVERRIDE];
-    delete process.env.CAPABILITY_REGISTRY_BASE_URL_APPAUTOMATE;
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_MOBILEDEVICECONTROL;
     delete process.env.CAPABILITY_REGISTRY_ENV;
   });
 
@@ -35,14 +35,14 @@ describe("a capability served from a named host", () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     expect(
-      await resolveBaseUrl("appautomate", CONFIG, SOURCE, undefined, "hub"),
+      await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
     ).toBe("https://hub-cloud.browserstack.com");
   });
 
   it("still gives the product's own host to a capability that names none", async () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
-    expect(await resolveBaseUrl("appautomate", CONFIG, SOURCE)).toBe(
+    expect(await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE)).toBe(
       "https://api-cloud.browserstack.com",
     );
   });
@@ -52,7 +52,7 @@ describe("a capability served from a named host", () => {
       await import("../../src/tools/capability-registry/config.js");
     expect(
       await resolveBaseUrl(
-        "appautomate",
+        "mobiledevicecontrol",
         CONFIG,
         { ...SOURCE, hosts: { hub: "https://hub-cloud.browserstack.com/" } },
         undefined,
@@ -66,9 +66,9 @@ describe("a capability served from a named host", () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     expect(
-      await resolveBaseUrl("appautomate", CONFIG, SOURCE, undefined, "hub"),
+      await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
     ).toBe("https://hub-preprod.example");
-    expect(await resolveBaseUrl("appautomate", CONFIG, SOURCE)).toBe(
+    expect(await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE)).toBe(
       "https://api-cloud.browserstack.com",
     );
   });
@@ -76,12 +76,12 @@ describe("a capability served from a named host", () => {
   it("is NOT overridden by the product-level variable, which addresses a different host", async () => {
     // Pointing the product at a preprod API must not silently redirect hub traffic there:
     // the hub is a separate deployment and would answer 404 for every /wd/hub path.
-    process.env.CAPABILITY_REGISTRY_BASE_URL_APPAUTOMATE =
+    process.env.CAPABILITY_REGISTRY_BASE_URL_MOBILEDEVICECONTROL =
       "https://api-preprod.example";
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     expect(
-      await resolveBaseUrl("appautomate", CONFIG, SOURCE, undefined, "hub"),
+      await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
     ).toBe("https://hub-cloud.browserstack.com");
   });
 
@@ -91,7 +91,7 @@ describe("a capability served from a named host", () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     await expect(
-      resolveBaseUrl("appautomate", CONFIG, SOURCE, undefined, "terminal"),
+      resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "terminal"),
     ).rejects.toThrow(/'terminal' host.*does not declare.*hub/s);
   });
 
@@ -102,7 +102,7 @@ describe("a capability served from a named host", () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     await expect(
-      resolveBaseUrl("appautomate", CONFIG, SOURCE, undefined, "hub"),
+      resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
     ).rejects.toThrow(/environment 'preprod' has no 'hub' host/);
   });
 
@@ -112,7 +112,7 @@ describe("a capability served from a named host", () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     expect(
-      await resolveBaseUrl("appautomate", CONFIG, SOURCE, undefined, "hub"),
+      await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
     ).toBe("https://hub-preprod.example");
   });
 });

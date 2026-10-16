@@ -820,7 +820,7 @@
     "guidance": [
      "APPENDS to whatever the field already holds. Call clear_element first to replace the value rather than adding to it.",
      "Read the result back with get_element_property on \"value\", not get_element_text, which is empty for an input.",
-     "A \\n at the end submits the form, which is usually quicker than finding and clicking the submit button.",
+     "A \\n at the end submits the form on a desktop browser and on Chrome for Android, and is quicker than finding the submit button. IT DOES NOT SUBMIT ON SAFARI FOR iOS \u2014 the text lands in the field and the page stays where it is, whether the newline is sent with the text or on its own. There, click the form's submit button, or call arguments[0].form.submit() through execute_script with the field as the argument.",
      "The element must be editable; typing into anything else answers \"element not interactable\".",
      "A site's own autocomplete or dropdown may swallow the keystrokes and require a click on a suggestion instead."
     ],

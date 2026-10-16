@@ -41,11 +41,7 @@ const DEFAULT_BROWSERSTACK_AUTOMATION_BASE_URL =
 const DEFAULT_BROWSERSTACK_O11Y_UI_BASE_URL =
   "https://automation.browserstack.com";
 
-/**
- * BROWSERSTACK_GRR_REGION: the Geo Region Restriction region of the account this server
- * serves — "us" (default), "eu" or "in". Unset or "us" keeps the US hosts. Any other
- * value fails at startup: a typo must not quietly send a GRR account's data to the US.
- */
+// BROWSERSTACK_GRR_REGION: "us" (default), "eu" or "in". Invalid values fail at startup.
 const GRR_REGIONS = ["us", "eu", "in"] as const;
 export type GrrRegion = (typeof GRR_REGIONS)[number];
 

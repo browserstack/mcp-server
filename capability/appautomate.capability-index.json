@@ -342,7 +342,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "find_element",
@@ -702,7 +703,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "delete_session",
@@ -1201,7 +1203,8 @@
       "$response": "Unauthorized"
      }
     },
-    "host": "api"
+    "host": "api",
+    "disabled": true
    },
    {
     "name": "take_screenshot",
@@ -1539,7 +1542,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "get_geo_location",
@@ -1573,7 +1577,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "push_file",
@@ -1626,7 +1631,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "pull_file",
@@ -1671,7 +1677,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "press_keycode",
@@ -2075,7 +2082,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "uninstall_app",
@@ -2148,7 +2156,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "simulate_biometric",
@@ -2201,7 +2210,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "inject_camera_image",
@@ -2253,7 +2263,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "annotate_session",
@@ -2304,7 +2315,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "is_keyboard_shown",
@@ -2464,7 +2476,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "get_active_app_info",

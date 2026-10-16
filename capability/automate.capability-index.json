@@ -648,7 +648,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "find_element",
@@ -946,7 +947,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "get_element_property",
@@ -1044,7 +1046,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "is_element_displayed",
@@ -1085,7 +1088,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "execute_script",
@@ -1209,7 +1213,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "set_window_rect",
@@ -1271,7 +1276,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "maximize_window",
@@ -1310,7 +1316,8 @@
       "$response": "WebDriverError"
      }
     },
-    "send_empty_body": true
+    "send_empty_body": true,
+    "disabled": true
    },
    {
     "name": "list_window_handles",
@@ -1517,7 +1524,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "delete_session",

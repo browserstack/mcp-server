@@ -649,8 +649,7 @@
      "404": {
       "$response": "WebDriverError"
      }
-    },
-    "disabled": true
+    }
    },
    {
     "name": "find_element",
@@ -1214,8 +1213,7 @@
      "404": {
       "$response": "WebDriverError"
      }
-    },
-    "disabled": true
+    }
    },
    {
     "name": "set_window_rect",

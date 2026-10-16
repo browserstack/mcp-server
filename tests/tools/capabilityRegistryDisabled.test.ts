@@ -76,9 +76,9 @@ describe("a disabled capability is absent from the loaded model", () => {
 
   it("is gone from the entity's capability list, which describeEntity returns wholesale", () => {
     const registry = registryWith(product());
-    expect(
-      registry.index.products.tm.entities.attachment.capabilities,
-    ).toEqual(["list_attachments_v1"]);
+    expect(registry.index.products.tm.entities.attachment.capabilities).toEqual(
+      ["list_attachments_v1"],
+    );
   });
 
   it("leaves the original bundle untouched rather than mutating the caller's object", () => {
@@ -93,7 +93,9 @@ describe("a disabled capability is absent from the loaded model", () => {
   });
 
   it("reports nothing, and shares the bundle, when no capability is disabled", () => {
-    const products = { tm: { summary: "s", capabilities: [LIVE], entities: {} } };
+    const products = {
+      tm: { summary: "s", capabilities: [LIVE], entities: {} },
+    };
     const registry = registryWith(products);
     expect(registry.disabledCounts()).toEqual({});
     // Untouched products keep object identity — the filter allocates only where it must.
@@ -104,9 +106,13 @@ describe("a disabled capability is absent from the loaded model", () => {
 describe("searchCapability cannot surface one", () => {
   it("does not return it for a query whose words it matches best", () => {
     const registry = registryWith(product());
-    const hit = searchCapabilities(registry.index.products, "upload attachments", {
-      product: "tm",
-    });
+    const hit = searchCapabilities(
+      registry.index.products,
+      "upload attachments",
+      {
+        product: "tm",
+      },
+    );
     expect(hit.hits.map((h) => h.capability.name)).not.toContain(
       "upload_generic_attachments",
     );
@@ -135,8 +141,12 @@ describe("searchCapability cannot surface one", () => {
   });
 });
 
-describe("invokeCapability answers `capability_disabled`, not `unknown`", () => {
-  it("names the reason when the caller already holds the name", () => {
+describe("a withheld handle answers the same way as an absent one", () => {
+  // Search, describe and every listing already behave as though it does not exist.
+  // Invocation says the same, because "withheld" is a fact about the artifact rather than
+  // this surface, and it invites a retry or a request to enable something that cannot be
+  // enabled here. The distinction survives on the error, for telemetry only.
+  it("tells a caller holding the name that it does not exist", () => {
     const registry = registryWith(product());
     expect(() => registry.byNameLookup("upload_generic_attachments")).toThrow(
       InvocationError,
@@ -145,12 +155,11 @@ describe("invokeCapability answers `capability_disabled`, not `unknown`", () => 
       registry.byNameLookup("upload_generic_attachments");
     } catch (error) {
       const message = (error as Error).message;
-      expect(message).toContain("capability_disabled");
-      // THAT it is disabled, not why. The reason is documentation and lives with the
-      // decision, not in four copies inside the shipped artifact.
-      expect(message).toContain("disabled on this surface");
-      // The distinction that matters: withheld by the index, not missing from it.
-      expect(message).not.toContain("unknown_capability");
+      expect(message).toContain("unknown_capability");
+      expect(message).not.toContain("disabled");
+      expect(message).not.toContain("withheld");
+      // Countable without being disclosed.
+      expect((error as InvocationError).withheld).toBe(true);
     }
   });
 
@@ -163,7 +172,20 @@ describe("invokeCapability answers `capability_disabled`, not `unknown`", () => 
       );
       throw new Error("expected a refusal");
     } catch (error) {
-      expect((error as Error).message).toContain("capability_disabled");
+      const message = (error as Error).message;
+      expect(message).toContain("unknown_endpoint");
+      expect(message).not.toContain("disabled");
+      expect((error as InvocationError).withheld).toBe(true);
+    }
+  });
+
+  it("leaves a genuinely absent name unmarked, so the two are told apart in telemetry", () => {
+    const registry = registryWith(product());
+    try {
+      registry.byNameLookup("no_such_capability");
+      throw new Error("expected a refusal");
+    } catch (error) {
+      expect((error as InvocationError).withheld).toBeUndefined();
     }
   });
 
@@ -217,13 +239,17 @@ describe("the shipped tm index", () => {
     const { readFileSync } = await import("node:fs");
     const raw = JSON.parse(readFileSync(FILE, "utf8"));
     const off = new Set(
-      raw.tm.capabilities.filter((c: any) => c.disabled).map((c: any) => c.name),
+      raw.tm.capabilities
+        .filter((c: any) => c.disabled)
+        .map((c: any) => c.name),
     );
     expect(off.size).toBe(WITHHELD_COUNT);
     for (const name of FILE_BEARING) expect(off.has(name)).toBe(true);
     // Every destructive capability is withheld, so the tier is now invisible as well as
     // refused. Nothing that passed is caught up in it.
-    const destructive = raw.tm.capabilities.filter((c: any) => c.mode === "destructive");
+    const destructive = raw.tm.capabilities.filter(
+      (c: any) => c.mode === "destructive",
+    );
     expect(destructive.every((c: any) => c.disabled)).toBe(true);
   });
 
@@ -273,10 +299,10 @@ describe("the shipped tm index", () => {
       expect(hits.hits.map((h) => h.capability.name)).not.toContain(name);
     }
 
-    // Still refused by name, with the reason.
+    // Still refused by name — as not found, the same answer every other surface gives.
     for (const name of FILE_BEARING) {
       expect(() => registry.byNameLookup(name, "tm")).toThrow(
-        /capability_disabled/,
+        /unknown_capability/,
       );
     }
   });

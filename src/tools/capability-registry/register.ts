@@ -234,7 +234,12 @@ export function addCapabilityRegistryTools(
    * below pin each branch against the message its source actually produces; if you reword
    * a refusal, one of them will tell you.
    */
-  const invocationReason = (message: string): string => {
+  const invocationReason = (message: string, error?: unknown): string => {
+    // A WITHHELD HANDLE IS REPORTED TO THE CALLER AS NOT FOUND, so the message cannot be
+    // what distinguishes it. The flag on the error can, which keeps the refusal countable
+    // without the wording admitting the capability exists.
+    if (error instanceof InvocationError && error.withheld)
+      return "capability_disabled";
     if (message.startsWith("unknown_capability:")) return "unknown_capability";
     if (message.startsWith("unknown_endpoint:")) return "unknown_endpoint";
     // The outcome this PR turns on: 46 of 244 capabilities are withheld, so this is the
@@ -1033,7 +1038,7 @@ export function addCapabilityRegistryTools(
         if (error instanceof InvocationError)
           return refuse(
             "describeCapability",
-            invocationReason(error.message),
+            invocationReason(error.message, error),
             error.message,
             undefined,
             identity,
@@ -1236,7 +1241,7 @@ export function addCapabilityRegistryTools(
         if (error instanceof InvocationError)
           return refuse(
             "invokeCapability",
-            invocationReason(error.message),
+            invocationReason(error.message, error),
             error.message,
             undefined,
             identity,

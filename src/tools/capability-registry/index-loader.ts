@@ -25,7 +25,18 @@ import {
 export class IndexError extends Error {}
 
 /** Thrown to the caller as a tool error, so the wording is caller-facing. */
-export class InvocationError extends Error {}
+export class InvocationError extends Error {
+  /**
+   * Set when the handle exists in the artifact but this surface withholds it.
+   *
+   * The MESSAGE deliberately does not say so — a caller is told the capability does not
+   * exist, because "withheld" invites a retry, a search for synonyms, or a question to the
+   * user about enabling it, none of which can succeed here. The flag keeps the distinction
+   * for telemetry, where knowing how often a withheld handle is reached for is how we learn
+   * whether withholding it was the right call.
+   */
+  withheld?: boolean;
+}
 
 /** The file inside a product subdirectory, for the earlier nested layout. */
 export const INDEX_FILE = "index.json";
@@ -285,26 +296,23 @@ export class CapabilityRegistry {
   }
 
   /**
-   * The `capability_disabled` message for a handle this build withholds, if it is one.
+   * Does this build withhold the handle?
    *
-   * Says THAT it is disabled and nothing about why. The reason is documentation and lives
-   * with the decision; repeating it here would put four copies of a paragraph in the
-   * shipped artifact to serve a path the flag itself makes rare.
+   * WHAT THE CALLER IS TOLD IS THAT IT DOES NOT EXIST, which is why this returns a boolean
+   * rather than a message. Saying "withheld" describes the artifact rather than the
+   * surface, and every action it invites — retry, hunt for a synonym, ask the user to turn
+   * it on — fails here. A capability absent from search, describe and every listing should
+   * read the same way at invocation as it does everywhere else.
    *
-   * Returns undefined for anything else, so the caller falls through to its own
-   * not-found wording.
+   * The caller raises its own not-found error and marks it `withheld`, so the distinction
+   * survives in telemetry without reaching the agent.
    */
-  private withheldMatch(handle: string, product?: string): string | undefined {
+  private isWithheld(handle: string, product?: string): boolean {
     for (const [owner, withheld] of this.withheld) {
       if (product && owner !== product) continue;
-      if (!withheld.has(handle)) continue;
-      return (
-        `capability_disabled: ${handle} is disabled on this surface. This is ` +
-        `deliberate — it is withheld by the ${owner} index, not missing from it — so ` +
-        `retrying will not help.`
-      );
+      if (withheld.has(handle)) return true;
     }
-    return undefined;
+    return false;
   }
 
   /** How many capabilities each product withholds. Startup logging only. */
@@ -409,12 +417,13 @@ export class CapabilityRegistry {
       if (capability) matches.push({ product: owner, capability });
     }
     if (matches.length === 0) {
-      // WITHHELD IS A DIFFERENT ANSWER FROM ABSENT, and only here. Search cannot surface a
-      // disabled capability, so reaching this branch means the caller already held the
-      // exact handle — from an older index, a doc, or a human. "unknown_capability" would
-      // send it hunting for a synonym that does not exist; the reason ends the attempt.
-      const off = this.withheldMatch(name, product);
-      if (off) throw new InvocationError(off);
+      // A WITHHELD HANDLE ANSWERS THE SAME WAY AS AN ABSENT ONE. Search, describe and the
+      // listings already behave as though it does not exist, and invocation is no place to
+      // contradict them: "withheld" is a fact about the artifact, not about this surface,
+      // and it invites a retry, a hunt for a synonym, or a question to the user about
+      // enabling something that cannot be enabled here. The error carries `withheld` so the
+      // attempt is still countable in telemetry.
+      const withheldHere = this.isWithheld(name, product);
 
       // Say whether names are published at all for the product asked about: "no such name"
       // and "this product does not name its capabilities" need different fixes.
@@ -428,7 +437,9 @@ export class CapabilityRegistry {
         ? ` ${unnamed.sort().join(", ")} ${unnamed.length > 1 ? "publish" : "publishes"} ` +
           `no capability names yet — call those by \`method\` and \`path\` instead.`
         : " Search again — names come from searchCapability and describeEntity.";
-      throw new InvocationError(`unknown_capability: ${name}.${hint}`);
+      const error = new InvocationError(`unknown_capability: ${name}.${hint}`);
+      if (withheldHere) error.withheld = true;
+      throw error;
     }
     if (matches.length > 1 && !product) {
       const owners = matches
@@ -465,12 +476,12 @@ export class CapabilityRegistry {
       if (capability) matches.push({ product: name, capability });
     }
     if (matches.length === 0) {
-      const off = this.withheldMatch(key, product);
-      if (off) throw new InvocationError(off);
-      throw new InvocationError(
+      const error = new InvocationError(
         `unknown_endpoint: ${key}. Search again — send \`method\` and \`path\` exactly as ` +
           `searchCapability returned them, placeholders included.`,
       );
+      if (this.isWithheld(key, product)) error.withheld = true;
+      throw error;
     }
     if (matches.length > 1 && !product) {
       const owners = matches

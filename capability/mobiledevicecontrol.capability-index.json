@@ -3,7 +3,7 @@
  "version": "0.1",
  "build_id": "appautomate-demo",
  "mobiledevicecontrol": {
-  "summary": "Mobile device control: run a real Android or iOS device and drive the app on it step by step. The account side lists the devices this account can use, including private ones, uploads and lists app builds, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link and video \u2014 after the device is released. The session side starts a device with an installed build and drives it: read the UI tree, find and tap elements, type, swipe, screenshot, press keys, rotate, switch between the native app and a web view, push and pull files, move the simulated GPS, change the network profile, launch, close and uninstall apps, answer biometric prompts and feed images to the camera. Apps are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Browsers are not here \u2014 those are device control, which drives a page rather than an installed app \u2014 and neither is App Live: it has no API an agent can drive, so agent sessions run on App Automate and consume its minutes. A build must exist before a session starts and can only be uploaded from a public link, never a file on disk \u2014 so media for camera injection must come from elsewhere. The default Appium server is 1.x and rejects every `mobile:` command; ask for 2.19.0.",
+  "summary": "Mobile device control: run a real Android or iOS device and drive the app on it step by step. The account side lists the devices this account can use, including private ones, uploads and lists app builds, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link and video \u2014 after the device is released. The session side starts a device with an installed build and drives it: read the UI tree, find and tap elements, type, swipe, screenshot, press keys, rotate, switch between the native app and a web view, move between the native app and a web view, and launch or close apps. Apps are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Browsers are not here \u2014 those are device control, which drives a page rather than an installed app \u2014 and neither is App Live: it has no API an agent can drive, so agent sessions run on App Automate and consume its minutes. A build must exist before a session starts and can only be uploaded from a public link, never a file on disk \u2014 so media for camera injection must come from elsewhere. The default Appium server is 1.x and rejects every `mobile:` command; ask for 2.19.0.",
   "routing_terms": [
    "app automate",
    "appium",
@@ -72,8 +72,8 @@
     "guidance": [
      "The app must already be uploaded: pass the bs:// URL from upload_app_build or list_app_builds, or the custom_id it was uploaded under, which always resolves to the newest build with that id.",
      "Allocation and app install usually take 20\u201330 seconds; the response carries the new session id at value.sessionId \u2014 carry it into every other app_session call.",
-     "The session ends itself after idle_timeout seconds with no command (90 by default, 300 at most) and after 2 hours in total. Keep calling, or call get_window_rect as a cheap keep-alive, while deciding the next step.",
-     "Every session occupies a device and consumes App Automate minutes until it ends: always finish with execute_script setSessionStatus and then delete_session.",
+     "The session ends itself after idle_timeout seconds with no command (90 by default, 900 at most) and after 2 hours in total. Keep calling, or call get_window_rect as a cheap keep-alive, while deciding the next step.",
+     "Every session occupies a device and consumes App Automate minutes until it ends: always finish with set_session_status and then delete_session.",
      "To let a person watch the device live while the agent drives it, set interactive_debugging true and leave video on; they then open the running session on the App Automate dashboard and start the interactive session there. That window is two-way: a person's taps and scrolls reach the same device, so ask them to watch only, or re-read the page source before every action.",
      "device_name and platform_version must be a combination mobile device control offers; an unknown pair fails with a session-not-created error naming the capability.",
      "Set appium_version to 2.19.0 for any session that will use execute_script with a `mobile:` command; the default server is 1.x and answers those with a 404 listing the commands it does know.",
@@ -615,8 +615,8 @@
     "entity": "app_session",
     "intent": "Run an Appium mobile command or a BrowserStack session command \u2014 scroll a list, press a hardware key, launch or close an app, or mark the session passed or failed.",
     "guidance": [
-     "Mark the result before ending the session: script 'browserstack_executor: {\"action\":\"setSessionStatus\",\"arguments\":{\"status\":\"passed\",\"reason\":\"Cart shows one item\"}}' with args []. status is passed or failed; a later call overwrites an earlier one, and the status survives delete_session.",
-     "Keep the setSessionStatus reason to one plain line under 256 characters with no escape sequences such as newlines.",
+     "set_session_status is the capability for marking a session passed or failed, and works after the session has ended too. Only reach for the browserstack_executor setSessionStatus action here when something has to happen from inside the running session.",
+     "Keep any executor reason to one plain line under 256 characters with no escape sequences such as newlines.",
      "Android scroll: script \"mobile: scrollGesture\" with args [{\"left\":100,\"top\":500,\"width\":880,\"height\":1500,\"direction\":\"down\",\"percent\":0.8}] \u2014 value true means more content remains below.",
      "Which mobile: commands exist depends on the Appium version the session runs. The default Android version is Appium 1.x, which supports scrollGesture, swipeGesture, flingGesture, dragGesture, longClickGesture, doubleClickGesture and pinch gestures, but NOT mobile: pressKey \u2014 that needs a session started with appium_version 2.x or later.",
      "An unsupported command fails with 404 \"unknown command\", and the message lists every mobile: command the session does support \u2014 read it rather than retrying variants."
@@ -1750,7 +1750,7 @@
     "intent": "Find out which app is in the foreground right now \u2014 use this to confirm the app under test is showing and not the home screen or another app.",
     "guidance": [
      "Returns the Android package name; it answers with the launcher's package when the app has been sent to the background.",
-     "This is the quickest way to learn the app under test's own package id, which launch_app, terminate_app and uninstall_app all need.",
+     "This is the quickest way to learn the app under test's own package id, which launch_app and terminate_app both need.",
      "Android only; get_active_app_info is the iOS equivalent and returns an object rather than a string.",
      "Called on iOS this is a 405 \"unknown method\" rather than a silent no-op; use 'mobile: activeAppInfo' there."
     ],

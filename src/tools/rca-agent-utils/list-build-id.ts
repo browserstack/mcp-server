@@ -13,10 +13,7 @@ export async function listBuildId(
   const authHeader =
     "Basic " + Buffer.from(`${username}:${accessKey}`).toString("base64");
 
-  const host = await getRegionalHost("automationApi", {
-    "browserstack-username": username,
-    "browserstack-access-key": accessKey,
-  });
+  const host = getRegionalHost("automationApi");
   const response = await apiClient.get({
     url: `${host}/ext/v1/builds/latest`,
     headers: {

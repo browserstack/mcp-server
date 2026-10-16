@@ -14,7 +14,7 @@ export async function fetchBuildInsightsTool(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const host = await getRegionalHost("automationApi", config);
+    const host = getRegionalHost("automationApi");
     const buildUrl = `${host}/ext/v1/builds/${args.buildId}`;
     const qualityGateUrl = `${host}/ext/v1/quality-gates/${args.buildId}`;
 

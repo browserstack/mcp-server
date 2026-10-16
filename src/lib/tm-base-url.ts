@@ -15,6 +15,13 @@ let cachedBaseUrl: string | null = null;
 export async function getTMBaseURL(
   config: BrowserStackConfig,
 ): Promise<string> {
+  // A GRR deployment names its region (BROWSERSTACK_GRR_REGION); use that host directly.
+  // Unset or "us" keeps the probe below, which also finds EU/IN accounts on its own.
+  const grrRegion = appConfig.BROWSERSTACK_GRR_REGION;
+  if (grrRegion === "eu" || grrRegion === "in") {
+    return `https://test-management-${grrRegion}.browserstack.com`;
+  }
+
   // Skip the module-level cache in remote (multi-tenant) mode: it is process-shared,
   // so the first user's region would be served to every subsequent user — breaking
   // requests for users on a different region's BrowserStack account.

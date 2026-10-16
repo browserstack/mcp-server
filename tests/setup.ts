@@ -11,17 +11,3 @@ vi.mock("sharp", () => {
   sharp.concurrency = vi.fn();
   return { default: sharp };
 });
-
-// Region routing probes BrowserStack before each call; most suites mock apiClient with
-// ordered responses, so resolve every host to its US default here. The resolver's own
-// behaviour is covered by tests/lib/regional-host.test.ts, which unmocks it.
-vi.mock("../src/lib/regional-host", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../src/lib/regional-host")>();
-  return {
-    ...actual,
-    getRegionalHost: vi.fn(async (kind: Parameters<typeof actual.hostFor>[0]) =>
-      actual.hostFor(kind, "us"),
-    ),
-  };
-});

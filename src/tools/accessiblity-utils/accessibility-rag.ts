@@ -21,7 +21,7 @@ export async function queryAccessibilityRAG(
   userQuery: string,
   config: BrowserStackConfig,
 ): Promise<any> {
-  const url = `${await getRegionalHost("accessibilityDashboard", config)}/api/tcg-proxy/search`;
+  const url = `${getRegionalHost("accessibilityDashboard")}/api/tcg-proxy/search`;
 
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");

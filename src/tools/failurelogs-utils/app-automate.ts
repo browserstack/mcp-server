@@ -15,7 +15,7 @@ export async function retrieveDeviceLogs(
   buildId: string,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const url = `${await getRegionalHost("appAutomateApi", config)}/app-automate/builds/${buildId}/sessions/${sessionId}/deviceLogs`;
+  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${buildId}/sessions/${sessionId}/deviceLogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -48,7 +48,7 @@ export async function retrieveAppiumLogs(
   buildId: string,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const url = `${await getRegionalHost("appAutomateApi", config)}/app-automate/builds/${buildId}/sessions/${sessionId}/appiumlogs`;
+  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${buildId}/sessions/${sessionId}/appiumlogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -81,7 +81,7 @@ export async function retrieveCrashLogs(
   buildId: string,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const url = `${await getRegionalHost("appAutomateApi", config)}/app-automate/builds/${buildId}/sessions/${sessionId}/crashlogs`;
+  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${buildId}/sessions/${sessionId}/crashlogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 

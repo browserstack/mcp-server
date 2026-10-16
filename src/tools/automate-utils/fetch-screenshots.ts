@@ -15,10 +15,7 @@ async function extractScreenshotUrls(
   const auth = Buffer.from(authString).toString("base64");
 
   const isAutomate = sessionType === SessionType.Automate;
-  const host = await getRegionalHost(
-    isAutomate ? "automateApi" : "appAutomateApi",
-    config,
-  );
+  const host = getRegionalHost(isAutomate ? "automateApi" : "appAutomateApi");
   const baseUrl = `${host}/${isAutomate ? "automate" : "app-automate"}`;
 
   const url = `${baseUrl}/sessions/${sessionId}/logs`;

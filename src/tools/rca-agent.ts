@@ -119,7 +119,7 @@ export async function fetchRCADataTool(
       testIds,
       authString,
       undefined,
-      await getRegionalHost("observabilityApi", config),
+      getRegionalHost("observabilityApi"),
     );
 
     const formattedData = formatRCAData(rcaData);
@@ -166,7 +166,7 @@ export async function listTestIdsTool(
       authString,
       status,
       includeFailureDetail,
-      await getRegionalHost("automationApi", config),
+      getRegionalHost("automationApi"),
     );
 
     return {

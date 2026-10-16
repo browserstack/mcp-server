@@ -42,6 +42,25 @@ const DEFAULT_BROWSERSTACK_O11Y_UI_BASE_URL =
   "https://automation.browserstack.com";
 
 /**
+ * BROWSERSTACK_GRR_REGION: the Geo Region Restriction region of the account this server
+ * serves — "us" (default), "eu" or "in". Unset or "us" keeps the US hosts. Any other
+ * value fails at startup: a typo must not quietly send a GRR account's data to the US.
+ */
+const GRR_REGIONS = ["us", "eu", "in"] as const;
+export type GrrRegion = (typeof GRR_REGIONS)[number];
+
+function parseGrrRegion(raw: string | undefined): GrrRegion {
+  const value = (raw || "").trim().toLowerCase();
+  if (!value) return "us";
+  if ((GRR_REGIONS as readonly string[]).includes(value)) {
+    return value as GrrRegion;
+  }
+  throw new Error(
+    `Invalid BROWSERSTACK_GRR_REGION "${raw}". Use one of: ${GRR_REGIONS.join(", ")}.`,
+  );
+}
+
+/**
  * USE_OWN_LOCAL_BINARY_PROCESS:
  *   If true, the system will not start a new local binary process, but will use the user's own process.
  */
@@ -77,6 +96,7 @@ export class Config {
      * "deferred" | "elicit". Anything else is ignored.
      */
     public readonly ASK_BROWSERSTACK_RELAY_TRANSPORT: string | undefined,
+    public readonly BROWSERSTACK_GRR_REGION: GrrRegion = "us",
   ) {}
 }
 
@@ -110,6 +130,7 @@ const config = new Config(
     : undefined,
   (process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT || "").trim().toLowerCase() ||
     undefined,
+  parseGrrRegion(process.env.BROWSERSTACK_GRR_REGION),
 );
 
 export default config;

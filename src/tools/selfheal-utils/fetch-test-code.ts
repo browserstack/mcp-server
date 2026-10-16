@@ -103,7 +103,7 @@ export async function fetchTestCodeBySession(
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
-  const url = `${await getRegionalHost("automationApi", config)}/ext/v1/sessions/${encodeURIComponent(sessionId)}/testCode`;
+  const url = `${getRegionalHost("automationApi")}/ext/v1/sessions/${encodeURIComponent(sessionId)}/testCode`;
 
   try {
     const response = await apiClient.get<TestCodeApiResponse | TestCodeEntry[]>(

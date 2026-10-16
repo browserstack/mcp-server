@@ -62,9 +62,8 @@ export async function resolveBuildIdFromSession(
     url: sessionDetailsUrl(
       sessionType,
       sessionId,
-      await getRegionalHost(
+      getRegionalHost(
         sessionType === SessionType.Automate ? "automateApi" : "appAutomateApi",
-        config,
       ),
     ),
     headers: {
@@ -99,7 +98,7 @@ export async function findSessionIdForObservabilityBuild(
 ): Promise<string | undefined> {
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
-  const baseUrl = `${await getRegionalHost("automationApi", config)}/ext/v1/builds/${encodeURIComponent(observabilityBuildId)}/testRuns`;
+  const baseUrl = `${getRegionalHost("automationApi")}/ext/v1/builds/${encodeURIComponent(observabilityBuildId)}/testRuns`;
 
   let nextPage: string | undefined;
   for (let page = 0; page < MAX_TEST_RUN_PAGES; page++) {

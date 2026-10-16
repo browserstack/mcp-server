@@ -12,9 +12,8 @@ export async function retrieveSessionVideo(
 ): Promise<string> {
   const product =
     sessionType === SessionType.AppAutomate ? "app-automate" : "automate";
-  const host = await getRegionalHost(
+  const host = getRegionalHost(
     sessionType === SessionType.AppAutomate ? "appAutomateApi" : "automateApi",
-    config,
   );
   const url = `${host}/${product}/sessions/${encodeURIComponent(sessionId)}.json`;
   const authString = getBrowserStackAuth(config);

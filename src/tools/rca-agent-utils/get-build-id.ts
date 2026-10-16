@@ -6,10 +6,7 @@ export async function getBuildId(
   username: string,
   accessKey: string,
 ): Promise<string> {
-  const host = await getRegionalHost("automationApi", {
-    "browserstack-username": username,
-    "browserstack-access-key": accessKey,
-  });
+  const host = getRegionalHost("automationApi");
   const url = new URL(`${host}/ext/v1/builds/latest`);
   url.searchParams.append("project_name", projectName);
   url.searchParams.append("build_name", buildName);

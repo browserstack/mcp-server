@@ -127,11 +127,10 @@ export async function listSessionIds(
     url: sessionsListUrl(
       args.sessionType,
       buildId,
-      await getRegionalHost(
+      getRegionalHost(
         args.sessionType === SessionType.Automate
           ? "automateApi"
           : "appAutomateUpload",
-        config,
       ),
     ),
     headers: {

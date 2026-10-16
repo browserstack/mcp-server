@@ -134,10 +134,7 @@ async function takeAppScreenshot(args: {
     try {
       driver = await remote({
         protocol: "https",
-        hostname: await getRegionalHost("appAutomateHub", {
-          "browserstack-username": username,
-          "browserstack-access-key": password,
-        }),
+        hostname: getRegionalHost("appAutomateHub"),
         port: 443,
         path: "/wd/hub",
         capabilities,

@@ -72,13 +72,6 @@ export class AccessibilityAuthConfig {
     this.auth = auth;
   }
 
-  private async apiHost(): Promise<string> {
-    return getRegionalHost("accessibilityApi", {
-      "browserstack-username": this.auth?.username ?? "",
-      "browserstack-access-key": this.auth?.password ?? "",
-    });
-  }
-
   private transformLocalUrl(url: string): string {
     try {
       const parsed = new URL(url);
@@ -118,7 +111,7 @@ export class AccessibilityAuthConfig {
 
     try {
       const response = await apiClient.post<AuthConfigResponse>({
-        url: `${await this.apiHost()}/api/website-scanner/v1/auth_configs`,
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/auth_configs`,
         headers: {
           Authorization:
             "Basic " +
@@ -176,7 +169,7 @@ export class AccessibilityAuthConfig {
 
     try {
       const response = await apiClient.post<AuthConfigResponse>({
-        url: `${await this.apiHost()}/api/website-scanner/v1/auth_configs`,
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/auth_configs`,
         headers: {
           Authorization:
             "Basic " +
@@ -215,7 +208,7 @@ export class AccessibilityAuthConfig {
     try {
       // No GET-by-id route exists; list and select.
       const response = await apiClient.get<AuthConfigListResponse>({
-        url: `${await this.apiHost()}/api/website-scanner/v1/auth_configs`,
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/auth_configs`,
         headers: {
           Authorization:
             "Basic " +

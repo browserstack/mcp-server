@@ -8,7 +8,7 @@ export async function getLatestO11YBuildInfo(
   projectName: string,
   config: BrowserStackConfig,
 ) {
-  const host = await getRegionalHost("observabilityApi", config);
+  const host = getRegionalHost("observabilityApi");
   const buildsUrl = `${host}/ext/v1/builds/latest?build_name=${encodeURIComponent(
     buildName,
   )}&project_name=${encodeURIComponent(projectName)}`;

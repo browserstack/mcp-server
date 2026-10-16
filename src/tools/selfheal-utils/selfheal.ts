@@ -70,7 +70,7 @@ export async function fetchSelfHealingReportByBuild(
   const auth = Buffer.from(authString).toString("base64");
 
   const presignedResp = await apiClient.get<Record<string, unknown>>({
-    url: `${await getRegionalHost("automationApi", config)}/ext/v1/builds/${encodeURIComponent(buildUuid)}/selfHealingReport`,
+    url: `${getRegionalHost("automationApi")}/ext/v1/builds/${encodeURIComponent(buildUuid)}/selfHealingReport`,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
@@ -133,9 +133,8 @@ export async function getSelfHealSelectors(
   const auth = Buffer.from(authString).toString("base64");
   const productPath =
     sessionType === "app-automate" ? "app-automate" : "automate";
-  const host = await getRegionalHost(
+  const host = getRegionalHost(
     sessionType === "app-automate" ? "appAutomateApi" : "automateApi",
-    config,
   );
   const url = `${host}/${productPath}/sessions/${sessionId}/logs`;
 

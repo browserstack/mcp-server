@@ -28,13 +28,6 @@ export class AccessibilityScanner {
     this.auth = auth;
   }
 
-  private async apiHost(): Promise<string> {
-    return getRegionalHost("accessibilityApi", {
-      "browserstack-username": this.auth?.username ?? "",
-      "browserstack-access-key": this.auth?.password ?? "",
-    });
-  }
-
   async startScan(
     name: string,
     urlList: string[],
@@ -111,7 +104,7 @@ export class AccessibilityScanner {
 
     try {
       const response = await apiClient.post<AccessibilityScanResponse>({
-        url: `${await this.apiHost()}/api/website-scanner/v1/scans`,
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans`,
         headers: {
           Authorization:
             "Basic " +
@@ -150,7 +143,7 @@ export class AccessibilityScanner {
   ): Promise<AccessibilityScanStatus> {
     try {
       const response = await apiClient.get<AccessibilityScanStatus>({
-        url: `${await this.apiHost()}/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
         headers: {
           Authorization:
             "Basic " +

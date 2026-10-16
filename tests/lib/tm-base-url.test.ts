@@ -107,3 +107,38 @@ describe("getTMBaseURL — failure details", () => {
     expect(err.message).toMatch(/HTTP 503/);
   });
 });
+
+describe("getTMBaseURL — BROWSERSTACK_GRR_REGION", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function loadWithRegion(region: string | undefined) {
+    vi.resetModules();
+    vi.doMock("../../src/config", () => ({
+      __esModule: true,
+      default: { REMOTE_MCP: false, BROWSERSTACK_GRR_REGION: region },
+    }));
+    const apiClientMod = await import("../../src/lib/apiClient");
+    const tmMod = await import("../../src/lib/tm-base-url");
+    return { apiClient: apiClientMod.apiClient, getTMBaseURL: tmMod.getTMBaseURL };
+  }
+
+  it.each([
+    ["eu", "https://test-management-eu.browserstack.com"],
+    ["in", "https://test-management-in.browserstack.com"],
+  ])("region %s goes straight to its host without probing", async (region, url) => {
+    const { apiClient, getTMBaseURL } = await loadWithRegion(region);
+    await expect(getTMBaseURL(mockConfig)).resolves.toBe(url);
+    expect(apiClient.get).not.toHaveBeenCalled();
+  });
+
+  it("region us keeps the existing probe", async () => {
+    const { apiClient, getTMBaseURL } = await loadWithRegion("us");
+    (apiClient.get as any).mockResolvedValueOnce({ ok: true });
+    await expect(getTMBaseURL(mockConfig)).resolves.toBe(
+      "https://test-management.browserstack.com",
+    );
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+  });
+});

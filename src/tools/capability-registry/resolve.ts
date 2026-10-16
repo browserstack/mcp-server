@@ -145,13 +145,12 @@ export async function invoke(
       // a body the product cannot parse, under a header that says it should be able to.
       delete headers["Content-Type"];
     }
-    return transport(
-      capability.method,
-      url,
-      headers,
-      bound.query,
-      multipart ?? bound.body,
-    );
+    const payload =
+      multipart ??
+      (bound.body === undefined && capability.send_empty_body
+        ? {}
+        : bound.body);
+    return transport(capability.method, url, headers, bound.query, payload);
   };
 
   let response = await send();

@@ -249,6 +249,13 @@ function coerceType(
   label = param.name,
 ): unknown {
   const expected = param.type;
+  if (expected === "any") {
+    // PASSES THROUGH UNTOUCHED, which is the whole point of declaring it. A polymorphic
+    // parameter reached the string branch and arrived as text: WebDriver's frame id takes a
+    // number, an element reference or null, and `null` sent as "null" is refused as an
+    // invalid argument — a failure that reads like the caller chose the wrong frame.
+    return value;
+  }
   if (expected === "file") {
     // CHECKED HERE, not at egress: `bind` runs dry before the write-consent gate, so a path
     // that does not exist — or a base directory nobody configured — is refused before the

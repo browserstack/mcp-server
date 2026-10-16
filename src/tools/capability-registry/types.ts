@@ -231,6 +231,20 @@ export interface Capability {
    * `local_only`: the path names the caller's own machine.
    */
   encoding?: "multipart";
+  /**
+   * Send `{}` rather than no body at all, for an endpoint that takes no parameters.
+   *
+   * Normally a capability with nothing to send sends nothing, which is right for a REST API
+   * and wrong for W3C WebDriver: Chrome answers 400 "invalid argument" to a parameterless
+   * POST with the body omitted and 200 to the same call carrying `{}`. Appium tolerates the
+   * omission, which is why the identical capability needs this on Automate and not on App
+   * Automate.
+   *
+   * Opt-in per capability rather than a rule for every bodyless POST, because 27 of those
+   * exist across the shipped indexes and changing what reaches their products is not
+   * something this can verify.
+   */
+  send_empty_body?: boolean;
   paginated?: boolean;
   /** The largest page the operation declares. */
   max_page_size?: number;

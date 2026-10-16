@@ -247,8 +247,15 @@ export function fetchTransport(timeoutMs = 45_000): Transport {
         method,
         headers,
         // Only send a body when there IS one: a literal `null` payload with a JSON
-        // content-type is rejected by several endpoints.
-        body: body === undefined ? undefined : JSON.stringify(body),
+        // content-type is rejected by several endpoints. A FormData goes through as it is —
+        // stringifying it yields "[object FormData]", which uploads nothing and reads as a
+        // product error rather than ours.
+        body:
+          body === undefined
+            ? undefined
+            : body instanceof FormData
+              ? body
+              : JSON.stringify(body),
         // A redirect from an authenticated API is usually a login bounce, and following it
         // turns a clear 401/302 into a 200 carrying an HTML sign-in page — which the
         // resolver would then read as an empty result set rather than a failure.

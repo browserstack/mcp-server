@@ -48,7 +48,10 @@
    "adb",
    "device property",
    "getprop",
-   "os build"
+   "os build",
+   "upload apk",
+   "upload ipa",
+   "local build"
   ],
   "base_url": "https://hub-cloud.browserstack.com",
   "auth": {
@@ -858,7 +861,8 @@
      "Pass custom_id to give the build a stable name, then later sessions can use that name in place of the bs:// URL and always get the newest build under it.",
      "Re-uploading under the same custom_id adds a new build rather than replacing the old one; both stay listed.",
      "Builds expire after 30 days, so a bs:// URL held from an earlier run can stop working.",
-     "Uploading a large build can take minutes \u2014 the call does not return until BrowserStack has fetched the whole file."
+     "Uploading a large build can take minutes \u2014 the call does not return until BrowserStack has fetched the whole file.",
+     "upload_app_build_from_file takes a build that is on this machine instead, where the server runs beside the user. It is not offered on a remote server, where a path would name the operator's disk rather than theirs."
     ],
     "body": [
      {
@@ -2569,6 +2573,57 @@
       "$response": "WebDriverError"
      }
     }
+   },
+   {
+    "name": "upload_app_build_from_file",
+    "method": "POST",
+    "path": "/app-automate/upload",
+    "host": "api",
+    "mode": "write",
+    "entity": "app_build",
+    "encoding": "multipart",
+    "local_only": true,
+    "intent": "Upload an app build that is on this machine to App Automate and get back the bs:// URL a session installs \u2014 use this when the .apk, .aab or .ipa is a local file rather than a download link.",
+    "guidance": [
+     "The file must sit inside the directory MCP_UPLOAD_BASE_DIR names. When that is not set the upload is refused and nothing is sent: tell the user to set it to the folder holding their builds and restart the server, then move the build there.",
+     "When it is set but the build is somewhere else, the refusal names the directory the file has to be inside. Tell the user to move it there rather than trying another path.",
+     "Only .apk, .aab and .ipa are accepted, and no part of the path may be a hidden folder, so a build under a dot-directory has to be moved out of it.",
+     "The path is checked before anything is uploaded and before the user is asked to approve, so a refusal costs nothing and means the file was never read.",
+     "upload_app_build takes a public https link instead and is the one to use when the build is not on this machine.",
+     "A large build takes minutes, because the call does not return until the whole file has been sent."
+    ],
+    "body": [
+     {
+      "name": "file",
+      "type": "file",
+      "required": true,
+      "description": "Path to the build on this machine, inside MCP_UPLOAD_BASE_DIR.",
+      "example": "/Users/me/builds/app-release.apk"
+     },
+     {
+      "name": "custom_id",
+      "type": "string",
+      "maxLength": 100,
+      "description": "Stable name for the build, reusable in place of the bs:// URL.",
+      "example": "my-app-staging"
+     }
+    ],
+    "returns": [
+     "app_url",
+     "custom_id",
+     "shareable_id"
+    ],
+    "responses": {
+     "200": {
+      "description": "The uploaded build.",
+      "schema": {
+       "$schema": "AppUpload"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    }
    }
   ],
   "schemas": {
@@ -3119,7 +3174,7 @@
     ],
     "id_convention": "app_url is a bs:// URL of 40 hex characters. A build may also carry a custom_id, a name chosen at upload that always resolves to the newest build under it.",
     "key_facts": [
-     "A build must be uploaded before any session can install it; a file on the caller's own machine cannot be sent through this surface, only a public download link.",
+     "A build must be uploaded before any session can install it, either from a public download link or from a file on the machine running this server.",
      "Builds expire 30 days after upload, so a bs:// URL kept from an earlier run can stop working.",
      "Uploading under a custom id that already exists adds another build rather than replacing the old one, and both stay listed.",
      "A build uploaded by one person is visible to the whole team."
@@ -3128,7 +3183,8 @@
      "upload_app_build",
      "list_app_builds",
      "list_team_app_builds",
-     "get_app_builds_by_custom_id"
+     "get_app_builds_by_custom_id",
+     "upload_app_build_from_file"
     ]
    },
    "plan": {

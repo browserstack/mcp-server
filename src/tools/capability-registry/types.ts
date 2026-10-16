@@ -205,6 +205,14 @@ export interface Capability {
    * than hunting for a synonym.
    */
   local_only?: boolean;
+  /**
+   * How the request body is encoded. Absent means JSON, which is every capability today.
+   *
+   * `multipart` exists for endpoints that take the bytes of a file rather than a reference
+   * to one. A capability declaring it must also declare a `file` parameter, and should be
+   * `local_only`: the path names the caller's own machine.
+   */
+  encoding?: "multipart";
   paginated?: boolean;
   /** The largest page the operation declares. */
   max_page_size?: number;

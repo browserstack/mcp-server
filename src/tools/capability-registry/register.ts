@@ -1176,6 +1176,24 @@ export function addCapabilityRegistryTools(
           body: input.body,
         };
 
+        if (capability.invocable === false) {
+          // THE ONE PLACE describe AND invoke DIVERGE, deliberately. Everywhere else a name
+          // that describes is a name that invokes, and breaking that is its own bug class —
+          // but a reference-only capability exists precisely to be read and not called. The
+          // refusal carries the instruction, because the note is the whole point of it
+          // still being published.
+          return refuse(
+            "invokeCapability",
+            "capability_not_invocable",
+            `${handle} cannot be called on this server. ` +
+              (capability.guidance?.[0] ??
+                "Describe it for what to do instead.") +
+              " Follow that instead of retrying.",
+            undefined,
+            identity,
+          );
+        }
+
         if (capability.mode === "destructive") {
           // Refused before binding, so consent is never sought for something that cannot run.
           return refuse(

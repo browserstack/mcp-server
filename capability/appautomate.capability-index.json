@@ -2623,7 +2623,8 @@
      "401": {
       "$response": "Unauthorized"
      }
-    }
+    },
+    "unavailable_note": "This server does not run on your own machine, so it cannot read a file you name \u2014 a path sent here would point at the machine hosting the server. Upload the build yourself with a multipart request carrying the file to the same endpoint, which the asset-upload helper will write out for you, and then use the bs:// url it returns as the app for create_session. upload_app_build does the same thing from a public download link, if the build is reachable at one."
    }
   ],
   "schemas": {

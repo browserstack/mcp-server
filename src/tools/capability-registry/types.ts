@@ -206,6 +206,24 @@ export interface Capability {
    */
   local_only?: boolean;
   /**
+   * What to do instead, on a surface where this capability cannot run.
+   *
+   * A `local_only` capability is NOT hidden on a remote server: the query that should find
+   * it still finds it, because an agent asked to upload a file from the user's machine
+   * needs to learn that the route exists and what replaces it here. What it loses is the
+   * means to call it — the parameters and response shapes are stripped at load, and
+   * invocation is refused — so the note is the whole of what remains.
+   *
+   * Write it as the instruction the caller should follow, not as an apology.
+   */
+  unavailable_note?: string;
+  /**
+   * FALSE when this build publishes the capability for reference but will not call it.
+   *
+   * Set by the loader, never authored: it is the surface's answer, not the artifact's.
+   */
+  invocable?: boolean;
+  /**
    * How the request body is encoded. Absent means JSON, which is every capability today.
    *
    * `multipart` exists for endpoints that take the bytes of a file rather than a reference

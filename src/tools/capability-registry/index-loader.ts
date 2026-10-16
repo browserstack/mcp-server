@@ -80,6 +80,50 @@ export function isDisabled(capability: Capability): boolean {
   return Boolean(capability.local_only) && Boolean(appConfig.REMOTE_MCP);
 }
 
+/**
+ * Is this capability published for reference only on this surface?
+ *
+ * `local_only` on a remote server. The capability is real and the caller may well be asking
+ * for exactly it, so hiding it leaves the agent concluding no such route exists. Publishing
+ * it without the means to call it, and with a note saying what to do instead, answers the
+ * question it was asked.
+ */
+export function isReferenceOnly(capability: Capability): boolean {
+  if (capability.disabled) return false;
+  return Boolean(capability.local_only) && Boolean(appConfig.REMOTE_MCP);
+}
+
+/**
+ * The reference form: what it is and what to do instead, and nothing to call it with.
+ *
+ * The parameters and response shapes go because publishing them invites the attempt — a
+ * model handed a body schema will fill it in. `intent` stays, because that is what the
+ * search matched on, and `mode` stays so a reader can still see what kind of operation it
+ * would have been.
+ */
+function asReference(capability: Capability): Capability {
+  const reference: Capability = { ...capability };
+  for (const field of [
+    "path_params",
+    "query",
+    "body",
+    "responses",
+    "returns",
+    "paginated",
+    "max_page_size",
+    "encoding",
+  ] as const) {
+    delete reference[field];
+  }
+  return {
+    ...reference,
+    invocable: false,
+    guidance: capability.unavailable_note
+      ? [capability.unavailable_note]
+      : ["This capability cannot be called on this server."],
+  };
+}
+
 export interface LoadedProduct {
   name: string;
   product: ProductIndex;
@@ -251,6 +295,18 @@ export class CapabilityRegistry {
         // between a disabled name and a live one is still a broken artifact, and skipping
         // the disabled half would mean re-enabling the flag could fail the load later,
         // somewhere with less context than here.
+        if (isReferenceOnly(capability)) {
+          // PUBLISHED, BUT NOT CALLABLE. It keeps its name and intent so the search that
+          // should find it does, and loses everything a caller would need to invoke it.
+          const reference = asReference(capability);
+          enabled.push(reference);
+          lookup.set(
+            endpointKey(capability.method, capability.path),
+            reference,
+          );
+          if (capability.name) names.set(capability.name, reference);
+          continue;
+        }
         if (isDisabled(capability)) {
           withheld.set(
             endpointKey(capability.method, capability.path),

@@ -10,7 +10,7 @@ vi.mock("../../src/lib/apiClient", () => ({
 }));
 
 vi.mock("../../src/logger", () => ({
-  default: { error: vi.fn(), info: vi.fn(), debug: vi.fn() },
+  default: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() },
 }));
 
 const PROD_AUTOMATION = "https://api-automation.browserstack.com";
@@ -99,14 +99,18 @@ describe("getRegionalHost", () => {
     );
   });
 
-  it("fails closed instead of falling back to the US host when every region refuses", async () => {
+  it("falls back to the US host, uncached, when every region refuses", async () => {
     const { get, getRegionalHost } = await loadModule(false);
     get.mockResolvedValue({ ok: false, status: 403 });
 
-    await expect(getRegionalHost("accessibilityApi", config)).rejects.toThrow(
-      /accessibility.*us: HTTP 403; eu: HTTP 403; in: HTTP 403/,
+    await expect(getRegionalHost("accessibilityApi", config)).resolves.toBe(
+      "https://api-accessibility.browserstack.com",
     );
     expect(get).toHaveBeenCalledTimes(3);
+
+    // Not cached: the next call probes again instead of pinning the fallback.
+    await getRegionalHost("accessibilityApi", config);
+    expect(get).toHaveBeenCalledTimes(6);
   });
 
   it("stdio mode caches the region per product, so hosts of one product share a probe", async () => {

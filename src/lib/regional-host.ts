@@ -14,8 +14,10 @@ import appConfig from "../config.js";
  *
  * The probe is per product, not per account, because GRR is enabled per product.
  *
- * There is no fallback: if every region refuses, the call fails rather than quietly
- * sending a GRR account's data to the US host.
+ * If every region refuses (bad credentials, no access to the product, a network failure),
+ * we fall back to the US host, which is what the tools called before this existed, so the
+ * product's own error reaches the user. The fallback is not cached, so the next call
+ * probes again.
  */
 
 export type GrrRegion = "us" | "eu" | "in";
@@ -146,10 +148,11 @@ async function probeRegion(
     }
   }
 
-  throw new Error(
-    `Could not determine which BrowserStack region serves this account's ${product} data. ` +
-      `Check your credentials and network connection. Details: ${failures.join("; ")}`,
+  logger.warn(
+    `No region accepted this account for ${product}; falling back to the US host. ` +
+      `Details: ${failures.join("; ")}`,
   );
+  return "us";
 }
 
 /** The host for `kind` in a given region. Pure; exposed for tests. */

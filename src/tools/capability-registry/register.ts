@@ -1013,8 +1013,37 @@ export function addCapabilityRegistryTools(
         // Dropped rather than overwritten: the raw field holds `{"$response": …}` pointers,
         // and spreading the capability would leak them through whenever the resolved value
         // is absent.
-        const { responses: unresolved, method, path, ...contract } = capability;
+        //
+        // THE WIRE FIELDS GO WITH IT, for the same reason the route does: they describe how
+        // WE reach the product, not anything the caller supplies or acts on. `host` names
+        // which of the product's origins serves this one capability; `encoding` and
+        // `send_empty_body` say how the request body is framed; `local_only` and `disabled`
+        // are claims about which surface publishes it, already answered by the capability
+        // being present at all. A contract that shows them invites a caller to reason about
+        // plumbing it cannot influence — and `host: "api"` was doing exactly that in a
+        // shipped describe response.
+        //
+        // `invocable` STAYS, and is the one of these that is not plumbing. Presence says the
+        // capability is published, which is not the same as callable: a reference-only entry
+        // is published precisely so search can still find it and say what to do instead.
+        // Stripping the flag would leave that fact only in a prose guidance line.
+        const {
+          responses: unresolved,
+          method,
+          path,
+          host,
+          encoding,
+          send_empty_body,
+          local_only,
+          disabled,
+          ...contract
+        } = capability;
         void unresolved;
+        void host;
+        void encoding;
+        void send_empty_body;
+        void local_only;
+        void disabled;
         return ok({
           // No build_id here either, same reason. `product` stays: describeCapability
           // resolves by NAME and its product argument is optional, so the answer has to

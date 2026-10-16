@@ -7,6 +7,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import appConfig from "../../config.js";
 import { basename, dirname } from "node:path";
 import {
   Capability,
@@ -57,9 +58,15 @@ export function endpointKey(method: string, path: string): string {
  * FAILS CLOSED: any truthy `disabled` hides it, not just `=== true`. The flag exists to
  * suppress something that cannot work, so an unexpected shape must hide it rather than be
  * ignored — the opposite default would turn a typo into a silently re-enabled capability.
+ *
+ * `local_only` withholds on a remote server only, for a capability that reads the caller's
+ * own machine: there, the path it would take resolves against the operator's disk instead.
+ * Read at call time rather than captured, because the remote server builds its config per
+ * session and a value captured at module load would outlive the deployment it described.
  */
 export function isDisabled(capability: Capability): boolean {
-  return Boolean(capability.disabled);
+  if (capability.disabled) return true;
+  return Boolean(capability.local_only) && Boolean(appConfig.REMOTE_MCP);
 }
 
 export interface LoadedProduct {

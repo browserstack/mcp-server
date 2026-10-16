@@ -188,6 +188,23 @@ export interface Capability {
    * suppression must not be ignored for arriving in an unexpected shape.
    */
   disabled?: boolean;
+  /**
+   * Withheld when the server is not running on the caller's own machine.
+   *
+   * Some capabilities only mean anything when the person and the process share a computer:
+   * one that reads a file the caller names is the clear case. On a remote server that path
+   * resolves against the OPERATOR's disk, so honouring it would read one user's files on
+   * another's behalf — the capability does not become unreliable there, it becomes wrong.
+   *
+   * Distinct from `disabled`, which withholds a capability everywhere. This one is a claim
+   * about where it can run, so the same artifact serves both deployments: a local server
+   * publishes it and a remote one does not.
+   *
+   * FAILS CLOSED in the same way, and takes the same `capability_disabled` path at
+   * invocation, so a caller holding the handle is told the absence is deliberate rather
+   * than hunting for a synonym.
+   */
+  local_only?: boolean;
   paginated?: boolean;
   /** The largest page the operation declares. */
   max_page_size?: number;

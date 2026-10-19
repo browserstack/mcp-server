@@ -2,7 +2,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { AccessibilityScanner } from "./accessiblity-utils/scanner.js";
-import { AccessibilityReportFetcher } from "./accessiblity-utils/report-fetcher.js";
+import {
+  AccessibilityReportFetcher,
+  type IssueSource,
+} from "./accessiblity-utils/report-fetcher.js";
 import {
   AccessibilityAuthConfig,
   safeAuthConfigData,
@@ -146,8 +149,48 @@ async function executeAccessibilityRAG(
   }
 }
 
+interface FetchIssuesArgs {
+  scanId?: string;
+  scanRunId?: string;
+  buildId?: string;
+  workflowReportId?: string;
+  cursor?: number;
+}
+
+/** The one source the arguments name, or why they do not name exactly one. */
+function issueSourceFrom(args: FetchIssuesArgs): IssueSource | string {
+  const named = [
+    Boolean(args.scanId || args.scanRunId),
+    Boolean(args.buildId),
+    Boolean(args.workflowReportId),
+  ].filter(Boolean).length;
+  if (named !== 1) {
+    return "Pass exactly one source: scanId with scanRunId (a Website Scanner run), buildId (an Automated Tests build) or workflowReportId (a Workflow Analyzer report).";
+  }
+  if (args.buildId) return { kind: "build", buildId: args.buildId };
+  if (args.workflowReportId) {
+    return { kind: "workflow", reportId: args.workflowReportId };
+  }
+  if (!args.scanId || !args.scanRunId) {
+    return "A Website Scanner run needs both scanId and scanRunId.";
+  }
+  return { kind: "scan", scanId: args.scanId, scanRunId: args.scanRunId };
+}
+
+/** The arguments that name the same source again, for the next-page hint. */
+function sourceArgs(source: IssueSource): string {
+  switch (source.kind) {
+    case "scan":
+      return `scanId: "${source.scanId}", scanRunId: "${source.scanRunId}"`;
+    case "build":
+      return `buildId: "${source.buildId}"`;
+    case "workflow":
+      return `workflowReportId: "${source.reportId}"`;
+  }
+}
+
 async function executeFetchAccessibilityIssues(
-  args: { scanId: string; scanRunId: string; cursor?: number },
+  args: FetchIssuesArgs,
   server: McpServer,
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
@@ -158,12 +201,9 @@ async function executeFetchAccessibilityIssues(
       undefined,
       config,
     );
-    return await fetchAccessibilityIssues(
-      args.scanId,
-      args.scanRunId,
-      config,
-      args.cursor,
-    );
+    const source = issueSourceFrom(args);
+    if (typeof source === "string") return createErrorResponse(source);
+    return await fetchAccessibilityIssues(source, config, args.cursor);
   } catch (error) {
     return handleMCPError("fetchAccessibilityIssues", server, config, error);
   }
@@ -200,13 +240,12 @@ function excludedIssuesNote(
 }
 
 async function fetchAccessibilityIssues(
-  scanId: string,
-  scanRunId: string,
+  source: IssueSource,
   config: BrowserStackConfig,
   cursor = 0,
 ): Promise<CallToolResult> {
   const reportFetcher = await initializeReportFetcher(config);
-  const reportLink = await reportFetcher.getReportLink(scanId, scanRunId);
+  const reportLink = await reportFetcher.getReportLink(source);
 
   const {
     records,
@@ -233,7 +272,7 @@ async function fetchAccessibilityIssues(
 
   if (next_page !== null) {
     messages.push(
-      `${remainingIssues} more issues available. Use fetchAccessibilityIssues with cursor: ${next_page} to get the next batch.`,
+      `${remainingIssues} more issues available. Use fetchAccessibilityIssues with ${sourceArgs(source)} and cursor: ${next_page} to get the next batch.`,
     );
   } else {
     messages.push(`✅ All issues retrieved.`);
@@ -455,7 +494,11 @@ async function runAccessibilityScan(
   }
 
   const reportFetcher = await initializeReportFetcher(config);
-  const reportLink = await reportFetcher.getReportLink(scanId, scanRunId);
+  const reportLink = await reportFetcher.getReportLink({
+    kind: "scan",
+    scanId,
+    scanRunId,
+  });
 
   const {
     records,
@@ -648,15 +691,31 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues from a completed scan with pagination support. Use cursor parameter to get subsequent pages of results." +
+    "Fetch accessibility issues with pagination support, from exactly one source: a completed Website Scanner run (scanId with scanRunId), an Automated Tests build from a BrowserStack SDK test run (buildId), or a Workflow Analyzer report (workflowReportId). Use cursor parameter to get subsequent pages of results." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z
         .string()
-        .describe("The scan ID from a completed accessibility scan"),
+        .optional()
+        .describe(
+          "Website Scanner: the scan ID from a completed accessibility scan",
+        ),
       scanRunId: z
         .string()
-        .describe("The scan run ID from a completed accessibility scan"),
+        .optional()
+        .describe(
+          "Website Scanner: the scan run ID from a completed accessibility scan",
+        ),
+      buildId: z
+        .string()
+        .optional()
+        .describe(
+          "Automated Tests: the Accessibility build id, shown as thBuildId in the build's accessibility report link (40 lowercase letters and digits). Not the Automate build id or the build name.",
+        ),
+      workflowReportId: z
+        .string()
+        .optional()
+        .describe("Workflow Analyzer: the report's numeric id, e.g. 123456"),
       cursor: z
         .number()
         .optional()

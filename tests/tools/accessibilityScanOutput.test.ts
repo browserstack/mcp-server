@@ -181,3 +181,81 @@ describe("accessibility issue counts", () => {
     expect(joined).not.toMatch(/Scan Run ID: run-7\S/);
   });
 });
+
+describe("fetchAccessibilityIssues sources", () => {
+  let handlers: Record<string, (...args: any[]) => any>;
+  const BUILD_ID = "q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.startScan.mockResolvedValue({
+      data: { id: "scan-42", scanRunId: "run-7" },
+    });
+    m.waitUntilComplete.mockResolvedValue("completed");
+    m.getReportLink.mockResolvedValue("https://csv");
+    m.parse.mockResolvedValue(GROUPED);
+    handlers = register();
+  });
+
+  it.each([
+    [
+      "a Website Scanner run",
+      { scanId: "scan-42", scanRunId: "run-7" },
+      { kind: "scan", scanId: "scan-42", scanRunId: "run-7" },
+      'scanId: "scan-42", scanRunId: "run-7"',
+    ],
+    [
+      "an Automated Tests build",
+      { buildId: BUILD_ID },
+      { kind: "build", buildId: BUILD_ID },
+      `buildId: "${BUILD_ID}"`,
+    ],
+    [
+      "a Workflow Analyzer report",
+      { workflowReportId: "123456" },
+      { kind: "workflow", reportId: "123456" },
+      'workflowReportId: "123456"',
+    ],
+  ])(
+    "reads the issues of %s and names it again for the next page",
+    async (_label, args, source, nextPageArgs) => {
+      const result = await handlers.fetchAccessibilityIssues(args, CONTEXT);
+
+      expect(result.isError).toBeFalsy();
+      expect(m.getReportLink).toHaveBeenCalledWith(source);
+      const body = text(result);
+      expect(body).toContain("Retrieved 1 accessibility issues (Total: 79)");
+      expect(body).toContain(
+        `Use fetchAccessibilityIssues with ${nextPageArgs} and cursor: 140`,
+      );
+    },
+  );
+
+  it("startAccessibilityScan reads the run it just started", async () => {
+    await handlers.startAccessibilityScan(
+      { name: "run", pageURL: "https://site.example" },
+      CONTEXT,
+    );
+    expect(m.getReportLink).toHaveBeenCalledWith({
+      kind: "scan",
+      scanId: "scan-42",
+      scanRunId: "run-7",
+    });
+  });
+
+  it.each([
+    ["no source", {}, /exactly one/],
+    [
+      "two sources",
+      { scanId: "scan-42", scanRunId: "run-7", buildId: BUILD_ID },
+      /exactly one/,
+    ],
+    ["a scan without its run", { scanId: "scan-42" }, /scanRunId/],
+  ])("refuses %s without calling the API", async (_label, args, message) => {
+    const result = await handlers.fetchAccessibilityIssues(args, CONTEXT);
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(message);
+    expect(m.getReportLink).not.toHaveBeenCalled();
+  });
+});

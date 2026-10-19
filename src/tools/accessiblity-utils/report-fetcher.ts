@@ -1,4 +1,5 @@
 import { apiClient } from "../../lib/apiClient.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 interface ReportInitResponse {
   success: true;
@@ -21,7 +22,7 @@ export class AccessibilityReportFetcher {
 
   async getReportLink(scanId: string, scanRunId: string): Promise<string> {
     // Initiate CSV link generation
-    const initUrl = `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?scan_run_id=${scanRunId}`;
+    const initUrl = `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?scan_run_id=${scanRunId}`;
 
     let basicAuthHeader = undefined;
     if (this.auth) {
@@ -42,7 +43,7 @@ export class AccessibilityReportFetcher {
     const taskId = initData.data.task_id;
 
     // Poll for the generated CSV link (task is async, may take a few seconds)
-    const reportUrl = `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?task_id=${encodeURIComponent(
+    const reportUrl = `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans/${scanId}/scan_runs/issues?task_id=${encodeURIComponent(
       taskId,
     )}`;
     const maxAttempts = 3;

@@ -2,6 +2,7 @@ import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 export const DEFAULT_SESSION_LIST_LIMIT = 10;
 
@@ -52,13 +53,14 @@ interface SessionListItem {
 export function sessionsListUrl(
   sessionType: SessionType,
   buildId: string,
+  host?: string,
 ): string {
   const encodedBuildId = encodeURIComponent(buildId);
   switch (sessionType) {
     case SessionType.Automate:
-      return `https://api.browserstack.com/automate/builds/${encodedBuildId}/sessions.json`;
+      return `${host ?? "https://api.browserstack.com"}/automate/builds/${encodedBuildId}/sessions.json`;
     case SessionType.AppAutomate:
-      return `https://api-cloud.browserstack.com/app-automate/builds/${encodedBuildId}/sessions.json`;
+      return `${host ?? "https://api-cloud.browserstack.com"}/app-automate/builds/${encodedBuildId}/sessions.json`;
     default: {
       const _exhaustive: never = sessionType;
       throw new Error(`Unsupported session type: ${_exhaustive}`);
@@ -122,7 +124,15 @@ export async function listSessionIds(
   }
 
   const response = await apiClient.get({
-    url: sessionsListUrl(args.sessionType, buildId),
+    url: sessionsListUrl(
+      args.sessionType,
+      buildId,
+      getRegionalHost(
+        args.sessionType === SessionType.Automate
+          ? "automateApi"
+          : "appAutomateUpload",
+      ),
+    ),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,

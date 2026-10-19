@@ -7,6 +7,7 @@ import {
   killExistingBrowserStackLocalProcesses,
 } from "../../lib/local.js";
 import config from "../../config.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 export interface AccessibilityScanResponse {
   success: boolean;
@@ -103,7 +104,7 @@ export class AccessibilityScanner {
 
     try {
       const response = await apiClient.post<AccessibilityScanResponse>({
-        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans",
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans`,
         headers: {
           Authorization:
             "Basic " +
@@ -142,7 +143,7 @@ export class AccessibilityScanner {
   ): Promise<AccessibilityScanStatus> {
     try {
       const response = await apiClient.get<AccessibilityScanStatus>({
-        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
         headers: {
           Authorization:
             "Basic " +

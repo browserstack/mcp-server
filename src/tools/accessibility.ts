@@ -165,6 +165,18 @@ async function executeFetchAccessibilityIssues(
   }
 }
 
+/** How grouped reports' duplicates were handled, or nothing for an ungrouped report. */
+function duplicatesNote(duplicates: number | null, unlinked: number): string[] {
+  if (!duplicates) return [];
+  const unmatched =
+    unlinked > 0
+      ? ` ${unlinked} of them could not be matched to a main issue and are counted only here.`
+      : "";
+  return [
+    `This report groups repeated occurrences: ${duplicates} duplicate occurrences are folded into their main issue (see duplicate_count) and are not included in the total.${unmatched}`,
+  ];
+}
+
 async function fetchAccessibilityIssues(
   scanId: string,
   scanRunId: string,
@@ -174,8 +186,14 @@ async function fetchAccessibilityIssues(
   const reportFetcher = await initializeReportFetcher(config);
   const reportLink = await reportFetcher.getReportLink(scanId, scanRunId);
 
-  const { records, page_length, total_issues, next_page } =
-    await parseAccessibilityReportFromCSV(reportLink, { nextPage: cursor });
+  const {
+    records,
+    page_length,
+    total_issues,
+    next_page,
+    duplicate_issues,
+    unlinked_duplicates,
+  } = await parseAccessibilityReportFromCSV(reportLink, { nextPage: cursor });
 
   const currentlyShown =
     cursor === 0
@@ -186,6 +204,7 @@ async function fetchAccessibilityIssues(
 
   const messages = [
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
+    ...duplicatesNote(duplicate_issues, unlinked_duplicates),
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
   ];
 
@@ -366,12 +385,14 @@ function createScanSuccessResponse(
   scanRunId: string,
   reportUrl: string,
   cursor: number | null,
+  duplicates: string[] = [],
 ): CallToolResult {
   const messages = [
     `Accessibility scan "${name}" completed. check the BrowserStack dashboard for more details [https://scanner.browserstack.com/site-scanner/scan-details/${name}].`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
     `You can also download the full report from the following link: ${reportUrl}`,
     `We found ${totalIssues} issues. Below are the details of the ${pageLength} most critical issues.`,
+    ...duplicates,
     `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
   ];
 
@@ -413,8 +434,14 @@ async function runAccessibilityScan(
   const reportFetcher = await initializeReportFetcher(config);
   const reportLink = await reportFetcher.getReportLink(scanId, scanRunId);
 
-  const { records, page_length, total_issues, next_page } =
-    await parseAccessibilityReportFromCSV(reportLink);
+  const {
+    records,
+    page_length,
+    total_issues,
+    next_page,
+    duplicate_issues,
+    unlinked_duplicates,
+  } = await parseAccessibilityReportFromCSV(reportLink);
 
   return createScanSuccessResponse(
     name,
@@ -425,6 +452,7 @@ async function runAccessibilityScan(
     scanRunId,
     reportLink,
     next_page,
+    duplicatesNote(duplicate_issues, unlinked_duplicates),
   );
 }
 

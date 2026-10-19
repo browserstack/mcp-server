@@ -168,4 +168,28 @@ describe("parseAccessibilityReportFromCSV", () => {
     expect(result.unlinked_duplicates).toBe(0);
     expect(result.records.every((r) => !("duplicate_count" in r))).toBe(true);
   });
+
+  it("says which page each issue is on and, for a build, which test found it", async () => {
+    const buildCsv = toCsv(
+      [...COLUMNS, "Source test"],
+      GROUPED_ROWS.map((r) => ({ ...r, "Source test": "test_checkout" })),
+    );
+    get.mockResolvedValue(csvResponse(buildCsv));
+    const { records } = await parseAccessibilityReportFromCSV("https://csv");
+
+    expect(records.map((r) => [r.affected_page, r.source_test])).toEqual([
+      ["https://site.example/", "test_checkout"],
+      ["https://site.example/", "test_checkout"],
+    ]);
+  });
+
+  it("adds no source_test to a report without that column", async () => {
+    get.mockResolvedValue(csvResponse(toCsv(COLUMNS, GROUPED_ROWS)));
+    const { records } = await parseAccessibilityReportFromCSV("https://csv");
+
+    expect(
+      records.every((r) => r.affected_page === "https://site.example/"),
+    ).toBe(true);
+    expect(records.every((r) => !("source_test" in r))).toBe(true);
+  });
 });

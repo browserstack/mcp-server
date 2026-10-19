@@ -88,11 +88,16 @@ export const NEEDS_SESSION_ID =
   " Requires a session id. listSessions lists them for a build; if you do not have the " +
   "build either, getBuildId or listBuildId resolves one from a project and build name.";
 
-/** A completed scan's ids come from startAccessibilityScan, or from the agent. */
+/**
+ * A scan run's ids come from startAccessibilityScan. Nothing here lists Automated Tests builds
+ * or Workflow Analyzer reports, so their ids come from the user or the report's link.
+ */
 export const NEEDS_A11Y_SCAN_ID =
-  " Requires the ids of a completed scan, which are returned by startAccessibilityScan. " +
-  "No tool here lists past scans, so if you do not have the ids, start a new scan rather " +
-  "than guessing.";
+  " Requires the id of a completed source: a Website Scanner run's ids, returned by " +
+  "startAccessibilityScan; an Automated Tests build's id, the thBuildId in its accessibility " +
+  "report link; or a Workflow Analyzer report's numeric id. No tool here lists past scans, " +
+  "builds or reports, so if you do not have the id, ask the user for the report link, or " +
+  "start a new scan, rather than guessing.";
 
 /** Auth-config ids are not listable by any tool here. */
 export const NEEDS_A11Y_CONFIG_ID =

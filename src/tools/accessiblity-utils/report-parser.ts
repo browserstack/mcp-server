@@ -9,9 +9,15 @@ type SimplifiedAccessibilityIssue = {
   HTML_snippet: string;
   how_to_fix: string;
   severity: string;
+  /** The page the issue is on; builds and Workflow Analyzer reports span several. */
+  affected_page: string;
+  /** Automated Tests builds only: the test that found the issue. */
+  source_test?: string;
   /** Grouped reports only: how many duplicate rows point at this issue. */
   duplicate_count?: number;
 };
+
+const SOURCE_TEST_COLUMN = "Source test";
 
 type PaginationOptions = {
   /** How many JSON-chars max per “page” (default 10000) */
@@ -80,6 +86,7 @@ export async function parseAccessibilityReportFromCSV(
   // `unlinked_duplicates` and the duplicate total, never against a specific issue.
   const grouped = columns.includes(DUPLICATE_COLUMN);
   const linkable = grouped && columns.includes(ISSUE_LINK_COLUMN);
+  const hasSourceTest = columns.includes(SOURCE_TEST_COLUMN);
   const mainRows = grouped ? parsed.filter(isMainIssue) : parsed;
   const duplicateRows = grouped
     ? parsed.filter((row) => !isMainIssue(row))
@@ -92,6 +99,8 @@ export async function parseAccessibilityReportFromCSV(
     HTML_snippet: row["HTML snippet"],
     how_to_fix: row["How to fix this issue"],
     severity: (row["Severity"] || "unknown").trim(),
+    affected_page: row["Affected page"],
+    ...(hasSourceTest ? { source_test: row[SOURCE_TEST_COLUMN] } : {}),
     ...(linkable ? { duplicate_count: 0 } : {}),
   }));
 

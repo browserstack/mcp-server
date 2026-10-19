@@ -130,4 +130,21 @@ describe("accessibility issue counts", () => {
     expect(body).toContain("We found 79 issues.");
     expect(body).not.toContain("duplicate occurrences");
   });
+
+  it("keeps the report link intact when a client joins the blocks with no separator", async () => {
+    m.getReportLink.mockResolvedValue(
+      "https://reports.example/r.csv?Signature=abc&Key-Pair-Id=K1",
+    );
+    m.parse.mockResolvedValue(GROUPED);
+    const result = await handlers.startAccessibilityScan(
+      { name: "joined", pageURL: "https://site.example" },
+      CONTEXT,
+    );
+
+    const joined = result.content.map((c: { text: string }) => c.text).join("");
+    expect(joined.match(/following link: (\S+)/)?.[1]).toBe(
+      "https://reports.example/r.csv?Signature=abc&Key-Pair-Id=K1",
+    );
+    expect(joined).not.toMatch(/Scan Run ID: run-7\S/);
+  });
 });

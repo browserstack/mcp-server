@@ -68,11 +68,15 @@ function createErrorResponse(message: string): CallToolResult {
   };
 }
 
+/**
+ * Each message ends with a newline: clients that join text blocks with no separator
+ * would otherwise run a link at the end of one block into the next block's first word.
+ */
 function createSuccessResponse(messages: string[]): CallToolResult {
   return {
     content: messages.map((text) => ({
       type: "text" as const,
-      text,
+      text: `${text}\n`,
     })),
   };
 }

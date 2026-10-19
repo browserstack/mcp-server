@@ -1,7 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { formatAxiosError } from "../../lib/error.js";
+import { errorText } from "../../lib/error.js";
 import {
   fetchFormFields,
   normalizeDefaultFields as normalizeDefaultFieldsFromForm,
@@ -306,12 +306,15 @@ Error details: ${JSON.stringify(err.response?.data || err.message)}`,
       };
     }
 
-    const errorMessage = formatAxiosError(err, "Failed to update test case");
+    const status = err.response?.status;
+    const detail = errorText(err, "unknown error");
+    const hint =
+      status === 401 ? " Check the BrowserStack credentials in use." : "";
     return {
       content: [
         {
           type: "text",
-          text: `Failed to update test case: ${errorMessage}. Please verify your credentials and try again.`,
+          text: `Failed to update test case${status ? ` (HTTP ${status})` : ""}: ${detail}.${hint}`,
         },
       ],
       isError: true,

@@ -73,24 +73,25 @@ jobs:
 
       - name: "Update server.json package version"
         env:
-          OLD_VERSION: ${{ steps.bump.outputs.old_version }}
           NEW_VERSION: ${{ steps.bump.outputs.new_version }}
         run: |
           set -e
           node -e '
             const fs = require("fs");
-            const oldV = process.env.OLD_VERSION;
             const newV = process.env.NEW_VERSION;
-            let s = fs.readFileSync("server.json", "utf8");
-            // Only the nested packages[].version matches "<oldV>";
-            // the top-level "version" is the schema version (1.0.0) and is left alone.
-            const needle = `"version": "${oldV}"`;
-            if (!s.includes(needle)) {
-              console.error(`Could not find ${needle} in server.json`);
+            const srv = JSON.parse(fs.readFileSync("server.json", "utf8"));
+            if (!Array.isArray(srv.packages) || srv.packages.length === 0) {
+              console.error("server.json has no packages[] entry to update");
               process.exit(1);
             }
-            s = s.replace(needle, `"version": "${newV}"`);
-            fs.writeFileSync("server.json", s);
+            // Both the top-level "version" and the nested packages[].version track
+            // the published package version (since the 2.x line). Set each field
+            // explicitly rather than string-replacing: a textual replace updates only
+            // the first match, which left packages[0].version stale and failed the
+            // verify step below.
+            srv.version = newV;
+            srv.packages[0].version = newV;
+            fs.writeFileSync("server.json", JSON.stringify(srv, null, 2) + "\n");
           '
 
       - name: "Verify all three files are in sync"
@@ -102,8 +103,9 @@ jobs:
           LOCK_TOP=$(node -p 'require("./package-lock.json").version')
           LOCK_ROOT=$(node -p 'require("./package-lock.json").packages[""].version')
           SRV=$(node -p 'require("./server.json").packages[0].version')
-          echo "package.json=$PKG lock=$LOCK_TOP lock.root=$LOCK_ROOT server.json=$SRV"
-          for v in "$PKG" "$LOCK_TOP" "$LOCK_ROOT" "$SRV"; do
+          SRV_TOP=$(node -p 'require("./server.json").version')
+          echo "package.json=$PKG lock=$LOCK_TOP lock.root=$LOCK_ROOT server.json=$SRV server.json.top=$SRV_TOP"
+          for v in "$PKG" "$LOCK_TOP" "$LOCK_ROOT" "$SRV" "$SRV_TOP"; do
             if [ "$v" != "$NEW" ]; then
               echo "Version mismatch: expected $NEW, got $v"
               exit 1

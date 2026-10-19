@@ -52,10 +52,12 @@
     "entity": "browser",
     "intent": "List every operating system, browser and version combination this account can run a web session on, with the exact names create_session expects.",
     "guidance": [
-     "This is a very large answer \u2014 several thousand rows, one per combination \u2014 and there is no filtering on the wire. Narrow it yourself, and never read it whole into a reply.",
+     "The endpoint accepts no filtering on the wire \u2014 every query parameter is ignored, and a filtered call comes back byte-identical to the bare one \u2014 so pass `select` instead and never fetch this whole. The full answer is several thousand rows; `select` with `distinct` turns the usual question into a few hundred bytes.",
+     "To ask what values EXIST, use distinct rather than reading rows: distinct ['browser'] names every browser, distinct ['os','os_version'] every platform, distinct ['device'] every mobile device. To check one combination, put it in `where` and see whether anything comes back.",
      "A desktop row carries os, os_version, browser and browser_version, with device null. A mobile row carries device and real_mobile true instead, and its browser_version is null because the browser ships with the OS.",
-     "The browser names are lower case and are what create_session takes: chrome, firefox, edge, safari, opera, and chromium on mobile.",
-     "Pass the strings exactly as they appear; an unlisted combination is refused rather than substituted."
+     "os is spelled Windows, OS X, android and ios \u2014 two capitalised and two not, in the same column \u2014 and `where` matches case-insensitively, so either spelling finds them. Browser names are lower case apart from chromeForTesting.",
+     "Rows come back in the product's own order, which is OLDEST VERSION FIRST, and `limit` takes the first N of them \u2014 so a limit is the wrong way to find the newest build and will hand back Chrome 37 for Windows 11. Ask for the versions with distinct and no limit (a hundred-odd strings, under 3 KB) and read the end of the list.",
+     "Pass the strings into create_session exactly as they appear here; an unlisted combination is refused rather than substituted."
     ],
     "returns": [
      "browser",
@@ -76,7 +78,18 @@
       "$response": "Unauthorized"
      }
     },
-    "host": "api"
+    "host": "api",
+    "narrowable": {
+     "fields": [
+      "os",
+      "os_version",
+      "browser",
+      "browser_version",
+      "device",
+      "real_mobile"
+     ],
+     "note": "The endpoint takes no parameters of its own, so this narrowing is applied to the response after the call."
+    }
    },
    {
     "name": "get_plan",

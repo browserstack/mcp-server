@@ -245,6 +245,32 @@ export interface Capability {
    * something this can verify.
    */
   send_empty_body?: boolean;
+  /**
+   * This capability's array response may be narrowed by the server, on these fields.
+   *
+   * THE PRODUCT CANNOT DO IT. Declaring this is a statement that the endpoint offers no
+   * filtering of its own — not that ours is more convenient. `/automate/browsers.json`
+   * returns 5,251 rows and ignores every query parameter it is given, so a caller asking
+   * which browsers run on Windows had to receive 604 KB and find out itself.
+   *
+   * Where the wire DOES filter, declare the parameters and let the product filter: a
+   * server-side pass still transfers the whole response and still costs the round trip,
+   * and it moves the contract off the product and onto us.
+   *
+   * Unset — which is every other capability — means `select` is refused outright and the
+   * response is handed back exactly as sent.
+   */
+  narrowable?: {
+    /** The only fields `select` may name. Anything else is refused with this list. */
+    fields: string[];
+    /**
+     * Dotted path to the array inside the body; omitted when the body IS the array.
+     * Siblings of the array are preserved, so an envelope survives the narrowing.
+     */
+    path?: string;
+    /** One line for the contract: why this is here rather than on the wire. */
+    note?: string;
+  };
   paginated?: boolean;
   /** The largest page the operation declares. */
   max_page_size?: number;

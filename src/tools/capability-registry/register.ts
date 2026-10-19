@@ -35,6 +35,7 @@ import {
   ResponseSelection,
   resolveResponses,
 } from "./index-loader.js";
+import { narrowResponse } from "./narrow.js";
 import { invoke } from "./resolve.js";
 import {
   ambiguousProducts,
@@ -1093,7 +1094,9 @@ export function addCapabilityRegistryTools(
       "as given — that is the handle. Only when a result carries no `name` (some products " +
       "do not publish them yet) pass `method` and `path` instead, exactly as returned. " +
       "Arguments go in path_params / query / body under the spec's own names. One call " +
-      "makes exactly one request and returns the product's own response untouched; when " +
+      "makes exactly one request and returns the product's own response as sent — unless " +
+      "you pass `select`, which only capabilities whose contract carries `narrowable` " +
+      "accept, and which reports what it narrowed. When " +
       "`completed` is false there is another page, which you fetch by sending the " +
       "capability's own page parameter. If the mode is 'write' you MUST ask the user " +
       "first, then resend with user_permission='granted' and a change_summary; both are " +
@@ -1148,6 +1151,35 @@ export function addCapabilityRegistryTools(
         .string()
         .optional()
         .describe("What will change. Required for writes."),
+      select: z
+        .object({
+          where: z
+            .record(z.string(), z.any())
+            .optional()
+            .describe(
+              "Field -> the value it must take, or an array of accepted values. Strings " +
+                "match case-insensitively.",
+            ),
+          distinct: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Return one row per distinct combination of these fields and nothing else — " +
+                "the cheapest way to ask what values exist.",
+            ),
+          fields: z
+            .array(z.string())
+            .optional()
+            .describe("Keep only these fields on each row."),
+          limit: z.number().optional().describe("At most this many rows."),
+        })
+        .optional()
+        .describe(
+          "ONLY for a capability whose contract carries `narrowable`, which names the " +
+            "fields this may use; on any other capability it is refused. Those endpoints " +
+            "take no filtering parameters of their own, so this is applied to the response " +
+            "here, and the result reports what it narrowed and from how many rows.",
+        ),
     },
     {
       title: "Invoke Capability",
@@ -1274,6 +1306,20 @@ export function addCapabilityRegistryTools(
           registry.index.products[product]?.auth,
           product,
         );
+        // NARROWING IS APPLIED TO A SUCCESS ONLY. A 4xx body is the diagnosis the caller
+        // needs whole, and a selection that happened to match none of its keys would
+        // quietly empty it. `narrowResponse` refuses an unsupported `select` by throwing,
+        // which lands in the InvocationError branch below with the accepted fields listed.
+        const narrowed = result.ok
+          ? narrowResponse(capability, result.http_response.body, input.select)
+          : undefined;
+        const answer = narrowed
+          ? {
+              ...result,
+              http_response: { ...result.http_response, body: narrowed.body },
+              narrowed: narrowed.narrowing,
+            }
+          : result;
         // The one row for a completed invoke. invoke() returns a 4xx/5xx rather than
         // throwing, so `success` keeps its tool-level meaning and these two fields carry
         // whether the product call worked. Status 0 means it could not be reached.
@@ -1282,8 +1328,14 @@ export function addCapabilityRegistryTools(
           upstream_ok: result.ok,
           upstream_status: result.http_response.status,
           change_summary: redact(input.change_summary),
+          ...(narrowed
+            ? {
+                narrowed_from: narrowed.narrowing.from,
+                narrowed_to: narrowed.narrowing.to,
+              }
+            : {}),
         });
-        return ok(result);
+        return ok(answer);
       } catch (error) {
         if (error instanceof InvocationError)
           return refuse(

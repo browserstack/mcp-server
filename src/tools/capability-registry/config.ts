@@ -18,6 +18,7 @@ import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { discoverBaseUrl, HostSource } from "./discovery.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
 import { FLAT_SUFFIX, INDEX_FILE, InvocationError } from "./index-loader.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 /**
  * The environment this DEPLOYMENT points at, e.g. "preprod".
@@ -52,14 +53,16 @@ function environmentMap(): Record<string, Record<string, string>> {
  *
  * The general mechanism lives in `discovery.ts` and is driven by the index's `base_urls`.
  * This map is the bridge for products that predate that: tm's hosts are still hardcoded in
- * `lib/tm-base-url.ts` and shared with the hand-written Test Management tools. Once tm's
- * product.yaml declares `base_urls`, this entry can go and nothing else changes.
+ * `lib/tm-base-url.ts` and shared with the hand-written Test Management tools. tra follows
+ * BROWSERSTACK_GRR_REGION through `lib/regional-host.ts`, like the hand-written Test Reporting
+ * tools. Once a product.yaml declares `base_urls`, its entry can go and nothing else changes.
  */
 const BUILTIN_DISCOVERY: Record<
   string,
   (config: BrowserStackConfig) => Promise<string>
 > = {
   tm: getTMBaseURL,
+  tra: async () => getRegionalHost("observabilityApi"),
 };
 
 /** True when this product's host is account-specific and must be discovered per call. */

@@ -200,3 +200,40 @@ describe("multiple environments, the way Atlas defines them", () => {
       .rejects.toThrow(/environment 'preprod' has no host/);
   });
 });
+
+describe("tra follows BROWSERSTACK_GRR_REGION", () => {
+  const DECLARED = "https://api-observability.browserstack.com";
+
+  beforeEach(() => {
+    vi.resetModules();
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_TRA;
+  });
+
+  afterEach(() => {
+    delete process.env.BROWSERSTACK_GRR_REGION;
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_TRA;
+  });
+
+  it("sends an EU deployment to the EU host, though the index declares the US one", async () => {
+    process.env.BROWSERSTACK_GRR_REGION = "eu";
+    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(
+      "https://api-observability-eu.browserstack.com",
+    );
+  });
+
+  it("keeps the US host when the region is unset", async () => {
+    delete process.env.BROWSERSTACK_GRR_REGION;
+    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(DECLARED);
+  });
+
+  it("lets an explicit override win over the region", async () => {
+    process.env.BROWSERSTACK_GRR_REGION = "eu";
+    process.env.CAPABILITY_REGISTRY_BASE_URL_TRA = "https://tra-preprod.example";
+    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(
+      "https://tra-preprod.example",
+    );
+  });
+});

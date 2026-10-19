@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
- "version": "0.1",
- "build_id": "appautomate-demo",
+ "version": "1.0",
+ "build_id": "6782f7e_2026-10-16T13:54:22Z",
  "mobiledevicecontrol": {
   "summary": "Mobile device control: run a real Android or iOS device and drive the app on it step by step. The account side lists the devices this account can use, including private ones, uploads and lists app builds, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link and video \u2014 after the device is released. The session side starts a device with an installed build and drives it: read the UI tree, find and tap elements, type, swipe, screenshot, press keys, rotate, switch between the native app and a web view, move between the native app and a web view, and launch or close apps. Apps are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Browsers are not here \u2014 those are device control, which drives a page rather than an installed app \u2014 and neither is App Live: it has no API an agent can drive, so agent sessions run on App Automate and consume its minutes. A build must exist before a session starts and can only be uploaded from a public link, never a file on disk \u2014 so media for camera injection must come from elsewhere. The default Appium server is 1.x and rejects every `mobile:` command; ask for 2.19.0.",
   "routing_terms": [

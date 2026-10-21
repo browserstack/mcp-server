@@ -21,8 +21,8 @@ describe("fetchAutomationScreenshotsTool", () => {
 
   it("SUCCESS: returns screenshots as image content", async () => {
     (fetchAutomationScreenshots as Mock).mockResolvedValue([
-      { base64: "abc123", url: "https://example.com/1.png" },
-      { base64: "def456", url: "https://example.com/2.png" },
+      { base64: "abc123", url: "https://example.com/1.png", mimeType: "image/png" },
+      { base64: "def456", url: "https://example.com/2.jpeg", mimeType: "image/jpeg" },
     ]);
 
     const result = await fetchAutomationScreenshotsTool(
@@ -34,6 +34,8 @@ describe("fetchAutomationScreenshotsTool", () => {
     expect(result.content.length).toBe(3); // 1 text + 2 images
     expect(result.content[0].type).toBe("text");
     expect(result.content[1].type).toBe("image");
+    expect(result.content[1].mimeType).toBe("image/png");
+    expect(result.content[2].mimeType).toBe("image/jpeg");
   });
 
   it("SUCCESS: returns isError when no screenshots found", async () => {

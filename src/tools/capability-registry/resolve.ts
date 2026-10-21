@@ -13,8 +13,10 @@
  * Hiding them made sense only while this module walked the pages itself.
  */
 
+import { invalidateToken } from "../../lib/central-oauth.js";
 import { bind, GroupedArguments } from "./bind.js";
 import { authHeaders, Credentials, Transport } from "./egress.js";
+import { resolveScope, resolveTokenUrl } from "./oauth.js";
 import { AuthScheme } from "./types.js";
 import { InvocationError } from "./index-loader.js";
 import { Capability } from "./types.js";
@@ -95,20 +97,46 @@ export async function invoke(
   credentials: Credentials,
   transport: Transport,
   auth?: AuthScheme,
+  product?: string,
 ): Promise<InvokeResult> {
   if (!baseUrl)
     throw new InvocationError("no base URL is configured for that product");
   assertTransportSafe(baseUrl);
   const bound = bind(capability, args);
-  const headers = authHeaders(credentials, auth);
+  // Before binding would be wrong and after sending is too late: a scheme that mints a
+  // token must not spend a round trip on a call that `bind` was going to reject anyway.
+  const url = `${baseUrl.replace(/\/$/, "")}${bound.path}`;
+  const send = async () =>
+    transport(
+      capability.method,
+      url,
+      await authHeaders(credentials, auth, product),
+      bound.query,
+      bound.body,
+    );
 
-  const response = await transport(
-    capability.method,
-    `${baseUrl.replace(/\/$/, "")}${bound.path}`,
-    headers,
-    bound.query,
-    bound.body,
-  );
+  let response = await send();
+
+  /**
+   * One replay, for a minted token the product rejected.
+   *
+   * The expiry skirt covers clock skew; it does not cover a token revoked mid-life, and a
+   * cached one can outlive its welcome by up to its whole lifetime. Discarding it and
+   * retrying once turns that from a failed call into a slow one.
+   *
+   * SAFE TO REPLAY EVEN FOR A WRITE: a 401 means the request was never authorised, so
+   * nothing was changed. Once only — with genuinely bad credentials the second attempt
+   * fails identically, and a loop here would hammer the token endpoint on every wrong
+   * password.
+   */
+  if (response.status === 401 && auth?.type === "oauth2") {
+    invalidateToken(
+      resolveTokenUrl(product ?? "this product", auth),
+      resolveScope(auth),
+      credentials,
+    );
+    response = await send();
+  }
 
   const ok = response.status >= 200 && response.status < 300;
   return {

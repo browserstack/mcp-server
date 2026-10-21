@@ -1604,6 +1604,90 @@ describe('updateTestCase — multi-select custom_fields', () => {
   });
 });
 
+// Error path of updateTestCase: the upstream message must reach the caller as text.
+describe('updateTestCase — upstream error messages', () => {
+  let updateTestCaseReal: typeof import('../../src/tools/testmanagement-utils/update-testcase').updateTestCase;
+  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
+  let AxiosErrorCtor: typeof import('axios').AxiosError;
+
+  const axiosError = (status: number, data: unknown) =>
+    Object.assign(Object.create(AxiosErrorCtor.prototype), {
+      message: `Request failed with status code ${status}`,
+      response: { status, data },
+    });
+
+  beforeAll(async () => {
+    const actual = await vi.importActual<
+      typeof import('../../src/tools/testmanagement-utils/update-testcase')
+    >('../../src/tools/testmanagement-utils/update-testcase');
+    updateTestCaseReal = actual.updateTestCase;
+    apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
+    AxiosErrorCtor = (await import('axios')).AxiosError;
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const args = { project_identifier: 'PR-1', test_case_identifier: 'TC-1', description: 'd' };
+
+  it('surfaces a string error from the response body with the HTTP status', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(
+      axiosError(422, { success: false, error: 'Priority is not valid for this project' }),
+    );
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toBe('Failed to update test case (HTTP 422): Priority is not valid for this project.');
+    expect(text).not.toContain('[object Object]');
+  });
+
+  it('serialises an object error body instead of printing [object Object]', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(
+      axiosError(400, { errors: { name: ['is too long'] } }),
+    );
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain('(HTTP 400)');
+    expect(text).toContain('{"name":["is too long"]}');
+    expect(text).not.toContain('[object Object]');
+  });
+
+  it('returns the whole body when it has no message, error or errors field', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(
+      axiosError(400, { detail: { hint: 'priority must be one of: low, medium, high' } }),
+    );
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    const text = (result.content[0] as any).text as string;
+    expect(text).toBe(
+      'Failed to update test case (HTTP 400): {"detail":{"hint":"priority must be one of: low, medium, high"}}.',
+    );
+  });
+
+  it('adds the credentials hint only on 401', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(axiosError(401, 'Unauthorized'));
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    const text = (result.content[0] as any).text as string;
+    expect(text).toBe('Failed to update test case (HTTP 401): Unauthorized. Check the BrowserStack credentials in use.');
+  });
+
+  it('falls back to the error message when there is no response', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(new Error('read ECONNRESET'));
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    expect((result.content[0] as any).text).toBe('Failed to update test case: read ECONNRESET.');
+  });
+});
+
 // listTestCaseTemplates resolves a template name to a template_id.
 describe('listTemplates', () => {
   let listTemplatesReal: typeof import('../../src/tools/testmanagement-utils/list-templates').listTemplates;
@@ -1666,11 +1750,11 @@ describe('listTemplates', () => {
   });
 });
 
-describe("test-plan tools point writes at askBrowserStackAI", () => {
+describe("test-plan tools point writes at the capability functions", () => {
   // There is no createTestPlan tool and no link/unlink tool — the plan surface here is four
-  // READ tools. Atlas can do the writes (the tm harness allows POST .../test-plans plus
-  // /update, /delete, /clone, /test-runs and /test-runs/unlink), so without a pointer the
-  // model finds no create and reports the capability as absent. A QA eval concluded exactly
+  // READ tools. The capability functions can do the writes (Test Management's own API covers
+  // creating, updating, cloning and deleting a plan, and linking or unlinking its runs), so
+  // without a pointer the model finds no create and reports the capability as absent. A QA eval concluded exactly
   // that, which is why this is pinned rather than left to the description prose.
   //
   // Registrations are captured into a fresh fake server rather than read off the
@@ -1695,15 +1779,18 @@ describe("test-plan tools point writes at askBrowserStackAI", () => {
     "getSubTestPlan",
   ];
 
-  it.each(PLAN_TOOLS)("%s names the agent as the way to write a plan", (name) => {
+  it.each(PLAN_TOOLS)("%s names the capability functions as the way to write a plan", (name) => {
     const d = descriptionOf(name);
     expect(d).toMatch(/not available as tools here/);
-    expect(d).toMatch(/askBrowserStackAI with product "tm"/);
+    expect(d).toMatch(/use the capability functions/);
+    // As a GROUP, never an individual name: a function named here goes stale on the next
+    // rename, and which one to call is the registry's business, not this description's.
+    expect(d).not.toMatch(/searchCapability|invokeCapability|describeCapability/);
     // The consent property matters: nobody should think this happens silently.
-    expect(d).toMatch(/asks you to confirm/);
+    expect(d).toMatch(/ask you to confirm/);
   });
 
-  it("names the missing OPERATIONS, so it is not a general invitation to use the agent", () => {
+  it("names the missing OPERATIONS, so it is not a general invitation to route plans away", () => {
     // If this ever broadens to "use the agent for plans", the routing advantage of the
     // specific read tools is lost — the descriptions elsewhere say to prefer a real tool.
     const d = descriptionOf("listTestPlans");

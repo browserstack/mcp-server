@@ -1,0 +1,130 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+// The shipped Load Testing index (not a fixture) — this guards the name contract
+// the registry depends on: describeEntity advertises capabilities by name, and
+// searchCapability/invokeCapability/describeCapability address them by that name.
+// Every LT capability was unnamed at one point, which left those handles
+// unresolvable ("unknown_capability … search again"); this test stops that
+// regressing.
+const INDEX = fileURLToPath(
+  new URL("../../capability/loadtesting.capability-index.json", import.meta.url),
+);
+
+const lt = JSON.parse(readFileSync(INDEX, "utf8")).loadtesting;
+
+describe("loadtesting capability index — name contract", () => {
+  it("every capability publishes a name", () => {
+    const unnamed = lt.capabilities.filter((c: any) => !c.name);
+    expect(unnamed, unnamed.map((c: any) => `${c.method} ${c.path}`).join(", ")).toHaveLength(0);
+  });
+
+  it("capability names are unique", () => {
+    const names = lt.capabilities.map((c: any) => c.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("every name an entity references resolves to a real capability", () => {
+    const capNames = new Set(lt.capabilities.map((c: any) => c.name));
+    const referenced = new Set<string>();
+    for (const doc of Object.values(lt.entities) as any[]) {
+      (doc.capabilities || []).forEach((n: string) => referenced.add(n));
+    }
+    const unresolvable = [...referenced].filter((n) => !capNames.has(n));
+    expect(unresolvable, unresolvable.join(", ")).toHaveLength(0);
+  });
+
+  it("every entity carries the describeEntity fields, including relations", () => {
+    for (const [name, doc] of Object.entries(lt.entities) as [string, any][]) {
+      expect(doc.title, name).toBeTruthy();
+      expect(Array.isArray(doc.aliases), name).toBe(true);
+      expect(doc.id_convention, name).toBeTruthy();
+      expect(Array.isArray(doc.relations), `${name}.relations`).toBe(true);
+      expect(Array.isArray(doc.capabilities), name).toBe(true);
+    }
+  });
+
+  it("searchLoadTests is a group-scoped name lookup (no projectId path param)", () => {
+    const cap = lt.capabilities.find((c: any) => c.name === "searchLoadTests");
+    expect(cap).toBeTruthy();
+    expect(cap.method).toBe("GET");
+    expect(cap.path).toBe("/api/v1/agent/loadTests/search");
+    // group-scoped: it must NOT require a projectId the way listLoadTests does.
+    expect(cap.path_params || []).toHaveLength(0);
+    const queryNames = (cap.query || []).map((q: any) => q.name);
+    expect(queryNames).toContain("name");
+    // it resolves under the loadTest entity so describeEntity surfaces it.
+    expect(lt.entities.loadTest.capabilities).toContain("searchLoadTests");
+  });
+});
+
+// The resolution contract the guidance leans on: name-by-search on listLoadTests
+// and date-window filtering on listLoadTestRuns. Without these params the agent
+// can only page-and-scan, which fans out badly in large projects.
+describe("loadtesting capability index — resolution contract", () => {
+  const byName = (n: string) =>
+    lt.capabilities.find((c: any) => c.name === n);
+  const queryNames = (n: string) =>
+    (byName(n)?.query || []).map((q: any) => q.name);
+
+  it("listLoadTestProjects resolves a project by name via search", () => {
+    expect(queryNames("listLoadTestProjects")).toContain("search");
+  });
+
+  it("listLoadTests resolves a test by name via search", () => {
+    expect(queryNames("listLoadTests")).toContain("search");
+  });
+
+  it("listLoadTestRuns resolves a run by date window", () => {
+    const q = queryNames("listLoadTestRuns");
+    expect(q).toContain("sinceIso");
+    expect(q).toContain("untilIso");
+  });
+
+  it("createLoadTest declares the name maxLength and the hybrid children[] param", () => {
+    const create = byName("createLoadTest");
+    const nameField = (create.body || []).find((f: any) => f.name === "name");
+    expect(nameField.maxLength).toBe(255);
+    expect((create.body || []).some((f: any) => f.name === "children")).toBe(true);
+  });
+
+  // The framework options must be scoped to the chosen testType: picking API must
+  // never surface Browser frameworks and vice-versa. The flat `values` enum alone
+  // let clients render all nine across every type, so the per-type map is the
+  // authoritative option set a client presents.
+  it("createLoadTest framework is scoped by testType and keeps the full enum for validation", () => {
+    const create = byName("createLoadTest");
+    const framework = (create.body || []).find(
+      (f: any) => f.name === "framework",
+    );
+    expect(framework.scopedBy).toBe("testType");
+    expect(framework.valuesByTestType.plu).toEqual([
+      "k6",
+      "jmeter",
+      "gatling",
+      "locust",
+    ]);
+    expect(framework.valuesByTestType.blu).toEqual([
+      "playwright",
+      "selenium",
+      "webdriverio",
+      "nightwatch",
+      "lcncnightwatch",
+    ]);
+    // hybrid's top-level framework is the Browser leg; the API leg lives in children[]
+    expect(framework.valuesByTestType.hybrid).toEqual(
+      framework.valuesByTestType.blu,
+    );
+    // no framework appears under both types
+    const api = new Set<string>(framework.valuesByTestType.plu);
+    expect(
+      framework.valuesByTestType.blu.some((f: string) => api.has(f)),
+    ).toBe(false);
+    // the flat enum still carries every value so invoke-time validation accepts any valid framework
+    expect(framework.values).toEqual([
+      ...framework.valuesByTestType.plu,
+      ...framework.valuesByTestType.blu,
+    ]);
+  });
+});

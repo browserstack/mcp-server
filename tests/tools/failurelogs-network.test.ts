@@ -59,6 +59,7 @@ describe("retrieveNetworkFailures", () => {
     const out = await retrieveNetworkFailures("s1", config);
     expect(out).toContain("Network Failures (1 found)");
     expect(out).toContain("https://app.example/aborted");
+    expect(out).toContain('"_error": "no response recorded"');
   });
 
   it("ignores a null entry in the HAR instead of throwing", async () => {

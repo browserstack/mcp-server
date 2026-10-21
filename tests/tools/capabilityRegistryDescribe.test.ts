@@ -31,7 +31,7 @@ describe("searchCapability is a shortlist, describeCapability is the contract", 
     const t = await tools();
     const found = await body(
       await t.searchCapability.handler(
-        { query: "create a test run" },
+        { query: "create a test run", product: "tm" },
         {} as any,
       ),
     );
@@ -49,7 +49,7 @@ describe("searchCapability is a shortlist, describeCapability is the contract", 
     const t = await tools();
     const found = await body(
       await t.searchCapability.handler(
-        { query: "create a test run" },
+        { query: "create a test run", product: "tm" },
         {} as any,
       ),
     );
@@ -111,7 +111,7 @@ describe("searchCapability is a shortlist, describeCapability is the contract", 
   it("is cheaper end to end than the single fat call it replaces", async () => {
     const t = await tools();
     const search = await t.searchCapability.handler(
-      { query: "create a test run" },
+      { query: "create a test run", product: "tm" },
       {} as any,
     );
     const describe = await t.describeCapability.handler(

@@ -8,7 +8,10 @@
  * where the missing identifier comes from.
  *
  * Point at a sibling tool whenever one can produce the id — it is faster and more
- * predictable than an agent. Point at `askBrowserStackAI` only when NO tool here can.
+ * predictable than anything that has to reason its way there. When no tool here can, point
+ * at the CAPABILITY FUNCTIONS: they reach the product's own API surface, so they answer the
+ * id question directly. Name them as a group, never individually — which function to call
+ * is their own business, and a name written here goes stale the moment one is renamed.
  *
  * The one that matters most: 15 of the 17 Test Management tools require a project
  * identifier and NONE of them accepts its absence, yet no tool in this server lists
@@ -23,8 +26,8 @@
 /** No tool lists projects, so this genuinely has to go to the agent. */
 export const NEEDS_PROJECT_ID =
   " Requires a project identifier (PR-*). No tool here lists projects, so if you do not " +
-  'have one, call askBrowserStackAI with product "tm" and ask which projects exist, then ' +
-  "retry this tool with the identifier it returns.";
+  "have one, use the capability functions to list the Test Management projects, then " +
+  "retry this tool with the identifier they return.";
 
 /** A sibling tool can produce the id — prefer it over the agent. */
 export function needsIdFrom(idLabel: string, sourceTool: string): string {
@@ -39,8 +42,8 @@ export function needsIdFrom(idLabel: string, sourceTool: string): string {
  */
 export const PROJECT_ID_ONLY_FOR_FOLDER =
   " Creating a project needs no identifier. Creating a folder inside an EXISTING project " +
-  "needs that project's identifier (PR-*); no tool here lists projects, so ask " +
-  'askBrowserStackAI with product "tm" for it.';
+  "needs that project's identifier (PR-*); no tool here lists projects, so use the " +
+  "capability functions to look it up.";
 
 /** A test plan id (TP-*) comes from listTestPlans. */
 export const NEEDS_TEST_PLAN_ID = needsIdFrom(
@@ -51,24 +54,24 @@ export const NEEDS_TEST_PLAN_ID = needsIdFrom(
 /**
  * The ONLY capability handoff here: every other constant points at a tool that produces a
  * missing *id*, but plan WRITES have no tool at all — the surface is `listTestPlans`,
- * `getTestPlan`, `listSubTestPlans`, `getSubTestPlan` and nothing else. Atlas can do them
- * (the tm harness allows POST /api/v1/projects/{id}/test-plans plus /update, /delete,
- * /clone, /test-runs and /test-runs/unlink), so without this line the model reads the four
- * read tools, finds no create, and reports the capability as absent — which is exactly what
- * a QA eval concluded.
+ * `getTestPlan`, `listSubTestPlans`, `getSubTestPlan` and nothing else. The capability functions can do them
+ * (Test Management's own API covers creating, updating, cloning and deleting a plan, and
+ * linking or unlinking its runs), so without this line the model reads the four read tools,
+ * finds no create, and reports the capability as absent — which is exactly what a QA eval
+ * concluded.
  *
  * Deliberately narrow: it names the specific operations that are missing rather than
- * inviting the model to route plan work to the agent generally, because the tool
- * descriptions otherwise say to prefer a specific tool whenever one fits.
+ * inviting the model to route plan work elsewhere generally, because the tool descriptions
+ * otherwise say to prefer a specific tool whenever one fits.
  *
- * Caveat worth knowing: askBrowserStackAI pins every write to human approval, so this path
- * only completes on a client that can show a prompt. On one that cannot, the intended write
- * comes back in `needs_approval` instead of happening.
+ * Caveat worth knowing: a capability write is pinned to human approval, so this path only
+ * completes on a client that can show a prompt. On one that cannot, the intended write is
+ * refused rather than performed.
  */
-export const PLAN_WRITES_VIA_AGENT =
+export const PLAN_WRITES_VIA_CAPABILITIES =
   " Creating a test plan or sub-plan, and linking or unlinking test runs on one, are not " +
-  'available as tools here: call askBrowserStackAI with product "tm" and describe what you ' +
-  "want. It asks you to confirm before changing anything.";
+  "available as tools here: use the capability functions, which reach Test Management's " +
+  "own API for these operations. They ask you to confirm before changing anything.";
 
 /** A build id comes from either build-lookup tool. */
 export const NEEDS_BUILD_ID = needsIdFrom(

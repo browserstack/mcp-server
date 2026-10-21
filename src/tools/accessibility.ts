@@ -745,7 +745,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          "A Website Scanner or Automated Tests report link from the Accessibility dashboard (carries thBuildId).",
+          "A Website Scanner or Automated Tests report link (carries thBuildId), or an Automate build or session link.",
         ),
       cursor: z
         .number()

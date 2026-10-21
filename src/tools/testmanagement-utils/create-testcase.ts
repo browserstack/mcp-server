@@ -98,16 +98,16 @@ export const CreateTestCaseSchema = z.object({
   description: z
     .string()
     .optional()
-    .describe("Brief description of the test case."),
+    .describe("Brief description."),
   owner: z
     .string()
     .email()
-    .describe("Email of the test case owner.")
+    .describe("Owner email.")
     .optional(),
   preconditions: z
     .string()
     .optional()
-    .describe("Any preconditions (HTML allowed)."),
+    .describe("Preconditions (HTML allowed)."),
   test_case_steps: z
     .array(
       z.object({
@@ -115,19 +115,19 @@ export const CreateTestCaseSchema = z.object({
         result: z.string().describe("Expected result of this step."),
       }),
     )
-    .describe("List of steps and expected results."),
+    .describe("Steps and expected results."),
   issues: z
     .array(z.string())
     .optional()
     .describe(
-      "List of the linked Jira, Asana or Azure issues ID's. This should be strictly in array format not the string of json.",
+      "Linked Jira/Asana/Azure issue IDs, as an array (not a JSON string).",
     ),
   issue_tracker: z
     .object({
       name: z
         .string()
         .describe(
-          "Issue tracker name,  For example, use jira for Jira, azure for Azure DevOps, or asana for Asana.",
+          "'jira', 'azure' or 'asana'.",
         ),
       host: z.string().url().describe("Base URL of the issue tracker."),
     })
@@ -136,43 +136,43 @@ export const CreateTestCaseSchema = z.object({
     .array(z.string())
     .optional()
     .describe(
-      "Tags to attach to the test case. This should be strictly in array format not the string of json",
+      "Tags, as an array (not a JSON string).",
     ),
   custom_fields: z
     .record(z.string(), customFieldValueSchema)
     .optional()
     .describe(
-      "Map of custom field NAME to value; use an array for multi-select fields.",
+      "Custom field NAME to value; array for multi-select.",
     ),
   automation_status: z
     .string()
     .optional()
     .describe(
-      "Automation status of the test case. Common values include 'not_automated', 'automated', 'automation_not_required'.",
+      "e.g. 'not_automated', 'automated', 'automation_not_required'.",
     ),
   priority: z
     .string()
     .optional()
     .describe(
-      "Priority, e.g. 'High' or 'medium'; values vary per project; default Medium.",
+      "e.g. 'High', 'medium'; varies per project; default Medium.",
     ),
   case_type: z
     .string()
     .optional()
     .describe(
-      "Test case type display or internal name (per-project). Omit for project default.",
+      "Test case type (varies per project); omit for default.",
     ),
   template: z
     .string()
     .optional()
     .describe(
-      "System template slug only: 'test_case_steps' or 'test_case_bdd'. For a custom template, use template_id instead.",
+      "'test_case_steps' or 'test_case_bdd'; for a custom template use template_id.",
     ),
   template_id: z
     .number()
     .optional()
     .describe(
-      "Numeric ID of a custom template (from listTestCaseTemplates); applies that template. Overrides 'template'.",
+      "Custom template ID (from listTestCaseTemplates); overrides 'template'.",
     ),
 });
 

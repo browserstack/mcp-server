@@ -415,3 +415,149 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
     );
   });
 });
+
+describe("AccessibilityReportFetcher and App Automate links", () => {
+  const APP_AUTOMATE_BUILD = "0a1b2c3d4e5f60718293a4b5c6d7e8f901234567";
+  const SESSION = "fedcba9876543210fedcba9876543210fedcba98";
+  const sessionsUrl = `https://api-cloud.browserstack.com/app-automate/builds/${APP_AUTOMATE_BUILD}/sessions.json?limit=1`;
+  const testCodeUrl = (session: string) =>
+    `https://api-automation.browserstack.com/ext/v1/sessions/${session}/testCode`;
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("maps an App Automate build link to its accessibility build through a session's test code", async () => {
+    get
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [{ automation_session: { hashed_id: SESSION } }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { session_id: SESSION, build_uuid: BUILD_ID, tests: [] },
+      });
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/dashboard/v2/builds/${APP_AUTOMATE_BUILD}`,
+      ),
+    ).resolves.toEqual({ kind: "appBuild", buildId: BUILD_ID });
+    expect(urls()).toEqual([sessionsUrl, testCodeUrl(SESSION)]);
+  });
+
+  it("goes straight to the session when the link names one", async () => {
+    get.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { session_id: SESSION, build_uuid: BUILD_ID, tests: [] },
+    });
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}/sessions/${SESSION}`,
+      ),
+    ).resolves.toEqual({ kind: "appBuild", buildId: BUILD_ID });
+    expect(urls()).toEqual([testCodeUrl(SESSION)]);
+  });
+
+  it("maps a native (Espresso) build by name through its project, as it has no SDK session", async () => {
+    const NAME = "Build #12: Checkout.apk v1.0";
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { input_capabilities: { project: "Checkout App" } },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [
+          { automation_build: { hashed_id: "other", name: "Build #13: x" } },
+          { automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: NAME } },
+        ],
+      })
+      .mockResolvedValueOnce(
+        ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          builds: [{ name: NAME, build_number: 1, th_build_id: BUILD_ID }],
+          info: { next: null },
+        }),
+      );
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
+      ),
+    ).resolves.toEqual({ kind: "appBuild", buildId: BUILD_ID });
+    expect(urls()).toEqual([
+      sessionsUrl,
+      `https://api-cloud.browserstack.com/app-automate/espresso/v2/builds/${APP_AUTOMATE_BUILD}`,
+      "https://api-cloud.browserstack.com/app-automate/builds.json?limit=100&offset=0",
+      `${APP_API}/project?name=Checkout%20App`,
+      `${APP_API}/project/123456/build?build_name=${encodeURIComponent(NAME)}&page_size=30&page=1`,
+    ]);
+  });
+
+  it("says when a native build ran without accessibility on", async () => {
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce({ ok: false, status: 404, data: {} })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { input_capabilities: { project: "Checkout App" } },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [{ automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: "Build #12: Checkout.ipa v1.0" } }],
+      })
+      .mockResolvedValueOnce(
+        ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
+      )
+      .mockResolvedValueOnce(ok({ builds: [], info: { next: null } }));
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
+      ),
+    ).rejects.toThrow(/accessibility was not on for this run/);
+    expect(urls()[2]).toBe(
+      `https://api-cloud.browserstack.com/app-automate/xcuitest/v2/builds/${APP_AUTOMATE_BUILD}`,
+    );
+  });
+
+  it("says when the run had no accessibility on, so there is no report to read", async () => {
+    get
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [{ automation_session: { hashed_id: SESSION } }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { session_id: SESSION, build_uuid: null, tests: [] },
+      });
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
+      ),
+    ).rejects.toThrow(/accessibility.*was not on/i);
+  });
+
+  it("says when the build has no sessions to map through", async () => {
+    get.mockResolvedValue({ ok: false, status: 404, data: {} });
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
+      ),
+    ).rejects.toThrow(/No session.*App Automate build/);
+  });
+});

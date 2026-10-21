@@ -970,7 +970,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          "A Website Scanner, Automated Tests or App Accessibility report link from its dashboard.",
+          "A Website Scanner, Automated Tests or App Accessibility report link, or an App Automate build or session link.",
         ),
       cursor: z
         .number()

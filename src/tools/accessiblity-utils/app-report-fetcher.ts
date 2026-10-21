@@ -1,4 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
+import { SessionType } from "../../lib/constants.js";
+import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
+import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
 import { pageOf, sortBySeverity } from "./paginate.js";
 
 /**
@@ -17,6 +20,12 @@ export const MAX_SNAPSHOT_PAGES = 20;
 /** A dashboard link names a build by number; a build someone just opened is among the newest. */
 export const MAX_APP_BUILD_LIST_PAGES = 3;
 const BUILD_LIST_PAGE_SIZE = 30;
+
+/** A native build is found by name in the account's App Automate build list, newest first. */
+const APP_AUTOMATE_BUILDS_URL =
+  "https://api-cloud.browserstack.com/app-automate/builds.json";
+const APP_AUTOMATE_BUILDS_PAGE_SIZE = 100;
+export const MAX_APP_AUTOMATE_BUILD_PAGES = 3;
 
 export interface AppBuildMeta {
   /** The build's number within its project, which the dashboard link uses. */
@@ -180,6 +189,19 @@ export function flattenAppSnapshots(
   return sortBySeverity(rows);
 }
 
+const APP_AUTOMATE_HOST = "app-automate.browserstack.com";
+
+/** The App Automate build and, when the link names one, the session (both 40-hex ids). */
+function appAutomateIds(
+  url: URL,
+): { buildId?: string; sessionId?: string } | undefined {
+  if (url.hostname !== APP_AUTOMATE_HOST) return undefined;
+  return {
+    buildId: url.pathname.match(/\/builds\/([0-9a-f]{40})(?:\/|$)/i)?.[1],
+    sessionId: url.pathname.match(/\/sessions\/([0-9a-f]{40})(?:\/|$)/i)?.[1],
+  };
+}
+
 /** The build an App Accessibility dashboard link names: project id, build name and number. */
 function buildOfDashboardLink(
   url: URL,
@@ -219,37 +241,166 @@ export class AppAccessibilityApi {
     if (url.hostname !== new URL(APP_DASHBOARD).hostname) return undefined;
     const build = buildOfDashboardLink(url);
     if (!build) return undefined;
-    const q = encodeURIComponent;
-    for (let page = 1; page <= MAX_APP_BUILD_LIST_PAGES; page++) {
-      const resp = await apiClient.get({
-        url: `${APP_API_BASE}/project/${q(build.projectId)}/build?page_size=${BUILD_LIST_PAGE_SIZE}&page=${page}`,
-        headers: this.headers(),
-        raise_error: false,
-      });
-      const row = resp.data?.builds?.find(
-        (b: { build_number?: number }) => b.build_number === build.number,
-      );
-      if (row?.th_build_id) return row.th_build_id;
-      if (!resp.ok || !resp.data?.info?.next) break;
-    }
+    const buildId = await this.findBuild(
+      build.projectId,
+      undefined,
+      (row) => row.build_number === build.number,
+    );
+    if (buildId) return buildId;
     throw new Error(
       `No build ${build.number} of "${build.name}" is among the project's newest builds (${MAX_APP_BUILD_LIST_PAGES} pages). Pass the build id instead, as buildId: the BrowserStack SDK prints it as "testhub id" at the end of the run`,
     );
   }
 
-  /** The build's page on the App Accessibility dashboard, when its project can be found. */
-  private async dashboardLink(meta: AppBuildMeta): Promise<string | undefined> {
-    try {
+  /**
+   * The accessibility build of an App Automate build or session link. An SDK (Appium)
+   * session's test code carries the TestHub build id its results went to, which is the
+   * App Accessibility build when accessibility was on; a build link goes through any one
+   * of its sessions. A native (Espresso, XCUITest) build has no SDK session, and is found
+   * by name instead.
+   */
+  async buildIdFromAppAutomateLink(url: URL): Promise<string | undefined> {
+    const ids = appAutomateIds(url);
+    if (!ids?.buildId && !ids?.sessionId) return undefined;
+    if (ids.sessionId) return this.buildOfSdkSession(ids.sessionId);
+    const session = await this.anySdkSession(ids.buildId!);
+    return session
+      ? this.buildOfSdkSession(session)
+      : this.buildOfNativeBuild(ids.buildId!);
+  }
+
+  private async buildOfSdkSession(sessionId: string): Promise<string> {
+    const resp = await apiClient.get({
+      url: `${getAutomationBaseUrl()}/ext/v1/sessions/${encodeURIComponent(sessionId)}/testCode`,
+      headers: this.headers(),
+      raise_error: false,
+    });
+    const buildId = resp.ok ? resp.data?.build_uuid : undefined;
+    if (!buildId) {
+      throw new Error(
+        `App Automate session ${sessionId} has no accessibility report: accessibility was not on for this run, or this is not an SDK (Appium) session. Run it again with accessibility on (browserstack.yml \`accessibility: true\`)`,
+      );
+    }
+    return buildId;
+  }
+
+  /** The first SDK session of an App Automate build; a native build lists none. */
+  private async anySdkSession(buildId: string): Promise<string | undefined> {
+    const resp = await apiClient.get({
+      url: `${sessionsListUrl(SessionType.AppAutomate, buildId)}?limit=1`,
+      headers: this.headers(),
+      raise_error: false,
+    });
+    return resp.ok ? resp.data?.[0]?.automation_session?.hashed_id : undefined;
+  }
+
+  /**
+   * A native build's details name its project; the App Automate build list names the build
+   * ("Build #N: app vX"); App Accessibility lists the run under the same project and name.
+   */
+  private async buildOfNativeBuild(buildId: string): Promise<string> {
+    const project = await this.nativeBuildProject(buildId);
+    if (!project) {
+      throw new Error(
+        `No session found for App Automate build ${buildId}, and it is not an Espresso or XCUITest build with a project, so it cannot be mapped to its accessibility report. Pass the build id the BrowserStack SDK printed as "testhub id" as buildId, or the build's App Accessibility dashboard link as reportUrl`,
+      );
+    }
+    const name = await this.appAutomateBuildName(buildId);
+    if (!name) {
+      throw new Error(
+        `App Automate build ${buildId} is not among the account's newest builds (${MAX_APP_AUTOMATE_BUILD_PAGES} pages of ${APP_AUTOMATE_BUILDS_PAGE_SIZE}), so its accessibility report cannot be found by name. Pass the build's App Accessibility dashboard link as reportUrl instead`,
+      );
+    }
+    const projectId = await this.projectId(project);
+    const found =
+      projectId !== undefined &&
+      (await this.findBuild(projectId, name, (row) => row.name === name));
+    if (!found) {
+      throw new Error(
+        `No App Accessibility build named "${name}" in project "${project}": accessibility was not on for this run. Run it again with \`accessibility: true\` in the Espresso/XCUITest build request`,
+      );
+    }
+    return found;
+  }
+
+  /** The project a native build was run under, from whichever framework API knows it. */
+  private async nativeBuildProject(
+    buildId: string,
+  ): Promise<string | undefined> {
+    for (const framework of ["espresso", "xcuitest"]) {
       const resp = await apiClient.get({
-        url: `${APP_API_BASE}/project?name=${encodeURIComponent(meta.project_name)}`,
+        url: `https://api-cloud.browserstack.com/app-automate/${framework}/v2/builds/${encodeURIComponent(buildId)}`,
         headers: this.headers(),
         raise_error: false,
       });
-      const project = resp.data?.projects?.find(
-        (p: { id?: number; name?: string }) => p.name === meta.project_name,
-      );
-      if (!project?.id) return undefined;
-      return `${APP_DASHBOARD}/automated-tests/projects/${project.id}/builds/${meta.normalised_name}/${meta.build_id}`;
+      if (resp.ok) return resp.data?.input_capabilities?.project;
+    }
+    return undefined;
+  }
+
+  /** The build's name in the account's App Automate build list, walked newest first. */
+  private async appAutomateBuildName(
+    buildId: string,
+  ): Promise<string | undefined> {
+    for (let page = 0; page < MAX_APP_AUTOMATE_BUILD_PAGES; page++) {
+      const resp = await apiClient.get({
+        url: `${APP_AUTOMATE_BUILDS_URL}?limit=${APP_AUTOMATE_BUILDS_PAGE_SIZE}&offset=${page * APP_AUTOMATE_BUILDS_PAGE_SIZE}`,
+        headers: this.headers(),
+        raise_error: false,
+      });
+      const rows: {
+        automation_build?: { hashed_id?: string; name?: string };
+      }[] = resp.ok && Array.isArray(resp.data) ? resp.data : [];
+      const row = rows.find((r) => r.automation_build?.hashed_id === buildId);
+      if (row) return row.automation_build?.name;
+      if (rows.length < APP_AUTOMATE_BUILDS_PAGE_SIZE) break;
+    }
+    return undefined;
+  }
+
+  /** The App Accessibility project of that exact name, if any. */
+  private async projectId(name: string): Promise<number | undefined> {
+    const resp = await apiClient.get({
+      url: `${APP_API_BASE}/project?name=${encodeURIComponent(name)}`,
+      headers: this.headers(),
+      raise_error: false,
+    });
+    return resp.data?.projects?.find(
+      (p: { id?: number; name?: string }) => p.name === name,
+    )?.id;
+  }
+
+  /**
+   * The id of the project's build that `pick` accepts, newest first, within the first
+   * pages; `buildName` narrows the list to builds named like it, when the name is known
+   * to be the build's own.
+   */
+  private async findBuild(
+    projectId: string | number,
+    buildName: string | undefined,
+    pick: (row: { name?: string; build_number?: number }) => boolean,
+  ): Promise<string | undefined> {
+    const q = encodeURIComponent;
+    const named = buildName ? `build_name=${q(buildName)}&` : "";
+    for (let page = 1; page <= MAX_APP_BUILD_LIST_PAGES; page++) {
+      const resp = await apiClient.get({
+        url: `${APP_API_BASE}/project/${q(String(projectId))}/build?${named}page_size=${BUILD_LIST_PAGE_SIZE}&page=${page}`,
+        headers: this.headers(),
+        raise_error: false,
+      });
+      const row = resp.data?.builds?.find(pick);
+      if (row?.th_build_id) return row.th_build_id;
+      if (!resp.ok || !resp.data?.info?.next) break;
+    }
+    return undefined;
+  }
+
+  /** The build's page on the App Accessibility dashboard, when its project can be found. */
+  private async dashboardLink(meta: AppBuildMeta): Promise<string | undefined> {
+    try {
+      const projectId = await this.projectId(meta.project_name);
+      if (projectId === undefined) return undefined;
+      return `${APP_DASHBOARD}/automated-tests/projects/${projectId}/builds/${meta.normalised_name}/${meta.build_id}`;
     } catch {
       return undefined;
     }

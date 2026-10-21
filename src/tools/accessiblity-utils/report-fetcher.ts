@@ -138,7 +138,8 @@ export class AccessibilityReportFetcher {
    * list can map to ids: each scan there carries its latest run's link. A link to an older
    * run therefore matches no scan, and is reported as such rather than guessed at. An App
    * Accessibility link names its build by project, name and number, which the project's
-   * build list maps to the id.
+   * build list maps to the id. An App Automate build or session link maps to the
+   * accessibility build through a session's test code.
    */
   async sourceFromReportUrl(reportUrl: string): Promise<IssueSource> {
     let url: URL | undefined;
@@ -147,7 +148,10 @@ export class AccessibilityReportFetcher {
     } catch {
       url = undefined;
     }
-    const appBuildId = url && (await this.app.buildIdFromDashboardLink(url));
+    const appBuildId =
+      url &&
+      ((await this.app.buildIdFromDashboardLink(url)) ??
+        (await this.app.buildIdFromAppAutomateLink(url)));
     if (appBuildId) return { kind: "appBuild", buildId: appBuildId };
     const thBuildId = url?.searchParams.get("thBuildId");
     if (url && thBuildId && url.pathname.includes("/automated-tests/")) {
@@ -160,7 +164,7 @@ export class AccessibilityReportFetcher {
       return this.findScanRun(thBuildId, decodeURIComponent(scanName));
     }
     throw new Error(
-      "This link does not name a report the API can look up. Pass an Automated Tests or Website Scanner report link from the Accessibility dashboard (both carry thBuildId), an App Accessibility build link (automated-tests/projects/…/builds/…), or the ids: scanId with scanRunId, buildId, or workflowReportId",
+      "This link does not name a report the API can look up. Pass an Automated Tests or Website Scanner report link from the Accessibility dashboard (both carry thBuildId), an App Accessibility build link (automated-tests/projects/…/builds/…), an App Automate build or session link, or the ids: scanId with scanRunId, buildId, or workflowReportId",
     );
   }
 

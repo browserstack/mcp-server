@@ -64,6 +64,6 @@ export const RUN_APP_AUTOMATE_SCHEMA = {
     .optional()
     .default(false)
     .describe(
-      "Run App Accessibility (WCAG) checks on the screens the tests interact with, and report the issues to the App Accessibility dashboard. Set when the user wants the app's accessibility tested. Android 11+ / iOS 14+.",
+      "Run App Accessibility (WCAG) checks on the screens the tests touch; Android 11+ or iOS 14+.",
     ),
 };

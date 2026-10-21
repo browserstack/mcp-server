@@ -6,7 +6,10 @@ import {
   AccessibilityReportFetcher,
   type IssueSource,
 } from "./accessiblity-utils/report-fetcher.js";
-import type { AppBuildReport } from "./accessiblity-utils/app-report-fetcher.js";
+import type {
+  AppBuildReport,
+  AppManualReport,
+} from "./accessiblity-utils/app-report-fetcher.js";
 import {
   AccessibilityAuthConfig,
   safeAuthConfigData,
@@ -155,6 +158,7 @@ interface FetchIssuesArgs {
   scanRunId?: string;
   buildId?: string;
   workflowReportId?: string;
+  appReportId?: string;
   reportUrl?: string;
   cursor?: number;
 }
@@ -168,15 +172,19 @@ function issueSourceFrom(args: FetchIssuesArgs): RequestedSource | string {
     Boolean(args.scanId || args.scanRunId),
     Boolean(args.buildId),
     Boolean(args.workflowReportId),
+    Boolean(args.appReportId),
     Boolean(args.reportUrl),
   ].filter(Boolean).length;
   if (named !== 1) {
-    return "Pass exactly one source: scanId with scanRunId (a Website Scanner run), buildId (an Automated Tests or App Accessibility build), workflowReportId (a Workflow Analyzer report) or reportUrl (a report's dashboard link).";
+    return "Pass exactly one source: scanId with scanRunId (a Website Scanner run), buildId (an Automated Tests or App Accessibility build), workflowReportId (a Workflow Analyzer report), appReportId (an App Accessibility manual report) or reportUrl (a report's dashboard link).";
   }
   if (args.reportUrl) return { kind: "link", reportUrl: args.reportUrl };
   if (args.buildId) return { kind: "build", buildId: args.buildId };
   if (args.workflowReportId) {
     return { kind: "workflow", reportId: args.workflowReportId };
+  }
+  if (args.appReportId) {
+    return { kind: "appReport", reportId: args.appReportId };
   }
   if (!args.scanId || !args.scanRunId) {
     return "A Website Scanner run needs both scanId and scanRunId.";
@@ -194,6 +202,8 @@ function sourceArgs(source: IssueSource): string {
       return `buildId: "${source.buildId}"`;
     case "workflow":
       return `workflowReportId: "${source.reportId}"`;
+    case "appReport":
+      return `appReportId: "${source.reportId}"`;
   }
 }
 
@@ -208,6 +218,8 @@ function describeSource(source: IssueSource): string {
       return `Workflow Analyzer report ${source.reportId}`;
     case "appBuild":
       return `App Accessibility build ${source.buildId}`;
+    case "appReport":
+      return `App Accessibility manual report ${source.reportId}`;
   }
 }
 
@@ -273,6 +285,7 @@ const PROCESSING_STATUSES = new Set([
   "processing",
   "finalizing",
   "rule_processing",
+  "in_progress",
 ]);
 
 /**
@@ -462,6 +475,61 @@ async function appBuildMessages(
   ];
 }
 
+/**
+ * A manual report's issues come inline from its scanned screens. The API lists every
+ * occurrence and does not mark the duplicates the dashboard folds, so the dashboard's
+ * own count is stated next to the total rather than reproduced.
+ */
+async function appReportMessages(
+  reportFetcher: AccessibilityReportFetcher,
+  source: { kind: "appReport"; reportId: string },
+  cursor: number,
+  preface: string[],
+  processing: ProcessingState,
+  stillProcessing: boolean,
+): Promise<string[]> {
+  const report: AppManualReport = await reportFetcher.appReportIssues(
+    source.reportId,
+    cursor,
+  );
+  const link = [
+    `View the report on the App Accessibility dashboard: ${report.dashboard_link}`,
+  ];
+  if (report.scan_count === 0 && !stillProcessing) {
+    return [
+      ...preface,
+      ...processingNote(processing),
+      `No screens were scanned in App Accessibility manual report "${report.report_name}" (status: ${report.status}), so there are no issues to list.`,
+      ...link,
+    ];
+  }
+  const { records, page_length, total_issues, next_page } = report;
+  const where = `${report.scan_count} screen${report.scan_count === 1 ? "" : "s"} scanned${
+    report.device ? ` on ${report.device}` : ""
+  }`;
+  const dashboardNote =
+    report.duplicate_occurrences > 0
+      ? [
+          `The dashboard counts ${report.dashboard_count} issues for this report: ${report.duplicate_occurrences} of the occurrences are duplicates it folds, which the API does not mark.`,
+        ]
+      : [];
+  return [
+    ...preface,
+    ...processingNote(processing),
+    `Retrieved ${page_length} accessibility issue occurrences (Total: ${total_issues}) from App Accessibility manual report "${report.report_name}" (${where})`,
+    ...dashboardNote,
+    ...excludedIssuesNote(null, 0, report.hidden_issues),
+    ...link,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
+    closingMessage(
+      next_page,
+      remainingIssues(cursor, page_length, total_issues, records),
+      source,
+      stillProcessing,
+    ),
+  ];
+}
+
 async function fetchAccessibilityIssues(
   requested: RequestedSource,
   config: BrowserStackConfig,
@@ -501,6 +569,18 @@ async function fetchAccessibilityIssues(
       ),
     );
   }
+  if (source.kind === "appReport") {
+    return createSuccessResponse(
+      await appReportMessages(
+        reportFetcher,
+        source,
+        cursor,
+        preface,
+        processing,
+        stillProcessing,
+      ),
+    );
+  }
 
   const reportLink = await reportFetcher.getReportLink(source);
 
@@ -528,6 +608,86 @@ async function fetchAccessibilityIssues(
       stillProcessing,
     ),
   ]);
+}
+
+interface ListAppReportsArgs {
+  kind?: "automated" | "manual";
+  projectName?: string;
+  name?: string;
+  limit?: number;
+}
+
+/**
+ * What App Accessibility has on record, newest first, with the ids the issues are read by.
+ * Without a project name, the automated listing shows the projects: a build list needs one.
+ */
+async function listAppAccessibilityReports(
+  args: ListAppReportsArgs,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  const reportFetcher = await initializeReportFetcher(config);
+  const limit = args.limit ?? 10;
+  const filtered = (what: string) =>
+    args.name ? ` whose ${what} contains "${args.name}"` : "";
+  if (args.kind === "manual") {
+    const { total, reports } = await reportFetcher.listAppManualReports(
+      args.name,
+      limit,
+    );
+    return createSuccessResponse([
+      `${total} App Accessibility manual reports (newest first)${filtered("name")}${
+        total > reports.length ? `, showing ${reports.length}` : ""
+      }:`,
+      wrapUntrusted(
+        "app accessibility reports",
+        JSON.stringify(reports, null, 2),
+      ),
+      `Read a report's issues with fetchAccessibilityIssues with appReportId: <reportId>; its dashboard_link opens it on the dashboard.`,
+    ]);
+  }
+  if (!args.projectName) {
+    const { total, projects } = await reportFetcher.listAppProjects(limit);
+    return createSuccessResponse([
+      `${total} App Accessibility projects (newest first)${
+        total > projects.length ? `, showing ${projects.length}` : ""
+      }:`,
+      wrapUntrusted(
+        "app accessibility projects",
+        JSON.stringify(projects, null, 2),
+      ),
+      `A build list needs a project: call listAppAccessibilityReports again with projectName: <name> (exact) to list its builds.`,
+    ]);
+  }
+  const { project, total, builds } = await reportFetcher.listAppBuilds(
+    args.projectName,
+    args.name,
+    limit,
+  );
+  return createSuccessResponse([
+    `${total} builds of App Accessibility project "${project.name}" (newest first)${filtered("name")}${
+      total > builds.length ? `, showing ${builds.length}` : ""
+    }:`,
+    wrapUntrusted("app accessibility builds", JSON.stringify(builds, null, 2)),
+    `Read a build's issues with fetchAccessibilityIssues with buildId: <buildId>; it waits while a build is still processing. report_status "failed" with scan_count 0 means the run recorded no scans.`,
+  ]);
+}
+
+async function executeListAppAccessibilityReports(
+  args: ListAppReportsArgs,
+  server: McpServer,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  try {
+    trackMCP(
+      "listAppAccessibilityReports",
+      server.server.getClientVersion()!,
+      undefined,
+      config,
+    );
+    return await listAppAccessibilityReports(args, config);
+  } catch (error) {
+    return handleMCPError("listAppAccessibilityReports", server, config, error);
+  }
 }
 
 async function executeAccessibilityScan(
@@ -942,7 +1102,7 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues from one source: scanId+scanRunId, buildId (web or app build), workflowReportId or reportUrl." +
+    "Fetch accessibility issues from one source: scanId+scanRunId, buildId (web/app build), workflowReportId, appReportId or reportUrl." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z
@@ -966,11 +1126,17 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe("Workflow Analyzer: the report's numeric id."),
+      appReportId: z
+        .string()
+        .optional()
+        .describe(
+          "Manual App Accessibility report id (a UUID), from listAppAccessibilityReports or its /report/ link.",
+        ),
       reportUrl: z
         .string()
         .optional()
         .describe(
-          "A Website Scanner, Automated Tests or App Accessibility report link, or an App Automate build or session link.",
+          "A web or app report dashboard link (scan, build, manual report), or an App Automate build or session link.",
         ),
       cursor: z
         .number()
@@ -991,6 +1157,48 @@ export default function addAccessibilityTools(
         server,
         config,
       );
+    },
+  );
+
+  tools.listAppAccessibilityReports = server.tool(
+    "listAppAccessibilityReports",
+    "List App Accessibility work newest first, with the ids fetchAccessibilityIssues reads: a project's builds (automated; omit projectName to list projects) or manual reports.",
+    {
+      kind: z
+        .enum(["automated", "manual"])
+        .optional()
+        .default("automated")
+        .describe(
+          "automated (App Automate builds, default) or manual (Workflow Analyzer reports).",
+        ),
+      projectName: z
+        .string()
+        .optional()
+        .describe(
+          "Automated only: the exact App Accessibility project name; omit to list the projects.",
+        ),
+      name: z
+        .string()
+        .optional()
+        .describe("Partial build or report name to filter by."),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(30)
+        .optional()
+        .default(10)
+        .describe("Rows to return, newest first (1 to 30, default 10)."),
+    },
+    {
+      title: "List App Accessibility Reports",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    async (args) => {
+      return await executeListAppAccessibilityReports(args, server, config);
     },
   );
 

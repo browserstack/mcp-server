@@ -344,7 +344,8 @@ searchCapability  →  describeCapability  →  invokeCapability
 | `accessibilityExpert` | Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices). |
 | `createAccessibilityAuthConfig` | Create an authentication configuration (form-based or basic) for accessibility scans behind a login. |
 | `getAccessibilityAuthConfig` | Retrieve an existing accessibility authentication configuration by ID. |
-| `fetchAccessibilityIssues` | Fetch accessibility issues, with pagination, from a Website Scanner run, an Automated Tests build (web) or App Accessibility build (mobile app, by the build id the SDK prints), a Workflow Analyzer report, or a report's dashboard link. Waits while a report is still processing; for an app build with no scans, lists the likely causes. |
+| `fetchAccessibilityIssues` | Fetch accessibility issues, with pagination, from a Website Scanner run, an Automated Tests build (web) or App Accessibility build (mobile app, by the build id the SDK prints), a Workflow Analyzer report, an App Accessibility manual report (`appReportId`), or a report's dashboard link. Waits while a report is still processing; for an app build with no scans, lists the likely causes. |
+| `listAppAccessibilityReports` | List App Accessibility (mobile app) work newest first, with the ids `fetchAccessibilityIssues` reads: a project's builds (`kind: automated`; without `projectName`, the projects), or the manual Workflow Analyzer reports (`kind: manual`). |
 
 </details>
 

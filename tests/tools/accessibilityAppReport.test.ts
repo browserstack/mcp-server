@@ -561,3 +561,246 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
     ).rejects.toThrow(/No session.*App Automate build/);
   });
 });
+
+describe("AccessibilityReportFetcher and App Accessibility manual reports", () => {
+  const REPORT_ID = "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
+  const DETAIL = {
+    meta_data: {
+      name: "Checkout walkthrough",
+      created_at: "2026-10-21T18:54:05.374Z",
+      ended_at: "2026-10-21T18:57:22.487Z",
+    },
+    wcag_version: "WCAG 2.2 AA",
+    data: {
+      issue_summary: {
+        total: 2,
+        severity_count: { critical: 1, serious: 1, hidden_issues: 1, duplicate_issues: 1 },
+        scan_count: 2,
+      },
+    },
+  };
+  /** A manual snapshot keeps its rules under meta, belongs to no test, and its issues carry no status. */
+  const manualSnapshot = (snapshot: (typeof SNAPSHOTS)[number]) => ({
+    meta: {
+      snapshot_id: snapshot.meta.snapshot_id,
+      screenshot_url: snapshot.meta.screenshot_url,
+      aggregated_results: snapshot.aggregated_results,
+    },
+  });
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("resolves a manual report's dashboard link to the report", async () => {
+    await expect(
+      fetcher().sourceFromReportUrl(`${DASHBOARD}/report/${REPORT_ID}`),
+    ).resolves.toEqual({ kind: "appReport", reportId: REPORT_ID });
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("reads a manual report's status from whether it has ended", async () => {
+    get.mockResolvedValueOnce(ok({ ...DETAIL, meta_data: { ...DETAIL.meta_data, ended_at: null } }));
+    await expect(
+      fetcher().reportStatus({ kind: "appReport", reportId: REPORT_ID }),
+    ).resolves.toBe("in_progress");
+
+    get.mockResolvedValueOnce(ok(DETAIL));
+    await expect(
+      fetcher().reportStatus({ kind: "appReport", reportId: REPORT_ID }),
+    ).resolves.toBe("complete");
+    expect(urls()).toEqual([
+      `${APP_API.replace("/automate/api/v1", "")}/api/v1/reports/${REPORT_ID}`,
+      `${APP_API.replace("/automate/api/v1", "")}/api/v1/reports/${REPORT_ID}`,
+    ]);
+  });
+
+  it("reads a manual report's issue occurrences from its screens, with the dashboard's own count", async () => {
+    const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
+    get
+      .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(
+        ok({
+          device: { model: "iPhone 15 Pro", os: "ios", os_version: "17.0" },
+          data: [manualSnapshot(SNAPSHOTS[0])],
+          pagination: { page: 1, next: 2 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          device: { model: "iPhone 15 Pro", os: "ios", os_version: "17.0" },
+          data: [manualSnapshot(SNAPSHOTS[1])],
+          pagination: { page: 2, next: null },
+        }),
+      );
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(urls()).toEqual([
+      `${MANUAL_API}/reports/${REPORT_ID}`,
+      `${MANUAL_API}/reports/${REPORT_ID}/issues?page_size=50&page=1`,
+      `${MANUAL_API}/reports/${REPORT_ID}/issues?page_size=50&page=2`,
+    ]);
+    expect(report).toMatchObject({
+      report_name: "Checkout walkthrough",
+      status: "complete",
+      scan_count: 2,
+      device: "iPhone 15 Pro, ios 17.0",
+      // Every occurrence the API lists; the hidden one is left out as its status says.
+      total_issues: 3,
+      page_length: 3,
+      next_page: null,
+      dashboard_count: 2,
+      duplicate_occurrences: 1,
+      hidden_issues: 1,
+      dashboard_link: `${DASHBOARD}/report/${REPORT_ID}`,
+    });
+    expect(report.records[0].screen).toBe("Screen 1");
+    expect(report.records.map((r) => r.severity)).toEqual([
+      "critical",
+      "serious",
+      "moderate",
+    ]);
+  });
+
+  it("fails plainly when the manual report does not exist", async () => {
+    get.mockResolvedValueOnce(missing());
+
+    await expect(fetcher().appReportIssues(REPORT_ID)).rejects.toThrow(
+      /No App Accessibility manual report/,
+    );
+  });
+});
+
+describe("AccessibilityReportFetcher lists App Accessibility work", () => {
+  const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("lists the newest projects when no project is named", async () => {
+    get.mockResolvedValueOnce(
+      ok({
+        projects: [
+          { id: 123456, name: "Checkout App", created_at: "2026-10-21T18:44:39.791Z" },
+          { id: 123457, name: "Other", created_at: "2026-10-20T10:00:00.000Z" },
+        ],
+        info: { page: 1, page_size: 10, count: 2, next: null },
+      }),
+    );
+
+    await expect(fetcher().listAppProjects(10)).resolves.toEqual({
+      projects: [
+        { id: 123456, name: "Checkout App", created_at: "2026-10-21T18:44:39.791Z" },
+        { id: 123457, name: "Other", created_at: "2026-10-20T10:00:00.000Z" },
+      ],
+      total: 2,
+    });
+    expect(urls()).toEqual([`${APP_API}/project?page_size=10`]);
+  });
+
+  it("lists a project's newest builds with the ids and links the issues are read by", async () => {
+    get
+      .mockResolvedValueOnce(ok({ projects: [{ id: 123456, name: "Checkout App" }] }))
+      .mockResolvedValueOnce(
+        ok({
+          builds: [
+            {
+              th_build_id: BUILD_ID,
+              build_number: 8,
+              name: "Checkout Build",
+              normalised_name: "Checkout+Build",
+              status: "failed",
+              report_status: "generated",
+              created_at: "2026-10-21T12:26:43.327Z",
+              issue_summary: { total: 36, severity_count: { critical: 14, serious: 9, moderate: 6, minor: 7 }, scan_count: 3 },
+              app_details: { name: "com.example.checkout" },
+              session_data: { frameworkName: "pytest", language: "python" },
+            },
+          ],
+          info: { page: 1, page_size: 10, count: 1, next: null },
+        }),
+      );
+
+    const result = await fetcher().listAppBuilds("Checkout App", undefined, 10);
+
+    expect(urls()).toEqual([
+      `${APP_API}/project?name=Checkout%20App`,
+      `${APP_API}/project/123456/build?page_size=10`,
+    ]);
+    expect(result).toEqual({
+      project: { id: 123456, name: "Checkout App" },
+      total: 1,
+      builds: [
+        {
+          buildId: BUILD_ID,
+          build_number: 8,
+          name: "Checkout Build",
+          status: "failed",
+          report_status: "generated",
+          created_at: "2026-10-21T12:26:43.327Z",
+          scan_count: 3,
+          issues: { total: 36, critical: 14, serious: 9, moderate: 6, minor: 7 },
+          app: "com.example.checkout",
+          framework: "pytest (python)",
+          dashboard_link: `${DASHBOARD}/automated-tests/projects/123456/builds/Checkout+Build/8`,
+        },
+      ],
+    });
+  });
+
+  it("filters builds by name and names the candidates when the project is not an exact match", async () => {
+    get.mockResolvedValueOnce(
+      ok({ projects: [{ id: 1, name: "Checkout App iOS" }, { id: 2, name: "Checkout App Android" }] }),
+    );
+
+    await expect(
+      fetcher().listAppBuilds("Checkout App", "Nightly", 10),
+    ).rejects.toThrow(/No project named "Checkout App".*Checkout App iOS.*Checkout App Android/s);
+  });
+
+  it("passes a build-name filter through", async () => {
+    get
+      .mockResolvedValueOnce(ok({ projects: [{ id: 123456, name: "Checkout App" }] }))
+      .mockResolvedValueOnce(ok({ builds: [], info: { count: 0, next: null } }));
+
+    await fetcher().listAppBuilds("Checkout App", "Nightly", 5);
+    expect(urls()[1]).toBe(
+      `${APP_API}/project/123456/build?page_size=5&build_name=Nightly`,
+    );
+  });
+
+  it("lists the newest manual reports with the ids the issues are read by", async () => {
+    get.mockResolvedValueOnce(
+      ok({
+        reports: [
+          {
+            id: "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+            name: "Checkout walkthrough",
+            status: "complete",
+            created_at: "2026-10-21T18:29:39.773Z",
+            app_details: { name: "Checkout", version: "1.2", package_name: "com.example.checkout" },
+            issue_summary: { total: 97, severity_count: { critical: 76, serious: 19, moderate: 0, minor: 2, hidden_issues: 0, duplicate_issues: 47 }, scan_count: 7 },
+          },
+        ],
+        info: { page: 1, page_size: 10, count: 1, next: null },
+      }),
+    );
+
+    const result = await fetcher().listAppManualReports("Checkout", 10);
+
+    expect(urls()).toEqual([`${MANUAL_API}/reports?page_size=10&report_name=Checkout`]);
+    expect(result).toEqual({
+      total: 1,
+      reports: [
+        {
+          reportId: "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+          name: "Checkout walkthrough",
+          status: "complete",
+          created_at: "2026-10-21T18:29:39.773Z",
+          app: "Checkout 1.2 (com.example.checkout)",
+          scan_count: 7,
+          issues: { total: 97, critical: 76, serious: 19, moderate: 0, minor: 2, duplicates: 47, hidden: 0 },
+          dashboard_link: `${DASHBOARD}/report/6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b`,
+        },
+      ],
+    });
+  });
+});

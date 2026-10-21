@@ -12,8 +12,11 @@ import { pageOf, sortBySeverity } from "./paginate.js";
 export const APP_API_BASE =
   "https://api-app-accessibility.browserstack.com/automate/api/v1";
 export const APP_DASHBOARD = "https://app-accessibility.browserstack.com";
+/** Manual (Workflow Analyzer) reports recorded on the dashboard: a separate, older route. */
+export const MANUAL_API_BASE =
+  "https://api-app-accessibility.browserstack.com/api/v1";
 
-/** Screens per API page, and how many pages a build is read across (1,000 screens). */
+/** Screens per API page, and how many pages a build or report is read across (1,000 screens). */
 const SNAPSHOT_PAGE_SIZE = 50;
 export const MAX_SNAPSHOT_PAGES = 20;
 
@@ -62,7 +65,12 @@ interface AppRule {
 }
 
 export interface AppSnapshot {
-  meta?: { screenshot_url?: string; testcase_name?: string };
+  meta?: {
+    screenshot_url?: string;
+    testcase_name?: string;
+    /** A manual report's snapshot keeps its rules here. */
+    aggregated_results?: AppRule[];
+  };
   aggregated_results?: AppRule[];
 }
 
@@ -98,6 +106,70 @@ export interface AppBuildReport {
   dashboard_link?: string;
   /** Whether the fair-usage cap dropped tests or scans from this build. */
   fup_capped: boolean;
+}
+
+/** A manual (Workflow Analyzer) report's issues, read inline from its scanned screens. */
+export interface AppManualReport {
+  records: AppAccessibilityIssue[];
+  page_length: number;
+  /** Every occurrence the API lists; the dashboard folds duplicates it does not mark. */
+  total_issues: number;
+  next_page: number | null;
+  dashboard_count: number;
+  duplicate_occurrences: number;
+  hidden_issues: number;
+  scan_count: number;
+  /** complete | in_progress */
+  status: string;
+  report_name: string;
+  device?: string;
+  dashboard_link: string;
+}
+
+export interface AppProjectRow {
+  id: number;
+  name: string;
+  created_at?: string;
+}
+
+/** A build as the listing tool shows it: what it is, how it went, and how to read it. */
+export interface AppBuildRow {
+  buildId: string;
+  build_number?: number;
+  name: string;
+  status?: string;
+  report_status?: string;
+  created_at?: string;
+  scan_count: number;
+  issues: {
+    total: number;
+    critical: number;
+    serious: number;
+    moderate: number;
+    minor: number;
+  };
+  app?: string;
+  framework?: string;
+  dashboard_link: string;
+}
+
+export interface AppManualReportRow {
+  reportId: string;
+  name: string;
+  status?: string;
+  created_at?: string;
+  app?: string;
+  scan_count: number;
+  issues: {
+    total: number;
+    critical: number;
+    serious: number;
+    moderate: number;
+    minor: number;
+    duplicates: number;
+    hidden: number;
+  };
+  dashboard_link: string;
 }
 
 /** The element details worth repeating; the rest are the rule's own inputs. */
@@ -154,7 +226,9 @@ export function flattenAppSnapshots(
   details.forEach((snapshot, index) => {
     const test = snapshot.meta?.testcase_name;
     const screen = `Screen ${index + 1}${test ? ` (${test})` : ""}`;
-    for (const rule of snapshot.aggregated_results ?? []) {
+    const rules =
+      snapshot.aggregated_results ?? snapshot.meta?.aggregated_results ?? [];
+    for (const rule of rules) {
       const wcag = (rule.guidelines ?? [])
         .map((g) => g.message)
         .filter(Boolean)
@@ -199,6 +273,40 @@ function appAutomateIds(
   return {
     buildId: url.pathname.match(/\/builds\/([0-9a-f]{40})(?:\/|$)/i)?.[1],
     sessionId: url.pathname.match(/\/sessions\/([0-9a-f]{40})(?:\/|$)/i)?.[1],
+  };
+}
+
+/** The id a manual report's dashboard link names (`/report/{uuid}`), if it is one. */
+export function manualReportIdFromDashboardLink(url: URL): string | undefined {
+  if (url.hostname !== new URL(APP_DASHBOARD).hostname) return undefined;
+  return url.pathname.match(/^\/report\/([0-9a-f-]{36})\/?$/i)?.[1];
+}
+
+/** A manual report has no status of its own; it is complete once it has ended. */
+export function manualReportStatus(detail: {
+  meta_data?: { ended_at?: string | null };
+}): string {
+  return detail.meta_data?.ended_at ? "complete" : "in_progress";
+}
+
+/** The severity counts of an issue summary, each defaulting to 0. */
+function severityCounts(summary: {
+  total?: number;
+  severity_count?: Record<string, number | undefined>;
+}): {
+  total: number;
+  critical: number;
+  serious: number;
+  moderate: number;
+  minor: number;
+} {
+  const sev = summary.severity_count ?? {};
+  return {
+    total: summary.total ?? 0,
+    critical: sev.critical ?? 0,
+    serious: sev.serious ?? 0,
+    moderate: sev.moderate ?? 0,
+    minor: sev.minor ?? 0,
   };
 }
 
@@ -360,14 +468,185 @@ export class AppAccessibilityApi {
 
   /** The App Accessibility project of that exact name, if any. */
   private async projectId(name: string): Promise<number | undefined> {
+    return (await this.projectsNamed(name)).find((p) => p.name === name)?.id;
+  }
+
+  /** The projects whose name contains `name`, as the API searches it. */
+  private async projectsNamed(name: string): Promise<AppProjectRow[]> {
     const resp = await apiClient.get({
       url: `${APP_API_BASE}/project?name=${encodeURIComponent(name)}`,
       headers: this.headers(),
       raise_error: false,
     });
-    return resp.data?.projects?.find(
-      (p: { id?: number; name?: string }) => p.name === name,
-    )?.id;
+    return resp.ok ? (resp.data?.projects ?? []) : [];
+  }
+
+  /** The newest projects, as many as asked for. */
+  async listAppProjects(
+    limit: number,
+  ): Promise<{ projects: AppProjectRow[]; total: number }> {
+    const resp = await apiClient.get({
+      url: `${APP_API_BASE}/project?page_size=${limit}`,
+      headers: this.headers(),
+    });
+    const rows: AppProjectRow[] = (resp.data?.projects ?? []).map(
+      (p: AppProjectRow) => ({
+        id: p.id,
+        name: p.name,
+        ...(p.created_at ? { created_at: p.created_at } : {}),
+      }),
+    );
+    return { projects: rows, total: resp.data?.info?.count ?? rows.length };
+  }
+
+  /**
+   * A project's newest builds, by exact project name, optionally filtered by build name.
+   * A project name that matches none exactly names the near matches, so the agent can
+   * pick rather than guess.
+   */
+  async listAppBuilds(
+    projectName: string,
+    buildName: string | undefined,
+    limit: number,
+  ): Promise<{
+    project: { id: number; name: string };
+    total: number;
+    builds: AppBuildRow[];
+  }> {
+    const candidates = await this.projectsNamed(projectName);
+    const project = candidates.find((p) => p.name === projectName);
+    if (!project) {
+      const near = candidates.map((p) => `"${p.name}"`).join(", ");
+      throw new Error(
+        `No project named "${projectName}"${near ? `. Did you mean: ${near}` : ""}. Call listAppAccessibilityReports without projectName to list the projects`,
+      );
+    }
+    const resp = await apiClient.get({
+      url: `${APP_API_BASE}/project/${project.id}/build?page_size=${limit}${
+        buildName ? `&build_name=${encodeURIComponent(buildName)}` : ""
+      }`,
+      headers: this.headers(),
+    });
+    const rows: any[] = resp.data?.builds ?? [];
+    const builds: AppBuildRow[] = rows.map((b) => {
+      const framework = b.session_data?.frameworkName;
+      const language = b.session_data?.language;
+      const app = b.app_details?.name ?? b.app_details?.package_name;
+      return {
+        buildId: b.th_build_id,
+        build_number: b.build_number,
+        name: b.name,
+        status: b.status,
+        report_status: b.report_status,
+        created_at: b.created_at,
+        scan_count: b.issue_summary?.scan_count ?? 0,
+        issues: severityCounts(b.issue_summary ?? {}),
+        ...(app ? { app } : {}),
+        ...(framework
+          ? { framework: language ? `${framework} (${language})` : framework }
+          : {}),
+        dashboard_link: `${APP_DASHBOARD}/automated-tests/projects/${project.id}/builds/${b.normalised_name}/${b.build_number}`,
+      };
+    });
+    return {
+      project: { id: project.id, name: project.name },
+      total: resp.data?.info?.count ?? builds.length,
+      builds,
+    };
+  }
+
+  /** The newest manual reports, optionally filtered by name. */
+  async listAppManualReports(
+    name: string | undefined,
+    limit: number,
+  ): Promise<{ total: number; reports: AppManualReportRow[] }> {
+    const resp = await apiClient.get({
+      url: `${MANUAL_API_BASE}/reports?page_size=${limit}${
+        name ? `&report_name=${encodeURIComponent(name)}` : ""
+      }`,
+      headers: this.headers(),
+    });
+    const rows: any[] = resp.data?.reports ?? [];
+    const reports: AppManualReportRow[] = rows.map((r) => {
+      const d = r.app_details;
+      const app = d?.name
+        ? `${d.name}${d.version ? ` ${d.version}` : ""}${d.package_name ? ` (${d.package_name})` : ""}`
+        : undefined;
+      const sev = r.issue_summary?.severity_count ?? {};
+      return {
+        reportId: r.id,
+        name: r.name,
+        status: r.status,
+        created_at: r.created_at,
+        ...(app ? { app } : {}),
+        scan_count: r.issue_summary?.scan_count ?? 0,
+        issues: {
+          ...severityCounts(r.issue_summary ?? {}),
+          duplicates: sev.duplicate_issues ?? 0,
+          hidden: sev.hidden_issues ?? 0,
+        },
+        dashboard_link: `${APP_DASHBOARD}/report/${r.id}`,
+      };
+    });
+    return { total: resp.data?.info?.count ?? reports.length, reports };
+  }
+
+  /** A manual report's details, or undefined when the API does not know the id. */
+  async manualReport(reportId: string): Promise<any | undefined> {
+    const resp = await apiClient.get({
+      url: `${MANUAL_API_BASE}/reports/${encodeURIComponent(reportId)}`,
+      headers: this.headers(),
+      raise_error: false,
+    });
+    return resp.ok ? resp.data : undefined;
+  }
+
+  /**
+   * A manual report's issues, every occurrence the API lists, most severe first. The
+   * dashboard's own count comes from the report's summary: it folds duplicates that the
+   * issue rows do not mark, so the two numbers are both given.
+   */
+  async appReportIssues(
+    reportId: string,
+    cursor = 0,
+    maxCharacterLength?: number,
+  ): Promise<AppManualReport> {
+    const detail = await this.manualReport(reportId);
+    if (!detail) {
+      throw new Error(
+        `No App Accessibility manual report with id "${reportId}". Pass the id from listAppAccessibilityReports (kind: manual), or the report's dashboard link (app-accessibility.browserstack.com/report/…) as reportUrl`,
+      );
+    }
+    const details: AppSnapshot[] = [];
+    let device:
+      | { model?: string; os?: string; os_version?: string }
+      | undefined;
+    for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
+      const resp = await apiClient.get({
+        url: `${MANUAL_API_BASE}/reports/${encodeURIComponent(reportId)}/issues?page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
+        headers: this.headers(),
+      });
+      device ??= resp.data?.device;
+      details.push(...(resp.data?.data ?? []));
+      if (!resp.data?.pagination?.next) break;
+    }
+    const summary = detail.data?.issue_summary ?? {};
+    const all = flattenAppSnapshots(details);
+    const page = pageOf(all, { nextPage: cursor, maxCharacterLength });
+    return {
+      ...page,
+      total_issues: all.length,
+      dashboard_count: summary.total ?? all.length,
+      duplicate_occurrences: summary.severity_count?.duplicate_issues ?? 0,
+      hidden_issues: summary.severity_count?.hidden_issues ?? 0,
+      scan_count: summary.scan_count ?? details.length,
+      status: manualReportStatus(detail),
+      report_name: detail.meta_data?.name ?? reportId,
+      ...(device?.model
+        ? { device: `${device.model}, ${device.os} ${device.os_version}` }
+        : {}),
+      dashboard_link: `${APP_DASHBOARD}/report/${reportId}`,
+    };
   }
 
   /**

@@ -12,6 +12,10 @@ const m = vi.hoisted(() => ({
   // A build id is probed on both APIs; by default it stays what it was named as.
   resolveBuild: vi.fn(async (source: unknown) => source),
   appBuildReport: vi.fn(),
+  appReportIssues: vi.fn(),
+  listAppProjects: vi.fn(),
+  listAppBuilds: vi.fn(),
+  listAppManualReports: vi.fn(),
   parse: vi.fn(),
 }));
 
@@ -30,6 +34,10 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     reportStatus = m.reportStatus;
     resolveBuild = m.resolveBuild;
     appBuildReport = m.appBuildReport;
+    appReportIssues = m.appReportIssues;
+    listAppProjects = m.listAppProjects;
+    listAppBuilds = m.listAppBuilds;
+    listAppManualReports = m.listAppManualReports;
   },
 }));
 vi.mock("../../src/tools/accessiblity-utils/report-parser.js", () => ({
@@ -574,5 +582,150 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
       `Resolved the report link to App Accessibility build ${BUILD_ID}.`,
     );
     expect(body).toContain(`buildId: "${BUILD_ID}" and cursor: 140`);
+  });
+});
+
+describe("fetchAccessibilityIssues and App Accessibility manual reports", () => {
+  const REPORT_ID = "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
+  const LINK = `https://app-accessibility.browserstack.com/report/${REPORT_ID}`;
+  let handlers: Record<string, (...args: any[]) => any>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.reportStatus.mockResolvedValue("complete");
+    m.appReportIssues.mockResolvedValue({
+      records: [{ issue_type: "Touch Target Size & Spacing", severity: "serious" }],
+      page_length: 1,
+      total_issues: 144,
+      next_page: 140,
+      dashboard_count: 97,
+      duplicate_occurrences: 47,
+      hidden_issues: 0,
+      scan_count: 7,
+      status: "complete",
+      report_name: "Checkout walkthrough",
+      device: "iPhone 15 Pro, ios 17.0",
+      dashboard_link: LINK,
+    });
+    handlers = register();
+  });
+
+  it("reads a manual report by its id and says how the dashboard counts it", async () => {
+    const result = await handlers.fetchAccessibilityIssues(
+      { appReportId: REPORT_ID },
+      CONTEXT,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(m.appReportIssues).toHaveBeenCalledWith(REPORT_ID, 0);
+    const body = text(result);
+    expect(body).toContain(
+      'Retrieved 1 accessibility issue occurrences (Total: 144) from App Accessibility manual report "Checkout walkthrough" (7 screens scanned on iPhone 15 Pro, ios 17.0)',
+    );
+    expect(body).toContain(
+      "The dashboard counts 97 issues for this report: 47 of the occurrences are duplicates it folds, which the API does not mark.",
+    );
+    expect(body).toContain(`View the report on the App Accessibility dashboard: ${LINK}\n`);
+    expect(body).toContain(
+      `Use fetchAccessibilityIssues with appReportId: "${REPORT_ID}" and cursor: 140`,
+    );
+  });
+
+  it("resolves a manual report's dashboard link", async () => {
+    m.sourceFromReportUrl.mockResolvedValue({ kind: "appReport", reportId: REPORT_ID });
+
+    const body = text(await handlers.fetchAccessibilityIssues({ reportUrl: LINK }, CONTEXT));
+
+    expect(body).toContain(`Resolved the report link to App Accessibility manual report ${REPORT_ID}.`);
+  });
+
+  it("refuses two sources at once, naming the manual report id among them", async () => {
+    const result = await handlers.fetchAccessibilityIssues(
+      { appReportId: REPORT_ID, workflowReportId: "1" },
+      CONTEXT,
+    );
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("appReportId");
+  });
+});
+
+describe("listAppAccessibilityReports", () => {
+  const BUILD_ID = "m3k8p2q7w1x5c9v4b6n0z2r8t3y7u1i5o9a4s2df";
+  let handlers: Record<string, (...args: any[]) => any>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handlers = register();
+  });
+
+  it("lists projects when none is named, and says how to go on", async () => {
+    m.listAppProjects.mockResolvedValue({
+      projects: [{ id: 123456, name: "Checkout App", created_at: "2026-10-21T18:44:39.791Z" }],
+      total: 1,
+    });
+
+    const body = text(await handlers.listAppAccessibilityReports({}));
+
+    expect(m.listAppProjects).toHaveBeenCalledWith(10);
+    expect(body).toContain("1 App Accessibility projects (newest first)");
+    expect(body).toContain("Checkout App");
+    expect(body).toContain("call listAppAccessibilityReports again with projectName");
+  });
+
+  it("lists a project's builds with the id and link each one's issues are read by", async () => {
+    m.listAppBuilds.mockResolvedValue({
+      project: { id: 123456, name: "Checkout App" },
+      total: 1,
+      builds: [
+        {
+          buildId: BUILD_ID,
+          build_number: 8,
+          name: "Checkout Build",
+          status: "failed",
+          report_status: "generated",
+          created_at: "2026-10-21T12:26:43.327Z",
+          scan_count: 3,
+          issues: { total: 36, critical: 14, serious: 9, moderate: 6, minor: 7 },
+          app: "com.example.checkout",
+          framework: "pytest (python)",
+          dashboard_link: "https://app-accessibility.browserstack.com/automated-tests/projects/123456/builds/Checkout+Build/8",
+        },
+      ],
+    });
+
+    const body = text(
+      await handlers.listAppAccessibilityReports({ projectName: "Checkout App", limit: 5 }),
+    );
+
+    expect(m.listAppBuilds).toHaveBeenCalledWith("Checkout App", undefined, 5);
+    expect(body).toContain('1 builds of App Accessibility project "Checkout App" (newest first)');
+    expect(body).toContain(BUILD_ID);
+    expect(body).toContain("fetchAccessibilityIssues with buildId");
+  });
+
+  it("lists manual reports when asked for them", async () => {
+    m.listAppManualReports.mockResolvedValue({
+      total: 1,
+      reports: [
+        {
+          reportId: "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+          name: "Checkout walkthrough",
+          status: "complete",
+          created_at: "2026-10-21T18:29:39.773Z",
+          app: "Checkout 1.2 (com.example.checkout)",
+          scan_count: 7,
+          issues: { total: 97, critical: 76, serious: 19, moderate: 0, minor: 2, duplicates: 47, hidden: 0 },
+          dashboard_link: "https://app-accessibility.browserstack.com/report/6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        },
+      ],
+    });
+
+    const body = text(
+      await handlers.listAppAccessibilityReports({ kind: "manual", name: "Checkout" }),
+    );
+
+    expect(m.listAppManualReports).toHaveBeenCalledWith("Checkout", 10);
+    expect(body).toContain("1 App Accessibility manual reports (newest first)");
+    expect(body).toContain("fetchAccessibilityIssues with appReportId");
   });
 });

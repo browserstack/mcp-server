@@ -1114,7 +1114,7 @@
     "entity": "browser_session",
     "intent": "Run JavaScript in the page \u2014 use this to scroll, read something the element readers cannot reach, or drive a control that resists clicking.",
     "guidance": [
-     "SCROLLING LIVES HERE: window.scrollTo(0, document.body.scrollHeight) goes to the bottom, and arguments[0].scrollIntoView({block:'center'}) brings an element into view before clicking it.",
+     "SCROLLING LIVES HERE, and the reliable form is the ELEMENT one: pass the element in args and call arguments[0].scrollIntoView({block:'center'}). window.scrollTo(0, document.body.scrollHeight) reaches the bottom on a desktop browser, but on Chrome for Android it can stop short and leave a footer off screen while still reporting success \u2014 so scroll the thing you actually want rather than the page, and confirm with a screenshot or the page source.",
      "`return` is required to get a value back; without it the answer is null.",
      "An element id can be passed in args as {\"element-6066-11e4-a52e-4f735466cecf\": \"<id>\"} and arrives as a real element in arguments.",
      "It runs with the page's own privileges and can change anything, so a script that alters state is as consequential as a click.",

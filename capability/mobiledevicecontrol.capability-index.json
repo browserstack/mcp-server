@@ -1809,7 +1809,7 @@
     "entity": "app_session",
     "intent": "Bring an app to the foreground, starting it if it is not running \u2014 use this to open the app under test, return to it, or switch to another installed app.",
     "guidance": [
-     "Android takes appId and iOS takes bundleId \u2014 send exactly the one for the platform. The wrong name is refused with a 400 \"invalid argument\" that names the parameter it wanted, and no action is taken.",
+     "The app is named INSIDE `args`, which is the one object there: args [{\"appId\": \"com.example.app\"}] on Android, args [{\"bundleId\": \"com.example.app\"}] on iOS. Sending appId or bundleId as a top-level body field is refused here before anything is sent \u2014 \"unknown body: bundleId. accepted: args, script\" \u2014 and sending the wrong one for the platform is refused by the product with a 400 \"invalid argument\" naming the parameter it wanted, with no action taken.",
      "Launching an app that is already in the foreground does nothing and still reports success.",
      "To restart an app from a clean state, call terminate_app first and then this.",
      "Succeeding means the app was activated, not that it finished drawing, so give it a moment and confirm before acting. An app that cannot be brought forward at all answers 400 rather than reporting success, and get_app_state reads 4 once it really is in front \u2014 sampled too early it can still report the home screen mid-switch.",
@@ -1882,7 +1882,7 @@
     "entity": "app_session",
     "intent": "Close an app and stop it running \u2014 use this to end a session inside the app, or as the first half of a restart.",
     "guidance": [
-     "Android takes appId and iOS takes bundleId \u2014 send exactly the one for the platform. The wrong name is refused with a 400 \"invalid argument\" that names the parameter it wanted, and no action is taken.",
+     "The app is named INSIDE `args`, which is the one object there: args [{\"appId\": \"com.example.app\"}] on Android, args [{\"bundleId\": \"com.example.app\"}] on iOS. Sending appId or bundleId as a top-level body field is refused here before anything is sent \u2014 \"unknown body: bundleId. accepted: args, script\" \u2014 and sending the wrong one for the platform is refused by the product with a 400 \"invalid argument\" naming the parameter it wanted, with no action taken.",
      "Returns true when the app was running and false when it was not; false is not an error.",
      "The app stays installed and keeps its data; only the running process is stopped.",
      "This does not clear state between runs \u2014 relaunching shows the app where it was unless the app itself resets."
@@ -1954,7 +1954,7 @@
     "entity": "app_session",
     "intent": "Check whether an app is installed, running or in the foreground \u2014 use this to confirm a launch or a close actually took effect.",
     "guidance": [
-     "Android takes appId and iOS takes bundleId \u2014 send exactly the one for the platform. The wrong name is refused with a 400 \"invalid argument\" that names the parameter it wanted, and no action is taken.",
+     "The app is named INSIDE `args`, which is the one object there: args [{\"appId\": \"com.example.app\"}] on Android, args [{\"bundleId\": \"com.example.app\"}] on iOS. Sending appId or bundleId as a top-level body field is refused here before anything is sent \u2014 \"unknown body: bundleId. accepted: args, script\" \u2014 and sending the wrong one for the platform is refused by the product with a 400 \"invalid argument\" naming the parameter it wanted, with no action taken.",
      "The value is a number: 0 not installed, 1 installed but not running, 2 running in the background and suspended, 3 running in the background, 4 running in the foreground.",
      "4 is the only state in which the app is on screen and can be driven.",
      "The same scale applies on both platforms. Sending an app to the background leaves it at 3 or 2 \u2014 the system suspends it a moment after it stops being visible \u2014 so treat anything below 4 as not on screen rather than waiting for one number. Launching it again returns it to 4."
@@ -2367,7 +2367,7 @@
     "guidance": [
      "iOS only; press_keycode is the Android equivalent and the two are not interchangeable.",
      "The button names carry no separator: home, volumeup, volumedown.",
-     "Pressing home sends the app to the background \u2014 bring it back with launch_app, passing bundleId rather than appId, and confirm from the page source that the app is in front again.",
+     "Pressing home sends the app to the background \u2014 bring it back with launch_app, whose args object takes bundleId rather than appId on iOS, and confirm from the page source that the app is in front again.",
      "The response is null on success and says nothing about what the button did."
     ],
     "path_params": [

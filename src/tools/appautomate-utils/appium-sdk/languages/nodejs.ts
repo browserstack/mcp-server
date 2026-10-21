@@ -6,10 +6,13 @@ import {
   combineInstructions,
 } from "../index.js";
 
-export function getNodejsSDKCommand(testingFramework: string): string {
+export function getNodejsSDKCommand(
+  testingFramework: string,
+  options: { accessibility?: boolean } = {},
+): string {
   switch (testingFramework) {
     case "webdriverio":
-      return getWebDriverIOCommand();
+      return getWebDriverIOCommand(options);
     case "nightwatch":
       return getNightwatchCommand();
     case "jest":
@@ -65,7 +68,16 @@ export function getNodejsAppInstructions(
   }
 }
 
-function getWebDriverIOCommand(): string {
+function getWebDriverIOCommand({
+  accessibility = false,
+}: { accessibility?: boolean } = {}): string {
+  const accessibilityConfig = accessibility
+    ? `accessibility: true,
+        accessibilityOptions: {
+          wcagVersion: 'wcag22aa',
+          includeIssueType: { bestPractice: true },
+        },`
+    : "accessibility: false,";
   const prerequisiteStep = createStep(
     "Prerequisite Setup:",
     `a. Ensure you do not modify or replace any existing local driver code, 
@@ -102,7 +114,7 @@ exports.config = {
       {
         app: 'bs://sample.app',
         browserstackLocal: true,
-        accessibility: false,
+        ${accessibilityConfig}
         testObservabilityOptions: {
           buildName: "bstack-demo",
           projectName: "BrowserStack Sample",

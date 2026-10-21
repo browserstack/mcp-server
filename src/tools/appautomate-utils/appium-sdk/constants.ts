@@ -47,7 +47,7 @@ export const MobileDeviceSchema = z.object({
 
 // Tool description and schema for setupBrowserStackAppAutomateTests
 export const SETUP_APP_AUTOMATE_DESCRIPTION =
-  "Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. ONLY for Appium based framework . This tool configures SDK for various languages with appium. For pre-built Espresso or XCUITest test suites, use 'runAppTestsOnBrowserStack' instead.";
+  "Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. ONLY for Appium based framework . This tool configures SDK for various languages with appium. For pre-built Espresso or XCUITest test suites, use 'runAppTestsOnBrowserStack' instead. Set accessibility: true to also run App Accessibility (WCAG) checks on the screens the tests interact with; the issues are then read with fetchAccessibilityIssues.";
 
 export const SETUP_APP_AUTOMATE_SCHEMA = {
   detectedFramework: z
@@ -86,4 +86,11 @@ export const SETUP_APP_AUTOMATE_SCHEMA = {
     .optional()
     .default("BStack-AppAutomate-Suite")
     .describe("Project name for organizing test runs on BrowserStack."),
+  accessibility: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Run App Accessibility (WCAG) checks on every screen the tests interact with, and report the issues to the App Accessibility dashboard. Set when the user wants the app's accessibility tested. Android 11+ only.",
+    ),
 };

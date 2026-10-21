@@ -459,12 +459,12 @@
     "entity": "app_session",
     "intent": "Type text into an input field in the app \u2014 use this to fill a search box, login form or any editable field found with find_element.",
     "guidance": [
-     "REPLACES whatever the field already holds rather than adding to it \u2014 measured on Android with and without refocusing between calls. Read the field back from get_page_source if the resulting value matters, and do not build up a value with successive calls.",
+     "WHETHER THIS REPLACES OR APPENDS DEPENDS ON THE PLATFORM: on Android it replaces whatever the field already holds, and on iOS it appends to it. Typing twice into one iOS field therefore leaves both values joined. Read the field back from get_page_source whenever the resulting value matters.",
      "The element must be an editable field (EditText on Android, TextField on iOS); typing into anything else fails with \"invalid element state\".",
      "The on-screen keyboard may stay open afterwards and cover lower elements \u2014 re-read the page source before the next tap.",
-     "The W3C specification says this appends, and other Appium drivers may; do not rely on either behaviour across platforms without checking. There is no separate way to empty a field on this surface: the standard clear endpoint answers 200 without reliably emptying the field, so typing the value you want is the way to set it.",
-     "The keyboard is usually left open afterwards: call hide_keyboard before tapping anything below the field, and is_keyboard_shown to confirm it closed.",
-     "Sending a newline submits the field and closes the keyboard on iOS, which is the most reliable way to dismiss it there."
+     "There is no way to empty a field on this surface: the standard clear endpoint answers 200 without reliably emptying it, so typing the value you want is the way to set it \u2014 and on iOS, where this appends, there is no way to correct a field you have already typed into.",
+     "The keyboard is usually left open afterwards. On Android, hide_keyboard closes it. On iOS it cannot be closed without submitting, so read hide_keyboard's guidance before planning a tap below the field.",
+     "Sending a newline closes the keyboard on iOS by SUBMITTING the field: the field resets to its placeholder and the value moves wherever the app sends it. Use it to dismiss the keyboard only when submitting is what you wanted anyway; see hide_keyboard for what the alternatives do."
     ],
     "path_params": [
      {
@@ -1449,9 +1449,11 @@
     "intent": "Close the on-screen keyboard \u2014 use this when it covers a button or field you need to tap after typing.",
     "guidance": [
      "The response is true when a keyboard was dismissed and false when none was showing; false is not an error.",
-     "On iOS this can be refused by a keyboard the app controls; the fallback is tapping an empty area or the keyboard's own Done key.",
      "A tap aimed at a control hidden behind the keyboard lands on the keyboard instead and reports success, so close it first rather than afterwards.",
-     "On iOS this frequently leaves the keyboard open while still answering successfully, so always confirm with is_keyboard_shown. Two things do close it there: send_keys with a newline, or execute_script with 'mobile: hideKeyboard' and args [{\"keys\":[\"return\"]}]. Tapping an empty area of the screen does not, and neither does that command with no keys or with [\"Done\"], which fail as \"invalid element state\".",
+     "On iOS this FAILS rather than quietly doing nothing: 400 \"invalid element state\", message \"Did not know how to dismiss the keyboard\". The keyboard stays up and the field keeps what was typed, so treat the 400 as the normal answer on iOS and not as a broken call.",
+     "What does close it on iOS closes it BY SUBMITTING: send_keys with a newline, or execute_script with 'mobile: hideKeyboard' and args [{\"keys\":[\"return\"]}]. Both press Return, so the field is submitted and cleared to its placeholder and the value moves wherever the app sends it \u2014 that is a change to the app, not just to the keyboard.",
+     "The keys argument names a key on the APP'S OWN keyboard, so it fails the same way when that key is absent: [\"Done\"] returns the same 400 on a keyboard that offers only Return. Omitting keys fails too, and tapping an empty area above the keyboard with perform_actions returns 200 and changes nothing.",
+     "So on iOS there may be no way to put the keyboard away without submitting. Prefer a flow that does not need to tap underneath it \u2014 read values from get_page_source rather than tapping a control the keyboard covers. On Android this capability works normally.",
      "is_keyboard_shown reports the state this changes, and is the reliable way to tell whether the keyboard actually went away."
     ],
     "path_params": [

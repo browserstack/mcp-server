@@ -267,6 +267,28 @@ export async function uploadXcuiTestSuite(
   );
 }
 
+/** What a native build run can be asked for beyond app, suite, devices and project. */
+export interface NativeBuildOptions {
+  /** Run App Accessibility checks during the tests (the build API's `accessibility` flag). */
+  accessibility?: boolean;
+}
+
+function buildRequestBody(
+  app_url: string,
+  test_suite_url: string,
+  devices: string[],
+  project: string,
+  options: NativeBuildOptions,
+): Record<string, unknown> {
+  return {
+    app: app_url,
+    testSuite: test_suite_url,
+    devices,
+    project,
+    ...(options.accessibility ? { accessibility: true } : {}),
+  };
+}
+
 // Triggers an Espresso test run on BrowserStack and returns the build_id
 export async function triggerEspressoBuild(
   app_url: string,
@@ -274,6 +296,7 @@ export async function triggerEspressoBuild(
   devices: string[],
   project: string,
   config: BrowserStackConfig,
+  options: NativeBuildOptions = {},
 ): Promise<string> {
   const authHeader =
     "Basic " + Buffer.from(getBrowserStackAuth(config)).toString("base64");
@@ -284,12 +307,7 @@ export async function triggerEspressoBuild(
       Authorization: authHeader,
       "Content-Type": "application/json",
     },
-    body: {
-      app: app_url,
-      testSuite: test_suite_url,
-      devices,
-      project,
-    },
+    body: buildRequestBody(app_url, test_suite_url, devices, project, options),
   });
 
   if (response.data.build_id) {
@@ -308,6 +326,7 @@ export async function triggerXcuiBuild(
   devices: string[],
   project: string,
   config: BrowserStackConfig,
+  options: NativeBuildOptions = {},
 ): Promise<string> {
   const auth = {
     username: config["browserstack-username"],
@@ -322,12 +341,7 @@ export async function triggerXcuiBuild(
         Buffer.from(`${auth.username}:${auth.password}`).toString("base64"),
       "Content-Type": "application/json",
     },
-    body: {
-      app: app_url,
-      testSuite: test_suite_url,
-      devices,
-      project,
-    },
+    body: buildRequestBody(app_url, test_suite_url, devices, project, options),
   });
 
   if (response.data.build_id) {

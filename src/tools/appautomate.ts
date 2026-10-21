@@ -168,6 +168,19 @@ async function takeAppScreenshot(args: {
   }
 }
 
+/** The run's build and, with accessibility on, where its issues are read once it finishes. */
+function runStartedMessage(
+  framework: string,
+  buildId: string,
+  accessibility: boolean,
+): string {
+  const link = `https://app-automate.browserstack.com/builds/${buildId}`;
+  const a11y = accessibility
+    ? `\n\n♿ App Accessibility checks are on. When the build finishes (typically 10–20 minutes), read the issues with fetchAccessibilityIssues, reportUrl: ${link} — it maps the build to its accessibility report and waits while the report is still processing.`
+    : "";
+  return `✅ ${framework} run started successfully!\n\n🔧 Build ID: ${buildId}\n🔗 View your build: ${link}${a11y}`;
+}
+
 //Runs AppAutomate tests on BrowserStack by uploading app and test suite, then triggering a test run.
 async function runAppTestsOnBrowserStack(
   args: {
@@ -178,9 +191,11 @@ async function runAppTestsOnBrowserStack(
     devices: Array<Array<string>>;
     project: string;
     detectedAutomationFramework: string;
+    accessibility?: boolean;
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
+  const accessibility = args.accessibility === true;
   // Validate that either paths or URLs are provided for both app and test suite
   if (!args.browserstackAppUrl && !args.appPath) {
     throw new Error(
@@ -234,13 +249,14 @@ async function runAppTestsOnBrowserStack(
           deviceStrings,
           args.project,
           config,
+          { accessibility },
         );
 
         return {
           content: [
             {
               type: "text",
-              text: `✅ Espresso run started successfully!\n\n🔧 Build ID: ${build_id}\n🔗 View your build: https://app-automate.browserstack.com/builds/${build_id}`,
+              text: runStartedMessage("Espresso", build_id, accessibility),
             },
           ],
         };
@@ -286,12 +302,13 @@ async function runAppTestsOnBrowserStack(
           deviceStrings,
           args.project,
           config,
+          { accessibility },
         );
         return {
           content: [
             {
               type: "text",
-              text: `✅ XCUITest run started successfully!\n\n🔧 Build ID: ${build_id}\n🔗 View your build: https://app-automate.browserstack.com/builds/${build_id}`,
+              text: runStartedMessage("XCUITest", build_id, accessibility),
             },
           ],
         };

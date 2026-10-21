@@ -320,7 +320,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 | `takeAppScreenshot` | Launch the app on a specified device and capture a quick verification screenshot to confirm your app has launched. |
 | `listTestIds` | List the tests in a BrowserStack build (Automate or App Automate) with each test's `status` and `session_id`, optionally filtered by status (passed/failed/pending/skipped). The `session_id` feeds `getFailureLogs` and `fetchAutomationScreenshots` directly. |
 | `setupBrowserStackAppAutomateTests` | Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. With `accessibility: true`, the run also performs App Accessibility (WCAG) checks on the screens the tests interact with, and the output says what makes a scan happen and how to read the issues. |
-| `runAppTestsOnBrowserStack` | Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files. |
+| `runAppTestsOnBrowserStack` | Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files. With `accessibility: true`, the build also performs App Accessibility (WCAG) checks, and the answer says how to read the issues once it finishes. |
 
 </details>
 

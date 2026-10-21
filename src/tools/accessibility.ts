@@ -154,19 +154,25 @@ interface FetchIssuesArgs {
   scanRunId?: string;
   buildId?: string;
   workflowReportId?: string;
+  reportUrl?: string;
   cursor?: number;
 }
 
+/** A source named by its ids, or a dashboard link still to be resolved to them. */
+type RequestedSource = IssueSource | { kind: "link"; reportUrl: string };
+
 /** The one source the arguments name, or why they do not name exactly one. */
-function issueSourceFrom(args: FetchIssuesArgs): IssueSource | string {
+function issueSourceFrom(args: FetchIssuesArgs): RequestedSource | string {
   const named = [
     Boolean(args.scanId || args.scanRunId),
     Boolean(args.buildId),
     Boolean(args.workflowReportId),
+    Boolean(args.reportUrl),
   ].filter(Boolean).length;
   if (named !== 1) {
-    return "Pass exactly one source: scanId with scanRunId (a Website Scanner run), buildId (an Automated Tests build) or workflowReportId (a Workflow Analyzer report).";
+    return "Pass exactly one source: scanId with scanRunId (a Website Scanner run), buildId (an Automated Tests build), workflowReportId (a Workflow Analyzer report) or reportUrl (a report's dashboard link).";
   }
+  if (args.reportUrl) return { kind: "link", reportUrl: args.reportUrl };
   if (args.buildId) return { kind: "build", buildId: args.buildId };
   if (args.workflowReportId) {
     return { kind: "workflow", reportId: args.workflowReportId };
@@ -186,6 +192,18 @@ function sourceArgs(source: IssueSource): string {
       return `buildId: "${source.buildId}"`;
     case "workflow":
       return `workflowReportId: "${source.reportId}"`;
+  }
+}
+
+/** What a dashboard link resolved to, in words. */
+function describeSource(source: IssueSource): string {
+  switch (source.kind) {
+    case "scan":
+      return `Website Scanner scan ${source.scanId}, run ${source.scanRunId}`;
+    case "build":
+      return `Automated Tests build ${source.buildId}`;
+    case "workflow":
+      return `Workflow Analyzer report ${source.reportId}`;
   }
 }
 
@@ -240,11 +258,15 @@ function excludedIssuesNote(
 }
 
 async function fetchAccessibilityIssues(
-  source: IssueSource,
+  requested: RequestedSource,
   config: BrowserStackConfig,
   cursor = 0,
 ): Promise<CallToolResult> {
   const reportFetcher = await initializeReportFetcher(config);
+  const source =
+    requested.kind === "link"
+      ? await reportFetcher.sourceFromReportUrl(requested.reportUrl)
+      : requested;
   const reportLink = await reportFetcher.getReportLink(source);
 
   const {
@@ -265,8 +287,12 @@ async function fetchAccessibilityIssues(
   const remainingIssues = total_issues - currentlyShown;
 
   const messages = [
+    ...(requested.kind === "link"
+      ? [`Resolved the report link to ${describeSource(source)}.`]
+      : []),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
+    `You can also download the full report (CSV) from the following link, valid for about 12 hours: ${reportLink}`,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
   ];
 
@@ -691,7 +717,7 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues with pagination support, from exactly one source: a completed Website Scanner run (scanId with scanRunId), an Automated Tests build from a BrowserStack SDK test run (buildId), or a Workflow Analyzer report (workflowReportId). Use cursor parameter to get subsequent pages of results." +
+    "Fetch accessibility issues with pagination support, from exactly one source: a completed Website Scanner run (scanId with scanRunId), an Automated Tests build from a BrowserStack SDK test run (buildId), a Workflow Analyzer report (workflowReportId), or a Website Scanner or Automated Tests report's dashboard link (reportUrl). Also returns a link to download the full report as a CSV. Use cursor parameter to get subsequent pages of results." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z
@@ -716,6 +742,12 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe("Workflow Analyzer: the report's numeric id, e.g. 123456"),
+      reportUrl: z
+        .string()
+        .optional()
+        .describe(
+          "A report's Accessibility dashboard link, as the user pasted it: a Website Scanner or Automated Tests report link carrying thBuildId. A Website Scanner link resolves only to its scan's latest run. Workflow Analyzer links are not supported; use workflowReportId.",
+        ),
       cursor: z
         .number()
         .optional()

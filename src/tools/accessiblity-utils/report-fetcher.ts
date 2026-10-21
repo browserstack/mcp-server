@@ -21,6 +21,33 @@ export type IssueSource =
 const API_BASE = "https://api-accessibility.browserstack.com/api";
 
 /**
+ * How far a report link's scan is searched for. The scan list has no name or link filter and
+ * spans the whole organisation, so the walk covers only the newest scans, which is where a
+ * link someone just opened will be. It runs at the list's default page size (~1.2 s a page):
+ * at limit=50 or 100 the cursor skips scans, so a larger page cannot be used to go faster.
+ */
+export const MAX_SCAN_LIST_PAGES = 15;
+
+interface ScanListPage {
+  scans?: {
+    id: number;
+    name: string;
+    scanUrl?: string;
+    lastScanDetails?: { scanRunId?: number };
+  }[];
+  pagination?: { hasNext?: boolean; nextPage?: string };
+}
+
+/** The thBuildId a dashboard report link carries, if any. */
+function thBuildIdOf(link: string | undefined): string | null {
+  try {
+    return link ? new URL(link).searchParams.get("thBuildId") : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Each source exports its issues the same way: one call starts a CSV export and returns a
  * task id, and the same route polled with that task id returns the link. Only the route and
  * its parameter names differ (the scanner's are snake_case, the other two camelCase).
@@ -76,19 +103,97 @@ export class AccessibilityReportFetcher {
     this.auth = auth;
   }
 
+  private authHeaders(): Record<string, string> | undefined {
+    if (!this.auth) return undefined;
+    const { username, password } = this.auth;
+    return {
+      Authorization:
+        "Basic " + Buffer.from(`${username}:${password}`).toString("base64"),
+    };
+  }
+
+  /**
+   * The source a dashboard report link points at. An Automated Tests link carries the build
+   * id itself. A Website Scanner link carries the thBuildId of one run, which only the scan
+   * list can map to ids: each scan there carries its latest run's link. A link to an older
+   * run therefore matches no scan, and is reported as such rather than guessed at.
+   */
+  async sourceFromReportUrl(reportUrl: string): Promise<IssueSource> {
+    let url: URL | undefined;
+    try {
+      url = new URL(reportUrl);
+    } catch {
+      url = undefined;
+    }
+    const thBuildId = url?.searchParams.get("thBuildId");
+    if (url && thBuildId && url.pathname.includes("/automated-tests/")) {
+      return { kind: "build", buildId: thBuildId };
+    }
+    const scanName = url?.pathname.match(
+      /\/site-scanner\/projects\/([^/]+)\/builds/,
+    )?.[1];
+    if (thBuildId && scanName) {
+      return this.findScanRun(thBuildId, decodeURIComponent(scanName));
+    }
+    throw new Error(
+      "This link does not name a report the API can look up. Pass an Automated Tests or Website Scanner report link from the Accessibility dashboard (both carry thBuildId), or the ids: scanId with scanRunId, buildId, or workflowReportId",
+    );
+  }
+
+  /** Walk the newest scans for the one whose own link carries this thBuildId. */
+  private async findScanRun(
+    thBuildId: string,
+    scanName: string,
+  ): Promise<IssueSource> {
+    let nextPage: string | undefined;
+    let sameName: number | undefined;
+    for (let page = 0; page < MAX_SCAN_LIST_PAGES; page++) {
+      const resp = await apiClient.get({
+        url: `${API_BASE}/website-scanner/v1/scans${
+          nextPage ? `?nextPage=${encodeURIComponent(nextPage)}` : ""
+        }`,
+        headers: this.authHeaders(),
+      });
+      const data: ScanListPage | undefined = resp.data?.data;
+      for (const scan of data?.scans ?? []) {
+        if (thBuildIdOf(scan.scanUrl) === thBuildId) {
+          return {
+            kind: "scan",
+            scanId: String(scan.id),
+            scanRunId: String(scan.lastScanDetails?.scanRunId),
+          };
+        }
+        if (sameName === undefined && scan.name === scanName) {
+          sameName = scan.id;
+        }
+      }
+      if (!data?.pagination?.hasNext || !data.pagination.nextPage) {
+        nextPage = undefined;
+        break;
+      }
+      nextPage = data.pagination.nextPage;
+    }
+    if (sameName !== undefined) {
+      throw new Error(
+        `This link is to an earlier run of scan "${scanName}" (scanId ${sameName}). A link resolves only to a scan's latest run; ask the user for that run's scanRunId and pass it with scanId ${sameName}`,
+      );
+    }
+    // nextPage is still set only when the walk stopped at the page cap, not at the end.
+    const searched = nextPage
+      ? ` among the most recent scans (${MAX_SCAN_LIST_PAGES} pages)`
+      : "";
+    throw new Error(
+      `No Website Scanner scan${searched} matches this link. Pass scanId and scanRunId instead`,
+    );
+  }
+
   async getReportLink(source: IssueSource): Promise<string> {
     const urls = exportUrls(source);
 
-    let basicAuthHeader = undefined;
-    if (this.auth) {
-      const { username, password } = this.auth;
-      basicAuthHeader =
-        "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
-    }
     // Initiate CSV link generation
     const initResp = await apiClient.get({
       url: urls.start,
-      headers: basicAuthHeader ? { Authorization: basicAuthHeader } : undefined,
+      headers: this.authHeaders(),
       raise_error: false,
     });
     const initData: ReportInitResponse = initResp.data;
@@ -105,9 +210,7 @@ export class AccessibilityReportFetcher {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const reportResp = await apiClient.get({
         url: reportUrl,
-        headers: basicAuthHeader
-          ? { Authorization: basicAuthHeader }
-          : undefined,
+        headers: this.authHeaders(),
       });
       const reportData: ReportResponse = reportResp.data;
       if (!reportData.success) {

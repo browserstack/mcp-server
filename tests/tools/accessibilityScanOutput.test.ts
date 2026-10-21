@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   startScan: vi.fn(),
   waitUntilComplete: vi.fn(),
   getReportLink: vi.fn(),
+  sourceFromReportUrl: vi.fn(),
   parse: vi.fn(),
 }));
 
@@ -21,6 +22,7 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
   AccessibilityReportFetcher: class {
     setAuth = vi.fn();
     getReportLink = m.getReportLink;
+    sourceFromReportUrl = m.sourceFromReportUrl;
   },
 }));
 vi.mock("../../src/tools/accessiblity-utils/report-parser.js", () => ({
@@ -228,8 +230,41 @@ describe("fetchAccessibilityIssues sources", () => {
       expect(body).toContain(
         `Use fetchAccessibilityIssues with ${nextPageArgs} and cursor: 140`,
       );
+      expect(body).toContain(
+        "download the full report (CSV) from the following link",
+      );
+      expect(body).toContain("https://csv\n");
     },
   );
+
+  it("resolves a dashboard report link and pages by the ids it found", async () => {
+    const reportUrl =
+      "https://accessibility.browserstack.com/site-scanner/projects/x/builds?thBuildId=abc";
+    m.sourceFromReportUrl.mockResolvedValue({
+      kind: "scan",
+      scanId: "scan-42",
+      scanRunId: "run-7",
+    });
+    const result = await handlers.fetchAccessibilityIssues(
+      { reportUrl },
+      CONTEXT,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(m.sourceFromReportUrl).toHaveBeenCalledWith(reportUrl);
+    expect(m.getReportLink).toHaveBeenCalledWith({
+      kind: "scan",
+      scanId: "scan-42",
+      scanRunId: "run-7",
+    });
+    const body = text(result);
+    expect(body).toContain(
+      "Resolved the report link to Website Scanner scan scan-42, run run-7.",
+    );
+    expect(body).toContain(
+      'Use fetchAccessibilityIssues with scanId: "scan-42", scanRunId: "run-7" and cursor: 140',
+    );
+  });
 
   it("startAccessibilityScan reads the run it just started", async () => {
     await handlers.startAccessibilityScan(
@@ -251,11 +286,20 @@ describe("fetchAccessibilityIssues sources", () => {
       /exactly one/,
     ],
     ["a scan without its run", { scanId: "scan-42" }, /scanRunId/],
+    [
+      "a report link with another source",
+      {
+        reportUrl: "https://accessibility.browserstack.com/x",
+        buildId: BUILD_ID,
+      },
+      /exactly one/,
+    ],
   ])("refuses %s without calling the API", async (_label, args, message) => {
     const result = await handlers.fetchAccessibilityIssues(args, CONTEXT);
 
     expect(result.isError).toBe(true);
     expect(text(result)).toMatch(message);
     expect(m.getReportLink).not.toHaveBeenCalled();
+    expect(m.sourceFromReportUrl).not.toHaveBeenCalled();
   });
 });

@@ -188,7 +188,9 @@ function buildOfDashboardLink(
     /\/automated-tests\/projects\/(\d+)\/builds\/([^/]+)\/(\d+)\/?$/,
   );
   if (!match) return undefined;
-  // The name in the link is CGI-escaped: spaces are "+".
+  // The name in the link is CGI-escaped (spaces are "+") and is TestHub's name for the
+  // build, which can differ from the build's own, so it serves only in messages: the
+  // build is found by its number, which is unique within the project.
   const name = decodeURIComponent(match[2].replace(/\+/g, " "));
   return { projectId: match[1], name, number: Number(match[3]) };
 }
@@ -208,7 +210,11 @@ export class AppAccessibilityApi {
     return resp.ok ? resp.data?.meta_data : undefined;
   }
 
-  /** The id of the build an App Accessibility dashboard link points at, if it is one. */
+  /**
+   * The id of the build an App Accessibility dashboard link points at, if it is one: the
+   * project's newest builds, by number. (The list's name filter would not do: the link
+   * carries TestHub's name for the build, which the filter does not match.)
+   */
   async buildIdFromDashboardLink(url: URL): Promise<string | undefined> {
     if (url.hostname !== new URL(APP_DASHBOARD).hostname) return undefined;
     const build = buildOfDashboardLink(url);
@@ -216,7 +222,7 @@ export class AppAccessibilityApi {
     const q = encodeURIComponent;
     for (let page = 1; page <= MAX_APP_BUILD_LIST_PAGES; page++) {
       const resp = await apiClient.get({
-        url: `${APP_API_BASE}/project/${q(build.projectId)}/build?build_name=${q(build.name)}&page_size=${BUILD_LIST_PAGE_SIZE}&page=${page}`,
+        url: `${APP_API_BASE}/project/${q(build.projectId)}/build?page_size=${BUILD_LIST_PAGE_SIZE}&page=${page}`,
         headers: this.headers(),
         raise_error: false,
       });

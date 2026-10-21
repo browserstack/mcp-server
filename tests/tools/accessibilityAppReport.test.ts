@@ -248,7 +248,7 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
     expect(urls()).toEqual([`${APP_API}/build/${BUILD_ID}`]);
   });
 
-  it("resolves an App Accessibility dashboard link through the project's build list", async () => {
+  it("resolves an App Accessibility dashboard link by build number, as the link's name is TestHub's, not the build's", async () => {
     get
       .mockResolvedValueOnce(
         ok({
@@ -269,8 +269,8 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
       ),
     ).resolves.toEqual({ kind: "appBuild", buildId: BUILD_ID });
     expect(urls()).toEqual([
-      `${APP_API}/project/123456/build?build_name=Checkout%20Build&page_size=30&page=1`,
-      `${APP_API}/project/123456/build?build_name=Checkout%20Build&page_size=30&page=2`,
+      `${APP_API}/project/123456/build?page_size=30&page=1`,
+      `${APP_API}/project/123456/build?page_size=30&page=2`,
     ]);
   });
 

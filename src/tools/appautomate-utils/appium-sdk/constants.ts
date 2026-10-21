@@ -47,7 +47,7 @@ export const MobileDeviceSchema = z.object({
 
 // Tool description and schema for setupBrowserStackAppAutomateTests
 export const SETUP_APP_AUTOMATE_DESCRIPTION =
-  "Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. ONLY for Appium based framework . This tool configures SDK for various languages with appium. For pre-built Espresso or XCUITest test suites, use 'runAppTestsOnBrowserStack' instead.";
+  "Set up the App Automate SDK for Appium tests. For pre-built Espresso or XCUITest suites use runAppTestsOnBrowserStack.";
 
 export const SETUP_APP_AUTOMATE_SCHEMA = {
   detectedFramework: z
@@ -59,7 +59,7 @@ export const SETUP_APP_AUTOMATE_SCHEMA = {
   detectedTestingFramework: z
     .nativeEnum(AppSDKSupportedTestingFrameworkEnum)
     .describe(
-      "The testing framework used in the project. Be precise with framework selection Example: 'testng', 'behave', 'pytest', 'robot'",
+      "Test framework in the project, e.g. testng, behave, pytest, robot.",
     ),
 
   detectedLanguage: z
@@ -73,7 +73,7 @@ export const SETUP_APP_AUTOMATE_SCHEMA = {
     .max(3)
     .default([])
     .describe(
-      "Tuples describing target mobile devices. Add device only when user asks explicitly for it. Defaults to [] . Example: [['android', 'Samsung Galaxy S24', '14'], ['ios', 'iPhone 15', '17']]",
+      "Only devices the user asked for, e.g. [['android', 'Samsung Galaxy S24', '14']].",
     ),
 
   appPath: z

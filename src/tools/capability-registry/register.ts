@@ -279,26 +279,13 @@ export function addCapabilityRegistryTools(
 
   tools.listProducts = server.tool(
     "listProducts",
-    "List the BrowserStack products this surface can reach: what each one does, the " +
-      "entities it models, and a line saying what each entity is. START HERE — " +
-      "searchCapability needs a product, and this is what tells you which one. If two " +
-      "products could both fit the task, ask the user rather than choosing for them. " +
-      "ALWAYS pass the user's request, in their own words, as `query`: the answer then " +
-      "says outright whether the products clash over the words in it. WHEN IT REPORTS A " +
-      "CLASH — two products claiming the same word for different things — ASK THE USER " +
-      "WHICH PRODUCT THEY MEAN AND WAIT FOR THEIR ANSWER BEFORE SEARCHING OR INVOKING " +
-      "ANYTHING. The response carries the question to put to them and what the shared " +
-      "word means in each product. Choosing for them, or searching each product in turn " +
-      "and merging the results, is the failure this call exists to prevent.",
+    "List BrowserStack products and their entities. START HERE: searchCapability needs a product name from this. Pass the user's request as `query`; if it reports a clash, ask the user which product they mean and wait. Never pick for them or merge products.",
     {
       query: z
         .string()
         .optional()
         .describe(
-          "The user's request, in their own words. With it the response carries a " +
-            "`routing` block saying whether the products share the vocabulary this " +
-            "request uses — and, when they do, the question to put to the user before " +
-            "searching either product.",
+          "The user's request, in their own words; enables clash detection.",
         ),
     },
     {
@@ -461,9 +448,7 @@ export function addCapabilityRegistryTools(
 
   tools.describeEntity = server.tool(
     "describeEntity",
-    "Describe one entity: what it is, what identifies it, what it relates to, and the " +
-      "vocabulary the product uses for it. Read this before filtering or writing, because " +
-      "ids and field values usually have to be resolved first.",
+    "Describe an entity: identifiers, relations and product vocabulary. Read before filtering or writing; ids often need resolving first.",
     {
       product: productArg().describe(
         `Which product the entity belongs to: ${productList}.`,
@@ -500,41 +485,11 @@ export function addCapabilityRegistryTools(
 
   tools.searchCapability = server.tool(
     "searchCapability",
-    "Find endpoints this surface can call, by plain language, within ONE product. " +
-      "CALL listProducts FIRST, passing the user's request as its `query`: it names the " +
-      "products, says whether they clash over the words in that request, and gives you " +
-      "the question to ask when they do. You need it anyway — `product` here takes a name " +
-      "exactly as listProducts spells it. Where two products use the same word for " +
-      "different things, ask the USER and wait for an answer rather than picking. " +
-      "Search matches the product's OWN words, not synonyms. When your words are not the " +
-      "product's, the response says so: `weak_match: true` with a `suggested_vocabulary` " +
-      "map of the product's entities and their aliases. Results are still returned, but " +
-      "treat them as unconfirmed — pick the closest entity from that map and search again " +
-      "using its vocabulary, or call describeEntity on it for the fuller picture. That one " +
-      "extra round trip is far cheaper than invoking the wrong capability. " +
-      "Narrowing further with `entity` sharpens results. " +
-      "THIS IS A SHORTLIST, NOT A CONTRACT. Each result carries only what you need to " +
-      "CHOOSE: `name` (the handle), `product`, `mode` (whether it writes), `intent` and " +
-      "`guidance` (what it does and what goes wrong), and `method`/`path` for products " +
-      "that publish no name yet. " +
-      "It does NOT carry parameters or response shapes. Once you have picked one, call " +
-      "describeCapability for its full contract, then invokeCapability. Fetching the " +
-      "contract only for the one you chose is the difference between ~1k and ~8.6k tokens " +
-      "a search. Results are ranked and capped. " +
-      "TO SEE EVERYTHING rather than search, pass query='*' — that lists the product " +
-      "(honouring `entity` and `mode`) in a stable order instead of ranking it, which is " +
-      "what you want when the task is 'what can this product do' rather than a lookup. " +
-      "TO PAGE, send `offset`: every response carries `offset` and, when more matched, " +
-      "`next_offset` — resend the SAME query with that value. `next_offset` is absent on " +
-      "the last page, so walk until it stops rather than comparing counts.",
+    "Find capabilities in ONE product by plain language. CALL listProducts FIRST; `product` must be spelled exactly as listProducts spells it. If `weak_match` is true, search again with `suggested_vocabulary` before invoking. Results are a shortlist: call describeCapability for the contract, then invokeCapability. query='*' lists all; page with `next_offset`.",
     {
       query: z
         .string()
-        .describe(
-          "What you are trying to do, in plain language. Pass '*' (or 'all') to BROWSE " +
-            "instead of search: every capability in the product, in a stable order, " +
-            "paginated — use it when you want to see the surface rather than find one thing.",
-        ),
+        .describe("Goal in plain language, or '*' to list every capability."),
       entity: z
         .string()
         .optional()
@@ -562,11 +517,7 @@ export function addCapabilityRegistryTools(
       // refused here instead, by a message that names listProducts.
       product: z
         .string()
-        .describe(
-          "Which product to search, named exactly as listProducts spells it. Call " +
-            "listProducts with the user's request to get the name — and to find out " +
-            "whether the products clash over it, in which case ask the user first.",
-        ),
+        .describe("Product name, exactly as listProducts spells it."),
       // `product_choice` USED TO LIVE HERE, AND WAS ITS OWN DEFEAT.
       //
       // A required enum of 'user_confirmed' | 'not_asked' publishes, in the schema every
@@ -580,20 +531,13 @@ export function addCapabilityRegistryTools(
         .string()
         .optional()
         .describe(
-          "The `routing_token` from the last listProducts call or product_ambiguous " +
-            "refusal — it carries what that step concluded about the user's request, " +
-            "signed. Always pass the most recent one. When it reports a clash, send the " +
-            "user's answer in `user_words` alongside it; neither works alone.",
+          "Latest `routing_token` from listProducts or a clash refusal; send with `user_words` after a clash.",
         ),
       user_words: z
         .string()
         .optional()
         .describe(
-          "The USER'S OWN words, verbatim, that settle which product this is — either " +
-            "the product's name or a term only one product uses ('quality gate', 'test " +
-            "plan'). Quote them; do not paraphrase, and do not write words the user did " +
-            "not say. When a query could mean either product this is what lifts the " +
-            "refusal, because it is checked against the index rather than taken on trust.",
+          "The user's own words, verbatim, naming the product or a term only it uses. Never paraphrase.",
         ),
       mode: z
         .enum(["read", "write", "destructive"])
@@ -603,10 +547,7 @@ export function addCapabilityRegistryTools(
       offset: z
         .number()
         .optional()
-        .describe(
-          "Skip this many results — send the `next_offset` from the previous response " +
-            "with the SAME query to get the next page. Omit for the first page.",
-        ),
+        .describe("`next_offset` from the previous page, with the same query."),
     },
     {
       title: "Search Capabilities",
@@ -911,16 +852,7 @@ export function addCapabilityRegistryTools(
 
   tools.describeCapability = server.tool(
     "describeCapability",
-    "The full contract for ONE capability you picked from searchCapability: its " +
-      "parameters grouped into path_params / query / body under the spec's own names, " +
-      "what it returns, and its declared response shapes fully expanded. Call this after " +
-      "search and before invokeCapability — search deliberately omits all of it, because " +
-      "it is only needed for the one capability you actually call. " +
-      "Identify it by `name`, exactly as search returned it; only when a result carries " +
-      "no `name` (some products publish none yet) pass `method` and `path` instead. " +
-      "Every parameter lists its type, whether it is required, its allowed values where " +
-      "the set is closed, and any limits the product declares — obey those before calling " +
-      "rather than discovering them from a rejected request.",
+    "Full contract (parameters, returns, response shapes) for ONE capability from searchCapability. Call it before invokeCapability. Identify by `name`; use `method` + `path` only when no name was returned.",
     {
       name: z
         .string()
@@ -942,17 +874,12 @@ export function addCapabilityRegistryTools(
         ),
       product: productArg()
         .optional()
-        .describe(
-          `Which product owns it (${productList}). searchCapability returns it on every ` +
-            "result; required only when two products share a name or a path.",
-        ),
+        .describe("Owning product; needed only when names or paths collide."),
       include_responses: z
         .enum(["success", "all", "none"])
         .optional()
         .describe(
-          "Which declared responses to expand: 'success' (default, the 2xx shape), 'all' " +
-            "(adds the error shapes — several times larger, and near-identical across " +
-            "endpoints), or 'none'.",
+          "'success' (default), 'all' (adds error shapes, larger) or 'none'.",
         ),
     },
     {
@@ -1049,17 +976,7 @@ export function addCapabilityRegistryTools(
 
   tools.invokeCapability = server.tool(
     "invokeCapability",
-    "Call a capability whose contract you have from describeCapability. Pass `name` exactly " +
-      "as given — that is the handle. Only when a result carries no `name` (some products " +
-      "do not publish them yet) pass `method` and `path` instead, exactly as returned. " +
-      "Arguments go in path_params / query / body under the spec's own names. One call " +
-      "makes exactly one request and returns the product's own response untouched; when " +
-      "`completed` is false there is another page, which you fetch by sending the " +
-      "capability's own page parameter. If the mode is 'write' you MUST ask the user " +
-      "first, then resend with user_permission='granted' and a change_summary; both are " +
-      "recorded. Capabilities whose mode is 'destructive' (deletes) are refused outright — " +
-      "archiving, closing and merging are ordinary writes and DO run, so read the mode and " +
-      "intent before confirming with the user.",
+    "Run a capability after describeCapability, by `name` (or `method` + `path` if unnamed); args go in path_params / query / body. If `completed` is false, fetch the next page. Writes: ask the user first, then resend with user_permission='granted' and a change_summary. Deletes are refused; archive, close and merge are writes.",
     {
       name: z
         .string()
@@ -1094,10 +1011,7 @@ export function addCapabilityRegistryTools(
         .describe("Body fields, under the spec's names."),
       product: productArg()
         .optional()
-        .describe(
-          `Which product owns the capability (${productList}). searchCapability returns it ` +
-            "on every result; required only when two products share a name or a path.",
-        ),
+        .describe("Owning product; needed only when names or paths collide."),
       user_permission: z
         .enum(PERMISSION_VALUES)
         .optional()

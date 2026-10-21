@@ -3,7 +3,7 @@ export const IMPORTANT_SETUP_WARNING =
   "If you cannot run commands or edit files in the user's project (e.g. a chat-only client), present every step below to the user in full — including each shell command, the package.json changes, and the complete browserstack.yml contents — instead of summarizing them.";
 
 export const SETUP_PERCY_DESCRIPTION =
-  "Set up or expand Percy visual testing configuration with comprehensive coverage for existing projects that might have Percy integrated. This supports both Percy Web Standalone and Percy Automate. Example prompts: Expand percy coverage for this project {project_name}";
+  "Set up or expand Percy visual testing coverage in a project, with or without existing Percy (Percy Web and Percy Automate).";
 
 export const LIST_TEST_FILES_DESCRIPTION =
   "Lists all test files for a given set of directories.";
@@ -12,9 +12,9 @@ export const PERCY_SNAPSHOT_COMMANDS_DESCRIPTION =
   "Adds Percy snapshot commands to the specified test files.";
 
 export const RUN_ON_BROWSERSTACK_DESCRIPTION =
-  "Set up and run automated web-based tests on BrowserStack using the BrowserStack SDK. Use this tool for functional or integration test setup on BrowserStack only. For any visual testing or Percy integration, use the dedicated Percy setup tool. Example prompts: run this test on browserstack; set up this project for browserstack.";
+  "Set up and run web tests on BrowserStack Automate with the SDK (functional or integration). For Percy visual testing use the Percy tool.";
 
-export const SIMULATE_PERCY_CHANGE_DESCRIPTION = `Integrate Percy visual testing into new projects and demonstrate visual change detection through a step-by-step simulation. This tool handles initial Percy integration, setup, and creates a working demonstration for new users. Primary tool for prompts like: "Integrate percy for this project", "Integrate percy in this project {project_name}"`;
+export const SIMULATE_PERCY_CHANGE_DESCRIPTION = `Integrate Percy visual testing into a new project and demo visual change detection step by step. Primary tool for "Integrate percy in this project".`;
 
 export const PERCY_REPLACE_REGEX =
   /Invoke listTestFiles\(\) with the provided directories[\s\S]*?- DO NOT STOP until you add commands in all the files or you reach end of the files\./;

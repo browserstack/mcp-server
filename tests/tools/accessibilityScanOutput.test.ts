@@ -42,6 +42,11 @@ vi.mock("../../src/logger.js", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() },
 }));
 vi.mock("../../src/lib/instrumentation.js", () => ({ trackMCP: vi.fn() }));
+// apiClient reaches the server entry through lib/utils; it must not start the server.
+vi.mock("../../src/index.js", () => ({
+  trackMCP: vi.fn(),
+  PackageJsonVersion: "0.0.0",
+}));
 
 import addAccessibilityTools, {
   REPORT_STATUS_POLL_MS,

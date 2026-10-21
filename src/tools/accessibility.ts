@@ -6,6 +6,7 @@ import {
   AccessibilityReportFetcher,
   type IssueSource,
 } from "./accessiblity-utils/report-fetcher.js";
+import type { AppBuildReport } from "./accessiblity-utils/app-report-fetcher.js";
 import {
   AccessibilityAuthConfig,
   safeAuthConfigData,
@@ -170,7 +171,7 @@ function issueSourceFrom(args: FetchIssuesArgs): RequestedSource | string {
     Boolean(args.reportUrl),
   ].filter(Boolean).length;
   if (named !== 1) {
-    return "Pass exactly one source: scanId with scanRunId (a Website Scanner run), buildId (an Automated Tests build), workflowReportId (a Workflow Analyzer report) or reportUrl (a report's dashboard link).";
+    return "Pass exactly one source: scanId with scanRunId (a Website Scanner run), buildId (an Automated Tests or App Accessibility build), workflowReportId (a Workflow Analyzer report) or reportUrl (a report's dashboard link).";
   }
   if (args.reportUrl) return { kind: "link", reportUrl: args.reportUrl };
   if (args.buildId) return { kind: "build", buildId: args.buildId };
@@ -189,6 +190,7 @@ function sourceArgs(source: IssueSource): string {
     case "scan":
       return `scanId: "${source.scanId}", scanRunId: "${source.scanRunId}"`;
     case "build":
+    case "appBuild":
       return `buildId: "${source.buildId}"`;
     case "workflow":
       return `workflowReportId: "${source.reportId}"`;
@@ -204,6 +206,8 @@ function describeSource(source: IssueSource): string {
       return `Automated Tests build ${source.buildId}`;
     case "workflow":
       return `Workflow Analyzer report ${source.reportId}`;
+    case "appBuild":
+      return `App Accessibility build ${source.buildId}`;
   }
 }
 
@@ -262,12 +266,13 @@ function excludedIssuesNote(
 export const REPORT_STATUS_POLL_MS = 10_000;
 export const REPORT_STATUS_WAIT_MS = 5 * 60 * 1000;
 
-/** Statuses during which a report's issues are still being added. */
+/** Statuses during which a report's issues are still being added (`rule_processing`: an app build's). */
 const PROCESSING_STATUSES = new Set([
   "queued",
   "running",
   "processing",
   "finalizing",
+  "rule_processing",
 ]);
 
 /**
@@ -351,6 +356,112 @@ function processingNote({
   return [];
 }
 
+/** How many issues the pages after this one still hold (an estimate past the first page). */
+function remainingIssues(
+  cursor: number,
+  page_length: number,
+  total_issues: number,
+  records: unknown[],
+): number {
+  const currentlyShown =
+    cursor === 0
+      ? page_length
+      : Math.floor(cursor / JSON.stringify(records[0] || {}).length) +
+        page_length;
+  return total_issues - currentlyShown;
+}
+
+/** The last line: how to get the next page, or that there is none. */
+function closingMessage(
+  next_page: number | null,
+  remaining: number,
+  source: IssueSource,
+  stillProcessing: boolean,
+): string {
+  if (next_page !== null) {
+    return `${remaining} more issues available. Use fetchAccessibilityIssues with ${sourceArgs(source)} and cursor: ${next_page} to get the next batch.`;
+  }
+  if (stillProcessing) {
+    return `All issues found so far retrieved; the report is still processing.`;
+  }
+  return `✅ All issues retrieved.`;
+}
+
+/**
+ * Why a finished app build has no scans. Each cause here produced a run that finished
+ * green with nothing scanned and no warning; they are listed most likely first, with what
+ * the build's own details say ahead of the rest.
+ */
+function noScansNote(report: AppBuildReport): string[] {
+  const causes = [
+    ...(report.fup_capped
+      ? [
+          "This build hit the fair-usage cap (fup in the build details), which drops tests or scans.",
+        ]
+      : []),
+    ...(report.status === "timeout"
+      ? [
+          'The session timed out during initialization (status "timeout"): check the script and the config.',
+        ]
+      : []),
+    "`accessibility: true` is not set in browserstack.yml (or the capabilities); the SDK defaults it to false.",
+    'The platform version is quoted in browserstack.yml (`platformVersion: "14.0"`): the SDK parses it as a number, fails on the string, and turns App Accessibility off without an error. Write it unquoted (`platformVersion: 14.0`).',
+    'The device runs Android 10 or older: App Accessibility needs Android 11 or newer (the build then reads "update_os_version").',
+    "The driver was created inside the test body: the SDK decides per test, at its start, from the drivers that already exist. Create it in a fixture or setup hook.",
+    "The test only read the screen (find_elements, page_source): scans run on interaction commands such as click/tap, send keys, actions and navigation. Interact with each screen you want scanned.",
+    ...(report.status === "timeout"
+      ? []
+      : [
+          'The session timed out during initialization (status "timeout"): check the script and the config.',
+        ]),
+  ];
+  return [
+    `No accessibility scans were recorded for App Accessibility build "${report.build_name}" (status: ${report.status}), so there are no issues to list. The usual causes, most likely first:`,
+    ...causes.map((cause, i) => `${i + 1}. ${cause}`),
+  ];
+}
+
+/** An app build's issues come inline from its scanned screens; there is no CSV to link. */
+async function appBuildMessages(
+  reportFetcher: AccessibilityReportFetcher,
+  source: { kind: "appBuild"; buildId: string },
+  cursor: number,
+  preface: string[],
+  processing: ProcessingState,
+  stillProcessing: boolean,
+): Promise<string[]> {
+  const report = await reportFetcher.appBuildReport(source.buildId, cursor);
+  const link = report.dashboard_link
+    ? [
+        `View the report on the App Accessibility dashboard: ${report.dashboard_link}`,
+      ]
+    : [];
+  if (report.scan_count === 0 && !stillProcessing) {
+    return [
+      ...preface,
+      ...processingNote(processing),
+      ...noScansNote(report),
+      ...link,
+    ];
+  }
+  const { records, page_length, total_issues, next_page } = report;
+  const screens = `${report.scan_count} screen${report.scan_count === 1 ? "" : "s"} scanned`;
+  return [
+    ...preface,
+    ...processingNote(processing),
+    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}) from App Accessibility build "${report.build_name}" (${screens})`,
+    ...excludedIssuesNote(null, 0, report.hidden_issues),
+    ...link,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
+    closingMessage(
+      next_page,
+      remainingIssues(cursor, page_length, total_issues, records),
+      source,
+      stillProcessing,
+    ),
+  ];
+}
+
 async function fetchAccessibilityIssues(
   requested: RequestedSource,
   config: BrowserStackConfig,
@@ -358,10 +469,12 @@ async function fetchAccessibilityIssues(
   context?: ScanProgressContext,
 ): Promise<CallToolResult> {
   const reportFetcher = await initializeReportFetcher(config);
-  const source =
+  const named =
     requested.kind === "link"
       ? await reportFetcher.sourceFromReportUrl(requested.reportUrl)
       : requested;
+  // A build id names a web build or a mobile app build; the APIs tell which.
+  const source = await reportFetcher.resolveBuild(named);
   const processing = await waitForProcessing(
     reportFetcher,
     source,
@@ -371,6 +484,24 @@ async function fetchAccessibilityIssues(
   const stillProcessing =
     processing.status !== undefined &&
     PROCESSING_STATUSES.has(processing.status);
+  const preface =
+    requested.kind === "link"
+      ? [`Resolved the report link to ${describeSource(source)}.`]
+      : [];
+
+  if (source.kind === "appBuild") {
+    return createSuccessResponse(
+      await appBuildMessages(
+        reportFetcher,
+        source,
+        cursor,
+        preface,
+        processing,
+        stillProcessing,
+      ),
+    );
+  }
+
   const reportLink = await reportFetcher.getReportLink(source);
 
   const {
@@ -383,37 +514,20 @@ async function fetchAccessibilityIssues(
     hidden_issues,
   } = await parseAccessibilityReportFromCSV(reportLink, { nextPage: cursor });
 
-  const currentlyShown =
-    cursor === 0
-      ? page_length
-      : Math.floor(cursor / JSON.stringify(records[0] || {}).length) +
-        page_length;
-  const remainingIssues = total_issues - currentlyShown;
-
-  const messages = [
-    ...(requested.kind === "link"
-      ? [`Resolved the report link to ${describeSource(source)}.`]
-      : []),
+  return createSuccessResponse([
+    ...preface,
     ...processingNote(processing),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     `You can also download the full report (CSV) from the following link, valid for about 12 hours: ${reportLink}`,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
-  ];
-
-  if (next_page !== null) {
-    messages.push(
-      `${remainingIssues} more issues available. Use fetchAccessibilityIssues with ${sourceArgs(source)} and cursor: ${next_page} to get the next batch.`,
-    );
-  } else if (stillProcessing) {
-    messages.push(
-      `All issues found so far retrieved; the report is still processing.`,
-    );
-  } else {
-    messages.push(`✅ All issues retrieved.`);
-  }
-
-  return createSuccessResponse(messages);
+    closingMessage(
+      next_page,
+      remainingIssues(cursor, page_length, total_issues, records),
+      source,
+      stillProcessing,
+    ),
+  ]);
 }
 
 async function executeAccessibilityScan(
@@ -688,10 +802,12 @@ export default function addAccessibilityTools(
 
   tools.startAccessibilityScan = server.tool(
     "startAccessibilityScan",
-    "Start an accessibility scan via BrowserStack and retrieve a local CSV report path.",
+    "Start an accessibility scan of a web page via BrowserStack and retrieve a local CSV report path. Web pages only: a mobile app (APK or IPA) is scanned by running it on App Automate with accessibility on. Set that up with setupBrowserStackAppAutomateTests (accessibility: true), run the tests, then read the issues with fetchAccessibilityIssues using the build id the SDK prints.",
     {
       name: z.string().describe("Name of the accessibility scan"),
-      pageURL: z.string().describe("The URL to scan for accessibility issues"),
+      pageURL: z
+        .string()
+        .describe("The web page URL to scan for accessibility issues"),
       authConfigId: z
         .number()
         .optional()

@@ -9,6 +9,9 @@ const m = vi.hoisted(() => ({
   getReportLink: vi.fn(),
   sourceFromReportUrl: vi.fn(),
   reportStatus: vi.fn(),
+  // A build id is probed on both APIs; by default it stays what it was named as.
+  resolveBuild: vi.fn(async (source: unknown) => source),
+  appBuildReport: vi.fn(),
   parse: vi.fn(),
 }));
 
@@ -25,6 +28,8 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     getReportLink = m.getReportLink;
     sourceFromReportUrl = m.sourceFromReportUrl;
     reportStatus = m.reportStatus;
+    resolveBuild = m.resolveBuild;
+    appBuildReport = m.appBuildReport;
   },
 }));
 vi.mock("../../src/tools/accessiblity-utils/report-parser.js", () => ({
@@ -423,5 +428,146 @@ describe("fetchAccessibilityIssues and a report still processing", () => {
 
     expect(m.reportStatus).toHaveBeenCalledTimes(1);
     expect(text(result)).toContain("✅ All issues retrieved.");
+  });
+});
+
+describe("fetchAccessibilityIssues and App Accessibility builds", () => {
+  const BUILD_ID = "m3k8p2q7w1x5c9v4b6n0z2r8t3y7u1i5o9a4s2df";
+  const LINK =
+    "https://app-accessibility.browserstack.com/automated-tests/projects/123456/builds/Checkout+Build/8";
+  const sendNotification = vi.fn();
+  const context = { sendNotification, _meta: { progressToken: "tok" } };
+  let handlers: Record<string, (...args: any[]) => any>;
+
+  /** Three issues over two screens, one hidden; the first page holds one row. */
+  const APP_REPORT = {
+    records: [
+      {
+        issue_type: "Interactive Element Accessibility Label",
+        rule_id: "interactable-element-content-label",
+        severity: "critical",
+      },
+    ],
+    page_length: 1,
+    total_issues: 3,
+    next_page: 140,
+    hidden_issues: 1,
+    scan_count: 2,
+    status: "failed",
+    build_name: "Checkout Build",
+    dashboard_link: LINK,
+    fup_capped: false,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    m.resolveBuild.mockResolvedValue({ kind: "appBuild", buildId: BUILD_ID });
+    m.reportStatus.mockResolvedValue("failed");
+    m.appBuildReport.mockResolvedValue(APP_REPORT);
+    handlers = register();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    m.resolveBuild.mockImplementation(async (source: unknown) => source);
+  });
+
+  it("reads an app build's issues by its build id and names the dashboard report", async () => {
+    const result = await handlers.fetchAccessibilityIssues(
+      { buildId: BUILD_ID },
+      context,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(m.appBuildReport).toHaveBeenCalledWith(BUILD_ID, 0);
+    expect(m.getReportLink).not.toHaveBeenCalled();
+    expect(m.parse).not.toHaveBeenCalled();
+    const body = text(result);
+    expect(body).toContain(
+      'Retrieved 1 accessibility issues (Total: 3) from App Accessibility build "Checkout Build" (2 screens scanned)',
+    );
+    expect(body).toContain(
+      "1 issues hidden in the dashboard are not included, as the dashboard leaves them out of its count too.",
+    );
+    expect(body).toContain(
+      `View the report on the App Accessibility dashboard: ${LINK}\n`,
+    );
+    expect(body).not.toContain("CSV");
+    expect(body).toContain(
+      `Use fetchAccessibilityIssues with buildId: "${BUILD_ID}" and cursor: 140`,
+    );
+  });
+
+  it("waits while an app build's rules are still processing", async () => {
+    m.reportStatus
+      .mockResolvedValueOnce("rule_processing")
+      .mockResolvedValueOnce("failed");
+
+    const pending = handlers.fetchAccessibilityIssues(
+      { buildId: BUILD_ID },
+      context,
+    );
+    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_MS);
+    const result = await pending;
+
+    expect(m.reportStatus).toHaveBeenCalledTimes(2);
+    expect(m.appBuildReport).toHaveBeenCalledTimes(1);
+    expect(text(result)).toContain(
+      "The report was still processing (status: rule_processing); waited",
+    );
+  });
+
+  it("lists the likely causes when a finished app build recorded no scans", async () => {
+    m.reportStatus.mockResolvedValue("passed");
+    m.appBuildReport.mockResolvedValue({
+      ...APP_REPORT,
+      records: [],
+      page_length: 0,
+      total_issues: 0,
+      next_page: null,
+      hidden_issues: 0,
+      scan_count: 0,
+      status: "passed",
+      fup_capped: true,
+    });
+
+    const result = await handlers.fetchAccessibilityIssues(
+      { buildId: BUILD_ID },
+      context,
+    );
+
+    expect(result.isError).toBeFalsy();
+    const body = text(result);
+    expect(body).toContain(
+      'No accessibility scans were recorded for App Accessibility build "Checkout Build" (status: passed)',
+    );
+    expect(body).toContain("fair-usage cap");
+    expect(body).toContain("accessibility: true");
+    expect(body).toContain("unquoted");
+    expect(body).toContain("Android 11");
+    expect(body).toContain("fixture");
+    expect(body).toContain("interaction");
+    expect(body).toContain(LINK);
+    expect(body).not.toContain("Retrieved 0");
+  });
+
+  it("resolves an App Accessibility dashboard link and pages by the build id", async () => {
+    m.sourceFromReportUrl.mockResolvedValue({
+      kind: "appBuild",
+      buildId: BUILD_ID,
+    });
+
+    const result = await handlers.fetchAccessibilityIssues(
+      { reportUrl: LINK },
+      context,
+    );
+
+    expect(m.sourceFromReportUrl).toHaveBeenCalledWith(LINK);
+    const body = text(result);
+    expect(body).toContain(
+      `Resolved the report link to App Accessibility build ${BUILD_ID}.`,
+    );
+    expect(body).toContain(`buildId: "${BUILD_ID}" and cursor: 140`);
   });
 });

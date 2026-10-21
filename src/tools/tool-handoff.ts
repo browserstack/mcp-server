@@ -89,8 +89,9 @@ export const NEEDS_SESSION_ID =
   "build either, getBuildId or listBuildId resolves one from a project and build name.";
 
 /**
- * A scan run's ids come from startAccessibilityScan. Nothing here lists builds or reports,
- * but the tool takes a report's dashboard link and looks the ids up itself.
+ * A scan run's ids come from startAccessibilityScan; a build's id is printed by the SDK at
+ * the end of its run. Nothing here lists builds or reports, but the tool takes a report's
+ * dashboard link and looks the ids up itself.
  */
 export const NEEDS_A11Y_SCAN_ID =
   " Ids: startAccessibilityScan or a dashboard link; nothing here lists reports.";

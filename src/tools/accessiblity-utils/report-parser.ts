@@ -1,6 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
 import { parse } from "csv-parse/sync";
 import logger from "../../logger.js";
+import { pageOf, sortBySeverity } from "./paginate.js";
 
 type SimplifiedAccessibilityIssue = {
   issue_type: string;
@@ -148,43 +149,12 @@ export async function parseAccessibilityReportFromCSV(
     else unlinkedDuplicates++;
   }
 
-  const totalIssues = all.length;
+  // 3) Most severe first, in pages by JSON length
+  const page = pageOf(sortBySeverity(all), { maxCharacterLength, nextPage });
 
-  // 3) Sort by severity
-  const order: Record<string, number> = {
-    critical: 0,
-    serious: 1,
-    moderate: 2,
-    minor: 3,
-  };
-  all.sort((a, b) => (order[a.severity] ?? 99) - (order[b.severity] ?? 99));
-
-  // 4) Walk to the starting offset
-  let charCursor = 0;
-  let idx = 0;
-  for (; idx < all.length; idx++) {
-    const len = JSON.stringify(all[idx]).length;
-    if (charCursor + len > nextPage) break;
-    charCursor += len;
-  }
-
-  // 5) Collect up to maxCharacterLength
-  const page: SimplifiedAccessibilityIssue[] = [];
-  for (let i = idx; i < all.length; i++) {
-    const recStr = JSON.stringify(all[i]);
-    if (charCursor - nextPage + recStr.length > maxCharacterLength) break;
-    page.push(all[i]);
-    charCursor += recStr.length;
-  }
-
-  const pageLength = page.length;
-
-  const hasMore = idx + pageLength < totalIssues;
   return {
-    records: page,
-    next_page: hasMore ? charCursor : null,
-    page_length: pageLength,
-    total_issues: totalIssues,
+    ...page,
+    total_issues: all.length,
     duplicate_issues: grouped ? duplicates : null,
     unlinked_duplicates: unlinkedDuplicates,
     hidden_issues: columns.includes(STATUS_COLUMN)

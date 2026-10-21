@@ -95,6 +95,19 @@ describe("Accessibility Tools", () => {
     addAccessibilityTools(serverMock, mockConfig);
   });
 
+  it("says where mobile app accessibility is served, as the scan tool takes web pages only", () => {
+    const description = (name: string) =>
+      serverMock.tool.mock.calls.find((c: any[]) => c[0] === name)[1];
+
+    expect(description("startAccessibilityScan")).toMatch(/web page/i);
+    expect(description("startAccessibilityScan")).toContain(
+      "setupBrowserStackAppAutomateTests",
+    );
+    expect(description("fetchAccessibilityIssues")).toContain(
+      "App Accessibility",
+    );
+  });
+
   it("registers all 5 accessibility tools", () => {
     const toolNames = serverMock.tool.mock.calls.map((c: any[]) => c[0]);
     expect(toolNames).toContain("accessibilityExpert");

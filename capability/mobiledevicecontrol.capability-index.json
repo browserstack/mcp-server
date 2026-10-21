@@ -464,7 +464,7 @@
      "The on-screen keyboard may stay open afterwards and cover lower elements \u2014 re-read the page source before the next tap.",
      "There is no way to empty a field on this surface: the standard clear endpoint answers 200 without reliably emptying it, so typing the value you want is the way to set it \u2014 and on iOS, where this appends, there is no way to correct a field you have already typed into.",
      "The keyboard is usually left open afterwards. On Android, hide_keyboard closes it. On iOS it cannot be closed without submitting, so read hide_keyboard's guidance before planning a tap below the field.",
-     "Sending a newline closes the keyboard on iOS by SUBMITTING the field: the field resets to its placeholder and the value moves wherever the app sends it. Use it to dismiss the keyboard only when submitting is what you wanted anyway; see hide_keyboard for what the alternatives do."
+     "Sending a newline closes the keyboard on iOS by pressing Return, which an app that commits on editing-ended will treat as a submit \u2014 the field resets and the value moves wherever the app sends it. The commit is the app's doing, not the newline's: dismissing the same field any other way can commit it too. See hide_keyboard."
     ],
     "path_params": [
      {
@@ -1451,9 +1451,9 @@
      "The response is true when a keyboard was dismissed and false when none was showing; false is not an error.",
      "A tap aimed at a control hidden behind the keyboard lands on the keyboard instead and reports success, so close it first rather than afterwards.",
      "On iOS this FAILS rather than quietly doing nothing: 400 \"invalid element state\", message \"Did not know how to dismiss the keyboard\". The keyboard stays up and the field keeps what was typed, so treat the 400 as the normal answer on iOS and not as a broken call.",
-     "What does close it on iOS closes it BY SUBMITTING: send_keys with a newline, or execute_script with 'mobile: hideKeyboard' and args [{\"keys\":[\"return\"]}]. Both press Return, so the field is submitted and cleared to its placeholder and the value moves wherever the app sends it \u2014 that is a change to the app, not just to the keyboard.",
-     "The keys argument names a key on the APP'S OWN keyboard, so it fails the same way when that key is absent: [\"Done\"] returns the same 400 on a keyboard that offers only Return. Omitting keys fails too, and tapping an empty area above the keyboard with perform_actions returns 200 and changes nothing.",
-     "So on iOS there may be no way to put the keyboard away without submitting. Prefer a flow that does not need to tap underneath it \u2014 read values from get_page_source rather than tapping a control the keyboard covers. On Android this capability works normally.",
+     "What DOES close it on iOS is execute_script with 'mobile: hideKeyboard' and a key the keyboard actually has, in args [{\"keys\":[\"<key>\"]}]. An iPad keyboard carries a \"Hide keyboard\" key and that closes it cleanly \u2014 200, is_keyboard_shown false, no Return pressed. An iPhone keyboard of this kind usually offers only the return key, and pressing that is also a submit.",
+     "The keys argument names a key on the APP'S OWN keyboard and fails when that key is absent: [\"Done\"] returns the same 400 on a keyboard that offers only Return. Read the keyboard from get_page_source first and pick from the keys that are really there rather than guessing \u2014 that also tells you in advance when the only option is one that submits. Omitting keys fails too, and tapping an empty area above the keyboard with perform_actions returns 200 and changes nothing.",
+     "WHETHER THE FIELD SURVIVES IS THE APP'S BUSINESS, NOT THE KEYBOARD'S. An app that commits on editing-ended will commit however the keyboard is dismissed \u2014 measured: closing an iPad keyboard with \"Hide keyboard\" still moved the text out of the field. So do not expect any dismissal to be side-effect free; check the app's own behaviour. On Android hide_keyboard works normally.",
      "is_keyboard_shown reports the state this changes, and is the reliable way to tell whether the keyboard actually went away."
     ],
     "path_params": [

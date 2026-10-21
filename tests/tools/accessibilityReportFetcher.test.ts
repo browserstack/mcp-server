@@ -5,6 +5,7 @@ vi.mock("../../src/lib/apiClient.js", () => ({
 }));
 
 import { apiClient } from "../../src/lib/apiClient.js";
+import { getAutomationBaseUrl } from "../../src/tools/rca-agent-utils/constants.js";
 import {
   AccessibilityReportFetcher,
   IssueSource,
@@ -166,5 +167,88 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl", () => {
       ),
     ).rejects.toThrow(/thBuildId/);
     expect(get).not.toHaveBeenCalled();
+  });
+});
+
+describe("AccessibilityReportFetcher.sourceFromReportUrl for Automate links", () => {
+  const AUTOMATE_BUILD = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c";
+  const SESSION = "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d";
+  const DASHBOARD = "https://automate.browserstack.com/dashboard/v2/builds";
+  const testCodeUrl = `${getAutomationBaseUrl()}/ext/v1/sessions/${SESSION}/testCode`;
+  const testCode = (buildUuid?: string) => ({
+    ok: true,
+    status: 200,
+    data: { session_id: SESSION, build_uuid: buildUuid, tests: [] },
+  });
+  const urls = () => get.mock.calls.map(([options]) => options.url);
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("maps a session link to the accessibility build it ran in", async () => {
+    get
+      .mockResolvedValueOnce(testCode(BUILD_ID))
+      .mockResolvedValueOnce(ok({ id: BUILD_ID }));
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `${DASHBOARD}/${AUTOMATE_BUILD}/sessions/${SESSION}`,
+      ),
+    ).resolves.toEqual({ kind: "build", buildId: BUILD_ID });
+    expect(urls()).toEqual([
+      testCodeUrl,
+      `${API}/automated-tests/v1/builds/${BUILD_ID}`,
+    ]);
+  });
+
+  it("maps a build link through one of its sessions", async () => {
+    get
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [{ automation_session: { hashed_id: SESSION } }],
+      })
+      .mockResolvedValueOnce(testCode(BUILD_ID))
+      .mockResolvedValueOnce(ok({ id: BUILD_ID }));
+
+    await expect(
+      fetcher().sourceFromReportUrl(`${DASHBOARD}/${AUTOMATE_BUILD}`),
+    ).resolves.toEqual({ kind: "build", buildId: BUILD_ID });
+    expect(urls()[0]).toBe(
+      `https://api.browserstack.com/automate/builds/${AUTOMATE_BUILD}/sessions.json?limit=1`,
+    );
+  });
+
+  it("says a session not run through the SDK has no accessibility results", async () => {
+    get.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      data: { message: "Session not found" },
+    });
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `${DASHBOARD}/${AUTOMATE_BUILD}/sessions/${SESSION}`,
+      ),
+    ).rejects.toThrow(/not linked to a BrowserStack SDK build/);
+  });
+
+  it("says an SDK run without accessibility testing has no results", async () => {
+    get
+      .mockResolvedValueOnce(testCode(BUILD_ID))
+      .mockResolvedValueOnce(failed(404, ["Build not found"]));
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `${DASHBOARD}/${AUTOMATE_BUILD}/sessions/${SESSION}`,
+      ),
+    ).rejects.toThrow(/accessibility testing was not on/);
+  });
+
+  it("names an Automate build it does not know", async () => {
+    get.mockResolvedValueOnce({ ok: false, status: 404, data: null });
+
+    await expect(
+      fetcher().sourceFromReportUrl(`${DASHBOARD}/${AUTOMATE_BUILD}`),
+    ).rejects.toThrow(`No Automate build with id ${AUTOMATE_BUILD}`);
   });
 });

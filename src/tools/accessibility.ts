@@ -697,7 +697,7 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues with pagination support, from exactly one source: a completed Website Scanner run (scanId with scanRunId), an Automated Tests build from a BrowserStack SDK test run (buildId), a Workflow Analyzer report (workflowReportId), or a Website Scanner or Automated Tests report's dashboard link (reportUrl). Also returns a link to download the full report as a CSV. Use cursor parameter to get subsequent pages of results." +
+    "Fetch accessibility issues with pagination support, from exactly one source: a completed Website Scanner run (scanId with scanRunId), an Automated Tests build from a BrowserStack SDK test run (buildId), a Workflow Analyzer report (workflowReportId), or a link (reportUrl) to a Website Scanner or Automated Tests report or to an Automate build or session, for the accessibility issues of that Automate run. Also returns a link to download the full report as a CSV. Use cursor parameter to get subsequent pages of results." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z
@@ -716,7 +716,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          "Automated Tests: the Accessibility build id, shown as thBuildId in the build's accessibility report link (40 lowercase letters and digits). Not the Automate build id or the build name.",
+          "Automated Tests: the Accessibility build id, shown as thBuildId in the build's accessibility report link (40 lowercase letters and digits). Not the Automate build id or the build name; for an Automate build, pass its Automate link as reportUrl.",
         ),
       workflowReportId: z
         .string()
@@ -726,7 +726,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          "A report's Accessibility dashboard link, as the user pasted it: a Website Scanner or Automated Tests report link carrying thBuildId. A Website Scanner link resolves only to its scan's latest run. Workflow Analyzer links are not supported; use workflowReportId.",
+          "A link as the user pasted it: a Website Scanner or Automated Tests report link from the Accessibility dashboard (carrying thBuildId), or an Automate build or session link from automate.browserstack.com. A Website Scanner link resolves only to its scan's latest run. An Automate link resolves to the whole build's accessibility issues, also for a session link, and only for runs made through the BrowserStack SDK with accessibility testing on. Workflow Analyzer links are not supported; use workflowReportId.",
         ),
       cursor: z
         .number()

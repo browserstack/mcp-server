@@ -1,4 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
+import { SessionType } from "../../lib/constants.js";
+import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
+import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
 
 interface ReportInitResponse {
   success: true;
@@ -91,9 +94,20 @@ function startFailure(source: IssueSource, status: number, body: any): string {
   // The API takes only its own build id; the Automate build id is a 404 "Build not found".
   const hint =
     status === 404 && source.kind === "build"
-      ? ". Pass the Accessibility build id: the thBuildId in the build's accessibility report link (40 lowercase letters and digits), not the Automate build id or the build name"
+      ? ". Pass the Accessibility build id: the thBuildId in the build's accessibility report link (40 lowercase letters and digits), not the Automate build id or the build name. For an Automate build or session, pass its Automate dashboard link as reportUrl"
       : "";
   return `Failed to initiate report: ${reason}${hint}`;
+}
+
+/** The build and session ids an Automate dashboard link carries, if it is one. */
+function automateIds(
+  url: URL,
+): { buildId?: string; sessionId?: string } | undefined {
+  if (url.hostname !== "automate.browserstack.com") return undefined;
+  return {
+    buildId: url.pathname.match(/\/builds\/([0-9a-f]{40})(?:\/|$)/i)?.[1],
+    sessionId: url.pathname.match(/\/sessions\/([0-9a-f]{40})(?:\/|$)/i)?.[1],
+  };
 }
 
 export class AccessibilityReportFetcher {
@@ -114,9 +128,11 @@ export class AccessibilityReportFetcher {
 
   /**
    * The source a dashboard report link points at. An Automated Tests link carries the build
-   * id itself. A Website Scanner link carries the thBuildId of one run, which only the scan
-   * list can map to ids: each scan there carries its latest run's link. A link to an older
-   * run therefore matches no scan, and is reported as such rather than guessed at.
+   * id itself. An Automate build or session link is mapped to that build through a session
+   * (see buildOfAutomateSession). A Website Scanner link carries the thBuildId of one run,
+   * which only the scan list can map to ids: each scan there carries its latest run's link.
+   * A link to an older run therefore matches no scan, and is reported as such rather than
+   * guessed at.
    */
   async sourceFromReportUrl(reportUrl: string): Promise<IssueSource> {
     let url: URL | undefined;
@@ -124,6 +140,15 @@ export class AccessibilityReportFetcher {
       url = new URL(reportUrl);
     } catch {
       url = undefined;
+    }
+    const automate = url && automateIds(url);
+    if (automate?.sessionId) {
+      return this.buildOfAutomateSession(automate.sessionId);
+    }
+    if (automate?.buildId) {
+      return this.buildOfAutomateSession(
+        await this.anyAutomateSession(automate.buildId),
+      );
     }
     const thBuildId = url?.searchParams.get("thBuildId");
     if (url && thBuildId && url.pathname.includes("/automated-tests/")) {
@@ -136,8 +161,71 @@ export class AccessibilityReportFetcher {
       return this.findScanRun(thBuildId, decodeURIComponent(scanName));
     }
     throw new Error(
-      "This link does not name a report the API can look up. Pass an Automated Tests or Website Scanner report link from the Accessibility dashboard (both carry thBuildId), or the ids: scanId with scanRunId, buildId, or workflowReportId",
+      "This link does not name a report the API can look up. Pass an Automated Tests or Website Scanner report link from the Accessibility dashboard (both carry thBuildId), an Automate build or session link, or the ids: scanId with scanRunId, buildId, or workflowReportId",
     );
+  }
+
+  /** Any one session of an Automate build; every session of an SDK run names the same build. */
+  private async anyAutomateSession(automateBuildId: string): Promise<string> {
+    const resp = await apiClient.get({
+      url: `${sessionsListUrl(SessionType.Automate, automateBuildId)}?limit=1`,
+      headers: this.authHeaders(),
+      raise_error: false,
+    });
+    if (resp.status === 404) {
+      throw new Error(`No Automate build with id ${automateBuildId}`);
+    }
+    if (!resp.ok) {
+      throw new Error(
+        `Could not list the sessions of Automate build ${automateBuildId}: HTTP ${resp.status}`,
+      );
+    }
+    const sessionId = resp.data?.[0]?.automation_session?.hashed_id;
+    if (!sessionId) {
+      throw new Error(`Automate build ${automateBuildId} has no sessions`);
+    }
+    return sessionId;
+  }
+
+  /**
+   * The Accessibility build an Automate session ran in. A session run through the BrowserStack
+   * SDK belongs to the SDK's build, whose id is also the Accessibility build id, and the
+   * session's test-code record names it (build_uuid). A session run without the SDK has no
+   * such record, and an SDK run without accessibility testing has a build the Accessibility
+   * API does not know; both are said plainly instead of surfacing later as a bare 404.
+   */
+  private async buildOfAutomateSession(
+    sessionId: string,
+  ): Promise<IssueSource> {
+    const resp = await apiClient.get({
+      url: `${getAutomationBaseUrl()}/ext/v1/sessions/${encodeURIComponent(sessionId)}/testCode`,
+      headers: this.authHeaders(),
+      raise_error: false,
+    });
+    if (!resp.ok && resp.status !== 404) {
+      throw new Error(
+        `Could not read Automate session ${sessionId}: HTTP ${resp.status}`,
+      );
+    }
+    const buildId: string | undefined = resp.ok
+      ? resp.data?.build_uuid
+      : undefined;
+    if (!buildId) {
+      throw new Error(
+        `Automate session ${sessionId} is not linked to a BrowserStack SDK build (it was not run through the SDK, or belongs to another account), so it has no accessibility results`,
+      );
+    }
+    const build = await apiClient.get({
+      url: `${API_BASE}/automated-tests/v1/builds/${encodeURIComponent(buildId)}`,
+      headers: this.authHeaders(),
+      raise_error: false,
+    });
+    if (build.status === 404) {
+      throw new Error(
+        `This Automate run belongs to build ${buildId}, which has no accessibility results: accessibility testing was not on for it`,
+      );
+    }
+    return { kind: "build", buildId };
   }
 
   /** Walk the newest scans for the one whose own link carries this thBuildId. */

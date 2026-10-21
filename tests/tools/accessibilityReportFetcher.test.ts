@@ -8,6 +8,7 @@ import { apiClient } from "../../src/lib/apiClient.js";
 import {
   AccessibilityReportFetcher,
   IssueSource,
+  MAX_SCAN_LIST_PAGES,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
 
 const get = apiClient.get as Mock;
@@ -90,5 +91,80 @@ describe("AccessibilityReportFetcher.getReportLink", () => {
     await expect(
       fetcher().getReportLink({ kind: "workflow", reportId: "abc" }),
     ).rejects.toThrow("Report id must be an Integer");
+  });
+});
+
+describe("AccessibilityReportFetcher.sourceFromReportUrl", () => {
+  const DASHBOARD = "https://accessibility.browserstack.com";
+  const scannerLink = (name: string, thBuildId: string) =>
+    `${DASHBOARD}/site-scanner/projects/${encodeURIComponent(name)}/builds?thBuildId=${thBuildId}&recurring=false&tunnel_vision=false`;
+  const scan = (
+    id: number,
+    name: string,
+    thBuildId: string,
+    scanRunId: number,
+  ) => ({
+    id,
+    name,
+    scanUrl: scannerLink(name, thBuildId),
+    lastScanDetails: { scanRunId },
+  });
+  const scansPage = (scans: unknown[], nextPage?: string) =>
+    ok({ scans, pagination: { hasNext: Boolean(nextPage), nextPage } });
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("takes an Automated Tests link's build id without calling the API", async () => {
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `${DASHBOARD}/automated-tests/projects/p/builds/b/1?thBuildId=${BUILD_ID}`,
+      ),
+    ).resolves.toEqual({ kind: "build", buildId: BUILD_ID });
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("finds a Website Scanner link's scan and latest run by paging the scan list", async () => {
+    get
+      .mockResolvedValueOnce(scansPage([scan(1, "other", "aaa", 11)], "tok2"))
+      .mockResolvedValueOnce(
+        scansPage([scan(1234, "checkout fix", "bbb", 5678)]),
+      );
+
+    await expect(
+      fetcher().sourceFromReportUrl(scannerLink("checkout fix", "bbb")),
+    ).resolves.toEqual({ kind: "scan", scanId: "1234", scanRunId: "5678" });
+    // No limit: larger pages make the list skip scans, so it is walked at its default size.
+    expect(get.mock.calls.map(([options]) => options.url)).toEqual([
+      `${API}/website-scanner/v1/scans`,
+      `${API}/website-scanner/v1/scans?nextPage=tok2`,
+    ]);
+  });
+
+  it("names the scan when the link is to one of its earlier runs", async () => {
+    get.mockResolvedValueOnce(
+      scansPage([scan(1234, "checkout fix", "newer", 5678)]),
+    );
+
+    await expect(
+      fetcher().sourceFromReportUrl(scannerLink("checkout fix", "older")),
+    ).rejects.toThrow(/earlier run of scan "checkout fix" \(scanId 1234\)/);
+  });
+
+  it("stops after the newest scans and asks for the ids", async () => {
+    get.mockResolvedValue(scansPage([scan(1, "other", "aaa", 11)], "more"));
+
+    await expect(
+      fetcher().sourceFromReportUrl(scannerLink("checkout fix", "bbb")),
+    ).rejects.toThrow(/most recent scans.*scanId and scanRunId/s);
+    expect(get).toHaveBeenCalledTimes(MAX_SCAN_LIST_PAGES);
+  });
+
+  it("refuses a link that carries no report id", async () => {
+    await expect(
+      fetcher().sourceFromReportUrl(
+        "https://scanner.browserstack.com/site-scanner/scan-details/checkout",
+      ),
+    ).rejects.toThrow(/thBuildId/);
+    expect(get).not.toHaveBeenCalled();
   });
 });

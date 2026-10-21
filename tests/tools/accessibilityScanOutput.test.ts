@@ -61,7 +61,7 @@ const text = (result: any) =>
 
 const CONTEXT = { sendNotification: vi.fn(), _meta: {} };
 
-/** A grouped report: 79 main issues, 43 duplicates (all matched). */
+/** A grouped report: 79 main issues, 43 duplicates (all matched), nothing hidden. */
 const GROUPED = {
   records: [{ issue_type: "select-name", duplicate_count: 0 }],
   page_length: 1,
@@ -69,6 +69,7 @@ const GROUPED = {
   next_page: 140,
   duplicate_issues: 43,
   unlinked_duplicates: 0,
+  hidden_issues: 0,
 };
 
 describe("accessibility issue counts", () => {
@@ -100,7 +101,7 @@ describe("accessibility issue counts", () => {
     expect(body).not.toContain("could not be matched");
   });
 
-  it("fetchAccessibilityIssues reports main issues as the total and names unmatched duplicates", async () => {
+  it("fetchAccessibilityIssues says folded only for the duplicates it could match", async () => {
     m.parse.mockResolvedValue({ ...GROUPED, unlinked_duplicates: 2 });
     const result = await handlers.fetchAccessibilityIssues(
       { scanId: "scan-42", scanRunId: "run-7" },
@@ -110,15 +111,46 @@ describe("accessibility issue counts", () => {
     const body = text(result);
     expect(body).toContain("Retrieved 1 accessibility issues (Total: 79)");
     expect(body).toContain(
-      "43 duplicate occurrences are folded into their main issue",
+      "43 duplicate occurrences are not included in the total. 41 are folded into their main issue (see duplicate_count); 2 could not be matched to one.",
     );
-    expect(body).toContain("2 of them could not be matched");
   });
 
-  it("adds no duplicates note for a report without duplicates", async () => {
+  it("does not point at duplicate_count when no duplicate could be matched", async () => {
+    m.parse.mockResolvedValue({ ...GROUPED, unlinked_duplicates: 43 });
+    const result = await handlers.fetchAccessibilityIssues(
+      { scanId: "scan-42", scanRunId: "run-7" },
+      CONTEXT,
+    );
+
+    const body = text(result);
+    expect(body).toContain(
+      "43 duplicate occurrences are not included in the total.",
+    );
+    // The note itself; the records below still carry the field.
+    expect(body).not.toMatch(
+      /not included in the total\.[^\n]*duplicate_count/,
+    );
+  });
+
+  it("states the hidden issues it left out", async () => {
+    m.parse.mockResolvedValue({ ...GROUPED, hidden_issues: 122 });
+    const result = await handlers.startAccessibilityScan(
+      { name: "hidden", pageURL: "https://site.example" },
+      CONTEXT,
+    );
+
+    const body = text(result);
+    expect(body).toContain("We found 79 issues.");
+    expect(body).toContain(
+      "122 issues hidden in the dashboard are not included, as the dashboard leaves them out of its count too.",
+    );
+  });
+
+  it("adds no note for a report without duplicates or hidden issues", async () => {
     m.parse.mockResolvedValue({
       ...GROUPED,
       duplicate_issues: null,
+      hidden_issues: null,
       next_page: null,
     });
     const result = await handlers.startAccessibilityScan(
@@ -129,6 +161,7 @@ describe("accessibility issue counts", () => {
     const body = text(result);
     expect(body).toContain("We found 79 issues.");
     expect(body).not.toContain("duplicate occurrences");
+    expect(body).not.toContain("hidden");
   });
 
   it("keeps the report link intact when a client joins the blocks with no separator", async () => {

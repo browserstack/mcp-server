@@ -169,16 +169,34 @@ async function executeFetchAccessibilityIssues(
   }
 }
 
-/** How grouped reports' duplicates were handled, or nothing for an ungrouped report. */
-function duplicatesNote(duplicates: number | null, unlinked: number): string[] {
-  if (!duplicates) return [];
-  const unmatched =
-    unlinked > 0
-      ? ` ${unlinked} of them could not be matched to a main issue and are counted only here.`
-      : "";
-  return [
-    `This report groups repeated occurrences: ${duplicates} duplicate occurrences are folded into their main issue (see duplicate_count) and are not included in the total.${unmatched}`,
-  ];
+/**
+ * What the total leaves out, as the dashboard's count does: duplicate occurrences (folded
+ * into their main issue only where one could be matched) and issues hidden in the dashboard.
+ */
+function excludedIssuesNote(
+  duplicates: number | null,
+  unlinked: number,
+  hidden: number | null,
+): string[] {
+  const notes: string[] = [];
+  if (duplicates) {
+    const folded = duplicates - unlinked;
+    const how =
+      unlinked === 0
+        ? " are folded into their main issue (see duplicate_count) and are not included in the total."
+        : folded > 0
+          ? ` are not included in the total. ${folded} are folded into their main issue (see duplicate_count); ${unlinked} could not be matched to one.`
+          : " are not included in the total.";
+    notes.push(
+      `This report groups repeated occurrences: ${duplicates} duplicate occurrences${how}`,
+    );
+  }
+  if (hidden) {
+    notes.push(
+      `${hidden} issues hidden in the dashboard are not included, as the dashboard leaves them out of its count too.`,
+    );
+  }
+  return notes;
 }
 
 async function fetchAccessibilityIssues(
@@ -197,6 +215,7 @@ async function fetchAccessibilityIssues(
     next_page,
     duplicate_issues,
     unlinked_duplicates,
+    hidden_issues,
   } = await parseAccessibilityReportFromCSV(reportLink, { nextPage: cursor });
 
   const currentlyShown =
@@ -208,7 +227,7 @@ async function fetchAccessibilityIssues(
 
   const messages = [
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
-    ...duplicatesNote(duplicate_issues, unlinked_duplicates),
+    ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
   ];
 
@@ -445,6 +464,7 @@ async function runAccessibilityScan(
     next_page,
     duplicate_issues,
     unlinked_duplicates,
+    hidden_issues,
   } = await parseAccessibilityReportFromCSV(reportLink);
 
   return createScanSuccessResponse(
@@ -456,7 +476,7 @@ async function runAccessibilityScan(
     scanRunId,
     reportLink,
     next_page,
-    duplicatesNote(duplicate_issues, unlinked_duplicates),
+    excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
   );
 }
 

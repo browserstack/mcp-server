@@ -137,7 +137,65 @@ describe("parseAccessibilityReportFromCSV", () => {
     // The third duplicate's main issue is not in the file: counted in the total only.
     expect(result.duplicate_issues).toBe(3);
     expect(result.unlinked_duplicates).toBe(1);
+    expect(result.hidden_issues).toBe(0);
     expect(result.next_page).toBeNull();
+  });
+
+  it("leaves out hidden issues, and every occurrence of them", async () => {
+    const LINK_C = "https://dash.example/issue?activeIssueId=hidden";
+    const hiddenIssue = {
+      ...contrast,
+      "Issue type": "region",
+      "Affected page": "https://site.example/",
+    };
+    const rows = [
+      ...GROUPED_ROWS,
+      row({
+        ...hiddenIssue,
+        "Issue link": LINK_C,
+        "Duplicate Issue of": "NA",
+        "Issue status": "hidden",
+      }),
+      // A duplicate of the hidden issue goes with it, whatever its own status says.
+      row({
+        ...hiddenIssue,
+        "Issue link": "https://dash.example/issue?activeIssueId=h1",
+        "Duplicate Issue of": LINK_C,
+        "Issue status": "hidden",
+      }),
+      row({
+        ...hiddenIssue,
+        "Issue link": "https://dash.example/issue?activeIssueId=h2",
+        "Duplicate Issue of": LINK_C,
+      }),
+    ];
+    get.mockResolvedValue(csvResponse(toCsv(COLUMNS, rows)));
+    const result = await parseAccessibilityReportFromCSV("https://csv");
+
+    expect(result.total_issues).toBe(2);
+    expect(result.records.map((r) => r.issue_type)).not.toContain("region");
+    expect(result.duplicate_issues).toBe(3);
+    expect(result.unlinked_duplicates).toBe(1);
+    expect(result.hidden_issues).toBe(1);
+  });
+
+  it("leaves out the hidden rows of an ungrouped report", async () => {
+    const ungrouped = [
+      "Issue type,Severity,Component,Issue description,HTML snippet,How to fix this issue,Issue status",
+      "image-alt,critical,img,Missing alt,<img>,Add alt,visible",
+      "label,serious,input,No label,<input>,Add a label,hidden",
+      "region,moderate,div,Not in a landmark,<div>,Add a landmark,visible",
+    ].join("\n");
+    get.mockResolvedValue(csvResponse(ungrouped));
+    const result = await parseAccessibilityReportFromCSV("https://csv");
+
+    expect(result.total_issues).toBe(2);
+    expect(result.records.map((r) => r.issue_type)).toEqual([
+      "image-alt",
+      "region",
+    ]);
+    expect(result.hidden_issues).toBe(1);
+    expect(result.duplicate_issues).toBeNull();
   });
 
   it("does not attribute duplicates when the report has no Issue link to match them by", async () => {
@@ -166,6 +224,8 @@ describe("parseAccessibilityReportFromCSV", () => {
     expect(result.total_issues).toBe(2);
     expect(result.duplicate_issues).toBeNull();
     expect(result.unlinked_duplicates).toBe(0);
+    // No Issue status column: nothing can be known to be hidden.
+    expect(result.hidden_issues).toBeNull();
     expect(result.records.every((r) => !("duplicate_count" in r))).toBe(true);
   });
 });

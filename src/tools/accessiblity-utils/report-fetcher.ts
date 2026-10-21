@@ -28,6 +28,9 @@ const API_BASE = "https://api-accessibility.browserstack.com/api";
  */
 export const MAX_SCAN_LIST_PAGES = 15;
 
+/** A build whose status is checked is one just run, so it sits at the top of its project's list. */
+const MAX_BUILD_LIST_PAGES = 3;
+
 interface ScanListPage {
   scans?: {
     id: number;
@@ -226,5 +229,66 @@ export class AccessibilityReportFetcher {
     throw new Error(
       `Report link was not available after ${maxAttempts} attempts. The CSV generation may still be in progress.`,
     );
+  }
+
+  /**
+   * Where the report is in its processing, as the report's own status reads it: `completed`,
+   * or `queued` / `running` / `processing` / `finalizing` while issues are still being added.
+   * Undefined when it cannot be read. A build's overview carries no status, so a build's comes
+   * from its project's build list (newest first), found by id.
+   */
+  async reportStatus(source: IssueSource): Promise<string | undefined> {
+    const q = encodeURIComponent;
+    try {
+      switch (source.kind) {
+        case "scan":
+          return (
+            await this.getData(
+              `${API_BASE}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/${q(source.scanRunId)}/status`,
+            )
+          )?.status;
+        case "workflow":
+          return (
+            await this.getData(
+              `${API_BASE}/workflow-analyzer/v1/reports/${q(source.reportId)}`,
+            )
+          )?.summary?.status;
+        case "build":
+          return await this.buildStatus(source.buildId);
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async buildStatus(buildId: string): Promise<string | undefined> {
+    const q = encodeURIComponent;
+    const project = (
+      await this.getData(`${API_BASE}/automated-tests/v1/builds/${q(buildId)}`)
+    )?.projectName;
+    if (!project) return undefined;
+    let nextPage: string | undefined;
+    for (let page = 0; page < MAX_BUILD_LIST_PAGES; page++) {
+      const data = await this.getData(
+        `${API_BASE}/automated-tests/v1/builds?project_name=${q(project)}&limit=100${
+          nextPage ? `&next_page=${q(nextPage)}` : ""
+        }`,
+      );
+      const row = data?.builds?.find((build: any) => build.id === buildId);
+      if (row) return row.status;
+      if (!data?.pagination?.has_next || !data.pagination.next_page) break;
+      nextPage = data.pagination.next_page;
+    }
+    return undefined;
+  }
+
+  /** The `data` of a successful API response, or undefined. */
+  private async getData(url: string): Promise<any> {
+    const resp = await apiClient.get({
+      url,
+      headers: this.authHeaders(),
+      raise_error: false,
+    });
+    return resp.ok ? resp.data?.data : undefined;
   }
 }

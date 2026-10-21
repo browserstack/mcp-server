@@ -209,6 +209,7 @@ function describeSource(source: IssueSource): string {
 
 async function executeFetchAccessibilityIssues(
   args: FetchIssuesArgs,
+  context: ScanProgressContext | undefined,
   server: McpServer,
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
@@ -221,7 +222,7 @@ async function executeFetchAccessibilityIssues(
     );
     const source = issueSourceFrom(args);
     if (typeof source === "string") return createErrorResponse(source);
-    return await fetchAccessibilityIssues(source, config, args.cursor);
+    return await fetchAccessibilityIssues(source, config, args.cursor, context);
   } catch (error) {
     return handleMCPError("fetchAccessibilityIssues", server, config, error);
   }
@@ -239,16 +240,112 @@ function duplicatesNote(duplicates: number | null, unlinked: number): string[] {
   ];
 }
 
+/** How often, and for how long, a first read waits on a report that is still processing. */
+export const REPORT_STATUS_POLL_MS = 10_000;
+export const REPORT_STATUS_WAIT_MS = 5 * 60 * 1000;
+
+/** Statuses during which a report's issues are still being added. */
+const PROCESSING_STATUSES = new Set([
+  "queued",
+  "running",
+  "processing",
+  "finalizing",
+]);
+
+interface ProcessingState {
+  /** The status when the issues were read; undefined when it could not be read. */
+  status?: string;
+  /** The status first seen, before any waiting. */
+  firstStatus?: string;
+  waitedMs: number;
+}
+
+/**
+ * Where a report is in its processing before its issues are read. Issues keep being added
+ * until it completes (an advanced scan adds its advanced-rule issues while "finalizing", for
+ * minutes after the tests end), so a first read waits for it, reporting progress, for up to
+ * REPORT_STATUS_WAIT_MS. A later page does not wait again, and a status that cannot be read
+ * is not waited on.
+ */
+async function waitForProcessing(
+  reportFetcher: AccessibilityReportFetcher,
+  source: IssueSource,
+  wait: boolean,
+  context: ScanProgressContext | undefined,
+): Promise<ProcessingState> {
+  const started = Date.now();
+  const firstStatus = await reportFetcher.reportStatus(source);
+  let status = firstStatus;
+  while (
+    wait &&
+    status &&
+    PROCESSING_STATUSES.has(status) &&
+    Date.now() - started < REPORT_STATUS_WAIT_MS
+  ) {
+    const waited = Date.now() - started;
+    if (context) {
+      await notifyScanProgress(
+        context,
+        `The report is still ${status}; waiting for it to complete (${formatDuration(waited)} of up to ${formatDuration(REPORT_STATUS_WAIT_MS)}).`,
+        Math.min(99, Math.round((waited / REPORT_STATUS_WAIT_MS) * 100)),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, REPORT_STATUS_POLL_MS));
+    status = await reportFetcher.reportStatus(source);
+  }
+  return { status, firstStatus, waitedMs: Date.now() - started };
+}
+
+function formatDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  return seconds < 60
+    ? `${seconds}s`
+    : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+/** What the answer says about the report's processing, if anything. */
+function processingNote({
+  status,
+  firstStatus,
+  waitedMs,
+}: ProcessingState): string[] {
+  if (status && PROCESSING_STATUSES.has(status)) {
+    const meaning =
+      status === "finalizing"
+        ? ", which on an advanced scan means advanced issue processing"
+        : "";
+    return [
+      `⚠️ This report is still processing (status: ${status}${meaning}). The issues below are only those found so far: more will be added and the total will grow. Call fetchAccessibilityIssues again in a few minutes for the complete list.`,
+    ];
+  }
+  if (firstStatus && PROCESSING_STATUSES.has(firstStatus)) {
+    return [
+      `The report was still processing (status: ${firstStatus}); waited ${formatDuration(waitedMs)} for it to complete before reading its issues.`,
+    ];
+  }
+  return [];
+}
+
 async function fetchAccessibilityIssues(
   requested: RequestedSource,
   config: BrowserStackConfig,
   cursor = 0,
+  context?: ScanProgressContext,
 ): Promise<CallToolResult> {
   const reportFetcher = await initializeReportFetcher(config);
   const source =
     requested.kind === "link"
       ? await reportFetcher.sourceFromReportUrl(requested.reportUrl)
       : requested;
+  const processing = await waitForProcessing(
+    reportFetcher,
+    source,
+    cursor === 0,
+    context,
+  );
+  const stillProcessing =
+    processing.status !== undefined &&
+    PROCESSING_STATUSES.has(processing.status);
   const reportLink = await reportFetcher.getReportLink(source);
 
   const {
@@ -271,6 +368,7 @@ async function fetchAccessibilityIssues(
     ...(requested.kind === "link"
       ? [`Resolved the report link to ${describeSource(source)}.`]
       : []),
+    ...processingNote(processing),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
     ...duplicatesNote(duplicate_issues, unlinked_duplicates),
     `You can also download the full report (CSV) from the following link, valid for about 12 hours: ${reportLink}`,
@@ -280,6 +378,10 @@ async function fetchAccessibilityIssues(
   if (next_page !== null) {
     messages.push(
       `${remainingIssues} more issues available. Use fetchAccessibilityIssues with ${sourceArgs(source)} and cursor: ${next_page} to get the next batch.`,
+    );
+  } else if (stillProcessing) {
+    messages.push(
+      `All issues found so far retrieved; the report is still processing.`,
     );
   } else {
     messages.push(`✅ All issues retrieved.`);
@@ -740,8 +842,13 @@ export default function addAccessibilityTools(
       destructiveHint: false,
       idempotentHint: true,
     },
-    async (args) => {
-      return await executeFetchAccessibilityIssues(args, server, config);
+    async (args, context) => {
+      return await executeFetchAccessibilityIssues(
+        args,
+        context as ScanProgressContext,
+        server,
+        config,
+      );
     },
   );
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What startAccessibilityScan / fetchAccessibilityIssues tell the agent about the issue
 // count: main issues only, matching the dashboard, with duplicates stated separately.
@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   waitUntilComplete: vi.fn(),
   getReportLink: vi.fn(),
   sourceFromReportUrl: vi.fn(),
+  reportStatus: vi.fn(),
   parse: vi.fn(),
 }));
 
@@ -23,6 +24,7 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     setAuth = vi.fn();
     getReportLink = m.getReportLink;
     sourceFromReportUrl = m.sourceFromReportUrl;
+    reportStatus = m.reportStatus;
   },
 }));
 vi.mock("../../src/tools/accessiblity-utils/report-parser.js", () => ({
@@ -36,7 +38,10 @@ vi.mock("../../src/logger.js", () => ({
 }));
 vi.mock("../../src/lib/instrumentation.js", () => ({ trackMCP: vi.fn() }));
 
-import addAccessibilityTools from "../../src/tools/accessibility.js";
+import addAccessibilityTools, {
+  REPORT_STATUS_POLL_MS,
+  REPORT_STATUS_WAIT_MS,
+} from "../../src/tools/accessibility.js";
 
 const CONFIG = {
   "browserstack-username": "fake-user",
@@ -268,5 +273,105 @@ describe("fetchAccessibilityIssues sources", () => {
     expect(text(result)).toMatch(message);
     expect(m.getReportLink).not.toHaveBeenCalled();
     expect(m.sourceFromReportUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchAccessibilityIssues and a report still processing", () => {
+  const BUILD_ID = "q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja";
+  const sendNotification = vi.fn();
+  const context = { sendNotification, _meta: { progressToken: "tok" } };
+  let handlers: Record<string, (...args: any[]) => any>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    m.getReportLink.mockResolvedValue("https://csv");
+    m.parse.mockResolvedValue({ ...GROUPED, next_page: null });
+    handlers = register();
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("reads the issues straight away when the report is complete", async () => {
+    m.reportStatus.mockResolvedValue("completed");
+    const result = await handlers.fetchAccessibilityIssues(
+      { buildId: BUILD_ID },
+      context,
+    );
+
+    expect(m.reportStatus).toHaveBeenCalledTimes(1);
+    const body = text(result);
+    expect(body).toContain("✅ All issues retrieved.");
+    expect(body).not.toContain("still processing");
+  });
+
+  it("waits while the report is finalizing, then reads the complete issues", async () => {
+    m.reportStatus
+      .mockResolvedValueOnce("finalizing")
+      .mockResolvedValueOnce("finalizing")
+      .mockResolvedValueOnce("completed");
+    const pending = handlers.fetchAccessibilityIssues(
+      { buildId: BUILD_ID },
+      context,
+    );
+    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_MS * 2);
+    const result = await pending;
+
+    expect(m.reportStatus).toHaveBeenCalledTimes(3);
+    expect(m.getReportLink).toHaveBeenCalledTimes(1);
+    expect(sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "notifications/progress",
+        params: expect.objectContaining({
+          message: expect.stringContaining("still finalizing"),
+        }),
+      }),
+    );
+    const body = text(result);
+    expect(body).toContain(
+      "The report was still processing (status: finalizing); waited 20s for it to complete",
+    );
+    expect(body).toContain("✅ All issues retrieved.");
+  });
+
+  it("says the issues are only those found so far when processing outlasts the wait", async () => {
+    m.reportStatus.mockResolvedValue("finalizing");
+    const pending = handlers.fetchAccessibilityIssues(
+      { buildId: BUILD_ID },
+      context,
+    );
+    await vi.advanceTimersByTimeAsync(
+      REPORT_STATUS_WAIT_MS + REPORT_STATUS_POLL_MS,
+    );
+    const result = await pending;
+
+    const body = text(result);
+    expect(body).toContain(
+      "This report is still processing (status: finalizing",
+    );
+    expect(body).toContain("only those found so far");
+    expect(body).not.toContain("✅ All issues retrieved.");
+  });
+
+  it("does not wait again for a later page, but still says the report is processing", async () => {
+    m.reportStatus.mockResolvedValue("finalizing");
+    const result = await handlers.fetchAccessibilityIssues(
+      { buildId: BUILD_ID, cursor: 4400 },
+      context,
+    );
+
+    expect(m.reportStatus).toHaveBeenCalledTimes(1);
+    expect(text(result)).toContain("This report is still processing");
+  });
+
+  it("does not wait when the status cannot be read", async () => {
+    m.reportStatus.mockResolvedValue(undefined);
+    const result = await handlers.fetchAccessibilityIssues(
+      { buildId: BUILD_ID },
+      context,
+    );
+
+    expect(m.reportStatus).toHaveBeenCalledTimes(1);
+    expect(text(result)).toContain("✅ All issues retrieved.");
   });
 });

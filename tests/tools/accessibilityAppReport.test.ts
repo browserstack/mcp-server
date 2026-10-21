@@ -804,3 +804,47 @@ describe("AccessibilityReportFetcher lists App Accessibility work", () => {
     });
   });
 });
+
+describe("AccessibilityReportFetcher listings with no match", () => {
+  const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
+  // The API answers an empty list with 404 "No builds found" for access-key callers.
+  const none = (message: string) => ({
+    ok: false,
+    status: 404,
+    data: { success: false, message },
+  });
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("lists no builds, not an error, when the name filter matches nothing", async () => {
+    get
+      .mockResolvedValueOnce(ok({ projects: [{ id: 123456, name: "Checkout App" }] }))
+      .mockResolvedValueOnce(none("No builds found"));
+
+    await expect(
+      fetcher().listAppBuilds("Checkout App", "Nightly", 10),
+    ).resolves.toEqual({
+      project: { id: 123456, name: "Checkout App" },
+      total: 0,
+      builds: [],
+    });
+    // The client must not throw on the 404 before the listing can read it as "none".
+    expect(get.mock.calls[1][0].raise_error).toBe(false);
+  });
+
+  it("lists no manual reports, not an error, when the name filter matches nothing", async () => {
+    get.mockResolvedValueOnce(none("No reports found"));
+
+    await expect(
+      fetcher().listAppManualReports("Nightly", 10),
+    ).resolves.toEqual({ total: 0, reports: [] });
+    expect(get.mock.calls[0][0].raise_error).toBe(false);
+    expect(urls()).toEqual([`${MANUAL_API}/reports?page_size=10&report_name=Nightly`]);
+  });
+
+  it("still fails plainly on any other listing error", async () => {
+    get.mockResolvedValueOnce({ ok: false, status: 500, data: { message: "Internal server error" } });
+
+    await expect(fetcher().listAppProjects(10)).rejects.toThrow(/HTTP 500/);
+  });
+});

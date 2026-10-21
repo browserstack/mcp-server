@@ -634,6 +634,11 @@ async function listAppAccessibilityReports(
       args.name,
       limit,
     );
+    if (reports.length === 0) {
+      return createSuccessResponse([
+        `No App Accessibility manual reports${filtered("name")}. Drop the name filter to list the newest reports.`,
+      ]);
+    }
     return createSuccessResponse([
       `${total} App Accessibility manual reports (newest first)${filtered("name")}${
         total > reports.length ? `, showing ${reports.length}` : ""
@@ -663,6 +668,15 @@ async function listAppAccessibilityReports(
     args.name,
     limit,
   );
+  if (builds.length === 0) {
+    return createSuccessResponse([
+      `No builds of App Accessibility project "${project.name}"${filtered("name")}${
+        args.name
+          ? ". Drop the name filter to list the project's newest builds"
+          : ": nothing has run with accessibility on in it yet"
+      }.`,
+    ]);
+  }
   return createSuccessResponse([
     `${total} builds of App Accessibility project "${project.name}" (newest first)${filtered("name")}${
       total > builds.length ? `, showing ${builds.length}` : ""

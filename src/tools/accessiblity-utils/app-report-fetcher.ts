@@ -481,22 +481,39 @@ export class AppAccessibilityApi {
     return resp.ok ? (resp.data?.projects ?? []) : [];
   }
 
+  /**
+   * A listing's page. The API answers an empty list with 404 ("No builds found") for
+   * access-key callers, which is not an error here; any other failure is.
+   */
+  private async listing(url: string, what: string): Promise<any> {
+    const resp = await apiClient.get({
+      url,
+      headers: this.headers(),
+      raise_error: false,
+    });
+    if (resp.ok) return resp.data ?? {};
+    if (resp.status === 404) return {};
+    throw new Error(
+      `Could not list ${what}: HTTP ${resp.status}${resp.data?.message ? ` (${resp.data.message})` : ""}`,
+    );
+  }
+
   /** The newest projects, as many as asked for. */
   async listAppProjects(
     limit: number,
   ): Promise<{ projects: AppProjectRow[]; total: number }> {
-    const resp = await apiClient.get({
-      url: `${APP_API_BASE}/project?page_size=${limit}`,
-      headers: this.headers(),
-    });
-    const rows: AppProjectRow[] = (resp.data?.projects ?? []).map(
+    const data = await this.listing(
+      `${APP_API_BASE}/project?page_size=${limit}`,
+      "App Accessibility projects",
+    );
+    const rows: AppProjectRow[] = (data.projects ?? []).map(
       (p: AppProjectRow) => ({
         id: p.id,
         name: p.name,
         ...(p.created_at ? { created_at: p.created_at } : {}),
       }),
     );
-    return { projects: rows, total: resp.data?.info?.count ?? rows.length };
+    return { projects: rows, total: data.info?.count ?? rows.length };
   }
 
   /**
@@ -521,13 +538,13 @@ export class AppAccessibilityApi {
         `No project named "${projectName}"${near ? `. Did you mean: ${near}` : ""}. Call listAppAccessibilityReports without projectName to list the projects`,
       );
     }
-    const resp = await apiClient.get({
-      url: `${APP_API_BASE}/project/${project.id}/build?page_size=${limit}${
+    const data = await this.listing(
+      `${APP_API_BASE}/project/${project.id}/build?page_size=${limit}${
         buildName ? `&build_name=${encodeURIComponent(buildName)}` : ""
       }`,
-      headers: this.headers(),
-    });
-    const rows: any[] = resp.data?.builds ?? [];
+      `the builds of "${project.name}"`,
+    );
+    const rows: any[] = data.builds ?? [];
     const builds: AppBuildRow[] = rows.map((b) => {
       const framework = b.session_data?.frameworkName;
       const language = b.session_data?.language;
@@ -550,7 +567,7 @@ export class AppAccessibilityApi {
     });
     return {
       project: { id: project.id, name: project.name },
-      total: resp.data?.info?.count ?? builds.length,
+      total: data.info?.count ?? builds.length,
       builds,
     };
   }
@@ -560,13 +577,13 @@ export class AppAccessibilityApi {
     name: string | undefined,
     limit: number,
   ): Promise<{ total: number; reports: AppManualReportRow[] }> {
-    const resp = await apiClient.get({
-      url: `${MANUAL_API_BASE}/reports?page_size=${limit}${
+    const data = await this.listing(
+      `${MANUAL_API_BASE}/reports?page_size=${limit}${
         name ? `&report_name=${encodeURIComponent(name)}` : ""
       }`,
-      headers: this.headers(),
-    });
-    const rows: any[] = resp.data?.reports ?? [];
+      "manual App Accessibility reports",
+    );
+    const rows: any[] = data.reports ?? [];
     const reports: AppManualReportRow[] = rows.map((r) => {
       const d = r.app_details;
       const app = d?.name
@@ -588,7 +605,7 @@ export class AppAccessibilityApi {
         dashboard_link: `${APP_DASHBOARD}/report/${r.id}`,
       };
     });
-    return { total: resp.data?.info?.count ?? reports.length, reports };
+    return { total: data.info?.count ?? reports.length, reports };
   }
 
   /** A manual report's details, or undefined when the API does not know the id. */

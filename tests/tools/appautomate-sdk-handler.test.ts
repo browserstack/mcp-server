@@ -60,6 +60,7 @@ describe("setupBrowserStackAppAutomateTests and App Accessibility", () => {
     expect(body).toContain("click");
     expect(body).toContain("find_elements");
     expect(body).toContain("Android 11");
+    expect(body).toContain("iOS 14");
     // The SDK's run summary carries the build id the issues are read by.
     expect(body).toContain("testhub id");
     expect(body).toContain("fetchAccessibilityIssues");

@@ -70,7 +70,7 @@ accessibility: ${config.accessibility ? "true" : "false"}${
 - Replace \`app: ${appPath}\` with the path to your actual app file (e.g., \`./SampleApp.apk\` for Android or \`./SampleApp.ipa\` for iOS)
 - You can upload your app using BrowserStack's App Upload API or manually through the dashboard
 - Set \`browserstackLocal: true\` if you need to test with local/staging servers
-- Keep \`platformVersion\` unquoted: the SDK parses it as a number
+- Keep \`osVersion\` unquoted: the SDK parses it as a number, and its App Accessibility module reads that key (not \`platformVersion\`)
 - Adjust \`parallelsPerPlatform\` based on your subscription limits`;
 
   const stepTitle =
@@ -92,7 +92,7 @@ function generatePlatformConfigs(config: {
       .map((env) => {
         return `  - platformName: ${env.platform}
     deviceName: "${env.deviceName}"
-    platformVersion: ${env.osVersion}`;
+    osVersion: ${env.osVersion}`;
       })
       .join("\n");
   } else if (config.platforms && config.platforms.length > 0) {
@@ -106,7 +106,7 @@ function generatePlatformConfigs(config: {
           .map(
             (device) => `  - platformName: ${platform}
     deviceName: ${device.deviceName}
-    platformVersion: ${device.platformVersion}`,
+    osVersion: ${device.platformVersion}`,
           )
           .join("\n");
       })

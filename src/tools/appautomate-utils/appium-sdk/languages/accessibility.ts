@@ -44,8 +44,8 @@ export function getAppAccessibilityChecksInstructions(
     "App Accessibility checks: what makes a scan happen, and how to read the issues",
     `- The SDK decides per test, at the test's start, whether to scan, from the drivers that exist at that moment. A driver created inside the test body is never scanned. ${driverAdvice(language, testingFramework)}
 - Scans run on interaction commands: click/tap, send keys, actions and navigation (such as back). Reads like \`find_elements\` or \`page_source\` do not scan. Interact with every screen state you want scanned.
-- Android 11 or newer is required; older devices are skipped without an error.
-- Keep \`platformVersion\` unquoted in browserstack.yml (\`14.0\`, not \`"14.0"\`): the SDK parses it as a number and silently turns the checks off when that fails.
+- Android 11 or newer, or iOS 14 or newer, is required; older devices are skipped without an error.
+- Under \`platforms\` write the OS version as \`osVersion\`, unquoted (\`osVersion: 14.0\`; not \`platformVersion\`, not \`"14.0"\`): with any other spelling the SDK still runs the tests but App Accessibility records no scans, without a message.
 - When the run ends, the SDK prints the build id as \`testhub id: <id>\` (also the id in its automation.browserstack.com/builds/<id> link). Read the issues with \`fetchAccessibilityIssues\`, \`buildId: <id>\`; it waits while the report is still processing and links the report on the App Accessibility dashboard (https://app-accessibility.browserstack.com/automated-tests). If it reports no scans, it lists the likely causes.`,
   );
 }

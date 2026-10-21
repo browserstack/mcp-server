@@ -222,12 +222,12 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
     ]);
   });
 
-  it("leaves a build id neither API knows alone, so the usual build error follows", async () => {
+  it("says plainly when neither API knows a build id", async () => {
     get.mockResolvedValueOnce(missing()).mockResolvedValueOnce(missing());
 
     await expect(
       fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID }),
-    ).resolves.toEqual({ kind: "build", buildId: BUILD_ID });
+    ).rejects.toThrow(/No Automated Tests \(web\) or App Accessibility build with id/);
   });
 
   it("does not probe for a source that is not a build", async () => {

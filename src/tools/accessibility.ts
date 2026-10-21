@@ -405,8 +405,8 @@ function noScansNote(report: AppBuildReport): string[] {
         ]
       : []),
     "`accessibility: true` is not set in browserstack.yml (or the capabilities); the SDK defaults it to false.",
-    'The platform version is quoted in browserstack.yml (`platformVersion: "14.0"`): the SDK parses it as a number, fails on the string, and turns App Accessibility off without an error. Write it unquoted (`platformVersion: 14.0`).',
-    'The device runs Android 10 or older: App Accessibility needs Android 11 or newer (the build then reads "update_os_version").',
+    'The platform entry in browserstack.yml does not use `osVersion`, unquoted: with `platformVersion` the SDK selects the device but App Accessibility records no scans, and a quoted "14.0" fails its number check and turns the checks off; neither says so. Write `osVersion: 14.0`.',
+    'The device runs an OS App Accessibility does not support: Android 11 or newer, or iOS 14 or newer, is needed (an older Android reads "update_os_version").',
     "The driver was created inside the test body: the SDK decides per test, at its start, from the drivers that already exist. Create it in a fixture or setup hook.",
     "The test only read the screen (find_elements, page_source): scans run on interaction commands such as click/tap, send keys, actions and navigation. Interact with each screen you want scanned.",
     ...(report.status === "timeout"

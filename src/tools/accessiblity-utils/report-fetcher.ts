@@ -167,8 +167,8 @@ export class AccessibilityReportFetcher {
   /**
    * A build id names a web build or a mobile app build: both are TestHub ids, and only the
    * API that ran the build knows it. The web API is asked first; a build it does not know
-   * that the App Accessibility API does is an app build. One neither knows is left as it
-   * was, so the web API's own error says so.
+   * that the App Accessibility API does is an app build. One neither knows is refused
+   * here, naming both.
    */
   async resolveBuild(source: IssueSource): Promise<IssueSource> {
     if (source.kind !== "build") return source;
@@ -182,7 +182,10 @@ export class AccessibilityReportFetcher {
       return source;
     }
     const meta = await this.app.buildMeta(source.buildId);
-    return meta ? { kind: "appBuild", buildId: source.buildId } : source;
+    if (meta) return { kind: "appBuild", buildId: source.buildId };
+    throw new Error(
+      `No Automated Tests (web) or App Accessibility build with id "${source.buildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl`,
+    );
   }
 
   /** An app build's issues, read inline from its scanned screens. */

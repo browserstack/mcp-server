@@ -29,11 +29,13 @@ function yml(options: { accessibility?: boolean } = {}) {
 }
 
 describe("generateAppBrowserStackYMLInstructions", () => {
-  it("writes the platform version unquoted, as the SDK parses it as a number", () => {
-    // SDK 1.51.x checks Android >= 11 with int(platformVersion): the string "14.0" throws,
-    // and the SDK then turns App Accessibility off without saying so.
-    expect(yml()).toContain("platformVersion: 14.0\n");
-    expect(yml()).not.toContain('platformVersion: "14.0"');
+  it("writes the OS version as osVersion, unquoted: the SDK's accessibility module reads that key as a number", () => {
+    // Observed on SDK 1.51.2: `platformVersion: 14.0` selects the device but App Accessibility
+    // records no scans; `osVersion: 14.0`, the documented key, scans. A quoted "14.0" fails the
+    // module's int() check and turns scanning off without a message.
+    expect(yml()).toContain("osVersion: 14.0\n");
+    expect(yml()).not.toMatch(/platformVersion:/);
+    expect(yml()).not.toContain('osVersion: "14.0"');
   });
 
   it("leaves accessibility off unless asked, with the option spelled out", () => {
@@ -63,8 +65,8 @@ describe("generateAppBrowserStackYMLInstructions", () => {
       { platforms: ["android"], testingFramework: "pytest" },
       "./app.apk",
     );
-    expect(text).toContain("platformVersion: 12.0\n");
-    expect(text).not.toMatch(/platformVersion: "/);
+    expect(text).toContain("osVersion: 12.0\n");
+    expect(text).not.toMatch(/osVersion: "/);
   });
 });
 

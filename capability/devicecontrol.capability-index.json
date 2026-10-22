@@ -262,7 +262,8 @@
      "The session ends itself after idle_timeout seconds without a command, and after 2 hours in total.",
      "console_logs and network_logs must be asked for here; they cannot be turned on once the session is running, and get_session only links to them when they were.",
      "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
-     "resolution takes one of a fixed set of values per operating system, not any width and height: an unsupported pair is refused outright rather than rounded to the nearest one. The browser window is well short of the screen it sits on \u2014 1920x1080 gives a viewport around 930x860 \u2014 so measure it rather than assuming the request was honoured."
+     "resolution takes one of a fixed set of values per operating system, not any width and height: an unsupported pair is refused outright rather than rounded to the nearest one. The browser window is well short of the screen it sits on \u2014 1920x1080 gives a viewport around 930x860 \u2014 so measure it rather than assuming the request was honoured.",
+     "THIS CALL RETURNS NO LINK \u2014 only value.sessionId. Nothing here can open a browser for the user either: this surface makes HTTP requests, and on a remote server there is no browser to open. So never say a live view was opened. If the user may want to watch, call get_session straight after this and give them browser_url in the same reply, which is the session on the dashboard and needs a BrowserStack login. public_url needs no login but carries an auth token, so offer it only when they ask to share outside the team."
     ],
     "body": [
      {

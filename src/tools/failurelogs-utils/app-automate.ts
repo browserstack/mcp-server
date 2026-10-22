@@ -14,7 +14,7 @@ export async function retrieveDeviceLogs(
   buildId: string,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/deviceLogs`;
+  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/devicelogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 

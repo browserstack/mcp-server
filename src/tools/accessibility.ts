@@ -2,7 +2,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { AccessibilityScanner } from "./accessiblity-utils/scanner.js";
-import { AccessibilityReportFetcher } from "./accessiblity-utils/report-fetcher.js";
+import {
+  AccessibilityReportFetcher,
+  type IssueSource,
+} from "./accessiblity-utils/report-fetcher.js";
 import {
   AccessibilityAuthConfig,
   safeAuthConfigData,
@@ -146,8 +149,67 @@ async function executeAccessibilityRAG(
   }
 }
 
+interface FetchIssuesArgs {
+  scanId?: string;
+  scanRunId?: string;
+  buildId?: string;
+  workflowReportId?: string;
+  reportUrl?: string;
+  cursor?: number;
+}
+
+/** A source named by its ids, or a dashboard link still to be resolved to them. */
+type RequestedSource = IssueSource | { kind: "link"; reportUrl: string };
+
+/** The one source the arguments name, or why they do not name exactly one. */
+function issueSourceFrom(args: FetchIssuesArgs): RequestedSource | string {
+  const named = [
+    Boolean(args.scanId || args.scanRunId),
+    Boolean(args.buildId),
+    Boolean(args.workflowReportId),
+    Boolean(args.reportUrl),
+  ].filter(Boolean).length;
+  if (named !== 1) {
+    return "Pass exactly one source: scanId with scanRunId (a Website Scanner run), buildId (an Automated Tests build), workflowReportId (a Workflow Analyzer report) or reportUrl (a report's dashboard link).";
+  }
+  if (args.reportUrl) return { kind: "link", reportUrl: args.reportUrl };
+  if (args.buildId) return { kind: "build", buildId: args.buildId };
+  if (args.workflowReportId) {
+    return { kind: "workflow", reportId: args.workflowReportId };
+  }
+  if (!args.scanId || !args.scanRunId) {
+    return "A Website Scanner run needs both scanId and scanRunId.";
+  }
+  return { kind: "scan", scanId: args.scanId, scanRunId: args.scanRunId };
+}
+
+/** The arguments that name the same source again, for the next-page hint. */
+function sourceArgs(source: IssueSource): string {
+  switch (source.kind) {
+    case "scan":
+      return `scanId: "${source.scanId}", scanRunId: "${source.scanRunId}"`;
+    case "build":
+      return `buildId: "${source.buildId}"`;
+    case "workflow":
+      return `workflowReportId: "${source.reportId}"`;
+  }
+}
+
+/** What a dashboard link resolved to, in words. */
+function describeSource(source: IssueSource): string {
+  switch (source.kind) {
+    case "scan":
+      return `Website Scanner scan ${source.scanId}, run ${source.scanRunId}`;
+    case "build":
+      return `Automated Tests build ${source.buildId}`;
+    case "workflow":
+      return `Workflow Analyzer report ${source.reportId}`;
+  }
+}
+
 async function executeFetchAccessibilityIssues(
-  args: { scanId: string; scanRunId: string; cursor?: number },
+  args: FetchIssuesArgs,
+  context: ScanProgressContext | undefined,
   server: McpServer,
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
@@ -158,12 +220,9 @@ async function executeFetchAccessibilityIssues(
       undefined,
       config,
     );
-    return await fetchAccessibilityIssues(
-      args.scanId,
-      args.scanRunId,
-      config,
-      args.cursor,
-    );
+    const source = issueSourceFrom(args);
+    if (typeof source === "string") return createErrorResponse(source);
+    return await fetchAccessibilityIssues(source, config, args.cursor, context);
   } catch (error) {
     return handleMCPError("fetchAccessibilityIssues", server, config, error);
   }
@@ -199,14 +258,120 @@ function excludedIssuesNote(
   return notes;
 }
 
+/** How often, and for how long, a first read waits on a report that is still processing. */
+export const REPORT_STATUS_POLL_MS = 10_000;
+export const REPORT_STATUS_WAIT_MS = 5 * 60 * 1000;
+
+/** Statuses during which a report's issues are still being added. */
+const PROCESSING_STATUSES = new Set([
+  "queued",
+  "running",
+  "processing",
+  "finalizing",
+]);
+
+/**
+ * Of those, the one worth waiting on: the advanced-issue processing after the run, which
+ * ends within minutes. A report whose scan or tests are still running is read as it is,
+ * with a note, since that can last as long as the suite does.
+ */
+const WAIT_STATUSES = new Set(["finalizing"]);
+
+interface ProcessingState {
+  /** The status when the issues were read; undefined when it could not be read. */
+  status?: string;
+  /** The status first seen, before any waiting. */
+  firstStatus?: string;
+  waitedMs: number;
+}
+
+/**
+ * Where a report is in its processing before its issues are read. Issues keep being added
+ * until it completes; an advanced scan adds its advanced-rule issues while "finalizing", for
+ * minutes after the tests end, so a first read waits for that, reporting progress, for up to
+ * REPORT_STATUS_WAIT_MS. A run still in progress is not waited on (it can take as long as
+ * the suite), nor is a later page, nor a status that cannot be read.
+ */
+async function waitForProcessing(
+  reportFetcher: AccessibilityReportFetcher,
+  source: IssueSource,
+  wait: boolean,
+  context: ScanProgressContext | undefined,
+): Promise<ProcessingState> {
+  const started = Date.now();
+  const firstStatus = await reportFetcher.reportStatus(source);
+  let status = firstStatus;
+  while (
+    wait &&
+    status &&
+    WAIT_STATUSES.has(status) &&
+    Date.now() - started < REPORT_STATUS_WAIT_MS
+  ) {
+    const waited = Date.now() - started;
+    if (context) {
+      await notifyScanProgress(
+        context,
+        `The report is still ${status}; waiting for it to complete (${formatDuration(waited)} of up to ${formatDuration(REPORT_STATUS_WAIT_MS)}).`,
+        Math.min(99, Math.round((waited / REPORT_STATUS_WAIT_MS) * 100)),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, REPORT_STATUS_POLL_MS));
+    status = await reportFetcher.reportStatus(source);
+  }
+  return { status, firstStatus, waitedMs: Date.now() - started };
+}
+
+function formatDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  return seconds < 60
+    ? `${seconds}s`
+    : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+/** What the answer says about the report's processing, if anything. */
+function processingNote({
+  status,
+  firstStatus,
+  waitedMs,
+}: ProcessingState): string[] {
+  if (status && PROCESSING_STATUSES.has(status)) {
+    const meaning =
+      status === "finalizing"
+        ? ", which on an advanced scan means advanced issue processing"
+        : "";
+    return [
+      `⚠️ This report is still processing (status: ${status}${meaning}). The issues below are only those found so far: more will be added and the total will grow. Call fetchAccessibilityIssues again in a few minutes for the complete list.`,
+    ];
+  }
+  if (firstStatus && PROCESSING_STATUSES.has(firstStatus)) {
+    return [
+      `The report was still processing (status: ${firstStatus}); waited ${formatDuration(waitedMs)} for it to complete before reading its issues.`,
+    ];
+  }
+  return [];
+}
+
 async function fetchAccessibilityIssues(
-  scanId: string,
-  scanRunId: string,
+  requested: RequestedSource,
   config: BrowserStackConfig,
   cursor = 0,
+  context?: ScanProgressContext,
 ): Promise<CallToolResult> {
   const reportFetcher = await initializeReportFetcher(config);
-  const reportLink = await reportFetcher.getReportLink(scanId, scanRunId);
+  const source =
+    requested.kind === "link"
+      ? await reportFetcher.sourceFromReportUrl(requested.reportUrl)
+      : requested;
+  const processing = await waitForProcessing(
+    reportFetcher,
+    source,
+    cursor === 0,
+    context,
+  );
+  const stillProcessing =
+    processing.status !== undefined &&
+    PROCESSING_STATUSES.has(processing.status);
+  const reportLink = await reportFetcher.getReportLink(source);
 
   const {
     records,
@@ -226,14 +391,23 @@ async function fetchAccessibilityIssues(
   const remainingIssues = total_issues - currentlyShown;
 
   const messages = [
+    ...(requested.kind === "link"
+      ? [`Resolved the report link to ${describeSource(source)}.`]
+      : []),
+    ...processingNote(processing),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
+    `You can also download the full report (CSV) from the following link, valid for about 12 hours: ${reportLink}`,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
   ];
 
   if (next_page !== null) {
     messages.push(
-      `${remainingIssues} more issues available. Use fetchAccessibilityIssues with cursor: ${next_page} to get the next batch.`,
+      `${remainingIssues} more issues available. Use fetchAccessibilityIssues with ${sourceArgs(source)} and cursor: ${next_page} to get the next batch.`,
+    );
+  } else if (stillProcessing) {
+    messages.push(
+      `All issues found so far retrieved; the report is still processing.`,
     );
   } else {
     messages.push(`✅ All issues retrieved.`);
@@ -455,7 +629,11 @@ async function runAccessibilityScan(
   }
 
   const reportFetcher = await initializeReportFetcher(config);
-  const reportLink = await reportFetcher.getReportLink(scanId, scanRunId);
+  const reportLink = await reportFetcher.getReportLink({
+    kind: "scan",
+    scanId,
+    scanRunId,
+  });
 
   const {
     records,
@@ -648,15 +826,36 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues from a completed scan with pagination support. Use cursor parameter to get subsequent pages of results." +
+    "Fetch accessibility issues (paged by cursor) from one source: scanId+scanRunId, buildId, workflowReportId or reportUrl." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z
         .string()
-        .describe("The scan ID from a completed accessibility scan"),
+        .optional()
+        .describe("Website Scanner: the scan id from startAccessibilityScan."),
       scanRunId: z
         .string()
-        .describe("The scan run ID from a completed accessibility scan"),
+        .optional()
+        .describe(
+          "Website Scanner: the scan run id from startAccessibilityScan.",
+        ),
+      buildId: z
+        .string()
+        .regex(/^[a-z0-9]{40}$/, "40 lowercase letters and digits")
+        .optional()
+        .describe(
+          "Automated Tests: the thBuildId in the build's accessibility report link (not the Automate build id).",
+        ),
+      workflowReportId: z
+        .string()
+        .optional()
+        .describe("Workflow Analyzer: the report's numeric id."),
+      reportUrl: z
+        .string()
+        .optional()
+        .describe(
+          "A Website Scanner or Automated Tests report link from the Accessibility dashboard (carries thBuildId).",
+        ),
       cursor: z
         .number()
         .optional()
@@ -669,8 +868,13 @@ export default function addAccessibilityTools(
       destructiveHint: false,
       idempotentHint: true,
     },
-    async (args) => {
-      return await executeFetchAccessibilityIssues(args, server, config);
+    async (args, context) => {
+      return await executeFetchAccessibilityIssues(
+        args,
+        context as ScanProgressContext,
+        server,
+        config,
+      );
     },
   );
 

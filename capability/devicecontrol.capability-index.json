@@ -1131,8 +1131,11 @@
       "name": "script",
       "type": "string",
       "required": true,
-      "description": "Leave as the default; it scrolls arguments[0] into the middle of the viewport and reports where it ended up.",
-      "example": "arguments[0].scrollIntoView({block:'center'}); var r=arguments[0].getBoundingClientRect(); return {top:r.top,bottom:r.bottom,innerHeight:window.innerHeight};"
+      "description": "Fixed. The only accepted value; anything else is refused before the request is sent.",
+      "example": "arguments[0].scrollIntoView({block:'center'}); var r=arguments[0].getBoundingClientRect(); return {top:r.top,bottom:r.bottom,innerHeight:window.innerHeight};",
+      "values": [
+       "arguments[0].scrollIntoView({block:'center'}); var r=arguments[0].getBoundingClientRect(); return {top:r.top,bottom:r.bottom,innerHeight:window.innerHeight};"
+      ]
      },
      {
       "name": "args",
@@ -1170,7 +1173,7 @@
     "intent": "Scroll the page itself by a distance or to the bottom \u2014 use this when there is no element to aim at, such as reaching a footer or loading more of an infinite list.",
     "guidance": [
      "PREFER scroll_to_element when you have an element. On Chrome for Android this form can stop short and leave a footer off screen while still reporting success \u2014 measured \u2014 so confirm from the returned position rather than the status.",
-     "The default script goes to the bottom. Replace document.body.scrollHeight with a pixel offset to move by a fixed amount instead.",
+     "Choose what it does with args: \"bottom\", \"top\", or a pixel count. The script itself is fixed and cannot be changed.",
      "Returns the scroll position and the page height, so a caller can tell whether it actually reached the end."
     ],
     "path_params": [
@@ -1186,15 +1189,20 @@
       "name": "script",
       "type": "string",
       "required": true,
-      "description": "The scroll to run. The default goes to the bottom of the page and reports where it landed.",
-      "example": "window.scrollTo(0, document.body.scrollHeight); return {scrollY:window.scrollY, innerHeight:window.innerHeight, scrollHeight:document.body.scrollHeight};"
+      "description": "Fixed. The only accepted value; anything else is refused before the request is sent. What it does is chosen by args, not by editing this.",
+      "example": "var a=arguments[0]; if(a==='bottom'){window.scrollTo(0,document.body.scrollHeight);} else if(a==='top'){window.scrollTo(0,0);} else {window.scrollBy(0,Number(a));} return {scrollY:window.scrollY, innerHeight:window.innerHeight, scrollHeight:document.body.scrollHeight};",
+      "values": [
+       "var a=arguments[0]; if(a==='bottom'){window.scrollTo(0,document.body.scrollHeight);} else if(a==='top'){window.scrollTo(0,0);} else {window.scrollBy(0,Number(a));} return {scrollY:window.scrollY, innerHeight:window.innerHeight, scrollHeight:document.body.scrollHeight};"
+      ]
      },
      {
       "name": "args",
       "type": "array",
       "required": true,
-      "description": "Always empty.",
-      "example": []
+      "description": "Exactly one value: \"bottom\", \"top\", or a number of pixels to scroll by (negative scrolls up).",
+      "example": [
+       "bottom"
+      ]
      }
     ],
     "returns": [

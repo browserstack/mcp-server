@@ -9,6 +9,11 @@ const AUTOMATE_API: Hosts = {
 };
 
 const HOSTS = {
+  testManagement: {
+    us: "https://test-management.browserstack.com",
+    eu: "https://test-management-eu.browserstack.com",
+    in: "https://test-management-in.browserstack.com",
+  },
   automateApi: AUTOMATE_API,
   appAutomateApi: AUTOMATE_API,
   appAutomateUpload: {
@@ -58,11 +63,4 @@ export function getRegionalHost(kind: RegionalHostKind): string {
     return appConfig.BROWSERSTACK_AUTOMATION_BASE_URL;
   }
   return hostFor(kind, appConfig.BROWSERSTACK_GRR_REGION ?? "us");
-}
-
-// The configured region first, then the rest in their standard order.
-export function regionPreference(): GrrRegion[] {
-  const first = appConfig.BROWSERSTACK_GRR_REGION ?? "us";
-  const regions = Object.keys(AUTOMATE_API) as GrrRegion[];
-  return [first, ...regions.filter((r) => r !== first)];
 }

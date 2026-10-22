@@ -41,13 +41,13 @@ const DEFAULT_BROWSERSTACK_AUTOMATION_BASE_URL =
 const DEFAULT_BROWSERSTACK_O11Y_UI_BASE_URL =
   "https://automation.browserstack.com";
 
-// BROWSERSTACK_GRR_REGION: "us" (default), "eu" or "in". Invalid values fail at startup.
+// BROWSERSTACK_GRR_REGION: "us", "eu" or "in"; unset means not configured. Invalid values fail at startup.
 const GRR_REGIONS = ["us", "eu", "in"] as const;
 export type GrrRegion = (typeof GRR_REGIONS)[number];
 
-function parseGrrRegion(raw: string | undefined): GrrRegion {
+function parseGrrRegion(raw: string | undefined): GrrRegion | undefined {
   const value = (raw || "").trim().toLowerCase();
-  if (!value) return "us";
+  if (!value) return undefined;
   if ((GRR_REGIONS as readonly string[]).includes(value)) {
     return value as GrrRegion;
   }
@@ -92,7 +92,7 @@ export class Config {
      * "deferred" | "elicit". Anything else is ignored.
      */
     public readonly ASK_BROWSERSTACK_RELAY_TRANSPORT: string | undefined,
-    public readonly BROWSERSTACK_GRR_REGION: GrrRegion = "us",
+    public readonly BROWSERSTACK_GRR_REGION?: GrrRegion,
   ) {}
 }
 

@@ -90,18 +90,6 @@ describe("getRegionalHost", () => {
   });
 });
 
-describe("regionPreference", () => {
-  it.each([
-    [undefined, ["us", "eu", "in"]],
-    ["us", ["us", "eu", "in"]],
-    ["eu", ["eu", "us", "in"]],
-    ["in", ["in", "us", "eu"]],
-  ])("region %s orders %j", async (region, order) => {
-    const { regionPreference } = await loadModule(region);
-    expect(regionPreference()).toEqual(order);
-  });
-});
-
 describe("BROWSERSTACK_GRR_REGION parsing", () => {
   const original = process.env.BROWSERSTACK_GRR_REGION;
 
@@ -119,8 +107,8 @@ describe("BROWSERSTACK_GRR_REGION parsing", () => {
   }
 
   it.each([
-    [undefined, "us"],
-    ["", "us"],
+    [undefined, undefined],
+    ["", undefined],
     ["us", "us"],
     [" EU ", "eu"],
     ["in", "in"],

@@ -108,7 +108,7 @@ describe("getTMBaseURL — failure details", () => {
   });
 });
 
-describe("getTMBaseURL — BROWSERSTACK_GRR_REGION sets the probe order", () => {
+describe("getTMBaseURL — BROWSERSTACK_GRR_REGION", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -124,37 +124,26 @@ describe("getTMBaseURL — BROWSERSTACK_GRR_REGION sets the probe order", () => 
     return { apiClient: apiClientMod.apiClient, getTMBaseURL: tmMod.getTMBaseURL };
   }
 
-  const probed = (apiClient: any) =>
-    apiClient.get.mock.calls.map((c: any[]) => new URL(c[0].url).host);
-
   it.each([
-    [undefined, ["test-management", "test-management-eu", "test-management-in"]],
-    ["us", ["test-management", "test-management-eu", "test-management-in"]],
-    ["eu", ["test-management-eu", "test-management", "test-management-in"]],
-    ["in", ["test-management-in", "test-management", "test-management-eu"]],
-  ])("region %s probes %j in that order", async (region, order) => {
+    ["us", "https://test-management.browserstack.com"],
+    ["eu", "https://test-management-eu.browserstack.com"],
+    ["in", "https://test-management-in.browserstack.com"],
+  ])("region %s uses its host directly, like every other product", async (region, url) => {
     const { apiClient, getTMBaseURL } = await loadWithRegion(region);
-    (apiClient.get as any).mockResolvedValue({ ok: false, status: 401 });
-    await getTMBaseURL(mockConfig).catch(() => {});
-    expect(probed(apiClient)).toEqual(order.map((h) => `${h}.browserstack.com`));
+    await expect(getTMBaseURL(mockConfig)).resolves.toBe(url);
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
 
-  it("a correct flag answers on the first probe", async () => {
-    const { apiClient, getTMBaseURL } = await loadWithRegion("eu");
-    (apiClient.get as any).mockResolvedValueOnce({ ok: true });
-    await expect(getTMBaseURL(mockConfig)).resolves.toBe(
-      "https://test-management-eu.browserstack.com",
-    );
-    expect(apiClient.get).toHaveBeenCalledTimes(1);
-  });
-
-  it("a wrong flag still finds the account's region", async () => {
-    const { apiClient, getTMBaseURL } = await loadWithRegion("eu");
+  it("unset keeps the US → EU → IN probe for accounts that never set the flag", async () => {
+    const { apiClient, getTMBaseURL } = await loadWithRegion(undefined);
     (apiClient.get as any)
       .mockResolvedValueOnce({ ok: false, status: 401 })
       .mockResolvedValueOnce({ ok: true });
     await expect(getTMBaseURL(mockConfig)).resolves.toBe(
-      "https://test-management.browserstack.com",
+      "https://test-management-eu.browserstack.com",
     );
+    expect(
+      (apiClient.get as any).mock.calls.map((c: any[]) => new URL(c[0].url).host),
+    ).toEqual(["test-management.browserstack.com", "test-management-eu.browserstack.com"]);
   });
 });

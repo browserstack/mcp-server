@@ -12,7 +12,13 @@
  *    capability needing an id it cannot possibly have yet.
  */
 
-import { Capability, EntityDoc, Mode, ProductIndex } from "./types.js";
+import {
+  Capability,
+  EntityDoc,
+  Mode,
+  ProductIndex,
+  guidanceLines,
+} from "./types.js";
 
 /**
  * Every non-alphanumeric character separates, `_` included.
@@ -429,7 +435,7 @@ function score(
     // `test_cases_count`); gating it on an identity match instead made a field reachable
     // only through returns unreachable, which is worse.
     [(capability.returns || []).join(" "), 1],
-    [(capability.guidance || []).join(" "), 1],
+    [guidanceLines(capability.guidance).join(" "), 1],
     // Parameter names, their descriptions, and their enum values — 330 descriptions and 34
     // value lists that the artifact already carries and nothing was reading. The vocabulary
     // a caller uses is often the value they mean to send: `pass` and `fail` appear nowhere

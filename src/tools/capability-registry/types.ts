@@ -118,6 +118,43 @@ export interface ResponseDoc extends ComponentRef {
 }
 
 /** A capability, keyed by the endpoint it exposes. There is deliberately no name. */
+/**
+ * How to call the endpoint correctly, optionally split by which surface is serving it.
+ *
+ * A plain array is shared — true wherever this runs, which is almost everything, and the
+ * form every shipped index already uses. The object form adds lines that are true on only
+ * one surface: `local` where the server sits beside the user, `remote` where it does not.
+ * `shared` is the same list the plain array would have been, so a capability can carry
+ * facts of both kinds without repeating any of them.
+ *
+ * The loader folds the applicable half into one array before anything reads it, so a
+ * caller is handed exactly the guidance that applies to the server it is talking to and
+ * never has to work out which half was meant for it. The split itself is ours to know:
+ * these keys do not survive into what describeCapability or searchCapability return.
+ *
+ * WHY A LINE IS SURFACE-SPECIFIC RATHER THAN SHARED: on a remote server, advice about the
+ * caller's own filesystem is not merely useless but wrong — it would have an agent tell the
+ * user to configure a machine they are not on. And for a `local_only` capability, `remote`
+ * is where "what to do instead" lives, which searchCapability puts in front of the caller
+ * before they pick anything, let alone call it.
+ */
+export type Guidance =
+  | string[]
+  | { shared?: string[]; local?: string[]; remote?: string[] };
+
+/**
+ * The guidance lines as a plain array, whichever form was authored.
+ *
+ * The loader flattens the object form at load, so everything downstream genuinely does hold
+ * an array — this exists so that is checked rather than asserted, and so a capability read
+ * straight from a file (a test, a checker) behaves the same as one from the registry.
+ * Without the surface to decide between them, only the shared lines can be returned.
+ */
+export function guidanceLines(guidance?: Guidance): string[] {
+  if (!guidance) return [];
+  return Array.isArray(guidance) ? guidance : (guidance.shared ?? []);
+}
+
 export interface Capability {
   /**
    * The caller-facing handle — the snake-cased `operationId`, unique within its product.
@@ -155,14 +192,8 @@ export interface Capability {
   query?: WireParam[];
   body?: WireParam[];
   intent?: string;
-  /**
-   * How to call the endpoint correctly.
-   *
-   * ABSENT from the released artifact — the export dropped it, and the shape-change note
-   * does not say whether that was intended. Kept optional and still scored by search so the
-   * server works either way; nothing may depend on it being present.
-   */
-  guidance?: string[];
+  /** How to call it; see `Guidance` for the local/remote split. */
+  guidance?: Guidance;
   /** Allowlisted row fields. Absent when `shape` is "discovered". */
   returns?: string[];
   /** "discovered" when the product declares no response schema for this operation. */
@@ -205,18 +236,7 @@ export interface Capability {
    * than hunting for a synonym.
    */
   local_only?: boolean;
-  /**
-   * What to do instead, on a surface where this capability cannot run.
-   *
-   * A `local_only` capability is NOT hidden on a remote server: the query that should find
-   * it still finds it, because an agent asked to upload a file from the user's machine
-   * needs to learn that the route exists and what replaces it here. What it loses is the
-   * means to call it — the parameters and response shapes are stripped at load, and
-   * invocation is refused — so the note is the whole of what remains.
-   *
-   * Write it as the instruction the caller should follow, not as an apology.
-   */
-  unavailable_note?: string;
+
   /**
    * FALSE when this build publishes the capability for reference but will not call it.
    *

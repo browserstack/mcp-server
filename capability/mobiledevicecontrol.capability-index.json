@@ -2608,14 +2608,25 @@
     "encoding": "multipart",
     "local_only": true,
     "intent": "Upload an app build that is on this machine to App Automate and get back the bs:// URL a session installs \u2014 use this when the .apk, .aab or .ipa is a local file rather than a download link.",
-    "guidance": [
-     "The file must sit inside the directory MCP_UPLOAD_BASE_DIR names. When that is not set the upload is refused and nothing is sent: tell the user to set it to the folder holding their builds and restart the server, then move the build there.",
-     "When it is set but the build is somewhere else, the refusal names the directory the file has to be inside. Tell the user to move it there rather than trying another path.",
-     "Only .apk, .aab and .ipa are accepted, and no part of the path may be a hidden folder, so a build under a dot-directory has to be moved out of it.",
-     "The path is checked before anything is uploaded and before the user is asked to approve, so a refusal costs nothing and means the file was never read.",
-     "upload_app_build takes a public https link instead and is the one to use when the build is not on this machine.",
-     "A large build takes minutes, because the call does not return until the whole file has been sent."
-    ],
+    "guidance": {
+     "shared": [
+      "Only .apk, .aab and .ipa are accepted.",
+      "A large build takes minutes, because the upload does not return until the whole file has been sent.",
+      "upload_app_build takes a public https link instead, and list_app_builds reuses a build already on the account \u2014 builds last 30 days."
+     ],
+     "local": [
+      "The file must sit inside the directory MCP_UPLOAD_BASE_DIR names. When that is not set the upload is refused and nothing is sent: tell the user to set it to the folder holding their builds and restart the server.",
+      "When it is set but the build is somewhere else, the refusal names the directory the file has to be inside. Tell the user to move it there rather than trying another path.",
+      "No part of the path may be a hidden folder, so a build under a dot-directory has to be moved out of it.",
+      "The path is checked before anything is uploaded and before the user is asked to approve, so a refusal costs nothing and means the file was never read."
+     ],
+     "remote": [
+      "Cheapest route first: list_app_builds or list_team_app_builds, if the build was uploaded before.",
+      "Then upload_app_build, if the build sits at a public https link \u2014 the only route that needs nothing from the user.",
+      "Otherwise the user uploads it themselves. The asset-upload helper PRINTS a curl command and nothing more \u2014 it reads no file and sends no request \u2014 so the user runs that command, and it answers with the bs:// url directly from /app-automate/upload. There is no intermediate storage and no second step.",
+      "Take the bs:// url back from them and pass it as the app for create_session."
+     ]
+    },
     "body": [
      {
       "name": "file",
@@ -2647,8 +2658,7 @@
      "401": {
       "$response": "Unauthorized"
      }
-    },
-    "unavailable_note": "This server does not run on your own machine, so it cannot read a file you name \u2014 a path sent here would point at the machine hosting the server. Three routes get you a bs:// url instead, cheapest first. (1) list_app_builds or list_team_app_builds, if the build was uploaded before: builds last 30 days and are reusable as they are. (2) upload_app_build, if the build sits at a public https link \u2014 the only fully automatic route. (3) Otherwise the user uploads it themselves: the asset-upload helper PRINTS a curl command and nothing more \u2014 it reads no file and sends no request \u2014 so the user has to run that command, and it answers with the bs:// url directly from /app-automate/upload. There is no intermediate storage and no second step. Take the bs:// url back from them and pass it as the app for create_session."
+    }
    },
    {
     "name": "find_elements",

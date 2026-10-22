@@ -52,8 +52,8 @@ const CAPABILITIES = [
     entity: "build",
     encoding: "multipart",
     local_only: true,
-    unavailable_note: "Upload it yourself and pass the returned url.",
     intent: "Upload a build that is on this machine.",
+    guidance: { remote: ["Upload it yourself and pass the returned url."] },
     body: [{ name: "file", type: "file", required: true }],
   },
 ];

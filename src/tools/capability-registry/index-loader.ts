@@ -115,13 +115,50 @@ function asReference(capability: Capability): Capability {
   ] as const) {
     delete reference[field];
   }
+  // Guidance is NOT touched here. `withSurfaceGuidance` has already folded in
+  // `remote_guidance` — which is where a reference-only capability says what to do
+  // instead — and it runs for every capability, not only this branch.
+  // `withSurfaceGuidance` has already run, so guidance is a plain array here — and for a
+  // reference-only capability its `remote` half is where "what to do instead" lives.
+  const named = Array.isArray(capability.guidance)
+    ? capability.guidance.length > 0
+    : false;
   return {
     ...reference,
     invocable: false,
-    guidance: capability.unavailable_note
-      ? [capability.unavailable_note]
-      : ["This capability cannot be called on this server."],
+    ...(named
+      ? {}
+      : { guidance: ["This capability cannot be called on this server."] }),
   };
+}
+
+/**
+ * Flatten `guidance` to the lines that apply to the surface doing the loading.
+ *
+ * A capability may say three things about how to use it: what is true everywhere, what is
+ * true only where the server sits beside the user, and what is true only on a remote one.
+ * Only one of the last two can ever apply, so the caller is handed exactly that and never
+ * has to work out which half was meant for them.
+ *
+ * COMPOSED, NOT REPLACED. An earlier shape put the remote instruction in a single
+ * `unavailable_note` that replaced the guidance outright, which threw away lines still true
+ * there — the accepted file types, how long a large upload takes — and invited them to be
+ * restated in the note, where the two copies could drift. Shared lines are now written once.
+ *
+ * The object form is flattened away here, so no reader downstream sees anything but a plain
+ * array, and which surface this is stays ours to know rather than a fact the caller acts on.
+ */
+function withSurfaceGuidance(capability: Capability): Capability {
+  const g = capability.guidance;
+  if (!g || Array.isArray(g)) return capability;
+  const lines = [
+    ...(g.shared ?? []),
+    ...(appConfig.REMOTE_MCP ? (g.remote ?? []) : (g.local ?? [])),
+  ];
+  const next: Capability = { ...capability };
+  if (lines.length) next.guidance = lines;
+  else delete next.guidance;
+  return next;
 }
 
 export interface LoadedProduct {
@@ -290,11 +327,14 @@ export class CapabilityRegistry {
       const withheld = new Map<string, Capability>();
       const enabled: Capability[] = [];
 
-      for (const capability of bundle.capabilities) {
+      for (let capability of bundle.capabilities) {
         // UNIQUENESS IS CHECKED OVER EVERY CAPABILITY, disabled ones included. A clash
         // between a disabled name and a live one is still a broken artifact, and skipping
         // the disabled half would mean re-enabling the flag could fail the load later,
         // somewhere with less context than here.
+        // Surface guidance is folded in for EVERY capability, before any of the branches
+        // below, so a reference-only one and an ordinary one are composed the same way.
+        capability = withSurfaceGuidance(capability);
         if (isReferenceOnly(capability)) {
           // PUBLISHED, BUT NOT CALLABLE. It keeps its name and intent so the search that
           // should find it does, and loses everything a caller would need to invoke it.

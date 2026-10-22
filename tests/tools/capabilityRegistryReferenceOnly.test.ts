@@ -17,9 +17,12 @@ const LOCAL_ONLY = {
   entity: "build",
   encoding: "multipart",
   local_only: true,
-  unavailable_note: "Upload it yourself and pass the returned url.",
   intent: "Upload a build that is on this machine.",
-  guidance: ["The file must sit inside MCP_UPLOAD_BASE_DIR."],
+  guidance: {
+    shared: ["Only .apk and .ipa are accepted."],
+    local: ["The file must sit inside MCP_UPLOAD_BASE_DIR."],
+    remote: ["Upload it yourself and pass the returned url."],
+  },
   body: [{ name: "file", type: "file", required: true }],
   returns: ["app_url"],
   responses: { "200": { description: "ok" } },
@@ -106,17 +109,43 @@ describe("a local_only capability on a remote server", () => {
     expect(capability.invocable).toBe(false);
   });
 
-  it("replaces its guidance with the note, which is the whole of what is left", async () => {
+  it("gives the remote half, keeps the shared lines, drops the local ones", async () => {
+    // The whole point of the split: a fact true on both surfaces is written once and still
+    // reaches a remote caller, while advice about the user's own disk — which here would be
+    // wrong, not merely useless — does not.
     const reg = await load(true);
     const { capability } = reg.byNameLookup("upload_from_file", "p");
     expect(capability.guidance).toEqual([
+      "Only .apk and .ipa are accepted.",
       "Upload it yourself and pass the returned url.",
     ]);
   });
 
-  it("says so even without an authored note, rather than saying nothing", async () => {
+  it("gives the local half on a local server, and never the remote one", async () => {
+    const reg = await load(false);
+    const { capability } = reg.byNameLookup("upload_from_file", "p");
+    expect(capability.guidance).toEqual([
+      "Only .apk and .ipa are accepted.",
+      "The file must sit inside MCP_UPLOAD_BASE_DIR.",
+    ]);
+  });
+
+  it("flattens the object away, so no reader downstream meets it", async () => {
+    for (const remote of [true, false]) {
+      const reg = await load(remote);
+      const { capability } = reg.byNameLookup("upload_from_file", "p");
+      expect(Array.isArray(capability.guidance), `remote=${remote}`).toBe(true);
+    }
+  });
+
+  it("says so when nothing at all applies here, rather than saying nothing", async () => {
+    // No shared lines and no remote ones: the capability would otherwise be published with
+    // no explanation of why it cannot be called.
     const reg = await load(true, [
-      { ...LOCAL_ONLY, unavailable_note: undefined },
+      {
+        ...LOCAL_ONLY,
+        guidance: { local: ["The file must sit inside MCP_UPLOAD_BASE_DIR."] },
+      },
     ]);
     const { capability } = reg.byNameLookup("upload_from_file", "p");
     expect(capability.guidance?.[0]).toMatch(/cannot be called/);
@@ -131,7 +160,9 @@ describe("the same capability on a local server", () => {
     const { capability } = reg.byNameLookup("upload_from_file", "p");
     expect(capability.invocable).toBeUndefined();
     expect(capability.body).toHaveLength(1);
-    expect(capability.guidance?.[0]).toMatch(/MCP_UPLOAD_BASE_DIR/);
+    expect((capability.guidance as string[]).join(" ")).toMatch(
+      /MCP_UPLOAD_BASE_DIR/,
+    );
   });
 });
 

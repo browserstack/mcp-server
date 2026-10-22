@@ -46,7 +46,7 @@ import {
   terms,
   vocabularyOf,
 } from "./search.js";
-import { Mode } from "./types.js";
+import { Mode, guidanceLines } from "./types.js";
 
 export const PERMISSION_VALUES = ["not_asked", "granted", "denied"] as const;
 
@@ -888,8 +888,8 @@ export function addCapabilityRegistryTools(
           mode: capability.mode,
           entity: capability.entity,
           ...(capability.intent ? { intent: capability.intent } : {}),
-          ...(capability.guidance?.length
-            ? { guidance: capability.guidance }
+          ...(guidanceLines(capability.guidance).length
+            ? { guidance: guidanceLines(capability.guidance) }
             : {}),
         })),
         ...rest,
@@ -1247,7 +1247,7 @@ export function addCapabilityRegistryTools(
             "invokeCapability",
             "capability_not_invocable",
             `${handle} cannot be called on this server. ` +
-              (capability.guidance?.[0] ??
+              (guidanceLines(capability.guidance)[0] ??
                 "Describe it for what to do instead.") +
               " Follow that instead of retrying.",
             undefined,

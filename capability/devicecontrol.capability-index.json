@@ -3,7 +3,7 @@
  "version": "1.0",
  "build_id": "8445466_2026-10-19T06:53:46Z",
  "devicecontrol": {
-  "summary": "Device control: drive a real desktop or mobile browser page by page. The account side lists every operating system, browser and version combination available, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link, video, and console, network and profiling logs \u2014 after the browser is released. The session side opens a browser on a chosen combination and drives it: navigate, go back and forward, reload, read the page HTML, find elements by CSS or XPath, click, type, clear, run JavaScript, screenshot the viewport, resize the window, and move between tabs and iframes. Web pages are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Mobile APPS are not here: those are mobile device control, which drives an installed app rather than a browser. Scrolling is done through execute_script, there is no capability that waits, and element ids go stale as soon as the page navigates or re-renders. A session holds a browser until it is ended.",
+  "summary": "Device control: drive a real desktop or mobile browser page by page. The account side lists every operating system, browser and version combination available, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link, video, and console, network and profiling logs \u2014 after the browser is released. The session side opens a browser on a chosen combination and drives it: navigate, go back and forward, reload, find elements by CSS or XPath, click, type, clear, run JavaScript, screenshot the viewport, resize the window, and move between tabs and iframes. Web pages are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Mobile APPS are not here: those are mobile device control, which drives an installed app rather than a browser. Scrolling is done through execute_script, there is no capability that waits, and element ids go stale as soon as the page navigates or re-renders. A session holds a browser until it is ended.",
   "routing_terms": [
    "automate",
    "browser",
@@ -499,7 +499,7 @@
     "entity": "browser_session",
     "intent": "Read the page title \u2014 the cheapest way to confirm which page is loaded.",
     "guidance": [
-     "Far cheaper than get_page_source when all that is needed is which page is showing."
+     "The cheapest way to confirm which page is showing, and enough on its own for most navigation checks."
     ],
     "path_params": [
      {
@@ -664,7 +664,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "find_element",
@@ -1115,6 +1116,7 @@
     "intent": "Run JavaScript in the page \u2014 use this to scroll, read something the element readers cannot reach, or drive a control that resists clicking.",
     "guidance": [
      "SCROLLING LIVES HERE, and the reliable form is the ELEMENT one: pass the element in args and call arguments[0].scrollIntoView({block:'center'}). window.scrollTo(0, document.body.scrollHeight) reaches the bottom on a desktop browser, but on Chrome for Android it can stop short and leave a footer off screen while still reporting success \u2014 so scroll the thing you actually want rather than the page, and confirm with a screenshot or the page source.",
+     "READING THE PAGE'S MARKUP LIVES HERE TOO: 'return document.documentElement.outerHTML' for the whole document, or 'return arguments[0].outerHTML' with an element in args for one part of it. Prefer the element form \u2014 a real page runs to tens of kilobytes and the whole document is rarely what is wanted. This is also how to discover a selector on a page you have not seen: read the markup around the area you care about rather than guessing a selector, which fails silently when it matches nothing.",
      "`return` is required to get a value back; without it the answer is null.",
      "An element id can be passed in args as {\"element-6066-11e4-a52e-4f735466cecf\": \"<id>\"} and arrives as a real element in arguments.",
      "It runs with the page's own privileges and can change anything, so a script that alters state is as consequential as a click.",

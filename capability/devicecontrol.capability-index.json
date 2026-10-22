@@ -3,7 +3,7 @@
  "version": "1.0",
  "build_id": "8445466_2026-10-19T06:53:46Z",
  "devicecontrol": {
-  "summary": "Device control: drive a real desktop or mobile browser page by page. The account side lists every operating system, browser and version combination available, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link, video, and console, network and profiling logs \u2014 after the browser is released. The session side opens a browser on a chosen combination and drives it: navigate, go back and forward, reload, find elements by CSS or XPath, click, type, clear, run JavaScript, screenshot the viewport, resize the window, and move between tabs and iframes. Web pages are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Mobile APPS are not here: those are mobile device control, which drives an installed app rather than a browser. Scrolling is done through execute_script, there is no capability that waits, and element ids go stale as soon as the page navigates or re-renders. A session holds a browser until it is ended.",
+  "summary": "Device control: drive a real desktop or mobile browser page by page. The account side lists every operating system, browser and version combination available, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link, video, and console, network and profiling logs \u2014 after the browser is released. The session side opens a browser on a chosen combination and drives it: navigate, go back and forward, reload, find elements by CSS or XPath, click, type, clear, screenshot the viewport, resize the window, and move between tabs and iframes. Web pages are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Mobile APPS are not here: those are mobile device control, which drives an installed app rather than a browser. Scrolling is done with scroll_to_element or scroll_page, there is no capability that waits, and element ids go stale as soon as the page navigates or re-renders. A session holds a browser until it is ended.",
   "routing_terms": [
    "automate",
    "browser",
@@ -792,7 +792,7 @@
     "intent": "Click an element \u2014 use this for buttons, links, checkboxes and anything else that responds to a click.",
     "guidance": [
      "Takes no parameters of its own.",
-     "The element must be in view and not covered. A click on something another element overlaps answers \"element click intercepted\" and names the element in the way \u2014 scroll it into view with execute_script, or dismiss the overlay first.",
+     "The element must be in view and not covered. A click on something another element overlaps answers \"element click intercepted\" and names the element in the way \u2014 scroll it into view with scroll_to_element, or dismiss the overlay first.",
      "An element that is not visible answers \"element not interactable\".",
      "Success means the click was dispatched, not that the page has finished reacting: read the page or the URL afterwards to confirm."
     ],
@@ -837,7 +837,7 @@
     "guidance": [
      "APPENDS to whatever the field already holds. Call clear_element first to replace the value rather than adding to it.",
      "Read the result back with get_element_property on \"value\": a field's current contents are a property, not text.",
-     "A \\n at the end submits the form on a desktop browser and on Chrome for Android, and is quicker than finding the submit button. IT DOES NOT SUBMIT ON SAFARI FOR iOS \u2014 the text lands in the field and the page stays where it is, whether the newline is sent with the text or on its own. There, click the form's submit button, or call arguments[0].form.submit() through execute_script with the field as the argument.",
+     "A \\n at the end submits the form on a desktop browser and on Chrome for Android, and is quicker than finding the submit button. IT DOES NOT SUBMIT ON SAFARI FOR iOS \u2014 the text lands in the field and the page stays where it is, whether the newline is sent with the text or on its own. There, click the form's submit button with click_element \u2014 scroll_to_element first if it sits below the fold.",
      "The element must be editable; typing into anything else answers \"element not interactable\".",
      "A site's own autocomplete or dropdown may swallow the keystrokes and require a click on a suggestion instead."
     ],
@@ -964,8 +964,7 @@
      "404": {
       "$response": "WebDriverError"
      }
-    },
-    "disabled": true
+    }
    },
    {
     "name": "get_element_property",
@@ -1063,8 +1062,7 @@
      "404": {
       "$response": "WebDriverError"
      }
-    },
-    "disabled": true
+    }
    },
    {
     "name": "is_element_displayed",
@@ -1105,8 +1103,114 @@
      "404": {
       "$response": "WebDriverError"
      }
-    },
-    "disabled": true
+    }
+   },
+   {
+    "name": "scroll_to_element",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Bring an element into view \u2014 use this before clicking or screenshotting something below the fold, since both fail or miss when the target is off screen.",
+    "guidance": [
+     "THE RELIABLE FORM ON EVERY PLATFORM. Prefer this to scrolling the page by a distance: it works out where the element is for you, and it is the only form measured to work on Chrome for Android, where scrolling the page to its height can stop short and leave the target off screen.",
+     "The element_id goes in args as {\"element-6066-11e4-a52e-4f735466cecf\": \"<id>\"} and arrives in the script as arguments[0]; find_element gives you the id.",
+     "Returns the element's position after scrolling, so a caller can confirm it really is in view rather than trusting the status.",
+     "A click on a covered element answers \"element click intercepted\" \u2014 scroll it into view with this first."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "description": "Leave as the default; it scrolls arguments[0] into the middle of the viewport and reports where it ended up.",
+      "example": "arguments[0].scrollIntoView({block:'center'}); var r=arguments[0].getBoundingClientRect(); return {top:r.top,bottom:r.bottom,innerHeight:window.innerHeight};"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object holding the element reference.",
+      "example": [
+       {
+        "element-6066-11e4-a52e-4f735466cecf": "<element_id>"
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Whatever the script returned.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "scroll_page",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Scroll the page itself by a distance or to the bottom \u2014 use this when there is no element to aim at, such as reaching a footer or loading more of an infinite list.",
+    "guidance": [
+     "PREFER scroll_to_element when you have an element. On Chrome for Android this form can stop short and leave a footer off screen while still reporting success \u2014 measured \u2014 so confirm from the returned position rather than the status.",
+     "The default script goes to the bottom. Replace document.body.scrollHeight with a pixel offset to move by a fixed amount instead.",
+     "Returns the scroll position and the page height, so a caller can tell whether it actually reached the end."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "description": "The scroll to run. The default goes to the bottom of the page and reports where it landed.",
+      "example": "window.scrollTo(0, document.body.scrollHeight); return {scrollY:window.scrollY, innerHeight:window.innerHeight, scrollHeight:document.body.scrollHeight};"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Always empty.",
+      "example": []
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Whatever the script returned.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
    },
    {
     "name": "execute_script",
@@ -1160,7 +1264,8 @@
      "404": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "take_screenshot",
@@ -1171,7 +1276,7 @@
     "intent": "Take a screenshot of the browser's viewport, as a base64 PNG \u2014 use this to see the page as a user would.",
     "guidance": [
      "Returned inline as base64 and typically tens of kilobytes, so take one when the picture is needed rather than after every step.",
-     "The VIEWPORT only, not the whole page: anything below the fold needs scrolling into view first with execute_script.",
+     "The VIEWPORT only, not the whole page: anything below the fold needs scrolling into view first with scroll_to_element.",
      "get_title and get_element_property answer most checks far more cheaply than reading an image."
     ],
     "path_params": [
@@ -2027,7 +2132,9 @@
      "open_new_window",
      "switch_to_frame",
      "get_cookies",
-     "delete_session"
+     "delete_session",
+     "scroll_to_element",
+     "scroll_page"
     ]
    },
    "browser": {

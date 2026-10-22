@@ -76,7 +76,7 @@
      "Every session occupies a device and consumes App Automate minutes until it ends: always finish with set_session_status and then delete_session.",
      "To let a person watch the device live while the agent drives it, set interactive_debugging true and leave video on; they then open the running session on the App Automate dashboard and start the interactive session there. That window is two-way: a person's taps and scrolls reach the same device, so ask them to watch only, or re-read the page source before every action.",
      "device_name and platform_version must be a combination mobile device control offers; an unknown pair fails with a session-not-created error naming the capability.",
-     "Set appium_version to 2.19.0 for any session that will use execute_script with a `mobile:` command; the default server is 1.x and answers those with a 404 listing the commands it does know.",
+     "Set appium_version to 2.19.0 for any session that will scroll with scroll_gesture, dismiss an iOS keyboard with dismiss_keyboard_key, or use any other mobile: capability; the default server is 1.x and answers those with a 404 listing the commands it does know.",
      "enable_biometric, enable_camera_image_injection and upload_media only take effect when set here \u2014 none of them can be turned on once the session is running.",
      "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
      "device_name and platform_version come from list_devices; get_plan first if sessions are queueing rather than starting.",
@@ -565,7 +565,7 @@
      "Tap: one touch pointer with pointerMove(duration 0, x, y), pointerDown(button 0), pause(100), pointerUp(button 0).",
      "Swipe up to scroll content down: pointerMove to a low point, pointerDown, pointerMove(duration 600) to a higher point, pointerUp. Keep the start and end inside the scrollable element's bounds.",
      "Long-press: replace the pause duration with 1000 or more.",
-     "For a scroll without computing coordinates, execute_script with \"mobile: scrollGesture\" is simpler and reports whether more content remains.",
+     "For a scroll without computing coordinates, scroll_gesture is simpler on Android and reports whether more content remains; on iOS compute the swipe here.",
      "To go back on an iOS screen that ignores press_back, swipe in from the left edge: a pointer sequence starting at exactly x=0 and moving right in several short steps. A single long move does not register."
     ],
     "path_params": [
@@ -657,6 +657,135 @@
     }
    },
    {
+    "name": "scroll_gesture",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Scroll a region of the screen in a direction \u2014 use this to move through a list or page without working out start and end coordinates yourself.",
+    "guidance": [
+     "ANDROID ONLY. On iOS this is a 404 \"unknown command\"; use perform_actions there and compute the swipe yourself.",
+     "The returned value is true when more content remains in that direction and false at the end, which is the cheap way to know whether to scroll again.",
+     "The area is a rectangle in screen pixels \u2014 get_window_rect gives the screen size to base it on \u2014 and percent is how far to scroll within it, 0 to 1.",
+     "Needs Appium 2.x: set appium_version to 2.19.0 at session start, since the default 1.x server answers mobile: commands with a 404 listing what it does know."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "description": "Leave as the default.",
+      "example": "mobile: scrollGesture"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object: the rectangle to scroll inside, the direction, and how far.",
+      "example": [
+       {
+        "left": 100,
+        "top": 500,
+        "width": 880,
+        "height": 1500,
+        "direction": "down",
+        "percent": 0.8
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Command result; its shape depends on the command.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     },
+     "500": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "dismiss_keyboard_key",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Close the on-screen keyboard by pressing one of its own keys \u2014 use this on iOS, where the plain hide_keyboard is refused.",
+    "guidance": [
+     "THIS IS THE ONE THAT WORKS ON iOS. hide_keyboard answers 400 \"invalid element state\" there; this presses a key the keyboard actually carries instead.",
+     "The key must EXIST on that keyboard or this returns the same 400: read the keyboard from get_page_source and pick from the keys that are really there. An iPad carries \"Hide keyboard\"; an iPhone keyboard of this kind usually offers only Return.",
+     "Several candidates may be listed in one call and it costs nothing, but it still fails when the keyboard carries none of them \u2014 measured with [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"].",
+     "PRESSING RETURN SUBMITS. An app that commits when the field stops being edited will commit however the keyboard is closed, so check the field afterwards rather than assuming only the keyboard moved.",
+     "Confirm with is_keyboard_shown; on Android use hide_keyboard instead, which works normally."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "description": "Leave as the default.",
+      "example": "mobile: hideKeyboard"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object whose keys field lists the key names to try, in order.",
+      "example": [
+       {
+        "keys": [
+         "Done",
+         "done",
+         "Hide keyboard",
+         "Dismiss"
+        ]
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Command result; its shape depends on the command.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     },
+     "500": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
     "name": "execute_script",
     "method": "POST",
     "path": "/wd/hub/session/{session_id}/execute/sync",
@@ -719,7 +848,8 @@
      "500": {
       "$response": "WebDriverError"
      }
-    }
+    },
+    "disabled": true
    },
    {
     "name": "get_window_rect",
@@ -767,7 +897,7 @@
     "guidance": [
      "There is no way to resume an ended session; any further step needs create_session again, which reinstalls the app.",
      "The session's video, logs and pass/fail status stay on the App Automate dashboard after it ends.",
-     "Call setSessionStatus through execute_script first \u2014 once the session has ended that route is gone."
+     "Mark the result with set_session_status first \u2014 it also works after the session has ended, so this is an ordering preference rather than a last chance."
     ],
     "path_params": [
      {
@@ -1148,8 +1278,7 @@
      "Works after the session has ended as well as during it, so the verdict can be set once the result is known.",
      "Only 'passed' and 'failed' are accepted; any other value is rejected with a 422.",
      "reason is truncated at 255 characters.",
-     "An unset session shows as neither passed nor failed on the dashboard, which reads as an abandoned run.",
-     "The same thing can be done from inside a running session with execute_script and the browserstack_executor setSessionStatus action; this way needs no open session."
+     "An unset session shows as neither passed nor failed on the dashboard, which reads as an abandoned run."
     ],
     "path_params": [
      {
@@ -1502,7 +1631,7 @@
      "The response is true when a keyboard was dismissed and false when none was showing; false is not an error.",
      "A tap aimed at a control hidden behind the keyboard lands on the keyboard instead and reports success, so close it first rather than afterwards.",
      "On iOS this FAILS rather than quietly doing nothing: 400 \"invalid element state\", message \"Did not know how to dismiss the keyboard\". The keyboard stays up and the field keeps what was typed, so treat the 400 as the normal answer on iOS and not as a broken call.",
-     "What DOES close it on iOS is execute_script with 'mobile: hideKeyboard' and a key the keyboard actually has, in args [{\"keys\":[\"<key>\"]}]. An iPad keyboard carries a \"Hide keyboard\" key and that closes it cleanly \u2014 200, is_keyboard_shown false, no Return pressed. An iPhone keyboard of this kind usually offers only the return key, and pressing that is also a submit.",
+     "What DOES close it on iOS is dismiss_keyboard_key, which presses a key the keyboard actually has. An iPad keyboard carries a \"Hide keyboard\" key and that closes it cleanly \u2014 200, is_keyboard_shown false, no Return pressed. An iPhone keyboard of this kind usually offers only the return key, and pressing that is also a submit.",
      "The keys argument names a key on the APP'S OWN keyboard and fails when that key is absent: [\"Done\"] returns the same 400 on a keyboard that offers only Return. SEVERAL CANDIDATES MAY BE LISTED IN ONE CALL \u2014 [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"] is accepted and costs nothing \u2014 but it still returns the same 400 when the keyboard carries none of them, so it is a convenience and not a way round the problem. Read the keyboard from get_page_source and pick from the keys that are really there; that also tells you in advance when the only option is one that submits.",
      "GESTURES DO NOT DISMISS IT. Tapping an empty area above the keyboard returns 200 and changes nothing, and so does a drag downward over it \u2014 including one that starts well above the keyboard's top and moves through it in short steps, which is the form that works on a screen whose scroll view dismisses on drag. This app's does not, and neither gesture moved it.",
      "WHETHER THE FIELD SURVIVES IS THE APP'S BUSINESS, NOT THE KEYBOARD'S. An app that commits on editing-ended will commit however the keyboard is dismissed \u2014 measured: closing an iPad keyboard with \"Hide keyboard\" still moved the text out of the field. So do not expect any dismissal to be side-effect free; check the app's own behaviour. On Android hide_keyboard works normally.",
@@ -1744,11 +1873,11 @@
     "entity": "app_session",
     "intent": "Press a hardware or system key on an Android device by its key code \u2014 use this for home, enter, delete, volume or any key with no on-screen control.",
     "guidance": [
-     "Android only. iOS has no equivalent: use press_back to go back, and execute_script with 'mobile: pressButton' for home and the volume keys.",
+     "Android only. iOS has no equivalent: use press_back to go back, and press_button for home and the volume keys.",
      "Common codes: 3 home, 4 back, 66 enter, 67 delete, 61 tab, 82 menu, 84 search, 187 app switch, 24 volume up, 25 volume down, 26 power.",
      "press_back is the clearer way to send 4.",
      "The response is null on success and says nothing about what the key did.",
-     "Called on iOS this is a 405 \"unknown method\" rather than a silent no-op; use press_back or 'mobile: pressButton' there."
+     "Called on iOS this is a 405 \"unknown method\" rather than a silent no-op; use press_back or press_button there."
     ],
     "path_params": [
      {
@@ -1806,7 +1935,7 @@
      "Returns the Android package name; it answers with the launcher's package when the app has been sent to the background.",
      "This is the quickest way to learn the app under test's own package id, which launch_app and terminate_app both need.",
      "Android only; get_active_app_info is the iOS equivalent and returns an object rather than a string.",
-     "Called on iOS this is a 405 \"unknown method\" rather than a silent no-op; use 'mobile: activeAppInfo' there."
+     "Called on iOS this is a 405 \"unknown method\" rather than a silent no-op; use get_active_app_info there."
     ],
     "path_params": [
      {
@@ -3286,7 +3415,9 @@
      "get_active_app_info",
      "read_device_property",
      "find_elements",
-     "clear_element"
+     "clear_element",
+     "scroll_gesture",
+     "dismiss_keyboard_key"
     ]
    },
    "device": {

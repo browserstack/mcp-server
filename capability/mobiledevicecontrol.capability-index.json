@@ -467,7 +467,7 @@
      "The element must be an editable field (EditText on Android, TextField on iOS); typing into anything else fails with \"invalid element state\".",
      "The on-screen keyboard may stay open afterwards and cover lower elements \u2014 re-read the page source before the next tap.",
      "clear_element empties a field, and on iOS \u2014 where this APPENDS \u2014 it is the only way to take back what is already there. It answers 200 whether or not the field changed, so read the field back from get_page_source rather than trusting the status.",
-     "The keyboard is usually left open afterwards. On Android, hide_keyboard closes it. On iOS it cannot be closed without submitting, so read hide_keyboard's guidance before planning a tap below the field.",
+     "The keyboard is usually left open afterwards. On Android and on an iPad, hide_keyboard closes it. On an iPhone it cannot be closed without submitting, so read hide_keyboard's guidance before planning a tap below the field.",
      "Sending a newline closes the keyboard on iOS by pressing Return, which an app that commits on editing-ended will treat as a submit \u2014 the field resets and the value moves wherever the app sends it. The commit is the app's doing, not the newline's: dismissing the same field any other way can commit it too. See hide_keyboard."
     ],
     "path_params": [
@@ -790,13 +790,13 @@
     "path": "/wd/hub/session/{session_id}/execute/sync",
     "mode": "write",
     "entity": "app_session",
-    "intent": "Close the on-screen keyboard by pressing one of its own keys \u2014 use this on iOS, where the plain hide_keyboard is refused.",
+    "intent": "Close the on-screen keyboard by pressing one of its own keys \u2014 use this on an iPhone, where the plain hide_keyboard is refused.",
     "guidance": [
-     "THIS IS THE ONE THAT WORKS ON iOS. hide_keyboard answers 400 \"invalid element state\" there; this presses a key the keyboard actually carries instead.",
+     "THIS IS THE ONE FOR AN iPHONE. hide_keyboard answers 400 \"invalid element state\" there, while on an iPad and on Android it works as it is; this presses a key the keyboard actually carries instead.",
      "The key must EXIST on that keyboard or this returns the same 400: read the keyboard from get_page_source and pick from the keys that are really there. An iPad carries \"Hide keyboard\"; an iPhone keyboard of this kind usually offers only Return.",
      "Several candidates may be listed in one call and it costs nothing, but it still fails when the keyboard carries none of them \u2014 measured with [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"].",
      "PRESSING RETURN SUBMITS. An app that commits when the field stops being edited will commit however the keyboard is closed, so check the field afterwards rather than assuming only the keyboard moved.",
-     "Confirm with is_keyboard_shown; on Android use hide_keyboard instead, which works normally."
+     "Confirm with is_keyboard_shown; on Android and on an iPad use hide_keyboard instead, which works normally."
     ],
     "path_params": [
      {
@@ -1696,11 +1696,11 @@
     "guidance": [
      "The response is true when a keyboard was dismissed and false when none was showing; false is not an error.",
      "A tap aimed at a control hidden behind the keyboard lands on the keyboard instead and reports success, so close it first rather than afterwards.",
-     "On iOS this FAILS rather than quietly doing nothing: 400 \"invalid element state\", message \"Did not know how to dismiss the keyboard\". The keyboard stays up and the field keeps what was typed, so treat the 400 as the normal answer on iOS and not as a broken call.",
-     "What DOES close it on iOS is dismiss_keyboard_key, which presses a key the keyboard actually has. An iPad keyboard carries a \"Hide keyboard\" key and that closes it cleanly \u2014 200, is_keyboard_shown false, no Return pressed. An iPhone keyboard of this kind usually offers only the return key, and pressing that is also a submit.",
+     "WHETHER THIS WORKS ON iOS DEPENDS ON THE KEYBOARD, NOT THE PLATFORM. On an iPad it closes the keyboard and answers 200 true, because that keyboard carries a \"Hide keyboard\" key. On an iPhone it FAILS rather than quietly doing nothing: 400 \"invalid element state\", message \"Did not know how to dismiss the keyboard\", because the only key that closes an iPhone keyboard of this kind is Return and that is not pressed for you. The keyboard stays up and the field keeps what was typed, so treat the 400 as the normal answer on an iPhone and not as a broken call.",
+     "On an iPhone, dismiss_keyboard_key presses a key the keyboard actually has, but an iPhone keyboard of this kind usually offers only the return key, and pressing that is also a submit.",
      "The keys argument names a key on the APP'S OWN keyboard and fails when that key is absent: [\"Done\"] returns the same 400 on a keyboard that offers only Return. SEVERAL CANDIDATES MAY BE LISTED IN ONE CALL \u2014 [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"] is accepted and costs nothing \u2014 but it still returns the same 400 when the keyboard carries none of them, so it is a convenience and not a way round the problem. Read the keyboard from get_page_source and pick from the keys that are really there; that also tells you in advance when the only option is one that submits.",
      "GESTURES DO NOT DISMISS IT. Tapping an empty area above the keyboard returns 200 and changes nothing, and so does a drag downward over it \u2014 including one that starts well above the keyboard's top and moves through it in short steps, which is the form that works on a screen whose scroll view dismisses on drag. This app's does not, and neither gesture moved it.",
-     "WHETHER THE FIELD SURVIVES IS THE APP'S BUSINESS, NOT THE KEYBOARD'S. An app that commits on editing-ended will commit however the keyboard is dismissed \u2014 measured: closing an iPad keyboard with \"Hide keyboard\" still moved the text out of the field. So do not expect any dismissal to be side-effect free; check the app's own behaviour. On Android hide_keyboard works normally.",
+     "WHETHER THE FIELD SURVIVES IS THE APP'S BUSINESS, NOT THE KEYBOARD'S. An app that commits on editing-ended will commit however the keyboard is dismissed \u2014 closing an iPad keyboard this way still moved the text out of the field. So do not expect any dismissal to be side-effect free; check the app's own behaviour. On Android it closes the keyboard, answers true, and leaves the field as it was.",
      "is_keyboard_shown reports the state this changes, and is the reliable way to tell whether the keyboard actually went away."
     ],
     "path_params": [

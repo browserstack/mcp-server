@@ -157,10 +157,16 @@ export class AccessibilityReportFetcher {
       const data: ScanListPage | undefined = resp.data?.data;
       for (const scan of data?.scans ?? []) {
         if (thBuildIdOf(scan.scanUrl) === thBuildId) {
+          const scanRunId = scan.lastScanDetails?.scanRunId;
+          if (scanRunId === undefined) {
+            throw new Error(
+              `Website Scanner scan ${scan.id} has no completed run to read yet; wait for it to finish, or pass scanId and scanRunId`,
+            );
+          }
           return {
             kind: "scan",
             scanId: String(scan.id),
-            scanRunId: String(scan.lastScanDetails?.scanRunId),
+            scanRunId: String(scanRunId),
           };
         }
         if (sameName === undefined && scan.name === scanName) {

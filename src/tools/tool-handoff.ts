@@ -93,17 +93,11 @@ export const NEEDS_SESSION_ID =
  * but the tool takes a report's dashboard link and looks the ids up itself.
  */
 export const NEEDS_A11Y_SCAN_ID =
-  " Requires a completed source: a Website Scanner run's ids, returned by " +
-  "startAccessibilityScan; an Automated Tests build's id, the thBuildId in its accessibility " +
-  "report link; a Workflow Analyzer report's numeric id; or a Website Scanner or Automated " +
-  "Tests report's dashboard link, passed as reportUrl. No tool here lists past scans, builds " +
-  "or reports, so if you have none of these, ask the user for the report link, or start a " +
-  "new scan, rather than guessing.";
+  " Ids: startAccessibilityScan or a dashboard link; nothing here lists reports.";
 
 /** Auth-config ids are not listable by any tool here. */
 export const NEEDS_A11Y_CONFIG_ID =
-  " Requires the numeric id returned by createAccessibilityAuthConfig. No tool here lists " +
-  "existing configurations, so if you do not have the id, create one rather than guessing.";
+  " Requires the id returned by createAccessibilityAuthConfig; nothing here lists configs.";
 
 /** Test ids come from listTestIds, which itself needs a build id. */
 export const NEEDS_TEST_IDS = needsIdFrom("test ids", "listTestIds");

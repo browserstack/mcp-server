@@ -717,36 +717,35 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues with pagination support, from exactly one source: a completed Website Scanner run (scanId with scanRunId), an Automated Tests build from a BrowserStack SDK test run (buildId), a Workflow Analyzer report (workflowReportId), or a Website Scanner or Automated Tests report's dashboard link (reportUrl). Also returns a link to download the full report as a CSV. Use cursor parameter to get subsequent pages of results." +
+    "Fetch accessibility issues (paged by cursor) from one source: scanId+scanRunId, buildId, workflowReportId or reportUrl." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z
         .string()
         .optional()
-        .describe(
-          "Website Scanner: the scan ID from a completed accessibility scan",
-        ),
+        .describe("Website Scanner: the scan id from startAccessibilityScan."),
       scanRunId: z
         .string()
         .optional()
         .describe(
-          "Website Scanner: the scan run ID from a completed accessibility scan",
+          "Website Scanner: the scan run id from startAccessibilityScan.",
         ),
       buildId: z
         .string()
+        .regex(/^[a-z0-9]{40}$/, "40 lowercase letters and digits")
         .optional()
         .describe(
-          "Automated Tests: the Accessibility build id, shown as thBuildId in the build's accessibility report link (40 lowercase letters and digits). Not the Automate build id or the build name.",
+          "Automated Tests: the thBuildId in the build's accessibility report link (not the Automate build id).",
         ),
       workflowReportId: z
         .string()
         .optional()
-        .describe("Workflow Analyzer: the report's numeric id, e.g. 123456"),
+        .describe("Workflow Analyzer: the report's numeric id."),
       reportUrl: z
         .string()
         .optional()
         .describe(
-          "A report's Accessibility dashboard link, as the user pasted it: a Website Scanner or Automated Tests report link carrying thBuildId. A Website Scanner link resolves only to its scan's latest run. Workflow Analyzer links are not supported; use workflowReportId.",
+          "A Website Scanner or Automated Tests report link from the Accessibility dashboard (carries thBuildId).",
         ),
       cursor: z
         .number()

@@ -168,3 +168,20 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl", () => {
     expect(get).not.toHaveBeenCalled();
   });
 });
+
+describe("AccessibilityReportFetcher.sourceFromReportUrl and a scan without a run", () => {
+  it("refuses a link whose scan has no run yet instead of asking the API for run 'undefined'", async () => {
+    const DASHBOARD = "https://accessibility.browserstack.com";
+    const link = `${DASHBOARD}/site-scanner/projects/checkout/builds?thBuildId=bbb`;
+    (apiClient.get as Mock).mockResolvedValueOnce(
+      ok({
+        scans: [{ id: 1234, name: "checkout", scanUrl: link }],
+        pagination: { hasNext: false },
+      }),
+    );
+
+    await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(
+      /scan 1234 has no completed run/,
+    );
+  });
+});

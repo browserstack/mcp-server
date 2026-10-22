@@ -276,11 +276,11 @@ const PROCESSING_STATUSES = new Set([
 ]);
 
 /**
- * Of those, the one worth waiting on: the advanced-issue processing after the run, which
- * ends within minutes. A report whose scan or tests are still running is read as it is,
+ * Of those, the ones worth waiting on: the processing after the run (a web scan's advanced
+ * issues, an app build's rules), which ends within minutes. A report whose scan or tests are still running is read as it is,
  * with a note, since that can last as long as the suite does.
  */
-const WAIT_STATUSES = new Set(["finalizing"]);
+const WAIT_STATUSES = new Set(["finalizing", "rule_processing"]);
 
 interface ProcessingState {
   /** The status when the issues were read; undefined when it could not be read. */
@@ -802,7 +802,7 @@ export default function addAccessibilityTools(
 
   tools.startAccessibilityScan = server.tool(
     "startAccessibilityScan",
-    "Start an accessibility scan of a web page via BrowserStack and retrieve a local CSV report path. Web pages only: a mobile app (APK or IPA) is scanned by running it on App Automate with accessibility on. Set that up with setupBrowserStackAppAutomateTests (accessibility: true), run the tests, then read the issues with fetchAccessibilityIssues using the build id the SDK prints.",
+    "Scan a web page URL for accessibility issues and get a CSV report. For a mobile app, run it on App Automate with accessibility on (setupBrowserStackAppAutomateTests), then fetchAccessibilityIssues.",
     {
       name: z.string().describe("Name of the accessibility scan"),
       pageURL: z
@@ -942,7 +942,7 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues (paged by cursor) from one source: scanId+scanRunId, buildId, workflowReportId or reportUrl." +
+    "Fetch accessibility issues from one source: scanId+scanRunId, buildId (web or app build), workflowReportId or reportUrl." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z
@@ -960,7 +960,7 @@ export default function addAccessibilityTools(
         .regex(/^[a-z0-9]{40}$/, "40 lowercase letters and digits")
         .optional()
         .describe(
-          "Automated Tests: the thBuildId in the build's accessibility report link (not the Automate build id).",
+          "Automated Tests or App Accessibility build id: the SDK's testhub id, or the thBuildId in a web report link.",
         ),
       workflowReportId: z
         .string()
@@ -970,7 +970,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          "A Website Scanner or Automated Tests report link from the Accessibility dashboard (carries thBuildId).",
+          "A Website Scanner, Automated Tests or App Accessibility report link from its dashboard.",
         ),
       cursor: z
         .number()

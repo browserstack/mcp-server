@@ -662,10 +662,11 @@
     "path": "/wd/hub/session/{session_id}/execute/sync",
     "mode": "write",
     "entity": "app_session",
-    "intent": "Scroll a region of the screen in a direction \u2014 use this to move through a list or page without working out start and end coordinates yourself.",
+    "intent": "Swipe or scroll a region of the screen in a direction \u2014 use this to move through a list or page, or to swipe left and right through a carousel of cards, without working out start and end coordinates yourself.",
     "guidance": [
      "ANDROID ONLY. On iOS this is a 405 \"unknown method\"; scroll_view is the iOS counterpart.",
      "The returned value is true when the view can still scroll further in that direction and false when it cannot \u2014 but the FIRST scroll of a freshly opened list can answer false while the screen moved and more content followed, so treat false as a hint and confirm from the page source before deciding you are at the end.",
+     "A HORIZONTAL SWIPE IS THE SAME CALL with direction left or right: a rectangle covering the carousel's band of the screen, taken from get_window_rect, is enough \u2014 no element bounds are needed, and perform_actions is the harder way to do the same thing. DIRECTION NAMES WHERE THE CONTENT COMES FROM, as with a list: down brings what is below into view (the finger moves up), so right brings the NEXT card and left the previous one.",
      "The area is a rectangle in screen pixels \u2014 get_window_rect gives the screen size to base it on \u2014 and percent is how far to scroll within it, 0 to 1.",
      "Needs Appium 2.x: set appium_version to 2.19.0 at session start, since the default 1.x server answers mobile: commands with a 404 listing what it does know."
     ],
@@ -691,7 +692,7 @@
       "name": "args",
       "type": "array",
       "required": true,
-      "description": "Exactly one object: the rectangle to scroll inside, the direction, and how far.",
+      "description": "Exactly one object: the rectangle to scroll inside, the direction (up, down, left or right), and how far.",
       "example": [
        {
         "left": 100,
@@ -728,10 +729,11 @@
     "path": "/wd/hub/session/{session_id}/execute/sync",
     "mode": "write",
     "entity": "app_session",
-    "intent": "Scroll a scrollable view on iOS in a direction, or until a named element is visible \u2014 use this to move through a list or a long screen.",
+    "intent": "Swipe or scroll a scrollable view on iOS in a direction, or until a named element is visible \u2014 use this to move through a list or a long screen, or to swipe left and right through a carousel.",
     "guidance": [
      "iOS ONLY, and the counterpart of scroll_gesture. On Android the same command exists with a different shape and answers 400 \"invalid argument\" naming strategy and selector as missing; use scroll_gesture there.",
      "Scroll by direction with {\"direction\":\"down\"}, or stop when something comes into view with {\"predicateString\":\"name == 'Submit'\", \"toVisible\": true} \u2014 the second is the reliable way to reach a known control without guessing how far to go.",
+     "A HORIZONTAL SWIPE IS THE SAME CALL with direction left or right, optionally with elementId naming the carousel; no coordinates are needed.",
      "Pass elementId in args to scroll inside that view rather than the whole screen; without one it scrolls the first scrollable view it finds, which may not be the one you meant.",
      "Needs Appium 2.x: set appium_version to 2.19.0 at session start, since the default 1.x server answers mobile: commands with a 404 listing what it does know.",
      "Confirm from get_page_source that the screen actually moved \u2014 this answers 200 even on a screen with nothing scrollable, so a 200 only says the gesture was delivered."

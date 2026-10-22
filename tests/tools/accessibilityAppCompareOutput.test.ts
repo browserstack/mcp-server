@@ -264,6 +264,9 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
     expect(out).toContain(
       'Compared App Accessibility build "checkout-android" #5 with build "checkout-android" #4, the build before it: 1 new, 2 resolved, 1 still open.',
     );
+    expect(out).toContain(
+      "New and still-open issues add up to this build's 2; resolved and still-open ones to the earlier build's 3.",
+    );
     expect(out).toMatch(/New issues \(1\):[\s\S]*com\.shop:id\/promo/);
     expect(out).toMatch(
       /Resolved issues \(2\):[\s\S]*com\.shop:id\/pay[\s\S]*com\.shop:id\/save/,

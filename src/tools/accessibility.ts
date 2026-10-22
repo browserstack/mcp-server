@@ -557,7 +557,7 @@ async function compareAppBuilds(
     ...preface,
     ...processingNote(processing),
     `Compared App Accessibility build "${after.build_name}" #${after.build_number} with build "${before.build_name}" #${before.build_number}${which}: ${added.length} new, ${resolved.length} resolved, ${retained} still open.`,
-    "Issues are matched by rule and element: its id, or its class and text when it has none.",
+    `Issues are matched one for one by rule and element: its id, or else its class and its text or label. New and still-open issues add up to this build's ${after.issues.length}; resolved and still-open ones to the earlier build's ${before.issues.length}.`,
     ...warnings,
     issueList("New issues", added),
     issueList("Resolved issues", resolved),

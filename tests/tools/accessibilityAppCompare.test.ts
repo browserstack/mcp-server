@@ -219,6 +219,80 @@ describe("compareAppIssues", () => {
     expect(diff.added).toEqual([]);
     expect(diff.retained).toBe(1);
   });
+
+  // An iOS issue often names its element by neither id nor class: only a frame, and
+  // sometimes an accessibility label. Many issues of one rule then look alike.
+  const unnamed = (screen: string, x: number, accessibilityLabel?: string) => ({
+    ...issue(
+      "text-magnification",
+      "critical",
+      "Font Magnification Support",
+      screen,
+      {
+        frame: { x, y: 10, width: 50, height: 20 },
+        ...(accessibilityLabel ? { accessibilityLabel } : {}),
+      },
+    ),
+    // With neither id nor class, the element is named by its rule.
+    issue_type: "Font Magnification Support",
+  });
+
+  it("matches look-alike issues one for one, so the counts add up to each build's total", () => {
+    const before = [
+      unnamed("Screen 1 (t)", 10),
+      unnamed("Screen 1 (t)", 70),
+      unnamed("Screen 2 (t)", 10),
+      unnamed("Screen 3 (t)", 10),
+    ];
+    const after = [unnamed("Screen 1 (t)", 10), unnamed("Screen 1 (t)", 70)];
+
+    const diff = compareAppIssues(before, after);
+
+    expect(diff.retained).toBe(2);
+    expect(diff.added).toEqual([]);
+    expect(diff.resolved.map((r) => r.screen)).toEqual([
+      "Screen 2 (t)",
+      "Screen 3 (t)",
+    ]);
+    expect(diff.added.length + diff.retained).toBe(after.length);
+    expect(diff.resolved.length + diff.retained).toBe(before.length);
+  });
+
+  it("pairs a look-alike with one on the same screen and spot before any other", () => {
+    const before = [unnamed("Screen 1 (t)", 10), unnamed("Screen 2 (t)", 10)];
+    const after = [unnamed("Screen 2 (t)", 10)];
+
+    const diff = compareAppIssues(before, after);
+
+    expect(diff.retained).toBe(1);
+    expect(diff.resolved.map((r) => r.screen)).toEqual(["Screen 1 (t)"]);
+  });
+
+  it("still pairs look-alikes that moved to another screen, as a fix can renumber the screens", () => {
+    const before = [unnamed("Screen 2 (t)", 10)];
+    const after = [unnamed("Screen 3 (t)", 10)];
+
+    const diff = compareAppIssues(before, after);
+
+    expect(diff.retained).toBe(1);
+    expect(diff.added).toEqual([]);
+    expect(diff.resolved).toEqual([]);
+  });
+
+  it("tells elements without an id apart by their accessibility label", () => {
+    const diff = compareAppIssues(
+      [
+        unnamed("Screen 1 (t)", 10, "Price"),
+        unnamed("Screen 1 (t)", 70, "Total"),
+      ],
+      [unnamed("Screen 1 (t)", 10, "Total")],
+    );
+
+    expect(diff.retained).toBe(1);
+    expect(diff.resolved.map((r) => r.element.accessibilityLabel)).toEqual([
+      "Price",
+    ]);
+  });
 });
 
 describe("AccessibilityReportFetcher and the build before an app build", () => {
@@ -321,13 +395,11 @@ describe("AccessibilityReportFetcher and the build before an app build", () => {
 
 describe("AccessibilityReportFetcher reads every issue of an app build to compare it", () => {
   it("returns all the build's issues with the tests its screens came from", async () => {
-    get
-      .mockResolvedValueOnce(ok({ meta_data: META }))
-      .mockResolvedValueOnce(
-        ok({
-          data: { details: SNAPSHOTS, info: { next: null }, issue_counts: {} },
-        }),
-      );
+    get.mockResolvedValueOnce(ok({ meta_data: META })).mockResolvedValueOnce(
+      ok({
+        data: { details: SNAPSHOTS, info: { next: null }, issue_counts: {} },
+      }),
+    );
 
     const build = await fetcher().appBuildIssues(BUILD_ID);
 

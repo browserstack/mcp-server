@@ -352,18 +352,30 @@ export function summarizeAppIssues(
 
 /**
  * The same issue in two builds: the same rule on the same element. An element is known by
- * its id; one without an id, by its class and text. The screen is left out, as screens are
+ * its id; one without an id, by its class (or, with no class either, as an iOS element can
+ * be, only by its rule) and its text or label. The screen is left out, as screens are
  * numbered in the order they were scanned, which a fix can shift.
  */
 function appIssueKey(row: AppAccessibilityIssue): string {
   const unnamed =
     row.component === row.element.className || row.component === row.issue_type;
-  return [row.rule_id, row.component, unnamed ? (row.element.text ?? "") : ""]
+  const label = row.element.text ?? row.element.accessibilityLabel ?? "";
+  return [row.rule_id, row.component, unnamed ? label : ""]
     .map(String)
     .join("|");
 }
 
-/** What a later build has that an earlier one did not, what it no longer has, and how many it kept. */
+const sameFrame = (a: AppAccessibilityIssue, b: AppAccessibilityIssue) =>
+  JSON.stringify(a.element.frame ?? null) ===
+  JSON.stringify(b.element.frame ?? null);
+
+/**
+ * Which issues of two builds are the same issue. Issues that look alike (one rule on
+ * elements known by neither id nor label) are paired one for one, those on the same screen
+ * and spot first, then on the same screen, then any; what is left over in either build is
+ * new or resolved. So new and still open add up to the later build's issues, and resolved
+ * and still open to the earlier one's.
+ */
 export function compareAppIssues(
   before: AppAccessibilityIssue[],
   after: AppAccessibilityIssue[],
@@ -372,19 +384,36 @@ export function compareAppIssues(
   resolved: AppAccessibilityIssue[];
   retained: number;
 } {
-  const keyed = (rows: AppAccessibilityIssue[]) => {
-    const byKey = new Map<string, AppAccessibilityIssue>();
-    for (const row of rows) {
-      if (!byKey.has(appIssueKey(row))) byKey.set(appIssueKey(row), row);
+  const earlierByKey = new Map<string, AppAccessibilityIssue[]>();
+  for (const row of before) {
+    const key = appIssueKey(row);
+    earlierByKey.set(key, [...(earlierByKey.get(key) ?? []), row]);
+  }
+  const matched = new Set<AppAccessibilityIssue>();
+  const passes = [
+    (a: AppAccessibilityIssue, b: AppAccessibilityIssue) =>
+      a.screen === b.screen && sameFrame(a, b),
+    (a: AppAccessibilityIssue, b: AppAccessibilityIssue) =>
+      a.screen === b.screen,
+    () => true,
+  ];
+  for (const pairs of passes) {
+    for (const row of after) {
+      if (matched.has(row)) continue;
+      const twin = earlierByKey
+        .get(appIssueKey(row))
+        ?.find((earlier) => !matched.has(earlier) && pairs(row, earlier));
+      if (twin) {
+        matched.add(row);
+        matched.add(twin);
+      }
     }
-    return byKey;
-  };
-  const earlier = keyed(before);
-  const later = keyed(after);
+  }
+  const added = after.filter((row) => !matched.has(row));
   return {
-    added: [...later].filter(([k]) => !earlier.has(k)).map(([, r]) => r),
-    resolved: [...earlier].filter(([k]) => !later.has(k)).map(([, r]) => r),
-    retained: [...later.keys()].filter((k) => earlier.has(k)).length,
+    added,
+    resolved: before.filter((row) => !matched.has(row)),
+    retained: after.length - added.length,
   };
 }
 

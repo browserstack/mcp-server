@@ -682,7 +682,6 @@
       "name": "script",
       "type": "string",
       "required": true,
-      "description": "Fixed. The only accepted value; anything else is refused before the request is sent.",
       "example": "mobile: scrollGesture",
       "values": [
        "mobile: scrollGesture"
@@ -753,8 +752,7 @@
       "values": [
        "mobile: scroll"
       ],
-      "example": "mobile: scroll",
-      "description": "Fixed. The only accepted value; anything else is refused before the request is sent."
+      "example": "mobile: scroll"
      },
      {
       "name": "args",
@@ -813,7 +811,6 @@
       "name": "script",
       "type": "string",
       "required": true,
-      "description": "Fixed. The only accepted value; anything else is refused before the request is sent.",
       "example": "mobile: hideKeyboard",
       "values": [
        "mobile: hideKeyboard"

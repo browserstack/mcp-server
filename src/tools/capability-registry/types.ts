@@ -155,6 +155,18 @@ export function guidanceLines(guidance?: Guidance): string[] {
   return Array.isArray(guidance) ? guidance : (guidance.shared ?? []);
 }
 
+/** One step of a capability's `fallbacks` chain. */
+export interface Fallback {
+  /** Runs when the latest response carried this status. */
+  when: { status: number };
+  /** The sibling capability to call, by published name, in the same product. */
+  capability: string;
+  /** The body to send it — authored, never the caller's. */
+  body?: Record<string, unknown>;
+  /** Query parameters to send it, if it takes any. */
+  query?: Record<string, unknown>;
+}
+
 export interface Capability {
   /**
    * The caller-facing handle — the snake-cased `operationId`, unique within its product.
@@ -291,6 +303,21 @@ export interface Capability {
     /** One line for the contract: why this is here rather than on the wire. */
     note?: string;
   };
+  /**
+   * What to try next when the product refuses THIS call, in order.
+   *
+   * The one authored exception to one-request-one-response. Each step names a sibling
+   * capability in the same product and the fixed body to send it; the original call's
+   * path parameters are carried over, nothing else. A step runs only when the LATEST
+   * response has the status it names, and the chain stops at the first 2xx.
+   *
+   * Exists for hide_keyboard on an iPhone: the keyboard has no dismiss key, so the plain
+   * call is refused, and the only way on is to press one of the keys it does carry. The
+   * caller's consent covers the chain, because the chain is this capability's published
+   * contract — so what a step may do (press Return, which an app may treat as submit) is
+   * the capability's guidance to state. Every attempt is reported with its status.
+   */
+  fallbacks?: Fallback[];
   paginated?: boolean;
   /** The largest page the operation declares. */
   max_page_size?: number;

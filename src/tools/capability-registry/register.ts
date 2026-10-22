@@ -36,6 +36,7 @@ import {
   resolveResponses,
 } from "./index-loader.js";
 import { narrowResponse } from "./narrow.js";
+import { invokeWithFallbacks } from "./fallback.js";
 import { invoke } from "./resolve.js";
 import {
   ambiguousProducts,
@@ -1297,14 +1298,22 @@ export function addCapabilityRegistryTools(
           }
         }
 
-        const result = await invoke(
+        // The base URL is resolved per target rather than once: a fallback step may sit
+        // on a different named host from the capability that declared it.
+        const { result, attempts } = await invokeWithFallbacks(
           capability,
           args,
-          await deps.baseUrlFor(product, capability.host),
-          deps.credentialsFor(),
-          transport,
-          registry.index.products[product]?.auth,
-          product,
+          async (target, targetArgs) =>
+            invoke(
+              target,
+              targetArgs,
+              await deps.baseUrlFor(product, target.host),
+              deps.credentialsFor(),
+              transport,
+              registry.index.products[product]?.auth,
+              product,
+            ),
+          (name) => registry.byNameLookup(name, product).capability,
         );
         // NARROWING IS APPLIED TO A SUCCESS ONLY. A 4xx body is the diagnosis the caller
         // needs whole, and a selection that happened to match none of its keys would
@@ -1313,13 +1322,18 @@ export function addCapabilityRegistryTools(
         const narrowed = result.ok
           ? narrowResponse(capability, result.http_response.body, input.select)
           : undefined;
-        const answer = narrowed
-          ? {
-              ...result,
-              http_response: { ...result.http_response, body: narrowed.body },
-              narrowed: narrowed.narrowing,
-            }
-          : result;
+        const answer = {
+          ...(narrowed
+            ? {
+                ...result,
+                http_response: { ...result.http_response, body: narrowed.body },
+                narrowed: narrowed.narrowing,
+              }
+            : result),
+          // Only when the chain ran: a capability without `fallbacks` answers exactly as
+          // before, and one whose first call succeeded has nothing to report.
+          ...(attempts ? { fallback: { attempts } } : {}),
+        };
         // The one row for a completed invoke. invoke() returns a 4xx/5xx rather than
         // throwing, so `success` keeps its tool-level meaning and these two fields carry
         // whether the product call worked. Status 0 means it could not be reached.
@@ -1328,6 +1342,7 @@ export function addCapabilityRegistryTools(
           upstream_ok: result.ok,
           upstream_status: result.http_response.status,
           change_summary: redact(input.change_summary),
+          ...(attempts ? { fallback_steps: attempts.length - 1 } : {}),
           ...(narrowed
             ? {
                 narrowed_from: narrowed.narrowing.from,

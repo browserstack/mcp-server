@@ -792,11 +792,11 @@
     "entity": "app_session",
     "intent": "Close the on-screen keyboard by pressing one of its own keys \u2014 use this on an iPhone, where the plain hide_keyboard is refused.",
     "guidance": [
-     "THIS IS THE ONE FOR AN iPHONE. hide_keyboard answers 400 \"invalid element state\" there, while on an iPad and on Android it works as it is; this presses a key the keyboard actually carries instead.",
+     "hide_keyboard already presses these keys on an iPhone when its plain call is refused \u2014 Done-type keys first, then Return \u2014 and reports each attempt. Call this directly to press exactly the key you choose: Return alone, or every key but Return when a submit must not happen.",
      "The key must EXIST on that keyboard or this returns the same 400: read the keyboard from get_page_source and pick from the keys that are really there. An iPad carries \"Hide keyboard\"; an iPhone keyboard of this kind usually offers only Return.",
      "Several candidates may be listed in one call and it costs nothing, but it still fails when the keyboard carries none of them \u2014 measured with [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"].",
      "PRESSING RETURN SUBMITS. An app that commits when the field stops being edited will commit however the keyboard is closed, so check the field afterwards rather than assuming only the keyboard moved.",
-     "Confirm with is_keyboard_shown; on Android and on an iPad use hide_keyboard instead, which works normally."
+     "Confirm with is_keyboard_shown; on Android and on an iPad hide_keyboard closes it on its own."
     ],
     "path_params": [
      {
@@ -1694,11 +1694,11 @@
     "entity": "app_session",
     "intent": "Close the on-screen keyboard \u2014 use this when it covers a button or field you need to tap after typing.",
     "guidance": [
-     "The response is true when a keyboard was dismissed and false when none was showing; false is not an error.",
+     "On a plain success the response is true when a keyboard was dismissed and false when none was showing; false is not an error. A success reached through the chain below carries the key press's own null value instead.",
      "A tap aimed at a control hidden behind the keyboard lands on the keyboard instead and reports success, so close it first rather than afterwards.",
-     "WHETHER THIS WORKS ON iOS DEPENDS ON THE KEYBOARD, NOT THE PLATFORM. On an iPad it closes the keyboard and answers 200 true, because that keyboard carries a \"Hide keyboard\" key. On an iPhone it FAILS rather than quietly doing nothing: 400 \"invalid element state\", message \"Did not know how to dismiss the keyboard\", because the only key that closes an iPhone keyboard of this kind is Return and that is not pressed for you. The keyboard stays up and the field keeps what was typed, so treat the 400 as the normal answer on an iPhone and not as a broken call.",
-     "On an iPhone, dismiss_keyboard_key presses a key the keyboard actually has, but an iPhone keyboard of this kind usually offers only the return key, and pressing that is also a submit.",
-     "The keys argument names a key on the APP'S OWN keyboard and fails when that key is absent: [\"Done\"] returns the same 400 on a keyboard that offers only Return. SEVERAL CANDIDATES MAY BE LISTED IN ONE CALL \u2014 [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"] is accepted and costs nothing \u2014 but it still returns the same 400 when the keyboard carries none of them, so it is a convenience and not a way round the problem. Read the keyboard from get_page_source and pick from the keys that are really there; that also tells you in advance when the only option is one that submits.",
+     "ON AN iPHONE THE PLAIN CALL IS REFUSED AND A CHAIN RUNS INSTEAD. That keyboard has no dismiss key, so the product answers 400 \"Did not know how to dismiss the keyboard\"; this then presses a key the keyboard actually carries \u2014 Done, Hide keyboard or Dismiss where one exists, and failing that Return. On an iPad the plain call closes it, because that keyboard carries \"Hide keyboard\"; on Android it closes it; neither runs the chain.",
+     "THE RESPONSE LISTS EVERY ATTEMPT WITH ITS STATUS under fallback.attempts, so read which one closed it. When the last attempt's keys include Return, Return is what was pressed \u2014 and in many apps that is a submit: a search runs, a form goes. Read the field and the screen back before assuming only the keyboard moved.",
+     "When no attempt answers 200 the keyboard stays up and the last 400 is the answer: the app offers no way to close it from outside, which a person on the phone would hit too. dismiss_keyboard_key is the same key press on its own, for trying exactly the key you choose \u2014 Return alone, or everything but Return.",
      "GESTURES DO NOT DISMISS IT. Tapping an empty area above the keyboard returns 200 and changes nothing, and so does a drag downward over it \u2014 including one that starts well above the keyboard's top and moves through it in short steps, which is the form that works on a screen whose scroll view dismisses on drag. This app's does not, and neither gesture moved it.",
      "WHETHER THE FIELD SURVIVES IS THE APP'S BUSINESS, NOT THE KEYBOARD'S. An app that commits on editing-ended will commit however the keyboard is dismissed \u2014 closing an iPad keyboard this way still moved the text out of the field. So do not expect any dismissal to be side-effect free; check the app's own behaviour. On Android it closes the keyboard, answers true, and leaves the field as it was.",
      "is_keyboard_shown reports the state this changes, and is the reliable way to tell whether the keyboard actually went away."
@@ -1709,6 +1709,50 @@
       "type": "string",
       "required": true,
       "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "fallbacks": [
+     {
+      "when": {
+       "status": 400
+      },
+      "capability": "dismiss_keyboard_key",
+      "body": {
+       "script": "mobile: hideKeyboard",
+       "args": [
+        {
+         "keys": [
+          "Done",
+          "done",
+          "Hide keyboard",
+          "Dismiss"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "when": {
+       "status": 400
+      },
+      "capability": "dismiss_keyboard_key",
+      "body": {
+       "script": "mobile: hideKeyboard",
+       "args": [
+        {
+         "keys": [
+          "Return",
+          "return",
+          "Go",
+          "go",
+          "Next",
+          "next",
+          "Search",
+          "search"
+         ]
+        }
+       ]
+      }
      }
     ],
     "returns": [

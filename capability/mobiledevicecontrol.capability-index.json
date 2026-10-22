@@ -864,13 +864,14 @@
     "entity": "app_build",
     "intent": "Upload an app build to App Automate from a public download link and get back the bs:// URL a session installs \u2014 use this to make a new .apk, .aab or .ipa available to devices.",
     "guidance": [
-     "Only the download-link form can be used here. The same endpoint also accepts a multipart upload carrying the file itself, which this surface cannot send \u2014 so for a build that exists only on the caller's own machine, give them that multipart request to run themselves and take the bs:// url it returns. There is no way to hand the bytes over from here.",
+     "Only the download-link form can be used here. The same endpoint also accepts a multipart upload carrying the file itself, which this surface cannot send \u2014 so for a build that exists only on the caller's own machine, give them that multipart request to run themselves and take the bs:// url it returns. The upload answers with the bs:// url directly: there is no intermediate storage, no presigned url and no second call. There is no way to hand the bytes over from here.",
      "The url must be https and reachable by BrowserStack without credentials; a link behind a login fails on their side, not the caller's.",
      "Pass custom_id to give the build a stable name, then later sessions can use that name in place of the bs:// URL and always get the newest build under it.",
      "Re-uploading under the same custom_id adds a new build rather than replacing the old one; both stay listed.",
      "Builds expire after 30 days, so a bs:// URL held from an earlier run can stop working.",
      "Uploading a large build can take minutes \u2014 the call does not return until BrowserStack has fetched the whole file.",
-     "upload_app_build_from_file takes a build that is on this machine instead, where the server runs beside the user. It is not offered on a remote server, where a path would name the operator's disk rather than theirs."
+     "upload_app_build_from_file takes a build that is on this machine instead, where the server runs beside the user. It is not offered on a remote server, where a path would name the operator's disk rather than theirs.",
+     "Before uploading at all, check list_app_builds \u2014 a build from an earlier run is still usable for 30 days, and on a remote server reusing one is the only route that needs nothing from the user."
     ],
     "body": [
      {
@@ -917,7 +918,8 @@
     "guidance": [
      "An account with no uploads answers with a message object or a 404 rather than an empty array; treat both as 'nothing uploaded yet'.",
      "This is only the calling user's own uploads \u2014 use list_team_app_builds for everyone on the team.",
-     "app_url is what create_session takes; app_id is an internal identifier and is not accepted there."
+     "app_url is what create_session takes; app_id is an internal identifier and is not accepted there.",
+     "On a remote server this is the first thing to try: uploading from a path is not offered there, so an existing build is the only app a session can install without either a public link or the user running an upload by hand."
     ],
     "query": [
      {
@@ -2646,7 +2648,7 @@
       "$response": "Unauthorized"
      }
     },
-    "unavailable_note": "This server does not run on your own machine, so it cannot read a file you name \u2014 a path sent here would point at the machine hosting the server. Upload the build yourself with a multipart request carrying the file to the same endpoint, which the asset-upload helper will write out for you, and then use the bs:// url it returns as the app for create_session. upload_app_build does the same thing from a public download link, if the build is reachable at one."
+    "unavailable_note": "This server does not run on your own machine, so it cannot read a file you name \u2014 a path sent here would point at the machine hosting the server. Three routes get you a bs:// url instead, cheapest first. (1) list_app_builds or list_team_app_builds, if the build was uploaded before: builds last 30 days and are reusable as they are. (2) upload_app_build, if the build sits at a public https link \u2014 the only fully automatic route. (3) Otherwise the user uploads it themselves: the asset-upload helper PRINTS a curl command and nothing more \u2014 it reads no file and sends no request \u2014 so the user has to run that command, and it answers with the bs:// url directly from /app-automate/upload. There is no intermediate storage and no second step. Take the bs:// url back from them and pass it as the app for create_session."
    },
    {
     "name": "find_elements",

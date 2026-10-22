@@ -974,23 +974,14 @@
      }
     ],
     "returns": [
+     "state",
      "value"
     ],
     "responses": {
      "200": {
-      "description": "Session ended; state is \"success\" and value is empty.",
+      "description": "state is \"success\" and value an empty string; the body is the hub's own, not the W3C null.",
       "schema": {
-       "type": "object",
-       "properties": {
-        "state": {
-         "type": "string",
-         "description": "\"success\" when the session was ended."
-        },
-        "value": {
-         "type": "string",
-         "description": "Empty string."
-        }
-       }
+       "$schema": "SessionDeletedResponse"
       }
      },
      "404": {
@@ -3447,6 +3438,24 @@
         }
        }
       }
+     }
+    }
+   },
+   "SessionDeletedResponse": {
+    "type": "object",
+    "description": "What the hub returns when a session is closed. Not the W3C null: state says whether it closed and value is an empty string.",
+    "properties": {
+     "state": {
+      "type": "string",
+      "description": "\"success\" when the session was closed."
+     },
+     "status": {
+      "type": "integer",
+      "description": "The hub's own legacy status code; 0 on success."
+     },
+     "value": {
+      "type": "string",
+      "description": "Always empty on success."
      }
     }
    }

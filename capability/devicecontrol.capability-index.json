@@ -262,7 +262,7 @@
      "The session ends itself after idle_timeout seconds without a command, and after 2 hours in total.",
      "console_logs and network_logs must be asked for here; they cannot be turned on once the session is running, and get_session only links to them when they were.",
      "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
-     "resolution takes one of a fixed set of values per operating system, not any width and height: an unsupported pair is refused outright rather than rounded to the nearest one. The browser window is well short of the screen it sits on \u2014 1920x1080 gives a viewport around 930x860 \u2014 so measure it rather than assuming the request was honoured.",
+     "resolution takes one of a fixed set of values per operating system, not any width and height: an unsupported pair is refused outright rather than rounded to the nearest one. It sets the screen, not the window \u2014 the browser opens at about half the screen's width (945x1012 on 1920x1080), so maximize_window or set_window_rect is the call that sizes the window, and get_window_rect is the figure to report.",
      "THIS CALL RETURNS NO LINK \u2014 only value.sessionId. Nothing here can open a browser for the user either: this surface makes HTTP requests, and on a remote server there is no browser to open. So never say a live view was opened. If the user may want to watch, call get_session straight after this and give them browser_url in the same reply, which is the session on the dashboard and needs a BrowserStack login. public_url needs no login but carries an auth token, so offer it only when they ask to share outside the team."
     ],
     "body": [
@@ -334,7 +334,7 @@
       "name": "resolution",
       "type": "string",
       "json_path": "/capabilities/alwaysMatch/bstack:options/resolution",
-      "description": "Desktop screen resolution, from a fixed set the chosen OS supports \u2014 an unsupported value is refused with \"The specified screen resolution is not compatible with the chosen OS version\" and no session starts. 1920x1080 is accepted on Windows 11; 2560x1440 is not. The browser window is much smaller than the screen either way, so read the real size rather than assuming it.",
+      "description": "Desktop screen resolution, from a fixed set the chosen OS supports \u2014 an unsupported value is refused with \"The specified screen resolution is not compatible with the chosen OS version\" and no session starts. 1920x1080 is accepted on Windows 11; 2560x1440 is not. This sets the SCREEN, not the window: the browser opens at about half the screen's width, so call maximize_window or set_window_rect afterwards for the size you actually want, and read get_window_rect for the real figure.",
       "example": "1920x1080"
      },
      {
@@ -1316,7 +1316,7 @@
     "entity": "browser_session",
     "intent": "Read the browser window's size and position \u2014 use this to learn the real viewport before planning anything that depends on layout.",
     "guidance": [
-     "The window is smaller than the screen resolution asked for at session start, because of the browser's own chrome; this is the real figure."
+     "The window is smaller than the screen resolution asked for at session start \u2014 it opens at about half the screen's width, 945x1012 on a 1920x1080 screen \u2014 and this is the real figure. Use maximize_window or set_window_rect to change it, then read this again."
     ],
     "path_params": [
      {
@@ -1352,7 +1352,8 @@
     "entity": "browser_session",
     "intent": "Resize or move the browser window \u2014 use this to check a layout at a particular width.",
     "guidance": [
-     "The response is the rectangle actually applied, which can differ from the one asked for: a window cannot exceed the screen, and some sizes are adjusted.",
+     "The response is the rectangle actually applied, which can differ from the one asked for: a size larger than the screen is clamped to roughly the screen rather than refused \u2014 2560x1440 on a 1920x1080 screen came back 1940x1100, the frame sitting just past the edges \u2014 while a size that fits is applied exactly. Read the applied rectangle, not the request.",
+     "This is how to get the wide window a screen resolution alone does not give: the window opens at about half the screen's width, and resolution at session start sets the screen, not the window. maximize_window fills the screen without naming a size.",
      "Resizing re-lays out the page, so element positions change and anything measured before is stale.",
      "A real mobile browser is not uniformly resizable: an Android device accepts the call, while iOS refuses it with a 405. Read the size back from get_window_rect rather than assuming either."
     ],
@@ -1404,8 +1405,7 @@
      "404": {
       "$response": "WebDriverError"
      }
-    },
-    "disabled": true
+    }
    },
    {
     "name": "maximize_window",
@@ -1415,9 +1415,10 @@
     "entity": "browser_session",
     "intent": "Maximise the browser window \u2014 use this to give the page the most room before reading a wide layout.",
     "guidance": [
-     "Takes no parameters of its own.",
+     "Takes no parameters of its own. The window opens at about half the screen's width whatever resolution the session asked for; this is what fills it \u2014 on a 1920x1080 screen the result is 1936x1048 at (-8,-8), the frame sitting just past the screen edges, which is normal for Windows.",
      "Page layout changes, so anything measured before is stale.",
-     "Aimed at a desktop browser; a real mobile browser is already full screen and may refuse it."
+     "Aimed at a desktop browser; a real mobile browser is already full screen and may refuse it.",
+     "The response carries the rectangle now applied, the same as get_window_rect would report."
     ],
     "path_params": [
      {
@@ -1444,8 +1445,7 @@
       "$response": "WebDriverError"
      }
     },
-    "send_empty_body": true,
-    "disabled": true
+    "send_empty_body": true
    },
    {
     "name": "list_window_handles",
@@ -1677,13 +1677,14 @@
      }
     ],
     "returns": [
+     "state",
      "value"
     ],
     "responses": {
      "200": {
-      "description": "Null on success.",
+      "description": "state is \"success\" and value an empty string; the body is the hub's own, not the W3C null.",
       "schema": {
-       "$schema": "NullValueResponse"
+       "$schema": "SessionDeletedResponse"
       }
      },
      "404": {
@@ -2067,6 +2068,24 @@
         "description": "What BrowserStack observed, which can differ from the status that was set."
        }
       }
+     }
+    }
+   },
+   "SessionDeletedResponse": {
+    "type": "object",
+    "description": "What the hub returns when a session is closed. Not the W3C null: state says whether it closed and value is an empty string.",
+    "properties": {
+     "state": {
+      "type": "string",
+      "description": "\"success\" when the session was closed."
+     },
+     "status": {
+      "type": "integer",
+      "description": "The hub's own legacy status code; 0 on success."
+     },
+     "value": {
+      "type": "string",
+      "description": "Always empty on success."
      }
     }
    }

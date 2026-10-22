@@ -664,8 +664,8 @@
     "entity": "app_session",
     "intent": "Scroll a region of the screen in a direction \u2014 use this to move through a list or page without working out start and end coordinates yourself.",
     "guidance": [
-     "ANDROID ONLY. On iOS this is a 404 \"unknown command\"; scroll_view is the iOS counterpart.",
-     "The returned value is true when more content remains in that direction and false at the end, which is the cheap way to know whether to scroll again.",
+     "ANDROID ONLY. On iOS this is a 405 \"unknown method\"; scroll_view is the iOS counterpart.",
+     "The returned value is true when the view can still scroll further in that direction and false when it cannot \u2014 but the FIRST scroll of a freshly opened list can answer false while the screen moved and more content followed, so treat false as a hint and confirm from the page source before deciding you are at the end.",
      "The area is a rectangle in screen pixels \u2014 get_window_rect gives the screen size to base it on \u2014 and percent is how far to scroll within it, 0 to 1.",
      "Needs Appium 2.x: set appium_version to 2.19.0 at session start, since the default 1.x server answers mobile: commands with a 404 listing what it does know."
     ],
@@ -730,11 +730,11 @@
     "entity": "app_session",
     "intent": "Scroll a scrollable view on iOS in a direction, or until a named element is visible \u2014 use this to move through a list or a long screen.",
     "guidance": [
-     "iOS ONLY, and the counterpart of scroll_gesture: this is a 404 \"unknown command\" on Android, where scroll_gesture is the one that works.",
+     "iOS ONLY, and the counterpart of scroll_gesture. On Android the same command exists with a different shape and answers 400 \"invalid argument\" naming strategy and selector as missing; use scroll_gesture there.",
      "Scroll by direction with {\"direction\":\"down\"}, or stop when something comes into view with {\"predicateString\":\"name == 'Submit'\", \"toVisible\": true} \u2014 the second is the reliable way to reach a known control without guessing how far to go.",
-     "Pass an element in args to scroll inside that view rather than the whole screen; without one it scrolls the first scrollable view it finds, which may not be the one you meant.",
+     "Pass elementId in args to scroll inside that view rather than the whole screen; without one it scrolls the first scrollable view it finds, which may not be the one you meant.",
      "Needs Appium 2.x: set appium_version to 2.19.0 at session start, since the default 1.x server answers mobile: commands with a 404 listing what it does know.",
-     "Confirm from get_page_source that the screen actually moved \u2014 a 200 only says the gesture was delivered."
+     "Confirm from get_page_source that the screen actually moved \u2014 this answers 200 even on a screen with nothing scrollable, so a 200 only says the gesture was delivered."
     ],
     "path_params": [
      {
@@ -758,7 +758,7 @@
       "name": "args",
       "type": "array",
       "required": true,
-      "description": "Exactly one object: a direction, or a predicateString with toVisible, optionally with an element to scroll inside.",
+      "description": "Exactly one object: a direction, or a predicateString with toVisible, optionally with elementId naming the view to scroll inside.",
       "example": [
        {
         "direction": "down"

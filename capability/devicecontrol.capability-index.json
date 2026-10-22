@@ -1113,7 +1113,7 @@
     "entity": "browser_session",
     "intent": "Bring an element into view \u2014 use this before clicking or screenshotting something below the fold, since both fail or miss when the target is off screen.",
     "guidance": [
-     "THE RELIABLE FORM ON EVERY PLATFORM. Prefer this to scrolling the page by a distance: it works out where the element is for you, and it is the only form measured to work on Chrome for Android, where scrolling the page to its height can stop short and leave the target off screen.",
+     "THE RELIABLE FORM ON EVERY PLATFORM. Prefer this to scrolling the page by a distance: it works out where the element is for you, and it does not depend on the page reporting its height correctly, which scroll_page does.",
      "The element_id goes in args as {\"element-6066-11e4-a52e-4f735466cecf\": \"<id>\"} and arrives in the script as arguments[0]; find_element gives you the id.",
      "Returns the element's position after scrolling, so a caller can confirm it really is in view rather than trusting the status.",
      "A click on a covered element answers \"element click intercepted\" \u2014 scroll it into view with this first."
@@ -1171,9 +1171,9 @@
     "entity": "browser_session",
     "intent": "Scroll the page itself by a distance or to the bottom \u2014 use this when there is no element to aim at, such as reaching a footer or loading more of an infinite list.",
     "guidance": [
-     "PREFER scroll_to_element when you have an element. On Chrome for Android this form can stop short and leave a footer off screen while still reporting success \u2014 measured \u2014 so confirm from the returned position rather than the status.",
+     "PREFER scroll_to_element when you have an element: it works out where the target is for you. Use this form only when there is nothing to aim at.",
      "Choose what it does with args: \"bottom\", \"top\", or a pixel count.",
-     "Returns the scroll position and the page height, so a caller can tell whether it actually reached the end."
+     "Returns the scroll position and the page height, so a caller can tell whether it actually reached the end: at rest at the bottom, scrollY + innerHeight equals scrollHeight within a couple of pixels \u2014 a scaled phone screen reports fractional positions, so do not demand exact equality. ON SAFARI THE POSITION IN THE \"bottom\" CALL'S OWN RESPONSE IS WHERE IT WAS ASKED TO GO, NOT WHERE IT STOPPED \u2014 it comes back equal to scrollHeight, which no resting position can be. Call again with args 0 to read the real position; that second reading is the one to check."
     ],
     "path_params": [
      {
@@ -1188,9 +1188,9 @@
       "name": "script",
       "type": "string",
       "required": true,
-      "example": "var a=arguments[0]; if(a==='bottom'){window.scrollTo(0,document.body.scrollHeight);} else if(a==='top'){window.scrollTo(0,0);} else {window.scrollBy(0,Number(a));} return {scrollY:window.scrollY, innerHeight:window.innerHeight, scrollHeight:document.body.scrollHeight};",
+      "example": "var a=arguments[0]; var h=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight); if(a==='bottom'){window.scrollTo(0,h);} else if(a==='top'){window.scrollTo(0,0);} else {window.scrollBy(0,Number(a));} return {scrollY:window.scrollY, innerHeight:window.innerHeight, scrollHeight:Math.max(document.body.scrollHeight,document.documentElement.scrollHeight)};",
       "values": [
-       "var a=arguments[0]; if(a==='bottom'){window.scrollTo(0,document.body.scrollHeight);} else if(a==='top'){window.scrollTo(0,0);} else {window.scrollBy(0,Number(a));} return {scrollY:window.scrollY, innerHeight:window.innerHeight, scrollHeight:document.body.scrollHeight};"
+       "var a=arguments[0]; var h=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight); if(a==='bottom'){window.scrollTo(0,h);} else if(a==='top'){window.scrollTo(0,0);} else {window.scrollBy(0,Number(a));} return {scrollY:window.scrollY, innerHeight:window.innerHeight, scrollHeight:Math.max(document.body.scrollHeight,document.documentElement.scrollHeight)};"
       ]
      },
      {

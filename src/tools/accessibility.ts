@@ -1116,7 +1116,7 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues from one source: scanId+scanRunId, buildId (web/app build), workflowReportId, appReportId or reportUrl." +
+    "Fetch accessibility issues from one source: scanId+scanRunId, buildId, workflowReportId, appReportId or reportUrl." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z

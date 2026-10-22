@@ -1,0 +1,2217 @@
+{
+ "schema_version": 1,
+ "version": "1.0",
+ "build_id": "8445466_2026-10-19T06:53:46Z",
+ "devicecontrol": {
+  "summary": "Device control: drive a real desktop or mobile browser page by page. The account side lists every operating system, browser and version combination available, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link, video, and console, network and profiling logs \u2014 after the browser is released. The session side opens a browser on a chosen combination and drives it: navigate, go back and forward, reload, find elements by CSS or XPath, click, type, clear, screenshot the viewport, resize the window, and move between tabs and iframes. Web pages are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Mobile APPS are not here: those are mobile device control, which drives an installed app rather than a browser. Scrolling is done with scroll_to_element or scroll_page, there is no capability that waits, and element ids go stale as soon as the page navigates or re-renders. A session holds a browser until it is ended.",
+  "routing_terms": [
+   "automate",
+   "browser",
+   "web",
+   "website",
+   "web page",
+   "chrome",
+   "firefox",
+   "safari",
+   "edge",
+   "desktop browser",
+   "mobile browser",
+   "selenium",
+   "webdriver",
+   "navigate",
+   "url",
+   "click",
+   "type",
+   "scroll",
+   "iframe",
+   "tab",
+   "cookie",
+   "screenshot",
+   "console logs",
+   "network logs",
+   "har",
+   "browser session",
+   "cross browser",
+   "device control",
+   "browser control"
+  ],
+  "base_url": "https://hub.browserstack.com",
+  "hosts": {
+   "api": "https://api.browserstack.com"
+  },
+  "auth": {
+   "type": "http",
+   "scheme": "basic"
+  },
+  "capabilities": [
+   {
+    "name": "list_browsers",
+    "method": "GET",
+    "path": "/automate/browsers.json",
+    "mode": "read",
+    "entity": "browser",
+    "intent": "List every operating system, browser and version combination this account can run a web session on, with the exact names create_session expects.",
+    "guidance": [
+     "The endpoint accepts no filtering on the wire \u2014 every query parameter is ignored, and a filtered call comes back byte-identical to the bare one \u2014 so pass `select` instead and never fetch this whole. The full answer is several thousand rows; `select` with `distinct` turns the usual question into a few hundred bytes.",
+     "To ask what values EXIST, use distinct rather than reading rows: distinct ['browser'] names every browser, distinct ['os','os_version'] every platform, distinct ['device'] every mobile device. To check one combination, put it in `where` and see whether anything comes back.",
+     "A desktop row carries os, os_version, browser and browser_version, with device null. A mobile row carries device and real_mobile true instead, and its browser_version is null because the browser ships with the OS.",
+     "os is spelled Windows, OS X, android and ios \u2014 two capitalised and two not, in the same column \u2014 and `where` matches case-insensitively, so either spelling finds them. Browser names are lower case apart from chromeForTesting.",
+     "Rows come back in the product's own order, which is OLDEST VERSION FIRST, and `limit` takes the first N of them \u2014 so a limit is the wrong way to find the newest build and will hand back Chrome 37 for Windows 11. Ask for the versions with distinct and no limit (a hundred-odd strings, under 3 KB) and read the end of the list.",
+     "Pass the strings into create_session exactly as they appear here; an unlisted combination is refused rather than substituted."
+    ],
+    "returns": [
+     "browser",
+     "browser_version",
+     "os",
+     "os_version",
+     "device",
+     "real_mobile"
+    ],
+    "responses": {
+     "200": {
+      "description": "Every supported combination.",
+      "schema": {
+       "$schema": "BrowserList"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api",
+    "narrowable": {
+     "fields": [
+      "os",
+      "os_version",
+      "browser",
+      "browser_version",
+      "device",
+      "real_mobile"
+     ],
+     "note": "The endpoint takes no parameters of its own, so this narrowing is applied to the response after the call."
+    }
+   },
+   {
+    "name": "get_plan",
+    "method": "GET",
+    "path": "/automate/plan.json",
+    "mode": "read",
+    "entity": "plan",
+    "intent": "Show the Automate plan and how many parallel browser sessions are running, queued and allowed \u2014 check this before starting a session or a batch of them.",
+    "guidance": [
+     "A start past the limit queues rather than failing, which looks like a slow start; this is how to tell the two apart.",
+     "The counts are account-wide and include sessions other people and CI started.",
+     "This is the web plan. App Automate has its own, counted separately."
+    ],
+    "returns": [
+     "automate_plan",
+     "parallel_sessions_running",
+     "parallel_sessions_max_allowed",
+     "team_parallel_sessions_max_allowed",
+     "queued_sessions",
+     "queued_sessions_max_allowed",
+     "terminal_access"
+    ],
+    "responses": {
+     "200": {
+      "description": "Plan name and parallel usage.",
+      "schema": {
+       "$schema": "Plan"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "get_session",
+    "method": "GET",
+    "path": "/automate/sessions/{session_id}.json",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Get a web session's record: status, browser, duration, the shareable link, the video, and the console, network and profiling logs \u2014 use this for the links to share or to review a finished run.",
+    "guidance": [
+     "public_url opens without a BrowserStack login, so it is the link to share outside the team; it carries an auth token and should be treated as a secret.",
+     "browser_url is the session on the dashboard and needs a login.",
+     "video_url is only complete once the session has ended.",
+     "har_logs_url, browser_console_logs_url and browser_profiling_url are present only when the session was started with the matching capability; they are fetched separately and are not part of this answer.",
+     "Works for any session on the account, including ones this caller did not start."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "status",
+     "reason",
+     "browser",
+     "browser_version",
+     "os",
+     "os_version",
+     "device",
+     "duration",
+     "public_url",
+     "browser_url",
+     "video_url",
+     "har_logs_url",
+     "browser_console_logs_url",
+     "browser_profiling_url",
+     "build_name",
+     "project_name",
+     "created_at",
+     "browserstack_status",
+     "hashed_id",
+     "name"
+    ],
+    "responses": {
+     "200": {
+      "description": "The session record.",
+      "schema": {
+       "$schema": "SessionDetails"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "set_session_status",
+    "method": "PUT",
+    "path": "/automate/sessions/{session_id}.json",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Mark a web session passed or failed with a reason, so the dashboard shows the outcome.",
+    "guidance": [
+     "Works after the session has ended as well as during it.",
+     "Only 'passed' and 'failed' are accepted.",
+     "reason is truncated at 255 characters.",
+     "A session left unmarked reads as an abandoned run on the dashboard."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "status",
+      "type": "string",
+      "required": true,
+      "values": [
+       "passed",
+       "failed"
+      ],
+      "example": "passed"
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "maxLength": 255,
+      "description": "Short explanation shown beside the status.",
+      "example": "The page behaved as expected"
+     }
+    ],
+    "returns": [
+     "status",
+     "reason",
+     "hashed_id",
+     "name",
+     "browser",
+     "os",
+     "os_version",
+     "build_name",
+     "project_name"
+    ],
+    "responses": {
+     "200": {
+      "description": "The updated session record.",
+      "schema": {
+       "$schema": "SessionStatusUpdate"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "create_session",
+    "method": "POST",
+    "path": "/wd/hub/session",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Start a browser session on a real desktop or mobile browser and get a session id to drive it with \u2014 use this to open a page and interact with it step by step.",
+    "guidance": [
+     "A DESKTOP target needs browser_name with os and os_version; a MOBILE BROWSER needs browser_name with device_name and real_mobile instead, and takes no browser_version because the browser ships with the OS. Sending both kinds together is refused.",
+     "ON MOBILE THE BROWSER IS NAMED AFTER THE PLATFORM, not the product: Chrome on an Android phone is \"android\", Safari on an iPhone is \"iphone\" and on an iPad \"ipad\". Samsung Internet is \"samsung\" and Chromium-based mobile browsers are \"chromium\". Asking for \"chrome\" or \"safari\" on a phone is refused.",
+     "Take every value from list_browsers exactly as it spells them; an unlisted combination is refused rather than substituted.",
+     "The session id comes back at value.sessionId \u2014 carry it into every other browser_session capability.",
+     "A session starts in seconds rather than the tens of seconds a device session takes, but it still holds a browser and consumes Automate minutes until it ends: always finish with set_session_status and then delete_session.",
+     "The session ends itself after idle_timeout seconds without a command, and after 2 hours in total.",
+     "console_logs and network_logs must be asked for here; they cannot be turned on once the session is running, and get_session only links to them when they were.",
+     "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
+     "resolution takes one of a fixed set of values per operating system, not any width and height: an unsupported pair is refused outright rather than rounded to the nearest one. The browser window is well short of the screen it sits on \u2014 1920x1080 gives a viewport around 930x860 \u2014 so measure it rather than assuming the request was honoured.",
+     "THIS CALL RETURNS NO LINK \u2014 only value.sessionId. Nothing here can open a browser for the user either: this surface makes HTTP requests, and on a remote server there is no browser to open. So never say a live view was opened. If the user may want to watch, call get_session straight after this and give them browser_url in the same reply, which is the session on the dashboard and needs a BrowserStack login. public_url needs no login but carries an auth token, so offer it only when they ask to share outside the team."
+    ],
+    "body": [
+     {
+      "name": "browser_name",
+      "type": "string",
+      "required": true,
+      "json_path": "/capabilities/alwaysMatch/browserName",
+      "values": [
+       "chrome",
+       "chromeForTesting",
+       "edge",
+       "firefox",
+       "ie",
+       "opera",
+       "safari",
+       "android",
+       "chromium",
+       "ipad",
+       "iphone",
+       "samsung"
+      ],
+      "description": "Lower case except chromeForTesting, exactly as list_browsers spells it. Desktop: chrome, chromeForTesting, edge, firefox, ie, opera, safari. Mobile: android, chromium, ipad, iphone, samsung.",
+      "example": "chrome"
+     },
+     {
+      "name": "browser_version",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/browserVersion",
+      "description": "Desktop only. Omit for the newest, or for a mobile browser, which has no separate version.",
+      "example": "latest"
+     },
+     {
+      "name": "os",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/os",
+      "description": "Desktop only, paired with os_version. Only Windows and OS X; a mobile browser uses device_name instead.",
+      "example": "Windows",
+      "values": [
+       "Windows",
+       "OS X"
+      ]
+     },
+     {
+      "name": "os_version",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/osVersion",
+      "description": "The desktop OS version, or the mobile device's OS version.",
+      "example": "11"
+     },
+     {
+      "name": "device_name",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/deviceName",
+      "description": "Mobile browser only, paired with real_mobile and os_version.",
+      "example": "Samsung Galaxy S23"
+     },
+     {
+      "name": "real_mobile",
+      "type": "string",
+      "values": [
+       "true"
+      ],
+      "json_path": "/capabilities/alwaysMatch/bstack:options/realMobile",
+      "description": "Mobile browser only: the string \"true\", not a boolean.",
+      "example": "true"
+     },
+     {
+      "name": "resolution",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/resolution",
+      "description": "Desktop screen resolution, from a fixed set the chosen OS supports \u2014 an unsupported value is refused with \"The specified screen resolution is not compatible with the chosen OS version\" and no session starts. 1920x1080 is accepted on Windows 11; 2560x1440 is not. The browser window is much smaller than the screen either way, so read the real size rather than assuming it.",
+      "example": "1920x1080"
+     },
+     {
+      "name": "idle_timeout",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 300,
+      "default": 90,
+      "json_path": "/capabilities/alwaysMatch/bstack:options/idleTimeout",
+      "description": "Seconds the session may sit without a command before it is ended. Raise it when an agent drives the session step by step.",
+      "example": 300
+     },
+     {
+      "name": "video",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/video",
+      "description": "Record a video of the session. On by default; set false for a page showing sensitive data.",
+      "example": true
+     },
+     {
+      "name": "console_logs",
+      "type": "string",
+      "values": [
+       "disable",
+       "errors",
+       "warnings",
+       "info",
+       "verbose"
+      ],
+      "json_path": "/capabilities/alwaysMatch/bstack:options/consoleLogs",
+      "description": "Capture the browser console at this level.",
+      "example": "info"
+     },
+     {
+      "name": "network_logs",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/networkLogs",
+      "description": "Capture network traffic as a HAR, linked from get_session.",
+      "example": true
+     },
+     {
+      "name": "project_name",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/projectName",
+      "description": "Groups sessions on the dashboard.",
+      "example": "Web checkout"
+     },
+     {
+      "name": "build_name",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/buildName",
+      "description": "Build the session is filed under.",
+      "example": "nightly"
+     },
+     {
+      "name": "session_name",
+      "type": "string",
+      "maxLength": 255,
+      "json_path": "/capabilities/alwaysMatch/bstack:options/sessionName",
+      "description": "Name shown for this session.",
+      "example": "sign in and add to basket"
+     }
+    ],
+    "returns": [
+     "value.sessionId",
+     "value.capabilities"
+    ],
+    "responses": {
+     "200": {
+      "description": "The new session.",
+      "schema": {
+       "$schema": "NewSessionResponse"
+      }
+     },
+     "400": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "navigate_to",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/url",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Open a URL in the session's browser \u2014 use this to go to the page you want to work on.",
+    "guidance": [
+     "The call returns once the page has loaded, so there is no need to wait afterwards; a slow page is bounded by the page-load timeout rather than by this call.",
+     "A URL without a scheme is rejected: send the https:// prefix.",
+     "Navigating away invalidates every element id already held \u2014 find elements again on the new page."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "url",
+      "type": "string",
+      "required": true,
+      "format": "uri",
+      "description": "Absolute URL including the scheme.",
+      "example": "https://www.example.com/products"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_current_url",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/url",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Read the URL the browser is on now \u2014 use this to confirm a navigation, a redirect or a form submission went where expected.",
+    "guidance": [
+     "A single-page app can change what is on screen without changing this, so confirm from the page rather than the URL alone."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The current URL.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_title",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/title",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Read the page title \u2014 the cheapest way to confirm which page is loaded.",
+    "guidance": [
+     "The cheapest way to confirm which page is showing, and enough on its own for most navigation checks."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The document title.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "go_back",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/back",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Go back one entry in the browser's history.",
+    "guidance": [
+     "Takes no parameters of its own.",
+     "Element ids from the page being left stop working; find them again.",
+     "Going back past the first page of the session does nothing and still answers 200."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "send_empty_body": true
+   },
+   {
+    "name": "go_forward",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/forward",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Go forward one entry in the browser's history, after going back.",
+    "guidance": [
+     "Takes no parameters of its own.",
+     "Does nothing when there is nothing to go forward to, and still answers 200."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "send_empty_body": true
+   },
+   {
+    "name": "refresh_page",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/refresh",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Reload the current page \u2014 use this to pick up a change the page does not reflect on its own.",
+    "guidance": [
+     "Takes no parameters of its own.",
+     "Every element id held becomes stale; find them again.",
+     "Anything typed and not submitted is lost."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "send_empty_body": true
+   },
+   {
+    "name": "get_page_source",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/source",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Get the current page's HTML \u2014 use this to find selectors, or to read content a screenshot cannot show.",
+    "guidance": [
+     "A real page runs to tens of kilobytes or more, so search it for what is needed rather than reading all of it. get_title answers most questions far more cheaply.",
+     "This is the page as the browser has it now, including anything scripts have changed, not the HTML the server sent.",
+     "Inside a frame this returns that frame's document; switch_to_frame with a null id first to get the top-level page back."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The page HTML.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "find_element",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/element",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Locate one element on the page by CSS selector, XPath or link text \u2014 use this to get the element id that click_element, send_keys and the element readers act on.",
+    "guidance": [
+     "The element id comes back under value[\"element-6066-11e4-a52e-4f735466cecf\"]; pass that string as element_id.",
+     "No match is a 404 with error \"no such element\". The element may not have rendered yet, or may be inside a frame \u2014 switch_to_frame first in that case.",
+     "A css selector is the cheapest and most stable choice; xpath is slower and brittle to markup changes.",
+     "An id goes stale the moment the page navigates, reloads or re-renders that part of the DOM, and using a stale one answers \"stale element reference\". Find it again rather than holding it across a navigation."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "using",
+      "type": "string",
+      "required": true,
+      "values": [
+       "css selector",
+       "xpath",
+       "link text",
+       "partial link text",
+       "tag name"
+      ],
+      "example": "css selector"
+     },
+     {
+      "name": "value",
+      "type": "string",
+      "required": true,
+      "description": "The selector itself, interpreted according to using.",
+      "example": "#add-to-cart"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The matching element reference.",
+      "schema": {
+       "$schema": "ElementResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "find_elements",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/elements",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Locate every element matching a selector \u2014 use this to count matches, or to work through a list of results, products or rows.",
+    "guidance": [
+     "No match is an EMPTY LIST and a 200, not a 404 \u2014 the opposite of find_element, which is how to test whether something is absent without handling an error.",
+     "The order is the document's own.",
+     "Each entry carries the same element-6066 key as find_element."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "using",
+      "type": "string",
+      "required": true,
+      "values": [
+       "css selector",
+       "xpath",
+       "link text",
+       "partial link text",
+       "tag name"
+      ],
+      "example": "css selector"
+     },
+     {
+      "name": "value",
+      "type": "string",
+      "required": true,
+      "description": "The selector itself, interpreted according to using.",
+      "example": ".product-card"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Every matching element, possibly none.",
+      "schema": {
+       "$schema": "ElementListResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "click_element",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/click",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Click an element \u2014 use this for buttons, links, checkboxes and anything else that responds to a click.",
+    "guidance": [
+     "Takes no parameters of its own.",
+     "The element must be in view and not covered. A click on something another element overlaps answers \"element click intercepted\" and names the element in the way \u2014 scroll it into view with scroll_to_element, or dismiss the overlay first.",
+     "An element that is not visible answers \"element not interactable\".",
+     "Success means the click was dispatched, not that the page has finished reacting: read the page or the URL afterwards to confirm."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element.",
+      "example": "f.00000000000000000000000000000000.d.0000000000000000.e.1"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "send_empty_body": true
+   },
+   {
+    "name": "send_keys",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/value",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Type into a field \u2014 use this to fill a search box, a login form or any editable input.",
+    "guidance": [
+     "APPENDS to whatever the field already holds. Call clear_element first to replace the value rather than adding to it.",
+     "Read the result back with get_element_property on \"value\": a field's current contents are a property, not text.",
+     "A \\n at the end submits the form on a desktop browser and on Chrome for Android, and is quicker than finding the submit button. IT DOES NOT SUBMIT ON SAFARI FOR iOS \u2014 the text lands in the field and the page stays where it is, whether the newline is sent with the text or on its own. There, click the form's submit button with click_element \u2014 scroll_to_element first if it sits below the fold.",
+     "The element must be editable; typing into anything else answers \"element not interactable\".",
+     "A site's own autocomplete or dropdown may swallow the keystrokes and require a click on a suggestion instead."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element.",
+      "example": "f.00000000000000000000000000000000.d.0000000000000000.e.1"
+     }
+    ],
+    "body": [
+     {
+      "name": "text",
+      "type": "string",
+      "required": true,
+      "description": "The characters to type. End with \\n to submit.",
+      "example": "hello"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "clear_element",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/clear",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Empty an input \u2014 use this before typing, since send_keys adds to what is already there.",
+    "guidance": [
+     "Takes no parameters of its own.",
+     "Confirm with get_element_property on \"value\", which reads empty afterwards.",
+     "Clearing also fires the page's own change handlers, so a form may revalidate and show an error about the now-empty field.",
+     "The element must be editable; anything else answers \"invalid element state\"."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element.",
+      "example": "f.00000000000000000000000000000000.d.0000000000000000.e.1"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "send_empty_body": true
+   },
+   {
+    "name": "get_element_text",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/text",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Read the visible text of an element \u2014 use this to check a heading, a price, a label or an error message.",
+    "guidance": [
+     "EMPTY FOR AN INPUT. What a user typed is a property, not text: read it with get_element_property on \"value\".",
+     "This is the rendered text, so it excludes anything hidden by CSS and collapses whitespace the way the page displays it.",
+     "For a container it returns the text of everything inside it, which can be far more than expected."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element.",
+      "example": "f.00000000000000000000000000000000.d.0000000000000000.e.1"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The element's visible text.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_element_property",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/property/{name}",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Read a live DOM property of an element \u2014 use this for what a field currently holds, or whether a box is checked right now.",
+    "guidance": [
+     "THIS IS THE ONE THAT READS A FIELD'S CURRENT VALUE. The \"value\" attribute is the markup's initial value rather than what is in the box now, and an input carries no text.",
+     "Useful names: value, checked, selected, disabled, innerText, href.",
+     "A property the element does not have comes back null, not an error."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element.",
+      "example": "f.00000000000000000000000000000000.d.0000000000000000.e.1"
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "description": "The DOM property to read.",
+      "example": "value"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The property's value, or null.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_element_attribute",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/attribute/{name}",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Read an HTML attribute of an element \u2014 use this for ids, classes, data- attributes and link targets as the markup declares them.",
+    "guidance": [
+     "This is the attribute as written in the HTML, which is NOT what a field currently holds: for that, use get_element_property on \"value\".",
+     "An attribute the element does not carry comes back null rather than an error, so null means absent, not empty.",
+     "An attribute a script has changed may still read as the original markup; the property is the live view."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element.",
+      "example": "f.00000000000000000000000000000000.d.0000000000000000.e.1"
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "description": "The attribute to read.",
+      "example": "href"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The attribute's value, or null when absent.",
+      "schema": {
+       "$schema": "NullableStringResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "is_element_displayed",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/displayed",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Check whether an element is actually visible on the page \u2014 use this before clicking, or to confirm something appeared or went away.",
+    "guidance": [
+     "False for an element that exists in the DOM but is hidden, zero-sized or has no visible text, which is why find_element succeeding does not mean a click will.",
+     "It does not say whether the element is scrolled into view or covered by something else; a click can still be intercepted."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element.",
+      "example": "f.00000000000000000000000000000000.d.0000000000000000.e.1"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "True when the element is visible.",
+      "schema": {
+       "$schema": "BooleanValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "scroll_to_element",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Bring an element into view \u2014 use this before clicking or screenshotting something below the fold, since both fail or miss when the target is off screen.",
+    "guidance": [
+     "THE RELIABLE FORM ON EVERY PLATFORM. Prefer this to scrolling the page by a distance: it works out where the element is for you, and it does not depend on the page reporting its height correctly, which scroll_page does.",
+     "The element_id goes in args as {\"element-6066-11e4-a52e-4f735466cecf\": \"<id>\"} and arrives in the script as arguments[0]; find_element gives you the id.",
+     "Returns the element's position after scrolling, so a caller can confirm it really is in view rather than trusting the status.",
+     "A click on a covered element answers \"element click intercepted\" \u2014 scroll it into view with this first."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "example": "arguments[0].scrollIntoView({block:'center'}); var r=arguments[0].getBoundingClientRect(); return {top:r.top,bottom:r.bottom,innerHeight:window.innerHeight};",
+      "values": [
+       "arguments[0].scrollIntoView({block:'center'}); var r=arguments[0].getBoundingClientRect(); return {top:r.top,bottom:r.bottom,innerHeight:window.innerHeight};"
+      ]
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object holding the element reference.",
+      "example": [
+       {
+        "element-6066-11e4-a52e-4f735466cecf": "<element_id>"
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Whatever the script returned.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "scroll_page",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Scroll the page itself by a distance or to the bottom \u2014 use this when there is no element to aim at, such as reaching a footer or loading more of an infinite list.",
+    "guidance": [
+     "PREFER scroll_to_element when you have an element: it works out where the target is for you. Use this form only when there is nothing to aim at.",
+     "Choose what it does with args: \"bottom\", \"top\", or a pixel count.",
+     "Returns the scroll position and the page height, so a caller can tell whether it actually reached the end: at rest at the bottom, scrollY + innerHeight equals scrollHeight within a couple of pixels \u2014 a scaled phone screen reports fractional positions, so do not demand exact equality. ON SAFARI THE POSITION IN THE \"bottom\" CALL'S OWN RESPONSE IS WHERE IT WAS ASKED TO GO, NOT WHERE IT STOPPED \u2014 it comes back equal to scrollHeight, which no resting position can be. Call again with args 0 to read the real position; that second reading is the one to check."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "example": "var a=arguments[0]; var h=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight); if(a==='bottom'){window.scrollTo(0,h);} else if(a==='top'){window.scrollTo(0,0);} else {window.scrollBy(0,Number(a));} return {scrollY:window.scrollY, innerHeight:window.innerHeight, scrollHeight:Math.max(document.body.scrollHeight,document.documentElement.scrollHeight)};",
+      "values": [
+       "var a=arguments[0]; var h=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight); if(a==='bottom'){window.scrollTo(0,h);} else if(a==='top'){window.scrollTo(0,0);} else {window.scrollBy(0,Number(a));} return {scrollY:window.scrollY, innerHeight:window.innerHeight, scrollHeight:Math.max(document.body.scrollHeight,document.documentElement.scrollHeight)};"
+      ]
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one value: \"bottom\", \"top\", or a number of pixels to scroll by (negative scrolls up).",
+      "example": [
+       "bottom"
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Whatever the script returned.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "execute_script",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Run JavaScript in the page \u2014 use this to scroll, read something the element readers cannot reach, or drive a control that resists clicking.",
+    "guidance": [
+     "SCROLLING LIVES HERE, and the reliable form is the ELEMENT one: pass the element in args and call arguments[0].scrollIntoView({block:'center'}). window.scrollTo(0, document.body.scrollHeight) reaches the bottom on a desktop browser, but on Chrome for Android it can stop short and leave a footer off screen while still reporting success \u2014 so scroll the thing you actually want rather than the page, and confirm with a screenshot or the page source.",
+     "READING THE PAGE'S MARKUP LIVES HERE TOO: 'return document.documentElement.outerHTML' for the whole document, or 'return arguments[0].outerHTML' with an element in args for one part of it. Prefer the element form \u2014 a real page runs to tens of kilobytes and the whole document is rarely what is wanted. This is also how to discover a selector on a page you have not seen: read the markup around the area you care about rather than guessing a selector, which fails silently when it matches nothing.",
+     "`return` is required to get a value back; without it the answer is null.",
+     "An element id can be passed in args as {\"element-6066-11e4-a52e-4f735466cecf\": \"<id>\"} and arrives as a real element in arguments.",
+     "It runs with the page's own privileges and can change anything, so a script that alters state is as consequential as a click.",
+     "A script that throws answers \"javascript error\" with the page's own message."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "description": "The JavaScript to run. Use `return` to get a value back.",
+      "example": "window.scrollTo(0, document.body.scrollHeight); return window.scrollY"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Arguments, available as `arguments` in the script. Send an empty list when there are none.",
+      "example": []
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Whatever the script returned.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "take_screenshot",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/screenshot",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Take a screenshot of the browser's viewport, as a base64 PNG \u2014 use this to see the page as a user would.",
+    "guidance": [
+     "Returned inline as base64 and typically tens of kilobytes, so take one when the picture is needed rather than after every step.",
+     "The VIEWPORT only, not the whole page: anything below the fold needs scrolling into view first with scroll_to_element.",
+     "get_title and get_element_property answer most checks far more cheaply than reading an image."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Base64-encoded PNG of the viewport.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_window_rect",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/window/rect",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Read the browser window's size and position \u2014 use this to learn the real viewport before planning anything that depends on layout.",
+    "guidance": [
+     "The window is smaller than the screen resolution asked for at session start, because of the browser's own chrome; this is the real figure."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value.width",
+     "value.height",
+     "value.x",
+     "value.y"
+    ],
+    "responses": {
+     "200": {
+      "description": "The window rectangle.",
+      "schema": {
+       "$schema": "RectResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "set_window_rect",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/window/rect",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Resize or move the browser window \u2014 use this to check a layout at a particular width.",
+    "guidance": [
+     "The response is the rectangle actually applied, which can differ from the one asked for: a window cannot exceed the screen, and some sizes are adjusted.",
+     "Resizing re-lays out the page, so element positions change and anything measured before is stale.",
+     "A real mobile browser is not uniformly resizable: an Android device accepts the call, while iOS refuses it with a 405. Read the size back from get_window_rect rather than assuming either."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "width",
+      "type": "integer",
+      "minimum": 0,
+      "example": 1200
+     },
+     {
+      "name": "height",
+      "type": "integer",
+      "minimum": 0,
+      "example": 900
+     },
+     {
+      "name": "x",
+      "type": "integer",
+      "example": 0
+     },
+     {
+      "name": "y",
+      "type": "integer",
+      "example": 0
+     }
+    ],
+    "returns": [
+     "value.width",
+     "value.height",
+     "value.x",
+     "value.y"
+    ],
+    "responses": {
+     "200": {
+      "description": "The rectangle now in effect.",
+      "schema": {
+       "$schema": "RectResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "maximize_window",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/window/maximize",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Maximise the browser window \u2014 use this to give the page the most room before reading a wide layout.",
+    "guidance": [
+     "Takes no parameters of its own.",
+     "Page layout changes, so anything measured before is stale.",
+     "Aimed at a desktop browser; a real mobile browser is already full screen and may refuse it."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value.width",
+     "value.height",
+     "value.x",
+     "value.y"
+    ],
+    "responses": {
+     "200": {
+      "description": "The rectangle after maximising.",
+      "schema": {
+       "$schema": "RectResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "send_empty_body": true,
+    "disabled": true
+   },
+   {
+    "name": "list_window_handles",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/window/handles",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "List the open tabs and windows \u2014 use this to find a tab a link opened, before switching to it.",
+    "guidance": [
+     "The first handle is the one the session started in. A new tab appears at the end.",
+     "A handle is opaque and only valid within this session.",
+     "Commands keep going to the tab last switched to, even after a link opens another one \u2014 a click that opens a tab does not move the session into it."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Every open tab or window.",
+      "schema": {
+       "$schema": "StringListResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "switch_to_window",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/window",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Point the session at a different tab or window \u2014 use this after a link opens one, so later commands act on it.",
+    "guidance": [
+     "Use a handle exactly as list_window_handles returned it; an invented one answers \"no such window\".",
+     "Element ids from the previous tab do not carry over.",
+     "Switching does not close anything; the other tab stays open."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "handle",
+      "type": "string",
+      "required": true,
+      "description": "Handle from list_window_handles.",
+      "example": "00000000000000000000000000000000"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "open_new_window",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/window/new",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Open a new tab or window \u2014 use this to work on two pages at once.",
+    "guidance": [
+     "The new handle comes back in the response, but the session does NOT move into it: call switch_to_window next.",
+     "The new tab starts blank; navigate_to after switching."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "type",
+      "type": "string",
+      "values": [
+       "tab",
+       "window"
+      ],
+      "example": "tab",
+      "description": "Open a tab or a separate window."
+     }
+    ],
+    "returns": [
+     "value.handle",
+     "value.type"
+    ],
+    "responses": {
+     "200": {
+      "description": "The new tab's handle.",
+      "schema": {
+       "$schema": "NewWindowResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "switch_to_frame",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/frame",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "Move into an iframe, or back out to the top-level page \u2014 use this when the content you need is inside an embedded frame.",
+    "guidance": [
+     "SEND null TO GET BACK TO THE TOP-LEVEL PAGE. Until you do, every find_element and the page source apply to the frame only, which is the usual reason an element that is plainly on screen cannot be found.",
+     "An index counts the frames in document order from 0, and an out-of-range one answers 404 \"no such frame\".",
+     "A frame can also be entered by passing an element id found for the iframe itself.",
+     "Element ids do not survive a frame switch.",
+     "Send the index as a number and null as a real null. A quoted \"0\" or \"null\" is refused with \"invalid argument\" rather than treated as a frame."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "id",
+      "type": "any",
+      "required": true,
+      "description": "The frame's index as a NUMBER, or an element reference for the iframe, or null to return to the top-level page. The type matters: sent as text, each of these is refused as an invalid argument.",
+      "example": 0
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_cookies",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/cookie",
+    "mode": "read",
+    "entity": "browser_session",
+    "intent": "Read the cookies for the current page \u2014 use this to check a login or consent cookie was set.",
+    "guidance": [
+     "Only cookies visible to the current page's domain; navigating elsewhere gives a different set.",
+     "An empty list means none for this domain, not an error.",
+     "A session that has not navigated anywhere yet has no cookies at all."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The cookies for this domain.",
+      "schema": {
+       "$schema": "CookieListResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "delete_session",
+    "method": "DELETE",
+    "path": "/wd/hub/session/{session_id}",
+    "mode": "write",
+    "entity": "browser_session",
+    "intent": "End a browser session and release the browser \u2014 use this when the flow is finished, after marking it passed or failed.",
+    "guidance": [
+     "Mark the outcome with set_session_status FIRST; an unmarked session reads as abandoned on the dashboard.",
+     "The session record, video and logs survive and stay readable with get_session.",
+     "A session already ended answers 404, which means it is gone rather than that something failed.",
+     "Every session consumes Automate minutes until it ends, so end it even when the run failed."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "state",
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "state is \"success\" and value an empty string; the body is the hub's own, not the W3C null.",
+      "schema": {
+       "$schema": "SessionDeletedResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   }
+  ],
+  "schemas": {
+   "StringValueResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "string"
+     }
+    }
+   },
+   "NullableStringResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "string",
+      "description": "Null when the attribute is absent."
+     }
+    }
+   },
+   "BooleanValueResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "boolean"
+     }
+    }
+   },
+   "NullValueResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "null"
+     }
+    }
+   },
+   "AnyValueResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "description": "Whatever the call produced; the shape depends on what was asked for."
+     }
+    }
+   },
+   "StringListResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "ElementResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "element-6066-11e4-a52e-4f735466cecf": {
+        "type": "string",
+        "description": "The element id to pass as element_id."
+       }
+      }
+     }
+    }
+   },
+   "ElementListResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "element-6066-11e4-a52e-4f735466cecf": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   },
+   "RectResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "x": {
+        "type": "integer"
+       },
+       "y": {
+        "type": "integer"
+       },
+       "width": {
+        "type": "integer"
+       },
+       "height": {
+        "type": "integer"
+       }
+      }
+     }
+    }
+   },
+   "NewWindowResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "handle": {
+        "type": "string"
+       },
+       "type": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   },
+   "CookieListResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "value": {
+         "type": "string"
+        },
+        "domain": {
+         "type": "string"
+        },
+        "path": {
+         "type": "string"
+        },
+        "secure": {
+         "type": "boolean"
+        },
+        "httpOnly": {
+         "type": "boolean"
+        },
+        "expiry": {
+         "type": "integer"
+        }
+       }
+      }
+     }
+    }
+   },
+   "NewSessionResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "sessionId": {
+        "type": "string",
+        "description": "Carry this into every other browser_session capability."
+       },
+       "capabilities": {
+        "type": "object",
+        "description": "What the hub negotiated, including the browser version actually given."
+       }
+      }
+     }
+    }
+   },
+   "WebDriverErrorBody": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "error": {
+        "type": "string",
+        "description": "The WebDriver error code, such as \"no such element\"."
+       },
+       "message": {
+        "type": "string"
+       },
+       "stacktrace": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   },
+   "BrowserList": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "properties": {
+      "browser": {
+       "type": "string",
+       "description": "Lower case, as create_session takes it."
+      },
+      "browser_version": {
+       "type": "string",
+       "description": "Null for a mobile browser, which ships with the OS."
+      },
+      "os": {
+       "type": "string"
+      },
+      "os_version": {
+       "type": "string"
+      },
+      "device": {
+       "type": "string",
+       "description": "Null for a desktop combination."
+      },
+      "real_mobile": {
+       "type": "boolean",
+       "description": "True for a real phone or tablet."
+      }
+     }
+    }
+   },
+   "Plan": {
+    "type": "object",
+    "properties": {
+     "automate_plan": {
+      "type": "string"
+     },
+     "parallel_sessions_running": {
+      "type": "integer",
+      "description": "Account-wide, including other people's sessions."
+     },
+     "parallel_sessions_max_allowed": {
+      "type": "integer"
+     },
+     "team_parallel_sessions_max_allowed": {
+      "type": "integer"
+     },
+     "queued_sessions": {
+      "type": "integer"
+     },
+     "queued_sessions_max_allowed": {
+      "type": "integer"
+     },
+     "terminal_access": {
+      "type": "string"
+     }
+    }
+   },
+   "SessionStatusUpdate": {
+    "type": "object",
+    "description": "The session record after the change.",
+    "properties": {
+     "automation_session": {
+      "type": "object",
+      "properties": {
+       "hashed_id": {
+        "type": "string",
+        "description": "The session id."
+       },
+       "name": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string",
+        "description": "passed, failed, or absent when never set."
+       },
+       "reason": {
+        "type": "string"
+       },
+       "browser": {
+        "type": "string"
+       },
+       "browser_version": {
+        "type": "string"
+       },
+       "os": {
+        "type": "string"
+       },
+       "os_version": {
+        "type": "string"
+       },
+       "device": {
+        "type": "string",
+        "description": "Set for a mobile browser, null for a desktop one."
+       },
+       "build_name": {
+        "type": "string"
+       },
+       "project_name": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   },
+   "SessionDetails": {
+    "type": "object",
+    "description": "The session record, wrapped in automation_session.",
+    "properties": {
+     "automation_session": {
+      "type": "object",
+      "properties": {
+       "hashed_id": {
+        "type": "string",
+        "description": "The session id."
+       },
+       "name": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string",
+        "description": "passed, failed, or absent when never set."
+       },
+       "reason": {
+        "type": "string"
+       },
+       "browser": {
+        "type": "string"
+       },
+       "browser_version": {
+        "type": "string"
+       },
+       "os": {
+        "type": "string"
+       },
+       "os_version": {
+        "type": "string"
+       },
+       "device": {
+        "type": "string",
+        "description": "Set for a mobile browser, null for a desktop one."
+       },
+       "build_name": {
+        "type": "string"
+       },
+       "project_name": {
+        "type": "string"
+       },
+       "duration": {
+        "type": "integer",
+        "description": "Seconds; null while the session is still running."
+       },
+       "created_at": {
+        "type": "string"
+       },
+       "public_url": {
+        "type": "string",
+        "description": "Shareable link needing no login; carries an auth token, so treat it as a secret."
+       },
+       "browser_url": {
+        "type": "string",
+        "description": "The session on the dashboard; needs a login."
+       },
+       "video_url": {
+        "type": "string",
+        "description": "Complete only once the session has ended."
+       },
+       "har_logs_url": {
+        "type": "string",
+        "description": "Present only when the session was started with network logs."
+       },
+       "browser_console_logs_url": {
+        "type": "string",
+        "description": "Present only when console logs were asked for."
+       },
+       "browser_profiling_url": {
+        "type": "string"
+       },
+       "browserstack_status": {
+        "type": "string",
+        "description": "What BrowserStack observed, which can differ from the status that was set."
+       }
+      }
+     }
+    }
+   },
+   "SessionDeletedResponse": {
+    "type": "object",
+    "description": "What the hub returns when a session is closed. Not the W3C null: state says whether it closed and value is an empty string.",
+    "properties": {
+     "state": {
+      "type": "string",
+      "description": "\"success\" when the session was closed."
+     },
+     "status": {
+      "type": "integer",
+      "description": "The hub's own legacy status code; 0 on success."
+     },
+     "value": {
+      "type": "string",
+      "description": "Always empty on success."
+     }
+    }
+   }
+  },
+  "responses": {
+   "WebDriverError": {
+    "description": "A WebDriver failure, naming the error code and the browser's own message.",
+    "schema": {
+     "$schema": "WebDriverErrorBody"
+    }
+   },
+   "Unauthorized": {
+    "description": "The credentials were rejected.",
+    "schema": {
+     "$schema": "WebDriverErrorBody"
+    }
+   }
+  },
+  "paging": {},
+  "entities": {
+   "browser_session": {
+    "title": "Browser Session",
+    "description": "A live browser on one operating system, driven page by page until it ends.",
+    "aliases": [
+     "browser session",
+     "automate session",
+     "web session",
+     "selenium session",
+     "webdriver session",
+     "browser",
+     "session",
+     "test session"
+    ],
+    "id_convention": "session_id is a 40-character hex string returned by create_session at value.sessionId; it cannot be listed or guessed. element_id is an opaque string from find_element and is valid only until the page navigates or that part of the page re-renders.",
+    "key_facts": [
+     "A session holds a browser and consumes Automate minutes from start until it ends; it ends itself after the idle timeout with no command, or after 2 hours.",
+     "Element ids go stale the moment the page navigates, reloads or re-renders, and a stale one is refused rather than silently acting on the wrong thing.",
+     "Console and network logs must be asked for when the session starts; they cannot be turned on later.",
+     "Each session is recorded with video and its record outlives it, including the shareable link and the passed or failed status.",
+     "Everything inside an iframe is invisible until the session is switched into it, and invisible again until it is switched back out."
+    ],
+    "capabilities": [
+     "get_session",
+     "set_session_status",
+     "create_session",
+     "navigate_to",
+     "get_current_url",
+     "get_title",
+     "go_back",
+     "go_forward",
+     "refresh_page",
+     "get_page_source",
+     "find_element",
+     "find_elements",
+     "click_element",
+     "send_keys",
+     "clear_element",
+     "get_element_text",
+     "get_element_property",
+     "get_element_attribute",
+     "is_element_displayed",
+     "execute_script",
+     "take_screenshot",
+     "get_window_rect",
+     "set_window_rect",
+     "maximize_window",
+     "list_window_handles",
+     "switch_to_window",
+     "open_new_window",
+     "switch_to_frame",
+     "get_cookies",
+     "delete_session",
+     "scroll_to_element",
+     "scroll_page"
+    ]
+   },
+   "browser": {
+    "title": "Browser",
+    "description": "One operating system, browser and version combination a session can run on.",
+    "aliases": [
+     "browser",
+     "browser version",
+     "os",
+     "platform",
+     "combination",
+     "browser list",
+     "capability",
+     "desktop browser",
+     "mobile browser"
+    ],
+    "id_convention": "A combination is addressed by its browser name with either os and os_version, or device and os_version for a mobile browser; there is no id, and the strings must match the list exactly.",
+    "key_facts": [
+     "Several thousand combinations exist, so the list is large and has to be narrowed by the caller.",
+     "A mobile browser is named after its platform rather than its product, so the name that works on a phone is not the one a person would say.",
+     "A mobile browser is the one that ships with the device's OS, so it has no separate version to choose.",
+     "The set changes as browser versions are released and retired, so a combination held from an earlier run can stop being offered."
+    ],
+    "capabilities": [
+     "list_browsers"
+    ]
+   },
+   "plan": {
+    "title": "Plan",
+    "description": "The account's Automate subscription and how much of its parallel-session allowance is in use.",
+    "aliases": [
+     "plan",
+     "subscription",
+     "parallel sessions",
+     "parallels",
+     "concurrency",
+     "quota",
+     "capacity",
+     "limits",
+     "usage"
+    ],
+    "id_convention": "There is one plan per account; it is not addressed by an id.",
+    "key_facts": [
+     "Parallel-session counts are account-wide and include sessions started by other people and by CI.",
+     "A team can have a lower ceiling than the account as a whole.",
+     "Starting past the limit queues the session rather than refusing it, which looks like a slow start.",
+     "Web and mobile-app sessions are counted against separate plans."
+    ],
+    "capabilities": [
+     "get_plan"
+    ]
+   }
+  }
+ }
+}

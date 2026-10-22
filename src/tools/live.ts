@@ -5,6 +5,7 @@ import { startBrowserSession } from "./live-utils/start-session.js";
 import { PlatformType } from "./live-utils/types.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
+import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
 import globalConfig from "../config.js";
 
 // Define the schema shape
@@ -124,9 +125,17 @@ export default function addBrowserLiveTools(
 ) {
   const tools: Record<string, any> = {};
 
+  // Same rule as runAppLiveSession: Live is for a person, and an agent that picks it for a
+  // click-by-locator task ends up reporting that Live cannot click by locator.
+  const description =
+    "Open a manual Live browser session (desktop or mobile) for the user to operate by hand. It cannot be driven by the agent." +
+    (capabilityRegistryEnabled()
+      ? " To click, type or read the page yourself, use a devicecontrol session via invokeCapability."
+      : "");
+
   tools.runBrowserLiveSession = server.tool(
     "runBrowserLiveSession",
-    "Launch a BrowserStack Live session (desktop or mobile).",
+    description,
     LiveArgsShape,
     {
       title: "Run Browser Live Session",

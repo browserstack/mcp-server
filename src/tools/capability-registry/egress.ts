@@ -199,7 +199,20 @@ async function readBody(response: Response): Promise<unknown> {
     return `<non-text response: ${contentType}${size ? `, ${size} bytes` : ""}>`;
   }
 
-  const raw = await response.text().catch(() => "");
+  // A FAILED READ IS NOT AN EMPTY BODY. `fetch` resolves as soon as the headers arrive, so
+  // the abort timer can fire while the body is still streaming. Swallowing that here
+  // returned the status line with no payload — a slow session create came back as a 200
+  // carrying null, which reads as a successful start that forgot to mention the session id.
+  // The device was really allocated, so the caller then had a session it could not name and
+  // could not release. Re-throwing lets the transport report the call as failed.
+  let raw: string;
+  try {
+    raw = await response.text();
+  } catch (error) {
+    throw new Error(
+      `the response body could not be read: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   if (!raw.trim()) return null;
 
   if (contentType.includes("json")) {
@@ -234,8 +247,15 @@ export function fetchTransport(timeoutMs = 45_000): Transport {
         method,
         headers,
         // Only send a body when there IS one: a literal `null` payload with a JSON
-        // content-type is rejected by several endpoints.
-        body: body === undefined ? undefined : JSON.stringify(body),
+        // content-type is rejected by several endpoints. A FormData goes through as it is —
+        // stringifying it yields "[object FormData]", which uploads nothing and reads as a
+        // product error rather than ours.
+        body:
+          body === undefined
+            ? undefined
+            : body instanceof FormData
+              ? body
+              : JSON.stringify(body),
         // A redirect from an authenticated API is usually a login bounce, and following it
         // turns a clear 401/302 into a 200 carrying an HTML sign-in page — which the
         // resolver would then read as an empty result set rather than a failure.

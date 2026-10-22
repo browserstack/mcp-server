@@ -7,6 +7,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import appConfig from "../../config.js";
 import { basename, dirname } from "node:path";
 import {
   Capability,
@@ -24,7 +25,18 @@ import {
 export class IndexError extends Error {}
 
 /** Thrown to the caller as a tool error, so the wording is caller-facing. */
-export class InvocationError extends Error {}
+export class InvocationError extends Error {
+  /**
+   * Set when the handle exists in the artifact but this surface withholds it.
+   *
+   * The MESSAGE deliberately does not say so — a caller is told the capability does not
+   * exist, because "withheld" invites a retry, a search for synonyms, or a question to the
+   * user about enabling it, none of which can succeed here. The flag keeps the distinction
+   * for telemetry, where knowing how often a withheld handle is reached for is how we learn
+   * whether withholding it was the right call.
+   */
+  withheld?: boolean;
+}
 
 /** The file inside a product subdirectory, for the earlier nested layout. */
 export const INDEX_FILE = "index.json";
@@ -57,9 +69,96 @@ export function endpointKey(method: string, path: string): string {
  * FAILS CLOSED: any truthy `disabled` hides it, not just `=== true`. The flag exists to
  * suppress something that cannot work, so an unexpected shape must hide it rather than be
  * ignored — the opposite default would turn a typo into a silently re-enabled capability.
+ *
+ * `local_only` withholds on a remote server only, for a capability that reads the caller's
+ * own machine: there, the path it would take resolves against the operator's disk instead.
+ * Read at call time rather than captured, because the remote server builds its config per
+ * session and a value captured at module load would outlive the deployment it described.
  */
 export function isDisabled(capability: Capability): boolean {
-  return Boolean(capability.disabled);
+  if (capability.disabled) return true;
+  return Boolean(capability.local_only) && Boolean(appConfig.REMOTE_MCP);
+}
+
+/**
+ * Is this capability published for reference only on this surface?
+ *
+ * `local_only` on a remote server. The capability is real and the caller may well be asking
+ * for exactly it, so hiding it leaves the agent concluding no such route exists. Publishing
+ * it without the means to call it, and with a note saying what to do instead, answers the
+ * question it was asked.
+ */
+export function isReferenceOnly(capability: Capability): boolean {
+  if (capability.disabled) return false;
+  return Boolean(capability.local_only) && Boolean(appConfig.REMOTE_MCP);
+}
+
+/**
+ * The reference form: what it is and what to do instead, and nothing to call it with.
+ *
+ * The parameters and response shapes go because publishing them invites the attempt — a
+ * model handed a body schema will fill it in. `intent` stays, because that is what the
+ * search matched on, and `mode` stays so a reader can still see what kind of operation it
+ * would have been.
+ */
+function asReference(capability: Capability): Capability {
+  const reference: Capability = { ...capability };
+  for (const field of [
+    "path_params",
+    "query",
+    "body",
+    "responses",
+    "returns",
+    "paginated",
+    "max_page_size",
+    "encoding",
+  ] as const) {
+    delete reference[field];
+  }
+  // Guidance is NOT touched here. `withSurfaceGuidance` has already folded in
+  // `remote_guidance` — which is where a reference-only capability says what to do
+  // instead — and it runs for every capability, not only this branch.
+  // `withSurfaceGuidance` has already run, so guidance is a plain array here — and for a
+  // reference-only capability its `remote` half is where "what to do instead" lives.
+  const named = Array.isArray(capability.guidance)
+    ? capability.guidance.length > 0
+    : false;
+  return {
+    ...reference,
+    invocable: false,
+    ...(named
+      ? {}
+      : { guidance: ["This capability cannot be called on this server."] }),
+  };
+}
+
+/**
+ * Flatten `guidance` to the lines that apply to the surface doing the loading.
+ *
+ * A capability may say three things about how to use it: what is true everywhere, what is
+ * true only where the server sits beside the user, and what is true only on a remote one.
+ * Only one of the last two can ever apply, so the caller is handed exactly that and never
+ * has to work out which half was meant for them.
+ *
+ * COMPOSED, NOT REPLACED. An earlier shape put the remote instruction in a single
+ * `unavailable_note` that replaced the guidance outright, which threw away lines still true
+ * there — the accepted file types, how long a large upload takes — and invited them to be
+ * restated in the note, where the two copies could drift. Shared lines are now written once.
+ *
+ * The object form is flattened away here, so no reader downstream sees anything but a plain
+ * array, and which surface this is stays ours to know rather than a fact the caller acts on.
+ */
+function withSurfaceGuidance(capability: Capability): Capability {
+  const g = capability.guidance;
+  if (!g || Array.isArray(g)) return capability;
+  const lines = [
+    ...(g.shared ?? []),
+    ...(appConfig.REMOTE_MCP ? (g.remote ?? []) : (g.local ?? [])),
+  ];
+  const next: Capability = { ...capability };
+  if (lines.length) next.guidance = lines;
+  else delete next.guidance;
+  return next;
 }
 
 export interface LoadedProduct {
@@ -228,11 +327,26 @@ export class CapabilityRegistry {
       const withheld = new Map<string, Capability>();
       const enabled: Capability[] = [];
 
-      for (const capability of bundle.capabilities) {
+      for (let capability of bundle.capabilities) {
         // UNIQUENESS IS CHECKED OVER EVERY CAPABILITY, disabled ones included. A clash
         // between a disabled name and a live one is still a broken artifact, and skipping
         // the disabled half would mean re-enabling the flag could fail the load later,
         // somewhere with less context than here.
+        // Surface guidance is folded in for EVERY capability, before any of the branches
+        // below, so a reference-only one and an ordinary one are composed the same way.
+        capability = withSurfaceGuidance(capability);
+        if (isReferenceOnly(capability)) {
+          // PUBLISHED, BUT NOT CALLABLE. It keeps its name and intent so the search that
+          // should find it does, and loses everything a caller would need to invoke it.
+          const reference = asReference(capability);
+          enabled.push(reference);
+          lookup.set(
+            endpointKey(capability.method, capability.path),
+            reference,
+          );
+          if (capability.name) names.set(capability.name, reference);
+          continue;
+        }
         if (isDisabled(capability)) {
           withheld.set(
             endpointKey(capability.method, capability.path),
@@ -278,26 +392,23 @@ export class CapabilityRegistry {
   }
 
   /**
-   * The `capability_disabled` message for a handle this build withholds, if it is one.
+   * Does this build withhold the handle?
    *
-   * Says THAT it is disabled and nothing about why. The reason is documentation and lives
-   * with the decision; repeating it here would put four copies of a paragraph in the
-   * shipped artifact to serve a path the flag itself makes rare.
+   * WHAT THE CALLER IS TOLD IS THAT IT DOES NOT EXIST, which is why this returns a boolean
+   * rather than a message. Saying "withheld" describes the artifact rather than the
+   * surface, and every action it invites — retry, hunt for a synonym, ask the user to turn
+   * it on — fails here. A capability absent from search, describe and every listing should
+   * read the same way at invocation as it does everywhere else.
    *
-   * Returns undefined for anything else, so the caller falls through to its own
-   * not-found wording.
+   * The caller raises its own not-found error and marks it `withheld`, so the distinction
+   * survives in telemetry without reaching the agent.
    */
-  private withheldMatch(handle: string, product?: string): string | undefined {
+  private isWithheld(handle: string, product?: string): boolean {
     for (const [owner, withheld] of this.withheld) {
       if (product && owner !== product) continue;
-      if (!withheld.has(handle)) continue;
-      return (
-        `capability_disabled: ${handle} is disabled on this surface. This is ` +
-        `deliberate — it is withheld by the ${owner} index, not missing from it — so ` +
-        `retrying will not help.`
-      );
+      if (withheld.has(handle)) return true;
     }
-    return undefined;
+    return false;
   }
 
   /** How many capabilities each product withholds. Startup logging only. */
@@ -402,12 +513,13 @@ export class CapabilityRegistry {
       if (capability) matches.push({ product: owner, capability });
     }
     if (matches.length === 0) {
-      // WITHHELD IS A DIFFERENT ANSWER FROM ABSENT, and only here. Search cannot surface a
-      // disabled capability, so reaching this branch means the caller already held the
-      // exact handle — from an older index, a doc, or a human. "unknown_capability" would
-      // send it hunting for a synonym that does not exist; the reason ends the attempt.
-      const off = this.withheldMatch(name, product);
-      if (off) throw new InvocationError(off);
+      // A WITHHELD HANDLE ANSWERS THE SAME WAY AS AN ABSENT ONE. Search, describe and the
+      // listings already behave as though it does not exist, and invocation is no place to
+      // contradict them: "withheld" is a fact about the artifact, not about this surface,
+      // and it invites a retry, a hunt for a synonym, or a question to the user about
+      // enabling something that cannot be enabled here. The error carries `withheld` so the
+      // attempt is still countable in telemetry.
+      const withheldHere = this.isWithheld(name, product);
 
       // Say whether names are published at all for the product asked about: "no such name"
       // and "this product does not name its capabilities" need different fixes.
@@ -421,7 +533,9 @@ export class CapabilityRegistry {
         ? ` ${unnamed.sort().join(", ")} ${unnamed.length > 1 ? "publish" : "publishes"} ` +
           `no capability names yet — call those by \`method\` and \`path\` instead.`
         : " Search again — names come from searchCapability and describeEntity.";
-      throw new InvocationError(`unknown_capability: ${name}.${hint}`);
+      const error = new InvocationError(`unknown_capability: ${name}.${hint}`);
+      if (withheldHere) error.withheld = true;
+      throw error;
     }
     if (matches.length > 1 && !product) {
       const owners = matches
@@ -458,12 +572,12 @@ export class CapabilityRegistry {
       if (capability) matches.push({ product: name, capability });
     }
     if (matches.length === 0) {
-      const off = this.withheldMatch(key, product);
-      if (off) throw new InvocationError(off);
-      throw new InvocationError(
+      const error = new InvocationError(
         `unknown_endpoint: ${key}. Search again — send \`method\` and \`path\` exactly as ` +
           `searchCapability returned them, placeholders included.`,
       );
+      if (this.isWithheld(key, product)) error.withheld = true;
+      throw error;
     }
     if (matches.length > 1 && !product) {
       const owners = matches

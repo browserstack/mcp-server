@@ -15,8 +15,36 @@ No fixture, no live call, no agents.
 """
 import json, sys, collections
 
+# The envelope is three fields and every shipped index gets them right, so nothing checked
+# it — until a hand-authored file arrived with `schema_version: "0.1"` and the loader
+# refused it. Loading is a MERGE across files, so that one file took every product down
+# with it: tm, tra and loadtesting became unavailable because a new index had a typo. Cheap
+# to assert, and the failure it prevents is total.
+SCHEMA_VERSION = 1
+
+
+def check_envelope(path, d):
+    problems = []
+    if d.get('schema_version') != SCHEMA_VERSION:
+        problems.append(
+            f"schema_version is {json.dumps(d.get('schema_version'))}, and the server reads "
+            f"{SCHEMA_VERSION} — it will refuse this file AND every other index alongside it")
+    for field in ('version', 'build_id'):
+        if not isinstance(d.get(field), str) or not d[field].strip():
+            problems.append(f"{field} must be a non-empty string, and is {json.dumps(d.get(field))}")
+    products = [k for k in d if k not in ('schema_version', 'version', 'build_id')]
+    if len(products) != 1:
+        problems.append(f"expected exactly one product key, found {products}")
+    if problems:
+        print(f"\n{path}: unloadable envelope")
+        for problem in problems:
+            print(f"  {problem}")
+        sys.exit(1)
+
+
 def load(p):
     d = json.load(open(p))
+    check_envelope(p, d)
     return d, d[list(k for k in d if k not in ('schema_version','version','build_id'))[0]]
 
 def resolve(tm, node, seen=None, path=''):

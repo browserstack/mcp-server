@@ -466,7 +466,7 @@
      "WHETHER THIS REPLACES OR APPENDS DEPENDS ON THE PLATFORM: on Android it replaces whatever the field already holds, and on iOS it appends to it. Typing twice into one iOS field therefore leaves both values joined. Read the field back from get_page_source whenever the resulting value matters.",
      "The element must be an editable field (EditText on Android, TextField on iOS); typing into anything else fails with \"invalid element state\".",
      "The on-screen keyboard may stay open afterwards and cover lower elements \u2014 re-read the page source before the next tap.",
-     "There is no way to empty a field on this surface: the standard clear endpoint answers 200 without reliably emptying it, so typing the value you want is the way to set it \u2014 and on iOS, where this appends, there is no way to correct a field you have already typed into.",
+     "clear_element empties a field, and on iOS \u2014 where this APPENDS \u2014 it is the only way to take back what is already there. It answers 200 whether or not the field changed, so read the field back from get_page_source rather than trusting the status.",
      "The keyboard is usually left open afterwards. On Android, hide_keyboard closes it. On iOS it cannot be closed without submitting, so read hide_keyboard's guidance before planning a tap below the field.",
      "Sending a newline closes the keyboard on iOS by pressing Return, which an app that commits on editing-ended will treat as a submit \u2014 the field resets and the value moves wherever the app sends it. The commit is the app's doing, not the newline's: dismissing the same field any other way can commit it too. See hide_keyboard."
     ],
@@ -507,6 +507,51 @@
       "$response": "WebDriverError"
      }
     }
+   },
+   {
+    "name": "clear_element",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/clear",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Empty an editable field in the app \u2014 use this before typing when the field already holds something and you need to replace rather than add to it.",
+    "guidance": [
+     "Takes no parameters of its own.",
+     "CONFIRM IT ACTUALLY EMPTIED THE FIELD by reading the field back from get_page_source: this endpoint can answer 200 without the field changing, and the status alone does not tell you which happened.",
+     "Needed far more on iOS than on Android: send_keys REPLACES the field's contents on Android, so clearing first is usually unnecessary there, while on iOS it APPENDS and this is the only way to take back what is already in the field.",
+     "The element must be an editable field \u2014 EditText on Android, TextField on iOS. Anything else answers \"invalid element state\".",
+     "The element_id must come from find_element on the current screen; after the screen changes it is stale and fails with \"stale element reference\"."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element.",
+      "example": "element-6066-11e4-a52e-4f735466cecf"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Field emptied; value is null. The null says the call was accepted, not that the field changed \u2014 read the field back to know that.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "send_empty_body": true
    },
    {
     "name": "perform_actions",
@@ -3240,7 +3285,8 @@
      "get_simulated_location",
      "get_active_app_info",
      "read_device_property",
-     "find_elements"
+     "find_elements",
+     "clear_element"
     ]
    },
    "device": {

@@ -2,25 +2,20 @@ import { apiClient } from "./apiClient.js";
 import logger from "../logger.js";
 import { BrowserStackConfig } from "./types.js";
 import { getBrowserStackAuth } from "./get-auth.js";
-import appConfig from "../config.js";
+import appConfig, { GrrRegion } from "../config.js";
+import { regionPreference } from "./regional-host.js";
 
-const TM_BASE_URLS = [
-  "https://test-management.browserstack.com",
-  "https://test-management-eu.browserstack.com",
-  "https://test-management-in.browserstack.com",
-] as const;
+const TM_BASE_URLS: Record<GrrRegion, string> = {
+  us: "https://test-management.browserstack.com",
+  eu: "https://test-management-eu.browserstack.com",
+  in: "https://test-management-in.browserstack.com",
+};
 
 let cachedBaseUrl: string | null = null;
 
 export async function getTMBaseURL(
   config: BrowserStackConfig,
 ): Promise<string> {
-  // Unset or "us" falls through to the probe below.
-  const grrRegion = appConfig.BROWSERSTACK_GRR_REGION;
-  if (grrRegion === "eu" || grrRegion === "in") {
-    return `https://test-management-${grrRegion}.browserstack.com`;
-  }
-
   // Skip the module-level cache in remote (multi-tenant) mode: it is process-shared,
   // so the first user's region would be served to every subsequent user — breaking
   // requests for users on a different region's BrowserStack account.
@@ -40,7 +35,7 @@ export async function getTMBaseURL(
 
   const failures: string[] = [];
 
-  for (const baseUrl of TM_BASE_URLS) {
+  for (const baseUrl of regionPreference().map((r) => TM_BASE_URLS[r])) {
     try {
       const res = await apiClient.get({
         url: `${baseUrl}/api/v2/projects/`,

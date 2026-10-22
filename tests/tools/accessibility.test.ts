@@ -70,7 +70,10 @@ vi.mock("../../src/logger", () => ({
 }));
 vi.mock("../../src/lib/instrumentation", () => ({ trackMCP: vi.fn() }));
 // apiClient reaches the server entry through lib/utils; it must not start the server.
-vi.mock("../../src/index", () => ({ trackMCP: vi.fn(), PackageJsonVersion: "0.0.0" }));
+vi.mock("../../src/index", () => ({
+  trackMCP: vi.fn(),
+  PackageJsonVersion: "0.0.0",
+}));
 
 const mockConfig = {
   "browserstack-username": "fake-user",
@@ -110,7 +113,10 @@ describe("Accessibility Tools", () => {
     expect(description("startAccessibilityScan")).toContain(
       "setupBrowserStackAppAutomateTests",
     );
-    expect(description("fetchAccessibilityIssues")).toMatch(/app build/i);
+    const buildId = serverMock.tool.mock.calls.find(
+      (c: any[]) => c[0] === "fetchAccessibilityIssues",
+    )[2].buildId;
+    expect(buildId.description).toMatch(/App Accessibility/);
   });
 
   it("registers all 6 accessibility tools", () => {

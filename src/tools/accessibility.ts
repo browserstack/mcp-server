@@ -270,6 +270,13 @@ const PROCESSING_STATUSES = new Set([
   "finalizing",
 ]);
 
+/**
+ * Of those, the one worth waiting on: the advanced-issue processing after the run, which
+ * ends within minutes. A report whose scan or tests are still running is read as it is,
+ * with a note, since that can last as long as the suite does.
+ */
+const WAIT_STATUSES = new Set(["finalizing"]);
+
 interface ProcessingState {
   /** The status when the issues were read; undefined when it could not be read. */
   status?: string;
@@ -280,10 +287,10 @@ interface ProcessingState {
 
 /**
  * Where a report is in its processing before its issues are read. Issues keep being added
- * until it completes (an advanced scan adds its advanced-rule issues while "finalizing", for
- * minutes after the tests end), so a first read waits for it, reporting progress, for up to
- * REPORT_STATUS_WAIT_MS. A later page does not wait again, and a status that cannot be read
- * is not waited on.
+ * until it completes; an advanced scan adds its advanced-rule issues while "finalizing", for
+ * minutes after the tests end, so a first read waits for that, reporting progress, for up to
+ * REPORT_STATUS_WAIT_MS. A run still in progress is not waited on (it can take as long as
+ * the suite), nor is a later page, nor a status that cannot be read.
  */
 async function waitForProcessing(
   reportFetcher: AccessibilityReportFetcher,
@@ -297,7 +304,7 @@ async function waitForProcessing(
   while (
     wait &&
     status &&
-    PROCESSING_STATUSES.has(status) &&
+    WAIT_STATUSES.has(status) &&
     Date.now() - started < REPORT_STATUS_WAIT_MS
   ) {
     const waited = Date.now() - started;

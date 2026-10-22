@@ -397,6 +397,23 @@ describe("fetchAccessibilityIssues and a report still processing", () => {
     expect(text(result)).toContain("This report is still processing");
   });
 
+  it("does not wait while the tests are still running, and says the issues are those found so far", async () => {
+    // A long suite can run for an hour; blocking the first read for five minutes and then
+    // returning partial results anyway serves nobody. Only post-run processing is waited on.
+    m.reportStatus.mockResolvedValue("running");
+
+    const result = await handlers.fetchAccessibilityIssues(
+      { buildId: BUILD_ID },
+      context,
+    );
+
+    expect(m.reportStatus).toHaveBeenCalledTimes(1);
+    expect(sendNotification).not.toHaveBeenCalled();
+    const body = text(result);
+    expect(body).toContain("still processing (status: running");
+    expect(body).toContain("only those found so far");
+  });
+
   it("does not wait when the status cannot be read", async () => {
     m.reportStatus.mockResolvedValue(undefined);
     const result = await handlers.fetchAccessibilityIssues(

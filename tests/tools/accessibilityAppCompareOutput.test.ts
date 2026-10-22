@@ -356,6 +356,41 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
     expect(text(result)).toMatch(/first build/);
   });
 
+  it("pages through long lists of new and resolved issues with the cursor", async () => {
+    m.previousAppBuild.mockResolvedValue({
+      buildId: EARLIER_ID,
+      same_name: true,
+    });
+    const many = Array.from({ length: 60 }, (_, i) =>
+      row("text-color-contrast", "serious", `com.shop:id/label_${i}`),
+    );
+    m.appBuildIssues.mockImplementation(async (id: string) =>
+      id === BUILD_ID ? { ...AFTER, issues: [] } : { ...BEFORE, issues: many },
+    );
+
+    const first = text(
+      await fetchIssues()({ buildId: BUILD_ID, compareWith: "previous" }),
+    );
+    expect(first).toContain("Resolved issues (60), 1 to 50:");
+    expect(first).toContain("label_49");
+    expect(first).not.toContain("label_50");
+    expect(first).toContain(
+      `More to list: call fetchAccessibilityIssues with buildId: "${BUILD_ID}", compareWith: "previous" and cursor: 50.`,
+    );
+
+    const next = text(
+      await fetchIssues()({
+        buildId: BUILD_ID,
+        compareWith: "previous",
+        cursor: 50,
+      }),
+    );
+    expect(next).toContain("Resolved issues (60), 51 to 60:");
+    expect(next).toContain("label_59");
+    expect(next).not.toContain('label_49"');
+    expect(next).not.toContain("More to list");
+  });
+
   it("refuses to compare a build with itself", async () => {
     const result = await fetchIssues()({
       buildId: BUILD_ID,

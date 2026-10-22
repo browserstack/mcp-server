@@ -461,7 +461,7 @@ function summaryNote(summary: AppIssueSummary, total: number): string[] {
   ];
 }
 
-/** How many new and resolved issues a comparison lists; the rest are counted. */
+/** How many new and resolved issues a comparison lists per page. */
 const COMPARE_LIST_MAX = 50;
 
 /** An issue as a comparison lists it: what and where, without the fix text. */
@@ -470,13 +470,21 @@ function compareRow(row: AppAccessibilityIssue) {
   return { issue_type, rule_id, severity, screen, component, element };
 }
 
-function issueList(label: string, rows: AppAccessibilityIssue[]): string {
-  const shown = rows.slice(0, COMPARE_LIST_MAX).map(compareRow);
-  const more =
-    rows.length > shown.length
-      ? ` (the first ${shown.length} of ${rows.length})`
+/** One page of a comparison's list: the cursor counts the issues already listed. */
+function issueList(
+  label: string,
+  rows: AppAccessibilityIssue[],
+  cursor: number,
+): string {
+  if (cursor > 0 && cursor >= rows.length) {
+    return `${label} (${rows.length}): all listed on earlier pages.`;
+  }
+  const shown = rows.slice(cursor, cursor + COMPARE_LIST_MAX).map(compareRow);
+  const range =
+    rows.length > COMPARE_LIST_MAX
+      ? `, ${cursor + 1} to ${cursor + shown.length}`
       : "";
-  return `${label} (${rows.length})${more}: ${wrapUntrusted("accessibility scan results", JSON.stringify(shown, null, 2))}`;
+  return `${label} (${rows.length})${range}: ${wrapUntrusted("accessibility scan results", JSON.stringify(shown, null, 2))}`;
 }
 
 /** The build to compare with, or why there is none. */
@@ -518,6 +526,7 @@ async function compareAppBuilds(
   reportFetcher: AccessibilityReportFetcher,
   source: { kind: "appBuild"; buildId: string },
   compareWith: string,
+  cursor: number,
   preface: string[],
   processing: ProcessingState,
 ): Promise<CallToolResult> {
@@ -559,9 +568,11 @@ async function compareAppBuilds(
     `Compared App Accessibility build "${after.build_name}" #${after.build_number} with build "${before.build_name}" #${before.build_number}${which}: ${added.length} new, ${resolved.length} resolved, ${retained} still open.`,
     `Issues are matched one for one by rule and element: its id, or else its class and its text or label. New and still-open issues add up to this build's ${after.issues.length}; resolved and still-open ones to the earlier build's ${before.issues.length}.`,
     ...warnings,
-    issueList("New issues", added),
-    issueList("Resolved issues", resolved),
-    `Read this build's open issues with fetchAccessibilityIssues with buildId: "${source.buildId}".`,
+    issueList("New issues", added, cursor),
+    issueList("Resolved issues", resolved, cursor),
+    Math.max(added.length, resolved.length) > cursor + COMPARE_LIST_MAX
+      ? `More to list: call fetchAccessibilityIssues with buildId: "${source.buildId}", compareWith: "${compareWith}" and cursor: ${cursor + COMPARE_LIST_MAX}.`
+      : `Read this build's open issues with fetchAccessibilityIssues with buildId: "${source.buildId}".`,
   ]);
 }
 
@@ -691,6 +702,7 @@ async function fetchAccessibilityIssues(
       reportFetcher,
       source,
       compareWith,
+      cursor,
       preface,
       processing,
     );
@@ -1289,7 +1301,9 @@ export default function addAccessibilityTools(
       cursor: z
         .number()
         .optional()
-        .describe("Character offset for pagination (default: 0)"),
+        .describe(
+          "Character offset for pagination (default: 0); with compareWith, how many issues are already listed.",
+        ),
       compareWith: z
         .string()
         .optional()

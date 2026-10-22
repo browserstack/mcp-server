@@ -6,9 +6,12 @@ import {
   AccessibilityReportFetcher,
   type IssueSource,
 } from "./accessiblity-utils/report-fetcher.js";
-import type {
-  AppBuildReport,
-  AppManualReport,
+import {
+  compareAppIssues,
+  type AppAccessibilityIssue,
+  type AppBuildReport,
+  type AppIssueSummary,
+  type AppManualReport,
 } from "./accessiblity-utils/app-report-fetcher.js";
 import {
   AccessibilityAuthConfig,
@@ -161,6 +164,7 @@ interface FetchIssuesArgs {
   appReportId?: string;
   reportUrl?: string;
   cursor?: number;
+  compareWith?: string;
 }
 
 /** A source named by its ids, or a dashboard link still to be resolved to them. */
@@ -238,7 +242,13 @@ async function executeFetchAccessibilityIssues(
     );
     const source = issueSourceFrom(args);
     if (typeof source === "string") return createErrorResponse(source);
-    return await fetchAccessibilityIssues(source, config, args.cursor, context);
+    return await fetchAccessibilityIssues(
+      source,
+      config,
+      args.cursor,
+      context,
+      args.compareWith,
+    );
   } catch (error) {
     return handleMCPError("fetchAccessibilityIssues", server, config, error);
   }
@@ -369,21 +379,6 @@ function processingNote({
   return [];
 }
 
-/** How many issues the pages after this one still hold (an estimate past the first page). */
-function remainingIssues(
-  cursor: number,
-  page_length: number,
-  total_issues: number,
-  records: unknown[],
-): number {
-  const currentlyShown =
-    cursor === 0
-      ? page_length
-      : Math.floor(cursor / JSON.stringify(records[0] || {}).length) +
-        page_length;
-  return total_issues - currentlyShown;
-}
-
 /** The last line: how to get the next page, or that there is none. */
 function closingMessage(
   next_page: number | null,
@@ -434,6 +429,142 @@ function noScansNote(report: AppBuildReport): string[] {
   ];
 }
 
+const SEVERITY_ORDER = ["critical", "serious", "moderate", "minor"];
+/** How many screens the summary names; the rest are counted. */
+const SUMMARY_SCREENS = 10;
+
+/** An app report's issues at a glance: by severity, by rule, and by screen. */
+function summaryNote(summary: AppIssueSummary, total: number): string[] {
+  if (total === 0) return [];
+  const rank = (severity: string) => {
+    const i = SEVERITY_ORDER.indexOf(severity);
+    return i === -1 ? SEVERITY_ORDER.length : i;
+  };
+  const severities = Object.entries(summary.by_severity)
+    .sort(([a], [b]) => rank(a) - rank(b))
+    .map(([severity, n]) => `${n} ${severity}`)
+    .join(", ");
+  const rules = summary.by_rule
+    .map((r) => `${r.issue_type} ${r.count}`)
+    .join(", ");
+  const shown = summary.by_screen.slice(0, SUMMARY_SCREENS);
+  const more = summary.by_screen.length - shown.length;
+  const screens = `${shown.map((s) => `${s.screen} ${s.count}`).join(", ")}${
+    more > 0 ? `, and ${more} more screens` : ""
+  }`;
+  return [
+    `Summary of the ${total} issues: ${severities}.`,
+    wrapUntrusted(
+      "accessibility issue counts",
+      `By rule: ${rules}.\nBy screen: ${screens}.`,
+    ),
+  ];
+}
+
+/** How many new and resolved issues a comparison lists; the rest are counted. */
+const COMPARE_LIST_MAX = 50;
+
+/** An issue as a comparison lists it: what and where, without the fix text. */
+function compareRow(row: AppAccessibilityIssue) {
+  const { issue_type, rule_id, severity, screen, component, element } = row;
+  return { issue_type, rule_id, severity, screen, component, element };
+}
+
+function issueList(label: string, rows: AppAccessibilityIssue[]): string {
+  const shown = rows.slice(0, COMPARE_LIST_MAX).map(compareRow);
+  const more =
+    rows.length > shown.length
+      ? ` (the first ${shown.length} of ${rows.length})`
+      : "";
+  return `${label} (${rows.length})${more}: ${wrapUntrusted("accessibility scan results", JSON.stringify(shown, null, 2))}`;
+}
+
+/** The build to compare with, or why there is none. */
+async function baselineAppBuild(
+  reportFetcher: AccessibilityReportFetcher,
+  buildId: string,
+  compareWith: string,
+): Promise<{ buildId: string; sameName?: boolean } | string> {
+  let baseline: { buildId: string; sameName?: boolean };
+  if (compareWith === "previous") {
+    const previous = await reportFetcher.previousAppBuild(buildId);
+    if (!previous) {
+      return "This is its project's first build, so there is nothing earlier to compare it with. Pass an earlier build's id or link as compareWith instead.";
+    }
+    baseline = { buildId: previous.buildId, sameName: previous.same_name };
+  } else {
+    const named: IssueSource = /^https?:\/\//i.test(compareWith)
+      ? await reportFetcher.sourceFromReportUrl(compareWith)
+      : { kind: "build", buildId: compareWith };
+    const source = await reportFetcher.resolveBuild(named);
+    if (source.kind !== "appBuild") {
+      return `compareWith names ${describeSource(source)}, which is not an App Accessibility build. Pass an earlier app build's id or link, or "previous".`;
+    }
+    baseline = { buildId: source.buildId };
+  }
+  if (baseline.buildId === buildId) {
+    return `compareWith names this build itself. Pass an earlier build's id or link, or "previous".`;
+  }
+  return baseline;
+}
+
+/**
+ * What changed between an earlier app build and this one: issues new in this build,
+ * issues the earlier one had that this one does not, and how many it kept. An issue on a
+ * screen this build did not reach also reads as resolved, so a build that scanned other
+ * screens or ran other tests is called out.
+ */
+async function compareAppBuilds(
+  reportFetcher: AccessibilityReportFetcher,
+  source: { kind: "appBuild"; buildId: string },
+  compareWith: string,
+  preface: string[],
+  processing: ProcessingState,
+): Promise<CallToolResult> {
+  const baseline = await baselineAppBuild(
+    reportFetcher,
+    source.buildId,
+    compareWith,
+  );
+  if (typeof baseline === "string") return createErrorResponse(baseline);
+  const [before, after] = await Promise.all([
+    reportFetcher.appBuildIssues(baseline.buildId),
+    reportFetcher.appBuildIssues(source.buildId),
+  ]);
+  const { added, resolved, retained } = compareAppIssues(
+    before.issues,
+    after.issues,
+  );
+  const which =
+    baseline.sameName === undefined
+      ? ""
+      : baseline.sameName
+        ? ", the build before it"
+        : `, the build just before it in its project (no earlier build is named "${after.build_name}")`;
+  const warnings: string[] = [];
+  if (before.scan_count !== after.scan_count) {
+    warnings.push(
+      `⚠️ The builds scanned a different number of screens (${after.scan_count} in this build, ${before.scan_count} before): an issue on a screen this build did not reach reads as resolved without having been fixed. Check the resolved issues' screens before calling them fixed.`,
+    );
+  }
+  const notRun = before.tests.filter((t) => !after.tests.includes(t));
+  if (notRun.length > 0) {
+    warnings.push(
+      `⚠️ Tests whose screens were scanned before but not in this build: ${notRun.join(", ")}. Their issues read as resolved without having been checked again.`,
+    );
+  }
+  return createSuccessResponse([
+    ...preface,
+    ...processingNote(processing),
+    `Compared App Accessibility build "${after.build_name}" #${after.build_number} with build "${before.build_name}" #${before.build_number}${which}: ${added.length} new, ${resolved.length} resolved, ${retained} still open.`,
+    "Issues are matched by rule and element: its id, or its class and text when it has none.",
+    ...warnings,
+    issueList("New issues", added),
+    issueList("Resolved issues", resolved),
+    `Read this build's open issues with fetchAccessibilityIssues with buildId: "${source.buildId}".`,
+  ]);
+}
+
 /** An app build's issues come inline from its scanned screens; there is no CSV to link. */
 async function appBuildMessages(
   reportFetcher: AccessibilityReportFetcher,
@@ -463,15 +594,11 @@ async function appBuildMessages(
     ...preface,
     ...processingNote(processing),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues}) from App Accessibility build "${report.build_name}" (${screens})`,
+    ...(cursor === 0 ? summaryNote(report.summary, total_issues) : []),
     ...excludedIssuesNote(null, 0, report.hidden_issues),
     ...link,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
-    closingMessage(
-      next_page,
-      remainingIssues(cursor, page_length, total_issues, records),
-      source,
-      stillProcessing,
-    ),
+    closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
 }
 
@@ -517,16 +644,12 @@ async function appReportMessages(
     ...preface,
     ...processingNote(processing),
     `Retrieved ${page_length} accessibility issue occurrences (Total: ${total_issues}) from App Accessibility manual report "${report.report_name}" (${where})`,
+    ...(cursor === 0 ? summaryNote(report.summary, total_issues) : []),
     ...dashboardNote,
     ...excludedIssuesNote(null, 0, report.hidden_issues),
     ...link,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
-    closingMessage(
-      next_page,
-      remainingIssues(cursor, page_length, total_issues, records),
-      source,
-      stillProcessing,
-    ),
+    closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
 }
 
@@ -535,6 +658,7 @@ async function fetchAccessibilityIssues(
   config: BrowserStackConfig,
   cursor = 0,
   context?: ScanProgressContext,
+  compareWith?: string,
 ): Promise<CallToolResult> {
   const reportFetcher = await initializeReportFetcher(config);
   const named =
@@ -543,6 +667,11 @@ async function fetchAccessibilityIssues(
       : requested;
   // A build id names a web build or a mobile app build; the APIs tell which.
   const source = await reportFetcher.resolveBuild(named);
+  if (compareWith !== undefined && source.kind !== "appBuild") {
+    return createErrorResponse(
+      `compareWith compares App Accessibility builds; ${describeSource(source)} is not one.`,
+    );
+  }
   const processing = await waitForProcessing(
     reportFetcher,
     source,
@@ -557,6 +686,15 @@ async function fetchAccessibilityIssues(
       ? [`Resolved the report link to ${describeSource(source)}.`]
       : [];
 
+  if (source.kind === "appBuild" && compareWith !== undefined) {
+    return compareAppBuilds(
+      reportFetcher,
+      source,
+      compareWith,
+      preface,
+      processing,
+    );
+  }
   if (source.kind === "appBuild") {
     return createSuccessResponse(
       await appBuildMessages(
@@ -589,6 +727,7 @@ async function fetchAccessibilityIssues(
     page_length,
     total_issues,
     next_page,
+    remaining,
     duplicate_issues,
     unlinked_duplicates,
     hidden_issues,
@@ -601,12 +740,7 @@ async function fetchAccessibilityIssues(
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     `You can also download the full report (CSV) from the following link, valid for about 12 hours: ${reportLink}`,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
-    closingMessage(
-      next_page,
-      remainingIssues(cursor, page_length, total_issues, records),
-      source,
-      stillProcessing,
-    ),
+    closingMessage(next_page, remaining, source, stillProcessing),
   ]);
 }
 
@@ -1156,6 +1290,12 @@ export default function addAccessibilityTools(
         .number()
         .optional()
         .describe("Character offset for pagination (default: 0)"),
+      compareWith: z
+        .string()
+        .optional()
+        .describe(
+          `App builds only: "previous" (the build before it) or an earlier build's id or link; lists new and resolved issues.`,
+        ),
     },
     {
       title: "Fetch Accessibility Issues",

@@ -29,6 +29,8 @@ const APP_AUTOMATE_BUILDS_URL =
   "https://api-cloud.browserstack.com/app-automate/builds.json";
 const APP_AUTOMATE_BUILDS_PAGE_SIZE = 100;
 export const MAX_APP_AUTOMATE_BUILD_PAGES = 3;
+/** A native run's accessibility build is created as the run starts: seconds apart, in practice. */
+const NATIVE_BUILD_START_WINDOW_MS = 2 * 60 * 1000;
 
 export interface AppBuildMeta {
   /** The build's number within its project, which the dashboard link uses. */
@@ -93,11 +95,21 @@ export type AppAccessibilityIssue = {
   duplicate_count?: number;
 };
 
+/** A report's issues counted by severity, by rule and by screen, largest first. */
+export interface AppIssueSummary {
+  by_severity: Record<string, number>;
+  by_rule: { rule_id: string; issue_type: string; count: number }[];
+  by_screen: { screen: string; count: number }[];
+}
+
 export interface AppBuildReport {
   records: AppAccessibilityIssue[];
   page_length: number;
   total_issues: number;
   next_page: number | null;
+  /** How many issues the pages after this one hold. */
+  remaining: number;
+  summary: AppIssueSummary;
   /** Issues hidden in the dashboard, which the API leaves out of the screens. */
   hidden_issues: number;
   scan_count: number;
@@ -115,6 +127,9 @@ export interface AppManualReport {
   /** Every occurrence the API lists; the dashboard folds duplicates it does not mark. */
   total_issues: number;
   next_page: number | null;
+  /** How many issues the pages after this one hold. */
+  remaining: number;
+  summary: AppIssueSummary;
   dashboard_count: number;
   duplicate_occurrences: number;
   hidden_issues: number;
@@ -124,6 +139,37 @@ export interface AppManualReport {
   report_name: string;
   device?: string;
   dashboard_link: string;
+}
+
+/** Every issue of one app build, with what a comparison needs to know of the build. */
+export interface AppBuildIssues {
+  buildId: string;
+  build_name: string;
+  build_number: number;
+  status: string;
+  scan_count: number;
+  /** The tests whose screens were scanned, in the order first seen. */
+  tests: string[];
+  issues: AppAccessibilityIssue[];
+}
+
+/** An earlier build of a project, as the build list names it. */
+export interface AppBuildRef {
+  buildId: string;
+  name?: string;
+  build_number?: number;
+  created_at?: string;
+  /** Whether it has the later build's name; a native run's builds are each named apart. */
+  same_name: boolean;
+}
+
+/** A build as the project's build list gives it. */
+interface AppBuildListRow {
+  th_build_id: string;
+  name?: string;
+  normalised_name?: string;
+  build_number?: number;
+  created_at?: string;
 }
 
 export interface AppProjectRow {
@@ -202,6 +248,11 @@ function elementOf(issue: AppRuleIssue): Record<string, unknown> {
     if (parsed === "" || parsed === null || parsed === undefined) continue;
     element[label] = parsed;
   }
+  // The class is the element's kind even when the details leave it out.
+  const className = issue.issue_class_android || issue.issue_class_ios;
+  if (className && element.className === undefined) {
+    element.className = className;
+  }
   return element;
 }
 
@@ -263,6 +314,80 @@ export function flattenAppSnapshots(
   return sortBySeverity(rows);
 }
 
+function countsOf<T>(
+  rows: T[],
+  keyOf: (row: T) => string,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    counts.set(keyOf(row), (counts.get(keyOf(row)) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Most first; ties keep the order the rows came in, which is most severe first. */
+function largestFirst(counts: Map<string, number>): [string, number][] {
+  return [...counts].sort((a, b) => b[1] - a[1]);
+}
+
+/** The issues counted by severity, by rule and by screen, largest first. */
+export function summarizeAppIssues(
+  rows: AppAccessibilityIssue[],
+): AppIssueSummary {
+  const ruleNames = new Map(rows.map((r) => [r.rule_id, r.issue_type]));
+  return {
+    by_severity: Object.fromEntries(countsOf(rows, (r) => r.severity)),
+    by_rule: largestFirst(countsOf(rows, (r) => r.rule_id)).map(
+      ([rule_id, count]) => ({
+        rule_id,
+        issue_type: ruleNames.get(rule_id) ?? rule_id,
+        count,
+      }),
+    ),
+    by_screen: largestFirst(countsOf(rows, (r) => r.screen)).map(
+      ([screen, count]) => ({ screen, count }),
+    ),
+  };
+}
+
+/**
+ * The same issue in two builds: the same rule on the same element. An element is known by
+ * its id; one without an id, by its class and text. The screen is left out, as screens are
+ * numbered in the order they were scanned, which a fix can shift.
+ */
+function appIssueKey(row: AppAccessibilityIssue): string {
+  const unnamed =
+    row.component === row.element.className || row.component === row.issue_type;
+  return [row.rule_id, row.component, unnamed ? (row.element.text ?? "") : ""]
+    .map(String)
+    .join("|");
+}
+
+/** What a later build has that an earlier one did not, what it no longer has, and how many it kept. */
+export function compareAppIssues(
+  before: AppAccessibilityIssue[],
+  after: AppAccessibilityIssue[],
+): {
+  added: AppAccessibilityIssue[];
+  resolved: AppAccessibilityIssue[];
+  retained: number;
+} {
+  const keyed = (rows: AppAccessibilityIssue[]) => {
+    const byKey = new Map<string, AppAccessibilityIssue>();
+    for (const row of rows) {
+      if (!byKey.has(appIssueKey(row))) byKey.set(appIssueKey(row), row);
+    }
+    return byKey;
+  };
+  const earlier = keyed(before);
+  const later = keyed(after);
+  return {
+    added: [...later].filter(([k]) => !earlier.has(k)).map(([, r]) => r),
+    resolved: [...earlier].filter(([k]) => !later.has(k)).map(([, r]) => r),
+    retained: [...later.keys()].filter((k) => earlier.has(k)).length,
+  };
+}
+
 const APP_AUTOMATE_HOST = "app-automate.browserstack.com";
 
 /** The App Automate build and, when the link names one, the session (both 40-hex ids). */
@@ -310,6 +435,15 @@ function severityCounts(summary: {
   };
 }
 
+/** A link's CGI-escaped name ("+" for a space), read the same however it was escaped. */
+function unescapedName(name: string): string {
+  try {
+    return decodeURIComponent(name.replace(/\+/g, " "));
+  } catch {
+    return name;
+  }
+}
+
 /** The build an App Accessibility dashboard link names: project id, build name and number. */
 function buildOfDashboardLink(
   url: URL,
@@ -318,11 +452,14 @@ function buildOfDashboardLink(
     /\/automated-tests\/projects\/(\d+)\/builds\/([^/]+)\/(\d+)\/?$/,
   );
   if (!match) return undefined;
-  // The name in the link is CGI-escaped (spaces are "+") and is TestHub's name for the
-  // build, which can differ from the build's own, so it serves only in messages: the
-  // build is found by its number, which is unique within the project.
-  const name = decodeURIComponent(match[2].replace(/\+/g, " "));
-  return { projectId: match[1], name, number: Number(match[3]) };
+  // The name in the link is the build's normalised name (TestHub's, which can differ from
+  // the build's own), and the number counts up per name: a project's first build of each
+  // name is number 1. The two together name one build.
+  return {
+    projectId: match[1],
+    name: unescapedName(match[2]),
+    number: Number(match[3]),
+  };
 }
 
 export class AppAccessibilityApi {
@@ -352,7 +489,10 @@ export class AppAccessibilityApi {
     const buildId = await this.findBuild(
       build.projectId,
       undefined,
-      (row) => row.build_number === build.number,
+      (row) =>
+        row.build_number === build.number &&
+        (row.normalised_name === undefined ||
+          unescapedName(row.normalised_name) === build.name),
     );
     if (buildId) return buildId;
     throw new Error(
@@ -403,26 +543,37 @@ export class AppAccessibilityApi {
   }
 
   /**
-   * A native build's details name its project; the App Automate build list names the build
-   * ("Build #N: app vX"); App Accessibility lists the run under the same project and name.
+   * A native build's details name its project and when it started; App Accessibility lists
+   * the run under the same project, created as it started, and named as the App Automate
+   * build list names it ("Build #N: app vX"). The start finds it among the project's newest
+   * builds; the name, read from the account's build list, tells runs that started together
+   * apart, and finds a run older than those.
    */
   private async buildOfNativeBuild(buildId: string): Promise<string> {
-    const project = await this.nativeBuildProject(buildId);
-    if (!project) {
+    const native = await this.nativeBuild(buildId);
+    if (!native?.project) {
       throw new Error(
         `No session found for App Automate build ${buildId}, and it is not an Espresso or XCUITest build with a project, so it cannot be mapped to its accessibility report. Pass the build id the BrowserStack SDK printed as "testhub id" as buildId, or the build's App Accessibility dashboard link as reportUrl`,
       );
     }
+    const { project, startedAt } = native;
+    const projectId = await this.projectId(project);
+    const started =
+      projectId !== undefined && startedAt !== undefined
+        ? await this.buildsStartedNear(projectId, startedAt)
+        : [];
+    if (started.length === 1) return started[0].th_build_id;
+
     const name = await this.appAutomateBuildName(buildId);
     if (!name) {
       throw new Error(
         `App Automate build ${buildId} is not among the account's newest builds (${MAX_APP_AUTOMATE_BUILD_PAGES} pages of ${APP_AUTOMATE_BUILDS_PAGE_SIZE}), so its accessibility report cannot be found by name. Pass the build's App Accessibility dashboard link as reportUrl instead`,
       );
     }
-    const projectId = await this.projectId(project);
     const found =
       projectId !== undefined &&
-      (await this.findBuild(projectId, name, (row) => row.name === name));
+      (started.find((row) => row.name === name)?.th_build_id ??
+        (await this.findBuild(projectId, name, (row) => row.name === name)));
     if (!found) {
       throw new Error(
         `No App Accessibility build named "${name}" in project "${project}": accessibility was not on for this run. Run it again with \`accessibility: true\` in the Espresso/XCUITest build request`,
@@ -431,19 +582,46 @@ export class AppAccessibilityApi {
     return found;
   }
 
-  /** The project a native build was run under, from whichever framework API knows it. */
-  private async nativeBuildProject(
+  /** A native build's project and start, from whichever framework API knows the build. */
+  private async nativeBuild(
     buildId: string,
-  ): Promise<string | undefined> {
+  ): Promise<{ project?: string; startedAt?: number } | undefined> {
     for (const framework of ["espresso", "xcuitest"]) {
       const resp = await apiClient.get({
         url: `https://api-cloud.browserstack.com/app-automate/${framework}/v2/builds/${encodeURIComponent(buildId)}`,
         headers: this.headers(),
         raise_error: false,
       });
-      if (resp.ok) return resp.data?.input_capabilities?.project;
+      if (!resp.ok) continue;
+      // "2026-03-04 10:30:40 UTC"
+      const startedAt = Date.parse(resp.data?.start_time ?? "");
+      return {
+        project: resp.data?.input_capabilities?.project,
+        ...(Number.isNaN(startedAt) ? {} : { startedAt }),
+      };
     }
     return undefined;
+  }
+
+  /** The project's builds created within moments of a run's start, newest first. */
+  private async buildsStartedNear(
+    projectId: number,
+    startedAt: number,
+  ): Promise<AppBuildListRow[]> {
+    const near: AppBuildListRow[] = [];
+    const created = (row: AppBuildListRow) => Date.parse(row.created_at ?? "");
+    for await (const rows of this.projectBuilds(projectId)) {
+      near.push(
+        ...rows.filter(
+          (row) =>
+            Math.abs(created(row) - startedAt) <= NATIVE_BUILD_START_WINDOW_MS,
+        ),
+      );
+      // Newest first: a page that reaches back before the run leaves nothing to find after it.
+      const oldest = rows.length ? created(rows[rows.length - 1]) : NaN;
+      if (oldest < startedAt - NATIVE_BUILD_START_WINDOW_MS) break;
+    }
+    return near;
   }
 
   /** The build's name in the account's App Automate build list, walked newest first. */
@@ -653,6 +831,7 @@ export class AppAccessibilityApi {
     return {
       ...page,
       total_issues: all.length,
+      summary: summarizeAppIssues(all),
       dashboard_count: summary.total ?? all.length,
       duplicate_occurrences: summary.severity_count?.duplicate_issues ?? 0,
       hidden_issues: summary.severity_count?.hidden_issues ?? 0,
@@ -674,8 +853,20 @@ export class AppAccessibilityApi {
   private async findBuild(
     projectId: string | number,
     buildName: string | undefined,
-    pick: (row: { name?: string; build_number?: number }) => boolean,
+    pick: (row: AppBuildListRow) => boolean,
   ): Promise<string | undefined> {
+    for await (const rows of this.projectBuilds(projectId, buildName)) {
+      const row = rows.find(pick);
+      if (row?.th_build_id) return row.th_build_id;
+    }
+    return undefined;
+  }
+
+  /** The project's builds a page at a time, newest first, within the first pages. */
+  private async *projectBuilds(
+    projectId: string | number,
+    buildName?: string,
+  ): AsyncGenerator<AppBuildListRow[]> {
     const q = encodeURIComponent;
     const named = buildName ? `build_name=${q(buildName)}&` : "";
     for (let page = 1; page <= MAX_APP_BUILD_LIST_PAGES; page++) {
@@ -684,11 +875,42 @@ export class AppAccessibilityApi {
         headers: this.headers(),
         raise_error: false,
       });
-      const row = resp.data?.builds?.find(pick);
-      if (row?.th_build_id) return row.th_build_id;
-      if (!resp.ok || !resp.data?.info?.next) break;
+      yield resp.data?.builds ?? [];
+      if (!resp.ok || !resp.data?.info?.next) return;
     }
-    return undefined;
+  }
+
+  /**
+   * The build before this one in its project: the newest earlier build of the same name,
+   * as an SDK suite keeps its name from run to run, or else the build just before it, as
+   * each native (Espresso, XCUITest) run is named apart. None for a project's first build.
+   */
+  async previousBuild(buildId: string): Promise<AppBuildRef | undefined> {
+    const meta = await this.requireBuildMeta(buildId);
+    const projectId = await this.projectId(meta.project_name);
+    if (projectId === undefined) return undefined;
+    const ref = (row: AppBuildListRow, same_name: boolean): AppBuildRef => ({
+      buildId: row.th_build_id,
+      ...(row.name !== undefined ? { name: row.name } : {}),
+      ...(row.build_number !== undefined
+        ? { build_number: row.build_number }
+        : {}),
+      ...(row.created_at !== undefined ? { created_at: row.created_at } : {}),
+      same_name,
+    });
+    let reached = false;
+    let justBefore: AppBuildListRow | undefined;
+    for await (const rows of this.projectBuilds(projectId)) {
+      for (const row of rows) {
+        if (row.th_build_id === buildId) {
+          reached = true;
+        } else if (reached) {
+          if (row.name === meta.name) return ref(row, true);
+          justBefore ??= row;
+        }
+      }
+    }
+    return justBefore && ref(justBefore, false);
   }
 
   /** The build's page on the App Accessibility dashboard, when its project can be found. */
@@ -721,27 +943,61 @@ export class AppAccessibilityApi {
     return { details, hidden };
   }
 
-  async report(
-    buildId: string,
-    cursor = 0,
-    maxCharacterLength?: number,
-  ): Promise<AppBuildReport> {
+  private async requireBuildMeta(buildId: string): Promise<AppBuildMeta> {
     const meta = await this.buildMeta(buildId);
     if (!meta) {
       throw new Error(
         `No App Accessibility build with id "${buildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run, or the build's App Accessibility dashboard link as reportUrl`,
       );
     }
+    return meta;
+  }
+
+  /** The build's details and scanned screens; a build with no scans has none to read. */
+  private async readBuild(buildId: string): Promise<{
+    meta: AppBuildMeta;
+    details: AppSnapshot[];
+    hidden: number;
+    scanCount: number;
+  }> {
+    const meta = await this.requireBuildMeta(buildId);
     const scanCount = meta.issue_summary?.scan_count ?? 0;
     const { details, hidden } =
       scanCount > 0
         ? await this.snapshots(buildId)
         : { details: [], hidden: 0 };
+    return { meta, details, hidden, scanCount };
+  }
+
+  /** Every issue of the build at once, to compare it with another. */
+  async buildIssues(buildId: string): Promise<AppBuildIssues> {
+    const { meta, details, scanCount } = await this.readBuild(buildId);
+    const tests = new Set(
+      details.map((d) => d.meta?.testcase_name).filter((t) => t !== undefined),
+    );
+    return {
+      buildId,
+      build_name: meta.name,
+      build_number: meta.build_id,
+      status: meta.status,
+      scan_count: scanCount,
+      tests: [...tests] as string[],
+      issues: flattenAppSnapshots(details),
+    };
+  }
+
+  async report(
+    buildId: string,
+    cursor = 0,
+    maxCharacterLength?: number,
+  ): Promise<AppBuildReport> {
+    const { meta, details, hidden, scanCount } = await this.readBuild(buildId);
     const all = flattenAppSnapshots(details);
     const page = pageOf(all, { nextPage: cursor, maxCharacterLength });
     return {
       ...page,
       total_issues: all.length,
+      summary: summarizeAppIssues(all),
       hidden_issues: hidden,
       scan_count: scanCount,
       status: meta.status,

@@ -178,7 +178,7 @@ describe("flattenAppSnapshots", () => {
     });
   });
 
-  it("names the element by its class when it has no id, and keeps only its identifying details", () => {
+  it("names the element by its class when it has no id, and keeps only its identifying details and its class", () => {
     const rows = flattenAppSnapshots(SNAPSHOTS);
     const contrast = rows.find((r) => r.rule_id === "text-color-contrast")!;
     const touch = rows.find(
@@ -186,7 +186,10 @@ describe("flattenAppSnapshots", () => {
     )!;
 
     expect(contrast.component).toBe("android.widget.TextView");
-    expect(contrast.element).toEqual({ text: "Low contrast body copy" });
+    expect(contrast.element).toEqual({
+      className: "android.widget.TextView",
+      text: "Low contrast body copy",
+    });
     expect(contrast.duplicate_count).toBeUndefined();
     expect(touch.screen).toBe("Screen 2 (test_checkout)");
     expect(touch.component).toBe("pay_button");
@@ -470,6 +473,9 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
         status: 200,
         data: { input_capabilities: { project: "Checkout App" } },
       })
+      .mockResolvedValueOnce(
+        ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
+      )
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -478,9 +484,6 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
           { automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: NAME } },
         ],
       })
-      .mockResolvedValueOnce(
-        ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
-      )
       .mockResolvedValueOnce(
         ok({
           builds: [{ name: NAME, build_number: 1, th_build_id: BUILD_ID }],
@@ -496,8 +499,8 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
     expect(urls()).toEqual([
       sessionsUrl,
       `https://api-cloud.browserstack.com/app-automate/espresso/v2/builds/${APP_AUTOMATE_BUILD}`,
-      "https://api-cloud.browserstack.com/app-automate/builds.json?limit=100&offset=0",
       `${APP_API}/project?name=Checkout%20App`,
+      "https://api-cloud.browserstack.com/app-automate/builds.json?limit=100&offset=0",
       `${APP_API}/project/123456/build?build_name=${encodeURIComponent(NAME)}&page_size=30&page=1`,
     ]);
   });
@@ -511,14 +514,14 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
         status: 200,
         data: { input_capabilities: { project: "Checkout App" } },
       })
+      .mockResolvedValueOnce(
+        ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
+      )
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
         data: [{ automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: "Build #12: Checkout.ipa v1.0" } }],
       })
-      .mockResolvedValueOnce(
-        ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
-      )
       .mockResolvedValueOnce(ok({ builds: [], info: { next: null } }));
 
     await expect(

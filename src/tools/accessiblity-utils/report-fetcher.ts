@@ -3,6 +3,8 @@ import {
   AppAccessibilityApi,
   manualReportIdFromDashboardLink,
   manualReportStatus,
+  type AppBuildIssues,
+  type AppBuildRef,
   type AppBuildReport,
   type AppBuildRow,
   type AppManualReport,
@@ -209,6 +211,16 @@ export class AccessibilityReportFetcher {
     maxCharacterLength?: number,
   ): Promise<AppBuildReport> {
     return this.app.report(buildId, cursor, maxCharacterLength);
+  }
+
+  /** Every issue of an app build at once, to compare it with another. */
+  appBuildIssues(buildId: string): Promise<AppBuildIssues> {
+    return this.app.buildIssues(buildId);
+  }
+
+  /** The build before an app build in its project, if it has one. */
+  previousAppBuild(buildId: string): Promise<AppBuildRef | undefined> {
+    return this.app.previousBuild(buildId);
   }
 
   /** A manual (Workflow Analyzer) app report's issues, read inline from its screens. */

@@ -92,6 +92,7 @@ describe("runAppTestsOnBrowserStack devices", () => {
       ["Google Pixel 8-14.0"],
       "Checkout",
       expect.anything(),
+      { accessibility: false },
     );
   });
 
@@ -110,6 +111,7 @@ describe("runAppTestsOnBrowserStack devices", () => {
       ["iPhone 15-17.0"],
       "Checkout",
       expect.anything(),
+      { accessibility: false },
     );
   });
 
@@ -122,6 +124,7 @@ describe("runAppTestsOnBrowserStack devices", () => {
       [],
       "Checkout",
       expect.anything(),
+      { accessibility: false },
     );
   });
 

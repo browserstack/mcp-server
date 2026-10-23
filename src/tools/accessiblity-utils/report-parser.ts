@@ -301,7 +301,11 @@ export function compareIssues(
 
 export async function parseAccessibilityReportFromCSV(
   reportLink: string,
-  { maxCharacterLength = 5000, nextPage = 0, pageUrl }: PaginationOptions = {},
+  {
+    maxCharacterLength = 10_000,
+    nextPage = 0,
+    pageUrl,
+  }: PaginationOptions = {},
 ): Promise<PaginatedResult> {
   // 1) Download & parse
   const { parsed, columns } = await loadReport(reportLink);

@@ -155,6 +155,61 @@ describe("summarizeAppIssues", () => {
   });
 });
 
+// Screens are numbered by scan order, so which earlier screen is which later one is read
+// from what is on them: a screen the later build never reached shares nothing with any of
+// its screens, and its issues are not resolved, only not seen again. (Build #3 of an iOS
+// app scanned 3 of #2's 5 screens; 89 of the 111 "resolved" issues were on the 2 it skipped.)
+describe("compareAppIssues and screens one build did not reach", () => {
+  const on = (screen: string, ids: string[], rule = "interactable-element-content-label") =>
+    ids.map((id) => issue(rule, "critical", id, screen));
+
+  it("sets apart, rather than resolves, the issues on an earlier screen no later screen resembles", () => {
+    const before = [
+      ...on("Screen 1 (test_scan)", ["home_a", "home_b", "home_c"]),
+      ...on("Screen 2 (test_scan)", ["cart_a", "cart_b", "cart_c", "cart_d"]),
+    ];
+    const after = on("Screen 1 (test_scan)", ["home_a", "home_c"]);
+
+    const diff = compareAppIssues(before, after);
+
+    expect(diff.resolved.map((r) => r.component)).toEqual(["home_b"]);
+    expect(diff.unconfirmed.map((r) => r.component)).toEqual([
+      "cart_a",
+      "cart_b",
+      "cart_c",
+      "cart_d",
+    ]);
+    expect(diff.retained).toBe(2);
+  });
+
+  it("sets apart, rather than counts as new, the issues on a later screen no earlier screen resembles", () => {
+    const before = on("Screen 1 (test_scan)", ["home_a", "home_b"]);
+    const after = [
+      ...on("Screen 1 (test_scan)", ["home_a", "home_b", "home_new"]),
+      ...on("Screen 2 (test_scan)", ["settings_a", "settings_b"]),
+    ];
+
+    const diff = compareAppIssues(before, after);
+
+    expect(diff.added.map((r) => r.component)).toEqual(["home_new"]);
+    expect(diff.first_scanned.map((r) => r.component)).toEqual([
+      "settings_a",
+      "settings_b",
+    ]);
+  });
+
+  it("does not set apart a screen whose elements cannot be told apart", () => {
+    // Known only by their rule, with no id, class or text, these elements match anything.
+    const unnamed = (screen: string) => ({
+      ...issue("touch-target-size-and-spacing", "serious", "touch target size and spacing", screen),
+    });
+    const diff = compareAppIssues([unnamed("Screen 2 (test_scan)")], []);
+
+    expect(diff.resolved).toHaveLength(1);
+    expect(diff.unconfirmed).toHaveLength(0);
+  });
+});
+
 describe("compareAppIssues", () => {
   it("matches issues by rule and element id, wherever the screens fell", () => {
     const before = [

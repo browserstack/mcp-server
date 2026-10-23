@@ -620,10 +620,28 @@ async function compareAppBuilds(
     current.created_at !== undefined &&
     Date.parse(named.created_at) > Date.parse(current.created_at);
   const [before, after] = reversed ? [current, named] : [named, current];
-  const { added, resolved, retained } = compareAppIssues(
-    before.issues,
-    after.issues,
-  );
+  const { added, first_scanned, resolved, unconfirmed, retained } =
+    compareAppIssues(before.issues, after.issues, {
+      sameScreens: before.scan_count === after.scan_count,
+    });
+  const screensOf = (rows: AppAccessibilityIssue[]) =>
+    new Set(rows.map((r) => r.screen)).size;
+  const unreached = screensOf(unconfirmed);
+  const unseen = screensOf(first_scanned);
+  const setApart = [
+    ...(unreached > 0
+      ? [
+          unreached === 1
+            ? `${unconfirmed.length} more issues of the earlier build are on 1 screen no screen of the later build resembles: the later build did not reach it, or every issue on it was fixed. They are not counted as resolved; scan that screen again to confirm.`
+            : `${unconfirmed.length} more issues of the earlier build are on ${unreached} screens no screen of the later build resembles: the later build did not reach them, or every issue on them was fixed. They are not counted as resolved; scan those screens again to confirm.`,
+        ]
+      : []),
+    ...(unseen > 0
+      ? [
+          `${first_scanned.length} more issues of the later build are on ${unseen === 1 ? "1 screen" : `${unseen} screens`} no screen of the earlier build resembles: not scanned before, so they are not counted as new.`,
+        ]
+      : []),
+  ];
   const which =
     baseline.sameName === undefined
       ? ""
@@ -666,11 +684,32 @@ async function compareAppBuilds(
       : []),
     `Compared App Accessibility build #${after.build_number} with build #${before.build_number}${which}: ${added.length} new, ${resolved.length} resolved, ${retained} still open.`,
     `Builds: ${builds}`,
-    `Issues are matched one for one by rule and element: its id, or else its class and its text or label. New and still-open issues add up to the later build's ${after.issues.length}; resolved and still-open ones to the earlier build's ${before.issues.length}.`,
+    ...setApart,
+    setApart.length > 0
+      ? `Issues are matched one for one by rule and element: its id, or else its class and its text or label; screens, by the elements on them. New, first-scanned and still-open issues add up to the later build's ${after.issues.length}; resolved, not-confirmed and still-open ones to the earlier build's ${before.issues.length}.`
+      : `Issues are matched one for one by rule and element: its id, or else its class and its text or label. New and still-open issues add up to the later build's ${after.issues.length}; resolved and still-open ones to the earlier build's ${before.issues.length}.`,
     ...warnings,
     issueList("New issues", added, cursor),
     issueList("Resolved issues", resolved, cursor),
-    Math.max(added.length, resolved.length) > cursor + COMPARE_LIST_MAX
+    ...(unconfirmed.length > 0
+      ? [issueList("Not confirmed resolved", unconfirmed, cursor)]
+      : []),
+    ...(first_scanned.length > 0
+      ? [
+          issueList(
+            "On screens first scanned in the later build",
+            first_scanned,
+            cursor,
+          ),
+        ]
+      : []),
+    Math.max(
+      added.length,
+      resolved.length,
+      unconfirmed.length,
+      first_scanned.length,
+    ) >
+    cursor + COMPARE_LIST_MAX
       ? `More to list: call fetchAccessibilityIssues with buildId: "${source.buildId}", compareWith: "${compareWith}" and cursor: ${cursor + COMPARE_LIST_MAX}.`
       : `Read the later build's open issues with fetchAccessibilityIssues with buildId: "${after.buildId}".`,
   ]);

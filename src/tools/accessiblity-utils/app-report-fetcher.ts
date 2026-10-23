@@ -554,6 +554,57 @@ function appIssueKey(row: AppAccessibilityIssue): string {
     .join("|");
 }
 
+/**
+ * The element an issue is on, whatever its rule: its id or class and its text or label. An
+ * element known only by its rule, with no text either, cannot be told apart from another.
+ */
+function elementIdentity(row: AppAccessibilityIssue): string | undefined {
+  const named = row.component !== row.issue_type;
+  const text =
+    row.element.text ??
+    row.element.accessibilityLabel ??
+    row.element.contentDescription ??
+    "";
+  if (!named && !text) return undefined;
+  return `${named ? row.component : ""}|${String(text)}`;
+}
+
+/** A screen is the same screen in another build when they share this much of its elements. */
+const SAME_SCREEN_SHARE = 0.25;
+
+/**
+ * The screens of one build no screen of the other resembles. Screens are named by scan
+ * order, so a screen is recognised by what is on it: one that shares under a quarter of its
+ * elements with every screen of the other build was not reached there, or changed entirely.
+ * A screen whose elements cannot be told apart is not set apart.
+ */
+function screensWithoutCounterpart(
+  from: AppAccessibilityIssue[],
+  to: AppAccessibilityIssue[],
+): Set<string> {
+  const elementsBy = (rows: AppAccessibilityIssue[]) => {
+    const screens = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const id = elementIdentity(row);
+      if (id === undefined) continue;
+      screens.set(row.screen, (screens.get(row.screen) ?? new Set()).add(id));
+    }
+    return screens;
+  };
+  const others = [...elementsBy(to).values()];
+  const without = new Set<string>();
+  for (const [screen, elements] of elementsBy(from)) {
+    const shared = Math.max(
+      0,
+      ...others.map(
+        (other) => [...elements].filter((e) => other.has(e)).length,
+      ),
+    );
+    if (shared / elements.size < SAME_SCREEN_SHARE) without.add(screen);
+  }
+  return without;
+}
+
 const sameFrame = (a: AppAccessibilityIssue, b: AppAccessibilityIssue) =>
   JSON.stringify(a.element.frame ?? null) ===
   JSON.stringify(b.element.frame ?? null);
@@ -562,15 +613,22 @@ const sameFrame = (a: AppAccessibilityIssue, b: AppAccessibilityIssue) =>
  * Which issues of two builds are the same issue. Issues that look alike (one rule on
  * elements known by neither id nor label) are paired one for one, those on the same screen
  * and spot first, then on the same screen, then any; what is left over in either build is
- * new or resolved. So new and still open add up to the later build's issues, and resolved
- * and still open to the earlier one's.
+ * new or resolved. When the builds scanned a different number of screens, a screen one of
+ * them has no counterpart for is set apart: an earlier screen's leftovers were not seen
+ * again (`unconfirmed`), and a later screen's were not looked for before (`first_scanned`).
+ * With as many screens in each, they correspond, and a screen with nothing left was fixed.
+ * So new, first scanned and still open add up to the later build's issues, and resolved,
+ * unconfirmed and still open to the earlier one's.
  */
 export function compareAppIssues(
   before: AppAccessibilityIssue[],
   after: AppAccessibilityIssue[],
+  { sameScreens = false }: { sameScreens?: boolean } = {},
 ): {
   added: AppAccessibilityIssue[];
+  first_scanned: AppAccessibilityIssue[];
   resolved: AppAccessibilityIssue[];
+  unconfirmed: AppAccessibilityIssue[];
   retained: number;
 } {
   const earlierByKey = new Map<string, AppAccessibilityIssue[]>();
@@ -599,9 +657,18 @@ export function compareAppIssues(
     }
   }
   const added = after.filter((row) => !matched.has(row));
+  const resolved = before.filter((row) => !matched.has(row));
+  const unreached = sameScreens
+    ? new Set<string>()
+    : screensWithoutCounterpart(before, after);
+  const unseen = sameScreens
+    ? new Set<string>()
+    : screensWithoutCounterpart(after, before);
   return {
-    added,
-    resolved: before.filter((row) => !matched.has(row)),
+    added: added.filter((row) => !unseen.has(row.screen)),
+    first_scanned: added.filter((row) => unseen.has(row.screen)),
+    resolved: resolved.filter((row) => !unreached.has(row.screen)),
+    unconfirmed: resolved.filter((row) => unreached.has(row.screen)),
     retained: after.length - added.length,
   };
 }

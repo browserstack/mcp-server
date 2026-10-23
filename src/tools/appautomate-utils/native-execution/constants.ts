@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { AppTestPlatform } from "./types.js";
 
-export const RUN_APP_AUTOMATE_DESCRIPTION = `Execute pre-built native mobile test suites (Espresso for Android, XCUITest for iOS) by direct upload to BrowserStack. ONLY for compiled .apk/.ipa test files. This is NOT for SDK integration or Appium tests. For Appium-based testing with SDK setup, use 'setupBrowserStackAppAutomateTests' instead. Set accessibility: true to also run App Accessibility (WCAG) checks during the tests; the issues are then read with fetchAccessibilityIssues.`;
+export const RUN_APP_AUTOMATE_DESCRIPTION = `Execute pre-built native mobile test suites (Espresso for Android, XCUITest for iOS) by direct upload to BrowserStack. ONLY for compiled .apk/.ipa test files. This is NOT for SDK integration or Appium tests. For Appium-based testing with SDK setup, use 'setupBrowserStackAppAutomateTests' instead.`;
 
 export const MobileDeviceSchema = z.object({
   platform: z

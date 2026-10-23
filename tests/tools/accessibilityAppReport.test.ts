@@ -514,6 +514,40 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
       /No App Accessibility build/,
     );
   });
+
+  // Both APIs answer 404 for a build they do not know, a malformed id included; anything
+  // else (bad credentials, an outage) is not an answer about the build.
+  const failed = (status: number) => ({ ok: false, status, data: {} });
+
+  it("reports a failed web lookup as the failure, without asking the app API", async () => {
+    get.mockResolvedValueOnce(failed(401));
+
+    await expect(
+      fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID }),
+    ).rejects.toThrow(/HTTP 401/);
+    expect(urls()).toEqual([`${API}/automated-tests/v1/builds/${BUILD_ID}`]);
+  });
+
+  it("reports a failed app lookup as the failure, not as an unknown build", async () => {
+    get.mockResolvedValueOnce(missing()).mockResolvedValueOnce(failed(503));
+
+    const lookup = fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID });
+    await expect(lookup).rejects.toThrow(/HTTP 503/);
+    await expect(lookup).rejects.not.toThrow(/No Automated Tests/);
+  });
+
+  it("names the page and status when a screen page cannot be read", async () => {
+    get
+      .mockResolvedValueOnce(ok({ meta_data: META }))
+      .mockResolvedValueOnce(
+        ok({ data: { details: SNAPSHOTS, info: { next: 2 }, issue_counts: { hidden_issues: 0 } } }),
+      )
+      .mockResolvedValueOnce(failed(500));
+
+    await expect(fetcher().appBuildReport(BUILD_ID)).rejects.toThrow(
+      /page 2 of build .*HTTP 500/,
+    );
+  });
 });
 
 describe("AccessibilityReportFetcher and App Automate links", () => {
@@ -737,6 +771,44 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
       ),
     ).rejects.toThrow(/No session.*App Automate build/);
   });
+
+  // Checked live: a native build lists no sessions (200, []), an id App Automate does not
+  // know answers 404 on each lookup, and a bad key 401. Only a 404 is a "not this one".
+  const link = `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`;
+  const failed = (status: number) => ({ ok: false, status, data: {} });
+
+  it("reports a failed session list as the failure, not as a native build", async () => {
+    get.mockResolvedValueOnce(failed(401));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 401/);
+    expect(urls()).toEqual([sessionsUrl]);
+  });
+
+  it("reports a failed native build lookup as the failure, not as an unknown build", async () => {
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce(failed(429));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 429/);
+    await expect(failure).rejects.not.toThrow(/No session found/);
+  });
+
+  it("reports a failed build list as the failure, not as an old build", async () => {
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { input_capabilities: { project: "Checkout App" } },
+      })
+      .mockResolvedValueOnce(failed(503));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 503/);
+    await expect(failure).rejects.not.toThrow(/newest builds/);
+  });
 });
 
 describe("AccessibilityReportFetcher and App Accessibility manual reports", () => {
@@ -874,5 +946,63 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
     await expect(fetcher().appReportIssues(REPORT_ID)).rejects.toThrow(
       /No App Accessibility manual report/,
     );
+  });
+
+  // Checked live: an unknown report is a 404 on its details and its issues, a bad key 401.
+  const failed = (status: number) => ({ ok: false, status, data: {} });
+  const MANUAL = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
+
+  it("reports a failed report lookup as the failure, not as an unknown report", async () => {
+    get.mockResolvedValueOnce(failed(401));
+
+    const failure = fetcher().appReportIssues(REPORT_ID);
+    await expect(failure).rejects.toThrow(/HTTP 401/);
+    await expect(failure).rejects.not.toThrow(/No App Accessibility manual report/);
+  });
+
+  it("reads the whole report from the Manual Reports API when a later dashboard page fails, rather than a part as the whole", async () => {
+    get
+      .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(
+        ok({ data: { details: [SNAPSHOTS[0]], info: { page: 1, next: 2 } } }),
+      )
+      .mockResolvedValueOnce(failed(500))
+      .mockResolvedValueOnce(
+        ok({
+          data: [manualSnapshot(SNAPSHOTS[0]), manualSnapshot(SNAPSHOTS[1])],
+          pagination: { page: 1, next: null },
+        }),
+      );
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(urls()[3]).toBe(`${MANUAL}/reports/${REPORT_ID}/issues?page_size=50&page=1`);
+    expect(report.deduplicated).toBe(false);
+    expect(report.total_issues).toBe(3);
+  });
+
+  it("fails with the page and status when an issues page cannot be read, rather than counting fewer issues", async () => {
+    get
+      .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(REDIRECT_TO_LOGIN)
+      .mockResolvedValueOnce(
+        ok({ data: [manualSnapshot(SNAPSHOTS[0])], pagination: { page: 1, next: 2 } }),
+      )
+      .mockResolvedValueOnce(failed(502));
+
+    await expect(fetcher().appReportIssues(REPORT_ID)).rejects.toThrow(
+      /page 2 of manual report .*HTTP 502/,
+    );
+  });
+
+  it("says how many screens it read when the report has more than the page limit", async () => {
+    get.mockImplementation(async ({ url }: { url: string }) => {
+      if (url.endsWith(REPORT_ID)) return ok(DETAIL);
+      return ok({ data: { details: [SNAPSHOTS[0]], info: { next: 2 } } });
+    });
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(report.screens_read).toBe(MAX_SNAPSHOT_PAGES);
   });
 });

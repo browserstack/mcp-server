@@ -191,6 +191,8 @@ export interface AppManualReport extends AppIssuePageContext {
   report_name: string;
   device?: string;
   dashboard_link: string;
+  /** Set when the report has more screens than were read: how many were. */
+  screens_read?: number;
 }
 
 /** Every issue of one app build, with what a comparison needs to know of the build. */
@@ -691,14 +693,23 @@ export class AppAccessibilityApi {
     private readonly headers: () => Record<string, string> | undefined,
   ) {}
 
-  /** The build's details, or undefined when the API does not know the id. */
+  /**
+   * The build's details, or undefined when the API does not know the id (its 404, which
+   * it also gives a malformed id). Any other failure is thrown with its status.
+   */
   async buildMeta(buildId: string): Promise<AppBuildMeta | undefined> {
     const resp = await apiClient.get({
       url: `${APP_API_BASE}/build/${encodeURIComponent(buildId)}`,
       headers: this.headers(),
       raise_error: false,
     });
-    return resp.ok ? resp.data?.meta_data : undefined;
+    if (resp.status === 404) return undefined;
+    if (!resp.ok) {
+      throw new Error(
+        `Could not look up App Accessibility build "${buildId}": HTTP ${resp.status}`,
+      );
+    }
+    return resp.data?.meta_data;
   }
 
   /**
@@ -762,13 +773,22 @@ export class AppAccessibilityApi {
     return buildId;
   }
 
-  /** The first SDK session of an App Automate build; a native build lists none. */
+  /**
+   * The first SDK session of an App Automate build; a native build lists none, and a build
+   * App Automate does not know is a 404. Any other failure is thrown: read as "no session",
+   * it would send an SDK build down the native path.
+   */
   private async anySdkSession(buildId: string): Promise<string | undefined> {
     const resp = await apiClient.get({
       url: `${sessionsListUrl(SessionType.AppAutomate, buildId)}?limit=1`,
       headers: this.headers(),
       raise_error: false,
     });
+    if (!resp.ok && resp.status !== 404) {
+      throw new Error(
+        `Could not list the sessions of App Automate build ${buildId}: HTTP ${resp.status}`,
+      );
+    }
     return resp.ok ? resp.data?.[0]?.automation_session?.hashed_id : undefined;
   }
 
@@ -822,13 +842,20 @@ export class AppAccessibilityApi {
         headers: this.headers(),
         raise_error: false,
       });
-      if (!resp.ok) continue;
-      // "2026-03-04 10:30:40 UTC"
-      const startedAt = Date.parse(resp.data?.start_time ?? "");
-      return {
-        project: resp.data?.input_capabilities?.project,
-        ...(Number.isNaN(startedAt) ? {} : { startedAt }),
-      };
+      if (resp.ok) {
+        // "2026-03-04 10:30:40 UTC"
+        const startedAt = Date.parse(resp.data?.start_time ?? "");
+        return {
+          project: resp.data?.input_capabilities?.project,
+          ...(Number.isNaN(startedAt) ? {} : { startedAt }),
+        };
+      }
+      // Each framework's API answers 404 for the other's builds.
+      if (resp.status !== 404) {
+        throw new Error(
+          `Could not read App Automate build ${buildId} from the ${framework} API: HTTP ${resp.status}`,
+        );
+      }
     }
     return undefined;
   }
@@ -865,9 +892,14 @@ export class AppAccessibilityApi {
         headers: this.headers(),
         raise_error: false,
       });
+      if (!resp.ok) {
+        throw new Error(
+          `Could not list App Automate builds to find build ${buildId}: HTTP ${resp.status}`,
+        );
+      }
       const rows: {
         automation_build?: { hashed_id?: string; name?: string };
-      }[] = resp.ok && Array.isArray(resp.data) ? resp.data : [];
+      }[] = Array.isArray(resp.data) ? resp.data : [];
       const row = rows.find((r) => r.automation_build?.hashed_id === buildId);
       if (row) return row.automation_build?.name;
       if (rows.length < APP_AUTOMATE_BUILDS_PAGE_SIZE) break;
@@ -912,25 +944,37 @@ export class AppAccessibilityApi {
     );
   }
 
-  /** A manual report's details, or undefined when the API does not know the id. */
+  /**
+   * A manual report's details, or undefined when the API does not know the id (its 404);
+   * any other failure is thrown with its status.
+   */
   async manualReport(reportId: string): Promise<any | undefined> {
     const resp = await apiClient.get({
       url: `${MANUAL_API_BASE}/reports/${encodeURIComponent(reportId)}`,
       headers: this.headers(),
       raise_error: false,
     });
-    return resp.ok ? resp.data : undefined;
+    if (resp.status === 404) return undefined;
+    if (!resp.ok) {
+      throw new Error(
+        `Could not read App Accessibility manual report ${reportId}: HTTP ${resp.status}`,
+      );
+    }
+    return resp.data;
   }
 
   /**
    * A manual report's screens as the dashboard reads them, duplicates left out and each
    * issue with its element, fix and measurements; undefined while that route answers an
-   * access key with a login redirect, as it does until it takes one.
+   * access key with a login redirect, as it does until it takes one (the redirect names
+   * no Location, so nothing follows it), and undefined too when a later page fails, so
+   * the Manual Reports API is read in full rather than part of this read as the whole.
    */
   private async dashboardScreens(
     reportId: string,
-  ): Promise<AppSnapshot[] | undefined> {
+  ): Promise<{ details: AppSnapshot[]; more: boolean } | undefined> {
     const details: AppSnapshot[] = [];
+    let more = false;
     for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
       const resp = await apiClient
         .get({
@@ -940,20 +984,22 @@ export class AppAccessibilityApi {
         })
         .catch(() => undefined);
       const data = resp?.ok && resp.data?.success ? resp.data.data : undefined;
-      if (!Array.isArray(data?.details))
-        return page === 1 ? undefined : details;
+      if (!Array.isArray(data?.details)) return undefined;
       details.push(...data.details);
-      if (!data.info?.next) break;
+      more = Boolean(data.info?.next);
+      if (!more) break;
     }
-    return details;
+    return { details, more };
   }
 
   /** Every occurrence the Manual Reports API lists, and the device the report ran on. */
   private async manualApiScreens(reportId: string): Promise<{
     details: AppSnapshot[];
+    more: boolean;
     device?: { model?: string; os?: string; os_version?: string };
   }> {
     const details: AppSnapshot[] = [];
+    let more = false;
     let device:
       | { model?: string; os?: string; os_version?: string }
       | undefined;
@@ -961,12 +1007,20 @@ export class AppAccessibilityApi {
       const resp = await apiClient.get({
         url: `${MANUAL_API_BASE}/reports/${encodeURIComponent(reportId)}/issues?page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
         headers: this.headers(),
+        raise_error: false,
       });
+      // A count over some of the pages would read as the report's.
+      if (!resp.ok) {
+        throw new Error(
+          `Could not read page ${page} of manual report ${reportId}'s issues from the Manual Reports API: HTTP ${resp.status}`,
+        );
+      }
       device ??= resp.data?.device;
       details.push(...(resp.data?.data ?? []));
-      if (!resp.data?.pagination?.next) break;
+      more = Boolean(resp.data?.pagination?.next);
+      if (!more) break;
     }
-    return { details, device };
+    return { details, more, device };
   }
 
   /**
@@ -987,8 +1041,8 @@ export class AppAccessibilityApi {
       );
     }
     const dashboard = await this.dashboardScreens(reportId);
-    const { details, device } = dashboard
-      ? { details: dashboard, device: undefined }
+    const { details, more, device } = dashboard
+      ? { ...dashboard, device: undefined }
       : await this.manualApiScreens(reportId);
     const summary = detail.data?.issue_summary ?? {};
     const all = flattenAppSnapshots(details);
@@ -1010,6 +1064,7 @@ export class AppAccessibilityApi {
         ? { device: `${device.model}, ${device.os} ${device.os_version}` }
         : {}),
       dashboard_link: `${APP_DASHBOARD}/report/${reportId}`,
+      ...(more ? { screens_read: details.length } : {}),
     };
   }
 
@@ -1124,7 +1179,15 @@ export class AppAccessibilityApi {
       const resp = await apiClient.get({
         url: `${APP_API_BASE}/build/${encodeURIComponent(buildId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
         headers: this.headers(),
+        raise_error: false,
       });
+      // A count over some of the screens would read as the build's, so a page that
+      // cannot be read fails the read.
+      if (!resp.ok) {
+        throw new Error(
+          `Could not read page ${page} of build ${buildId}'s scanned screens from the App Accessibility API: HTTP ${resp.status}`,
+        );
+      }
       const data = resp.data?.data;
       details.push(...(data?.details ?? []));
       hidden = data?.issue_counts?.hidden_issues ?? hidden;

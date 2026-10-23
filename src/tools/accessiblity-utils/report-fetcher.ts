@@ -185,9 +185,19 @@ export class AccessibilityReportFetcher {
    */
   async resolveBuild(source: IssueSource): Promise<IssueSource> {
     if (source.kind !== "build") return source;
-    const web = await this.getData(
-      `${API_BASE}/automated-tests/v1/builds/${encodeURIComponent(source.buildId)}`,
-    );
+    // Only a 404 means the web API does not know the id: any other failure is not an
+    // answer about the build, and asking the app API next would hide it.
+    const resp = await apiClient.get({
+      url: `${API_BASE}/automated-tests/v1/builds/${encodeURIComponent(source.buildId)}`,
+      headers: this.authHeaders(),
+      raise_error: false,
+    });
+    if (!resp.ok && resp.status !== 404) {
+      throw new Error(
+        `Could not look up build "${source.buildId}" in Automated Tests: HTTP ${resp.status}`,
+      );
+    }
+    const web = resp.ok ? resp.data?.data : undefined;
     if (web) {
       if (web.projectName) {
         this.webBuildProjects.set(source.buildId, web.projectName);

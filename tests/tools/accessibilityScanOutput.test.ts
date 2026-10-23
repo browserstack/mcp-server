@@ -687,6 +687,7 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
       page_length: 1,
       total_issues: 144,
       next_page: 140,
+      deduplicated: false,
       dashboard_count: 97,
       duplicate_occurrences: 47,
       hidden_issues: 0,
@@ -695,8 +696,47 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
       report_name: "Checkout walkthrough",
       device: "iPhone 15 Pro, ios 17.0",
       dashboard_link: LINK,
+      rules: {},
+      screens: {},
     });
     handlers = register();
+  });
+
+  it("gives the dashboard's count when the issues come without its duplicates", async () => {
+    m.appReportIssues.mockResolvedValue({
+      records: [{ rule_id: "touch-target-size-and-spacing", severity: "serious", screen: "Screen 1" }],
+      page_length: 1,
+      total_issues: 97,
+      next_page: 140,
+      deduplicated: true,
+      dashboard_count: 97,
+      duplicate_occurrences: 47,
+      hidden_issues: 0,
+      scan_count: 7,
+      status: "complete",
+      report_name: "Checkout walkthrough",
+      dashboard_link: LINK,
+      rules: {
+        "touch-target-size-and-spacing": {
+          issue_type: "Touch Target Size & Spacing",
+          issue_description: "Targets must be large enough.",
+          wcag: "WCAG 2.2-2.5.8 AA",
+          how_to_fix: "Make the target at least 48dp.",
+        },
+      },
+      screens: { "Screen 1": "https://assets.example/s1.jpeg" },
+    });
+
+    const body = text(await handlers.fetchAccessibilityIssues({ appReportId: REPORT_ID }, CONTEXT));
+
+    expect(body).toContain(
+      "Retrieved 1 accessibility issues (Total: 97) from the App Accessibility manual report below (7 screens scanned)",
+    );
+    expect(body).toContain(
+      "47 duplicate occurrences are left out, as the dashboard leaves them out of its count.",
+    );
+    expect(body).not.toContain("which the API does not mark");
+    expect(body).toContain("Make the target at least 48dp.");
   });
 
   it("reads a manual report by its id and says how the dashboard counts it", async () => {

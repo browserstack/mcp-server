@@ -153,11 +153,16 @@ export interface AppBuildReport extends AppIssuePageContext {
 }
 
 /** A manual (Workflow Analyzer) report's issues, read inline from its scanned screens. */
-export interface AppManualReport {
-  records: AppAccessibilityIssue[];
+export interface AppManualReport extends AppIssuePageContext {
+  records: AppIssueRow[];
   page_length: number;
-  /** Every occurrence the API lists; the dashboard folds duplicates it does not mark. */
+  /**
+   * The issues, duplicates left out as the dashboard leaves them out when `deduplicated`;
+   * else every occurrence the Manual Reports API lists, which does not mark duplicates.
+   */
   total_issues: number;
+  /** Read from the dashboard's own screens: duplicates left out, issues with their element. */
+  deduplicated: boolean;
   next_page: number | null;
   dashboard_count: number;
   duplicate_occurrences: number;
@@ -779,21 +784,36 @@ export class AppAccessibilityApi {
   }
 
   /**
-   * A manual report's issues, every occurrence the API lists, most severe first. The
-   * dashboard's own count comes from the report's summary: it folds duplicates that the
-   * issue rows do not mark, so the two numbers are both given.
+   * A manual report's screens as the dashboard reads them, duplicates left out and each
+   * issue with its element, fix and measurements; undefined while that route answers an
+   * access key with a login redirect, as it does until it takes one.
    */
-  async appReportIssues(
+  private async dashboardScreens(
     reportId: string,
-    cursor = 0,
-    maxCharacterLength?: number,
-  ): Promise<AppManualReport> {
-    const detail = await this.manualReport(reportId);
-    if (!detail) {
-      throw new Error(
-        `No App Accessibility manual report with id "${reportId}". Pass the id from listAppAccessibilityReports (kind: manual), or the report's dashboard link (app-accessibility.browserstack.com/report/…) as reportUrl`,
-      );
+  ): Promise<AppSnapshot[] | undefined> {
+    const details: AppSnapshot[] = [];
+    for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
+      const resp = await apiClient
+        .get({
+          url: `${MANUAL_API_BASE}/app_scanner/${encodeURIComponent(reportId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
+          headers: this.headers(),
+          raise_error: false,
+        })
+        .catch(() => undefined);
+      const data = resp?.ok && resp.data?.success ? resp.data.data : undefined;
+      if (!Array.isArray(data?.details))
+        return page === 1 ? undefined : details;
+      details.push(...data.details);
+      if (!data.info?.next) break;
     }
+    return details;
+  }
+
+  /** Every occurrence the Manual Reports API lists, and the device the report ran on. */
+  private async manualApiScreens(reportId: string): Promise<{
+    details: AppSnapshot[];
+    device?: { model?: string; os?: string; os_version?: string };
+  }> {
     const details: AppSnapshot[] = [];
     let device:
       | { model?: string; os?: string; os_version?: string }
@@ -807,12 +827,39 @@ export class AppAccessibilityApi {
       details.push(...(resp.data?.data ?? []));
       if (!resp.data?.pagination?.next) break;
     }
+    return { details, device };
+  }
+
+  /**
+   * A manual report's issues, most severe first: from the dashboard's own screens when the
+   * route takes the access key, so the count is the dashboard's and each issue names its
+   * element; else every occurrence the Manual Reports API lists, which marks neither
+   * duplicates nor elements, with the dashboard's count stated next to it.
+   */
+  async appReportIssues(
+    reportId: string,
+    cursor = 0,
+    maxCharacterLength?: number,
+  ): Promise<AppManualReport> {
+    const detail = await this.manualReport(reportId);
+    if (!detail) {
+      throw new Error(
+        `No App Accessibility manual report with id "${reportId}". Pass the id from listAppAccessibilityReports (kind: manual), or the report's dashboard link (app-accessibility.browserstack.com/report/…) as reportUrl`,
+      );
+    }
+    const dashboard = await this.dashboardScreens(reportId);
+    const { details, device } = dashboard
+      ? { details: dashboard, device: undefined }
+      : await this.manualApiScreens(reportId);
     const summary = detail.data?.issue_summary ?? {};
     const all = flattenAppSnapshots(details);
-    const page = pageOf(all, { nextPage: cursor, maxCharacterLength });
+    const { rows, context } = compactAppIssues(all);
+    const page = pageOf(rows, { nextPage: cursor, maxCharacterLength });
     return {
       ...page,
+      ...contextOf(page.records, context),
       total_issues: all.length,
+      deduplicated: dashboard !== undefined,
       dashboard_count: summary.total ?? all.length,
       duplicate_occurrences: summary.severity_count?.duplicate_issues ?? 0,
       hidden_issues: summary.severity_count?.hidden_issues ?? 0,

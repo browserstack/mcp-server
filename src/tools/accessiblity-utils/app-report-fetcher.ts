@@ -183,6 +183,18 @@ interface AppBuildListRow {
   normalised_name?: string;
   build_number?: number;
   created_at?: string;
+  /** "Espresso-Junit4" for a native run; "pytest", "reqnroll-nunit", … for an SDK one. */
+  session_data?: { frameworkName?: string };
+}
+
+/**
+ * Whether a project build can be a native (Espresso, XCUITest) run's. An SDK suite started
+ * at the same moment in the same project is not, and taking it would read its issues as the
+ * native run's.
+ */
+function maybeNative(row: AppBuildListRow): boolean {
+  const framework = row.session_data?.frameworkName;
+  return !framework || /espresso|xcui/i.test(framework);
 }
 
 export interface AppProjectRow {
@@ -671,6 +683,7 @@ export class AppAccessibilityApi {
       near.push(
         ...rows.filter(
           (row) =>
+            maybeNative(row) &&
             Math.abs(created(row) - startedAt) <= NATIVE_BUILD_START_WINDOW_MS,
         ),
       );
@@ -926,7 +939,8 @@ export class AppAccessibilityApi {
 
   /**
    * The project's builds a page at a time, newest first, within the first pages; `more`
-   * says whether the list goes on past the page.
+   * says whether the list goes on past the page. A page that fails is an error, not the end
+   * of the list, or a build with earlier ones would read as its project's first.
    */
   private async *projectBuilds(
     projectId: string | number,
@@ -935,13 +949,12 @@ export class AppAccessibilityApi {
     const q = encodeURIComponent;
     const named = buildName ? `build_name=${q(buildName)}&` : "";
     for (let page = 1; page <= MAX_APP_BUILD_LIST_PAGES; page++) {
-      const resp = await apiClient.get({
-        url: `${APP_API_BASE}/project/${q(String(projectId))}/build?${named}page_size=${BUILD_LIST_PAGE_SIZE}&page=${page}`,
-        headers: this.headers(),
-        raise_error: false,
-      });
-      const more = Boolean(resp.ok && resp.data?.info?.next);
-      yield { rows: resp.data?.builds ?? [], more };
+      const data = await this.listing(
+        `${APP_API_BASE}/project/${q(String(projectId))}/build?${named}page_size=${BUILD_LIST_PAGE_SIZE}&page=${page}`,
+        `page ${page} of App Accessibility project ${projectId}'s builds`,
+      );
+      const more = Boolean(data.info?.next);
+      yield { rows: data.builds ?? [], more };
       if (!more) return;
     }
   }

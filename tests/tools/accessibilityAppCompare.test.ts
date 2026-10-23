@@ -429,6 +429,27 @@ describe("AccessibilityReportFetcher and the build before an app build", () => {
     });
   });
 
+  it("reports a failed later page as the failure, not as 'first build'", async () => {
+    get
+      .mockResolvedValueOnce(ok({ meta_data: META }))
+      .mockResolvedValueOnce(project())
+      .mockResolvedValueOnce(
+        morePages([{ th_build_id: BUILD_ID, name: "checkout-android" }]),
+      )
+      .mockResolvedValueOnce({ ok: false, status: 500, data: {} });
+
+    await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(/HTTP 500/);
+  });
+
+  it("reports a failed first page as the failure, not as 'first build'", async () => {
+    get
+      .mockResolvedValueOnce(ok({ meta_data: META }))
+      .mockResolvedValueOnce(project())
+      .mockResolvedValueOnce({ ok: false, status: 503, data: {} });
+
+    await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(/HTTP 503/);
+  });
+
   it("is none for a project's first build", async () => {
     get
       .mockResolvedValueOnce(ok({ meta_data: META }))
@@ -570,6 +591,88 @@ describe("AccessibilityReportFetcher and Espresso / XCUITest build links", () =>
     });
     expect(urls()).not.toContainEqual(expect.stringContaining("builds.json"));
     expect(urls()).toHaveLength(4);
+  });
+
+  it("does not take an SDK build that started at the same time for the native run's", async () => {
+    get
+      .mockResolvedValueOnce(noSessions)
+      .mockResolvedValueOnce(
+        espresso({
+          start_time: STARTED,
+          input_capabilities: { project: "Checkout App" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          builds: [
+            {
+              th_build_id: "pytest-run",
+              name: "nightly-pytest",
+              created_at: "2026-03-04T10:30:41.794Z",
+              session_data: { frameworkName: "pytest", language: "python" },
+            },
+          ],
+          info: { next: null },
+        }),
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [
+          {
+            automation_build: {
+              hashed_id: APP_AUTOMATE_BUILD,
+              name: "Build #13: Checkout.apk v1.0",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce(ok({ builds: [], info: { next: null } }));
+
+    await expect(fetcher().sourceFromReportUrl(LINK)).rejects.toThrow(
+      /No App Accessibility build named "Build #13: Checkout.apk v1.0"/,
+    );
+  });
+
+  it("still takes the native build that started with the run when it names its framework", async () => {
+    get
+      .mockResolvedValueOnce(noSessions)
+      .mockResolvedValueOnce(
+        espresso({
+          start_time: STARTED,
+          input_capabilities: { project: "Checkout App" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          builds: [
+            {
+              th_build_id: "pytest-run",
+              name: "nightly-pytest",
+              created_at: "2026-03-04T10:30:40.500Z",
+              session_data: { frameworkName: "pytest", language: "python" },
+            },
+            {
+              th_build_id: BUILD_ID,
+              name: "Build #13: Checkout.apk v1.0",
+              created_at: "2026-03-04T10:30:41.794Z",
+              session_data: { frameworkName: "Espresso-Junit4", language: "java" },
+            },
+          ],
+          info: { next: null },
+        }),
+      );
+
+    await expect(fetcher().sourceFromReportUrl(LINK)).resolves.toEqual({
+      kind: "appBuild",
+      buildId: BUILD_ID,
+    });
   });
 
   it("tells runs that started together apart by the run's name", async () => {

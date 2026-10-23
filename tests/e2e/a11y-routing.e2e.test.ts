@@ -42,6 +42,18 @@ describe("e2e: accessibility routing in the server instructions", () => {
     expect(instructions).toMatch(/fetchAccessibilityIssues/);
   });
 
+  // An app with no tests yet is not a dead end: the agent offers to write them, and the
+  // framework is the user's choice (any Appium SDK language, Espresso or XCUITest), not one
+  // forced on them; left to the agent, it picks one and says which.
+  it("offers to write tests for an app that has none, in the framework the user picks", async () => {
+    const { instructions } = await connect();
+
+    expect(instructions).toMatch(/no tests yet[^.]*write them/i);
+    expect(instructions).toMatch(/framework the user (picks|chooses)/i);
+    expect(instructions).toMatch(/Appium in any language[^.]*Espresso or XCUITest/);
+    expect(instructions).toMatch(/leave it to you[^.]*pick one/i);
+  });
+
   it("names only tools the server registers", async () => {
     const { instructions, tools } = await connect();
     const routing = instructions

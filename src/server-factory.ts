@@ -16,6 +16,9 @@ import addFailureLogsTools from "./tools/get-failure-logs.js";
 import addAutomateTools from "./tools/automate.js";
 import addSelfHealTools from "./tools/selfheal.js";
 import addAppLiveTools from "./tools/applive.js";
+import addMobileDeviceTools from "./tools/mobile-devices.js";
+import addDeviceSessionTools from "./tools/device-session.js";
+import addBrowserSessionTools from "./tools/browser-session.js";
 import addBuildInsightsTools from "./tools/build-insights.js";
 import { setupOnInitialized } from "./oninitialized.js";
 import { BrowserStackConfig } from "./lib/types.js";
@@ -74,6 +77,12 @@ export class BrowserStackMcpServer {
       addSelfHealTools,
       addBuildInsightsTools,
       addRCATools,
+      // Mobile device catalog (devices, uploaded builds, parallels) and agent-drivable
+      // device sessions on App Automate. The session group can be switched off on its
+      // own with BROWSERSTACK_DEVICE_SESSION_TOOLS=false.
+      addMobileDeviceTools,
+      addDeviceSessionTools,
+      addBrowserSessionTools,
       // Hands a plain-language task to BrowserStack's agent and relays its mid-run
       // permission asks back to this client, so a write can be confirmed by the human
       // sitting in front of it rather than refused for want of anyone to ask.

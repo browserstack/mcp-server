@@ -12,7 +12,9 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 > **Remote MCP note:** Tools marked _(not available in Remote MCP)_ rely on local file/process state and are disabled in the multi-tenant [Remote MCP Server](../README.md#-remote-mcp-server). They are available in the local (npx) setup.
 
-> **File & app uploads:** tools that upload a local file/app (`uploadProductRequirementFile`, `takeAppScreenshot`, `runAppTestsOnBrowserStack`, `runAppLiveSession`) require the `MCP_UPLOAD_BASE_DIR` env var set to a directory containing those files; uploads are restricted to it.
+> **Remote server with per-user login:** `npm run start:http` serves MCP over Streamable HTTP (`127.0.0.1:8931/mcp` by default). Each session authenticates with its own BrowserStack credentials (`Authorization: Basic`), which are verified before any tool runs.
+
+> **File & app uploads:** tools that upload a local file/app (`uploadProductRequirementFile`, `takeAppScreenshot`, `runAppTestsOnBrowserStack`, `runAppLiveSession`, `uploadMobileApp`, `startDeviceSession` with `appPath`) require the `MCP_UPLOAD_BASE_DIR` env var set to a directory containing those files; uploads are restricted to it.
 
 ---
 
@@ -321,6 +323,64 @@ searchCapability  →  describeCapability  →  invokeCapability
 | `listTestIds` | List the tests in a BrowserStack build (Automate or App Automate) with each test's `status` and `session_id`, optionally filtered by status (passed/failed/pending/skipped). The `session_id` feeds `getFailureLogs` and `fetchAutomationScreenshots` directly. |
 | `setupBrowserStackAppAutomateTests` | Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. |
 | `runAppTestsOnBrowserStack` | Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files. |
+
+</details>
+
+<details>
+<summary><b>🤳 Mobile Devices &amp; Agent-Driven Device Sessions</b></summary>
+
+Drive a real iOS/Android device step by step from your assistant. Sessions run on App Automate over the Appium hub with your own username and access key (App Live has no input API), show up on the App Automate dashboard with video, and open their live view in your browser automatically (also returned as a shareable link). The flow: `listMobileDevices` → `startDeviceSession` → `takeDeviceScreenshot` → `tapOnDevice` / `typeOnDevice` / `swipeOnDevice` / `pressDeviceKey` → `endDeviceSession`.
+
+| Tool | What it does |
+|---|---|
+| `listMobileDevices` | List the real devices and OS versions your account can drive on App Automate. Filter by platform, name substring, OS version. Device names passed to `startDeviceSession` must match exactly. |
+| `getTeamDefaultDevices` | The team's default devices from `BROWSERSTACK_TEAM_DEVICES_FILE`, each checked against the account's devices. |
+| `listDedicatedDevices` | The account's private (dedicated) devices; empty without a private device cloud. |
+| `uploadMobileApp` | Upload an `.apk`/`.aab`/`.ipa` to App Automate from a local file (inside `MCP_UPLOAD_BASE_DIR`) or a public https link; returns the `bs://` URL. Optional `customId`. Local files are refused on the remote server. |
+| `listUploadedApps` | List builds already uploaded to App Automate (yours or your team's) so they can be reused. |
+| `getAppAutomatePlan` | Plan name and parallel-session usage (running / max / queued). |
+| `startDeviceSession` | Start a drivable device with your app installed and open. Returns `sessionId`, dashboard and shareable live-view links, and opens the live view in your browser (local server; turn off with `BROWSERSTACK_OPEN_LIVE_VIEW=false`). Options: OS version (`latest`/`oldest`), idle timeout, interactive debugging, video, network logs, language, locale, time zone, GPS. |
+| `getDeviceSession` | No id: list sessions this server has open. With id: status, live-view/video links, orientation, foreground app, keyboard, contexts. |
+| `endDeviceSession` | End the session and release the device; optionally mark it passed/failed with a reason. |
+| `takeDeviceScreenshot` | Screenshot of the device (pixels on Android, points on iOS — the same space as taps). |
+| `tapOnDevice` | Tap or long-press at coordinates from a screenshot, or on an element by visible text or Appium selector (waited for automatically). If the on-screen keyboard covers the element it is closed first; if the app gives no way to close it, the tool says so instead of reporting a tap. |
+| `typeOnDevice` | Type into a field (by selector/text, or the focused one); optional clear, enter, and `hideKeyboard` to close the keyboard afterwards. The value is never echoed. |
+| `swipeOnDevice` | Swipe/scroll by direction and distance, or between two points. |
+| `pressDeviceKey` | back, home, enter and more; Android keycodes; iOS back is the left-edge back swipe, and the result says when the screen ignored it (use the app's own back control then). |
+| `manageDeviceApp` | Launch, close or restart the app under test (or another installed app). Launch fails if the app did not reach the front, for example an app restricted on a shared device. |
+| `uninstallDeviceApp` | Uninstall an app from the session's device. *(destructive — asks first)* |
+| `setDeviceState` | Rotate, close the on-screen keyboard, switch native/web-view context. |
+| `uploadMediaFile` | Upload an image/video/document (inside `MCP_UPLOAD_BASE_DIR`) and get a `media://` URL for `uploadMedia` or `injectCameraImage`. |
+| `simulateBiometric` | Pass or fail a fingerprint / Face ID prompt (session started with `enableBiometric`). |
+| `runAdbShellCommand` | Read a device property on Android with `getprop <property>` only. Commands that list apps (`pm list`, `dumpsys`) are refused, because public phones are shared between customers. BrowserStack itself allows only some properties (for example `ro.build.version.release`, `ro.product.manufacturer`); a refused one gets a clear message. |
+| `pushFileToDevice` / `pullFileFromDevice` | Write a file (local file or text) to the device, or read one back (text, image or base64). |
+| `injectCameraImage` | Make the app's camera see an uploaded image (session started with `enableCameraImageInjection`). |
+| `setDeviceLocation` | Change simulated GPS mid-session. |
+| `setNetworkConditions` | Switch to a named network profile mid-session (`3g-umts-good`, `no-network`, `reset`, …). |
+
+`startDeviceSession` also accepts `local` (BrowserStack Local), `deviceTunnel` (private dedicated devices only), `enableBiometric`, `enableCameraImageInjection`, `uploadMedia` and `networkProfile`.
+
+Settings: `BROWSERSTACK_DEVICE_SESSION_TOOLS=false` removes the device and browser session tools (the catalog tools stay); `BROWSERSTACK_DEVICE_SESSION_MAX` caps open sessions per server process (default 2, max 10). Sessions are also released by BrowserStack after their idle timeout (default 300 s).
+
+</details>
+
+<details>
+<summary><b>🧭 Agent-Driven Browser Sessions (Automate)</b></summary>
+
+Drive a real desktop or mobile browser step by step on BrowserStack Automate with your own credentials. Pass `local: true` to reach localhost / staging through BrowserStack Local (local server only).
+
+| Tool | What it does |
+|---|---|
+| `listBrowsers` | Desktop OS / browser / version combinations, or real mobile devices and their browsers. |
+| `getAutomatePlan` | Automate plan and parallel usage. |
+| `startBrowserSession` | Start a browser (exact os/osVersion/browser, or device). Returns `sessionId` plus dashboard and live-view links, and opens the live view in your browser (local server). |
+| `getBrowserSession` / `endBrowserSession` | List or inspect sessions; end one with an optional passed/failed status. |
+| `navigateBrowser` | Open a URL, or go back / forward / refresh. |
+| `clickInBrowser` | Click by CSS/XPath or visible text (auto-wait, scrolled into view). |
+| `typeInBrowser` | Type into a field, or pick a `<select>` option; optional clear and Enter. Values are never echoed. |
+| `scrollBrowser` | Scroll by direction / pixels, to top or bottom, or bring an element into view. |
+| `switchBrowserContext` | List, switch, open or close tabs and windows; enter or leave frames. |
+| `takeBrowserScreenshot` | Screenshot of the current page. |
 
 </details>
 

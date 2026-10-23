@@ -83,4 +83,19 @@ describe("the WebdriverIO service config", () => {
     expect(text).toContain("accessibility: false,");
     expect(text).not.toContain("accessibilityOptions:");
   });
+
+  // App Accessibility supports @wdio/browserstack-service 8.42.0+ (WDIO v8) and 9.6.0+
+  // (WDIO v9), and reads the device's OS version from osVersion.
+  it("installs a service version App Accessibility supports when it is on", () => {
+    const text = getNodejsSDKCommand("webdriverio", { accessibility: true });
+    expect(text).toContain("npm install @wdio/browserstack-service@^9.6.0");
+    expect(text).toContain("@wdio/browserstack-service@^8.42.0");
+    expect(text).not.toContain("@wdio/browserstack-service@^7");
+  });
+
+  it("gives the device's OS version as osVersion when it is on", () => {
+    const text = getNodejsSDKCommand("webdriverio", { accessibility: true });
+    expect(text).toContain("osVersion: '12.0'");
+    expect(text).not.toContain("platformVersion:");
+  });
 });

@@ -388,6 +388,26 @@ function closingMessage(
 }
 
 /**
+ * An app build's name and dashboard link, as data: the name is the user's own (from their
+ * CI or browserstack.yml), so it is quoted in an untrusted block rather than in our prose.
+ */
+function appBuildDetails(report: AppBuildReport): string {
+  return `Build: ${wrapUntrusted(
+    "App Accessibility build",
+    JSON.stringify(
+      {
+        name: report.build_name,
+        ...(report.dashboard_link
+          ? { dashboard_link: report.dashboard_link }
+          : {}),
+      },
+      null,
+      2,
+    ),
+  )}`;
+}
+
+/**
  * Why a finished app build has no scans. Each cause here produced a run that finished
  * green with nothing scanned and no warning; they are listed most likely first, with what
  * the build's own details say ahead of the rest.
@@ -416,7 +436,9 @@ function noScansNote(report: AppBuildReport): string[] {
         ]),
   ];
   return [
-    `No accessibility scans were recorded for App Accessibility build "${report.build_name}" (status: ${report.status}), so there are no issues to list. The usual causes, most likely first:`,
+    `No accessibility scans were recorded for the App Accessibility build below (status: ${report.status}), so there are no issues to list.`,
+    appBuildDetails(report),
+    "The usual causes, most likely first:",
     ...causes.map((cause, i) => `${i + 1}. ${cause}`),
   ];
 }
@@ -431,27 +453,17 @@ async function appBuildMessages(
   stillProcessing: boolean,
 ): Promise<string[]> {
   const report = await reportFetcher.appBuildReport(source.buildId, cursor);
-  const link = report.dashboard_link
-    ? [
-        `View the report on the App Accessibility dashboard: ${report.dashboard_link}`,
-      ]
-    : [];
   if (report.scan_count === 0 && !stillProcessing) {
-    return [
-      ...preface,
-      ...processingNote(processing),
-      ...noScansNote(report),
-      ...link,
-    ];
+    return [...preface, ...processingNote(processing), ...noScansNote(report)];
   }
   const { records, page_length, total_issues, next_page } = report;
   const screens = `${report.scan_count} screen${report.scan_count === 1 ? "" : "s"} scanned`;
   return [
     ...preface,
     ...processingNote(processing),
-    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}) from App Accessibility build "${report.build_name}" (${screens})`,
+    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}) from the App Accessibility build below (${screens})`,
+    appBuildDetails(report),
     ...excludedIssuesNote(null, 0, report.hidden_issues),
-    ...link,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
     closingMessage(
       next_page,

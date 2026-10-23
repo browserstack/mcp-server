@@ -175,6 +175,8 @@ export interface AppManualReport extends AppIssuePageContext {
   report_name: string;
   device?: string;
   dashboard_link: string;
+  /** Set when the report has more screens than were read: how many were. */
+  screens_read?: number;
 }
 
 export interface AppProjectRow {
@@ -647,25 +649,37 @@ export class AppAccessibilityApi {
     );
   }
 
-  /** A manual report's details, or undefined when the API does not know the id. */
+  /**
+   * A manual report's details, or undefined when the API does not know the id (its 404);
+   * any other failure is thrown with its status.
+   */
   async manualReport(reportId: string): Promise<any | undefined> {
     const resp = await apiClient.get({
       url: `${MANUAL_API_BASE}/reports/${encodeURIComponent(reportId)}`,
       headers: this.headers(),
       raise_error: false,
     });
-    return resp.ok ? resp.data : undefined;
+    if (resp.status === 404) return undefined;
+    if (!resp.ok) {
+      throw new Error(
+        `Could not read App Accessibility manual report ${reportId}: HTTP ${resp.status}`,
+      );
+    }
+    return resp.data;
   }
 
   /**
    * A manual report's screens as the dashboard reads them, duplicates left out and each
    * issue with its element, fix and measurements; undefined while that route answers an
-   * access key with a login redirect, as it does until it takes one.
+   * access key with a login redirect, as it does until it takes one (the redirect names
+   * no Location, so nothing follows it), and undefined too when a later page fails, so
+   * the Manual Reports API is read in full rather than part of this read as the whole.
    */
   private async dashboardScreens(
     reportId: string,
-  ): Promise<AppSnapshot[] | undefined> {
+  ): Promise<{ details: AppSnapshot[]; more: boolean } | undefined> {
     const details: AppSnapshot[] = [];
+    let more = false;
     for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
       const resp = await apiClient
         .get({
@@ -675,20 +689,22 @@ export class AppAccessibilityApi {
         })
         .catch(() => undefined);
       const data = resp?.ok && resp.data?.success ? resp.data.data : undefined;
-      if (!Array.isArray(data?.details))
-        return page === 1 ? undefined : details;
+      if (!Array.isArray(data?.details)) return undefined;
       details.push(...data.details);
-      if (!data.info?.next) break;
+      more = Boolean(data.info?.next);
+      if (!more) break;
     }
-    return details;
+    return { details, more };
   }
 
   /** Every occurrence the Manual Reports API lists, and the device the report ran on. */
   private async manualApiScreens(reportId: string): Promise<{
     details: AppSnapshot[];
+    more: boolean;
     device?: { model?: string; os?: string; os_version?: string };
   }> {
     const details: AppSnapshot[] = [];
+    let more = false;
     let device:
       | { model?: string; os?: string; os_version?: string }
       | undefined;
@@ -696,12 +712,20 @@ export class AppAccessibilityApi {
       const resp = await apiClient.get({
         url: `${MANUAL_API_BASE}/reports/${encodeURIComponent(reportId)}/issues?page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
         headers: this.headers(),
+        raise_error: false,
       });
+      // A count over some of the pages would read as the report's.
+      if (!resp.ok) {
+        throw new Error(
+          `Could not read page ${page} of manual report ${reportId}'s issues from the Manual Reports API: HTTP ${resp.status}`,
+        );
+      }
       device ??= resp.data?.device;
       details.push(...(resp.data?.data ?? []));
-      if (!resp.data?.pagination?.next) break;
+      more = Boolean(resp.data?.pagination?.next);
+      if (!more) break;
     }
-    return { details, device };
+    return { details, more, device };
   }
 
   /**
@@ -722,8 +746,8 @@ export class AppAccessibilityApi {
       );
     }
     const dashboard = await this.dashboardScreens(reportId);
-    const { details, device } = dashboard
-      ? { details: dashboard, device: undefined }
+    const { details, more, device } = dashboard
+      ? { ...dashboard, device: undefined }
       : await this.manualApiScreens(reportId);
     const summary = detail.data?.issue_summary ?? {};
     const all = flattenAppSnapshots(details);
@@ -744,6 +768,7 @@ export class AppAccessibilityApi {
         ? { device: `${device.model}, ${device.os} ${device.os_version}` }
         : {}),
       dashboard_link: `${APP_DASHBOARD}/report/${reportId}`,
+      ...(more ? { screens_read: details.length } : {}),
     };
   }
 

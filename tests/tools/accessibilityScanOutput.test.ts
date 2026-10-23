@@ -733,6 +733,17 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
     expect(body).toContain("Make the target at least 48dp.");
   });
 
+  it("says how many screens it read when the report has more than it reads", async () => {
+    const base = await m.appReportIssues();
+    m.appReportIssues.mockResolvedValue({ ...base, scan_count: 1200, screens_read: 1000 });
+
+    const body = text(await handlers.fetchAccessibilityIssues({ appReportId: REPORT_ID }, CONTEXT));
+
+    expect(body).toContain(
+      "Only the first 1000 of the report's 1200 scanned screens were read; the total counts the issues on those. The dashboard report has them all.",
+    );
+  });
+
   it("reads a manual report by its id and says how the dashboard counts it", async () => {
     const result = await handlers.fetchAccessibilityIssues(
       { appReportId: REPORT_ID },

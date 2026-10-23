@@ -597,6 +597,11 @@ async function appReportMessages(
     ...processingNote(processing),
     `Retrieved ${page_length} accessibility ${counted} (Total: ${total_issues}) from the App Accessibility manual report below (${where})`,
     details,
+    ...(report.screens_read !== undefined
+      ? [
+          `Only the first ${report.screens_read} of the report's ${report.scan_count} scanned screens were read; the total counts the issues on those. The dashboard report has them all.`,
+        ]
+      : []),
     ...dashboardNote,
     ...excludedIssuesNote(null, 0, report.hidden_issues),
     APP_ISSUES_SHAPE,

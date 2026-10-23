@@ -944,4 +944,62 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
       /No App Accessibility manual report/,
     );
   });
+
+  // Checked live: an unknown report is a 404 on its details and its issues, a bad key 401.
+  const failed = (status: number) => ({ ok: false, status, data: {} });
+  const MANUAL = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
+
+  it("reports a failed report lookup as the failure, not as an unknown report", async () => {
+    get.mockResolvedValueOnce(failed(401));
+
+    const failure = fetcher().appReportIssues(REPORT_ID);
+    await expect(failure).rejects.toThrow(/HTTP 401/);
+    await expect(failure).rejects.not.toThrow(/No App Accessibility manual report/);
+  });
+
+  it("reads the whole report from the Manual Reports API when a later dashboard page fails, rather than a part as the whole", async () => {
+    get
+      .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(
+        ok({ data: { details: [SNAPSHOTS[0]], info: { page: 1, next: 2 } } }),
+      )
+      .mockResolvedValueOnce(failed(500))
+      .mockResolvedValueOnce(
+        ok({
+          data: [manualSnapshot(SNAPSHOTS[0]), manualSnapshot(SNAPSHOTS[1])],
+          pagination: { page: 1, next: null },
+        }),
+      );
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(urls()[3]).toBe(`${MANUAL}/reports/${REPORT_ID}/issues?page_size=50&page=1`);
+    expect(report.deduplicated).toBe(false);
+    expect(report.total_issues).toBe(3);
+  });
+
+  it("fails with the page and status when an issues page cannot be read, rather than counting fewer issues", async () => {
+    get
+      .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(REDIRECT_TO_LOGIN)
+      .mockResolvedValueOnce(
+        ok({ data: [manualSnapshot(SNAPSHOTS[0])], pagination: { page: 1, next: 2 } }),
+      )
+      .mockResolvedValueOnce(failed(502));
+
+    await expect(fetcher().appReportIssues(REPORT_ID)).rejects.toThrow(
+      /page 2 of manual report .*HTTP 502/,
+    );
+  });
+
+  it("says how many screens it read when the report has more than the page limit", async () => {
+    get.mockImplementation(async ({ url }: { url: string }) => {
+      if (url.endsWith(REPORT_ID)) return ok(DETAIL);
+      return ok({ data: { details: [SNAPSHOTS[0]], info: { next: 2 } } });
+    });
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(report.screens_read).toBe(MAX_SNAPSHOT_PAGES);
+  });
 });

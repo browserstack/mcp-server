@@ -492,14 +492,16 @@ export class AppAccessibilityApi {
     return (await this.projectsNamed(name)).find((p) => p.name === name)?.id;
   }
 
-  /** The projects whose name contains `name`, as the API searches it. */
+  /**
+   * The projects whose name contains `name`, as the API searches it. A failed search is an
+   * error, not an empty list, or a correct name would read as one that matches nothing.
+   */
   private async projectsNamed(name: string): Promise<AppProjectRow[]> {
-    const resp = await apiClient.get({
-      url: `${APP_API_BASE}/project?name=${encodeURIComponent(name)}`,
-      headers: this.headers(),
-      raise_error: false,
-    });
-    return resp.ok ? (resp.data?.projects ?? []) : [];
+    const data = await this.listing(
+      `${APP_API_BASE}/project?name=${encodeURIComponent(name)}`,
+      `the App Accessibility projects named "${name}"`,
+    );
+    return data.projects ?? [];
   }
 
   /**

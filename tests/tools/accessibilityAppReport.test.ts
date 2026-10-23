@@ -869,6 +869,23 @@ describe("AccessibilityReportFetcher lists App Accessibility work", () => {
     ).rejects.toThrow(/No project named "Checkout App".*Checkout App iOS.*Checkout App Android/s);
   });
 
+  it("reports a failed project search as the failure, not as a project with no such name", async () => {
+    get.mockResolvedValueOnce({ ok: false, status: 500, data: { message: "Internal error" } });
+
+    const listing = fetcher().listAppBuilds("Checkout App", undefined, 10);
+
+    await expect(listing).rejects.toThrow(/HTTP 500/);
+    await expect(listing).rejects.not.toThrow(/No project named/);
+  });
+
+  it("still names no project when the search finds none", async () => {
+    get.mockResolvedValueOnce({ ok: false, status: 404, data: { message: "No projects found" } });
+
+    await expect(fetcher().listAppBuilds("Checkout App", undefined, 10)).rejects.toThrow(
+      /No project named "Checkout App"/,
+    );
+  });
+
   it("passes a build-name filter through", async () => {
     get
       .mockResolvedValueOnce(ok({ projects: [{ id: 123456, name: "Checkout App" }] }))

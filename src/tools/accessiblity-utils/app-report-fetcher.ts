@@ -50,6 +50,8 @@ interface AppRuleIssue {
   issue_class_ios?: string;
   issue_id_android?: string;
   issue_id_ios?: string;
+  /** An iOS element's class. */
+  issue_type_ios?: string;
   how_to_fix_desc?: string;
   issue_details?: { label?: string; value?: unknown; important?: boolean }[];
   /** The rule's inputs for this element, among them what it expects (`expected_ratio`, …). */
@@ -166,13 +168,21 @@ function detailValue(value: unknown): unknown {
   }
 }
 
+/** An iOS element's details, under the names an Android element's go by. */
+const IOS_DETAILS: Record<string, string> = {
+  class: "className",
+  identifier: "accessibilityIdentifier",
+  visibleText: "text",
+};
+
 function elementOf(issue: AppRuleIssue): Record<string, unknown> {
   const element: Record<string, unknown> = {};
   for (const { label, value } of issue.issue_details ?? []) {
-    if (!label || !ELEMENT_DETAILS.has(label)) continue;
+    const name = label && (IOS_DETAILS[label] ?? label);
+    if (!name || !ELEMENT_DETAILS.has(name)) continue;
     const parsed = detailValue(value);
     if (parsed === "" || parsed === null || parsed === undefined) continue;
-    element[label] = parsed;
+    element[name] = parsed;
   }
   return element;
 }
@@ -200,7 +210,8 @@ const EXPECTED = /^(expected|desired|minimum)_/;
 function measuredOf(issue: AppRuleIssue): Record<string, unknown> | undefined {
   const measured: Record<string, unknown> = {};
   for (const { label, value, important } of issue.issue_details ?? []) {
-    if (!important || !label || ELEMENT_DETAILS.has(label)) continue;
+    if (!important || !label) continue;
+    if (ELEMENT_DETAILS.has(IOS_DETAILS[label] ?? label)) continue;
     measured[label] = detailValue(value);
   }
   for (const [key, value] of Object.entries(issue.rule_dynamic_meta ?? {})) {
@@ -232,18 +243,23 @@ export function flattenAppSnapshots(
         .join("; ");
       for (const issue of rule.rule_issues ?? []) {
         if (isLeftOut(issue)) continue;
+        const element = elementOf(issue);
         rows.push({
           issue_type: rule.label,
           rule_id: rule.rule_id,
           severity: (rule.severity ?? "unknown").toLowerCase(),
           screen,
-          component:
+          // An iOS element's id is often only in its details, and its class in issue_type_ios.
+          component: String(
             issue.issue_id_android ||
-            issue.issue_id_ios ||
-            issue.issue_class_android ||
-            issue.issue_class_ios ||
-            rule.label,
-          element: elementOf(issue),
+              issue.issue_id_ios ||
+              element.accessibilityIdentifier ||
+              issue.issue_class_android ||
+              issue.issue_class_ios ||
+              issue.issue_type_ios ||
+              rule.label,
+          ),
+          element,
           issue_description: rule.description ?? "",
           how_to_fix: plainText(issue.how_to_fix_desc),
           wcag,

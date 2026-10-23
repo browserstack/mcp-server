@@ -255,8 +255,8 @@ describe("capability registry, end to end through the server factory", () => {
     // settled, never whether it settled on what was being asked for.
     const crossed = await run({ query: "check my quota" });
     expect(crossed.blocked).toBe(true);
-    expect(crossed.body.error).toMatch(/points at secondproduct, not tm/);
-    expect(crossed.body.error).toMatch(/only secondproduct claims \('quota'\)/);
+    expect(crossed.body.message).toMatch(/points at secondproduct, not Test Management/);
+    expect(crossed.body.message).toMatch(/only secondproduct claims \('quota'\)/);
     expect(
       (await run({ query: "check my quota", product: "secondproduct" }))
         .blocked,

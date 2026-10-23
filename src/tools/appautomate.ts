@@ -220,8 +220,14 @@ async function runAppTestsOnBrowserStack(
     );
   }
 
-  // Validate devices against real BrowserStack device data
-  await validateAppAutomateDevices(args.devices);
+  // Validate devices against real BrowserStack device data, and ask for them as App Automate
+  // lists them: a version given as "14" is "14.0" there, and a run asking for "-14" waits for
+  // a device that never matches.
+  const validated = await validateAppAutomateDevices(args.devices);
+  const deviceStrings =
+    args.devices.length > 0
+      ? validated.map((device) => `${device.deviceName}-${device.osVersion}`)
+      : [];
 
   switch (args.detectedAutomationFramework) {
     case AppTestPlatform.ESPRESSO: {
@@ -248,12 +254,6 @@ async function runAppTestsOnBrowserStack(
           );
           logger.info(`Test suite uploaded. URL: ${test_suite_url}`);
         }
-
-        // Convert array format to string format for Espresso
-        const deviceStrings = args.devices.map((device) => {
-          const [, deviceName, osVersion] = device;
-          return `${deviceName}-${osVersion}`;
-        });
 
         const build_id = await triggerEspressoBuild(
           app_url,
@@ -301,12 +301,6 @@ async function runAppTestsOnBrowserStack(
           );
           logger.info(`Test suite uploaded. URL: ${test_suite_url}`);
         }
-
-        // Convert array format to string format for XCUITest
-        const deviceStrings = args.devices.map((device) => {
-          const [, deviceName, osVersion] = device;
-          return `${deviceName}-${osVersion}`;
-        });
 
         const build_id = await triggerXcuiBuild(
           app_url,

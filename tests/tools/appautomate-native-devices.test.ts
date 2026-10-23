@@ -124,4 +124,35 @@ describe("runAppTestsOnBrowserStack devices", () => {
       expect.anything(),
     );
   });
+
+  // The resolver falls back to the closest version App Automate lists, so the answer says
+  // which devices the run asked for, and when a version was swapped, so a run on the wrong
+  // OS version is not missed.
+  const text = (result: any) =>
+    result.content.map((c: { text: string }) => c.text).join("\n");
+
+  it("names the devices the run asked for", async () => {
+    const result = await runTests()({
+      ...RUN,
+      detectedAutomationFramework: "espresso",
+      devices: [{ platform: "android", deviceName: "google pixel 8", osVersion: "14" }],
+    });
+
+    expect(text(result)).toContain("Devices: Google Pixel 8-14.0");
+    expect(text(result)).not.toContain("⚠️");
+  });
+
+  it("says when a requested version was not listed and the closest was used", async () => {
+    const result = await runTests()({
+      ...RUN,
+      appPath: "./app.ipa",
+      testSuitePath: "./suite.zip",
+      detectedAutomationFramework: "xcuitest",
+      devices: [{ platform: "ios", deviceName: "iPhone 15", osVersion: "16" }],
+    });
+
+    expect(text(result)).toMatch(
+      /⚠️ iPhone 15: version 16 is not listed on App Automate, so the run uses 1[78]\.0, the closest it lists\./,
+    );
+  });
 });

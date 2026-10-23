@@ -13,6 +13,7 @@ import {
   MAX_APP_BUILD_LIST_PAGES,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
 import {
+  compactAppIssues,
   flattenAppSnapshots,
   MAX_SNAPSHOT_PAGES,
 } from "../../src/tools/accessiblity-utils/app-report-fetcher.js";
@@ -423,7 +424,8 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
 
     // A page that holds the first row and not the second.
     const pageSize =
-      JSON.stringify(flattenAppSnapshots(SNAPSHOTS)[0]).length + 10;
+      JSON.stringify(compactAppIssues(flattenAppSnapshots(SNAPSHOTS)).rows[0])
+        .length + 10;
     const first = await fetcher().appBuildReport(BUILD_ID, 0, pageSize);
     expect(first.page_length).toBe(1);
     expect(first.next_page).toBe(JSON.stringify(first.records[0]).length);

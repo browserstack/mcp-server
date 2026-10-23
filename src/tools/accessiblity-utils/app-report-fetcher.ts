@@ -40,7 +40,9 @@ interface AppRuleIssue {
   issue_id_android?: string;
   issue_id_ios?: string;
   how_to_fix_desc?: string;
-  issue_details?: { label?: string; value?: unknown }[];
+  issue_details?: { label?: string; value?: unknown; important?: boolean }[];
+  /** The rule's inputs for this element, among them what it expects (`expected_ratio`, …). */
+  rule_dynamic_meta?: Record<string, unknown>;
 }
 
 interface AppRule {
@@ -74,10 +76,46 @@ export type AppAccessibilityIssue = {
   screenshot?: string;
   /** How many more occurrences of this issue the report folded into it. */
   duplicate_count?: number;
+  /**
+   * What the rule measured on the element (a contrast issue's colours and ratio, a touch
+   * target's size, a font size, the label it found) and what it expects, so a fix can be
+   * sized.
+   */
+  measured?: Record<string, unknown>;
 };
 
-export interface AppBuildReport {
-  records: AppAccessibilityIssue[];
+/** An issue as a page hands it out: what is its own, with its rule and screen named. */
+export type AppIssueRow = Omit<
+  AppAccessibilityIssue,
+  | "issue_type"
+  | "issue_description"
+  | "wcag"
+  | "screenshot"
+  | "how_to_fix"
+  | "component"
+> & {
+  /** The element's id or class; an element with neither is known by its rule. */
+  component?: string;
+  /** Only when it differs from the rule's usual fix, which is under the page's rules. */
+  how_to_fix?: string;
+};
+
+/** What a page's issues share, said once: per rule, and each screen's screenshot. */
+export interface AppIssuePageContext {
+  rules: Record<
+    string,
+    {
+      issue_type: string;
+      issue_description: string;
+      wcag: string;
+      how_to_fix: string;
+    }
+  >;
+  screens: Record<string, string>;
+}
+
+export interface AppBuildReport extends AppIssuePageContext {
+  records: AppIssueRow[];
   page_length: number;
   total_issues: number;
   next_page: number | null;
@@ -143,6 +181,24 @@ function plainText(markup: string | undefined): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** A rule's inputs that say what it expects of the element; the rest describe the run. */
+const EXPECTED = /^(expected|desired|minimum)_/;
+
+function measuredOf(issue: AppRuleIssue): Record<string, unknown> | undefined {
+  const measured: Record<string, unknown> = {};
+  for (const { label, value, important } of issue.issue_details ?? []) {
+    if (!important || !label || ELEMENT_DETAILS.has(label)) continue;
+    measured[label] = detailValue(value);
+  }
+  for (const [key, value] of Object.entries(issue.rule_dynamic_meta ?? {})) {
+    // The ratio as "4.5:1" says what expected_contrast_ratio's 4.5 does.
+    if (EXPECTED.test(key) && key !== "expected_contrast_ratio") {
+      measured[key] = value;
+    }
+  }
+  return Object.keys(measured).length ? measured : undefined;
+}
+
 /** Issues the dashboard does not count: hidden by the user, or marked as not an issue. */
 function isLeftOut(issue: AppRuleIssue): boolean {
   return issue.status === "hidden" || issue.status === "non_issue";
@@ -184,11 +240,89 @@ export function flattenAppSnapshots(
           ...(issue.duplication_count
             ? { duplicate_count: issue.duplication_count }
             : {}),
+          ...(measuredOf(issue) ? { measured: measuredOf(issue) } : {}),
         });
       }
     }
   });
   return sortBySeverity(rows);
+}
+
+/** The value most rows give, the first of them on a tie. */
+function mostCommon(values: string[]): string {
+  const counts = new Map<string, number>();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  let best = "";
+  let bestCount = 0;
+  for (const [v, n] of counts) {
+    if (n > bestCount) [best, bestCount] = [v, n];
+  }
+  return best;
+}
+
+/**
+ * An issue's name, description, WCAG criteria and fix are its rule's, and its screenshot is
+ * its screen's: two thirds of an issue's length, repeated on every one. Said once, under
+ * the page's rules and screens, a page holds about three times as many issues. An issue
+ * keeps its own fix only when it differs from its rule's usual one.
+ */
+export function compactAppIssues(all: AppAccessibilityIssue[]): {
+  rows: AppIssueRow[];
+  context: AppIssuePageContext;
+} {
+  const byRule = new Map<string, AppAccessibilityIssue[]>();
+  for (const row of all) {
+    byRule.set(row.rule_id, [...(byRule.get(row.rule_id) ?? []), row]);
+  }
+  const rules: AppIssuePageContext["rules"] = {};
+  for (const [ruleId, rows] of byRule) {
+    rules[ruleId] = {
+      issue_type: rows[0].issue_type,
+      issue_description: rows[0].issue_description,
+      wcag: rows[0].wcag,
+      how_to_fix: mostCommon(rows.map((r) => r.how_to_fix)),
+    };
+  }
+  const screens: Record<string, string> = {};
+  const rows = all.map((row): AppIssueRow => {
+    const {
+      issue_type,
+      issue_description,
+      wcag,
+      screenshot,
+      how_to_fix,
+      component,
+      ...own
+    } = row;
+    void issue_description;
+    void wcag;
+    if (screenshot) screens[own.screen] = screenshot;
+    return {
+      ...own,
+      ...(component !== issue_type ? { component } : {}),
+      ...(how_to_fix && how_to_fix !== rules[own.rule_id].how_to_fix
+        ? { how_to_fix }
+        : {}),
+    };
+  });
+  return { rows, context: { rules, screens } };
+}
+
+/** The rules and screens a page's issues name, and nothing else. */
+export function contextOf(
+  records: AppIssueRow[],
+  { rules, screens }: AppIssuePageContext,
+): AppIssuePageContext {
+  return {
+    rules: Object.fromEntries(
+      [...new Set(records.map((r) => r.rule_id))].map((id) => [id, rules[id]]),
+    ),
+    screens: Object.fromEntries(
+      [...new Set(records.map((r) => r.screen))]
+        .filter((screen) => screens[screen])
+        .map((screen) => [screen, screens[screen]]),
+    ),
+  };
 }
 
 /** The build an App Accessibility dashboard link names: project id, build name and number. */
@@ -307,9 +441,11 @@ export class AppAccessibilityApi {
         ? await this.snapshots(buildId)
         : { details: [], hidden: 0, more: false };
     const all = flattenAppSnapshots(details);
-    const page = pageOf(all, { nextPage: cursor, maxCharacterLength });
+    const { rows, context } = compactAppIssues(all);
+    const page = pageOf(rows, { nextPage: cursor, maxCharacterLength });
     return {
       ...page,
+      ...contextOf(page.records, context),
       total_issues: all.length,
       hidden_issues: hidden,
       scan_count: scanCount,

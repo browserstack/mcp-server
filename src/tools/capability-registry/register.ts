@@ -839,9 +839,9 @@ export function addCapabilityRegistryTools(
                   (ambiguity.because?.length
                     ? ` (${ambiguity.because.map((t) => `'${t}'`).join(", ")})`
                     : "") +
-                  `, so the request points at ${ambiguity.settled}, not ${product}. ` +
+                  `, so the request points at ${label(ambiguity.settled as string)}, not ${label(product)}. ` +
                   "Search the product the words name, or — if the user meant " +
-                  `${product} — get them to say so and quote them. `
+                  `${label(product)} — get them to say so and quote them. `
                 : `'${subject}' could mean ${ambiguity.products.map(label).join(" or ")} — ` +
                   `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
                   `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. `) +

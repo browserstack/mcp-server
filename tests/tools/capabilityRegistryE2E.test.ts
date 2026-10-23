@@ -236,9 +236,9 @@ describe("capability registry, end to end through the server factory", () => {
     // the fixture's second product declares none and reads as its key.
     expect(refused.body.message).toContain("secondproduct or Test Management");
     expect(refused.body.message).toContain("'project'");
-    expect(refused.body.error).toMatch(/to the USER/);
+    expect(refused.body.message).toMatch(/to the USER/);
     // And it must name the failure mode it exists to stop.
-    expect(refused.body.error).toMatch(/search each product in turn and merge/);
+    expect(refused.body.message).toMatch(/search each product in turn and merge/);
 
     // A word only one product claims settles the query, so there is nothing to ask —
     // PROVIDED it settles on the product being searched.

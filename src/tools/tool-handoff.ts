@@ -90,14 +90,15 @@ export const NEEDS_SESSION_ID =
 
 /**
  * A scan run's ids come from startAccessibilityScan. Nothing here lists builds or reports,
- * but the tool takes a report's dashboard link, or an Automate link, and looks the ids up itself.
+ * but the tool takes a report's dashboard link, or an Automate link, and looks the ids up
+ * itself; for a past run, Ask AI can locate it.
  */
 export const NEEDS_A11Y_SCAN_ID =
-  " Ids: startAccessibilityScan or a dashboard link; nothing here lists reports.";
+  ' Ids: startAccessibilityScan, a link, or askBrowserStackAI with product "a11y".';
 
-/** Auth-config ids are not listable by any tool here. */
+/** Auth-config ids are not listable by any tool here; Ask AI can find one. */
 export const NEEDS_A11Y_CONFIG_ID =
-  " Requires the id returned by createAccessibilityAuthConfig; nothing here lists configs.";
+  ' Id: from createAccessibilityAuthConfig, or askBrowserStackAI with product "a11y" to find one.';
 
 /** Test ids come from listTestIds, which itself needs a build id. */
 export const NEEDS_TEST_IDS = needsIdFrom("test ids", "listTestIds");

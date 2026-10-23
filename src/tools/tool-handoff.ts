@@ -90,11 +90,12 @@ export const NEEDS_SESSION_ID =
 
 /**
  * A scan run's ids come from startAccessibilityScan; a build's id is printed by the SDK at
- * the end of its run. Nothing here lists builds or reports, but the tool takes a report's
- * dashboard link and looks the ids up itself.
+ * the end of its run. The tool takes a report's dashboard link and looks the ids up
+ * itself, and App Accessibility's projects, builds and manual reports are listed by its
+ * capabilities. Nothing here lists web reports.
  */
 export const NEEDS_A11Y_SCAN_ID =
-  " Ids: startAccessibilityScan or a dashboard link; nothing here lists reports.";
+  " Ids: startAccessibilityScan, a dashboard link, or app lists via searchCapability.";
 
 /** Auth-config ids are not listable by any tool here. */
 export const NEEDS_A11Y_CONFIG_ID =

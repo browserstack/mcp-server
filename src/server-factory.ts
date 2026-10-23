@@ -25,7 +25,6 @@ import addCapabilityRegistryTools from "./tools/capability-registry/register.js"
 import { instrumentToolLatency } from "./lib/tool-latency.js";
 import { nodeUpgradeNotice } from "./lib/node-version-notice.js";
 import { FEEDBACK_INSTRUCTION } from "./lib/feedback-hint.js";
-import { ACCESSIBILITY_ROUTING_INSTRUCTION } from "./lib/accessibility-routing.js";
 import addFeedbackTools from "./tools/feedback.js";
 
 /**
@@ -48,11 +47,7 @@ export class BrowserStackMcpServer {
         version: packageJson.version,
       },
       {
-        instructions: [
-          nodeUpgradeNotice(),
-          FEEDBACK_INSTRUCTION,
-          ACCESSIBILITY_ROUTING_INSTRUCTION,
-        ]
+        instructions: [nodeUpgradeNotice(), FEEDBACK_INSTRUCTION]
           .filter(Boolean)
           .join("\n"),
       },

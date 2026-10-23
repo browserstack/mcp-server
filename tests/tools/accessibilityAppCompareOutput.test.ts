@@ -355,7 +355,7 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
 
     expect(out).toContain("0 new, 1 resolved, 1 still open.");
     expect(out).toContain(
-      "2 more issues of the earlier build are on 1 screen no screen of the later build resembles: the later build did not reach it, or every issue on it was fixed. They are not counted as resolved; scan that screen again to confirm.",
+      "2 more issues of the earlier build are on 1 screen no screen of the later build resembles: the later build did not reach it, or the issues on it were fixed. They are not counted as resolved; scan that screen again to confirm.",
     );
     expect(out).toContain("Not confirmed resolved (2):");
     expect(out.indexOf("cart_a")).toBeGreaterThan(out.indexOf("Not confirmed resolved (2):"));
@@ -464,6 +464,19 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
     expect(next).toContain("label_59");
     expect(next).not.toContain('label_49"');
     expect(next).not.toContain("More to list");
+  });
+
+  it("refuses to compare a build whose screens were not all read, as the unread ones' issues would read as new or resolved", async () => {
+    m.appBuildIssues.mockImplementation(async (id: string) =>
+      id === BUILD_ID ? { ...AFTER, scan_count: 1200, screens_read: 1000 } : BEFORE,
+    );
+
+    const result = await fetchIssues()({ buildId: BUILD_ID, compareWith: EARLIER_ID });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain(
+      "Build #5 has more scanned screens than are read here (the first 1000 of 1200)",
+    );
   });
 
   it("refuses to compare a build with itself", async () => {

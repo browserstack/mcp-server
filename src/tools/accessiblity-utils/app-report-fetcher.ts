@@ -206,6 +206,8 @@ export interface AppBuildIssues {
   /** The tests whose screens were scanned, in the order first seen. */
   tests: string[];
   issues: AppAccessibilityIssue[];
+  /** Set when the build has more screens than were read: how many were. */
+  screens_read?: number;
 }
 
 /** An earlier build of a project, as the build list names it. */
@@ -533,12 +535,21 @@ function elementIdentity(row: AppAccessibilityIssue): string | undefined {
 
 /** A screen is the same screen in another build when they share this much of its elements. */
 const SAME_SCREEN_SHARE = 0.25;
+/**
+ * Within one test, the share of the smaller screen's elements that makes two screens one: a
+ * screen whose issues were mostly fixed keeps few, as only elements with an issue are known.
+ */
+const SAME_TEST_SCREEN_SHARE = 0.5;
+
+/** The test a screen was scanned in, from its name ("Screen 3 (test_checkout)"). */
+const testOf = (screen: string) => screen.match(/\((.+)\)$/)?.[1];
 
 /**
  * The screens of one build no screen of the other resembles. Screens are named by scan
  * order, so a screen is recognised by what is on it: one that shares under a quarter of its
- * elements with every screen of the other build was not reached there, or changed entirely.
- * A screen whose elements cannot be told apart is not set apart.
+ * elements with every screen of the other build, and under half of the smaller one's with
+ * every screen of the same test, was not reached there, or its issues were fixed. A screen
+ * whose elements cannot be told apart is not set apart.
  */
 function screensWithoutCounterpart(
   from: AppAccessibilityIssue[],
@@ -553,16 +564,20 @@ function screensWithoutCounterpart(
     }
     return screens;
   };
-  const others = [...elementsBy(to).values()];
+  const others = [...elementsBy(to)];
   const without = new Set<string>();
   for (const [screen, elements] of elementsBy(from)) {
-    const shared = Math.max(
-      0,
-      ...others.map(
-        (other) => [...elements].filter((e) => other.has(e)).length,
-      ),
-    );
-    if (shared / elements.size < SAME_SCREEN_SHARE) without.add(screen);
+    const resembled = others.some(([otherScreen, other]) => {
+      const shared = [...elements].filter((e) => other.has(e)).length;
+      if (shared / elements.size >= SAME_SCREEN_SHARE) return true;
+      const test = testOf(screen);
+      return (
+        test !== undefined &&
+        test === testOf(otherScreen) &&
+        shared / Math.min(elements.size, other.size) >= SAME_TEST_SCREEN_SHARE
+      );
+    });
+    if (!resembled) without.add(screen);
   }
   return without;
 }
@@ -721,15 +736,22 @@ export class AppAccessibilityApi {
     if (url.hostname !== new URL(APP_DASHBOARD).hostname) return undefined;
     const build = buildOfDashboardLink(url);
     if (!build) return undefined;
-    const buildId = await this.findBuild(
-      build.projectId,
-      undefined,
-      (row) =>
-        row.build_number === build.number &&
-        (row.normalised_name === undefined ||
-          unescapedName(row.normalised_name) === build.name),
-    );
-    if (buildId) return buildId;
+    // The name in the link is TestHub's, which can differ from the build's own: with no
+    // build of that name, the one build with the link's number is it, and two are a guess.
+    const numbered: AppBuildListRow[] = [];
+    for await (const page of this.projectBuilds(build.projectId)) {
+      for (const row of page.rows) {
+        if (row.build_number !== build.number) continue;
+        if (
+          row.normalised_name === undefined ||
+          unescapedName(row.normalised_name) === build.name
+        ) {
+          return row.th_build_id;
+        }
+        numbered.push(row);
+      }
+    }
+    if (numbered.length === 1) return numbered[0].th_build_id;
     throw new Error(
       `No build ${build.number} of "${build.name}" is among the project's newest builds (${MAX_APP_BUILD_LIST_PAGES} pages). Pass the build id instead, as buildId: the BrowserStack SDK prints it as "testhub id" at the end of the run`,
     );
@@ -1115,7 +1137,11 @@ export class AppAccessibilityApi {
   async previousBuild(buildId: string): Promise<AppBuildRef | undefined> {
     const meta = await this.requireBuildMeta(buildId);
     const projectId = await this.projectId(meta.project_name);
-    if (projectId === undefined) return undefined;
+    if (projectId === undefined) {
+      throw new Error(
+        `No App Accessibility project is named "${meta.project_name}", the project of build ${buildId}, so the build before it cannot be found here. Pass the earlier build's id or link as compareWith instead`,
+      );
+    }
     let reached = false;
     let justBefore: AppBuildListRow | undefined;
     let more = false;
@@ -1144,6 +1170,11 @@ export class AppAccessibilityApi {
     if (!reached && more) {
       throw new Error(
         `App Accessibility build ${buildId} is not among its project's newest builds (${MAX_APP_BUILD_LIST_PAGES} pages), so the build before it cannot be found here. Pass the earlier build's id or link as compareWith instead`,
+      );
+    }
+    if (!reached) {
+      throw new Error(
+        `App Accessibility build ${buildId} is not in the build list of its project ("${meta.project_name}"), so the build before it cannot be found here. Pass the earlier build's id or link as compareWith instead`,
       );
     }
     if (!justBefore && more) {
@@ -1227,7 +1258,7 @@ export class AppAccessibilityApi {
 
   /** Every issue of the build at once, to compare it with another. */
   async buildIssues(buildId: string): Promise<AppBuildIssues> {
-    const { meta, details, scanCount } = await this.readBuild(buildId);
+    const { meta, details, more, scanCount } = await this.readBuild(buildId);
     const tests = new Set(
       details.map((d) => d.meta?.testcase_name).filter((t) => t !== undefined),
     );
@@ -1240,6 +1271,7 @@ export class AppAccessibilityApi {
       scan_count: scanCount,
       tests: [...tests] as string[],
       issues: flattenAppSnapshots(details),
+      ...(more ? { screens_read: details.length } : {}),
     };
   }
 

@@ -198,6 +198,51 @@ describe("compareAppIssues and screens one build did not reach", () => {
     ]);
   });
 
+  // Screens are known only by their issue-bearing elements, so a screen where most issues
+  // were fixed shares few with its later self; within one test, sharing half of the smaller
+  // screen's is enough.
+  it("resolves the fixes on a screen of the same test that kept only some of its issues", () => {
+    const before = [
+      ...on("Screen 1 (test_scan)", ["home_a", "home_b"]),
+      ...on("Screen 2 (test_scan)", ["cart_a", "cart_b", "cart_c", "cart_d", "cart_e"]),
+      ...on("Screen 3 (test_scan)", ["pay_a", "pay_b"]),
+    ];
+    const after = [
+      ...on("Screen 1 (test_scan)", ["home_a", "home_b"]),
+      ...on("Screen 2 (test_scan)", ["cart_e"]),
+    ];
+
+    const diff = compareAppIssues(before, after);
+
+    expect(diff.resolved.map((r) => r.component)).toEqual([
+      "cart_a",
+      "cart_b",
+      "cart_c",
+      "cart_d",
+    ]);
+    expect(diff.unconfirmed.map((r) => r.component)).toEqual(["pay_a", "pay_b"]);
+  });
+
+  it("does not take a screen of another test for it on one shared element", () => {
+    const before = [
+      ...on("Screen 1 (test_cart)", ["back", "cart_a", "cart_b", "cart_c", "cart_d"]),
+      ...on("Screen 2 (test_home)", ["home_a"]),
+    ];
+    const after = [
+      ...on("Screen 1 (test_home)", ["home_a"]),
+      ...on("Screen 2 (test_settings)", ["back"]),
+    ];
+
+    const diff = compareAppIssues(before, after);
+
+    expect(diff.unconfirmed.map((r) => r.component)).toEqual([
+      "cart_a",
+      "cart_b",
+      "cart_c",
+      "cart_d",
+    ]);
+  });
+
   it("does not set apart a screen whose elements cannot be told apart", () => {
     // Known only by their rule, with no id, class or text, these elements match anything.
     const unnamed = (screen: string) => ({
@@ -505,6 +550,19 @@ describe("AccessibilityReportFetcher and the build before an app build", () => {
     await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(/HTTP 503/);
   });
 
+  it("says it cannot find the build in its project's list, rather than 'first build'", async () => {
+    get
+      .mockResolvedValueOnce(ok({ meta_data: META }))
+      .mockResolvedValueOnce(project())
+      .mockResolvedValueOnce(
+        ok({ builds: [{ th_build_id: "other", name: "checkout-android" }], info: { next: null } }),
+      );
+
+    await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(
+      /not in the build list of its project/,
+    );
+  });
+
   it("is none for a project's first build", async () => {
     get
       .mockResolvedValueOnce(ok({ meta_data: META }))
@@ -570,6 +628,43 @@ describe("AccessibilityReportFetcher and App Accessibility dashboard links", () 
         `${DASHBOARD}/automated-tests/projects/123456/builds/checkout-android/1`,
       ),
     ).resolves.toEqual({ kind: "appBuild", buildId: BUILD_ID });
+  });
+
+  // The link's name is TestHub's, which can differ from the build's own.
+  it("takes the one build with the link's number when none has the link's name", async () => {
+    get.mockResolvedValueOnce(
+      ok({
+        builds: [
+          { build_number: 2, normalised_name: "checkout-android", th_build_id: "other" },
+          { build_number: 1, normalised_name: "checkout-android", th_build_id: BUILD_ID },
+        ],
+        info: { next: null },
+      }),
+    );
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `${DASHBOARD}/automated-tests/projects/123456/builds/Checkout+Android+CI/1`,
+      ),
+    ).resolves.toEqual({ kind: "appBuild", buildId: BUILD_ID });
+  });
+
+  it("does not guess between builds with the link's number when none has its name", async () => {
+    get.mockResolvedValueOnce(
+      ok({
+        builds: [
+          { build_number: 1, normalised_name: "smoke-android", th_build_id: "smoke" },
+          { build_number: 1, normalised_name: "checkout-android", th_build_id: BUILD_ID },
+        ],
+        info: { next: null },
+      }),
+    );
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `${DASHBOARD}/automated-tests/projects/123456/builds/Checkout+Android+CI/1`,
+      ),
+    ).rejects.toThrow(/No build 1 of "Checkout Android CI"/);
   });
 
   it("matches the name however the link's characters are escaped", async () => {

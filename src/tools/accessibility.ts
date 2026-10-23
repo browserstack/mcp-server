@@ -613,6 +613,13 @@ async function compareAppBuilds(
     reportFetcher.appBuildIssues(baseline.buildId),
     reportFetcher.appBuildIssues(source.buildId),
   ]);
+  // Issues on screens past the read limit would read as resolved or new.
+  const partial = [current, named].find((b) => b.screens_read !== undefined);
+  if (partial) {
+    return createErrorResponse(
+      `Build #${partial.build_number} has more scanned screens than are read here (the first ${partial.screens_read} of ${partial.scan_count}), so a comparison would count the issues on the rest as resolved or new. Compare the builds on the App Accessibility dashboard instead.`,
+    );
+  }
   // A comparison runs from the earlier build to the later; named the other way round, the
   // new issues would read as resolved and the resolved as new.
   const reversed =
@@ -632,8 +639,8 @@ async function compareAppBuilds(
     ...(unreached > 0
       ? [
           unreached === 1
-            ? `${unconfirmed.length} more issues of the earlier build are on 1 screen no screen of the later build resembles: the later build did not reach it, or every issue on it was fixed. They are not counted as resolved; scan that screen again to confirm.`
-            : `${unconfirmed.length} more issues of the earlier build are on ${unreached} screens no screen of the later build resembles: the later build did not reach them, or every issue on them was fixed. They are not counted as resolved; scan those screens again to confirm.`,
+            ? `${unconfirmed.length} more issues of the earlier build are on 1 screen no screen of the later build resembles: the later build did not reach it, or the issues on it were fixed. They are not counted as resolved; scan that screen again to confirm.`
+            : `${unconfirmed.length} more issues of the earlier build are on ${unreached} screens no screen of the later build resembles: the later build did not reach them, or the issues on them were fixed. They are not counted as resolved; scan those screens again to confirm.`,
         ]
       : []),
     ...(unseen > 0

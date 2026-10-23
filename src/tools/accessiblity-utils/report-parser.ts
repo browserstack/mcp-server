@@ -233,9 +233,14 @@ function pageIssues(
     by_severity: bySeverity,
   };
   if (onPage.length === 0) {
-    const tail =
-      new URL(target, "https://x").pathname.split("/").filter(Boolean).pop() ??
-      "";
+    let path: string;
+    try {
+      path = new URL(target, "https://x").pathname;
+    } catch {
+      // A scheme with no host ("http://") does not parse even against a base.
+      path = target.replace(/^[a-z][a-z0-9+.-]*:\/*/i, "");
+    }
+    const tail = path.split("/").filter(Boolean).pop() ?? "";
     const stem = tail.split("-").slice(0, 2).join("-");
     // A short row may have no Affected page at all.
     const pages = [

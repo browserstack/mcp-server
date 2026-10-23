@@ -235,7 +235,11 @@ async function executeFetchAccessibilityIssues(
     const source = issueSourceFrom(args);
     if (typeof source === "string") return createErrorResponse(source);
     if (args.compareWith) {
-      return await compareScanRuns(source, args.compareWith, config, context);
+      return await compareScanRuns(source, args.compareWith, config, context, {
+        cursor: args.cursor,
+        pageUrl: args.pageUrl,
+        exportTaskId: args.exportTaskId,
+      });
     }
     return await fetchAccessibilityIssues(
       source,
@@ -422,7 +426,8 @@ async function fetchAccessibilityIssues(
   const stillProcessing =
     processing.status !== undefined &&
     PROCESSING_STATUSES.has(processing.status);
-  const pageArg = pageUrl ? `, pageUrl: "${pageUrl}"` : "";
+  // Written into the next call's arguments, so quoted as JSON: the address is free text.
+  const pageArg = pageUrl ? `, pageUrl: ${JSON.stringify(pageUrl)}` : "";
   let reportLink: string;
   try {
     reportLink = await reportFetcher.getReportLink(source, {
@@ -518,12 +523,19 @@ const COMPARE_LIST_LIMIT = 50;
  * A Website Scanner run against an earlier run of the same scan: the run before it
  * ("previous") or a given scanRunId. Issues are matched by rule, element and page; against
  * the previous run, the dashboard's own counts (the run's changesSinceLastRun) are given too.
+ * A comparison is one answer, so the paging and single-page arguments are refused rather
+ * than dropped.
  */
 async function compareScanRuns(
   requested: RequestedSource,
   compareWith: string,
   config: BrowserStackConfig,
   context?: ScanProgressContext,
+  {
+    cursor,
+    pageUrl,
+    exportTaskId,
+  }: { cursor?: number; pageUrl?: string; exportTaskId?: string } = {},
 ): Promise<CallToolResult> {
   const reportFetcher = await initializeReportFetcher(config);
   const source =
@@ -535,26 +547,62 @@ async function compareScanRuns(
       'compareWith compares Website Scanner runs: pass the newer run (scanId and scanRunId, or its report link) and compareWith: "previous" or the older run\'s scanRunId.',
     );
   }
-  const previous = await reportFetcher.previousScanRun(
-    source.scanId,
-    source.scanRunId,
-  );
-  const baseRunId =
-    compareWith === "previous" ? previous && String(previous.id) : compareWith;
+  const combined = [
+    cursor ? "cursor" : "",
+    pageUrl ? "pageUrl" : "",
+    exportTaskId ? "exportTaskId" : "",
+  ].find(Boolean);
+  if (combined) {
+    return createErrorResponse(
+      `compareWith cannot be combined with ${combined}: a comparison is one answer, listing up to ${COMPARE_LIST_LIMIT} new and ${COMPARE_LIST_LIMIT} resolved issues plus both runs' CSV links. Call fetchAccessibilityIssues with the two runs only: the run and compareWith.`,
+    );
+  }
+  if (compareWith === source.scanRunId) {
+    return createErrorResponse(
+      `compareWith names run ${source.scanRunId} itself, and a run cannot be compared with itself: pass "previous" or an earlier run's scanRunId.`,
+    );
+  }
+  // Only "previous" needs the scan's history; a given run is compared as it is.
+  const againstPrevious = compareWith === "previous";
+  const previous = againstPrevious
+    ? await reportFetcher.previousScanRun(source.scanId, source.scanRunId)
+    : undefined;
+  const baseRunId = againstPrevious
+    ? previous && String(previous.id)
+    : compareWith;
   if (!baseRunId) {
     return createErrorResponse(
       `Run ${source.scanRunId} is the first run of scan ${source.scanId}; there is no earlier run to compare it with.`,
     );
   }
   const base: IssueSource = { ...source, scanRunId: baseRunId };
-  const againstPrevious =
-    previous !== undefined && String(previous.id) === baseRunId;
+
+  // A run still adding issues is exported as it stands, and that export is not kept.
+  const statuses = await Promise.all([
+    reportFetcher.reportStatus(source),
+    reportFetcher.reportStatus(base),
+  ]);
+  const processing = (status?: string) =>
+    status !== undefined && PROCESSING_STATUSES.has(status);
+  const stillProcessingNotes = [source.scanRunId, baseRunId].flatMap(
+    (runId, i) =>
+      processing(statuses[i])
+        ? [
+            `Run ${runId} is still ${statuses[i]}: its issues are still being added, so the comparison may change once it completes.`,
+          ]
+        : [],
+  );
 
   let links: [string, string];
   try {
     links = await Promise.all([
-      reportFetcher.getReportLink(source, { onWait: exportProgress(context) }),
-      reportFetcher.getReportLink(base, {}),
+      reportFetcher.getReportLink(source, {
+        onWait: exportProgress(context),
+        stillProcessing: processing(statuses[0]),
+      }),
+      reportFetcher.getReportLink(base, {
+        stillProcessing: processing(statuses[1]),
+      }),
     ]);
   } catch (error) {
     if (error instanceof ExportPendingError) {
@@ -587,6 +635,7 @@ async function compareScanRuns(
       ? [`Resolved the report link to ${describeSource(source)}.`]
       : []),
     `Compared Website Scanner scan ${source.scanId}: run ${source.scanRunId} with ${baseLabel}.`,
+    ...stillProcessingNotes,
     changes
       ? `The dashboard's comparison: ${changes.newIssues} new, ${changes.resolvedIssues} resolved, ${changes.retainedIssues} still open. Matching the issues by rule, element and page gives ${matched}.`
       : `Matching the issues by rule, element and page: ${matched}.`,
@@ -1132,6 +1181,8 @@ export default function addAccessibilityTools(
         ),
       cursor: z
         .number()
+        .int()
+        .nonnegative()
         .optional()
         .describe("Character offset for pagination (default: 0)"),
       pageUrl: z

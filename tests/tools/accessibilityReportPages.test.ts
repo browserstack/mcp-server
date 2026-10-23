@@ -118,6 +118,14 @@ describe("parseAccessibilityReportFromCSV for one page", () => {
     expect(result.page).toMatchObject({ occurrences: 0, similar_pages: [DRY] });
   });
 
+  it("gives the no-match note for a page address that is not a URL, rather than failing", async () => {
+    serve(SITE);
+
+    const result = await parseAccessibilityReportFromCSV("https://csv", { pageUrl: "http://" });
+
+    expect(result.page).toMatchObject({ url: "http://", occurrences: 0 });
+  });
+
   it("still answers when a short row has no Affected page", async () => {
     get.mockResolvedValue({ ok: true, statusText: "OK", data: `${toCsv(SITE)}\n"region","moderate"` });
 

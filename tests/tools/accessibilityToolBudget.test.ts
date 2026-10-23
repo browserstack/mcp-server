@@ -57,4 +57,12 @@ describe("accessibility tool descriptions", () => {
     expect(schema.safeParse("checkout-build").success).toBe(false);
     expect(schema.safeParse("3f9a1c7e2b5d4e8f9a0b1c2d3e4f5a6b").success).toBe(false);
   });
+
+  it("takes cursor only as a whole number from 0", () => {
+    const schema = tools.find((t) => t.name === "fetchAccessibilityIssues")!.schema.cursor;
+    expect(schema.safeParse(0).success).toBe(true);
+    expect(schema.safeParse(900).success).toBe(true);
+    expect(schema.safeParse(-1).success).toBe(false);
+    expect(schema.safeParse(1.5).success).toBe(false);
+  });
 });

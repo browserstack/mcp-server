@@ -31,6 +31,8 @@ export interface Page<T> {
   page_length: number;
   /** Character offset of the next page, or null when this was the last. */
   next_page: number | null;
+  /** How many rows the pages after this one hold. */
+  remaining: number;
 }
 
 export function pageOf<T>(
@@ -46,25 +48,22 @@ export function pageOf<T>(
     charCursor += len;
   }
 
-  // Collect up to maxCharacterLength; a record longer than that goes out on a page of its
-  // own, or the cursor could never move past it.
+  // Collect up to maxCharacterLength; a row larger than that still makes a page of its
+  // own, or the cursor would never move past it
   const page: T[] = [];
   for (let i = idx; i < all.length; i++) {
     const recStr = JSON.stringify(all[i]);
-    if (
-      page.length > 0 &&
-      charCursor - nextPage + recStr.length > maxCharacterLength
-    ) {
-      break;
-    }
+    const fits = charCursor - nextPage + recStr.length <= maxCharacterLength;
+    if (!fits && page.length > 0) break;
     page.push(all[i]);
     charCursor += recStr.length;
   }
 
-  const hasMore = idx + page.length < all.length;
+  const remaining = all.length - idx - page.length;
   return {
     records: page,
     page_length: page.length,
-    next_page: hasMore ? charCursor : null,
+    next_page: remaining > 0 ? charCursor : null,
+    remaining,
   };
 }

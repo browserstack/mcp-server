@@ -1,7 +1,12 @@
 import { apiClient } from "../../lib/apiClient.js";
 import {
   AppAccessibilityApi,
+  manualReportIdFromDashboardLink,
+  manualReportStatus,
+  type AppBuildIssues,
+  type AppBuildRef,
   type AppBuildReport,
+  type AppManualReport,
 } from "./app-report-fetcher.js";
 
 export { MAX_APP_BUILD_LIST_PAGES } from "./app-report-fetcher.js";
@@ -26,7 +31,8 @@ export type IssueSource =
   | { kind: "scan"; scanId: string; scanRunId: string }
   | { kind: "build"; buildId: string }
   | { kind: "workflow"; reportId: string }
-  | { kind: "appBuild"; buildId: string };
+  | { kind: "appBuild"; buildId: string }
+  | { kind: "appReport"; reportId: string };
 
 const API_BASE = "https://api-accessibility.browserstack.com/api";
 
@@ -93,8 +99,9 @@ function exportUrls(source: IssueSource): {
       };
     }
     case "appBuild":
+    case "appReport":
       throw new Error(
-        "An App Accessibility build has no CSV export; its issues are read inline",
+        "An App Accessibility build or report has no CSV export; its issues are read inline",
       );
   }
 }
@@ -148,6 +155,8 @@ export class AccessibilityReportFetcher {
     } catch {
       url = undefined;
     }
+    const manualReportId = url && manualReportIdFromDashboardLink(url);
+    if (manualReportId) return { kind: "appReport", reportId: manualReportId };
     const appBuildId =
       url &&
       ((await this.app.buildIdFromDashboardLink(url)) ??
@@ -164,7 +173,7 @@ export class AccessibilityReportFetcher {
       return this.findScanRun(thBuildId, decodeURIComponent(scanName));
     }
     throw new Error(
-      "This link does not name a report the API can look up. Pass an Automated Tests or Website Scanner report link from the Accessibility dashboard (both carry thBuildId), an App Accessibility build link (automated-tests/projects/…/builds/…), an App Automate build or session link, or the ids: scanId with scanRunId, buildId, or workflowReportId",
+      "This link does not name a report the API can look up. Pass an Automated Tests or Website Scanner report link from the Accessibility dashboard (both carry thBuildId), an App Accessibility build link (automated-tests/projects/…/builds/…), an App Automate build or session link, an App Accessibility manual report link (report/…), or the ids: scanId with scanRunId, buildId, workflowReportId, or appReportId",
     );
   }
 
@@ -209,6 +218,25 @@ export class AccessibilityReportFetcher {
     maxCharacterLength?: number,
   ): Promise<AppBuildReport> {
     return this.app.report(buildId, cursor, maxCharacterLength);
+  }
+
+  /** Every issue of an app build at once, to compare it with another. */
+  appBuildIssues(buildId: string): Promise<AppBuildIssues> {
+    return this.app.buildIssues(buildId);
+  }
+
+  /** The build before an app build in its project, if it has one. */
+  previousAppBuild(buildId: string): Promise<AppBuildRef | undefined> {
+    return this.app.previousBuild(buildId);
+  }
+
+  /** A manual (Workflow Analyzer) app report's issues, read inline from its screens. */
+  appReportIssues(
+    reportId: string,
+    cursor = 0,
+    maxCharacterLength?: number,
+  ): Promise<AppManualReport> {
+    return this.app.appReportIssues(reportId, cursor, maxCharacterLength);
   }
 
   /** Walk the newest scans for the one whose own link carries this thBuildId. */
@@ -332,6 +360,10 @@ export class AccessibilityReportFetcher {
           return await this.buildStatus(source.buildId);
         case "appBuild":
           return (await this.app.buildMeta(source.buildId))?.status;
+        case "appReport": {
+          const detail = await this.app.manualReport(source.reportId);
+          return detail ? manualReportStatus(detail) : undefined;
+        }
       }
     } catch {
       return undefined;

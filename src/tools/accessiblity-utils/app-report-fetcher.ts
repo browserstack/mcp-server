@@ -35,6 +35,7 @@ const NATIVE_BUILD_START_WINDOW_MS = 2 * 60 * 1000;
 export interface AppBuildMeta {
   /** The build's number within its project, which the dashboard link uses. */
   build_id: number;
+  created_at?: string;
   th_build_id: string;
   name: string;
   normalised_name: string;
@@ -150,6 +151,7 @@ export interface AppBuildIssues {
   buildId: string;
   build_name: string;
   build_number: number;
+  created_at?: string;
   status: string;
   scan_count: number;
   /** The tests whose screens were scanned, in the order first seen. */
@@ -165,6 +167,11 @@ export interface AppBuildRef {
   created_at?: string;
   /** Whether it has the later build's name; a native run's builds are each named apart. */
   same_name: boolean;
+  /**
+   * Whether the project's whole build list was read. When it was not, a build of the same
+   * name may still be further back than the newest builds read.
+   */
+  searched_all: boolean;
 }
 
 /** A build as the project's build list gives it. */
@@ -649,7 +656,7 @@ export class AppAccessibilityApi {
   ): Promise<AppBuildListRow[]> {
     const near: AppBuildListRow[] = [];
     const created = (row: AppBuildListRow) => Date.parse(row.created_at ?? "");
-    for await (const rows of this.projectBuilds(projectId)) {
+    for await (const { rows } of this.projectBuilds(projectId)) {
       near.push(
         ...rows.filter(
           (row) =>
@@ -897,18 +904,21 @@ export class AppAccessibilityApi {
     buildName: string | undefined,
     pick: (row: AppBuildListRow) => boolean,
   ): Promise<string | undefined> {
-    for await (const rows of this.projectBuilds(projectId, buildName)) {
+    for await (const { rows } of this.projectBuilds(projectId, buildName)) {
       const row = rows.find(pick);
       if (row?.th_build_id) return row.th_build_id;
     }
     return undefined;
   }
 
-  /** The project's builds a page at a time, newest first, within the first pages. */
+  /**
+   * The project's builds a page at a time, newest first, within the first pages; `more`
+   * says whether the list goes on past the page.
+   */
   private async *projectBuilds(
     projectId: string | number,
     buildName?: string,
-  ): AsyncGenerator<AppBuildListRow[]> {
+  ): AsyncGenerator<{ rows: AppBuildListRow[]; more: boolean }> {
     const q = encodeURIComponent;
     const named = buildName ? `build_name=${q(buildName)}&` : "";
     for (let page = 1; page <= MAX_APP_BUILD_LIST_PAGES; page++) {
@@ -917,8 +927,9 @@ export class AppAccessibilityApi {
         headers: this.headers(),
         raise_error: false,
       });
-      yield resp.data?.builds ?? [];
-      if (!resp.ok || !resp.data?.info?.next) return;
+      const more = Boolean(resp.ok && resp.data?.info?.next);
+      yield { rows: resp.data?.builds ?? [], more };
+      if (!more) return;
     }
   }
 
@@ -931,6 +942,9 @@ export class AppAccessibilityApi {
     const meta = await this.requireBuildMeta(buildId);
     const projectId = await this.projectId(meta.project_name);
     if (projectId === undefined) return undefined;
+    let reached = false;
+    let justBefore: AppBuildListRow | undefined;
+    let more = false;
     const ref = (row: AppBuildListRow, same_name: boolean): AppBuildRef => ({
       buildId: row.th_build_id,
       ...(row.name !== undefined ? { name: row.name } : {}),
@@ -939,11 +953,11 @@ export class AppAccessibilityApi {
         : {}),
       ...(row.created_at !== undefined ? { created_at: row.created_at } : {}),
       same_name,
+      searched_all: !more,
     });
-    let reached = false;
-    let justBefore: AppBuildListRow | undefined;
-    for await (const rows of this.projectBuilds(projectId)) {
-      for (const row of rows) {
+    for await (const page of this.projectBuilds(projectId)) {
+      more = page.more;
+      for (const row of page.rows) {
         if (row.th_build_id === buildId) {
           reached = true;
         } else if (reached) {
@@ -951,6 +965,17 @@ export class AppAccessibilityApi {
           justBefore ??= row;
         }
       }
+    }
+    // Stopping at the page limit is not the end of the list: say so rather than guess.
+    if (!reached && more) {
+      throw new Error(
+        `App Accessibility build ${buildId} is not among its project's newest builds (${MAX_APP_BUILD_LIST_PAGES} pages), so the build before it cannot be found here. Pass the earlier build's id or link as compareWith instead`,
+      );
+    }
+    if (!justBefore && more) {
+      throw new Error(
+        `App Accessibility build ${buildId} is the last of its project's newest builds read (${MAX_APP_BUILD_LIST_PAGES} pages): the build before it is older than the newest builds read. Pass the earlier build's id or link as compareWith instead`,
+      );
     }
     return justBefore && ref(justBefore, false);
   }
@@ -1021,6 +1046,7 @@ export class AppAccessibilityApi {
       buildId,
       build_name: meta.name,
       build_number: meta.build_id,
+      ...(meta.created_at ? { created_at: meta.created_at } : {}),
       status: meta.status,
       scan_count: scanCount,
       tests: [...tests] as string[],

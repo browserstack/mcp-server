@@ -335,6 +335,7 @@ describe("AccessibilityReportFetcher and the build before an app build", () => {
       build_number: 4,
       created_at: "2026-03-04T09:00:00Z",
       same_name: true,
+      searched_all: true,
     });
     expect(urls()).toEqual([
       `${APP_API}/build/${BUILD_ID}`,
@@ -375,6 +376,56 @@ describe("AccessibilityReportFetcher and the build before an app build", () => {
     await expect(fetcher().previousAppBuild(BUILD_ID)).resolves.toMatchObject({
       buildId: EARLIER_ID,
       same_name: false,
+    });
+  });
+
+  const morePages = (rows: Record<string, unknown>[]) =>
+    ok({ builds: rows, info: { next: 2 } });
+
+  it("says it cannot tell, rather than 'first build', when the build is beyond the newest pages", async () => {
+    get
+      .mockResolvedValueOnce(ok({ meta_data: META }))
+      .mockResolvedValueOnce(project())
+      .mockResolvedValue(
+        morePages([{ th_build_id: "newer", name: "checkout-android" }]),
+      );
+
+    await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(
+      /not among its project's newest builds/,
+    );
+  });
+
+  it("says it cannot tell when the build is the last one read and more pages remain", async () => {
+    get
+      .mockResolvedValueOnce(ok({ meta_data: META }))
+      .mockResolvedValueOnce(project())
+      .mockResolvedValueOnce(morePages([{ th_build_id: "newer" }]))
+      .mockResolvedValueOnce(morePages([{ th_build_id: "newer2" }]))
+      .mockResolvedValueOnce(
+        morePages([{ th_build_id: BUILD_ID, name: "checkout-android" }]),
+      );
+
+    await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(
+      /build before it is older than the newest builds/,
+    );
+  });
+
+  it("does not claim no earlier build shares the name when it stopped at the page limit", async () => {
+    get
+      .mockResolvedValueOnce(ok({ meta_data: META }))
+      .mockResolvedValueOnce(project())
+      .mockResolvedValueOnce(
+        morePages([
+          { th_build_id: BUILD_ID, name: "checkout-android" },
+          { th_build_id: EARLIER_ID, name: "smoke-android" },
+        ]),
+      )
+      .mockResolvedValue(morePages([{ th_build_id: "x", name: "other" }]));
+
+    await expect(fetcher().previousAppBuild(BUILD_ID)).resolves.toMatchObject({
+      buildId: EARLIER_ID,
+      same_name: false,
+      searched_all: false,
     });
   });
 

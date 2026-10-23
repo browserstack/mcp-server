@@ -559,14 +559,20 @@ async function baselineAppBuild(
   reportFetcher: AccessibilityReportFetcher,
   buildId: string,
   compareWith: string,
-): Promise<{ buildId: string; sameName?: boolean } | string> {
-  let baseline: { buildId: string; sameName?: boolean };
+): Promise<
+  { buildId: string; sameName?: boolean; searchedAll?: boolean } | string
+> {
+  let baseline: { buildId: string; sameName?: boolean; searchedAll?: boolean };
   if (compareWith === "previous") {
     const previous = await reportFetcher.previousAppBuild(buildId);
     if (!previous) {
       return "This is its project's first build, so there is nothing earlier to compare it with. Pass an earlier build's id or link as compareWith instead.";
     }
-    baseline = { buildId: previous.buildId, sameName: previous.same_name };
+    baseline = {
+      buildId: previous.buildId,
+      sameName: previous.same_name,
+      searchedAll: previous.searched_all,
+    };
   } else {
     const named: IssueSource = /^https?:\/\//i.test(compareWith)
       ? await reportFetcher.sourceFromReportUrl(compareWith)
@@ -603,10 +609,17 @@ async function compareAppBuilds(
     compareWith,
   );
   if (typeof baseline === "string") return createErrorResponse(baseline);
-  const [before, after] = await Promise.all([
+  const [named, current] = await Promise.all([
     reportFetcher.appBuildIssues(baseline.buildId),
     reportFetcher.appBuildIssues(source.buildId),
   ]);
+  // A comparison runs from the earlier build to the later; named the other way round, the
+  // new issues would read as resolved and the resolved as new.
+  const reversed =
+    named.created_at !== undefined &&
+    current.created_at !== undefined &&
+    Date.parse(named.created_at) > Date.parse(current.created_at);
+  const [before, after] = reversed ? [current, named] : [named, current];
   const { added, resolved, retained } = compareAppIssues(
     before.issues,
     after.issues,
@@ -616,30 +629,50 @@ async function compareAppBuilds(
       ? ""
       : baseline.sameName
         ? ", the build before it"
-        : `, the build just before it in its project (no earlier build is named "${after.build_name}")`;
+        : baseline.searchedAll
+          ? ", the build just before it in its project (no earlier build has this build's name)"
+          : ", the build just before it in its project (none of the newest builds before it has this build's name)";
   const warnings: string[] = [];
   if (before.scan_count !== after.scan_count) {
     warnings.push(
-      `⚠️ The builds scanned a different number of screens (${after.scan_count} in this build, ${before.scan_count} before): an issue on a screen this build did not reach reads as resolved without having been fixed. Check the resolved issues' screens before calling them fixed.`,
+      `⚠️ The builds scanned a different number of screens (${after.scan_count} in the later build, ${before.scan_count} in the earlier one): an issue on a screen the later build did not reach reads as resolved without having been fixed. Check the resolved issues' screens before calling them fixed.`,
     );
   }
   const notRun = before.tests.filter((t) => !after.tests.includes(t));
   if (notRun.length > 0) {
     warnings.push(
-      `⚠️ Tests whose screens were scanned before but not in this build: ${notRun.join(", ")}. Their issues read as resolved without having been checked again.`,
+      `⚠️ Some tests had screens scanned in the earlier build but not in the later one; their issues read as resolved without having been checked again. ${wrapUntrusted("test names", JSON.stringify(notRun))}`,
     );
   }
+  // Build names are the user's own (from their CI or browserstack.yml), so they are data.
+  const builds = wrapUntrusted(
+    "App Accessibility builds",
+    JSON.stringify(
+      {
+        later: { build_number: after.build_number, name: after.build_name },
+        earlier: { build_number: before.build_number, name: before.build_name },
+      },
+      null,
+      2,
+    ),
+  );
   return createSuccessResponse([
     ...preface,
     ...processingNote(processing),
-    `Compared App Accessibility build "${after.build_name}" #${after.build_number} with build "${before.build_name}" #${before.build_number}${which}: ${added.length} new, ${resolved.length} resolved, ${retained} still open.`,
-    `Issues are matched one for one by rule and element: its id, or else its class and its text or label. New and still-open issues add up to this build's ${after.issues.length}; resolved and still-open ones to the earlier build's ${before.issues.length}.`,
+    ...(reversed
+      ? [
+          "compareWith names a build newer than this one, so the comparison runs from this build (the earlier) to that one (the later).",
+        ]
+      : []),
+    `Compared App Accessibility build #${after.build_number} with build #${before.build_number}${which}: ${added.length} new, ${resolved.length} resolved, ${retained} still open.`,
+    `Builds: ${builds}`,
+    `Issues are matched one for one by rule and element: its id, or else its class and its text or label. New and still-open issues add up to the later build's ${after.issues.length}; resolved and still-open ones to the earlier build's ${before.issues.length}.`,
     ...warnings,
     issueList("New issues", added, cursor),
     issueList("Resolved issues", resolved, cursor),
     Math.max(added.length, resolved.length) > cursor + COMPARE_LIST_MAX
       ? `More to list: call fetchAccessibilityIssues with buildId: "${source.buildId}", compareWith: "${compareWith}" and cursor: ${cursor + COMPARE_LIST_MAX}.`
-      : `Read this build's open issues with fetchAccessibilityIssues with buildId: "${source.buildId}".`,
+      : `Read the later build's open issues with fetchAccessibilityIssues with buildId: "${after.buildId}".`,
   ]);
 }
 

@@ -549,15 +549,21 @@ async function appReportMessages(
     source.reportId,
     cursor,
   );
-  const link = [
-    `View the report on the App Accessibility dashboard: ${report.dashboard_link}`,
-  ];
+  // The report's name is whatever its author typed, so it is quoted as data.
+  const details = `Report: ${wrapUntrusted(
+    "App Accessibility manual report",
+    JSON.stringify(
+      { name: report.report_name, dashboard_link: report.dashboard_link },
+      null,
+      2,
+    ),
+  )}`;
   if (report.scan_count === 0 && !stillProcessing) {
     return [
       ...preface,
       ...processingNote(processing),
-      `No screens were scanned in App Accessibility manual report "${report.report_name}" (status: ${report.status}), so there are no issues to list.`,
-      ...link,
+      `No screens were scanned in the App Accessibility manual report below (status: ${report.status}), so there are no issues to list.`,
+      details,
     ];
   }
   const { records, page_length, total_issues, next_page } = report;
@@ -573,10 +579,10 @@ async function appReportMessages(
   return [
     ...preface,
     ...processingNote(processing),
-    `Retrieved ${page_length} accessibility issue occurrences (Total: ${total_issues}) from App Accessibility manual report "${report.report_name}" (${where})`,
+    `Retrieved ${page_length} accessibility issue occurrences (Total: ${total_issues}) from the App Accessibility manual report below (${where})`,
+    details,
     ...dashboardNote,
     ...excludedIssuesNote(null, 0, report.hidden_issues),
-    ...link,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
     closingMessage(
       next_page,
@@ -1199,6 +1205,10 @@ export default function addAccessibilityTools(
         .describe("Workflow Analyzer: the report's numeric id."),
       appReportId: z
         .string()
+        .regex(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+          "A manual report id is a UUID",
+        )
         .optional()
         .describe(
           "Manual App Accessibility report id (a UUID), from listAppAccessibilityReports or its /report/ link.",

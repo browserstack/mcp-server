@@ -493,7 +493,8 @@ export class AppAccessibilityApi {
 
   /**
    * A listing's page. The API answers an empty list with 404 ("No builds found") for
-   * access-key callers, which is not an error here; any other failure is.
+   * access-key callers, which is not an error here; any other failure is, a 404 from a
+   * wrong route or a missing permission included.
    */
   private async listing(url: string, what: string): Promise<any> {
     const resp = await apiClient.get({
@@ -502,7 +503,9 @@ export class AppAccessibilityApi {
       raise_error: false,
     });
     if (resp.ok) return resp.data ?? {};
-    if (resp.status === 404) return {};
+    if (resp.status === 404 && /^No .+ found/i.test(resp.data?.message ?? "")) {
+      return {};
+    }
     throw new Error(
       `Could not list ${what}: HTTP ${resp.status}${resp.data?.message ? ` (${resp.data.message})` : ""}`,
     );

@@ -889,6 +889,12 @@ describe("AccessibilityReportFetcher listings with no match", () => {
     expect(urls()).toEqual([`${MANUAL_API}/reports?page_size=10&report_name=Nightly`]);
   });
 
+  it("still fails on a 404 that is not a 'none found' answer, such as a wrong route", async () => {
+    get.mockResolvedValueOnce({ ok: false, status: 404, data: { message: "Not Found" } });
+
+    await expect(fetcher().listAppManualReports(undefined, 10)).rejects.toThrow(/HTTP 404 \(Not Found\)/);
+  });
+
   it("still fails plainly on any other listing error", async () => {
     get.mockResolvedValueOnce({ ok: false, status: 500, data: { message: "Internal server error" } });
 

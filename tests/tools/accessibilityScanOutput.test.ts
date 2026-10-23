@@ -669,12 +669,15 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
     expect(m.appReportIssues).toHaveBeenCalledWith(REPORT_ID, 0);
     const body = text(result);
     expect(body).toContain(
-      'Retrieved 1 accessibility issue occurrences (Total: 144) from App Accessibility manual report "Checkout walkthrough" (7 screens scanned on iPhone 15 Pro, ios 17.0)',
+      "Retrieved 1 accessibility issue occurrences (Total: 144) from the App Accessibility manual report below (7 screens scanned on iPhone 15 Pro, ios 17.0)",
     );
     expect(body).toContain(
       "The dashboard counts 97 issues for this report: 47 of the occurrences are duplicates it folds, which the API does not mark.",
     );
-    expect(body).toContain(`View the report on the App Accessibility dashboard: ${LINK}\n`);
+    const block = body.indexOf("«UNTRUSTED App Accessibility manual report");
+    expect(block).toBeGreaterThan(-1);
+    expect(body.indexOf('"name": "Checkout walkthrough"')).toBeGreaterThan(block);
+    expect(body.indexOf(`"dashboard_link": "${LINK}"`)).toBeGreaterThan(block);
     expect(body).toContain(
       `Use fetchAccessibilityIssues with appReportId: "${REPORT_ID}" and cursor: 140`,
     );

@@ -690,100 +690,6 @@ async function fetchAccessibilityIssues(
   ]);
 }
 
-interface ListAppReportsArgs {
-  kind?: "automated" | "manual";
-  projectName?: string;
-  name?: string;
-  limit?: number;
-}
-
-/**
- * What App Accessibility has on record, newest first, with the ids the issues are read by.
- * Without a project name, the automated listing shows the projects: a build list needs one.
- */
-async function listAppAccessibilityReports(
-  args: ListAppReportsArgs,
-  config: BrowserStackConfig,
-): Promise<CallToolResult> {
-  const reportFetcher = await initializeReportFetcher(config);
-  const limit = args.limit ?? 10;
-  const filtered = (what: string) =>
-    args.name ? ` whose ${what} contains "${args.name}"` : "";
-  if (args.kind === "manual") {
-    const { total, reports } = await reportFetcher.listAppManualReports(
-      args.name,
-      limit,
-    );
-    if (reports.length === 0) {
-      return createSuccessResponse([
-        `No App Accessibility manual reports${filtered("name")}. Drop the name filter to list the newest reports.`,
-      ]);
-    }
-    return createSuccessResponse([
-      `${total} App Accessibility manual reports (newest first)${filtered("name")}${
-        total > reports.length ? `, showing ${reports.length}` : ""
-      }:`,
-      wrapUntrusted(
-        "app accessibility reports",
-        JSON.stringify(reports, null, 2),
-      ),
-      `Read a report's issues with fetchAccessibilityIssues with appReportId: <reportId>; its dashboard_link opens it on the dashboard.`,
-    ]);
-  }
-  if (!args.projectName) {
-    const { total, projects } = await reportFetcher.listAppProjects(limit);
-    return createSuccessResponse([
-      `${total} App Accessibility projects (newest first)${
-        total > projects.length ? `, showing ${projects.length}` : ""
-      }:`,
-      wrapUntrusted(
-        "app accessibility projects",
-        JSON.stringify(projects, null, 2),
-      ),
-      `A build list needs a project: call listAppAccessibilityReports again with projectName: <name> (exact) to list its builds.`,
-    ]);
-  }
-  const { project, total, builds } = await reportFetcher.listAppBuilds(
-    args.projectName,
-    args.name,
-    limit,
-  );
-  if (builds.length === 0) {
-    return createSuccessResponse([
-      `No builds of App Accessibility project "${project.name}"${filtered("name")}${
-        args.name
-          ? ". Drop the name filter to list the project's newest builds"
-          : ": nothing has run with accessibility on in it yet"
-      }.`,
-    ]);
-  }
-  return createSuccessResponse([
-    `${total} builds of App Accessibility project "${project.name}" (newest first)${filtered("name")}${
-      total > builds.length ? `, showing ${builds.length}` : ""
-    }:`,
-    wrapUntrusted("app accessibility builds", JSON.stringify(builds, null, 2)),
-    `Read a build's issues with fetchAccessibilityIssues with buildId: <buildId>; it waits while a build is still processing. report_status "failed" with scan_count 0 means the run recorded no scans.`,
-  ]);
-}
-
-async function executeListAppAccessibilityReports(
-  args: ListAppReportsArgs,
-  server: McpServer,
-  config: BrowserStackConfig,
-): Promise<CallToolResult> {
-  try {
-    trackMCP(
-      "listAppAccessibilityReports",
-      server.server.getClientVersion()!,
-      undefined,
-      config,
-    );
-    return await listAppAccessibilityReports(args, config);
-  } catch (error) {
-    return handleMCPError("listAppAccessibilityReports", server, config, error);
-  }
-}
-
 async function executeAccessibilityScan(
   args: {
     name: string;
@@ -1228,7 +1134,7 @@ export default function addAccessibilityTools(
         )
         .optional()
         .describe(
-          "Manual App Accessibility report id (a UUID), from listAppAccessibilityReports or its /report/ link.",
+          "Manual App Accessibility report id (a UUID), from its /report/ link or the capability functions' report list.",
         ),
       reportUrl: z
         .string()
@@ -1255,48 +1161,6 @@ export default function addAccessibilityTools(
         server,
         config,
       );
-    },
-  );
-
-  tools.listAppAccessibilityReports = server.tool(
-    "listAppAccessibilityReports",
-    "List App Accessibility work newest first, with the ids fetchAccessibilityIssues reads: a project's builds (automated; omit projectName to list projects) or manual reports.",
-    {
-      kind: z
-        .enum(["automated", "manual"])
-        .optional()
-        .default("automated")
-        .describe(
-          "automated (App Automate builds, default) or manual (Workflow Analyzer reports).",
-        ),
-      projectName: z
-        .string()
-        .optional()
-        .describe(
-          "Automated only: the exact App Accessibility project name; omit to list the projects.",
-        ),
-      name: z
-        .string()
-        .optional()
-        .describe("Partial build or report name to filter by."),
-      limit: z
-        .number()
-        .int()
-        .min(1)
-        .max(30)
-        .optional()
-        .default(10)
-        .describe("Rows to return, newest first (1 to 30, default 10)."),
-    },
-    {
-      title: "List App Accessibility Reports",
-      readOnlyHint: true,
-      openWorldHint: false,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
-    async (args) => {
-      return await executeListAppAccessibilityReports(args, server, config);
     },
   );
 

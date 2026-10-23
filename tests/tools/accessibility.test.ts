@@ -119,14 +119,14 @@ describe("Accessibility Tools", () => {
     expect(buildId.description).toMatch(/App Accessibility/);
   });
 
-  it("registers all 6 accessibility tools", () => {
+  it("registers the 5 accessibility tools; App Accessibility's lists are capabilities, not a tool", () => {
     const toolNames = serverMock.tool.mock.calls.map((c: any[]) => c[0]);
     expect(toolNames).toContain("accessibilityExpert");
     expect(toolNames).toContain("startAccessibilityScan");
     expect(toolNames).toContain("createAccessibilityAuthConfig");
     expect(toolNames).toContain("getAccessibilityAuthConfig");
     expect(toolNames).toContain("fetchAccessibilityIssues");
-    expect(toolNames).toContain("listAppAccessibilityReports");
+    expect(toolNames).not.toContain("listAppAccessibilityReports");
   });
 
   it("accessibilityExpert — returns a response without crashing", async () => {

@@ -269,3 +269,69 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl for Automate links", ()
     ).rejects.toThrow(`No Automate build with id ${AUTOMATE_BUILD}`);
   });
 });
+
+describe("AccessibilityReportFetcher.reportStatus", () => {
+  const urls = () => get.mock.calls.map(([options]) => options.url);
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("reads a scan run's status from its status endpoint", async () => {
+    get.mockResolvedValueOnce(
+      ok({ scan_id: "1234", scan_run_id: "5678", status: "finalizing" }),
+    );
+
+    await expect(
+      fetcher().reportStatus({
+        kind: "scan",
+        scanId: "1234",
+        scanRunId: "5678",
+      }),
+    ).resolves.toBe("finalizing");
+    expect(urls()).toEqual([
+      `${API}/website-scanner/v1/scans/1234/scan_runs/5678/status`,
+    ]);
+  });
+
+  it("reads a Workflow Analyzer report's status from its summary", async () => {
+    get.mockResolvedValueOnce(ok({ summary: { status: "completed" } }));
+
+    await expect(
+      fetcher().reportStatus({ kind: "workflow", reportId: "123456" }),
+    ).resolves.toBe("completed");
+    expect(urls()).toEqual([`${API}/workflow-analyzer/v1/reports/123456`]);
+  });
+
+  it("reads a build's status from its project's build list, as the build overview has none", async () => {
+    get
+      .mockResolvedValueOnce(ok({ id: BUILD_ID, projectName: "Checkout" }))
+      .mockResolvedValueOnce(
+        ok({
+          builds: [{ id: "newer", status: "running" }],
+          pagination: { has_next: true, next_page: "p2" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          builds: [{ id: BUILD_ID, status: "finalizing" }],
+          pagination: { has_next: false },
+        }),
+      );
+
+    await expect(
+      fetcher().reportStatus({ kind: "build", buildId: BUILD_ID }),
+    ).resolves.toBe("finalizing");
+    expect(urls()).toEqual([
+      `${API}/automated-tests/v1/builds/${BUILD_ID}`,
+      `${API}/automated-tests/v1/builds?project_name=Checkout&limit=100`,
+      `${API}/automated-tests/v1/builds?project_name=Checkout&limit=100&next_page=p2`,
+    ]);
+  });
+
+  it("returns nothing when the status cannot be read", async () => {
+    get.mockResolvedValueOnce(failed(500, ["Internal server Error"]));
+
+    await expect(
+      fetcher().reportStatus({ kind: "build", buildId: BUILD_ID }),
+    ).resolves.toBeUndefined();
+  });
+});

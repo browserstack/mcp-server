@@ -27,6 +27,8 @@ const API_BASE = "https://api-accessibility.browserstack.com/api";
  * at limit=50 or 100 the cursor skips scans, so a larger page cannot be used to go faster.
  */
 export const MAX_SCAN_LIST_PAGES = 15;
+/** How many pages of a scan's runs are read to find the run before a given one. */
+const MAX_SCAN_RUN_PAGES = 10;
 
 /** A build whose status is checked is one just run, so it sits at the top of its project's list. */
 const MAX_BUILD_LIST_PAGES = 3;
@@ -331,12 +333,18 @@ export class AccessibilityReportFetcher {
     scanId: string,
     scanRunId: string,
   ): Promise<ScanRun | undefined> {
-    const runs: ScanRun[] =
-      (
-        await this.getData(
-          `${API_BASE}/website-scanner/v1/scans/${encodeURIComponent(scanId)}/scan_runs`,
-        )
-      )?.scanRuns ?? [];
+    // The runs come a page at a time; the one before may be on a later page.
+    const runs: ScanRun[] = [];
+    const base = `${API_BASE}/website-scanner/v1/scans/${encodeURIComponent(scanId)}/scan_runs`;
+    let nextPage: string | undefined;
+    for (let page = 0; page < MAX_SCAN_RUN_PAGES; page++) {
+      const data = await this.getData(
+        nextPage ? `${base}?nextPage=${encodeURIComponent(nextPage)}` : base,
+      );
+      runs.push(...(data?.scanRuns ?? []));
+      if (!data?.pagination?.hasNext || !data.pagination.nextPage) break;
+      nextPage = data.pagination.nextPage;
+    }
     const newestFirst = [...runs].sort((a, b) =>
       b.scanDate.localeCompare(a.scanDate),
     );

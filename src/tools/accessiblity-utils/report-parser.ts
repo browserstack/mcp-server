@@ -237,7 +237,14 @@ function pageIssues(
       new URL(target, "https://x").pathname.split("/").filter(Boolean).pop() ??
       "";
     const stem = tail.split("-").slice(0, 2).join("-");
-    const pages = [...new Set(visible.map((row) => row["Affected page"]))];
+    // A short row may have no Affected page at all.
+    const pages = [
+      ...new Set(
+        visible
+          .map((row) => row["Affected page"])
+          .filter((p): p is string => Boolean(p)),
+      ),
+    ];
     page.similar_pages = pages
       .filter((p) => stem && samePage(p).includes(stem))
       .slice(0, 5);

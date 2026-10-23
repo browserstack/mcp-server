@@ -494,7 +494,7 @@ function pageNote(page: {
 }): string[] {
   if (page.occurrences === 0) {
     const similar = page.similar_pages?.length
-      ? ` Pages in this report with a similar address: ${page.similar_pages.join(", ")}.`
+      ? ` Pages in this report with a similar address: ${wrapUntrusted("report page addresses", JSON.stringify(page.similar_pages))}`
       : "";
     return [`No issue in this report is on ${page.url}.${similar}`];
   }

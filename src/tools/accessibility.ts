@@ -19,6 +19,7 @@ import {
   parseAccessibilityReportFromCSV,
 } from "./accessiblity-utils/report-parser.js";
 import { wrapUntrusted } from "../lib/untrusted-content.js";
+import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
 import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
@@ -134,6 +135,24 @@ async function initializeReportFetcher(
   const auth = setupAuth(config);
   reportFetcher.setAuth(auth);
   return reportFetcher;
+}
+
+async function executeAccessibilityRAG(
+  args: { query: string },
+  server: McpServer,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  try {
+    trackMCP(
+      "accessibilityExpert",
+      server.server.getClientVersion()!,
+      undefined,
+      config,
+    );
+    return await queryAccessibilityRAG(args.query, config);
+  } catch (error) {
+    return handleMCPError("accessibilityExpert", server, config, error);
+  }
 }
 
 interface FetchIssuesArgs {
@@ -838,6 +857,28 @@ export default function addAccessibilityTools(
   config: BrowserStackConfig,
 ) {
   const tools: Record<string, any> = {};
+
+  tools.accessibilityExpert = server.tool(
+    "accessibilityExpert",
+    "Answer accessibility, a11y, and WCAG questions using BrowserStack's accessibility knowledge base.",
+    {
+      query: z
+        .string()
+        .describe(
+          "Any accessibility, a11y, WCAG, or web accessibility question",
+        ),
+    },
+    {
+      title: "Accessibility Expert",
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    async (args) => {
+      return await executeAccessibilityRAG(args, server, config);
+    },
+  );
 
   tools.startAccessibilityScan = server.tool(
     "startAccessibilityScan",

@@ -20,6 +20,21 @@ export interface AccessibilityScanStatus {
   errors?: string[];
 }
 
+/**
+ * What a Website Scanner scan checks for, as the create-scan API takes it under
+ * scanSettings. A setting left out takes the API's default.
+ */
+export interface ScanSettings {
+  /** The WCAG version and level, such as "wcag22aa", or "rgaa41" (API default "wcag21aa"). */
+  wcagVersion?: string;
+  /** Report best-practice issues too (API default false). */
+  bestPractices?: boolean;
+  /** Report issues that need a manual review (API default true). */
+  needsReview?: boolean;
+  /** Run the advanced rules (API default true). */
+  advancedRules?: boolean;
+}
+
 export class AccessibilityScanner {
   private auth: { username: string; password: string } | undefined;
 
@@ -31,7 +46,7 @@ export class AccessibilityScanner {
     name: string,
     urlList: string[],
     authConfigId?: number,
-    advancedRules?: boolean,
+    settings: ScanSettings = {},
   ): Promise<AccessibilityScanResponse> {
     if (!this.auth?.username || !this.auth?.password) {
       throw new Error(
@@ -80,14 +95,15 @@ export class AccessibilityScanner {
       }
     });
 
+    const scanSettings = Object.fromEntries(
+      Object.entries(settings).filter(([, value]) => value !== undefined),
+    );
     const baseRequestBody = {
       name,
       urlList: transformedUrlList,
       recurring: false,
       ...(authConfigId && { authConfigId }),
-      ...(advancedRules !== undefined && {
-        scanSettings: { advancedRules },
-      }),
+      ...(Object.keys(scanSettings).length > 0 && { scanSettings }),
     };
 
     let requestBody = baseRequestBody;

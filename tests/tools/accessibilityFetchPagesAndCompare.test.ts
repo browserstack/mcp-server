@@ -126,6 +126,34 @@ describe("fetchAccessibilityIssues for one page", () => {
   });
 });
 
+describe("fetchAccessibilityIssues and a page address with quotes in it", () => {
+  it("writes the address into the follow-up as a JSON string", async () => {
+    m.getReportLink.mockResolvedValue("https://csv");
+    m.parse.mockResolvedValue({
+      records: [{ issue_type: "region" }],
+      page_length: 1,
+      total_issues: 2,
+      next_page: 400,
+      duplicate_issues: null,
+      unlinked_duplicates: 0,
+      hidden_issues: null,
+      page: { url: 'https://shop.example/a"b', occurrences: 2, distinct_issues: 2, first_found_here: 2, by_severity: { serious: 2 } },
+    });
+
+    const out = text(await fetchIssues()({ ...RUN, pageUrl: 'https://shop.example/a"b' }));
+
+    expect(out).toContain('pageUrl: "https://shop.example/a\\"b" and cursor: 400');
+  });
+
+  it("writes it into the follow-up for an export still being generated as a JSON string", async () => {
+    m.getReportLink.mockRejectedValue(new (ExportPendingError as any)("tok", 40_000));
+
+    const out = text(await fetchIssues()({ ...RUN, pageUrl: 'https://shop.example/a"b' }));
+
+    expect(out).toContain('pageUrl: "https://shop.example/a\\"b" and exportTaskId: "tok"');
+  });
+});
+
 describe("fetchAccessibilityIssues for a page with no issues", () => {
   it("quotes the report's page addresses it suggests as untrusted data", async () => {
     m.getReportLink.mockResolvedValue("https://csv");
@@ -194,6 +222,50 @@ describe("fetchAccessibilityIssues comparing scan runs", () => {
 
     expect(result.isError).toBe(true);
     expect(text(result)).toMatch(/first run/);
+  });
+
+  it("does not keep a still-processing run's export, and says the comparison may change", async () => {
+    m.previousScanRun.mockResolvedValue({ id: 5520296, scanDate: "2026-10-21T11:31:00.584Z" });
+    m.reportStatus.mockImplementation(async (source: any) =>
+      source.scanRunId === RUN.scanRunId ? "running" : "completed",
+    );
+
+    const out = text(await fetchIssues()({ ...RUN, compareWith: "previous" }));
+
+    expect(m.getReportLink).toHaveBeenCalledWith(
+      { kind: "scan", ...RUN },
+      expect.objectContaining({ stillProcessing: true }),
+    );
+    expect(m.getReportLink).toHaveBeenCalledWith(
+      { kind: "scan", scanId: RUN.scanId, scanRunId: "5520296" },
+      expect.objectContaining({ stillProcessing: false }),
+    );
+    expect(out).toContain("Run 5520318 is still running");
+  });
+
+  it.each([
+    ["cursor", { cursor: 900 }],
+    ["pageUrl", { pageUrl: "https://shop.example/a" }],
+    ["exportTaskId", { exportTaskId: "t:42" }],
+  ])("refuses compareWith with %s rather than dropping it", async (name, extra) => {
+    const result = await fetchIssues()({ ...RUN, compareWith: "previous", ...extra });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain(`compareWith cannot be combined with ${name}`);
+    expect(m.getReportLink).not.toHaveBeenCalled();
+  });
+
+  it("refuses to compare a run with itself", async () => {
+    const result = await fetchIssues()({ ...RUN, compareWith: RUN.scanRunId });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(/with itself/);
+  });
+
+  it("does not walk the scan's runs for a run it is given", async () => {
+    await fetchIssues()({ ...RUN, compareWith: "5520281" });
+
+    expect(m.previousScanRun).not.toHaveBeenCalled();
   });
 
   it("compares Website Scanner runs only", async () => {

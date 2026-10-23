@@ -112,6 +112,10 @@ export interface AgentRequest {
    */
   user_id?: string;
   permission_relay?: PermissionRelay;
+  /** Continue this conversation instead of starting a new one. */
+  conversation_id?: string;
+  /** Uploaded files attached to this turn. */
+  attachment_ids?: string[];
 }
 
 /** CONTRACT §5 — one entry in an approval trail, in the order the asks arrived. */
@@ -182,6 +186,13 @@ export const ASK_STATUSES = [
   // only status a caller is invited to come back from, and the only one carrying a
   // `run_id`.
   "needs_approval",
+  // An agent is still working (poll with `conversation_id`), or it
+  // is waiting on answers to `questions`.
+  "running",
+  "needs_input",
+  // Hosted: the files named in `files` are reserved but not sent yet. The result carries
+  // a command per file for the client to run, then it calls again with `attachment_ids`.
+  "needs_upload",
 ] as const;
 export type AskStatus = (typeof ASK_STATUSES)[number];
 
@@ -269,7 +280,7 @@ export interface AskResult {
   next_step?: {
     instruction: string;
     call: string;
-    params: Record<string, string>;
+    params: Record<string, unknown>;
   };
   /**
    * Why the call failed, when it did.
@@ -279,4 +290,8 @@ export interface AskResult {
    * caller reading the top level is told why rather than having to go looking.
    */
   error?: string;
+  /** The files this call attached to the conversation, by name. */
+  attachments?: string[];
+  /** `needs_upload` only: what to run, per file, before calling again. */
+  uploads?: { name: string; attachment_id: string; command: string }[];
 }

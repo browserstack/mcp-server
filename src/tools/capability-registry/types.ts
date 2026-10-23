@@ -287,8 +287,45 @@ export interface AuthScheme {
   scopes?: string[];
 }
 
+/**
+ * One of the product's BrowserStack AI agents: a multi-step workflow that runs inside
+ * BrowserStack, reached through `askBrowserStackAI` and never through `invokeCapability`.
+ *
+ * WHY THE INDEX CARRIES THEM. Without this, a client asked to "generate test cases from
+ * this PRD" finds `create_test_case` here, writes the cases itself and saves them one by
+ * one — skipping the agent's coverage and priority rules, its review step and its
+ * AI-generated attribution. Listing the agent beside the capabilities is what lets the
+ * client see that the task already has an owner.
+ *
+ * NO REQUEST FIELD NAMES THE AGENT. BrowserStack AI takes a task and a product and routes on
+ * the task's wording against each agent's own trigger, the same as the in-product chat. So
+ * nothing here is sent anywhere: `name` is for telemetry and humans, and the client's job is
+ * to pass the user's request through verbatim.
+ */
+export interface AgentDoc {
+  /** The agent's id, e.g. `tm-generate-test-cases`. */
+  name: string;
+  /** Human title, e.g. "Test case generation". */
+  title?: string;
+  /** What it does, in product language. Public: this file ships to npm. */
+  description: string;
+  /**
+   * Words of which at least one must appear for a request to match. They are what tells
+   * "generate test cases from this PRD" (the agent) from "create a test case named Login"
+   * (one CRUD call) — the intents alone share too many words to separate the two.
+   */
+  signals: string[];
+  /** Example requests, scored against the caller's words. */
+  intents: string[];
+}
+
 export interface ProductIndex {
   summary: string;
+  /**
+   * BrowserStack AI agents for this product. Absent means none, and they are only shown
+   * when `askBrowserStackAI` can reach the product — see `agents.ts`.
+   */
+  agents?: AgentDoc[];
   /**
    * Words that route to this product but are not the name of anything in it.
    *

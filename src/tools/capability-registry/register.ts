@@ -36,6 +36,9 @@ import {
   resolveResponses,
 } from "./index-loader.js";
 import { invoke } from "./resolve.js";
+import { agentHandoff, agentSummary, agentsOf, matchAgents } from "./agents.js";
+import { isEnabled as askIsEnabled } from "../ask-browserstack/config.js";
+import { PRODUCTS as ASK_PRODUCTS } from "../ask-browserstack/types.js";
 import {
   ambiguousProducts,
   productAnchors,
@@ -67,6 +70,12 @@ export interface RegistryDeps {
   baseUrlFor: (product: string) => Promise<string>;
   credentialsFor: () => Credentials;
   transport?: Transport;
+  /**
+   * Whether a product's BrowserStack AI agents may be advertised. Absent means never: an
+   * agent the client is told about but cannot reach through askBrowserStackAI is worse
+   * than no hint at all, because the CRUD route it displaced still worked.
+   */
+  agentsEnabled?: (product: string) => boolean;
 }
 
 /**
@@ -146,6 +155,10 @@ export function addCapabilityRegistryToolsFromConfig(
         username: config["browserstack-username"],
         accessKey: config["browserstack-access-key"],
       }),
+      // Read per call, like askBrowserStackAI's own kill switch, so flipping it hides the
+      // agents too without a restart.
+      agentsEnabled: (product) =>
+        askIsEnabled() && (ASK_PRODUCTS as readonly string[]).includes(product),
     },
     config,
   );
@@ -193,6 +206,12 @@ export function addCapabilityRegistryTools(
 
   /** "tm, loadtesting" — for prose that has to name them. */
   const productList = productNames.join(", ") || "none loaded";
+
+  /** The agents a client may be pointed at for this product, gated on reachability. */
+  const reachableAgents = (product: string) =>
+    deps.agentsEnabled?.(product)
+      ? registry.index.products[product]
+      : undefined;
 
   // NO PRODUCT CATALOG IN ANY DESCRIPTION. listProducts used to restate every product's
   // trimmed summary in its own description — duplicating, as static context on every
@@ -289,7 +308,9 @@ export function addCapabilityRegistryTools(
       "WHICH PRODUCT THEY MEAN AND WAIT FOR THEIR ANSWER BEFORE SEARCHING OR INVOKING " +
       "ANYTHING. The response carries the question to put to them and what the shared " +
       "word means in each product. Choosing for them, or searching each product in turn " +
-      "and merging the results, is the failure this call exists to prevent.",
+      "and merging the results, is the failure this call exists to prevent. A product's " +
+      "`agents` run whole tasks inside BrowserStack: when `agent_match` is returned, call " +
+      "askBrowserStackAI instead of searching.",
     {
       query: z
         .string()
@@ -309,7 +330,6 @@ export function addCapabilityRegistryTools(
       openWorldHint: false,
     },
     async ({ query }) => {
-      track("listProducts");
       // THE CLASH, STATED RATHER THAN LEFT TO BE NOTICED. The entity lists below carry
       // the evidence — `report` under two products — but reading two lists and spotting
       // the overlap is work an agent skips when it already has a product in mind. So the
@@ -411,11 +431,30 @@ export function addCapabilityRegistryTools(
                     : {}),
                 }
               : undefined;
+      // ONLY ONCE THE PRODUCT IS SETTLED. A clash is the user's question to answer first,
+      // and an agent hint beside it would read as the answer.
+      const settledOn =
+        routing?.verdict === "no_clash" ? ambiguity.settled : undefined;
+      const agentMatches = settledOn
+        ? matchAgents(reachableAgents(settledOn), query)
+        : [];
+      track(
+        "listProducts",
+        agentMatches.length
+          ? { product: settledOn, agent_match: agentMatches[0].agent.name }
+          : undefined,
+      );
       return ok({
         ...(routing ? { routing } : {}),
+        ...(agentMatches.length
+          ? { agent_match: agentHandoff(settledOn as string, agentMatches) }
+          : {}),
         products: registry.productNames().map((name) => ({
           name,
           summary: registry.index.products[name].summary,
+          ...(agentsOf(reachableAgents(name)).length
+            ? { agents: agentsOf(reachableAgents(name)).map(agentSummary) }
+            : {}),
           // THE ENTITIES AND WHAT EACH ONE IS. Routing is this tool's whole job, and a
           // product summary alone does not do it: "add a tag to xyz test" reads as
           // either product until you can see that `tag` exists in one and not the other.
@@ -833,9 +872,16 @@ export function addCapabilityRegistryTools(
       // Whether the search FOUND anything useful: zero results, or a weak match (the
       // caller's words are not the product's), is a miss worth counting even though the
       // call succeeded.
+      // A TASK AN AGENT OWNS IS HANDED OVER, NOT ASSEMBLED. The capabilities still come
+      // back — a later "save these to folder X" may genuinely need one — but the handoff
+      // leads, so it is read before the shortlist that would otherwise be acted on.
+      const agentMatches = isBrowseQuery(query)
+        ? []
+        : matchAgents(reachableAgents(product), user_words || query);
       track("searchCapability", {
         product,
         entity,
+        agent_match: agentMatches[0]?.agent.name,
         search_query: redact(query),
         results_returned: hits.length,
         total_matched: rest.total_matched,
@@ -844,6 +890,9 @@ export function addCapabilityRegistryTools(
         coverage: Math.round(rest.coverage * 100) / 100,
       });
       return ok({
+        ...(agentMatches.length
+          ? { use_agent: agentHandoff(product, agentMatches) }
+          : {}),
         // NO build_id. It is provenance — for our logs and for cache busting — and
         // resolution must never depend on it, which is exactly why no caller has anything
         // to do with it. It was also the WHOLE registry's id, so a search scoped to one

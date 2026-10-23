@@ -60,14 +60,27 @@ const LINK_EXPIRY_MARGIN_MS = 10 * 60 * 1000;
 const LINK_FALLBACK_TTL_MS = 60 * 60 * 1000;
 
 /**
- * Exports per report, kept for the life of the server: the finished link to reuse for later
- * pages, or the task of an export still running, to continue instead of starting another.
- * Keyed by the account and the report, so one account never sees another's.
+ * Exports per report: the finished link to reuse for later pages, or the task of an export
+ * still running, to continue instead of starting another. Keyed by the account and the
+ * report, so one account never sees another's, and bounded, oldest dropped first.
  */
 export const reportExports = new Map<
   string,
   { link?: string; expiresAt?: number; taskId?: string }
 >();
+export const MAX_REPORT_EXPORTS = 200;
+
+function rememberExport(
+  key: string,
+  entry: { link?: string; expiresAt?: number; taskId?: string },
+): void {
+  reportExports.delete(key);
+  reportExports.set(key, entry);
+  for (const oldest of reportExports.keys()) {
+    if (reportExports.size <= MAX_REPORT_EXPORTS) break;
+    reportExports.delete(oldest);
+  }
+}
 
 /** An export still being generated when a call stopped waiting on it. */
 export class ExportPendingError extends Error {
@@ -367,10 +380,15 @@ export class AccessibilityReportFetcher {
     options: {
       exportTaskId?: string;
       onWait?: (waitedMs: number) => Promise<void>;
+      /**
+       * The report is still adding issues: its export is a snapshot, so it is neither
+       * reused nor kept, or a call after it finishes would read the stale one.
+       */
+      stillProcessing?: boolean;
     } = {},
   ): Promise<string> {
     const key = `${this.auth?.username ?? ""}|${JSON.stringify(source)}`;
-    const known = reportExports.get(key);
+    const known = options.stillProcessing ? undefined : reportExports.get(key);
     if (known?.link && (known.expiresAt ?? 0) > Date.now()) return known.link;
 
     const urls = exportUrls(source);
@@ -387,7 +405,7 @@ export class AccessibilityReportFetcher {
       }
       taskId = initData.data.task_id;
     }
-    reportExports.set(key, { taskId });
+    rememberExport(key, { taskId });
 
     const started = Date.now();
     for (let attempt = 0; ; attempt++) {
@@ -403,7 +421,8 @@ export class AccessibilityReportFetcher {
       }
       const link = reportData.data?.reportLink;
       if (link) {
-        reportExports.set(key, { link, expiresAt: linkExpiry(link) });
+        if (options.stillProcessing) reportExports.delete(key);
+        else rememberExport(key, { link, expiresAt: linkExpiry(link) });
         return link;
       }
       const message = reportData.data?.message ?? "";

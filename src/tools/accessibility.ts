@@ -425,6 +425,7 @@ async function fetchAccessibilityIssues(
     reportLink = await reportFetcher.getReportLink(source, {
       exportTaskId,
       onWait: exportProgress(context),
+      stillProcessing,
     });
   } catch (error) {
     if (error instanceof ExportPendingError) {

@@ -341,7 +341,6 @@ searchCapability  →  describeCapability  →  invokeCapability
 | Tool | What it does |
 |---|---|
 | `startAccessibilityScan` | Start a web accessibility scan and retrieve a local CSV report path. |
-| `accessibilityExpert` | Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices). |
 | `createAccessibilityAuthConfig` | Create an authentication configuration (form-based or basic) for accessibility scans behind a login. |
 | `getAccessibilityAuthConfig` | Retrieve an existing accessibility authentication configuration by ID. |
 | `fetchAccessibilityIssues` | Fetch accessibility issues from a completed scan, with pagination support. |

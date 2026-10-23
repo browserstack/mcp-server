@@ -445,17 +445,16 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
     expect(text(result)).toMatch(/itself/);
   });
 
-  it("compares app builds only", async () => {
+  it("compares Website Scanner runs and app builds, not web Automated Tests builds", async () => {
     m.resolveBuild.mockImplementation(async (source: unknown) => source);
     m.reportStatus.mockResolvedValue("completed");
 
     const result = await fetchIssues()({
-      scanId: "7310042",
-      scanRunId: "5520318",
+      buildId: "q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja",
       compareWith: "previous",
     });
 
     expect(result.isError).toBe(true);
-    expect(text(result)).toMatch(/App Accessibility builds/);
+    expect(text(result)).toMatch(/Website Scanner runs and App Accessibility builds/);
   });
 });

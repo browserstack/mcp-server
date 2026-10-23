@@ -39,6 +39,15 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     listAppBuilds = m.listAppBuilds;
     listAppManualReports = m.listAppManualReports;
   },
+  EXPORT_WAIT_MS: 45_000,
+  ExportPendingError: class extends Error {
+    constructor(
+      readonly taskId: string,
+      readonly waitedMs: number,
+    ) {
+      super("still generating");
+    }
+  },
 }));
 vi.mock("../../src/tools/accessiblity-utils/report-parser.js", () => ({
   parseAccessibilityReportFromCSV: m.parse,
@@ -60,6 +69,7 @@ import addAccessibilityTools, {
   REPORT_STATUS_POLL_MS,
   REPORT_STATUS_WAIT_MS,
 } from "../../src/tools/accessibility.js";
+import { ExportPendingError } from "../../src/tools/accessiblity-utils/report-fetcher.js";
 
 const CONFIG = {
   "browserstack-username": "fake-user",
@@ -248,7 +258,7 @@ describe("fetchAccessibilityIssues sources", () => {
       const result = await handlers.fetchAccessibilityIssues(args, CONTEXT);
 
       expect(result.isError).toBeFalsy();
-      expect(m.getReportLink).toHaveBeenCalledWith(source);
+      expect(m.getReportLink).toHaveBeenCalledWith(source, expect.anything());
       const body = text(result);
       expect(body).toContain("Retrieved 1 accessibility issues (Total: 79)");
       expect(body).toContain(
@@ -276,11 +286,10 @@ describe("fetchAccessibilityIssues sources", () => {
 
     expect(result.isError).toBeFalsy();
     expect(m.sourceFromReportUrl).toHaveBeenCalledWith(reportUrl);
-    expect(m.getReportLink).toHaveBeenCalledWith({
-      kind: "scan",
-      scanId: "scan-42",
-      scanRunId: "run-7",
-    });
+    expect(m.getReportLink).toHaveBeenCalledWith(
+      { kind: "scan", scanId: "scan-42", scanRunId: "run-7" },
+      expect.anything(),
+    );
     const body = text(result);
     expect(body).toContain(
       "Resolved the report link to Website Scanner scan scan-42, run run-7.",
@@ -295,11 +304,25 @@ describe("fetchAccessibilityIssues sources", () => {
       { name: "run", pageURL: "https://site.example" },
       CONTEXT,
     );
-    expect(m.getReportLink).toHaveBeenCalledWith({
-      kind: "scan",
-      scanId: "scan-42",
-      scanRunId: "run-7",
-    });
+    expect(m.getReportLink).toHaveBeenCalledWith(
+      { kind: "scan", scanId: "scan-42", scanRunId: "run-7" },
+      expect.anything(),
+    );
+  });
+
+  it("startAccessibilityScan hands a still-generating export over to fetchAccessibilityIssues", async () => {
+    m.getReportLink.mockRejectedValueOnce(new (ExportPendingError as any)("t:7", 45_000));
+
+    const result = await handlers.startAccessibilityScan(
+      { name: "run", pageURL: "https://site.example" },
+      CONTEXT,
+    );
+
+    expect(result.isError).toBeFalsy();
+    const body = text(result);
+    expect(body).toMatch(/completed/);
+    expect(body).toMatch(/still being generated/);
+    expect(body).toContain('scanId: "scan-42", scanRunId: "run-7" and exportTaskId: "t:7"');
   });
 
   it.each([

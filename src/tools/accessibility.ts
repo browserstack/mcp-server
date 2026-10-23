@@ -4,6 +4,8 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { AccessibilityScanner } from "./accessiblity-utils/scanner.js";
 import {
   AccessibilityReportFetcher,
+  EXPORT_WAIT_MS,
+  ExportPendingError,
   type IssueSource,
 } from "./accessiblity-utils/report-fetcher.js";
 import {
@@ -18,9 +20,12 @@ import {
   safeAuthConfigData,
 } from "./accessiblity-utils/auth-config.js";
 import { trackMCP } from "../lib/instrumentation.js";
-import { parseAccessibilityReportFromCSV } from "./accessiblity-utils/report-parser.js";
+import {
+  compareIssues,
+  loadMainIssues,
+  parseAccessibilityReportFromCSV,
+} from "./accessiblity-utils/report-parser.js";
 import { wrapUntrusted } from "../lib/untrusted-content.js";
-import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
 import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
@@ -138,24 +143,6 @@ async function initializeReportFetcher(
   return reportFetcher;
 }
 
-async function executeAccessibilityRAG(
-  args: { query: string },
-  server: McpServer,
-  config: BrowserStackConfig,
-): Promise<CallToolResult> {
-  try {
-    trackMCP(
-      "accessibilityExpert",
-      server.server.getClientVersion()!,
-      undefined,
-      config,
-    );
-    return await queryAccessibilityRAG(args.query, config);
-  } catch (error) {
-    return handleMCPError("accessibilityExpert", server, config, error);
-  }
-}
-
 interface FetchIssuesArgs {
   scanId?: string;
   scanRunId?: string;
@@ -164,7 +151,9 @@ interface FetchIssuesArgs {
   appReportId?: string;
   reportUrl?: string;
   cursor?: number;
+  pageUrl?: string;
   compareWith?: string;
+  exportTaskId?: string;
 }
 
 /** A source named by its ids, or a dashboard link still to be resolved to them. */
@@ -247,7 +236,11 @@ async function executeFetchAccessibilityIssues(
       config,
       args.cursor,
       context,
-      args.compareWith,
+      {
+        compareWith: args.compareWith,
+        pageUrl: args.pageUrl,
+        exportTaskId: args.exportTaskId,
+      },
     );
   } catch (error) {
     return handleMCPError("fetchAccessibilityIssues", server, config, error);
@@ -379,15 +372,42 @@ function processingNote({
   return [];
 }
 
+/** Progress while a report's CSV export is generated, so clients see the call is alive. */
+function exportProgress(
+  context: ScanProgressContext | undefined,
+): (waitedMs: number) => Promise<void> {
+  return async (waitedMs) => {
+    if (!context) return;
+    await notifyScanProgress(
+      context,
+      `Generating the report's CSV export (large reports take longer): ${formatDuration(waitedMs)} so far.`,
+      Math.min(99, Math.round((waitedMs / EXPORT_WAIT_MS) * 100)),
+    );
+  };
+}
+
+/** What to say of an export still being generated: how to continue it, not an error. */
+function exportPendingMessages(
+  source: IssueSource,
+  error: ExportPendingError,
+  extraArgs: string,
+): string[] {
+  return [
+    `This report's CSV export is still being generated (waited ${formatDuration(error.waitedMs)}; large reports can take a few minutes). No issues have been read yet.`,
+    `Call fetchAccessibilityIssues again with ${sourceArgs(source)}${extraArgs} and exportTaskId: "${error.taskId}" to continue this export instead of starting a new one.`,
+  ];
+}
+
 /** The last line: how to get the next page, or that there is none. */
 function closingMessage(
   next_page: number | null,
   remaining: number,
   source: IssueSource,
   stillProcessing: boolean,
+  extraArgs = "",
 ): string {
   if (next_page !== null) {
-    return `${remaining} more issues available. Use fetchAccessibilityIssues with ${sourceArgs(source)} and cursor: ${next_page} to get the next batch.`;
+    return `${remaining} more issues available. Use fetchAccessibilityIssues with ${sourceArgs(source)}${extraArgs} and cursor: ${next_page} to get the next batch.`;
   }
   if (stillProcessing) {
     return `All issues found so far retrieved; the report is still processing.`;
@@ -765,7 +785,11 @@ async function fetchAccessibilityIssues(
   config: BrowserStackConfig,
   cursor = 0,
   context?: ScanProgressContext,
-  compareWith?: string,
+  {
+    compareWith,
+    pageUrl,
+    exportTaskId,
+  }: { compareWith?: string; pageUrl?: string; exportTaskId?: string } = {},
 ): Promise<CallToolResult> {
   const reportFetcher = await initializeReportFetcher(config);
   const named =
@@ -774,9 +798,18 @@ async function fetchAccessibilityIssues(
       : requested;
   // A build id names a web build or a mobile app build; the APIs tell which.
   const source = await reportFetcher.resolveBuild(named);
+  // Website Scanner runs and App Accessibility builds can be compared, each in its own way.
+  if (compareWith !== undefined && source.kind === "scan") {
+    return compareScanRuns(
+      requested.kind === "link" ? requested : source,
+      compareWith,
+      config,
+      context,
+    );
+  }
   if (compareWith !== undefined && source.kind !== "appBuild") {
     return createErrorResponse(
-      `compareWith compares App Accessibility builds; ${describeSource(source)} is not one.`,
+      `compareWith compares Website Scanner runs and App Accessibility builds; ${describeSource(source)} is neither.`,
     );
   }
   const processing = await waitForProcessing(
@@ -828,7 +861,21 @@ async function fetchAccessibilityIssues(
     );
   }
 
-  const reportLink = await reportFetcher.getReportLink(source);
+  const pageArg = pageUrl ? `, pageUrl: "${pageUrl}"` : "";
+  let reportLink: string;
+  try {
+    reportLink = await reportFetcher.getReportLink(source, {
+      exportTaskId,
+      onWait: exportProgress(context),
+    });
+  } catch (error) {
+    if (error instanceof ExportPendingError) {
+      return createSuccessResponse(
+        exportPendingMessages(source, error, pageArg),
+      );
+    }
+    throw error;
+  }
 
   const {
     records,
@@ -839,16 +886,129 @@ async function fetchAccessibilityIssues(
     duplicate_issues,
     unlinked_duplicates,
     hidden_issues,
-  } = await parseAccessibilityReportFromCSV(reportLink, { nextPage: cursor });
+    page,
+  } = await parseAccessibilityReportFromCSV(reportLink, {
+    nextPage: cursor,
+    pageUrl,
+  });
 
   return createSuccessResponse([
     ...preface,
     ...processingNote(processing),
+    ...(page ? pageNote(page) : []),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     `You can also download the full report (CSV) from the following link, valid for about 12 hours: ${reportLink}`,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
-    closingMessage(next_page, remaining, source, stillProcessing),
+    closingMessage(next_page, remaining, source, stillProcessing, pageArg),
+  ]);
+}
+/** What one page of a report holds, in the dashboard's page-view terms. */
+function pageNote(page: {
+  url: string;
+  occurrences: number;
+  distinct_issues: number;
+  first_found_here: number;
+  by_severity: Record<string, number>;
+  similar_pages?: string[];
+}): string[] {
+  if (page.occurrences === 0) {
+    const similar = page.similar_pages?.length
+      ? ` Pages in this report with a similar address: ${wrapUntrusted("report page addresses", JSON.stringify(page.similar_pages))}`
+      : "";
+    return [`No issue in this report is on ${page.url}.${similar}`];
+  }
+  const severities = Object.entries(page.by_severity)
+    .sort(([, a], [, b]) => b - a)
+    .map(([severity, n]) => `${n} ${severity}`)
+    .join(", ");
+  return [
+    `${page.occurrences} issue occurrences on ${page.url} (${severities}), as the dashboard's page view counts them: ${page.distinct_issues} distinct issues, ${page.first_found_here} of them first found on this page. Each issue below is listed once, with occurrences_on_page; first_found_on names the page an issue was first found on when it is another one.`,
+  ];
+}
+
+/** At most this many new and resolved issues are listed in a comparison. */
+const COMPARE_LIST_LIMIT = 50;
+
+/**
+ * A Website Scanner run against an earlier run of the same scan: the run before it
+ * ("previous") or a given scanRunId. Issues are matched by rule, element and page; against
+ * the previous run, the dashboard's own counts (the run's changesSinceLastRun) are given too.
+ */
+async function compareScanRuns(
+  requested: RequestedSource,
+  compareWith: string,
+  config: BrowserStackConfig,
+  context?: ScanProgressContext,
+): Promise<CallToolResult> {
+  const reportFetcher = await initializeReportFetcher(config);
+  const source =
+    requested.kind === "link"
+      ? await reportFetcher.sourceFromReportUrl(requested.reportUrl)
+      : requested;
+  if (source.kind !== "scan") {
+    return createErrorResponse(
+      'compareWith compares Website Scanner runs: pass the newer run (scanId and scanRunId, or its report link) and compareWith: "previous" or the older run\'s scanRunId.',
+    );
+  }
+  const previous = await reportFetcher.previousScanRun(
+    source.scanId,
+    source.scanRunId,
+  );
+  const baseRunId =
+    compareWith === "previous" ? previous && String(previous.id) : compareWith;
+  if (!baseRunId) {
+    return createErrorResponse(
+      `Run ${source.scanRunId} is the first run of scan ${source.scanId}; there is no earlier run to compare it with.`,
+    );
+  }
+  const base: IssueSource = { ...source, scanRunId: baseRunId };
+  const againstPrevious =
+    previous !== undefined && String(previous.id) === baseRunId;
+
+  let links: [string, string];
+  try {
+    links = await Promise.all([
+      reportFetcher.getReportLink(source, { onWait: exportProgress(context) }),
+      reportFetcher.getReportLink(base, {}),
+    ]);
+  } catch (error) {
+    if (error instanceof ExportPendingError) {
+      return createSuccessResponse([
+        `The CSV exports of these runs are still being generated (waited ${formatDuration(error.waitedMs)}). Call fetchAccessibilityIssues again with the same arguments in about a minute; the exports continue where they are.`,
+      ]);
+    }
+    throw error;
+  }
+  const [after, before] = await Promise.all(links.map(loadMainIssues));
+  const diff = compareIssues(before, after);
+  const changes = againstPrevious
+    ? await reportFetcher.changesSinceLastRun(source.scanId, source.scanRunId)
+    : undefined;
+
+  const baseLabel = againstPrevious
+    ? `the run before it, run ${baseRunId}${previous?.scanDate ? ` (${previous.scanDate})` : ""}`
+    : `run ${baseRunId}`;
+  const matched = `${diff.added.length} new, ${diff.resolved.length} resolved, ${diff.retained} still open`;
+  const listed = (issues: typeof diff.added) =>
+    wrapUntrusted(
+      "accessibility comparison",
+      JSON.stringify(issues.slice(0, COMPARE_LIST_LIMIT), null, 2),
+    ) +
+    (issues.length > COMPARE_LIST_LIMIT
+      ? `\n(${issues.length - COMPARE_LIST_LIMIT} more not listed; see the CSV links.)`
+      : "");
+  return createSuccessResponse([
+    ...(requested.kind === "link"
+      ? [`Resolved the report link to ${describeSource(source)}.`]
+      : []),
+    `Compared Website Scanner scan ${source.scanId}: run ${source.scanRunId} with ${baseLabel}.`,
+    changes
+      ? `The dashboard's comparison: ${changes.newIssues} new, ${changes.resolvedIssues} resolved, ${changes.retainedIssues} still open. Matching the issues by rule, element and page gives ${matched}.`
+      : `Matching the issues by rule, element and page: ${matched}.`,
+    `New issues: ${listed(diff.added)}`,
+    `Resolved issues: ${listed(diff.resolved)}`,
+    `CSV of each run, valid for about 12 hours: newer ${links[0]} , older ${links[1]}`,
   ]);
 }
 
@@ -1159,11 +1319,29 @@ async function runAccessibilityScan(
   }
 
   const reportFetcher = await initializeReportFetcher(config);
-  const reportLink = await reportFetcher.getReportLink({
-    kind: "scan",
-    scanId,
-    scanRunId,
-  });
+  let reportLink: string;
+  try {
+    reportLink = await reportFetcher.getReportLink(
+      { kind: "scan", scanId, scanRunId },
+      { onWait: exportProgress(context) },
+    );
+  } catch (error) {
+    if (error instanceof ExportPendingError) {
+      return createSuccessResponse([
+        `Accessibility scan "${name}" completed. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+        ...exportPendingMessages(
+          {
+            kind: "scan",
+            scanId: String(scanId),
+            scanRunId: String(scanRunId),
+          },
+          error,
+          "",
+        ),
+      ]);
+    }
+    throw error;
+  }
 
   const {
     records,
@@ -1193,28 +1371,6 @@ export default function addAccessibilityTools(
   config: BrowserStackConfig,
 ) {
   const tools: Record<string, any> = {};
-
-  tools.accessibilityExpert = server.tool(
-    "accessibilityExpert",
-    "Answer accessibility, a11y, and WCAG questions using BrowserStack's accessibility knowledge base.",
-    {
-      query: z
-        .string()
-        .describe(
-          "Any accessibility, a11y, WCAG, or web accessibility question",
-        ),
-    },
-    {
-      title: "Accessibility Expert",
-      readOnlyHint: true,
-      openWorldHint: false,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
-    async (args) => {
-      return await executeAccessibilityRAG(args, server, config);
-    },
-  );
 
   tools.startAccessibilityScan = server.tool(
     "startAccessibilityScan",
@@ -1396,7 +1552,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          "A web or app report dashboard link (scan, build, manual report), or an App Automate build or session link.",
+          "A web or app report link (dashboard, scanner share link, manual report), or an Automate or App Automate link.",
         ),
       cursor: z
         .number()
@@ -1404,11 +1560,23 @@ export default function addAccessibilityTools(
         .describe(
           "Character offset for pagination (default: 0); with compareWith, how many issues are already listed.",
         ),
+      pageUrl: z
+        .string()
+        .optional()
+        .describe(
+          "Only the issues on this page URL, counted as the dashboard's page view counts them.",
+        ),
       compareWith: z
         .string()
         .optional()
         .describe(
-          `App builds only: "previous" (the build before it) or an earlier build's id or link; lists new and resolved issues.`,
+          `"previous", an older scanRunId (Website Scanner), or an earlier app build's id or link; lists new and resolved issues.`,
+        ),
+      exportTaskId: z
+        .string()
+        .optional()
+        .describe(
+          "Continue a CSV export that an earlier call said is still being generated.",
         ),
     },
     {

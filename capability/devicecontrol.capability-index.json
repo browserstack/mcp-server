@@ -253,18 +253,25 @@
     "mode": "write",
     "entity": "browser_session",
     "intent": "Start a browser session on a real desktop or mobile browser and get a session id to drive it with \u2014 use this to open a page and interact with it step by step.",
-    "guidance": [
-     "A DESKTOP target needs browser_name with os and os_version; a MOBILE BROWSER needs browser_name with device_name and real_mobile instead, and takes no browser_version because the browser ships with the OS. Sending both kinds together is refused.",
-     "ON MOBILE THE BROWSER IS NAMED AFTER THE PLATFORM, not the product: Chrome on an Android phone is \"android\", Safari on an iPhone is \"iphone\" and on an iPad \"ipad\". Samsung Internet is \"samsung\" and Chromium-based mobile browsers are \"chromium\". Asking for \"chrome\" or \"safari\" on a phone is refused.",
-     "Take every value from list_browsers exactly as it spells them; an unlisted combination is refused rather than substituted.",
-     "The session id comes back at value.sessionId \u2014 carry it into every other browser_session capability.",
-     "A session starts in seconds rather than the tens of seconds a device session takes, but it still holds a browser and consumes Automate minutes until it ends: always finish with set_session_status and then delete_session.",
-     "The session ends itself after idle_timeout seconds without a command, and after 2 hours in total.",
-     "console_logs and network_logs must be asked for here; they cannot be turned on once the session is running, and get_session only links to them when they were.",
-     "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
-     "resolution takes one of a fixed set of values per operating system, not any width and height: an unsupported pair is refused outright rather than rounded to the nearest one. The browser window is well short of the screen it sits on \u2014 1920x1080 gives a viewport around 930x860 \u2014 so measure it rather than assuming the request was honoured.",
-     "THIS CALL RETURNS NO LINK \u2014 only value.sessionId. Nothing here can open a browser for the user either: this surface makes HTTP requests, and on a remote server there is no browser to open. So never say a live view was opened. If the user may want to watch, call get_session straight after this and give them browser_url in the same reply, which is the session on the dashboard and needs a BrowserStack login. public_url needs no login but carries an auth token, so offer it only when they ask to share outside the team."
-    ],
+    "guidance": {
+     "shared": [
+      "A DESKTOP target needs browser_name with os and os_version; a MOBILE BROWSER needs browser_name with device_name and real_mobile instead, and takes no browser_version because the browser ships with the OS. Sending both kinds together is refused.",
+      "ON MOBILE THE BROWSER IS NAMED AFTER THE PLATFORM, not the product: Chrome on an Android phone is \"android\", Safari on an iPhone is \"iphone\" and on an iPad \"ipad\". Samsung Internet is \"samsung\" and Chromium-based mobile browsers are \"chromium\". Asking for \"chrome\" or \"safari\" on a phone is refused.",
+      "Take every value from list_browsers exactly as it spells them; an unlisted combination is refused rather than substituted.",
+      "The session id comes back at value.sessionId \u2014 carry it into every other browser_session capability.",
+      "A session starts in seconds rather than the tens of seconds a device session takes, but it still holds a browser and consumes Automate minutes until it ends: always finish with set_session_status and then delete_session.",
+      "The session ends itself after idle_timeout seconds without a command, and after 2 hours in total.",
+      "console_logs and network_logs must be asked for here; they cannot be turned on once the session is running, and get_session only links to them when they were.",
+      "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
+      "resolution takes one of a fixed set of values per operating system, not any width and height: an unsupported pair is refused outright rather than rounded to the nearest one. The browser window is well short of the screen it sits on \u2014 1920x1080 gives a viewport around 930x860 \u2014 so measure it rather than assuming the request was honoured."
+     ],
+     "local": [
+      "ON THE USER'S OWN MACHINE YOU CAN OPEN THE LIVE VIEW FOR THEM. This call returns only value.sessionId; call get_session straight after it, then run the shell command open \"<browser_url>\" on macOS or xdg-open \"<browser_url>\" on Linux, and say you opened the session on the Automate dashboard \u2014 it needs a BrowserStack login in that browser."
+     ],
+     "remote": [
+      "THIS CALL RETURNS NO LINK \u2014 only value.sessionId. Nothing here can open a browser for the user either: this surface makes HTTP requests, and on a remote server there is no browser to open. So never say a live view was opened. If the user may want to watch, call get_session straight after this and give them browser_url in the same reply, which is the session on the dashboard and needs a BrowserStack login. public_url needs no login but carries an auth token, so offer it only when they ask to share outside the team."
+     ]
+    },
     "body": [
      {
       "name": "browser_name",

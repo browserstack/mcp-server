@@ -69,25 +69,32 @@
     "mode": "write",
     "entity": "app_session",
     "intent": "Start a live Appium session on a real Android or iOS device with an uploaded app \u2014 use this before reading the screen, tapping, typing or swiping in the app.",
-    "guidance": [
-     "The app must already be uploaded: pass the bs:// URL from upload_app_build or list_app_builds, or the custom_id it was uploaded under, which always resolves to the newest build with that id.",
-     "Allocation and app install usually take 20\u201330 seconds; the response carries the new session id at value.sessionId \u2014 carry it into every other app_session call.",
-     "The session ends itself after idle_timeout seconds with no command (90 by default, 900 at most) and after 2 hours in total. Keep calling, or call get_window_rect as a cheap keep-alive, while deciding the next step.",
-     "Every session occupies a device and consumes App Automate minutes until it ends: always finish with set_session_status and then delete_session.",
-     "To let a person watch the device live while the agent drives it, set interactive_debugging true and leave video on; they then open the running session on the App Automate dashboard and start the interactive session there. That window is two-way: a person's taps and scrolls reach the same device, so ask them to watch only, or find the element you are about to act on again before every action.",
-     "device_name and platform_version must be a combination mobile device control offers; an unknown pair fails with a session-not-created error naming the capability.",
-     "Set appium_version to 2.19.0 for any session that will scroll with scroll_gesture, dismiss an iOS keyboard with dismiss_keyboard_key, or use any other mobile: capability; the default server is 1.x and answers those with a 404 listing the commands it does know.",
-     "enable_biometric, enable_camera_image_injection and upload_media only take effect when set here \u2014 none of them can be turned on once the session is running.",
-     "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
-     "device_name and platform_version come from list_devices; get_plan first if sessions are queueing rather than starting.",
-     "Treat a response without value.sessionId as a failed start even when the status is 200, and treat a failed call the same way: allocation can outlast the client's own timeout, so BrowserStack may have started a session the answer never named. One is then holding a device and consuming minutes until its idle timeout.",
-     "After a start that failed or returned no session id, look for a session left running on the account and end it rather than starting another.",
-     "The response carries no link of any kind \u2014 it is the session id and the negotiated capabilities only. Call get_session for the links: browser_url to watch the run on the dashboard, and public_url to share it with someone who has no BrowserStack account.",
-     "LANGUAGE AND LOCALE LAND IN DIFFERENT PLACES ON THE TWO PLATFORMS. On Android they change the device, and the app with it \u2014 measured with language de and locale DE: the system's own permission dialog came up in German and the app rendered German throughout. On iOS they leave the device alone \u2014 Settings and General stay in English \u2014 and apply to the app under test at launch. Either way nothing is visible unless the app actually ships that language, so test with an app that does and read the strings back with get_element_text rather than trusting the call's 200.",
-     "Both are accepted without complaint on both platforms, so a 200 says nothing about whether anything changed. There is also no way to confirm the device locale from inside the session: read_device_property refuses getprop persist.sys.locale and ro.product.locale as unsupported commands. Judge it from what is on screen.",
-     "THIS CALL RETURNS NO LINK \u2014 only value.sessionId. Nothing here can open a browser for the user either: this surface makes HTTP requests, and on a remote server there is no browser to open. So never say a live view was opened. If the user may want to watch, call get_session straight after this and give them browser_url in the same reply, which is the session on the dashboard and needs a BrowserStack login. public_url needs no login but carries an auth token, so offer it only when they ask to share outside the team.",
-     "Someone can only WATCH AND INTERACT if interactive_debugging was set true in this call \u2014 it cannot be turned on once the session is running, it is off by default on Android, and it needs video left on. Ask for it up front when a person is going to follow along, because the alternative is restarting the session."
-    ],
+    "guidance": {
+     "shared": [
+      "The app must already be uploaded: pass the bs:// URL from upload_app_build or list_app_builds, or the custom_id it was uploaded under, which always resolves to the newest build with that id.",
+      "Allocation and app install usually take 20\u201330 seconds; the response carries the new session id at value.sessionId \u2014 carry it into every other app_session call.",
+      "The session ends itself after idle_timeout seconds with no command (90 by default, 900 at most) and after 2 hours in total. Keep calling, or call get_window_rect as a cheap keep-alive, while deciding the next step.",
+      "Every session occupies a device and consumes App Automate minutes until it ends: always finish with set_session_status and then delete_session.",
+      "To let a person watch the device live while the agent drives it, set interactive_debugging true and leave video on; they then open the running session on the App Automate dashboard and start the interactive session there. That window is two-way: a person's taps and scrolls reach the same device, so ask them to watch only, or find the element you are about to act on again before every action.",
+      "device_name and platform_version must be a combination mobile device control offers; an unknown pair fails with a session-not-created error naming the capability.",
+      "Set appium_version to 2.19.0 for any session that will scroll with scroll_gesture, dismiss an iOS keyboard with dismiss_keyboard_key, or use any other mobile: capability; the default server is 1.x and answers those with a 404 listing the commands it does know.",
+      "enable_biometric, enable_camera_image_injection and upload_media only take effect when set here \u2014 none of them can be turned on once the session is running.",
+      "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
+      "device_name and platform_version come from list_devices; get_plan first if sessions are queueing rather than starting.",
+      "Treat a response without value.sessionId as a failed start even when the status is 200, and treat a failed call the same way: allocation can outlast the client's own timeout, so BrowserStack may have started a session the answer never named. One is then holding a device and consuming minutes until its idle timeout.",
+      "After a start that failed or returned no session id, look for a session left running on the account and end it rather than starting another.",
+      "The response carries no link of any kind \u2014 it is the session id and the negotiated capabilities only. Call get_session for the links: browser_url to watch the run on the dashboard, and public_url to share it with someone who has no BrowserStack account.",
+      "LANGUAGE AND LOCALE LAND IN DIFFERENT PLACES ON THE TWO PLATFORMS. On Android they change the device, and the app with it \u2014 measured with language de and locale DE: the system's own permission dialog came up in German and the app rendered German throughout. On iOS they leave the device alone \u2014 Settings and General stay in English \u2014 and apply to the app under test at launch. Either way nothing is visible unless the app actually ships that language, so test with an app that does and read the strings back with get_element_text rather than trusting the call's 200.",
+      "Both are accepted without complaint on both platforms, so a 200 says nothing about whether anything changed. There is also no way to confirm the device locale from inside the session: read_device_property refuses getprop persist.sys.locale and ro.product.locale as unsupported commands. Judge it from what is on screen.",
+      "Someone can only WATCH AND INTERACT if interactive_debugging was set true in this call \u2014 it cannot be turned on once the session is running, it is off by default on Android, and it needs video left on. Ask for it up front when a person is going to follow along, because the alternative is restarting the session."
+     ],
+     "local": [
+      "ON THE USER'S OWN MACHINE YOU CAN OPEN THE LIVE VIEW FOR THEM. This call returns only value.sessionId; call get_session straight after it, then run the shell command open \"<browser_url>\" on macOS or xdg-open \"<browser_url>\" on Linux, and say you opened the session on the App Automate dashboard \u2014 it needs a BrowserStack login in that browser. Set interactive_debugging true in this call when they should be able to tap as well as watch; without it the view is watch-only."
+     ],
+     "remote": [
+      "THIS CALL RETURNS NO LINK \u2014 only value.sessionId. Nothing here can open a browser for the user either: this surface makes HTTP requests, and on a remote server there is no browser to open. So never say a live view was opened. If the user may want to watch, call get_session straight after this and give them browser_url in the same reply, which is the session on the dashboard and needs a BrowserStack login. public_url needs no login but carries an auth token, so offer it only when they ask to share outside the team."
+     ]
+    },
     "body": [
      {
       "name": "platform_name",

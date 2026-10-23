@@ -1,0 +1,550 @@
+{
+  "schema_version": 1,
+  "version": "1.0",
+  "build_id": "app_accessibility-v1.0-lists",
+  "app_accessibility": {
+    "summary": "BrowserStack App Accessibility: WCAG accessibility results for mobile apps (Android and iOS), from automated App Automate tests run with accessibility checks on, and from manual App Live sessions scanned with Workflow Analyzer. Find the account's App Accessibility projects, a project's builds, and its manual reports, each with the id, status, app and issue counts needed to pick one. These capabilities list results; they do not read a build's or report's individual issues, compare builds, start tests or scans, or change or delete anything. Website accessibility (Website Scanner, Automate web tests) is not here.",
+    "routing_terms": [
+      "app accessibility",
+      "app a11y",
+      "mobile accessibility",
+      "workflow analyzer",
+      "manual accessibility report",
+      "testhub id"
+    ],
+    "auth": { "type": "http", "scheme": "basic" },
+    "base_url": "https://api-app-accessibility.browserstack.com",
+    "capabilities": [
+      {
+        "name": "list_app_accessibility_projects",
+        "method": "GET",
+        "path": "/automate/api/v1/project",
+        "mode": "read",
+        "entity": "project",
+        "query": [
+          {
+            "name": "name",
+            "type": "string",
+            "description": "Finds projects whose name contains this text, so several can come back; pick the exact match. Omit to list every project.",
+            "example": "Checkout App"
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number, from 1. The parameter is page: page_number is not read, and a call sending it returns the first page every time."
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "minimum": 1,
+            "description": "Projects per page. There is no server-side ceiling: a large value returns that many projects in one response, and an account can hold thousands, so search by name or keep pages near 50.",
+            "example": 50
+          }
+        ],
+        "intent": "List the account's App Accessibility projects newest first, or find one by name - use this to get the project id that lists its builds.",
+        "guidance": [
+          "The list covers the whole account, every team's projects, often thousands; searching by name is cheaper than paging through it.",
+          "There is no filter for the caller's own projects. To narrow to one person's work, list a project's builds with that person's user_id.",
+          "A project's integer id is what list_app_accessibility_builds takes; the name is not accepted there."
+        ],
+        "returns": [
+          "projects.id",
+          "projects.name",
+          "projects.created_at",
+          "info.count",
+          "info.next"
+        ],
+        "paginated": true,
+        "responses": {
+          "200": { "$response": "ListAppAccessibilityProjects" },
+          "401": { "$response": "Unauthorized" },
+          "403": { "$response": "Forbidden" },
+          "500": { "$response": "InternalServerError" }
+        }
+      },
+      {
+        "name": "list_app_accessibility_builds",
+        "method": "GET",
+        "path": "/automate/api/v1/project/{project_id}/build",
+        "mode": "read",
+        "entity": "build",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "The project's integer id, from list_app_accessibility_projects.",
+            "example": 123456
+          }
+        ],
+        "query": [
+          {
+            "name": "build_name",
+            "type": "string",
+            "description": "Keeps builds whose build name, app name, app version or package name contains this text. It searches only the project's 500 newest builds; an older build is reached by paging without it.",
+            "example": "Nightly"
+          },
+          {
+            "name": "user_id",
+            "type": "integer",
+            "minimum": 1,
+            "description": "Keeps the builds one person started: their numeric BrowserStack user id, as created_by.user_id shows on any of their builds.",
+            "example": 1234567
+          },
+          {
+            "name": "test_health",
+            "type": "string",
+            "description": "Keeps builds by test outcome: passed, failed, skipped or running; several comma-separated. Any other value is refused with 400 and the allowed list.",
+            "example": "failed"
+          },
+          {
+            "name": "created_between",
+            "type": "string",
+            "description": "Keeps builds started within a window: two ISO-8601 timestamps, from and to, comma-separated. Anything but exactly two valid timestamps is refused with 400.",
+            "example": "2026-01-01T00:00:00Z,2026-02-01T00:00:00Z"
+          },
+          {
+            "name": "bundle_id",
+            "type": "string",
+            "description": "Keeps builds of one app: its Android package name or iOS bundle id.",
+            "example": "com.example.checkout"
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number, from 1."
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "minimum": 1,
+            "default": 10,
+            "description": "Builds per page.",
+            "example": 30
+          }
+        ],
+        "intent": "List an App Accessibility project's builds newest first, with each build's id, status, app and issue counts - use this to find the latest run, a build by name, or one person's builds.",
+        "guidance": [
+          "th_build_id is the build id the accessibility issue tools read (the SDK prints it as the testhub id at the end of a run). build_number counts per build name, so it is not unique within a project.",
+          "Builds that ran without accessibility checks are left out, so a page can hold fewer rows than page_size.",
+          "An empty result answers 404 with the message 'No builds found': that is an empty list, not a missing project.",
+          "info carries count without build_name and total_count with it; next is the following page, null on the last.",
+          "issue_summary.total is the dashboard's count, duplicates left out; severity_count.duplicate_issues counts the repeats."
+        ],
+        "returns": [
+          "builds.th_build_id",
+          "builds.build_number",
+          "builds.name",
+          "builds.status",
+          "builds.report_status",
+          "builds.created_at",
+          "builds.created_by",
+          "builds.app_details",
+          "builds.issue_summary",
+          "builds.a11y_score",
+          "info.next"
+        ],
+        "paginated": true,
+        "responses": {
+          "200": { "$response": "ListAppAccessibilityBuilds" },
+          "400": { "$response": "BadRequest" },
+          "401": { "$response": "Unauthorized" },
+          "403": { "$response": "Forbidden" },
+          "404": { "$response": "EmptyList" },
+          "500": { "$response": "InternalServerError" }
+        }
+      },
+      {
+        "name": "list_manual_app_accessibility_reports",
+        "method": "GET",
+        "path": "/api/v1/reports",
+        "mode": "read",
+        "entity": "manual_report",
+        "query": [
+          {
+            "name": "report_name",
+            "type": "string",
+            "description": "Keeps reports whose name, app name, app version, package name, or creator's name or email contains this text.",
+            "example": "Checkout"
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "values": ["in_progress", "completed"],
+            "description": "Keeps reports still being recorded (in_progress) or finished (completed)."
+          },
+          {
+            "name": "bundle_id",
+            "type": "string",
+            "description": "Keeps reports of one app: its Android package name or iOS bundle id.",
+            "example": "com.example.checkout"
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number, from 1."
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10,
+            "description": "Reports per page, at most 100. A larger value is refused, with a 404 that names the limit.",
+            "example": 50
+          }
+        ],
+        "intent": "List manual App Accessibility reports (App Live sessions scanned with Workflow Analyzer) newest first, with each report's id, app, status and issue counts - use this to find a report QA shared or the latest manual scan of an app.",
+        "guidance": [
+          "id is a UUID: the accessibility issue tools read a manual report by it, or by its dashboard link.",
+          "issue_summary.total is the dashboard's count, duplicates left out; severity_count.duplicate_issues counts the repeats.",
+          "An empty result answers 404 with the message 'No reports found': that is an empty list, not an error. A refused parameter also answers 404, with the reason.",
+          "There is no date filter that works, and narrowing to one person's reports is not available to most callers: page through newest first, or search by report_name."
+        ],
+        "returns": [
+          "reports.id",
+          "reports.name",
+          "reports.created_at",
+          "reports.status",
+          "reports.app_details",
+          "reports.issue_summary",
+          "reports.a11y_score",
+          "info.next"
+        ],
+        "paginated": true,
+        "max_page_size": 100,
+        "responses": {
+          "200": { "$response": "ListManualAppAccessibilityReports" },
+          "401": { "$response": "Unauthorized" },
+          "403": { "$response": "Forbidden" },
+          "404": { "$response": "ManualReportsRefusedOrEmpty" },
+          "500": { "$response": "InternalServerError" }
+        }
+      }
+    ],
+    "entities": {
+      "project": {
+        "entity": "project",
+        "title": "Project",
+        "description": "A named group of App Accessibility builds, usually one per app or test suite, holding every automated run reported under it.",
+        "aliases": [
+          "app accessibility project",
+          "app a11y project",
+          "mobile accessibility project",
+          "accessibility project"
+        ],
+        "id_convention": "A plain integer, discovered through the project list; a name is resolved to its id by searching that list.",
+        "parents": [],
+        "relations": [
+          { "entity": "build", "via": "groups the automated builds reported under its name" }
+        ],
+        "capabilities": ["list_app_accessibility_projects"],
+        "key_facts": [
+          "Projects are shared across the whole account, so a large account lists thousands; searching by name finds one faster than paging.",
+          "A project is created by the first automated run reported under its name; there is nothing to create or delete here."
+        ]
+      },
+      "build": {
+        "entity": "build",
+        "title": "Build",
+        "description": "One automated test run of an app with accessibility checks on, and the issues its scanned screens produced.",
+        "aliases": [
+          "app accessibility build",
+          "app a11y build",
+          "automated accessibility build",
+          "accessibility run",
+          "app automate accessibility build",
+          "testhub build"
+        ],
+        "id_convention": "th_build_id, a 40-character string, is the id the accessibility issue tools read; the SDK prints it as the testhub id. build_number counts per build name and the integer id is internal. Discover ids through the build list.",
+        "parents": ["project"],
+        "relations": [
+          { "entity": "project", "via": "belongs to one project" }
+        ],
+        "capabilities": ["list_app_accessibility_builds"],
+        "key_facts": [
+          "A build appears only if its tests ran with accessibility checks on; one without them is not listed.",
+          "Its issue counts are the dashboard's, with duplicates left out and hidden issues counted apart.",
+          "status is how the tests went; report_status is whether the accessibility report has finished processing."
+        ]
+      },
+      "manual_report": {
+        "entity": "manual_report",
+        "title": "Manual report",
+        "description": "The accessibility results of one manual App Live session, scanned screen by screen with Workflow Analyzer.",
+        "aliases": [
+          "manual report",
+          "manual accessibility report",
+          "manual app accessibility report",
+          "workflow analyzer report",
+          "app live report",
+          "manual scan",
+          "wa report"
+        ],
+        "id_convention": "A UUID, discovered through the manual report list or read from the report's dashboard link.",
+        "parents": [],
+        "relations": [],
+        "capabilities": ["list_manual_app_accessibility_reports"],
+        "key_facts": [
+          "A report is in_progress while its session is still recording, and completed once it has ended.",
+          "Its issue counts are the dashboard's, duplicates left out; the duplicate count says how many repeats were folded in."
+        ]
+      }
+    },
+    "schemas": {
+      "PageInfo": {
+        "type": "object",
+        "description": "Paging. next is the following page number and null on the last page; prev is null on the first.",
+        "properties": {
+          "page": { "type": "integer" },
+          "page_size": { "type": "integer" },
+          "prev": { "type": "integer", "description": "Null on the first page." },
+          "next": { "type": "integer", "description": "Null on the last page." },
+          "count": { "type": "integer", "description": "Every matching row across all pages, where the list reports it." },
+          "total_count": { "type": "integer", "description": "Every matching row across all pages, for a build list narrowed by build_name." },
+          "current_page_count": { "type": "integer", "description": "Rows on this page, where the list reports it." }
+        }
+      },
+      "User": {
+        "type": "object",
+        "description": "Who created the build or report.",
+        "properties": {
+          "user_id": { "type": "integer", "description": "Numeric BrowserStack user id; the user_id the build list filters by." },
+          "name": { "type": "string" },
+          "email_id": { "type": "string" },
+          "group_id": { "type": "integer" },
+          "status": { "type": "string" }
+        }
+      },
+      "BuildCreator": {
+        "allOf": [{ "$schema": "User" }],
+        "properties": {
+          "id": { "type": "integer", "description": "Internal record id, not the BrowserStack user id." }
+        }
+      },
+      "IssueSummary": {
+        "type": "object",
+        "description": "Issue counts as the dashboard shows them.",
+        "properties": {
+          "total": { "type": "integer", "description": "Issues, duplicates left out." },
+          "severity_count": {
+            "type": "object",
+            "properties": {
+              "critical": { "type": "integer" },
+              "serious": { "type": "integer" },
+              "moderate": { "type": "integer" },
+              "minor": { "type": "integer" },
+              "failed_issues": { "type": "integer" },
+              "needs_review": { "type": "integer" },
+              "confirmed": { "type": "integer" },
+              "hidden_issues": { "type": "integer", "description": "Issues hidden on the dashboard, not in total." },
+              "duplicate_issues": { "type": "integer", "description": "Repeats of an issue already counted, not in total." }
+            }
+          },
+          "scan_count": { "type": "integer", "description": "Screens scanned." }
+        }
+      },
+      "BuildIssueSummary": {
+        "allOf": [{ "$schema": "IssueSummary" }],
+        "properties": {
+          "raw_scan_count": { "type": "integer", "description": "Screens scanned before duplicates were folded together." }
+        }
+      },
+      "AccessibilityScore": {
+        "type": "object",
+        "description": "The accessibility score the dashboard shows.",
+        "properties": {
+          "score": { "type": "number" },
+          "partial": { "type": "boolean", "description": "True when the score covers only part of the rules." },
+          "status_reason": { "type": "string" },
+          "applicable_rules": { "type": "integer" }
+        }
+      },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "description": "The project id list_app_accessibility_builds takes." },
+          "name": { "type": "string" },
+          "normalised_name": { "type": "string", "description": "The name URL-encoded, as the dashboard link carries it." },
+          "created_at": { "type": "string", "format": "date-time" },
+          "team_id": { "type": "integer" }
+        }
+      },
+      "Build": {
+        "type": "object",
+        "properties": {
+          "th_build_id": { "type": "string", "description": "The build id the accessibility issue tools read." },
+          "id": { "type": "integer", "description": "Internal id." },
+          "build_number": { "type": "integer", "description": "Counts per build name, not per project." },
+          "name": { "type": "string" },
+          "normalised_name": { "type": "string" },
+          "project_id": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "started_at": { "type": "string", "format": "date-time" },
+          "created_by": { "$schema": "BuildCreator" },
+          "status": { "type": "string", "description": "How the tests went." },
+          "report_status": { "type": "string", "description": "Whether the accessibility report has finished processing." },
+          "app_details": {
+            "type": "object",
+            "properties": {
+              "os": { "type": "string" },
+              "name": { "type": "string" },
+              "version": { "type": "string" },
+              "package_name": { "type": "string" },
+              "rule_engine_version": { "type": "string" }
+            }
+          },
+          "session_data": {
+            "type": "object",
+            "description": "The SDK and test framework the run used.",
+            "properties": {
+              "language": { "type": "string" },
+              "frameworkName": { "type": "string", "description": "Espresso-Junit4 for a native Espresso run; pytest, testng and the like for an SDK run." },
+              "frameworkVersion": { "type": "string" }
+            }
+          },
+          "test_health": {
+            "type": "object",
+            "properties": {
+              "total_count": { "type": "integer" },
+              "failed_count": { "type": "integer" }
+            }
+          },
+          "fup": {
+            "type": "object",
+            "description": "Whether the fair-usage cap dropped tests or scans from the build.",
+            "properties": {
+              "capped": { "type": "boolean" },
+              "tests_partial": { "type": "boolean" },
+              "tests_dropped": { "type": "boolean" }
+            }
+          },
+          "wcag_criteria": { "type": "array", "items": { "type": "string" } },
+          "usage_quota_status": { "type": "string", "description": "Whether the plan's usage quota leaves the build's results open, such as unlocked." },
+          "issue_summary": { "$schema": "BuildIssueSummary" },
+          "a11y_score": { "$schema": "AccessibilityScore" }
+        }
+      },
+      "ManualReport": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "description": "The report id the accessibility issue tools read." },
+          "name": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "started_at": { "type": "string", "format": "date-time" },
+          "created_by": { "$schema": "User" },
+          "status": { "type": "string", "description": "in_progress while the session records, completed once it has ended." },
+          "app_details": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "type": "string" },
+              "package_name": { "type": "string" },
+              "framework": { "type": "string" }
+            }
+          },
+          "issue_summary": { "$schema": "IssueSummary" },
+          "a11y_score": { "$schema": "AccessibilityScore" }
+        }
+      },
+      "Failure": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "ListAppAccessibilityProjects": {
+        "description": "A page of projects, newest first.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": { "type": "boolean" },
+            "projects": { "type": "array", "items": { "$schema": "Project" } },
+            "info": { "$schema": "PageInfo" }
+          }
+        }
+      },
+      "ListAppAccessibilityBuilds": {
+        "description": "A page of a project's builds, newest first.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": { "type": "boolean" },
+            "builds": { "type": "array", "items": { "$schema": "Build" } },
+            "info": { "$schema": "PageInfo" },
+            "filters": {
+              "type": "object",
+              "description": "The filter options the dashboard offers for this list.",
+              "properties": {
+                "status": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      },
+      "ListManualAppAccessibilityReports": {
+        "description": "A page of manual reports, newest first.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": { "type": "boolean" },
+            "reports": { "type": "array", "items": { "$schema": "ManualReport" } },
+            "info": { "$schema": "PageInfo" },
+            "filters": {
+              "type": "object",
+              "description": "An open map echoing the filters the request sent, keyed by parameter name."
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "A filter value was refused; message names the allowed values.",
+        "schema": { "$schema": "Failure" }
+      },
+      "Unauthorized": {
+        "description": "The username or access key was not accepted.",
+        "schema": { "$schema": "Failure" }
+      },
+      "Forbidden": {
+        "description": "The account's plan or the caller's role does not include this list.",
+        "schema": { "$schema": "Failure" }
+      },
+      "EmptyList": {
+        "description": "Nothing matched: message is 'No builds found'. An empty list, not a missing project.",
+        "schema": { "$schema": "Failure" }
+      },
+      "ManualReportsRefusedOrEmpty": {
+        "description": "Nothing matched (message 'No reports found'), or a parameter was refused: message, or errors for a refused status, says why.",
+        "schema": {
+          "allOf": [{ "$schema": "Failure" }],
+          "properties": {
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": { "type": "string" },
+                  "message": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "The service failed to answer.",
+        "schema": { "$schema": "Failure" }
+      }
+    }
+  }
+}

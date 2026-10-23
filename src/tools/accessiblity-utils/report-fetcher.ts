@@ -6,10 +6,7 @@ import {
   type AppBuildIssues,
   type AppBuildRef,
   type AppBuildReport,
-  type AppBuildRow,
   type AppManualReport,
-  type AppManualReportRow,
-  type AppProjectRow,
 } from "./app-report-fetcher.js";
 
 export { MAX_APP_BUILD_LIST_PAGES } from "./app-report-fetcher.js";
@@ -230,31 +227,6 @@ export class AccessibilityReportFetcher {
     maxCharacterLength?: number,
   ): Promise<AppManualReport> {
     return this.app.appReportIssues(reportId, cursor, maxCharacterLength);
-  }
-
-  listAppProjects(
-    limit: number,
-  ): Promise<{ projects: AppProjectRow[]; total: number }> {
-    return this.app.listAppProjects(limit);
-  }
-
-  listAppBuilds(
-    projectName: string,
-    buildName: string | undefined,
-    limit: number,
-  ): Promise<{
-    project: { id: number; name: string };
-    total: number;
-    builds: AppBuildRow[];
-  }> {
-    return this.app.listAppBuilds(projectName, buildName, limit);
-  }
-
-  listAppManualReports(
-    name: string | undefined,
-    limit: number,
-  ): Promise<{ total: number; reports: AppManualReportRow[] }> {
-    return this.app.listAppManualReports(name, limit);
   }
 
   /** Walk the newest scans for the one whose own link carries this thBuildId. */

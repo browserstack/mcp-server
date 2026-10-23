@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 
 // Reading an App Accessibility (mobile app) build: its issues come inline from the App
 // Accessibility API's per-screen snapshots, not from a CSV export.
@@ -602,6 +602,59 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
     ]);
   });
 
+  // The project search answers a native build's link, so how it fails matters there: a
+  // failed search is that failure, and only the API's "No projects found" means no project.
+  describe("when the project search does not answer", () => {
+    const NAME = "Build #12: Checkout.apk v1.0";
+    const link = `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`;
+    afterEach(() => get.mockReset());
+    // Answered by URL, not by call order: which lookup comes first is the mapping's
+    // business, and these tests are about what the project search's answer means.
+    const searchAnswers = (search: Record<string, unknown>) =>
+      get.mockImplementation(async ({ url }: { url: string }) => {
+        if (url.includes("/sessions")) return { ok: true, status: 200, data: [] };
+        if (url.includes("/espresso/v2/builds/")) {
+          return {
+            ok: true,
+            status: 200,
+            data: { input_capabilities: { project: "Checkout App" } },
+          };
+        }
+        if (url.includes("builds.json")) {
+          return {
+            ok: true,
+            status: 200,
+            data: [{ automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: NAME } }],
+          };
+        }
+        if (url.includes("/project?name=")) return search;
+        return { ok: false, status: 404, data: { message: "Not Found" } };
+      });
+
+    it("reports a failed search as the failure, not as accessibility being off", async () => {
+      searchAnswers({ ok: false, status: 500, data: { message: "Internal error" } });
+
+      const mapping = fetcher().sourceFromReportUrl(link);
+
+      await expect(mapping).rejects.toThrow(/HTTP 500/);
+      await expect(mapping).rejects.not.toThrow(/accessibility was not on/);
+    });
+
+    it("fails on a 404 that is not a 'none found' answer, such as a wrong route", async () => {
+      searchAnswers({ ok: false, status: 404, data: { message: "Not Found" } });
+
+      await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(/HTTP 404/);
+    });
+
+    it("reads 'No projects found' as no project, so no accessibility build", async () => {
+      searchAnswers({ ok: false, status: 404, data: { message: "No projects found" } });
+
+      await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(
+        /accessibility was not on for this run/,
+      );
+    });
+  });
+
   it("says when a native build ran without accessibility on", async () => {
     get
       .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
@@ -821,207 +874,5 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
     await expect(fetcher().appReportIssues(REPORT_ID)).rejects.toThrow(
       /No App Accessibility manual report/,
     );
-  });
-});
-
-describe("AccessibilityReportFetcher lists App Accessibility work", () => {
-  const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
-
-  beforeEach(() => vi.clearAllMocks());
-
-  it("lists the newest projects when no project is named", async () => {
-    get.mockResolvedValueOnce(
-      ok({
-        projects: [
-          { id: 123456, name: "Checkout App", created_at: "2026-10-21T18:44:39.791Z" },
-          { id: 123457, name: "Other", created_at: "2026-10-20T10:00:00.000Z" },
-        ],
-        info: { page: 1, page_size: 10, count: 2, next: null },
-      }),
-    );
-
-    await expect(fetcher().listAppProjects(10)).resolves.toEqual({
-      projects: [
-        { id: 123456, name: "Checkout App", created_at: "2026-10-21T18:44:39.791Z" },
-        { id: 123457, name: "Other", created_at: "2026-10-20T10:00:00.000Z" },
-      ],
-      total: 2,
-    });
-    expect(urls()).toEqual([`${APP_API}/project?page_size=10`]);
-  });
-
-  it("lists a project's newest builds with the ids and links the issues are read by", async () => {
-    get
-      .mockResolvedValueOnce(ok({ projects: [{ id: 123456, name: "Checkout App" }] }))
-      .mockResolvedValueOnce(
-        ok({
-          builds: [
-            {
-              th_build_id: BUILD_ID,
-              build_number: 8,
-              name: "Checkout Build",
-              normalised_name: "Checkout+Build",
-              status: "failed",
-              report_status: "generated",
-              created_at: "2026-10-21T12:26:43.327Z",
-              issue_summary: { total: 36, severity_count: { critical: 14, serious: 9, moderate: 6, minor: 7 }, scan_count: 3 },
-              app_details: { name: "com.example.checkout" },
-              session_data: { frameworkName: "pytest", language: "python" },
-            },
-          ],
-          info: { page: 1, page_size: 10, count: 1, next: null },
-        }),
-      );
-
-    const result = await fetcher().listAppBuilds("Checkout App", undefined, 10);
-
-    expect(urls()).toEqual([
-      `${APP_API}/project?name=Checkout%20App`,
-      `${APP_API}/project/123456/build?page_size=10`,
-    ]);
-    expect(result).toEqual({
-      project: { id: 123456, name: "Checkout App" },
-      total: 1,
-      builds: [
-        {
-          buildId: BUILD_ID,
-          build_number: 8,
-          name: "Checkout Build",
-          status: "failed",
-          report_status: "generated",
-          created_at: "2026-10-21T12:26:43.327Z",
-          scan_count: 3,
-          issues: { total: 36, critical: 14, serious: 9, moderate: 6, minor: 7 },
-          app: "com.example.checkout",
-          framework: "pytest (python)",
-          dashboard_link: `${DASHBOARD}/automated-tests/projects/123456/builds/Checkout+Build/8`,
-        },
-      ],
-    });
-  });
-
-  it("filters builds by name and names the candidates when the project is not an exact match", async () => {
-    get.mockResolvedValueOnce(
-      ok({ projects: [{ id: 1, name: "Checkout App iOS" }, { id: 2, name: "Checkout App Android" }] }),
-    );
-
-    await expect(
-      fetcher().listAppBuilds("Checkout App", "Nightly", 10),
-    ).rejects.toThrow(/No project named "Checkout App".*Checkout App iOS.*Checkout App Android/s);
-  });
-
-  it("reports a failed project search as the failure, not as a project with no such name", async () => {
-    get.mockResolvedValueOnce({ ok: false, status: 500, data: { message: "Internal error" } });
-
-    const listing = fetcher().listAppBuilds("Checkout App", undefined, 10);
-
-    await expect(listing).rejects.toThrow(/HTTP 500/);
-    await expect(listing).rejects.not.toThrow(/No project named/);
-  });
-
-  it("still names no project when the search finds none", async () => {
-    get.mockResolvedValueOnce({ ok: false, status: 404, data: { message: "No projects found" } });
-
-    await expect(fetcher().listAppBuilds("Checkout App", undefined, 10)).rejects.toThrow(
-      /No project named "Checkout App"/,
-    );
-  });
-
-  it("passes a build-name filter through", async () => {
-    get
-      .mockResolvedValueOnce(ok({ projects: [{ id: 123456, name: "Checkout App" }] }))
-      .mockResolvedValueOnce(ok({ builds: [], info: { count: 0, next: null } }));
-
-    await fetcher().listAppBuilds("Checkout App", "Nightly", 5);
-    expect(urls()[1]).toBe(
-      `${APP_API}/project/123456/build?page_size=5&build_name=Nightly`,
-    );
-  });
-
-  it("lists the newest manual reports with the ids the issues are read by", async () => {
-    get.mockResolvedValueOnce(
-      ok({
-        reports: [
-          {
-            id: "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
-            name: "Checkout walkthrough",
-            status: "complete",
-            created_at: "2026-10-21T18:29:39.773Z",
-            app_details: { name: "Checkout", version: "1.2", package_name: "com.example.checkout" },
-            issue_summary: { total: 97, severity_count: { critical: 76, serious: 19, moderate: 0, minor: 2, hidden_issues: 0, duplicate_issues: 47 }, scan_count: 7 },
-          },
-        ],
-        info: { page: 1, page_size: 10, count: 1, next: null },
-      }),
-    );
-
-    const result = await fetcher().listAppManualReports("Checkout", 10);
-
-    expect(urls()).toEqual([`${MANUAL_API}/reports?page_size=10&report_name=Checkout`]);
-    expect(result).toEqual({
-      total: 1,
-      reports: [
-        {
-          reportId: "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
-          name: "Checkout walkthrough",
-          status: "complete",
-          created_at: "2026-10-21T18:29:39.773Z",
-          app: "Checkout 1.2 (com.example.checkout)",
-          scan_count: 7,
-          issues: { total: 97, critical: 76, serious: 19, moderate: 0, minor: 2, duplicates: 47, hidden: 0 },
-          dashboard_link: `${DASHBOARD}/report/6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b`,
-        },
-      ],
-    });
-  });
-});
-
-describe("AccessibilityReportFetcher listings with no match", () => {
-  const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
-  // The API answers an empty list with 404 "No builds found" for access-key callers.
-  const none = (message: string) => ({
-    ok: false,
-    status: 404,
-    data: { success: false, message },
-  });
-
-  beforeEach(() => vi.clearAllMocks());
-
-  it("lists no builds, not an error, when the name filter matches nothing", async () => {
-    get
-      .mockResolvedValueOnce(ok({ projects: [{ id: 123456, name: "Checkout App" }] }))
-      .mockResolvedValueOnce(none("No builds found"));
-
-    await expect(
-      fetcher().listAppBuilds("Checkout App", "Nightly", 10),
-    ).resolves.toEqual({
-      project: { id: 123456, name: "Checkout App" },
-      total: 0,
-      builds: [],
-    });
-    // The client must not throw on the 404 before the listing can read it as "none".
-    expect(get.mock.calls[1][0].raise_error).toBe(false);
-  });
-
-  it("lists no manual reports, not an error, when the name filter matches nothing", async () => {
-    get.mockResolvedValueOnce(none("No reports found"));
-
-    await expect(
-      fetcher().listAppManualReports("Nightly", 10),
-    ).resolves.toEqual({ total: 0, reports: [] });
-    expect(get.mock.calls[0][0].raise_error).toBe(false);
-    expect(urls()).toEqual([`${MANUAL_API}/reports?page_size=10&report_name=Nightly`]);
-  });
-
-  it("still fails on a 404 that is not a 'none found' answer, such as a wrong route", async () => {
-    get.mockResolvedValueOnce({ ok: false, status: 404, data: { message: "Not Found" } });
-
-    await expect(fetcher().listAppManualReports(undefined, 10)).rejects.toThrow(/HTTP 404 \(Not Found\)/);
-  });
-
-  it("still fails plainly on any other listing error", async () => {
-    get.mockResolvedValueOnce({ ok: false, status: 500, data: { message: "Internal server error" } });
-
-    await expect(fetcher().listAppProjects(10)).rejects.toThrow(/HTTP 500/);
   });
 });

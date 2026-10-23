@@ -248,46 +248,6 @@ export interface AppProjectRow {
   created_at?: string;
 }
 
-/** A build as the listing tool shows it: what it is, how it went, and how to read it. */
-export interface AppBuildRow {
-  buildId: string;
-  build_number?: number;
-  name: string;
-  status?: string;
-  report_status?: string;
-  created_at?: string;
-  scan_count: number;
-  issues: {
-    total: number;
-    critical: number;
-    serious: number;
-    moderate: number;
-    minor: number;
-  };
-  app?: string;
-  framework?: string;
-  dashboard_link: string;
-}
-
-export interface AppManualReportRow {
-  reportId: string;
-  name: string;
-  status?: string;
-  created_at?: string;
-  app?: string;
-  scan_count: number;
-  issues: {
-    total: number;
-    critical: number;
-    serious: number;
-    moderate: number;
-    minor: number;
-    duplicates: number;
-    hidden: number;
-  };
-  dashboard_link: string;
-}
-
 /** The element details worth repeating; the rest are the rule's own inputs. */
 const ELEMENT_DETAILS = new Set([
   "className",
@@ -699,27 +659,6 @@ export function manualReportStatus(detail: {
   return detail.meta_data?.ended_at ? "complete" : "in_progress";
 }
 
-/** The severity counts of an issue summary, each defaulting to 0. */
-function severityCounts(summary: {
-  total?: number;
-  severity_count?: Record<string, number | undefined>;
-}): {
-  total: number;
-  critical: number;
-  serious: number;
-  moderate: number;
-  minor: number;
-} {
-  const sev = summary.severity_count ?? {};
-  return {
-    total: summary.total ?? 0,
-    critical: sev.critical ?? 0,
-    serious: sev.serious ?? 0,
-    moderate: sev.moderate ?? 0,
-    minor: sev.minor ?? 0,
-  };
-}
-
 /** A link's CGI-escaped name ("+" for a space), read the same however it was escaped. */
 function unescapedName(name: string): string {
   try {
@@ -973,116 +912,6 @@ export class AppAccessibilityApi {
     );
   }
 
-  /** The newest projects, as many as asked for. */
-  async listAppProjects(
-    limit: number,
-  ): Promise<{ projects: AppProjectRow[]; total: number }> {
-    const data = await this.listing(
-      `${APP_API_BASE}/project?page_size=${limit}`,
-      "App Accessibility projects",
-    );
-    const rows: AppProjectRow[] = (data.projects ?? []).map(
-      (p: AppProjectRow) => ({
-        id: p.id,
-        name: p.name,
-        ...(p.created_at ? { created_at: p.created_at } : {}),
-      }),
-    );
-    return { projects: rows, total: data.info?.count ?? rows.length };
-  }
-
-  /**
-   * A project's newest builds, by exact project name, optionally filtered by build name.
-   * A project name that matches none exactly names the near matches, so the agent can
-   * pick rather than guess.
-   */
-  async listAppBuilds(
-    projectName: string,
-    buildName: string | undefined,
-    limit: number,
-  ): Promise<{
-    project: { id: number; name: string };
-    total: number;
-    builds: AppBuildRow[];
-  }> {
-    const candidates = await this.projectsNamed(projectName);
-    const project = candidates.find((p) => p.name === projectName);
-    if (!project) {
-      const near = candidates.map((p) => `"${p.name}"`).join(", ");
-      throw new Error(
-        `No project named "${projectName}"${near ? `. Did you mean: ${near}` : ""}. Call listAppAccessibilityReports without projectName to list the projects`,
-      );
-    }
-    const data = await this.listing(
-      `${APP_API_BASE}/project/${project.id}/build?page_size=${limit}${
-        buildName ? `&build_name=${encodeURIComponent(buildName)}` : ""
-      }`,
-      `the builds of "${project.name}"`,
-    );
-    const rows: any[] = data.builds ?? [];
-    const builds: AppBuildRow[] = rows.map((b) => {
-      const framework = b.session_data?.frameworkName;
-      const language = b.session_data?.language;
-      const app = b.app_details?.name ?? b.app_details?.package_name;
-      return {
-        buildId: b.th_build_id,
-        build_number: b.build_number,
-        name: b.name,
-        status: b.status,
-        report_status: b.report_status,
-        created_at: b.created_at,
-        scan_count: b.issue_summary?.scan_count ?? 0,
-        issues: severityCounts(b.issue_summary ?? {}),
-        ...(app ? { app } : {}),
-        ...(framework
-          ? { framework: language ? `${framework} (${language})` : framework }
-          : {}),
-        dashboard_link: `${APP_DASHBOARD}/automated-tests/projects/${project.id}/builds/${b.normalised_name}/${b.build_number}`,
-      };
-    });
-    return {
-      project: { id: project.id, name: project.name },
-      total: data.info?.count ?? builds.length,
-      builds,
-    };
-  }
-
-  /** The newest manual reports, optionally filtered by name. */
-  async listAppManualReports(
-    name: string | undefined,
-    limit: number,
-  ): Promise<{ total: number; reports: AppManualReportRow[] }> {
-    const data = await this.listing(
-      `${MANUAL_API_BASE}/reports?page_size=${limit}${
-        name ? `&report_name=${encodeURIComponent(name)}` : ""
-      }`,
-      "manual App Accessibility reports",
-    );
-    const rows: any[] = data.reports ?? [];
-    const reports: AppManualReportRow[] = rows.map((r) => {
-      const d = r.app_details;
-      const app = d?.name
-        ? `${d.name}${d.version ? ` ${d.version}` : ""}${d.package_name ? ` (${d.package_name})` : ""}`
-        : undefined;
-      const sev = r.issue_summary?.severity_count ?? {};
-      return {
-        reportId: r.id,
-        name: r.name,
-        status: r.status,
-        created_at: r.created_at,
-        ...(app ? { app } : {}),
-        scan_count: r.issue_summary?.scan_count ?? 0,
-        issues: {
-          ...severityCounts(r.issue_summary ?? {}),
-          duplicates: sev.duplicate_issues ?? 0,
-          hidden: sev.hidden_issues ?? 0,
-        },
-        dashboard_link: `${APP_DASHBOARD}/report/${r.id}`,
-      };
-    });
-    return { total: data.info?.count ?? reports.length, reports };
-  }
-
   /** A manual report's details, or undefined when the API does not know the id. */
   async manualReport(reportId: string): Promise<any | undefined> {
     const resp = await apiClient.get({
@@ -1154,7 +983,7 @@ export class AppAccessibilityApi {
     const detail = await this.manualReport(reportId);
     if (!detail) {
       throw new Error(
-        `No App Accessibility manual report with id "${reportId}". Pass the id from listAppAccessibilityReports (kind: manual), or the report's dashboard link (app-accessibility.browserstack.com/report/…) as reportUrl`,
+        `No App Accessibility manual report with id "${reportId}". Pass the report's dashboard link (app-accessibility.browserstack.com/report/…) as reportUrl, or an id from the capability functions' list of manual App Accessibility reports`,
       );
     }
     const dashboard = await this.dashboardScreens(reportId);

@@ -87,7 +87,7 @@ export default function addAppLiveTools(
   // this tool ended with "my tools can start it but can't tap anything in it". The
   // description says so, and names the surface that can — only when that surface is on.
   const description =
-    "Open a manual App Live session for the user to operate by hand. It cannot be driven by the agent." +
+    "Open a manual App Live session for the user to operate by hand. It cannot be driven by the agent, and it uploads the app to App Live's own store, which agent-driven device sessions cannot use." +
     (capabilityRegistryEnabled()
       ? " To tap, type or read the app yourself, use a mobiledevicecontrol session via invokeCapability."
       : "");

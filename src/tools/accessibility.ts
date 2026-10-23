@@ -463,6 +463,11 @@ async function appBuildMessages(
     ...processingNote(processing),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues}) from the App Accessibility build below (${screens})`,
     appBuildDetails(report),
+    ...(report.screens_read !== undefined
+      ? [
+          `Only the first ${report.screens_read} of the build's ${report.scan_count} scanned screens were read; the total counts the issues on those. The dashboard report has them all.`,
+        ]
+      : []),
     ...excludedIssuesNote(null, 0, report.hidden_issues),
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
     closingMessage(

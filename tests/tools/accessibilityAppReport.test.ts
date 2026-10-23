@@ -12,7 +12,10 @@ import {
   AccessibilityReportFetcher,
   MAX_APP_BUILD_LIST_PAGES,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
-import { flattenAppSnapshots } from "../../src/tools/accessiblity-utils/app-report-fetcher.js";
+import {
+  flattenAppSnapshots,
+  MAX_SNAPSHOT_PAGES,
+} from "../../src/tools/accessiblity-utils/app-report-fetcher.js";
 
 const get = apiClient.get as Mock;
 const API = "https://api-accessibility.browserstack.com/api";
@@ -315,6 +318,42 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
       ),
     ).rejects.toThrow(/build 8 of "Checkout Build"/);
     expect(get).toHaveBeenCalledTimes(MAX_APP_BUILD_LIST_PAGES);
+  });
+
+  it("stops at the snapshot page limit and says how many screens it read", async () => {
+    get.mockImplementation(async ({ url }: { url: string }) => {
+      if (url.endsWith(BUILD_ID)) {
+        return ok({ meta_data: { ...META, issue_summary: { total: 9, scan_count: 1500 } } });
+      }
+      if (url.includes("/snapshot")) {
+        return ok({
+          data: {
+            details: [SNAPSHOTS[0]],
+            info: { next: 2 },
+            issue_counts: { hidden_issues: 0 },
+          },
+        });
+      }
+      return ok({ projects: [] });
+    });
+
+    const report = await fetcher().appBuildReport(BUILD_ID);
+
+    expect(urls().filter((u) => u.includes("/snapshot"))).toHaveLength(MAX_SNAPSHOT_PAGES);
+    expect(report.screens_read).toBe(MAX_SNAPSHOT_PAGES);
+  });
+
+  it("reports no screens_read when every snapshot page was read", async () => {
+    get
+      .mockResolvedValueOnce(ok({ meta_data: META }))
+      .mockResolvedValueOnce(
+        ok({ data: { details: SNAPSHOTS, info: { next: null }, issue_counts: { hidden_issues: 1 } } }),
+      )
+      .mockResolvedValueOnce(ok({ projects: [] }));
+
+    const report = await fetcher().appBuildReport(BUILD_ID);
+
+    expect(report).not.toHaveProperty("screens_read");
   });
 
   it("reads an app build's issues from its screens, with its dashboard link", async () => {

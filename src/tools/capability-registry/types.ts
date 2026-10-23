@@ -435,6 +435,14 @@ export interface AuthScheme {
 }
 
 export interface ProductIndex {
+  /**
+   * The product's name as a person would say it — "Mobile Device Control", not the key.
+   *
+   * The key stays the handle every call takes; this is what the routing question and
+   * the product listing show, because "which do you mean — mobiledevicecontrol or tm?"
+   * is a question asked in our vocabulary rather than the user's.
+   */
+  title?: string;
   summary: string;
   /**
    * Words that route to this product but are not the name of anything in it.

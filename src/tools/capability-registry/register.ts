@@ -350,13 +350,16 @@ export function addCapabilityRegistryTools(
                 : { verdict: "settled", product: ambiguity.settled },
           )
         : undefined;
+      /** The product's title for the question put to a person; the key stays the handle. */
+      const label = (name: string) =>
+        registry.index.products[name]?.title ?? name;
       const routing =
         ambiguity.products.length > 1
           ? {
               verdict: "products_clash" as const,
               note:
                 `These products clash over ${ambiguity.terms.map((t) => `'${t}'`).join(", ")} — ` +
-                `the same word means something different in ${ambiguity.products.join(" and ")}. ` +
+                `the same word means something different in ${ambiguity.products.map(label).join(" and ")}. ` +
                 "ASK THE USER which they mean before searching or invoking anything; do not " +
                 "search each product in turn and merge the results. Searching before you " +
                 "ask will be refused: send the user's answer in `user_words` with this " +
@@ -364,9 +367,10 @@ export function addCapabilityRegistryTools(
               routing_token: listingToken,
               shared_terms: ambiguity.terms,
               products: ambiguity.products,
-              question: `Which product do you mean — ${ambiguity.products.join(" or ")}?`,
+              question: `Which product do you mean — ${ambiguity.products.map(label).join(" or ")}?`,
               senses: ambiguity.products.map((name) => ({
                 product: name,
+                title: label(name),
                 means: ambiguity.terms
                   .map((term) => {
                     const entities =
@@ -403,6 +407,7 @@ export function addCapabilityRegistryTools(
                 routing_token: listingToken,
                 question: `Which product do you mean — ${registry
                   .productNames()
+                  .map(label)
                   .join(" or ")}?`,
               }
             : query
@@ -428,6 +433,9 @@ export function addCapabilityRegistryTools(
         ...(routing ? { routing } : {}),
         products: registry.productNames().map((name) => ({
           name,
+          ...(registry.index.products[name].title
+            ? { title: registry.index.products[name].title }
+            : {}),
           summary: registry.index.products[name].summary,
           // THE ENTITIES AND WHAT EACH ONE IS. Routing is this tool's whole job, and a
           // product summary alone does not do it: "add a tag to xyz test" reads as

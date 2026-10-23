@@ -3,6 +3,7 @@
  "version": "1.0",
  "build_id": "8445466_2026-10-19T06:53:46Z",
  "devicecontrol": {
+  "title": "Device Control (Automate)",
   "summary": "Device control: drive a real desktop or mobile browser page by page. The account side lists every operating system, browser and version combination available, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link, video, and console, network and profiling logs \u2014 after the browser is released. The session side opens a browser on a chosen combination and drives it: navigate, go back and forward, reload, find elements by CSS or XPath, click, type, clear, screenshot the viewport, resize the window, and move between tabs and iframes. Web pages are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Mobile APPS are not here: those are mobile device control, which drives an installed app rather than a browser. Scrolling is done with scroll_to_element or scroll_page, there is no capability that waits, and element ids go stale as soon as the page navigates or re-renders. A session holds a browser until it is ended.",
   "routing_terms": [
    "automate",

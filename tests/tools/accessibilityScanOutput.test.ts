@@ -17,6 +17,7 @@ vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
     setAuth = vi.fn();
     startScan = m.startScan;
     waitUntilComplete = m.waitUntilComplete;
+    runSettings = vi.fn().mockResolvedValue(undefined);
   },
 }));
 vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({

@@ -20,6 +20,21 @@ export interface AccessibilityScanStatus {
   errors?: string[];
 }
 
+/**
+ * What a Website Scanner scan checks for, as the create-scan API takes it under
+ * scanSettings. A setting left out takes the API's default.
+ */
+export interface ScanSettings {
+  /** The WCAG version and level, such as "wcag22aa", or "rgaa41" (API default "wcag21aa"). */
+  wcagVersion?: string;
+  /** Report best-practice issues too (API default false). */
+  bestPractices?: boolean;
+  /** Report issues that need a manual review (API default true). */
+  needsReview?: boolean;
+  /** Run the advanced rules (API default true). */
+  advancedRules?: boolean;
+}
+
 export class AccessibilityScanner {
   private auth: { username: string; password: string } | undefined;
 
@@ -31,7 +46,7 @@ export class AccessibilityScanner {
     name: string,
     urlList: string[],
     authConfigId?: number,
-    advancedRules?: boolean,
+    settings: ScanSettings = {},
   ): Promise<AccessibilityScanResponse> {
     if (!this.auth?.username || !this.auth?.password) {
       throw new Error(
@@ -80,14 +95,15 @@ export class AccessibilityScanner {
       }
     });
 
+    const scanSettings = Object.fromEntries(
+      Object.entries(settings).filter(([, value]) => value !== undefined),
+    );
     const baseRequestBody = {
       name,
       urlList: transformedUrlList,
       recurring: false,
       ...(authConfigId && { authConfigId }),
-      ...(advancedRules !== undefined && {
-        scanSettings: { advancedRules },
-      }),
+      ...(Object.keys(scanSettings).length > 0 && { scanSettings }),
     };
 
     let requestBody = baseRequestBody;
@@ -121,19 +137,60 @@ export class AccessibilityScanner {
         );
       return data;
     } catch (err: any) {
-      // apiClient throws generic errors, try to extract message
-      if (err?.response?.status === 422) {
+      // apiClient throws generic errors, try to extract message. A 422 also refuses a
+      // setting (a WCAG version the API does not take), so its own reason comes first.
+      const data = err?.response?.data;
+      const reason =
+        data?.error ||
+        data?.message ||
+        (Array.isArray(data?.errors) ? data.errors.join(", ") : undefined);
+      if (err?.response?.status === 422 && !reason) {
         throw new Error(
           "A scan with this name already exists. please update the name and run again.",
         );
       }
-      const msg =
-        err?.response?.data?.error ||
-        err?.response?.data?.message ||
-        err?.message ||
-        String(err);
-      throw new Error(`Failed to start scan: ${msg}`);
+      throw new Error(
+        `Failed to start scan: ${reason || err?.message || String(err)}`,
+      );
     }
+  }
+
+  /**
+   * The settings a run actually ran with, from its summary, or undefined when it cannot be
+   * read. A setting left out takes the API's default, and the plan can turn advanced rules
+   * off, so what was asked for is not always what ran.
+   */
+  async runSettings(
+    scanId: string,
+    scanRunId: string,
+  ): Promise<ScanSettings | undefined> {
+    const resp = await apiClient
+      .get({
+        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}`,
+        headers: {
+          Authorization:
+            "Basic " +
+            Buffer.from(
+              `${this.auth?.username}:${this.auth?.password}`,
+            ).toString("base64"),
+        },
+        raise_error: false,
+      })
+      .catch(() => undefined);
+    const run = resp?.ok ? resp.data?.data : undefined;
+    if (!run) return undefined;
+    return {
+      ...(run.wcagVersion ? { wcagVersion: run.wcagVersion } : {}),
+      ...(typeof run.bestPractices === "boolean"
+        ? { bestPractices: run.bestPractices }
+        : {}),
+      ...(typeof run.needsReview === "boolean"
+        ? { needsReview: run.needsReview }
+        : {}),
+      ...(typeof run.advanced === "boolean"
+        ? { advancedRules: run.advanced }
+        : {}),
+    };
   }
 
   async pollStatus(

@@ -290,6 +290,36 @@ export function addCapabilityRegistryTools(
     return failed(message, extra);
   };
 
+  /**
+   * A question for the user, not a failure.
+   *
+   * A product clash stops the search just as a refusal does, but it is the EXPECTED path
+   * for an ambiguous request, and surfacing it as a tool error made every client render
+   * it in red and every agent narrate "the search failed". It is returned as an ordinary
+   * result whose `status` says what to do; the search still does not run. Counted in
+   * telemetry under `ask_user_reason`, next to the refusals it used to sit with.
+   */
+  const askUser = (
+    tool: string,
+    reason: string,
+    message: string,
+    extra: Record<string, unknown>,
+    extras?: MCPEventExtras,
+  ): CallToolResult => {
+    try {
+      trackMCP(tool, server.server.getClientVersion()!, undefined, config, {
+        ask_user_reason: reason,
+        ...(extras ?? {}),
+      });
+    } catch {
+      // Telemetry must not decide whether a tool call succeeds.
+    }
+    return ok({ status: "ask_user", reason, message, ...extra });
+  };
+
+  /** The product's title for anything put to a person; the key stays the handle. */
+  const label = (name: string) => registry.index.products[name]?.title ?? name;
+
   tools.listProducts = server.tool(
     "listProducts",
     "List the BrowserStack products this surface can reach: what each one does, the " +
@@ -350,9 +380,6 @@ export function addCapabilityRegistryTools(
                 : { verdict: "settled", product: ambiguity.settled },
           )
         : undefined;
-      /** The product's title for the question put to a person; the key stays the handle. */
-      const label = (name: string) =>
-        registry.index.products[name]?.title ?? name;
       const routing =
         ambiguity.products.length > 1
           ? {
@@ -792,12 +819,15 @@ export function addCapabilityRegistryTools(
               .filter(Boolean);
             return {
               product: name,
+              ...(registry.index.products[name]?.title
+                ? { title: registry.index.products[name]?.title }
+                : {}),
               summary: registry.index.products[name]?.summary,
               ...(senses.length ? { shared_terms: senses } : {}),
             };
           });
           const named = anchor.products.length > 0;
-          return refuse(
+          return askUser(
             "searchCapability",
             "product_ambiguous",
             (blank
@@ -809,15 +839,15 @@ export function addCapabilityRegistryTools(
                   (ambiguity.because?.length
                     ? ` (${ambiguity.because.map((t) => `'${t}'`).join(", ")})`
                     : "") +
-                  `, so the request points at ${ambiguity.settled}, not ${product}. ` +
+                  `, so the request points at ${label(ambiguity.settled as string)}, not ${label(product)}. ` +
                   "Search the product the words name, or — if the user meant " +
-                  `${product} — get them to say so and quote them. `
-                : `'${subject}' could mean ${ambiguity.products.join(" or ")} — ` +
+                  `${label(product)} — get them to say so and quote them. `
+                : `'${subject}' could mean ${ambiguity.products.map(label).join(" or ")} — ` +
                   `${ambiguity.terms.map((t) => `'${t}'`).join(", ")} ` +
                   `${ambiguity.terms.length === 1 ? "belongs" : "belong"} to both. `) +
               (named
                 ? `The words you quoted (${anchor.terms.map((t) => `'${t}'`).join(", ")}) ` +
-                  `point at ${anchor.products.join(" and ")}, not ${product}. `
+                  `point at ${anchor.products.map(label).join(" and ")}, not ${label(product)}. `
                 : user_words
                   ? "Nothing in the words you quoted names a product or a term only one " +
                     "product uses. "
@@ -830,7 +860,7 @@ export function addCapabilityRegistryTools(
             {
               routing_token: token,
               clarify: {
-                question: `Which product do you mean — ${choices.join(" or ")}?`,
+                question: `Which product do you mean — ${choices.map(label).join(" or ")}?`,
                 shared: ambiguity.terms,
                 options,
               },

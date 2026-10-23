@@ -25,9 +25,15 @@ const FIXTURE_DIR = fileURLToPath(
  */
 const SHIPPED_DIR = mkdtempSync(join(tmpdir(), "cap-registry-multi-"));
 for (const [from, name] of [
-  [new URL("../../capability/tm.capability-index.json", import.meta.url), "tm.capability-index.json"],
   [
-    new URL("../fixtures/capability-multi/secondproduct.capability-index.json", import.meta.url),
+    new URL("../../capability/tm.capability-index.json", import.meta.url),
+    "tm.capability-index.json",
+  ],
+  [
+    new URL(
+      "../fixtures/capability-multi/secondproduct.capability-index.json",
+      import.meta.url,
+    ),
     "secondproduct.capability-index.json",
   ],
 ] as const) {
@@ -148,9 +154,8 @@ describe("capability registry, end to end through the server factory", () => {
   it("carries each entity's one-line meaning on the routing call", async () => {
     const server = await buildServer();
     const listed = JSON.parse(
-      (
-        await (server.getTools().listProducts as any).handler({}, {} as any)
-      ).content[0].text,
+      (await (server.getTools().listProducts as any).handler({}, {} as any))
+        .content[0].text,
     );
     const byName = Object.fromEntries(
       listed.products[0].entities.map((e: any) => [e.entity, e]),
@@ -214,21 +219,26 @@ describe("capability registry, end to end through the server factory", () => {
     const server = await buildServer();
     const search = server.getTools().searchCapability as any;
     const run = async (args: Record<string, unknown>) => {
-      const r = await search.handler(
-        { product: "tm", ...args },
-        {} as any,
-      );
-      return { blocked: r.isError === true, body: JSON.parse(r.content[0].text) };
+      const r = await search.handler({ product: "tm", ...args }, {} as any);
+      const body = JSON.parse(r.content[0].text);
+      // The gate is a question for the user, not an error: it stops the search without
+      // flagging the call as failed.
+      return {
+        blocked: body.status === "ask_user" && r.isError !== true,
+        body,
+      };
     };
 
     const refused = await run({ query: "list all projects" });
     expect(refused.blocked).toBe(true);
     // The refusal has to be actionable: which products, and on which word.
-    expect(refused.body.error).toContain("secondproduct or tm");
-    expect(refused.body.error).toContain("'project'");
-    expect(refused.body.error).toMatch(/to the USER/);
+    // Products are named by title where they have one — tm's is "Test Management";
+    // the fixture's second product declares none and reads as its key.
+    expect(refused.body.message).toContain("secondproduct or Test Management");
+    expect(refused.body.message).toContain("'project'");
+    expect(refused.body.message).toMatch(/to the USER/);
     // And it must name the failure mode it exists to stop.
-    expect(refused.body.error).toMatch(/search each product in turn and merge/);
+    expect(refused.body.message).toMatch(/search each product in turn and merge/);
 
     // A word only one product claims settles the query, so there is nothing to ask —
     // PROVIDED it settles on the product being searched.
@@ -245,10 +255,11 @@ describe("capability registry, end to end through the server factory", () => {
     // settled, never whether it settled on what was being asked for.
     const crossed = await run({ query: "check my quota" });
     expect(crossed.blocked).toBe(true);
-    expect(crossed.body.error).toMatch(/points at secondproduct, not tm/);
-    expect(crossed.body.error).toMatch(/only secondproduct claims \('quota'\)/);
+    expect(crossed.body.message).toMatch(/points at secondproduct, not Test Management/);
+    expect(crossed.body.message).toMatch(/only secondproduct claims \('quota'\)/);
     expect(
-      (await run({ query: "check my quota", product: "secondproduct" })).blocked,
+      (await run({ query: "check my quota", product: "secondproduct" }))
+        .blocked,
     ).toBe(false);
 
     // ONE WAY OUT, AND IT IS NOT A FLAG. `product_choice: 'user_confirmed'` used to open
@@ -256,15 +267,21 @@ describe("capability registry, end to end through the server factory", () => {
     // caller wrote it on every ambiguous prompt with nothing behind it. What opens it now
     // is the user's own words, checked against the index rather than taken on trust.
     expect(
-      (await run({
-        query: "list all projects",
-        user_words: "the test management one",
-      })).blocked,
+      (
+        await run({
+          query: "list all projects",
+          user_words: "the test management one",
+        })
+      ).blocked,
     ).toBe(false);
     // And a flag by that name buys nothing, because there is no longer such an argument.
     expect(
-      (await run({ query: "list all projects", product_choice: "user_confirmed" }))
-        .blocked,
+      (
+        await run({
+          query: "list all projects",
+          product_choice: "user_confirmed",
+        })
+      ).blocked,
     ).toBe(true);
 
     // `entity` IS NOT A WAY OUT, and used to be. It narrows within a product and says
@@ -286,7 +303,11 @@ describe("capability registry, end to end through the server factory", () => {
     process.env.CAPABILITY_REGISTRY_INDEX_DIR = SHIPPED_DIR;
     const server = await buildServer();
     const r: any = await (server.getTools().searchCapability as any).handler(
-      { query: "list all projects", product: "tm", product_choice: "not_asked" },
+      {
+        query: "list all projects",
+        product: "tm",
+        product_choice: "not_asked",
+      },
       {} as any,
     );
     const { clarify } = JSON.parse(r.content[0].text);
@@ -302,7 +323,10 @@ describe("capability registry, end to end through the server factory", () => {
     // word — the two things a user needs to answer without being shown a schema.
     const tm = clarify.options.find((o: any) => o.product === "tm");
     expect(tm.summary).toMatch(/Test Management/);
-    expect(tm.shared_terms[0]).toMatchObject({ term: "project", entity: "project" });
+    expect(tm.shared_terms[0]).toMatchObject({
+      term: "project",
+      entity: "project",
+    });
     expect(tm.shared_terms[0].means).toMatch(/top-level container/);
 
     // The second product ships no entity descriptions, so its sense of `project` has no
@@ -321,13 +345,13 @@ describe("capability registry, end to end through the server factory", () => {
     process.env.CAPABILITY_REGISTRY_INDEX_DIR = SHIPPED_DIR;
     const server = await buildServer();
     const search = server.getTools().searchCapability as any;
-    const blocked = async (query: string) =>
-      (
-        await search.handler(
-          { query, product: "tm", product_choice: "not_asked" },
-          {} as any,
-        )
-      ).isError === true;
+    const blocked = async (query: string) => {
+      const r = await search.handler(
+        { query, product: "tm", product_choice: "not_asked" },
+        {} as any,
+      );
+      return JSON.parse(r.content[0].text).status === "ask_user";
+    };
 
     // QUERY side: the entry is `project`, the user says "projects". Exact containment
     // missed this — and it is the query that was actually reported.

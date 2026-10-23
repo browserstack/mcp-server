@@ -676,6 +676,10 @@ async function compareAppBuilds(
   ]);
 }
 
+/** How an app page's issues name what they share, which the page says once. */
+const APP_ISSUES_SHAPE =
+  "Each issue names its rule (rule_id) and screen: the rule's name, description, WCAG criteria and usual fix are under rules, each screen's screenshot under screens, and measured holds what the rule measured on the element.";
+
 /** An app build's issues come inline from its scanned screens; there is no CSV to link. */
 async function appBuildMessages(
   reportFetcher: AccessibilityReportFetcher,
@@ -703,15 +707,17 @@ async function appBuildMessages(
         ]
       : []),
     ...excludedIssuesNote(null, 0, report.hidden_issues),
-    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
+    APP_ISSUES_SHAPE,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules: report.rules, screens: report.screens }, null, 2))}`,
     closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
 }
 
 /**
- * A manual report's issues come inline from its scanned screens. The API lists every
- * occurrence and does not mark the duplicates the dashboard folds, so the dashboard's
- * own count is stated next to the total rather than reproduced.
+ * A manual report's issues come inline from its scanned screens: the dashboard's own, with
+ * its duplicates left out, when its route takes the access key; else every occurrence the
+ * Manual Reports API lists, which does not mark duplicates, so the dashboard's count is
+ * stated next to the total rather than reproduced.
  */
 async function appReportMessages(
   reportFetcher: AccessibilityReportFetcher,
@@ -747,20 +753,26 @@ async function appReportMessages(
     report.device ? ` on ${report.device}` : ""
   }`;
   const dashboardNote =
-    report.duplicate_occurrences > 0
-      ? [
-          `The dashboard counts ${report.dashboard_count} issues for this report: ${report.duplicate_occurrences} of the occurrences are duplicates it folds, which the API does not mark.`,
-        ]
-      : [];
+    report.duplicate_occurrences === 0
+      ? []
+      : report.deduplicated
+        ? [
+            `${report.duplicate_occurrences} duplicate occurrences are left out, as the dashboard leaves them out of its count.`,
+          ]
+        : [
+            `The dashboard counts ${report.dashboard_count} issues for this report: ${report.duplicate_occurrences} of the occurrences are duplicates it folds, which the API does not mark.`,
+          ];
+  const counted = report.deduplicated ? "issues" : "issue occurrences";
   return [
     ...preface,
     ...processingNote(processing),
-    `Retrieved ${page_length} accessibility issue occurrences (Total: ${total_issues}) from the App Accessibility manual report below (${where})`,
+    `Retrieved ${page_length} accessibility ${counted} (Total: ${total_issues}) from the App Accessibility manual report below (${where})`,
     details,
     ...(cursor === 0 ? summaryNote(report.summary, total_issues) : []),
     ...dashboardNote,
     ...excludedIssuesNote(null, 0, report.hidden_issues),
-    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
+    APP_ISSUES_SHAPE,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules: report.rules, screens: report.screens }, null, 2))}`,
     closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
 }

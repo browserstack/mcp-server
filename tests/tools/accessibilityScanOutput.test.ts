@@ -477,6 +477,15 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
     build_name: "Checkout Build",
     dashboard_link: LINK,
     fup_capped: false,
+    rules: {
+      "interactable-element-content-label": {
+        issue_type: "Interactive Element Accessibility Label",
+        issue_description: "Interactive elements must have a label.",
+        wcag: "WCAG 2.2-4.1.2 A",
+        how_to_fix: "Give the button a contentDescription.",
+      },
+    },
+    screens: { "Screen 1 (test_checkout)": "https://assets.example/s1.jpeg" },
   };
 
   beforeEach(() => {
@@ -530,6 +539,21 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
 
     expect(body).toContain(
       "Only the first 1000 of the build's 1500 scanned screens were read; the total counts the issues on those. The dashboard report has them all.",
+    );
+  });
+
+  it("hands out each rule's description and fix, and each screen's screenshot, with the page's issues", async () => {
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ buildId: BUILD_ID }, context),
+    );
+
+    const block = body.slice(body.indexOf("«UNTRUSTED accessibility scan results"));
+    expect(block).toContain('"rules"');
+    expect(block).toContain("Give the button a contentDescription.");
+    expect(block).toContain('"screens"');
+    expect(block).toContain("https://assets.example/s1.jpeg");
+    expect(body).toContain(
+      "Each issue names its rule (rule_id) and screen: the rule's name, description, WCAG criteria and usual fix are under rules, each screen's screenshot under screens, and measured holds what the rule measured on the element.",
     );
   });
 
@@ -672,6 +696,7 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
       next_page: 140,
       remaining: 143,
       summary: { by_severity: { serious: 144 }, by_rule: [], by_screen: [] },
+      deduplicated: false,
       dashboard_count: 97,
       duplicate_occurrences: 47,
       hidden_issues: 0,
@@ -680,8 +705,49 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
       report_name: "Checkout walkthrough",
       device: "iPhone 15 Pro, ios 17.0",
       dashboard_link: LINK,
+      rules: {},
+      screens: {},
     });
     handlers = register();
+  });
+
+  it("gives the dashboard's count when the issues come without its duplicates", async () => {
+    m.appReportIssues.mockResolvedValue({
+      records: [{ rule_id: "touch-target-size-and-spacing", severity: "serious", screen: "Screen 1" }],
+      page_length: 1,
+      total_issues: 97,
+      next_page: 140,
+      remaining: 96,
+      summary: { by_severity: { serious: 97 }, by_rule: [], by_screen: [] },
+      deduplicated: true,
+      dashboard_count: 97,
+      duplicate_occurrences: 47,
+      hidden_issues: 0,
+      scan_count: 7,
+      status: "complete",
+      report_name: "Checkout walkthrough",
+      dashboard_link: LINK,
+      rules: {
+        "touch-target-size-and-spacing": {
+          issue_type: "Touch Target Size & Spacing",
+          issue_description: "Targets must be large enough.",
+          wcag: "WCAG 2.2-2.5.8 AA",
+          how_to_fix: "Make the target at least 48dp.",
+        },
+      },
+      screens: { "Screen 1": "https://assets.example/s1.jpeg" },
+    });
+
+    const body = text(await handlers.fetchAccessibilityIssues({ appReportId: REPORT_ID }, CONTEXT));
+
+    expect(body).toContain(
+      "Retrieved 1 accessibility issues (Total: 97) from the App Accessibility manual report below (7 screens scanned)",
+    );
+    expect(body).toContain(
+      "47 duplicate occurrences are left out, as the dashboard leaves them out of its count.",
+    );
+    expect(body).not.toContain("which the API does not mark");
+    expect(body).toContain("Make the target at least 48dp.");
   });
 
   it("reads a manual report by its id and says how the dashboard counts it", async () => {

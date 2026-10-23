@@ -132,6 +132,15 @@ describe("parseAccessibilityReportFromCSV for one page", () => {
 describe("parseAccessibilityReportFromCSV paging", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("hands out about 10,000 characters of issues per call by default", async () => {
+    serve([1, 2, 3, 4].map((n) => row({ "Issue type": `rule-${n}`, Component: "div", "Affected page": HOME, "Issue link": link(`p${n}`), "HTML snippet": "x".repeat(3000) })));
+
+    const page = await parseAccessibilityReportFromCSV("https://csv");
+
+    expect(page.page_length).toBe(3);
+    expect(page.next_page).not.toBeNull();
+  });
+
   it("still returns an issue larger than a page, so paging never stalls", async () => {
     serve([
       row({ "Issue type": "small", Component: "a", "Affected page": HOME, "Issue link": link("s") }),

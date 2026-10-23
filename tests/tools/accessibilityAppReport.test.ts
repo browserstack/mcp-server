@@ -709,4 +709,42 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
       ),
     ).rejects.toThrow(/No session.*App Automate build/);
   });
+
+  // Checked live: a native build lists no sessions (200, []), an id App Automate does not
+  // know answers 404 on each lookup, and a bad key 401. Only a 404 is a "not this one".
+  const link = `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`;
+  const failed = (status: number) => ({ ok: false, status, data: {} });
+
+  it("reports a failed session list as the failure, not as a native build", async () => {
+    get.mockResolvedValueOnce(failed(401));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 401/);
+    expect(urls()).toEqual([sessionsUrl]);
+  });
+
+  it("reports a failed native build lookup as the failure, not as an unknown build", async () => {
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce(failed(429));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 429/);
+    await expect(failure).rejects.not.toThrow(/No session found/);
+  });
+
+  it("reports a failed build list as the failure, not as an old build", async () => {
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { input_capabilities: { project: "Checkout App" } },
+      })
+      .mockResolvedValueOnce(failed(503));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 503/);
+    await expect(failure).rejects.not.toThrow(/newest builds/);
+  });
 });

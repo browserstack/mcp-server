@@ -464,13 +464,22 @@ export class AppAccessibilityApi {
     return buildId;
   }
 
-  /** The first SDK session of an App Automate build; a native build lists none. */
+  /**
+   * The first SDK session of an App Automate build; a native build lists none, and a build
+   * App Automate does not know is a 404. Any other failure is thrown: read as "no session",
+   * it would send an SDK build down the native path.
+   */
   private async anySdkSession(buildId: string): Promise<string | undefined> {
     const resp = await apiClient.get({
       url: `${sessionsListUrl(SessionType.AppAutomate, buildId)}?limit=1`,
       headers: this.headers(),
       raise_error: false,
     });
+    if (!resp.ok && resp.status !== 404) {
+      throw new Error(
+        `Could not list the sessions of App Automate build ${buildId}: HTTP ${resp.status}`,
+      );
+    }
     return resp.ok ? resp.data?.[0]?.automation_session?.hashed_id : undefined;
   }
 
@@ -514,6 +523,12 @@ export class AppAccessibilityApi {
         raise_error: false,
       });
       if (resp.ok) return resp.data?.input_capabilities?.project;
+      // Each framework's API answers 404 for the other's builds.
+      if (resp.status !== 404) {
+        throw new Error(
+          `Could not read App Automate build ${buildId} from the ${framework} API: HTTP ${resp.status}`,
+        );
+      }
     }
     return undefined;
   }
@@ -528,9 +543,14 @@ export class AppAccessibilityApi {
         headers: this.headers(),
         raise_error: false,
       });
+      if (!resp.ok) {
+        throw new Error(
+          `Could not list App Automate builds to find build ${buildId}: HTTP ${resp.status}`,
+        );
+      }
       const rows: {
         automation_build?: { hashed_id?: string; name?: string };
-      }[] = resp.ok && Array.isArray(resp.data) ? resp.data : [];
+      }[] = Array.isArray(resp.data) ? resp.data : [];
       const row = rows.find((r) => r.automation_build?.hashed_id === buildId);
       if (row) return row.automation_build?.name;
       if (rows.length < APP_AUTOMATE_BUILDS_PAGE_SIZE) break;

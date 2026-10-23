@@ -134,6 +134,14 @@ describe("runAppTestsOnBrowserStack and App Accessibility", () => {
     expect(body).toContain("browserstack-java-sdk");
   });
 
+  it("says it turns Test Observability on for an Espresso build with the checks", async () => {
+    const result = await run({ accessibility: true });
+
+    const body = result.content.map((c: any) => c.text).join("\n");
+    expect(m.post.mock.calls[0][0].body).toMatchObject({ testObservability: true });
+    expect(body).toContain("Test Observability is turned on for the build");
+  });
+
   it("says an XCUITest suite must embed and initialize the BrowserStack Swift SDK to be scanned", async () => {
     const result = await run({
       accessibility: true,

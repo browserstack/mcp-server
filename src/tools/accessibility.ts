@@ -488,6 +488,10 @@ function noScansNote(report: AppBuildReport): string[] {
   ];
 }
 
+/** How an app page's issues name what they share, which the page says once. */
+const APP_ISSUES_SHAPE =
+  "Each issue names its rule (rule_id) and screen: the rule's name, description, WCAG criteria and usual fix are under rules, each screen's screenshot under screens, and measured holds what the rule measured on the element.";
+
 /** An app build's issues come inline from its scanned screens; there is no CSV to link. */
 async function appBuildMessages(
   reportFetcher: AccessibilityReportFetcher,
@@ -514,7 +518,8 @@ async function appBuildMessages(
         ]
       : []),
     ...excludedIssuesNote(null, 0, report.hidden_issues),
-    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
+    APP_ISSUES_SHAPE,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules: report.rules, screens: report.screens }, null, 2))}`,
     closingMessage(
       next_page,
       remainingIssues(cursor, page_length, total_issues, records),

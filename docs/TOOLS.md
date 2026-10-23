@@ -341,7 +341,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 | Tool | What it does |
 |---|---|
 | `startAccessibilityScan` | Start a web accessibility scan of a page URL and retrieve a local CSV report path. Optional settings: `wcagVersion` (WCAG 2.0–2.2 at A/AA/AAA, or RGAA 4.1), `bestPractices`, `needsReview`, `advancedRules` and `experimentalRules`; the answer states the settings the scan ran with. Mobile apps are scanned through an App Automate run instead (`setupBrowserStackAppAutomateTests` with `accessibility: true`). |
-| `accessibilityExpert` | Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices). |
+| `accessibilityExpert` | **Deprecated, to be removed.** Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices). |
 | `createAccessibilityAuthConfig` | Create an authentication configuration (form-based or basic) for accessibility scans behind a login. |
 | `getAccessibilityAuthConfig` | Retrieve an existing accessibility authentication configuration by ID. |
 | `fetchAccessibilityIssues` | Fetch accessibility issues, with pagination, from a Website Scanner run, an Automated Tests build (web) or App Accessibility build (mobile app, by the build id the SDK prints), a Workflow Analyzer report, an App Accessibility manual report (`appReportId`), or a report's dashboard link. Once the tests or scan have finished, waits while the report is still processing; a run still in progress is read as it is, with a note. For an app build with no scans, lists the likely causes. |

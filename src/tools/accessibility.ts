@@ -148,6 +148,13 @@ async function initializeReportFetcher(
   return reportFetcher;
 }
 
+/**
+ * accessibilityExpert is going away; until it is removed it still answers, with this note,
+ * which names what to use instead so an agent stops reaching for it.
+ */
+const ACCESSIBILITY_EXPERT_DEPRECATED =
+  "Note: accessibilityExpert is deprecated and will be removed in a future release. Answer general WCAG and accessibility questions directly; for the issues on a page or in a report, use startAccessibilityScan or fetchAccessibilityIssues.";
+
 async function executeAccessibilityRAG(
   args: { query: string },
   server: McpServer,
@@ -160,7 +167,14 @@ async function executeAccessibilityRAG(
       undefined,
       config,
     );
-    return await queryAccessibilityRAG(args.query, config);
+    const answer = await queryAccessibilityRAG(args.query, config);
+    return {
+      ...answer,
+      content: [
+        { type: "text", text: ACCESSIBILITY_EXPERT_DEPRECATED },
+        ...answer.content,
+      ],
+    };
   } catch (error) {
     return handleMCPError("accessibilityExpert", server, config, error);
   }
@@ -1584,7 +1598,7 @@ export default function addAccessibilityTools(
 
   tools.accessibilityExpert = server.tool(
     "accessibilityExpert",
-    "Answer accessibility, a11y, and WCAG questions using BrowserStack's accessibility knowledge base.",
+    "Deprecated, to be removed: answers accessibility, a11y, and WCAG questions from BrowserStack's accessibility knowledge base.",
     {
       query: z
         .string()
@@ -1593,7 +1607,7 @@ export default function addAccessibilityTools(
         ),
     },
     {
-      title: "Accessibility Expert",
+      title: "Accessibility Expert (deprecated)",
       readOnlyHint: true,
       openWorldHint: false,
       destructiveHint: false,

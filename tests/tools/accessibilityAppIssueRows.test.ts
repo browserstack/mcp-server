@@ -187,3 +187,60 @@ describe("a page of app issues", () => {
     expect(report.next_page).toBeNull();
   });
 });
+
+// An iOS issue names its element in other words than an Android one: `class`, `identifier`
+// and `visibleText`, and `issue_type_ios` for the class. Read the same way, an iOS element
+// is known by its class and text, as an Android one is.
+describe("an iOS issue's element", () => {
+  it("is known by its class and text, under the names an Android element uses", () => {
+    const [row] = flattenAppSnapshots([
+      {
+        meta: { snapshot_id: "1" },
+        aggregated_results: [
+          contrastRule([
+            {
+              ...CONTRAST_ISSUE,
+              issue_type_ios: "UILabel",
+              issue_id_ios: "",
+              issue_details: [
+                { label: "class", value: '"UILabel"', important: false },
+                { label: "identifier", value: '"promo_text"', important: false },
+                { label: "frame", value: '{"x":16,"y":413,"width":180,"height":20}', important: false },
+                { label: "visibleText", value: '"Low contrast body copy"', important: false },
+              ],
+            },
+          ]),
+        ],
+      } as any,
+    ]);
+
+    expect(row.element).toEqual({
+      className: "UILabel",
+      accessibilityIdentifier: "promo_text",
+      frame: { x: 16, y: 413, width: 180, height: 20 },
+      text: "Low contrast body copy",
+    });
+    expect(row.component).toBe("promo_text");
+  });
+
+  it("falls back to its class when it has no identifier", () => {
+    const [row] = flattenAppSnapshots([
+      {
+        meta: { snapshot_id: "1" },
+        aggregated_results: [
+          contrastRule([
+            {
+              uid: "u1",
+              status: "fail",
+              issue_type_ios: "UILabel",
+              issue_id_ios: "",
+              issue_details: [{ label: "class", value: '"UILabel"' }],
+            },
+          ]),
+        ],
+      } as any,
+    ]);
+
+    expect(row.component).toBe("UILabel");
+  });
+});

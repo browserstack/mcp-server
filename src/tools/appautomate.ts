@@ -176,7 +176,7 @@ async function takeAppScreenshot(args: {
  */
 function devicesNote(
   requested: Array<Array<string>>,
-  resolved: Array<{ deviceName: string; osVersion: string }>,
+  resolved: Array<{ deviceName?: string; osVersion: string }>,
 ): string {
   if (requested.length === 0) return "";
   const lines = [

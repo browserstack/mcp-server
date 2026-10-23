@@ -895,8 +895,9 @@
     "entity": "browser_session",
     "intent": "Empty an input \u2014 use this before typing, since send_keys adds to what is already there.",
     "guidance": [
+     "WORKS ON EVERY BROWSER: desktop Chrome, Chrome for Android and Safari on iPhone all answer 200 and leave the field empty; typing afterwards starts from nothing.",
      "Takes no parameters of its own.",
-     "Confirm with get_element_property on \"value\", which reads empty afterwards.",
+     "Confirm with get_element_property on \"value\", which reads empty afterwards \u2014 on Safari for iOS, where property reads answer 405, use get_element_attribute with name value instead. Measured empty after clearing on desktop Chrome, Chrome for Android and Safari on iPhone.",
      "Clearing also fires the page's own change handlers, so a form may revalidate and show an error about the now-empty field.",
      "The element must be editable; anything else answers \"invalid element state\"."
     ],
@@ -981,6 +982,7 @@
     "entity": "browser_session",
     "intent": "Read a live DOM property of an element \u2014 use this for what a field currently holds, or whether a box is checked right now.",
     "guidance": [
+     "NOT ON SAFARI FOR iOS: the driver there answers 405 \"unknown method\" to every property read. On an iPhone or iPad read get_element_attribute with name value instead, which returns what the field holds right now; on desktop browsers and Chrome for Android this is the live view and the attribute is the markup.",
      "THIS IS THE ONE THAT READS A FIELD'S CURRENT VALUE. The \"value\" attribute is the markup's initial value rather than what is in the box now, and an input carries no text.",
      "Useful names: value, checked, selected, disabled, innerText, href.",
      "A property the element does not have comes back null, not an error."
@@ -1030,7 +1032,7 @@
     "entity": "browser_session",
     "intent": "Read an HTML attribute of an element \u2014 use this for ids, classes, data- attributes and link targets as the markup declares them.",
     "guidance": [
-     "This is the attribute as written in the HTML, which is NOT what a field currently holds: for that, use get_element_property on \"value\".",
+     "On desktop browsers and Chrome for Android this is the attribute as written in the HTML, which is NOT what a field currently holds: for that, use get_element_property on \"value\". On Safari for iOS it is the other way round \u2014 get_element_property answers 405 there, and this call with name value returns what the field holds right now.",
      "An attribute the element does not carry comes back null rather than an error, so null means absent, not empty.",
      "An attribute a script has changed may still read as the original markup; the property is the live view."
     ],

@@ -43,6 +43,8 @@ export interface AppBuildMeta {
   status: string;
   issue_summary?: { total?: number; scan_count?: number };
   fup?: { capped?: boolean; tests_partial?: boolean; tests_dropped?: boolean };
+  /** What ran the tests: an SDK framework (pytest, …) or a native one (Espresso-Junit4, …). */
+  session_data?: { framework?: { name?: string } };
 }
 
 interface AppRuleIssue {
@@ -118,6 +120,8 @@ export interface AppBuildReport {
   dashboard_link?: string;
   /** Whether the fair-usage cap dropped tests or scans from this build. */
   fup_capped: boolean;
+  /** The test framework the build ran under, when the build's details name it. */
+  framework?: string;
 }
 
 /** A manual (Workflow Analyzer) report's issues, read inline from its scanned screens. */
@@ -552,6 +556,12 @@ export class AppAccessibilityApi {
       headers: this.headers(),
       raise_error: false,
     });
+    // A session with no test code is a 404; any other failure is the request's, not the run's.
+    if (!resp.ok && resp.status !== 404) {
+      throw new Error(
+        `Could not read App Automate session ${sessionId}: HTTP ${resp.status}`,
+      );
+    }
     const buildId = resp.ok ? resp.data?.build_uuid : undefined;
     if (!buildId) {
       throw new Error(
@@ -690,7 +700,8 @@ export class AppAccessibilityApi {
 
   /**
    * A listing's page. The API answers an empty list with 404 ("No builds found") for
-   * access-key callers, which is not an error here; any other failure is.
+   * access-key callers, which is not an error here; any other failure is, a 404 from a
+   * wrong route or a missing permission included.
    */
   private async listing(url: string, what: string): Promise<any> {
     const resp = await apiClient.get({
@@ -699,7 +710,9 @@ export class AppAccessibilityApi {
       raise_error: false,
     });
     if (resp.ok) return resp.data ?? {};
-    if (resp.status === 404) return {};
+    if (resp.status === 404 && /^No .+ found/i.test(resp.data?.message ?? "")) {
+      return {};
+    }
     throw new Error(
       `Could not list ${what}: HTTP ${resp.status}${resp.data?.message ? ` (${resp.data.message})` : ""}`,
     );
@@ -1033,6 +1046,9 @@ export class AppAccessibilityApi {
       build_name: meta.name,
       dashboard_link: await this.dashboardLink(meta),
       fup_capped: Boolean(meta.fup?.capped || meta.fup?.tests_dropped),
+      ...(meta.session_data?.framework?.name
+        ? { framework: meta.session_data.framework.name }
+        : {}),
     };
   }
 }

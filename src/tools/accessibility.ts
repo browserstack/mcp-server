@@ -396,11 +396,76 @@ function closingMessage(
 }
 
 /**
+ * An app build's name and dashboard link, as data: the name is the user's own (from their
+ * CI or browserstack.yml), so it is quoted in an untrusted block rather than in our prose.
+ */
+function appBuildDetails(report: AppBuildReport): string {
+  return `Build: ${wrapUntrusted(
+    "App Accessibility build",
+    JSON.stringify(
+      {
+        name: report.build_name,
+        ...(report.dashboard_link
+          ? { dashboard_link: report.dashboard_link }
+          : {}),
+      },
+      null,
+      2,
+    ),
+  )}`;
+}
+
+/**
  * Why a finished app build has no scans. Each cause here produced a run that finished
  * green with nothing scanned and no warning; they are listed most likely first, with what
  * the build's own details say ahead of the rest.
  */
+/**
+ * Why a native (Espresso, XCUITest) build recorded no scans. The build request's flag only
+ * turns the checks on: the suite itself must carry BrowserStack's instrumentation.
+ */
+const NATIVE_NO_SCAN_CAUSES: Record<"espresso" | "xcuitest", string[]> = {
+  espresso: [
+    "The test suite was not built with BrowserStack's Gradle plugin and SDK: add classpath 'com.browserstack:gradle-tool:latest.release' to the root build.gradle, id 'com.browserstack.gradle-tool' to the app's plugins, and androidTestImplementation 'com.browserstack:browserstack-java-sdk:latest.release' (1.31.0 or newer), then rebuild the test APK.",
+    "Test Observability was off for the build: Espresso's App Accessibility report needs `testObservability: true` in the build request alongside `accessibility: true` (runAppTestsOnBrowserStack sends both).",
+    "The app cannot reach BrowserStack from the device: it needs internet permission, and cleartext traffic allowed (usesCleartextTraffic) if the network calls for it.",
+    "No tests ran: check the build's sessions and test results on App Automate.",
+  ],
+  xcuitest: [
+    "The UI test target does not embed and initialize the BrowserStack Swift SDK: add BrowserstackSwiftSDK.xcframework (or the Swift package) to the test target, and set NSPrincipalClass to BrowserstackSwiftSDK.BrowserstackSwiftSDK in its Info.plist or call BrowserstackSwiftSDK.init() in the test class's init().",
+    "The device runs iOS older than 14, or the suite was built with Swift older than 5.4.",
+    "No tests ran: check the build's sessions and test results on App Automate.",
+  ],
+};
+
+/** Which native framework ran a build, when its details name one. */
+function nativeFramework(
+  framework: string | undefined,
+): "espresso" | "xcuitest" | undefined {
+  if (!framework) return undefined;
+  if (/espresso/i.test(framework)) return "espresso";
+  if (/xcui|xctest/i.test(framework)) return "xcuitest";
+  return undefined;
+}
+
 function noScansNote(report: AppBuildReport): string[] {
+  const native = nativeFramework(report.framework);
+  if (native) {
+    const causes = [
+      ...(report.fup_capped
+        ? [
+            "This build hit the fair-usage cap (fup in the build details), which drops tests or scans.",
+          ]
+        : []),
+      ...NATIVE_NO_SCAN_CAUSES[native],
+    ];
+    return [
+      `No accessibility scans were recorded for the ${native === "espresso" ? "Espresso" : "XCUITest"} build below (status: ${report.status}), so there are no issues to list.`,
+      appBuildDetails(report),
+      "The usual causes for a native build, most likely first:",
+      ...causes.map((cause, i) => `${i + 1}. ${cause}`),
+    ];
+  }
   const causes = [
     ...(report.fup_capped
       ? [
@@ -424,7 +489,9 @@ function noScansNote(report: AppBuildReport): string[] {
         ]),
   ];
   return [
-    `No accessibility scans were recorded for App Accessibility build "${report.build_name}" (status: ${report.status}), so there are no issues to list. The usual causes, most likely first:`,
+    `No accessibility scans were recorded for the App Accessibility build below (status: ${report.status}), so there are no issues to list.`,
+    appBuildDetails(report),
+    "The usual causes, most likely first:",
     ...causes.map((cause, i) => `${i + 1}. ${cause}`),
   ];
 }
@@ -586,28 +653,18 @@ async function appBuildMessages(
   stillProcessing: boolean,
 ): Promise<string[]> {
   const report = await reportFetcher.appBuildReport(source.buildId, cursor);
-  const link = report.dashboard_link
-    ? [
-        `View the report on the App Accessibility dashboard: ${report.dashboard_link}`,
-      ]
-    : [];
   if (report.scan_count === 0 && !stillProcessing) {
-    return [
-      ...preface,
-      ...processingNote(processing),
-      ...noScansNote(report),
-      ...link,
-    ];
+    return [...preface, ...processingNote(processing), ...noScansNote(report)];
   }
   const { records, page_length, total_issues, next_page } = report;
   const screens = `${report.scan_count} screen${report.scan_count === 1 ? "" : "s"} scanned`;
   return [
     ...preface,
     ...processingNote(processing),
-    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}) from App Accessibility build "${report.build_name}" (${screens})`,
+    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}) from the App Accessibility build below (${screens})`,
+    appBuildDetails(report),
     ...(cursor === 0 ? summaryNote(report.summary, total_issues) : []),
     ...excludedIssuesNote(null, 0, report.hidden_issues),
-    ...link,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
     closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
@@ -630,15 +687,21 @@ async function appReportMessages(
     source.reportId,
     cursor,
   );
-  const link = [
-    `View the report on the App Accessibility dashboard: ${report.dashboard_link}`,
-  ];
+  // The report's name is whatever its author typed, so it is quoted as data.
+  const details = `Report: ${wrapUntrusted(
+    "App Accessibility manual report",
+    JSON.stringify(
+      { name: report.report_name, dashboard_link: report.dashboard_link },
+      null,
+      2,
+    ),
+  )}`;
   if (report.scan_count === 0 && !stillProcessing) {
     return [
       ...preface,
       ...processingNote(processing),
-      `No screens were scanned in App Accessibility manual report "${report.report_name}" (status: ${report.status}), so there are no issues to list.`,
-      ...link,
+      `No screens were scanned in the App Accessibility manual report below (status: ${report.status}), so there are no issues to list.`,
+      details,
     ];
   }
   const { records, page_length, total_issues, next_page } = report;
@@ -654,11 +717,11 @@ async function appReportMessages(
   return [
     ...preface,
     ...processingNote(processing),
-    `Retrieved ${page_length} accessibility issue occurrences (Total: ${total_issues}) from App Accessibility manual report "${report.report_name}" (${where})`,
+    `Retrieved ${page_length} accessibility issue occurrences (Total: ${total_issues}) from the App Accessibility manual report below (${where})`,
+    details,
     ...(cursor === 0 ? summaryNote(report.summary, total_issues) : []),
     ...dashboardNote,
     ...excludedIssuesNote(null, 0, report.hidden_issues),
-    ...link,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
     closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
@@ -1288,6 +1351,10 @@ export default function addAccessibilityTools(
         .describe("Workflow Analyzer: the report's numeric id."),
       appReportId: z
         .string()
+        .regex(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+          "A manual report id is a UUID",
+        )
         .optional()
         .describe(
           "Manual App Accessibility report id (a UUID), from listAppAccessibilityReports or its /report/ link.",

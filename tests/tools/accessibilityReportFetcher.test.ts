@@ -477,6 +477,31 @@ describe("AccessibilityReportFetcher scan run history", () => {
     expect(get.mock.calls[0][0].url).toBe(`${API}/website-scanner/v1/scans/1234/scan_runs`);
   });
 
+  it("reads every page of the scan's runs before picking the one before", async () => {
+    get
+      .mockResolvedValueOnce(
+        ok({
+          scanRuns: [
+            { id: 30, scanDate: "2026-10-22T05:54:23Z", issues: 147 },
+            { id: 20, scanDate: "2026-10-21T11:31:00Z", issues: 150 },
+          ],
+          pagination: { hasNext: true, nextPage: "p2" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          scanRuns: [{ id: 10, scanDate: "2026-10-21T11:14:51Z", issues: 160 }],
+          pagination: { hasNext: false, nextPage: null },
+        }),
+      );
+
+    await expect(fetcher().previousScanRun("1234", "20")).resolves.toMatchObject({ id: 10 });
+    expect(get.mock.calls.map(([o]) => o.url)).toEqual([
+      `${API}/website-scanner/v1/scans/1234/scan_runs`,
+      `${API}/website-scanner/v1/scans/1234/scan_runs?nextPage=p2`,
+    ]);
+  });
+
   it("has no previous run for a scan's first run", async () => {
     get.mockResolvedValueOnce(
       ok({ scanRuns: [{ id: 10, scanDate: "2026-10-21T11:14:51Z", issues: 160 }], pagination: { hasNext: false } }),

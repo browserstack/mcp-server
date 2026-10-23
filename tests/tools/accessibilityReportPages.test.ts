@@ -117,6 +117,16 @@ describe("parseAccessibilityReportFromCSV for one page", () => {
     expect(result.total_issues).toBe(0);
     expect(result.page).toMatchObject({ occurrences: 0, similar_pages: [DRY] });
   });
+
+  it("still answers when a short row has no Affected page", async () => {
+    get.mockResolvedValue({ ok: true, statusText: "OK", data: `${toCsv(SITE)}\n"region","moderate"` });
+
+    const result = await parseAccessibilityReportFromCSV("https://csv", {
+      pageUrl: "https://shop.example/collections/dry-skin-app",
+    });
+
+    expect(result.page).toMatchObject({ occurrences: 0, similar_pages: [DRY] });
+  });
 });
 
 describe("parseAccessibilityReportFromCSV paging", () => {

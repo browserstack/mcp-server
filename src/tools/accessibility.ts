@@ -1,7 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { AccessibilityScanner } from "./accessiblity-utils/scanner.js";
+import {
+  AccessibilityScanner,
+  type ScanSettings,
+} from "./accessiblity-utils/scanner.js";
 import {
   AccessibilityReportFetcher,
   EXPORT_WAIT_MS,
@@ -1111,13 +1114,50 @@ async function executeListAppAccessibilityReports(
   }
 }
 
+/** The WCAG versions and levels Website Scanner checks against, and RGAA 4.1, by name. */
+const WCAG_VERSIONS = {
+  wcag2a: "WCAG 2.0 A",
+  wcag2aa: "WCAG 2.0 AA",
+  wcag2aaa: "WCAG 2.0 AAA",
+  wcag21a: "WCAG 2.1 A",
+  wcag21aa: "WCAG 2.1 AA",
+  wcag21aaa: "WCAG 2.1 AAA",
+  wcag22a: "WCAG 2.2 A",
+  wcag22aa: "WCAG 2.2 AA",
+  wcag22aaa: "WCAG 2.2 AAA",
+  rgaa41: "RGAA 4.1",
+} as const;
+
+/** What the create-scan API uses for a setting the request leaves out. */
+const SCAN_DEFAULTS = {
+  wcagVersion: "wcag21aa",
+  bestPractices: false,
+  needsReview: true,
+  advancedRules: true,
+} as const;
+
+/** The settings a scan ran with, each marked when it was the API's default. */
+function scanSettingsNote(settings: ScanSettings): string {
+  const pick = <K extends keyof typeof SCAN_DEFAULTS>(key: K) =>
+    settings[key] === undefined
+      ? { value: SCAN_DEFAULTS[key], note: " (default)" }
+      : { value: settings[key]!, note: "" };
+  const wcag = pick("wcagVersion");
+  const onOff = (key: "bestPractices" | "needsReview" | "advancedRules") => {
+    const { value, note } = pick(key);
+    return `${value ? "on" : "off"}${note}`;
+  };
+  const name =
+    WCAG_VERSIONS[wcag.value as keyof typeof WCAG_VERSIONS] ?? wcag.value;
+  return `Scan settings: ${name}${wcag.note}, best practices ${onOff("bestPractices")}, needs review ${onOff("needsReview")}, advanced rules ${onOff("advancedRules")}.`;
+}
+
 async function executeAccessibilityScan(
   args: {
     name: string;
     pageURL: string;
     authConfigId?: number;
-    advancedRules?: boolean;
-  },
+  } & ScanSettings,
   context: ScanProgressContext,
   server: McpServer,
   config: BrowserStackConfig,
@@ -1135,7 +1175,12 @@ async function executeAccessibilityScan(
       context,
       config,
       args.authConfigId,
-      args.advancedRules,
+      {
+        wcagVersion: args.wcagVersion,
+        bestPractices: args.bestPractices,
+        needsReview: args.needsReview,
+        advancedRules: args.advancedRules,
+      },
     );
   } catch (error) {
     return handleMCPError("startAccessibilityScan", server, config, error);
@@ -1278,10 +1323,12 @@ function createScanSuccessResponse(
   reportUrl: string,
   cursor: number | null,
   duplicates: string[] = [],
+  settings: ScanSettings = {},
 ): CallToolResult {
   const messages = [
     `Accessibility scan "${name}" completed. check the BrowserStack dashboard for more details [https://scanner.browserstack.com/site-scanner/scan-details/${name}].`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+    scanSettingsNote(settings),
     `You can also download the full report from the following link: ${reportUrl}`,
     `We found ${totalIssues} issues. Below are the details of the ${pageLength} most critical issues.`,
     ...duplicates,
@@ -1303,7 +1350,7 @@ async function runAccessibilityScan(
   context: ScanProgressContext,
   config: BrowserStackConfig,
   authConfigId?: number,
-  advancedRules?: boolean,
+  settings: ScanSettings = {},
 ): Promise<CallToolResult> {
   const scanner = await initializeScanner(config);
 
@@ -1311,7 +1358,7 @@ async function runAccessibilityScan(
     name,
     [pageURL],
     authConfigId,
-    advancedRules,
+    settings,
   );
   const scanId = startResp.data!.id;
   const scanRunId = startResp.data!.scanRunId;
@@ -1368,6 +1415,7 @@ async function runAccessibilityScan(
     reportLink,
     next_page,
     excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
+    settings,
   );
 }
 
@@ -1392,7 +1440,23 @@ export default function addAccessibilityTools(
       advancedRules: z
         .boolean()
         .optional()
-        .describe("Enable advanced accessibility rules in the scan settings"),
+        .describe("Run the advanced accessibility rules (default true)."),
+      wcagVersion: z
+        .enum(Object.keys(WCAG_VERSIONS) as [keyof typeof WCAG_VERSIONS])
+        .optional()
+        .describe(
+          'WCAG version and level to check against, e.g. "wcag22aa", or "rgaa41" for RGAA 4.1 (default "wcag21aa").',
+        ),
+      bestPractices: z
+        .boolean()
+        .optional()
+        .describe("Also report best-practice issues (default false)."),
+      needsReview: z
+        .boolean()
+        .optional()
+        .describe(
+          'Also report "needs review" issues to check by hand (default true).',
+        ),
     },
     {
       title: "Start Accessibility Scan",

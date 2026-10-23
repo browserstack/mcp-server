@@ -44,6 +44,67 @@ interface ScanListPage {
   pagination?: { hasNext?: boolean; nextPage?: string };
 }
 
+/**
+ * How long one call waits on a CSV export. Export time grows with the report's rows: a few
+ * seconds for hundreds, ~17 s for 18k rows, over 2 minutes for 30k issues. A call stays well
+ * under the 60 s request timeout MCP clients default to; an export still running after this
+ * is handed back to be continued by the next call rather than started again.
+ */
+export const EXPORT_WAIT_MS = 45_000;
+const EXPORT_POLL_MS = [1000, 2000, 3000, 5000];
+
+/** A finished export's link is reused until shortly before it expires (about 12 hours). */
+const LINK_EXPIRY_MARGIN_MS = 10 * 60 * 1000;
+const LINK_FALLBACK_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Exports per report, kept for the life of the server: the finished link to reuse for later
+ * pages, or the task of an export still running, to continue instead of starting another.
+ * Keyed by the account and the report, so one account never sees another's.
+ */
+export const reportExports = new Map<
+  string,
+  { link?: string; expiresAt?: number; taskId?: string }
+>();
+
+/** An export still being generated when a call stopped waiting on it. */
+export class ExportPendingError extends Error {
+  constructor(
+    readonly taskId: string,
+    readonly waitedMs: number,
+  ) {
+    super(
+      `The report's CSV export is still being generated after ${Math.round(waitedMs / 1000)}s (export task ${taskId}).`,
+    );
+    this.name = "ExportPendingError";
+  }
+}
+
+/** When a presigned export link stops working, from its Expires parameter. */
+function linkExpiry(link: string): number {
+  try {
+    const expires = Number(new URL(link).searchParams.get("Expires"));
+    if (expires > 0) return expires * 1000 - LINK_EXPIRY_MARGIN_MS;
+  } catch {
+    // Not a URL we can read; fall back below.
+  }
+  return Date.now() + LINK_FALLBACK_TTL_MS;
+}
+
+/** A run in a scan's history, newest first in the API's list. */
+export interface ScanRun {
+  id: number;
+  scanDate: string;
+  issues?: number;
+}
+
+/** What the dashboard counts between a run and the run before it. */
+export interface RunChanges {
+  newIssues: number;
+  retainedIssues: number;
+  resolvedIssues: number;
+}
+
 /** The thBuildId a dashboard report link carries, if any. */
 function thBuildIdOf(link: string | undefined): string | null {
   try {
@@ -144,6 +205,10 @@ export class AccessibilityReportFetcher {
     } catch {
       url = undefined;
     }
+    // A scanner share link (scanner.browserstack.com/.../a11y-report) carries the dashboard
+    // link it shows as its reportUrl parameter.
+    const shared = url?.searchParams.get("reportUrl");
+    if (shared && shared !== reportUrl) return this.sourceFromReportUrl(shared);
     const automate = url && automateIds(url);
     if (automate?.sessionId) {
       return this.buildOfAutomateSession(automate.sessionId);
@@ -272,7 +337,7 @@ export class AccessibilityReportFetcher {
     }
     if (sameName !== undefined) {
       throw new Error(
-        `This link is to an earlier run of scan "${scanName}" (scanId ${sameName}). A link resolves only to a scan's latest run; ask the user for that run's scanRunId and pass it with scanId ${sameName}`,
+        `This link is to an earlier run of scan "${scanName}" (scanId ${sameName}). A link resolves only to a scan's latest run; ask the user for that run's scanRunId and pass it with scanId ${sameName}, or read the latest run with compareWith: "previous" to compare it with the run before it`,
       );
     }
     // nextPage is still set only when the walk stopped at the page cap, not at the end.
@@ -284,45 +349,101 @@ export class AccessibilityReportFetcher {
     );
   }
 
-  async getReportLink(source: IssueSource): Promise<string> {
+  /**
+   * The CSV link of a report's issues. A finished export is reused until its link expires.
+   * Otherwise an export is started, or continued (`exportTaskId`, or the one an earlier call
+   * left running), and waited on for up to EXPORT_WAIT_MS; one still running then is handed
+   * back as an ExportPendingError carrying its task id.
+   */
+  async getReportLink(
+    source: IssueSource,
+    options: {
+      exportTaskId?: string;
+      onWait?: (waitedMs: number) => Promise<void>;
+    } = {},
+  ): Promise<string> {
+    const key = `${this.auth?.username ?? ""}|${JSON.stringify(source)}`;
+    const known = reportExports.get(key);
+    if (known?.link && (known.expiresAt ?? 0) > Date.now()) return known.link;
+
     const urls = exportUrls(source);
-
-    // Initiate CSV link generation
-    const initResp = await apiClient.get({
-      url: urls.start,
-      headers: this.authHeaders(),
-      raise_error: false,
-    });
-    const initData: ReportInitResponse = initResp.data;
-    if (!initResp.ok || !initData?.success) {
-      throw new Error(startFailure(source, initResp.status, initData));
+    let taskId = options.exportTaskId ?? known?.taskId;
+    if (!taskId) {
+      const initResp = await apiClient.get({
+        url: urls.start,
+        headers: this.authHeaders(),
+        raise_error: false,
+      });
+      const initData: ReportInitResponse = initResp.data;
+      if (!initResp.ok || !initData?.success) {
+        throw new Error(startFailure(source, initResp.status, initData));
+      }
+      taskId = initData.data.task_id;
     }
-    const taskId = initData.data.task_id;
+    reportExports.set(key, { taskId });
 
-    // Poll for the generated CSV link (task is async, may take a few seconds)
-    const reportUrl = urls.poll(taskId);
-    const maxAttempts = 3;
-    const pollIntervalMs = 2000;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const started = Date.now();
+    for (let attempt = 0; ; attempt++) {
       const reportResp = await apiClient.get({
-        url: reportUrl,
+        url: urls.poll(taskId),
         headers: this.authHeaders(),
       });
-      const reportData: ReportResponse = reportResp.data;
+      const reportData: ReportResponse & { data?: { message?: string } } =
+        reportResp.data;
       if (!reportData.success) {
+        reportExports.delete(key);
         throw new Error(`Failed to fetch report: ${reportData.error}`);
       }
       const link = reportData.data?.reportLink;
       if (link) {
+        reportExports.set(key, { link, expiresAt: linkExpiry(link) });
         return link;
       }
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      const message = reportData.data?.message ?? "";
+      if (/generation failed/i.test(message)) {
+        reportExports.delete(key);
+        throw new Error(`The report's CSV export failed: ${message}`);
+      }
+      const waited = Date.now() - started;
+      if (waited >= EXPORT_WAIT_MS)
+        throw new ExportPendingError(taskId, waited);
+      await options.onWait?.(waited);
+      const pause =
+        EXPORT_POLL_MS[Math.min(attempt, EXPORT_POLL_MS.length - 1)];
+      await new Promise((resolve) => setTimeout(resolve, pause));
     }
+  }
 
-    throw new Error(
-      `Report link was not available after ${maxAttempts} attempts. The CSV generation may still be in progress.`,
+  /** The run before `scanRunId` in its scan's history, or undefined for the first run. */
+  async previousScanRun(
+    scanId: string,
+    scanRunId: string,
+  ): Promise<ScanRun | undefined> {
+    const runs: ScanRun[] =
+      (
+        await this.getData(
+          `${API_BASE}/website-scanner/v1/scans/${encodeURIComponent(scanId)}/scan_runs`,
+        )
+      )?.scanRuns ?? [];
+    const newestFirst = [...runs].sort((a, b) =>
+      b.scanDate.localeCompare(a.scanDate),
     );
+    const at = newestFirst.findIndex((run) => String(run.id) === scanRunId);
+    return at >= 0 ? newestFirst[at + 1] : undefined;
+  }
+
+  /** The dashboard's new / retained / resolved counts against the run before this one. */
+  async changesSinceLastRun(
+    scanId: string,
+    scanRunId: string,
+  ): Promise<RunChanges | undefined> {
+    const q = encodeURIComponent;
+    const changes = (
+      await this.getData(
+        `${API_BASE}/website-scanner/v1/scans/${q(scanId)}/scan_runs/${q(scanRunId)}`,
+      )
+    )?.changesSinceLastRun;
+    return changes ?? undefined;
   }
 
   /**

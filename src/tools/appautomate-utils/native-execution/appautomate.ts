@@ -307,7 +307,11 @@ export async function triggerEspressoBuild(
       Authorization: authHeader,
       "Content-Type": "application/json",
     },
-    body: buildRequestBody(app_url, test_suite_url, devices, project, options),
+    body: {
+      ...buildRequestBody(app_url, test_suite_url, devices, project, options),
+      // An Espresso build's App Accessibility report is generated through Test Observability.
+      ...(options.accessibility ? { testObservability: true } : {}),
+    },
   });
 
   if (response.data.build_id) {

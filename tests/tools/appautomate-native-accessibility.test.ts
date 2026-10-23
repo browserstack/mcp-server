@@ -56,6 +56,26 @@ describe("native build requests and App Accessibility", () => {
     });
   });
 
+  // Espresso App Accessibility reports need Test Observability on; XCUITest's do not.
+  it("turns Test Observability on with accessibility for Espresso, as its reports need it", async () => {
+    await triggerEspressoBuild("bs://app", "bs://suite", ["Google Pixel 8-14.0"], "p", CONFIG, {
+      accessibility: true,
+    });
+
+    expect(m.post.mock.calls[0][0].body).toMatchObject({
+      accessibility: true,
+      testObservability: true,
+    });
+  });
+
+  it("leaves Test Observability alone for XCUITest", async () => {
+    await triggerXcuiBuild("bs://app", "bs://suite", ["iPhone 15-17.0"], "p", CONFIG, {
+      accessibility: true,
+    });
+
+    expect(m.post.mock.calls[0][0].body).not.toHaveProperty("testObservability");
+  });
+
   it.each([
     ["Espresso", triggerEspressoBuild],
     ["XCUITest", triggerXcuiBuild],
@@ -104,6 +124,26 @@ describe("runAppTestsOnBrowserStack and App Accessibility", () => {
     expect(body).toContain("App Accessibility checks are on");
     expect(body).toContain("fetchAccessibilityIssues");
     expect(body).toContain("reportUrl: https://app-automate.browserstack.com/builds/b1");
+  });
+
+  it("says an Espresso suite must be built with BrowserStack's Gradle plugin and SDK to be scanned", async () => {
+    const result = await run({ accessibility: true });
+
+    const body = result.content.map((c: any) => c.text).join("\n");
+    expect(body).toContain("com.browserstack.gradle-tool");
+    expect(body).toContain("browserstack-java-sdk");
+  });
+
+  it("says an XCUITest suite must embed and initialize the BrowserStack Swift SDK to be scanned", async () => {
+    const result = await run({
+      accessibility: true,
+      detectedAutomationFramework: "xcuitest",
+      devices: [{ platform: "ios", deviceName: "iPhone 15", osVersion: "17.0" }],
+    });
+
+    const body = result.content.map((c: any) => c.text).join("\n");
+    expect(body).toContain("BrowserstackSwiftSDK");
+    expect(body).not.toContain("gradle");
   });
 
   it("says nothing about accessibility when it was not asked for", async () => {

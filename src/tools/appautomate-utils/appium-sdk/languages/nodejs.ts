@@ -94,9 +94,15 @@ export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 
+  // App Accessibility needs @wdio/browserstack-service 8.42.0+ on WDIO v8, or 9.6.0+ on v9.
   const installStep = createStep(
     "Install BrowserStack WDIO service:",
-    `\`\`\`bash
+    accessibility
+      ? `\`\`\`bash
+npm install @wdio/browserstack-service@^9.6.0 --save-dev
+\`\`\`
+App Accessibility needs WebdriverIO v8 or v9: on WebdriverIO v8, install @wdio/browserstack-service@^8.42.0 instead.`
+      : `\`\`\`bash
 npm install @wdio/browserstack-service@^7 --save-dev
 \`\`\``,
   );
@@ -126,7 +132,7 @@ exports.config = {
   capabilities: [{
     'bstack:options': {
       deviceName: 'Samsung Galaxy S22 Ultra',
-      platformVersion: '12.0',
+      ${accessibility ? "osVersion" : "platformVersion"}: '12.0',
       platformName: 'android',
     }
   }],

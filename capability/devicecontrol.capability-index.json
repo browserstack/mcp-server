@@ -3,7 +3,7 @@
  "version": "1.0",
  "build_id": "8445466_2026-10-19T06:53:46Z",
  "devicecontrol": {
-  "title": "Device Control (Automate)",
+  "title": "Device Control",
   "summary": "Device control: drive a real desktop or mobile browser page by page. The account side lists every operating system, browser and version combination available, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link, video, and console, network and profiling logs \u2014 after the browser is released. The session side opens a browser on a chosen combination and drives it: navigate, go back and forward, reload, find elements by CSS or XPath, click, type, clear, screenshot the viewport, resize the window, and move between tabs and iframes. Web pages are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Mobile APPS are not here: those are mobile device control, which drives an installed app rather than a browser. Scrolling is done with scroll_to_element or scroll_page, there is no capability that waits, and element ids go stale as soon as the page navigates or re-renders. A session holds a browser until it is ended.",
   "routing_terms": [
    "automate",
@@ -97,11 +97,11 @@
     "path": "/automate/plan.json",
     "mode": "read",
     "entity": "plan",
-    "intent": "Show the Automate plan and how many parallel browser sessions are running, queued and allowed \u2014 check this before starting a session or a batch of them.",
+    "intent": "Show the browser-session plan and how many parallel browser sessions are running, queued and allowed \u2014 check this before starting a session or a batch of them.",
     "guidance": [
      "A start past the limit queues rather than failing, which looks like a slow start; this is how to tell the two apart.",
      "The counts are account-wide and include sessions other people and CI started.",
-     "This is the web plan. App Automate has its own, counted separately."
+     "This is the web plan. Mobile device sessions have their own plan, counted separately."
     ],
     "returns": [
      "automate_plan",
@@ -259,14 +259,14 @@
       "ON MOBILE THE BROWSER IS NAMED AFTER THE PLATFORM, not the product: Chrome on an Android phone is \"android\", Safari on an iPhone is \"iphone\" and on an iPad \"ipad\". Samsung Internet is \"samsung\" and Chromium-based mobile browsers are \"chromium\". Asking for \"chrome\" or \"safari\" on a phone is refused.",
       "Take every value from list_browsers exactly as it spells them; an unlisted combination is refused rather than substituted.",
       "The session id comes back at value.sessionId \u2014 carry it into every other browser_session capability.",
-      "A session starts in seconds rather than the tens of seconds a device session takes, but it still holds a browser and consumes Automate minutes until it ends: always finish with set_session_status and then delete_session.",
+      "A session starts in seconds rather than the tens of seconds a device session takes, but it still holds a browser and consumes browser minutes until it ends: always finish with set_session_status and then delete_session.",
       "The session ends itself after idle_timeout seconds without a command, and after 2 hours in total.",
       "console_logs and network_logs must be asked for here; they cannot be turned on once the session is running, and get_session only links to them when they were.",
       "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
       "resolution takes one of a fixed set of values per operating system, not any width and height: an unsupported pair is refused outright rather than rounded to the nearest one. The browser window is well short of the screen it sits on \u2014 1920x1080 gives a viewport around 930x860 \u2014 so measure it rather than assuming the request was honoured."
      ],
      "local": [
-      "ON THE USER'S OWN MACHINE YOU CAN OPEN THE LIVE VIEW FOR THEM. This call returns only value.sessionId; call get_session straight after it, then run the shell command open \"<browser_url>\" on macOS or xdg-open \"<browser_url>\" on Linux, and say you opened the session on the Automate dashboard \u2014 it needs a BrowserStack login in that browser."
+      "ON THE USER'S OWN MACHINE YOU CAN OPEN THE LIVE VIEW FOR THEM. This call returns only value.sessionId; call get_session straight after it, then run the shell command open \"<browser_url>\" on macOS or xdg-open \"<browser_url>\" on Linux, and say you opened the session on the session dashboard \u2014 it needs a BrowserStack login in that browser."
      ],
      "remote": [
       "THIS CALL RETURNS NO LINK \u2014 only value.sessionId. Nothing here can open a browser for the user either: this surface makes HTTP requests, and on a remote server there is no browser to open. So never say a live view was opened. If the user may want to watch, call get_session straight after this and give them browser_url in the same reply, which is the session on the dashboard and needs a BrowserStack login. public_url needs no login but carries an auth token, so offer it only when they ask to share outside the team."
@@ -1675,7 +1675,7 @@
      "Mark the outcome with set_session_status FIRST; an unmarked session reads as abandoned on the dashboard.",
      "The session record, video and logs survive and stay readable with get_session.",
      "A session already ended answers 404, which means it is gone rather than that something failed.",
-     "Every session consumes Automate minutes until it ends, so end it even when the run failed."
+     "Every session consumes browser minutes until it ends, so end it even when the run failed."
     ],
     "path_params": [
      {
@@ -2130,7 +2130,7 @@
     ],
     "id_convention": "session_id is a 40-character hex string returned by create_session at value.sessionId; it cannot be listed or guessed. element_id is an opaque string from find_element and is valid only until the page navigates or that part of the page re-renders.",
     "key_facts": [
-     "A session holds a browser and consumes Automate minutes from start until it ends; it ends itself after the idle timeout with no command, or after 2 hours.",
+     "A session holds a browser and consumes browser minutes from start until it ends; it ends itself after the idle timeout with no command, or after 2 hours.",
      "Element ids go stale the moment the page navigates, reloads or re-renders, and a stale one is refused rather than silently acting on the wrong thing.",
      "Console and network logs must be asked for when the session starts; they cannot be turned on later.",
      "Each session is recorded with video and its record outlives it, including the shareable link and the passed or failed status.",
@@ -2198,7 +2198,7 @@
    },
    "plan": {
     "title": "Plan",
-    "description": "The account's Automate subscription and how much of its parallel-session allowance is in use.",
+    "description": "The account's browser-session subscription and how much of its parallel-session allowance is in use.",
     "aliases": [
      "plan",
      "subscription",

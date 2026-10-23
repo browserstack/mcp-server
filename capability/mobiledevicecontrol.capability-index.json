@@ -3,8 +3,8 @@
  "version": "1.0",
  "build_id": "6782f7e_2026-10-16T13:54:22Z",
  "mobiledevicecontrol": {
-  "title": "Mobile Device Control (App Automate)",
-  "summary": "Mobile device control: run a real Android or iOS device and drive the app on it step by step. The account side lists the devices this account can use, including private ones, uploads and lists app builds, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link and video \u2014 after the device is released. The session side starts a device with an installed build and drives it: find elements and read their text, position and attributes, tap them, type, swipe, screenshot, press keys, rotate, switch between the native app and a web view, move between the native app and a web view, and launch or close apps. Apps are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Browsers are not here \u2014 those are device control, which drives a page rather than an installed app \u2014 and neither is App Live: it has no API an agent can drive, so agent sessions run on App Automate and consume its minutes. A build must exist before a session starts; it is uploaded here from a public link, or from a file on the user's own machine when the server runs there. App Live keeps a separate store, so an app uploaded for manual App Live testing is not available to sessions here. Media for camera injection must come from elsewhere. The default Appium server is 1.x and rejects every `mobile:` command; ask for 2.19.0.",
+  "title": "Mobile Device Control",
+  "summary": "Mobile device control: run a real Android or iOS device and drive the app on it step by step. The account side lists the devices this account can use, including private ones, uploads and lists app builds, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link and video \u2014 after the device is released. The session side starts a device with an installed build and drives it: find elements and read their text, position and attributes, tap them, type, swipe, screenshot, press keys, rotate, switch between the native app and a web view, move between the native app and a web view, and launch or close apps. Apps are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Browsers are not here \u2014 those are device control, which drives a page rather than an installed app \u2014 and neither is App Live: it has no API an agent can drive, so agent sessions run here, on real devices, and consume the account's device minutes. A build must exist before a session starts; it is uploaded here from a public link, or from a file on the user's own machine when the server runs there. App Live keeps a separate store, so an app uploaded for manual App Live testing is not available to sessions here. Media for camera injection must come from elsewhere. The default Appium server is 1.x and rejects every `mobile:` command; ask for 2.19.0.",
   "routing_terms": [
    "app automate",
    "app build",
@@ -64,8 +64,8 @@
       "The app must already be uploaded: pass the bs:// URL from upload_app_build or list_app_builds, or the custom_id it was uploaded under, which always resolves to the newest build with that id.",
       "Allocation and app install usually take 20\u201330 seconds; the response carries the new session id at value.sessionId \u2014 carry it into every other app_session call.",
       "The session ends itself after idle_timeout seconds with no command (90 by default, 900 at most) and after 2 hours in total. Keep calling, or call get_window_rect as a cheap keep-alive, while deciding the next step.",
-      "Every session occupies a device and consumes App Automate minutes until it ends: always finish with set_session_status and then delete_session.",
-      "To let a person watch the device live while the agent drives it, set interactive_debugging true and leave video on; they then open the running session on the App Automate dashboard and start the interactive session there. That window is two-way: a person's taps and scrolls reach the same device, so ask them to watch only, or find the element you are about to act on again before every action.",
+      "Every session occupies a device and consumes device minutes until it ends: always finish with set_session_status and then delete_session.",
+      "To let a person watch the device live while the agent drives it, set interactive_debugging true and leave video on; they then open the running session on the session dashboard and start the interactive session there. That window is two-way: a person's taps and scrolls reach the same device, so ask them to watch only, or find the element you are about to act on again before every action.",
       "device_name and platform_version must be a combination mobile device control offers; an unknown pair fails with a session-not-created error naming the capability.",
       "Set appium_version to 2.19.0 for any session that will scroll with scroll_gesture, dismiss an iOS keyboard with dismiss_keyboard_key, or use any other mobile: capability; the default server is 1.x and answers those with a 404 listing the commands it does know.",
       "enable_biometric, enable_camera_image_injection and upload_media only take effect when set here \u2014 none of them can be turned on once the session is running.",
@@ -79,7 +79,7 @@
       "Someone can only WATCH AND INTERACT if interactive_debugging was set true in this call \u2014 it cannot be turned on once the session is running, it is off by default on Android, and it needs video left on. Ask for it up front when a person is going to follow along, because the alternative is restarting the session."
      ],
      "local": [
-      "ON THE USER'S OWN MACHINE YOU CAN OPEN THE LIVE VIEW FOR THEM. This call returns only value.sessionId; call get_session straight after it, then run the shell command open \"<browser_url>\" on macOS or xdg-open \"<browser_url>\" on Linux, and say you opened the session on the App Automate dashboard \u2014 it needs a BrowserStack login in that browser. Set interactive_debugging true in this call when they should be able to tap as well as watch; without it the view is watch-only."
+      "ON THE USER'S OWN MACHINE YOU CAN OPEN THE LIVE VIEW FOR THEM. This call returns only value.sessionId; call get_session straight after it, then run the shell command open \"<browser_url>\" on macOS or xdg-open \"<browser_url>\" on Linux, and say you opened the session on the session dashboard \u2014 it needs a BrowserStack login in that browser. Set interactive_debugging true in this call when they should be able to tap as well as watch; without it the view is watch-only."
      ],
      "remote": [
       "THIS CALL RETURNS NO LINK \u2014 only value.sessionId. Nothing here can open a browser for the user either: this surface makes HTTP requests, and on a remote server there is no browser to open. So never say a live view was opened. If the user may want to watch, call get_session straight after this and give them browser_url in the same reply, which is the session on the dashboard and needs a BrowserStack login. public_url needs no login but carries an auth token, so offer it only when they ask to share outside the team."
@@ -102,14 +102,14 @@
       "type": "string",
       "required": true,
       "json_path": "/capabilities/alwaysMatch/appium:deviceName",
-      "description": "Device model exactly as App Automate lists it.",
+      "description": "Device model exactly as list_devices gives it.",
       "example": "Google Pixel 6"
      },
      {
       "name": "platform_version",
       "type": "string",
       "json_path": "/capabilities/alwaysMatch/appium:platformVersion",
-      "description": "OS version of that device, as App Automate lists it. Omit to let App Automate pick one for the device.",
+      "description": "OS version of that device, as list_devices gives it. Omit to let BrowserStack pick one for the device.",
       "example": "12.0"
      },
      {
@@ -117,7 +117,7 @@
       "type": "string",
       "required": true,
       "json_path": "/capabilities/alwaysMatch/appium:app",
-      "description": "The bs:// app URL returned by an App Automate upload, or the custom_id given at upload time (the latest app with that id is used).",
+      "description": "The bs:// app URL returned by upload_app_build, or the custom_id given at upload time (the latest app with that id is used).",
       "example": "bs://0123456789abcdef0123456789abcdef01234567"
      },
      {
@@ -134,7 +134,7 @@
       "maximum": 900,
       "default": 90,
       "json_path": "/capabilities/alwaysMatch/bstack:options/idleTimeout",
-      "description": "Seconds the session may sit without a command before App Automate ends it. Raise it when an agent drives the session step by step and may pause to think, or while a human watches; the device is held, and billed, for the whole idle period.",
+      "description": "Seconds the session may sit without a command before BrowserStack ends it. Raise it when an agent drives the session step by step and may pause to think, or while a human watches; the device is held, and billed, for the whole idle period.",
       "example": 300
      },
      {
@@ -148,7 +148,7 @@
       "name": "project_name",
       "type": "string",
       "json_path": "/capabilities/alwaysMatch/bstack:options/projectName",
-      "description": "Groups sessions on the App Automate dashboard.",
+      "description": "Groups sessions on the session dashboard.",
       "example": "Mobile checkout"
      },
      {
@@ -203,7 +203,7 @@
       "type": "integer",
       "minimum": 0,
       "json_path": "/capabilities/alwaysMatch/appium:newCommandTimeout",
-      "description": "Seconds the Appium server itself waits for the next command before ending the session. Distinct from idle_timeout, which is App Automate's own backstop; the shorter of the two wins.",
+      "description": "Seconds the Appium server itself waits for the next command before ending the session. Distinct from idle_timeout, which is BrowserStack's own backstop; the shorter of the two wins.",
       "example": 300
      },
      {
@@ -955,10 +955,10 @@
     "path": "/wd/hub/session/{session_id}",
     "mode": "write",
     "entity": "app_session",
-    "intent": "End a live App Automate session and release the device \u2014 use this when the flow is finished, after marking the session passed or failed.",
+    "intent": "End a live device session and release the device \u2014 use this when the flow is finished, after marking the session passed or failed.",
     "guidance": [
      "There is no way to resume an ended session; any further step needs create_session again, which reinstalls the app.",
-     "The session's video, logs and pass/fail status stay on the App Automate dashboard after it ends.",
+     "The session's video, logs and pass/fail status stay on the session dashboard after it ends.",
      "Mark the result with set_session_status first \u2014 it also works after the session has ended, so this is an ordering preference rather than a last chance."
     ],
     "path_params": [
@@ -1056,7 +1056,7 @@
     "path": "/app-automate/plan.json",
     "mode": "read",
     "entity": "plan",
-    "intent": "Show the App Automate plan and how many parallel sessions are running, queued and allowed \u2014 check this before starting a session or a batch of them.",
+    "intent": "Show the device-session plan and how many parallel sessions are running, queued and allowed \u2014 check this before starting a session or a batch of them.",
     "guidance": [
      "A session start blocks and then queues when parallel_sessions_running has reached parallel_sessions_max_allowed, so a start that seems slow is usually this.",
      "team_parallel_sessions_max_allowed is the ceiling shared across everyone on the team and can be lower than the account's own maximum.",
@@ -1090,7 +1090,7 @@
     "path": "/app-automate/upload",
     "mode": "write",
     "entity": "app_build",
-    "intent": "Upload an app build to App Automate \u2014 the store device sessions install from, separate from App Live's \u2014 from a public download link, and get back the bs:// URL a session installs. Use this to make a new .apk, .aab or .ipa available to the devices an agent drives.",
+    "intent": "Upload an app build to the device-session store \u2014 the one sessions here install from, separate from App Live's \u2014 from a public download link, and get back the bs:// URL a session installs. Use this to make a new .apk, .aab or .ipa available to the devices an agent drives.",
     "guidance": [
      "APP LIVE KEEPS A SEPARATE STORE. An app uploaded for App Live (manual, exploratory testing in a person's browser) is not available here, and one uploaded here does not appear in App Live \u2014 so when the app is going to be driven by you, tapped, typed into or scrolled by capability calls, upload it HERE, whatever the user calls the testing. The bs:// this returns is the one create_session installs.",
      "Only the download-link form can be used here. The same endpoint also accepts a multipart upload carrying the file itself, which this surface cannot send \u2014 so for a build that exists only on the caller's own machine, give them that multipart request to run themselves and take the bs:// url it returns. The upload answers with the bs:// url directly: there is no intermediate storage, no presigned url and no second call. There is no way to hand the bytes over from here.",
@@ -2880,7 +2880,7 @@
     "entity": "app_build",
     "encoding": "multipart",
     "local_only": true,
-    "intent": "Upload an app build that is on this machine to App Automate and get back the bs:// URL a session installs \u2014 use this when the .apk, .aab or .ipa is a local file rather than a download link.",
+    "intent": "Upload an app build that is on this machine to the device-session store and get back the bs:// URL a session installs \u2014 use this when the .apk, .aab or .ipa is a local file rather than a download link.",
     "guidance": {
      "shared": [
       "APP LIVE KEEPS A SEPARATE STORE. An app uploaded for App Live (manual, exploratory testing in a person's browser) is not available here, and one uploaded here does not appear in App Live \u2014 so when the app is going to be driven by you, tapped, typed into or scrolled by capability calls, upload it HERE, whatever the user calls the testing. The bs:// this returns is the one create_session installs.",
@@ -3632,10 +3632,10 @@
     ],
     "id_convention": "session_id is a 40-character hex string returned by create_session at value.sessionId; it cannot be listed or guessed. element_id is an opaque string from find_element, valid only until the screen changes.",
     "key_facts": [
-     "A session holds a real device and consumes App Automate minutes from start until it ends; it ends itself after the idle timeout with no command, or after 2 hours.",
+     "A session holds a real device and consumes device minutes from start until it ends; it ends itself after the idle timeout with no command, or after 2 hours.",
      "The app must already be uploaded before a session can start; a build is uploaded by giving a public download link, not by sending a file.",
      "Actions are decided from the UI tree: read the page source, act, then read it again to confirm the effect.",
-     "Each session is recorded with video and logs on the App Automate dashboard, including its passed or failed status.",
+     "Each session is recorded with video and logs on the session dashboard, including its passed or failed status.",
      "A session's record outlives the session: its status, shareable link and video stay available on the account after the device is released.",
      "Apps can be launched, closed and removed during a session, and anything removed comes back only when a later session installs it again."
     ],
@@ -3749,7 +3749,7 @@
    },
    "plan": {
     "title": "Plan",
-    "description": "The account's App Automate subscription and how much of its parallel-session allowance is in use.",
+    "description": "The account's device-session subscription and how much of its parallel-session allowance is in use.",
     "aliases": [
      "plan",
      "subscription",

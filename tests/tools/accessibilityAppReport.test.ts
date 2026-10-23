@@ -227,7 +227,9 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
 
     await expect(
       fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID }),
-    ).rejects.toThrow(/No Automated Tests \(web\) or App Accessibility build with id/);
+    ).rejects.toThrow(
+      /No Automated Tests \(web\) or App Accessibility build with id/,
+    );
   });
 
   it("does not probe for a source that is not a build", async () => {
@@ -407,6 +409,27 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
     expect(urls()).not.toContainEqual(expect.stringContaining("/snapshot"));
   });
 
+  it("says which framework ran the build, so a native build's empty report can be explained", async () => {
+    get.mockResolvedValueOnce(
+      ok({
+        meta_data: {
+          ...META,
+          status: "passed",
+          issue_summary: { total: 0, scan_count: 0 },
+          session_data: {
+            framework: { name: "Espresso-Junit4", version: null },
+            sdk: { version: null },
+          },
+        },
+      }),
+    );
+    get.mockResolvedValueOnce(ok({ projects: [] }));
+
+    const report = await fetcher().appBuildReport(BUILD_ID);
+
+    expect(report.framework).toBe("Espresso-Junit4");
+  });
+
   it("fails plainly when the app build does not exist", async () => {
     get.mockResolvedValueOnce(missing());
 
@@ -514,7 +537,14 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        data: [{ automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: "Build #12: Checkout.ipa v1.0" } }],
+        data: [
+          {
+            automation_build: {
+              hashed_id: APP_AUTOMATE_BUILD,
+              name: "Build #12: Checkout.ipa v1.0",
+            },
+          },
+        ],
       })
       .mockResolvedValueOnce(
         ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
@@ -549,6 +579,23 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
         `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
       ),
     ).rejects.toThrow(/accessibility.*was not on/i);
+  });
+
+  it("reports a failed session lookup as the error it was, not as accessibility being off", async () => {
+    get
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [{ automation_session: { hashed_id: SESSION } }],
+      })
+      .mockResolvedValueOnce({ ok: false, status: 500, data: {} });
+
+    const failure = fetcher().sourceFromReportUrl(
+      `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
+    );
+
+    await expect(failure).rejects.toThrow(/HTTP 500/);
+    await expect(failure).rejects.not.toThrow(/was not on/);
   });
 
   it("says when the build has no sessions to map through", async () => {

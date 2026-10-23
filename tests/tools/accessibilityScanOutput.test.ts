@@ -571,6 +571,41 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
     expect(body).not.toContain("Retrieved 0");
   });
 
+  it.each([
+    [
+      "Espresso-Junit4",
+      [
+        "com.browserstack.gradle-tool",
+        "browserstack-java-sdk",
+        "testObservability",
+      ],
+    ],
+    ["XCUITest", ["BrowserstackSwiftSDK"]],
+  ])(
+    "gives a native (%s) build with no scans the native causes, not the SDK's",
+    async (framework, causes) => {
+      m.reportStatus.mockResolvedValue("passed");
+      m.appBuildReport.mockResolvedValue({
+        ...APP_REPORT,
+        records: [],
+        page_length: 0,
+        total_issues: 0,
+        next_page: null,
+        scan_count: 0,
+        status: "passed",
+        framework,
+      });
+
+      const body = text(
+        await handlers.fetchAccessibilityIssues({ buildId: BUILD_ID }, context),
+      );
+
+      for (const cause of causes) expect(body).toContain(cause);
+      expect(body).not.toContain("browserstack.yml");
+      expect(body).not.toContain("fixture");
+    },
+  );
+
   it("resolves an App Accessibility dashboard link and pages by the build id", async () => {
     m.sourceFromReportUrl.mockResolvedValue({
       kind: "appBuild",

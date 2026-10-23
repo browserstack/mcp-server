@@ -38,6 +38,8 @@ export interface AppBuildMeta {
   status: string;
   issue_summary?: { total?: number; scan_count?: number };
   fup?: { capped?: boolean; tests_partial?: boolean; tests_dropped?: boolean };
+  /** What ran the tests: an SDK framework (pytest, …) or a native one (Espresso-Junit4, …). */
+  session_data?: { framework?: { name?: string } };
 }
 
 interface AppRuleIssue {
@@ -98,6 +100,8 @@ export interface AppBuildReport {
   dashboard_link?: string;
   /** Whether the fair-usage cap dropped tests or scans from this build. */
   fup_capped: boolean;
+  /** The test framework the build ran under, when the build's details name it. */
+  framework?: string;
 }
 
 /** The element details worth repeating; the rest are the rule's own inputs. */
@@ -275,6 +279,12 @@ export class AppAccessibilityApi {
       headers: this.headers(),
       raise_error: false,
     });
+    // A session with no test code is a 404; any other failure is the request's, not the run's.
+    if (!resp.ok && resp.status !== 404) {
+      throw new Error(
+        `Could not read App Automate session ${sessionId}: HTTP ${resp.status}`,
+      );
+    }
     const buildId = resp.ok ? resp.data?.build_uuid : undefined;
     if (!buildId) {
       throw new Error(
@@ -452,6 +462,9 @@ export class AppAccessibilityApi {
       build_name: meta.name,
       dashboard_link: await this.dashboardLink(meta),
       fup_capped: Boolean(meta.fup?.capped || meta.fup?.tests_dropped),
+      ...(meta.session_data?.framework?.name
+        ? { framework: meta.session_data.framework.name }
+        : {}),
     };
   }
 }

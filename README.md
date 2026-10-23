@@ -49,7 +49,7 @@ Click on the buttons below to install MCP in your respective IDE or assistant:
 
 For manual setup in any MCP client, see [Install the MCP server locally](https://www.browserstack.com/docs/browserstack-mcp-server/get-started/local-mcp) or [Set up the remote MCP server](https://www.browserstack.com/docs/browserstack-mcp-server/get-started/remote-mcp-server).
 
-#### Note : Ensure you are using Node version >= `20.9` 
+#### Note : Ensure you are using Node version >= `22` 
 - Check your node version using `node --version`. Recommended version: `v22.15.0` (LTS)
 - To Upgrade Node :
 - 1. On macOS `(Homebrew) - brew update && brew upgrade node  or if using (nvm) - nvm install 22.15.0 && nvm use 22.15.0 && nvm alias default 22.15.0`

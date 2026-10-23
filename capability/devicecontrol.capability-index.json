@@ -843,7 +843,7 @@
     "intent": "Type into a field \u2014 use this to fill a search box, a login form or any editable input.",
     "guidance": [
      "APPENDS to whatever the field already holds. Call clear_element first to replace the value rather than adding to it.",
-     "Read the result back with get_element_property on \"value\": a field's current contents are a property, not text.",
+     "Read the result back with get_element_property on \"value\": a field's current contents are a property, not text. On Safari for iOS, where property reads answer 405, use get_element_attribute with name value instead.",
      "A \\n at the end submits the form on a desktop browser and on Chrome for Android, and is quicker than finding the submit button. IT DOES NOT SUBMIT ON SAFARI FOR iOS \u2014 the text lands in the field and the page stays where it is, whether the newline is sent with the text or on its own. There, click the form's submit button with click_element \u2014 scroll_to_element first if it sits below the fold.",
      "The element must be editable; typing into anything else answers \"element not interactable\".",
      "A site's own autocomplete or dropdown may swallow the keystrokes and require a click on a suggestion instead."

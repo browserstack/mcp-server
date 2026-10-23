@@ -433,28 +433,39 @@ const WCAG_VERSIONS = {
   rgaa41: "RGAA 4.1",
 } as const;
 
-/** What the create-scan API uses for a setting the request leaves out. */
-const SCAN_DEFAULTS = {
-  wcagVersion: "wcag21aa",
-  bestPractices: false,
-  needsReview: true,
-  advancedRules: true,
-} as const;
-
-/** The settings a scan ran with, each marked when it was the API's default. */
-function scanSettingsNote(settings: ScanSettings): string {
-  const pick = <K extends keyof typeof SCAN_DEFAULTS>(key: K) =>
-    settings[key] === undefined
-      ? { value: SCAN_DEFAULTS[key], note: " (default)" }
-      : { value: settings[key]!, note: "" };
-  const wcag = pick("wcagVersion");
-  const onOff = (key: "bestPractices" | "needsReview" | "advancedRules") => {
-    const { value, note } = pick(key);
-    return `${value ? "on" : "off"}${note}`;
-  };
-  const name =
-    WCAG_VERSIONS[wcag.value as keyof typeof WCAG_VERSIONS] ?? wcag.value;
-  return `Scan settings: ${name}${wcag.note}, best practices ${onOff("bestPractices")}, needs review ${onOff("needsReview")}, advanced rules ${onOff("advancedRules")}.`;
+/**
+ * What the scan ran with, read back from the run, since an unset setting takes the API's
+ * default and the plan can turn advanced rules off. When it cannot be read, only what was
+ * asked for is said: a guessed default would be stated as fact.
+ */
+function scanSettingsNote(
+  asked: ScanSettings,
+  applied: ScanSettings | undefined,
+): string {
+  const wcagName = (value: string) =>
+    WCAG_VERSIONS[value as keyof typeof WCAG_VERSIONS] ?? value;
+  const onOff = (value: boolean) => (value ? "on" : "off");
+  const describe = (settings: ScanSettings) =>
+    [
+      settings.wcagVersion !== undefined ? wcagName(settings.wcagVersion) : "",
+      settings.bestPractices !== undefined
+        ? `best practices ${onOff(settings.bestPractices)}`
+        : "",
+      settings.needsReview !== undefined
+        ? `needs review ${onOff(settings.needsReview)}`
+        : "",
+      settings.advancedRules !== undefined
+        ? `advanced rules ${onOff(settings.advancedRules)}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+  if (applied && describe(applied)) {
+    return `Scan settings, as the scan ran: ${describe(applied)}.`;
+  }
+  return describe(asked)
+    ? `Scan settings asked for: ${describe(asked)}; anything not asked for takes the scan's default.`
+    : "No scan settings were asked for, so the scan's defaults apply.";
 }
 
 async function executeAccessibilityScan(
@@ -629,11 +640,12 @@ function createScanSuccessResponse(
   cursor: number | null,
   duplicates: string[] = [],
   settings: ScanSettings = {},
+  applied?: ScanSettings,
 ): CallToolResult {
   const messages = [
     `Accessibility scan "${name}" completed. check the BrowserStack dashboard for more details [https://scanner.browserstack.com/site-scanner/scan-details/${name}].`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
-    scanSettingsNote(settings),
+    scanSettingsNote(settings, applied),
     `You can also download the full report from the following link: ${reportUrl}`,
     `We found ${totalIssues} issues. Below are the details of the ${pageLength} most critical issues.`,
     ...duplicates,
@@ -675,6 +687,7 @@ async function runAccessibilityScan(
     return createScanFailureResponse(name, status);
   }
 
+  const applied = await scanner.runSettings(scanId, scanRunId);
   const reportFetcher = await initializeReportFetcher(config);
   const reportLink = await reportFetcher.getReportLink({
     kind: "scan",
@@ -703,6 +716,7 @@ async function runAccessibilityScan(
     next_page,
     excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     settings,
+    applied,
   );
 }
 

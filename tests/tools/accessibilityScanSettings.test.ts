@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   post: vi.fn(),
   startScan: vi.fn(),
   waitUntilComplete: vi.fn(),
+  runSettings: vi.fn(),
   getReportLink: vi.fn(),
   parse: vi.fn(),
 }));
@@ -64,6 +65,27 @@ describe("AccessibilityScanner.startScan", () => {
     expect(m.post.mock.calls[0][0].body.scanSettings).toEqual({ bestPractices: true });
   });
 
+  it("passes on the API's own reason for a 422, rather than assuming a duplicate name", async () => {
+    m.post.mockRejectedValue({
+      response: { status: 422, data: { message: "wcagVersion field must be one of: wcag21aa, wcag22aa" } },
+    });
+
+    const start = (await scanner()).startScan("checkout", ["https://shop.example/"], undefined, {
+      wcagVersion: "rgaa41",
+    });
+
+    await expect(start).rejects.toThrow(/wcagVersion field must be one of/);
+    await expect(start).rejects.not.toThrow(/already exists/);
+  });
+
+  it("still reads a 422 with no reason as a name already in use", async () => {
+    m.post.mockRejectedValue({ response: { status: 422, data: {} } });
+
+    await expect(
+      (await scanner()).startScan("checkout", ["https://shop.example/"]),
+    ).rejects.toThrow(/A scan with this name already exists/);
+  });
+
   it("sends no scanSettings when none are given", async () => {
     await (await scanner()).startScan("checkout", ["https://shop.example/"]);
 
@@ -80,6 +102,7 @@ describe("startAccessibilityScan scan settings", () => {
         setAuth = vi.fn();
         startScan = m.startScan;
         waitUntilComplete = m.waitUntilComplete;
+        runSettings = m.runSettings;
       },
     }));
     vi.doMock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
@@ -124,7 +147,13 @@ describe("startAccessibilityScan scan settings", () => {
 
   const text = (result: any) => result.content.map((c: { text: string }) => c.text).join("\n");
 
-  it("passes the requested settings to the scan and says what the scan ran with", async () => {
+  it("passes the requested settings to the scan and reports the settings it ran with", async () => {
+    m.runSettings.mockResolvedValue({
+      wcagVersion: "wcag22aaa",
+      bestPractices: true,
+      needsReview: true,
+      advancedRules: false,
+    });
     const { run } = await tool();
 
     const result = await run({
@@ -138,19 +167,28 @@ describe("startAccessibilityScan scan settings", () => {
       wcagVersion: "wcag22aaa",
       bestPractices: true,
     });
+    expect(m.runSettings).toHaveBeenCalledWith("7310042", "5520318");
+    // Advanced rules read back off, as a plan without them turns them off.
     expect(text(result)).toContain(
-      "Scan settings: WCAG 2.2 AAA, best practices on, needs review on (default), advanced rules on (default).",
+      "Scan settings, as the scan ran: WCAG 2.2 AAA, best practices on, needs review on, advanced rules off.",
     );
   });
 
-  it("names the defaults when no setting is asked for", async () => {
+  it("says only what was asked for when the run's settings cannot be read", async () => {
+    m.runSettings.mockResolvedValue(undefined);
     const { run } = await tool();
 
-    const result = await run({ name: "checkout", pageURL: "https://shop.example/" });
+    const result = await run({
+      name: "checkout",
+      pageURL: "https://shop.example/",
+      wcagVersion: "wcag22aaa",
+      bestPractices: true,
+    });
 
     expect(text(result)).toContain(
-      "Scan settings: WCAG 2.1 AA (default), best practices off (default), needs review on (default), advanced rules on (default).",
+      "Scan settings asked for: WCAG 2.2 AAA, best practices on; anything not asked for takes the scan's default.",
     );
+    expect(text(result)).not.toContain("(default)");
   });
 
   it("takes only the WCAG versions the API knows, RGAA 4.1 among them", async () => {

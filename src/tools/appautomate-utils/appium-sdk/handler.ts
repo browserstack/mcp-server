@@ -15,7 +15,10 @@ import {
   getAppSDKPrefixCommand,
   generateAppBrowserStackYMLInstructions,
 } from "./index.js";
-import { getAppAccessibilityChecksInstructions } from "./languages/accessibility.js";
+import {
+  getAppAccessibilityChecksInstructions,
+  getAppAccessibilityNotSetUpInstructions,
+} from "./languages/accessibility.js";
 
 import {
   AppSDKSupportedLanguage,
@@ -128,10 +131,9 @@ export async function setupAppAutomateHandler(
   // Step 5: What makes an accessibility scan happen, and how to read the issues
   if (accessibility) {
     instructions.push({
-      content: getAppAccessibilityChecksInstructions(
-        language,
-        testingFramework,
-      ),
+      content:
+        getAppAccessibilityNotSetUpInstructions(testingFramework) ??
+        getAppAccessibilityChecksInstructions(language, testingFramework),
       type: "run",
     });
   }

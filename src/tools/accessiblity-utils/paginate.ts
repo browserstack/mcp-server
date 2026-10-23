@@ -46,11 +46,17 @@ export function pageOf<T>(
     charCursor += len;
   }
 
-  // Collect up to maxCharacterLength
+  // Collect up to maxCharacterLength; a record longer than that goes out on a page of its
+  // own, or the cursor could never move past it.
   const page: T[] = [];
   for (let i = idx; i < all.length; i++) {
     const recStr = JSON.stringify(all[i]);
-    if (charCursor - nextPage + recStr.length > maxCharacterLength) break;
+    if (
+      page.length > 0 &&
+      charCursor - nextPage + recStr.length > maxCharacterLength
+    ) {
+      break;
+    }
     page.push(all[i]);
     charCursor += recStr.length;
   }

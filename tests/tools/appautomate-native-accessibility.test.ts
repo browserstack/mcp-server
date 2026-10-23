@@ -154,3 +154,18 @@ describe("runAppTestsOnBrowserStack and App Accessibility", () => {
     expect(body).not.toContain("fetchAccessibilityIssues");
   });
 });
+
+// A native suite records App Accessibility scans only when it was built with BrowserStack's
+// instrumentation; saying so where the agent chooses the flag lets it check before a run
+// that would otherwise finish, 10 to 20 minutes later, with no scans.
+describe("the accessibility flag's description", () => {
+  it("names the SDK the suite must be built with, within the argument budget", async () => {
+    const { RUN_APP_AUTOMATE_SCHEMA } = await import(
+      "../../src/tools/appautomate-utils/native-execution/constants.js"
+    );
+    const description = RUN_APP_AUTOMATE_SCHEMA.accessibility.description ?? "";
+
+    expect(description).toMatch(/BrowserStack's SDK/);
+    expect(description.length).toBeLessThanOrEqual(120);
+  });
+});

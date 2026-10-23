@@ -23,6 +23,27 @@ def driver():
     drv.quit()
 \`\`\``;
 
+/**
+ * The frameworks set up without a browserstack.yml whose setup here does not turn App
+ * Accessibility on; guidance for a config that was never written would only mislead.
+ */
+const NOT_SET_UP: Partial<Record<AppSDKSupportedTestingFramework, string>> = {
+  [AppSDKSupportedTestingFrameworkEnum.nightwatch]: "Nightwatch",
+  [AppSDKSupportedTestingFrameworkEnum.cucumberRuby]: "Cucumber (Ruby)",
+};
+
+/** Says the checks were asked for but not set up, for a framework this setup leaves them off. */
+export function getAppAccessibilityNotSetUpInstructions(
+  testingFramework: AppSDKSupportedTestingFramework,
+): string | undefined {
+  const label = NOT_SET_UP[testingFramework];
+  if (!label) return undefined;
+  return createStep(
+    "App Accessibility checks",
+    `App Accessibility checks are not set up for ${label}: this setup does not turn them on for it, so these tests run without them. To check the app, set the tests up in another framework this tool supports, such as WebdriverIO, pytest, TestNG or JUnit, with accessibility: true.`,
+  );
+}
+
 function driverAdvice(
   language: AppSDKSupportedLanguage,
   testingFramework: AppSDKSupportedTestingFramework,

@@ -517,6 +517,22 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
     );
   });
 
+  it("says when only the first screens were read, so the total is not taken for the build's", async () => {
+    m.appBuildReport.mockResolvedValue({
+      ...APP_REPORT,
+      scan_count: 1500,
+      screens_read: 1000,
+    });
+
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ buildId: BUILD_ID }, context),
+    );
+
+    expect(body).toContain(
+      "Only the first 1000 of the build's 1500 scanned screens were read; the total counts the issues on those. The dashboard report has them all.",
+    );
+  });
+
   it("quotes the build's name and link, which the API takes from the user's CI, as untrusted data", async () => {
     m.appBuildReport.mockResolvedValue({
       ...APP_REPORT,

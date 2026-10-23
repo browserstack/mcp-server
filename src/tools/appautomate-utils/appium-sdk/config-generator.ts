@@ -53,7 +53,7 @@ app: ${appPath}
 platforms:
 ${platformConfigs}
 parallelsPerPlatform: 1
-browserstackLocal: false
+browserstackLocal: true
 # Replace projectName and buildName according to the actual project
 projectName: ${projectName}
 buildName: ${buildName}
@@ -70,8 +70,11 @@ accessibility: ${config.accessibility ? "true" : "false"}${
 - Replace \`app: ${appPath}\` with the path to your actual app file (e.g., \`./SampleApp.apk\` for Android or \`./SampleApp.ipa\` for iOS)
 - You can upload your app using BrowserStack's App Upload API or manually through the dashboard
 - Set \`browserstackLocal: true\` if you need to test with local/staging servers
-- Keep \`osVersion\` unquoted: the SDK parses it as a number, and its App Accessibility module reads that key (not \`platformVersion\`)
-- Adjust \`parallelsPerPlatform\` based on your subscription limits`;
+${
+  config.accessibility
+    ? "- Keep `osVersion` unquoted: the SDK parses it as a number, and its App Accessibility module reads that key (not `platformVersion`)\n"
+    : ""
+}- Adjust \`parallelsPerPlatform\` based on your subscription limits`;
 
   const stepTitle =
     "Update browserstack.yml file with App Automate configuration:";
@@ -82,9 +85,20 @@ accessibility: ${config.accessibility ? "true" : "false"}${
   return createStep(stepTitle, stepDescription);
 }
 
+/**
+ * The device's OS version line. App Accessibility needs \`osVersion\` unquoted (observed on
+ * the Python SDK); without it the line stays as it always was.
+ */
+function versionLine(version: string, accessibility?: boolean): string {
+  return accessibility
+    ? `osVersion: ${version}`
+    : `platformVersion: "${version}"`;
+}
+
 function generatePlatformConfigs(config: {
   validatedEnvironments?: ValidatedEnvironment[];
   platforms?: string[];
+  accessibility?: boolean;
 }): string {
   if (config.validatedEnvironments && config.validatedEnvironments.length > 0) {
     return config.validatedEnvironments
@@ -92,7 +106,7 @@ function generatePlatformConfigs(config: {
       .map((env) => {
         return `  - platformName: ${env.platform}
     deviceName: "${env.deviceName}"
-    osVersion: ${env.osVersion}`;
+    ${versionLine(env.osVersion, config.accessibility)}`;
       })
       .join("\n");
   } else if (config.platforms && config.platforms.length > 0) {
@@ -106,7 +120,7 @@ function generatePlatformConfigs(config: {
           .map(
             (device) => `  - platformName: ${platform}
     deviceName: ${device.deviceName}
-    osVersion: ${device.platformVersion}`,
+    ${versionLine(device.platformVersion, config.accessibility)}`,
           )
           .join("\n");
       })

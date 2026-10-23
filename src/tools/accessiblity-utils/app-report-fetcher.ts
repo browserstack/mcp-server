@@ -387,14 +387,23 @@ export class AppAccessibilityApi {
     private readonly headers: () => Record<string, string> | undefined,
   ) {}
 
-  /** The build's details, or undefined when the API does not know the id. */
+  /**
+   * The build's details, or undefined when the API does not know the id (its 404, which
+   * it also gives a malformed id). Any other failure is thrown with its status.
+   */
   async buildMeta(buildId: string): Promise<AppBuildMeta | undefined> {
     const resp = await apiClient.get({
       url: `${APP_API_BASE}/build/${encodeURIComponent(buildId)}`,
       headers: this.headers(),
       raise_error: false,
     });
-    return resp.ok ? resp.data?.meta_data : undefined;
+    if (resp.status === 404) return undefined;
+    if (!resp.ok) {
+      throw new Error(
+        `Could not look up App Accessibility build "${buildId}": HTTP ${resp.status}`,
+      );
+    }
+    return resp.data?.meta_data;
   }
 
   /**
@@ -591,7 +600,15 @@ export class AppAccessibilityApi {
       const resp = await apiClient.get({
         url: `${APP_API_BASE}/build/${encodeURIComponent(buildId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
         headers: this.headers(),
+        raise_error: false,
       });
+      // A count over some of the screens would read as the build's, so a page that
+      // cannot be read fails the read.
+      if (!resp.ok) {
+        throw new Error(
+          `Could not read page ${page} of build ${buildId}'s scanned screens from the App Accessibility API: HTTP ${resp.status}`,
+        );
+      }
       const data = resp.data?.data;
       details.push(...(data?.details ?? []));
       hidden = data?.issue_counts?.hidden_issues ?? hidden;

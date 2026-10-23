@@ -29,13 +29,21 @@ function yml(options: { accessibility?: boolean } = {}) {
 }
 
 describe("generateAppBrowserStackYMLInstructions", () => {
-  it("writes the OS version as osVersion, unquoted: the SDK's accessibility module reads that key as a number", () => {
+  it("writes the OS version as osVersion, unquoted, when App Accessibility is on: its module reads that key as a number", () => {
     // Observed on SDK 1.51.2: `platformVersion: 14.0` selects the device but App Accessibility
     // records no scans; `osVersion: 14.0`, the documented key, scans. A quoted "14.0" fails the
     // module's int() check and turns scanning off without a message.
-    expect(yml()).toContain("osVersion: 14.0\n");
-    expect(yml()).not.toMatch(/platformVersion:/);
-    expect(yml()).not.toContain('osVersion: "14.0"');
+    const text = yml({ accessibility: true });
+    expect(text).toContain("osVersion: 14.0\n");
+    expect(text).not.toMatch(/platformVersion:/);
+    expect(text).not.toContain('osVersion: "14.0"');
+  });
+
+  // Only Python SDK 1.51.2 was observed with the change above, so a run without App
+  // Accessibility keeps the config it has always been given.
+  it("keeps platformVersion, quoted, when App Accessibility is off", () => {
+    expect(yml()).toContain('platformVersion: "14.0"\n');
+    expect(yml()).not.toMatch(/osVersion:/);
   });
 
   it("leaves accessibility off unless asked, with the option spelled out", () => {
@@ -50,8 +58,9 @@ describe("generateAppBrowserStackYMLInstructions", () => {
     expect(text).not.toContain("accessibility: false");
   });
 
-  it("does not route traffic through a Local tunnel unless the user sets it up", () => {
-    expect(yml()).toContain("browserstackLocal: false");
+  it("keeps the Local tunnel default every setup has had", () => {
+    expect(yml()).toContain("\nbrowserstackLocal: true\n");
+    expect(yml({ accessibility: true })).toContain("\nbrowserstackLocal: true\n");
   });
 
   it("writes YAML comments, not // lines that YAML reads as keys", () => {
@@ -62,7 +71,7 @@ describe("generateAppBrowserStackYMLInstructions", () => {
 
   it("falls back to the default devices unquoted too", () => {
     const text = generateAppBrowserStackYMLInstructions(
-      { platforms: ["android"], testingFramework: "pytest" },
+      { platforms: ["android"], testingFramework: "pytest", accessibility: true },
       "./app.apk",
     );
     expect(text).toContain("osVersion: 12.0\n");

@@ -209,10 +209,15 @@ function elementOf(issue: AppRuleIssue): Record<string, unknown> {
   return element;
 }
 
-/** The fix text is light markup (`<document>`, `<code>`); the words are what matter. */
+/**
+ * The fix text is light markup (`<document>`, `<code>`); the words are what matter. Tags
+ * are dropped, then any angle bracket left over, so nested markup such as
+ * `<scr<script>ipt>` cannot leave a tag behind.
+ */
 function plainText(markup: string | undefined): string {
   return (markup ?? "")
-    .replace(/<[^>]+>/g, "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/[<>]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }

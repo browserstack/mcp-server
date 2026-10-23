@@ -421,11 +421,6 @@ function appBuildDetails(report: AppBuildReport): string {
 }
 
 /**
- * Why a finished app build has no scans. Each cause here produced a run that finished
- * green with nothing scanned and no warning; they are listed most likely first, with what
- * the build's own details say ahead of the rest.
- */
-/**
  * Why a native (Espresso, XCUITest) build recorded no scans. The build request's flag only
  * turns the checks on: the suite itself must carry BrowserStack's instrumentation.
  */
@@ -453,6 +448,11 @@ function nativeFramework(
   return undefined;
 }
 
+/**
+ * Why a finished app build has no scans. Each cause here produced a run that finished
+ * green with nothing scanned and no warning; they are listed most likely first, with what
+ * the build's own details say ahead of the rest. A native build gets the native causes.
+ */
 function noScansNote(report: AppBuildReport): string[] {
   const native = nativeFramework(report.framework);
   if (native) {

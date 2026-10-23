@@ -267,6 +267,19 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl for Automate links", ()
     ).rejects.toThrow(/accessibility testing was not on/);
   });
 
+  it("reports a failed accessibility build lookup as the error it was", async () => {
+    get
+      .mockResolvedValueOnce(testCode(BUILD_ID))
+      .mockResolvedValueOnce(failed(500, ["Internal server Error"]));
+
+    const lookup = fetcher().sourceFromReportUrl(
+      `${DASHBOARD}/${AUTOMATE_BUILD}/sessions/${SESSION}`,
+    );
+
+    await expect(lookup).rejects.toThrow(/HTTP 500/);
+    await expect(lookup).rejects.not.toThrow(/not on/);
+  });
+
   it("names an Automate build it does not know", async () => {
     get.mockResolvedValueOnce({ ok: false, status: 404, data: null });
 

@@ -295,6 +295,11 @@ export class AccessibilityReportFetcher {
         `This Automate run belongs to build ${buildId}, which has no accessibility results: accessibility testing was not on for it`,
       );
     }
+    if (!build.ok) {
+      throw new Error(
+        `Could not read accessibility build ${buildId} of this Automate run: HTTP ${build.status}`,
+      );
+    }
     return { kind: "build", buildId };
   }
 

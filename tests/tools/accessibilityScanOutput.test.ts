@@ -470,6 +470,15 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
     build_name: "Checkout Build",
     dashboard_link: LINK,
     fup_capped: false,
+    rules: {
+      "interactable-element-content-label": {
+        issue_type: "Interactive Element Accessibility Label",
+        issue_description: "Interactive elements must have a label.",
+        wcag: "WCAG 2.2-4.1.2 A",
+        how_to_fix: "Give the button a contentDescription.",
+      },
+    },
+    screens: { "Screen 1 (test_checkout)": "https://assets.example/s1.jpeg" },
   };
 
   beforeEach(() => {
@@ -523,6 +532,21 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
 
     expect(body).toContain(
       "Only the first 1000 of the build's 1500 scanned screens were read; the total counts the issues on those. The dashboard report has them all.",
+    );
+  });
+
+  it("hands out each rule's description and fix, and each screen's screenshot, with the page's issues", async () => {
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ buildId: BUILD_ID }, context),
+    );
+
+    const block = body.slice(body.indexOf("«UNTRUSTED accessibility scan results"));
+    expect(block).toContain('"rules"');
+    expect(block).toContain("Give the button a contentDescription.");
+    expect(block).toContain('"screens"');
+    expect(block).toContain("https://assets.example/s1.jpeg");
+    expect(body).toContain(
+      "Each issue names its rule (rule_id) and screen: the rule's name, description, WCAG criteria and usual fix are under rules, each screen's screenshot under screens, and measured holds what the rule measured on the element.",
     );
   });
 

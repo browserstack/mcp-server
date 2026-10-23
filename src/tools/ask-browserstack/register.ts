@@ -551,7 +551,7 @@ export function addAskBrowserStackAITool(
       product: z
         .enum(PRODUCTS)
         .describe(
-          "Which product to work in: tm (Test Management), " +
+          "Which product to work in: tm (Test Management), a11y (Accessibility), " +
             "tra (Test Reporting & Analytics).",
         ),
       // OPTIONAL, because a resume does not carry one. `next_step` tells the model to

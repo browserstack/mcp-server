@@ -69,6 +69,11 @@ vi.mock("../../src/logger", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() },
 }));
 vi.mock("../../src/lib/instrumentation", () => ({ trackMCP: vi.fn() }));
+// apiClient reaches the server entry through lib/utils; it must not start the server.
+vi.mock("../../src/index", () => ({
+  trackMCP: vi.fn(),
+  PackageJsonVersion: "0.0.0",
+}));
 
 const mockConfig = {
   "browserstack-username": "fake-user",
@@ -108,16 +113,20 @@ describe("Accessibility Tools", () => {
     expect(description("startAccessibilityScan")).toContain(
       "setupBrowserStackAppAutomateTests",
     );
-    expect(description("fetchAccessibilityIssues")).toMatch(/app build/i);
+    const buildId = serverMock.tool.mock.calls.find(
+      (c: any[]) => c[0] === "fetchAccessibilityIssues",
+    )[2].buildId;
+    expect(buildId.description).toMatch(/App Accessibility/);
   });
 
-  it("registers all 5 accessibility tools", () => {
+  it("registers the 5 accessibility tools; App Accessibility's lists are capabilities, not a tool", () => {
     const toolNames = serverMock.tool.mock.calls.map((c: any[]) => c[0]);
     expect(toolNames).toContain("accessibilityExpert");
     expect(toolNames).toContain("startAccessibilityScan");
     expect(toolNames).toContain("createAccessibilityAuthConfig");
     expect(toolNames).toContain("getAccessibilityAuthConfig");
     expect(toolNames).toContain("fetchAccessibilityIssues");
+    expect(toolNames).not.toContain("listAppAccessibilityReports");
   });
 
   it("accessibilityExpert — returns a response without crashing", async () => {

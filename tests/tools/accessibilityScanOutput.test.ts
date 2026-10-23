@@ -12,6 +12,7 @@ const m = vi.hoisted(() => ({
   // A build id is probed on both APIs; by default it stays what it was named as.
   resolveBuild: vi.fn(async (source: unknown) => source),
   appBuildReport: vi.fn(),
+  appReportIssues: vi.fn(),
   parse: vi.fn(),
 }));
 
@@ -30,6 +31,7 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     reportStatus = m.reportStatus;
     resolveBuild = m.resolveBuild;
     appBuildReport = m.appBuildReport;
+    appReportIssues = m.appReportIssues;
   },
 }));
 vi.mock("../../src/tools/accessiblity-utils/report-parser.js", () => ({
@@ -84,6 +86,7 @@ const GROUPED = {
   page_length: 1,
   total_issues: 79,
   next_page: 140,
+  remaining: 78,
   duplicate_issues: 43,
   unlinked_duplicates: 0,
   hidden_issues: 0,
@@ -456,6 +459,12 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
     page_length: 1,
     total_issues: 3,
     next_page: 140,
+    remaining: 2,
+    summary: {
+      by_severity: { critical: 1, serious: 1, moderate: 1 },
+      by_rule: [],
+      by_screen: [],
+    },
     hidden_issues: 1,
     scan_count: 2,
     status: "failed",
@@ -611,6 +620,41 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
     expect(body).not.toContain("Retrieved 0");
   });
 
+  it.each([
+    [
+      "Espresso-Junit4",
+      [
+        "com.browserstack.gradle-tool",
+        "browserstack-java-sdk",
+        "testObservability",
+      ],
+    ],
+    ["XCUITest", ["BrowserstackSwiftSDK"]],
+  ])(
+    "gives a native (%s) build with no scans the native causes, not the SDK's",
+    async (framework, causes) => {
+      m.reportStatus.mockResolvedValue("passed");
+      m.appBuildReport.mockResolvedValue({
+        ...APP_REPORT,
+        records: [],
+        page_length: 0,
+        total_issues: 0,
+        next_page: null,
+        scan_count: 0,
+        status: "passed",
+        framework,
+      });
+
+      const body = text(
+        await handlers.fetchAccessibilityIssues({ buildId: BUILD_ID }, context),
+      );
+
+      for (const cause of causes) expect(body).toContain(cause);
+      expect(body).not.toContain("browserstack.yml");
+      expect(body).not.toContain("fixture");
+    },
+  );
+
   it("resolves an App Accessibility dashboard link and pages by the build id", async () => {
     m.sourceFromReportUrl.mockResolvedValue({
       kind: "appBuild",
@@ -628,5 +672,127 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
       `Resolved the report link to App Accessibility build ${BUILD_ID}.`,
     );
     expect(body).toContain(`buildId: "${BUILD_ID}" and cursor: 140`);
+  });
+});
+
+describe("fetchAccessibilityIssues and App Accessibility manual reports", () => {
+  const REPORT_ID = "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
+  const LINK = `https://app-accessibility.browserstack.com/report/${REPORT_ID}`;
+  let handlers: Record<string, (...args: any[]) => any>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.reportStatus.mockResolvedValue("complete");
+    m.appReportIssues.mockResolvedValue({
+      records: [{ issue_type: "Touch Target Size & Spacing", severity: "serious" }],
+      page_length: 1,
+      total_issues: 144,
+      next_page: 140,
+      remaining: 143,
+      summary: { by_severity: { serious: 144 }, by_rule: [], by_screen: [] },
+      deduplicated: false,
+      dashboard_count: 97,
+      duplicate_occurrences: 47,
+      hidden_issues: 0,
+      scan_count: 7,
+      status: "complete",
+      report_name: "Checkout walkthrough",
+      device: "iPhone 15 Pro, ios 17.0",
+      dashboard_link: LINK,
+      rules: {},
+      screens: {},
+    });
+    handlers = register();
+  });
+
+  it("gives the dashboard's count when the issues come without its duplicates", async () => {
+    m.appReportIssues.mockResolvedValue({
+      records: [{ rule_id: "touch-target-size-and-spacing", severity: "serious", screen: "Screen 1" }],
+      page_length: 1,
+      total_issues: 97,
+      next_page: 140,
+      remaining: 96,
+      summary: { by_severity: { serious: 97 }, by_rule: [], by_screen: [] },
+      deduplicated: true,
+      dashboard_count: 97,
+      duplicate_occurrences: 47,
+      hidden_issues: 0,
+      scan_count: 7,
+      status: "complete",
+      report_name: "Checkout walkthrough",
+      dashboard_link: LINK,
+      rules: {
+        "touch-target-size-and-spacing": {
+          issue_type: "Touch Target Size & Spacing",
+          issue_description: "Targets must be large enough.",
+          wcag: "WCAG 2.2-2.5.8 AA",
+          how_to_fix: "Make the target at least 48dp.",
+        },
+      },
+      screens: { "Screen 1": "https://assets.example/s1.jpeg" },
+    });
+
+    const body = text(await handlers.fetchAccessibilityIssues({ appReportId: REPORT_ID }, CONTEXT));
+
+    expect(body).toContain(
+      "Retrieved 1 accessibility issues (Total: 97) from the App Accessibility manual report below (7 screens scanned)",
+    );
+    expect(body).toContain(
+      "47 duplicate occurrences are left out, as the dashboard leaves them out of its count.",
+    );
+    expect(body).not.toContain("which the API does not mark");
+    expect(body).toContain("Make the target at least 48dp.");
+  });
+
+  it("says how many screens it read when the report has more than it reads", async () => {
+    const base = await m.appReportIssues();
+    m.appReportIssues.mockResolvedValue({ ...base, scan_count: 1200, screens_read: 1000 });
+
+    const body = text(await handlers.fetchAccessibilityIssues({ appReportId: REPORT_ID }, CONTEXT));
+
+    expect(body).toContain(
+      "Only the first 1000 of the report's 1200 scanned screens were read; the total counts the issues on those. The dashboard report has them all.",
+    );
+  });
+
+  it("reads a manual report by its id and says how the dashboard counts it", async () => {
+    const result = await handlers.fetchAccessibilityIssues(
+      { appReportId: REPORT_ID },
+      CONTEXT,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(m.appReportIssues).toHaveBeenCalledWith(REPORT_ID, 0);
+    const body = text(result);
+    expect(body).toContain(
+      "Retrieved 1 accessibility issue occurrences (Total: 144) from the App Accessibility manual report below (7 screens scanned on iPhone 15 Pro, ios 17.0)",
+    );
+    expect(body).toContain(
+      "The dashboard counts 97 issues for this report: 47 of the occurrences are duplicates it folds, which the API does not mark.",
+    );
+    const block = body.indexOf("«UNTRUSTED App Accessibility manual report");
+    expect(block).toBeGreaterThan(-1);
+    expect(body.indexOf('"name": "Checkout walkthrough"')).toBeGreaterThan(block);
+    expect(body.indexOf(`"dashboard_link": "${LINK}"`)).toBeGreaterThan(block);
+    expect(body).toContain(
+      `Use fetchAccessibilityIssues with appReportId: "${REPORT_ID}" and cursor: 140`,
+    );
+  });
+
+  it("resolves a manual report's dashboard link", async () => {
+    m.sourceFromReportUrl.mockResolvedValue({ kind: "appReport", reportId: REPORT_ID });
+
+    const body = text(await handlers.fetchAccessibilityIssues({ reportUrl: LINK }, CONTEXT));
+
+    expect(body).toContain(`Resolved the report link to App Accessibility manual report ${REPORT_ID}.`);
+  });
+
+  it("refuses two sources at once, naming the manual report id among them", async () => {
+    const result = await handlers.fetchAccessibilityIssues(
+      { appReportId: REPORT_ID, workflowReportId: "1" },
+      CONTEXT,
+    );
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("appReportId");
   });
 });

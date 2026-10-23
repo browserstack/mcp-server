@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 
 // Reading an App Accessibility (mobile app) build: its issues come inline from the App
 // Accessibility API's per-screen snapshots, not from a CSV export.
@@ -30,6 +30,12 @@ const ok = (body: Record<string, unknown>) => ({
   status: 200,
   data: { success: true, ...body },
 });
+/** What the dashboard's routes answer an access key with until they take one. */
+const REDIRECT_TO_LOGIN = {
+  ok: false,
+  status: 302,
+  data: { success: false, message: "redirect_to_login" },
+};
 const missing = () => ({
   ok: false,
   status: 404,
@@ -209,7 +215,7 @@ describe("flattenAppSnapshots", () => {
     expect(rows[0].how_to_fix).toContain("Done");
   });
 
-  it("names the element by its class when it has no id, and keeps only its identifying details", () => {
+  it("names the element by its class when it has no id, and keeps only its identifying details and its class", () => {
     const rows = flattenAppSnapshots(SNAPSHOTS);
     const contrast = rows.find((r) => r.rule_id === "text-color-contrast")!;
     const touch = rows.find(
@@ -217,7 +223,10 @@ describe("flattenAppSnapshots", () => {
     )!;
 
     expect(contrast.component).toBe("android.widget.TextView");
-    expect(contrast.element).toEqual({ text: "Low contrast body copy" });
+    expect(contrast.element).toEqual({
+      className: "android.widget.TextView",
+      text: "Low contrast body copy",
+    });
     expect(contrast.duplicate_count).toBeUndefined();
     expect(touch.screen).toBe("Screen 2 (test_checkout)");
     expect(touch.component).toBe("pay_button");
@@ -258,7 +267,9 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
 
     await expect(
       fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID }),
-    ).rejects.toThrow(/No Automated Tests \(web\) or App Accessibility build with id/);
+    ).rejects.toThrow(
+      /No Automated Tests \(web\) or App Accessibility build with id/,
+    );
   });
 
   it("does not probe for a source that is not a build", async () => {
@@ -475,6 +486,27 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
     expect(urls()).not.toContainEqual(expect.stringContaining("/snapshot"));
   });
 
+  it("says which framework ran the build, so a native build's empty report can be explained", async () => {
+    get.mockResolvedValueOnce(
+      ok({
+        meta_data: {
+          ...META,
+          status: "passed",
+          issue_summary: { total: 0, scan_count: 0 },
+          session_data: {
+            framework: { name: "Espresso-Junit4", version: null },
+            sdk: { version: null },
+          },
+        },
+      }),
+    );
+    get.mockResolvedValueOnce(ok({ projects: [] }));
+
+    const report = await fetcher().appBuildReport(BUILD_ID);
+
+    expect(report.framework).toBe("Espresso-Junit4");
+  });
+
   it("fails plainly when the app build does not exist", async () => {
     get.mockResolvedValueOnce(missing());
 
@@ -515,5 +547,462 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
     await expect(fetcher().appBuildReport(BUILD_ID)).rejects.toThrow(
       /page 2 of build .*HTTP 500/,
     );
+  });
+});
+
+describe("AccessibilityReportFetcher and App Automate links", () => {
+  const APP_AUTOMATE_BUILD = "0a1b2c3d4e5f60718293a4b5c6d7e8f901234567";
+  const SESSION = "fedcba9876543210fedcba9876543210fedcba98";
+  const sessionsUrl = `https://api-cloud.browserstack.com/app-automate/builds/${APP_AUTOMATE_BUILD}/sessions.json?limit=1`;
+  const testCodeUrl = (session: string) =>
+    `https://api-automation.browserstack.com/ext/v1/sessions/${session}/testCode`;
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("maps an App Automate build link to its accessibility build through a session's test code", async () => {
+    get
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [{ automation_session: { hashed_id: SESSION } }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { session_id: SESSION, build_uuid: BUILD_ID, tests: [] },
+      });
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/dashboard/v2/builds/${APP_AUTOMATE_BUILD}`,
+      ),
+    ).resolves.toEqual({ kind: "appBuild", buildId: BUILD_ID });
+    expect(urls()).toEqual([sessionsUrl, testCodeUrl(SESSION)]);
+  });
+
+  it("goes straight to the session when the link names one", async () => {
+    get.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { session_id: SESSION, build_uuid: BUILD_ID, tests: [] },
+    });
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}/sessions/${SESSION}`,
+      ),
+    ).resolves.toEqual({ kind: "appBuild", buildId: BUILD_ID });
+    expect(urls()).toEqual([testCodeUrl(SESSION)]);
+  });
+
+  it("maps a native (Espresso) build by name through its project, as it has no SDK session", async () => {
+    const NAME = "Build #12: Checkout.apk v1.0";
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { input_capabilities: { project: "Checkout App" } },
+      })
+      .mockResolvedValueOnce(
+        ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [
+          { automation_build: { hashed_id: "other", name: "Build #13: x" } },
+          { automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: NAME } },
+        ],
+      })
+      .mockResolvedValueOnce(
+        ok({
+          builds: [{ name: NAME, build_number: 1, th_build_id: BUILD_ID }],
+          info: { next: null },
+        }),
+      );
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
+      ),
+    ).resolves.toEqual({ kind: "appBuild", buildId: BUILD_ID });
+    expect(urls()).toEqual([
+      sessionsUrl,
+      `https://api-cloud.browserstack.com/app-automate/espresso/v2/builds/${APP_AUTOMATE_BUILD}`,
+      `${APP_API}/project?name=Checkout%20App`,
+      "https://api-cloud.browserstack.com/app-automate/builds.json?limit=100&offset=0",
+      `${APP_API}/project/123456/build?build_name=${encodeURIComponent(NAME)}&page_size=30&page=1`,
+    ]);
+  });
+
+  // The project search answers a native build's link, so how it fails matters there: a
+  // failed search is that failure, and only the API's "No projects found" means no project.
+  describe("when the project search does not answer", () => {
+    const NAME = "Build #12: Checkout.apk v1.0";
+    const link = `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`;
+    afterEach(() => get.mockReset());
+    // Answered by URL, not by call order: which lookup comes first is the mapping's
+    // business, and these tests are about what the project search's answer means.
+    const searchAnswers = (search: Record<string, unknown>) =>
+      get.mockImplementation(async ({ url }: { url: string }) => {
+        if (url.includes("/sessions")) return { ok: true, status: 200, data: [] };
+        if (url.includes("/espresso/v2/builds/")) {
+          return {
+            ok: true,
+            status: 200,
+            data: { input_capabilities: { project: "Checkout App" } },
+          };
+        }
+        if (url.includes("builds.json")) {
+          return {
+            ok: true,
+            status: 200,
+            data: [{ automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: NAME } }],
+          };
+        }
+        if (url.includes("/project?name=")) return search;
+        return { ok: false, status: 404, data: { message: "Not Found" } };
+      });
+
+    it("reports a failed search as the failure, not as accessibility being off", async () => {
+      searchAnswers({ ok: false, status: 500, data: { message: "Internal error" } });
+
+      const mapping = fetcher().sourceFromReportUrl(link);
+
+      await expect(mapping).rejects.toThrow(/HTTP 500/);
+      await expect(mapping).rejects.not.toThrow(/accessibility was not on/);
+    });
+
+    it("fails on a 404 that is not a 'none found' answer, such as a wrong route", async () => {
+      searchAnswers({ ok: false, status: 404, data: { message: "Not Found" } });
+
+      await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(/HTTP 404/);
+    });
+
+    it("reads 'No projects found' as no project, so no accessibility build", async () => {
+      searchAnswers({ ok: false, status: 404, data: { message: "No projects found" } });
+
+      await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(
+        /accessibility was not on for this run/,
+      );
+    });
+  });
+
+  it("says when a native build ran without accessibility on", async () => {
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce({ ok: false, status: 404, data: {} })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { input_capabilities: { project: "Checkout App" } },
+      })
+      .mockResolvedValueOnce(
+        ok({ projects: [{ id: 123456, name: "Checkout App" }] }),
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [
+          {
+            automation_build: {
+              hashed_id: APP_AUTOMATE_BUILD,
+              name: "Build #12: Checkout.ipa v1.0",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce(ok({ builds: [], info: { next: null } }));
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
+      ),
+    ).rejects.toThrow(/accessibility was not on for this run/);
+    expect(urls()[2]).toBe(
+      `https://api-cloud.browserstack.com/app-automate/xcuitest/v2/builds/${APP_AUTOMATE_BUILD}`,
+    );
+  });
+
+  it("says when the run had no accessibility on, so there is no report to read", async () => {
+    get
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [{ automation_session: { hashed_id: SESSION } }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { session_id: SESSION, build_uuid: null, tests: [] },
+      });
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
+      ),
+    ).rejects.toThrow(/accessibility.*was not on/i);
+  });
+
+  it("reports a failed session lookup as the error it was, not as accessibility being off", async () => {
+    get
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [{ automation_session: { hashed_id: SESSION } }],
+      })
+      .mockResolvedValueOnce({ ok: false, status: 500, data: {} });
+
+    const failure = fetcher().sourceFromReportUrl(
+      `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
+    );
+
+    await expect(failure).rejects.toThrow(/HTTP 500/);
+    await expect(failure).rejects.not.toThrow(/was not on/);
+  });
+
+  it("says when the build has no sessions to map through", async () => {
+    get.mockResolvedValue({ ok: false, status: 404, data: {} });
+
+    await expect(
+      fetcher().sourceFromReportUrl(
+        `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
+      ),
+    ).rejects.toThrow(/No session.*App Automate build/);
+  });
+
+  // Checked live: a native build lists no sessions (200, []), an id App Automate does not
+  // know answers 404 on each lookup, and a bad key 401. Only a 404 is a "not this one".
+  const link = `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`;
+  const failed = (status: number) => ({ ok: false, status, data: {} });
+
+  it("reports a failed session list as the failure, not as a native build", async () => {
+    get.mockResolvedValueOnce(failed(401));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 401/);
+    expect(urls()).toEqual([sessionsUrl]);
+  });
+
+  it("reports a failed native build lookup as the failure, not as an unknown build", async () => {
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce(failed(429));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 429/);
+    await expect(failure).rejects.not.toThrow(/No session found/);
+  });
+
+  it("reports a failed build list as the failure, not as an old build", async () => {
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { input_capabilities: { project: "Checkout App" } },
+      })
+      .mockResolvedValueOnce(failed(503));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 503/);
+    await expect(failure).rejects.not.toThrow(/newest builds/);
+  });
+});
+
+describe("AccessibilityReportFetcher and App Accessibility manual reports", () => {
+  const REPORT_ID = "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
+  const DETAIL = {
+    meta_data: {
+      name: "Checkout walkthrough",
+      created_at: "2026-10-21T18:54:05.374Z",
+      ended_at: "2026-10-21T18:57:22.487Z",
+    },
+    wcag_version: "WCAG 2.2 AA",
+    data: {
+      issue_summary: {
+        total: 2,
+        severity_count: { critical: 1, serious: 1, hidden_issues: 1, duplicate_issues: 1 },
+        scan_count: 2,
+      },
+    },
+  };
+  /** A manual snapshot keeps its rules under meta, belongs to no test, and its issues carry no status. */
+  const manualSnapshot = (snapshot: (typeof SNAPSHOTS)[number]) => ({
+    meta: {
+      snapshot_id: snapshot.meta.snapshot_id,
+      screenshot_url: snapshot.meta.screenshot_url,
+      aggregated_results: snapshot.aggregated_results,
+    },
+  });
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("resolves a manual report's dashboard link to the report", async () => {
+    await expect(
+      fetcher().sourceFromReportUrl(`${DASHBOARD}/report/${REPORT_ID}`),
+    ).resolves.toEqual({ kind: "appReport", reportId: REPORT_ID });
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("reads a manual report's status from whether it has ended", async () => {
+    get.mockResolvedValueOnce(ok({ ...DETAIL, meta_data: { ...DETAIL.meta_data, ended_at: null } }));
+    await expect(
+      fetcher().reportStatus({ kind: "appReport", reportId: REPORT_ID }),
+    ).resolves.toBe("in_progress");
+
+    get.mockResolvedValueOnce(ok(DETAIL));
+    await expect(
+      fetcher().reportStatus({ kind: "appReport", reportId: REPORT_ID }),
+    ).resolves.toBe("complete");
+    expect(urls()).toEqual([
+      `${APP_API.replace("/automate/api/v1", "")}/api/v1/reports/${REPORT_ID}`,
+      `${APP_API.replace("/automate/api/v1", "")}/api/v1/reports/${REPORT_ID}`,
+    ]);
+  });
+
+  it("falls back to the Manual Reports API's occurrences, with the dashboard's own count, while the dashboard's screens refuse the key", async () => {
+    const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
+    get
+      .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(REDIRECT_TO_LOGIN)
+      .mockResolvedValueOnce(
+        ok({
+          device: { model: "iPhone 15 Pro", os: "ios", os_version: "17.0" },
+          data: [manualSnapshot(SNAPSHOTS[0])],
+          pagination: { page: 1, next: 2 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          device: { model: "iPhone 15 Pro", os: "ios", os_version: "17.0" },
+          data: [manualSnapshot(SNAPSHOTS[1])],
+          pagination: { page: 2, next: null },
+        }),
+      );
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(urls()).toEqual([
+      `${MANUAL_API}/reports/${REPORT_ID}`,
+      `${MANUAL_API}/app_scanner/${REPORT_ID}/snapshot?hide_duplicate_issues=true&page_size=50&page=1`,
+      `${MANUAL_API}/reports/${REPORT_ID}/issues?page_size=50&page=1`,
+      `${MANUAL_API}/reports/${REPORT_ID}/issues?page_size=50&page=2`,
+    ]);
+    expect(report).toMatchObject({
+      deduplicated: false,
+      report_name: "Checkout walkthrough",
+      status: "complete",
+      scan_count: 2,
+      device: "iPhone 15 Pro, ios 17.0",
+      // Every occurrence the API lists; the hidden one is left out as its status says.
+      total_issues: 3,
+      page_length: 3,
+      next_page: null,
+      dashboard_count: 2,
+      duplicate_occurrences: 1,
+      hidden_issues: 1,
+      dashboard_link: `${DASHBOARD}/report/${REPORT_ID}`,
+    });
+    expect(report.records[0].screen).toBe("Screen 1");
+    expect(report.records.map((r) => r.severity)).toEqual([
+      "critical",
+      "serious",
+      "moderate",
+    ]);
+  });
+
+  it("reads a manual report's screens as the dashboard does: duplicates left out, each issue with its element and fix", async () => {
+    const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
+    get
+      .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(
+        ok({ data: { details: [SNAPSHOTS[0]], info: { page: 1, next: 2 } } }),
+      )
+      .mockResolvedValueOnce(
+        ok({ data: { details: [SNAPSHOTS[1]], info: { page: 2, next: null } } }),
+      );
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(urls()).toEqual([
+      `${MANUAL_API}/reports/${REPORT_ID}`,
+      `${MANUAL_API}/app_scanner/${REPORT_ID}/snapshot?hide_duplicate_issues=true&page_size=50&page=1`,
+      `${MANUAL_API}/app_scanner/${REPORT_ID}/snapshot?hide_duplicate_issues=true&page_size=50&page=2`,
+    ]);
+    expect(report.deduplicated).toBe(true);
+    expect(report.total_issues).toBe(3);
+    const pay = report.records.find((r) => r.component === "com.example:id/btn_pay");
+    expect(pay?.element).toMatchObject({ className: "android.widget.Button" });
+    expect(report.rules["interactable-element-content-label"].how_to_fix).toBe(
+      "Ensure spokenDescription is defined.",
+    );
+  });
+
+  it("fails plainly when the manual report does not exist", async () => {
+    get.mockResolvedValueOnce(missing());
+
+    await expect(fetcher().appReportIssues(REPORT_ID)).rejects.toThrow(
+      /No App Accessibility manual report/,
+    );
+  });
+
+  // Checked live: an unknown report is a 404 on its details and its issues, a bad key 401.
+  const failed = (status: number) => ({ ok: false, status, data: {} });
+  const MANUAL = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
+
+  it("reports a failed report lookup as the failure, not as an unknown report", async () => {
+    get.mockResolvedValueOnce(failed(401));
+
+    const failure = fetcher().appReportIssues(REPORT_ID);
+    await expect(failure).rejects.toThrow(/HTTP 401/);
+    await expect(failure).rejects.not.toThrow(/No App Accessibility manual report/);
+  });
+
+  it("reads the whole report from the Manual Reports API when a later dashboard page fails, rather than a part as the whole", async () => {
+    get
+      .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(
+        ok({ data: { details: [SNAPSHOTS[0]], info: { page: 1, next: 2 } } }),
+      )
+      .mockResolvedValueOnce(failed(500))
+      .mockResolvedValueOnce(
+        ok({
+          data: [manualSnapshot(SNAPSHOTS[0]), manualSnapshot(SNAPSHOTS[1])],
+          pagination: { page: 1, next: null },
+        }),
+      );
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(urls()[3]).toBe(`${MANUAL}/reports/${REPORT_ID}/issues?page_size=50&page=1`);
+    expect(report.deduplicated).toBe(false);
+    expect(report.total_issues).toBe(3);
+  });
+
+  it("fails with the page and status when an issues page cannot be read, rather than counting fewer issues", async () => {
+    get
+      .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(REDIRECT_TO_LOGIN)
+      .mockResolvedValueOnce(
+        ok({ data: [manualSnapshot(SNAPSHOTS[0])], pagination: { page: 1, next: 2 } }),
+      )
+      .mockResolvedValueOnce(failed(502));
+
+    await expect(fetcher().appReportIssues(REPORT_ID)).rejects.toThrow(
+      /page 2 of manual report .*HTTP 502/,
+    );
+  });
+
+  it("says how many screens it read when the report has more than the page limit", async () => {
+    get.mockImplementation(async ({ url }: { url: string }) => {
+      if (url.endsWith(REPORT_ID)) return ok(DETAIL);
+      return ok({ data: { details: [SNAPSHOTS[0]], info: { next: 2 } } });
+    });
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(report.screens_read).toBe(MAX_SNAPSHOT_PAGES);
   });
 });

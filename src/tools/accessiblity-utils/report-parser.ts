@@ -34,6 +34,8 @@ type PaginatedResult = {
   /** Main issues only when the report is grouped, so it matches the run's issue count. */
   total_issues: number;
   next_page: number | null;
+  /** How many issues the pages after this one hold. */
+  remaining: number;
   /** Duplicate rows left out of `records`; null when the report is not grouped. */
   duplicate_issues: number | null;
   /** Of those, the ones whose main issue could not be identified (counted only here). */

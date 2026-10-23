@@ -12,6 +12,7 @@ import {
   IssueSource,
   MAX_SCAN_LIST_PAGES,
   reportExports,
+  MAX_REPORT_EXPORTS,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
 
 const get = apiClient.get as Mock;
@@ -357,6 +358,33 @@ describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
       .mockResolvedValueOnce(ok({ task_id: "t:2", message: "started" }))
       .mockResolvedValueOnce(ok({ reportLink: "https://csv2" }));
     await expect(fetcher().getReportLink(SOURCE)).resolves.toBe("https://csv2");
+  });
+
+  it("starts a fresh export for a report still processing, so a call after it finishes is not stale", async () => {
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }))
+      .mockResolvedValueOnce(ok({ reportLink: "https://csv?Expires=9999999999" }))
+      .mockResolvedValueOnce(ok({ task_id: "t:2", message: "started" }))
+      .mockResolvedValueOnce(ok({ reportLink: "https://csv2?Expires=9999999999" }));
+
+    await fetcher().getReportLink(SOURCE, { stillProcessing: true });
+    await expect(fetcher().getReportLink(SOURCE)).resolves.toBe(
+      "https://csv2?Expires=9999999999",
+    );
+    expect(urls().filter((u) => u.includes("scan_run_id="))).toHaveLength(2);
+  });
+
+  it("remembers a bounded number of reports' exports", async () => {
+    get.mockResolvedValue(ok({ reportLink: "https://csv?Expires=9999999999" }));
+
+    for (let run = 0; run < MAX_REPORT_EXPORTS + 5; run++) {
+      await fetcher().getReportLink(
+        { kind: "scan", scanId: "1234", scanRunId: String(run) },
+        { exportTaskId: `t:${run}` },
+      );
+    }
+
+    expect(reportExports.size).toBe(MAX_REPORT_EXPORTS);
   });
 
   it("stops waiting when the API says the export failed", async () => {

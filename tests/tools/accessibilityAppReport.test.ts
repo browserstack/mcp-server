@@ -178,6 +178,33 @@ describe("flattenAppSnapshots", () => {
     });
   });
 
+  it("leaves no tag in the fix text, however its markup is nested", () => {
+    const rows = flattenAppSnapshots([
+      {
+        aggregated_results: [
+          {
+            rule_id: "r",
+            label: "Rule",
+            severity: "Serious",
+            rule_issues: [
+              {
+                uid: "x",
+                status: "fail",
+                issue_id_android: "com.example:id/pay",
+                how_to_fix_desc:
+                  "<document>Label it.<scr<script>ipt>alert(1)</script> <<b>b>Done</document>",
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    expect(rows[0].how_to_fix).not.toMatch(/[<>]/);
+    expect(rows[0].how_to_fix).toContain("Label it.");
+    expect(rows[0].how_to_fix).toContain("Done");
+  });
+
   it("names the element by its class when it has no id, and keeps only its identifying details and its class", () => {
     const rows = flattenAppSnapshots(SNAPSHOTS);
     const contrast = rows.find((r) => r.rule_id === "text-color-contrast")!;

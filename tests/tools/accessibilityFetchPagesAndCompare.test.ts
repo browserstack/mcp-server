@@ -20,6 +20,7 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     getReportLink = m.getReportLink;
     sourceFromReportUrl = m.sourceFromReportUrl;
     reportStatus = m.reportStatus;
+    resolveBuild = vi.fn(async (source: unknown) => source);
     previousScanRun = m.previousScanRun;
     changesSinceLastRun = m.changesSinceLastRun;
   },

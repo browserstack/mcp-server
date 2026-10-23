@@ -1,6 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
 import { parse } from "csv-parse/sync";
 import logger from "../../logger.js";
+import { PAGE_CHARACTERS, pageOf, sortBySeverity } from "./paginate.js";
 
 type SimplifiedAccessibilityIssue = {
   issue_type: string;
@@ -54,6 +55,8 @@ type PaginatedResult = {
   /** Main issues only when the report is grouped, so it matches the run's issue count. */
   total_issues: number;
   next_page: number | null;
+  /** How many issues the pages after this one hold. */
+  remaining: number;
   /** Duplicate rows left out of `records`; null when the report is not grouped. */
   duplicate_issues: number | null;
   /** Of those, the ones whose main issue could not be identified (counted only here). */
@@ -103,47 +106,6 @@ function recordOfRow(
     affected_page: row["Affected page"],
     ...(hasSourceTest ? { source_test: row[SOURCE_TEST_COLUMN] } : {}),
   };
-}
-
-const SEVERITY_ORDER: Record<string, number> = {
-  critical: 0,
-  serious: 1,
-  moderate: 2,
-  minor: 3,
-};
-
-/** Most severe first, then the page in character-length slices from `nextPage`. */
-function pageOf(
-  all: SimplifiedAccessibilityIssue[],
-  maxCharacterLength: number,
-  nextPage: number,
-): { records: SimplifiedAccessibilityIssue[]; next_page: number | null } {
-  all.sort(
-    (a, b) =>
-      (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99),
-  );
-  let charCursor = 0;
-  let idx = 0;
-  for (; idx < all.length; idx++) {
-    const len = JSON.stringify(all[idx]).length;
-    if (charCursor + len > nextPage) break;
-    charCursor += len;
-  }
-  const page: SimplifiedAccessibilityIssue[] = [];
-  for (let i = idx; i < all.length; i++) {
-    const recStr = JSON.stringify(all[i]);
-    // An issue larger than a whole page still makes a page of its own, or paging would stall.
-    if (
-      page.length > 0 &&
-      charCursor - nextPage + recStr.length > maxCharacterLength
-    ) {
-      break;
-    }
-    page.push(all[i]);
-    charCursor += recStr.length;
-  }
-  const hasMore = idx + page.length < all.length;
-  return { records: page, next_page: hasMore ? charCursor : null };
 }
 
 async function loadReport(
@@ -295,11 +257,9 @@ export function compareIssues(
 ): { added: RunIssue[]; resolved: RunIssue[]; retained: number } {
   const before = new Set(base.map((issue) => issue.key));
   const after = new Set(current.map((issue) => issue.key));
-  const bySeverity = (a: RunIssue, b: RunIssue) =>
-    (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
   return {
-    added: current.filter((issue) => !before.has(issue.key)).sort(bySeverity),
-    resolved: base.filter((issue) => !after.has(issue.key)).sort(bySeverity),
+    added: sortBySeverity(current.filter((issue) => !before.has(issue.key))),
+    resolved: sortBySeverity(base.filter((issue) => !after.has(issue.key))),
     retained: current.filter((issue) => before.has(issue.key)).length,
   };
 }
@@ -307,7 +267,7 @@ export function compareIssues(
 export async function parseAccessibilityReportFromCSV(
   reportLink: string,
   {
-    maxCharacterLength = 10_000,
+    maxCharacterLength = PAGE_CHARACTERS,
     nextPage = 0,
     pageUrl,
   }: PaginationOptions = {},
@@ -317,10 +277,12 @@ export async function parseAccessibilityReportFromCSV(
 
   if (pageUrl) {
     const { all, page } = pageIssues(parsed, columns, pageUrl);
-    const slice = pageOf(all, maxCharacterLength, nextPage);
+    const slice = pageOf(sortBySeverity(all), {
+      maxCharacterLength,
+      nextPage,
+    });
     return {
       ...slice,
-      page_length: slice.records.length,
       total_issues: all.length,
       duplicate_issues: null,
       unlinked_duplicates: 0,
@@ -384,21 +346,12 @@ export async function parseAccessibilityReportFromCSV(
     else unlinkedDuplicates++;
   }
 
-  const totalIssues = all.length;
-
   // 3) Most severe first, in pages by JSON length
-  const { records: page, next_page } = pageOf(
-    all,
-    maxCharacterLength,
-    nextPage,
-  );
-  const pageLength = page.length;
+  const page = pageOf(sortBySeverity(all), { maxCharacterLength, nextPage });
 
   return {
-    records: page,
-    next_page,
-    page_length: pageLength,
-    total_issues: totalIssues,
+    ...page,
+    total_issues: all.length,
     duplicate_issues: grouped ? duplicates : null,
     unlinked_duplicates: unlinkedDuplicates,
     hidden_issues: columns.includes(STATUS_COLUMN)

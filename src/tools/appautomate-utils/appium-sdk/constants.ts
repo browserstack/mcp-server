@@ -86,4 +86,11 @@ export const SETUP_APP_AUTOMATE_SCHEMA = {
     .optional()
     .default("BStack-AppAutomate-Suite")
     .describe("Project name for organizing test runs on BrowserStack."),
+  accessibility: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Run App Accessibility (WCAG) checks on the screens the tests touch; Android 11+ or iOS 14+.",
+    ),
 };

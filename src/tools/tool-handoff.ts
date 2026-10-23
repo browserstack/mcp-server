@@ -89,9 +89,11 @@ export const NEEDS_SESSION_ID =
   "build either, getBuildId or listBuildId resolves one from a project and build name.";
 
 /**
- * A scan run's ids come from startAccessibilityScan. Nothing here lists builds or reports,
- * but the tool takes a report's dashboard link, or an Automate link, and looks the ids up
- * itself; for a past run, Ask AI can locate it.
+ * A scan run's ids come from startAccessibilityScan; a build's id is printed by the SDK at
+ * the end of its run. The tool takes a report's dashboard link, or an Automate link, and
+ * looks the ids up itself; for a past run, Ask AI can locate it. App Accessibility's builds
+ * and manual reports are listed by its capabilities, which the id arguments name, as this
+ * line has no room left within the description budget.
  */
 export const NEEDS_A11Y_SCAN_ID =
   ' Ids: startAccessibilityScan, a link, or askBrowserStackAI with product "a11y".';

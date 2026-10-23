@@ -46,6 +46,7 @@ export function getAppSDKPrefixCommand(
   language: AppSDKSupportedLanguage,
   testingFramework: string,
   appPath?: string,
+  options: { accessibility?: boolean } = {},
 ): string {
   switch (language) {
     case "csharp":
@@ -53,7 +54,7 @@ export function getAppSDKPrefixCommand(
     case "java":
       return getJavaSDKCommand(testingFramework, appPath);
     case "nodejs":
-      return getNodejsSDKCommand(testingFramework);
+      return getNodejsSDKCommand(testingFramework, options);
     case "python":
       return getPythonSDKCommand(testingFramework);
     case "ruby":

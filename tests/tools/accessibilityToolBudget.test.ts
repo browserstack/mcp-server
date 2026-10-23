@@ -65,4 +65,11 @@ describe("accessibility tool descriptions", () => {
     expect(schema.safeParse(-1).success).toBe(false);
     expect(schema.safeParse(1.5).success).toBe(false);
   });
+
+  it("takes appReportId only as a UUID, so it cannot reach another API path", () => {
+    const schema = tools.find((t) => t.name === "fetchAccessibilityIssues")!.schema.appReportId;
+    expect(schema.safeParse("6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b").success).toBe(true);
+    expect(schema.safeParse("..").success).toBe(false);
+    expect(schema.safeParse("../reports").success).toBe(false);
+  });
 });

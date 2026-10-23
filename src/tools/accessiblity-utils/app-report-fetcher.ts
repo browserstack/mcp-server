@@ -125,16 +125,20 @@ function elementOf(issue: AppRuleIssue): Record<string, unknown> {
 }
 
 /**
- * The fix text is light markup (`<document>`, `<code>`); the words are what matter. Tags
- * are dropped, then any angle bracket left over, so nested markup such as
- * `<scr<script>ipt>` cannot leave a tag behind.
+ * The fix text is light markup (`<document>`, `<code>`); the words are what matter. Text
+ * inside angle brackets is dropped, and so is every bracket, character by character:
+ * nested markup such as `<scr<script>ipt>` cannot leave a tag behind, as a regex
+ * replacement of whole tags could.
  */
 function plainText(markup: string | undefined): string {
-  return (markup ?? "")
-    .replace(/<[^>]*>/g, "")
-    .replace(/[<>]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  let text = "";
+  let inTag = false;
+  for (const ch of markup ?? "") {
+    if (ch === "<") inTag = true;
+    else if (ch === ">") inTag = false;
+    else if (!inTag) text += ch;
+  }
+  return text.replace(/\s+/g, " ").trim();
 }
 
 /** Issues the dashboard does not count: hidden by the user, or marked as not an issue. */

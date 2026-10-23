@@ -19,6 +19,13 @@ export function sortBySeverity<T extends { severity: string }>(rows: T[]): T[] {
   );
 }
 
+/**
+ * How many characters of issue JSON one call hands out by default: about 2,500 tokens, so
+ * a page stays small next to a client's own limit on tool output while a large report
+ * still takes few calls.
+ */
+export const PAGE_CHARACTERS = 10_000;
+
 export interface Page<T> {
   records: T[];
   page_length: number;
@@ -28,7 +35,7 @@ export interface Page<T> {
 
 export function pageOf<T>(
   all: T[],
-  { maxCharacterLength = 5000, nextPage = 0 } = {},
+  { maxCharacterLength = PAGE_CHARACTERS, nextPage = 0 } = {},
 ): Page<T> {
   // Walk to the starting offset
   let charCursor = 0;

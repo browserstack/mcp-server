@@ -56,8 +56,12 @@ interface AppRuleIssue {
   issue_class_ios?: string;
   issue_id_android?: string;
   issue_id_ios?: string;
+  /** An iOS element's class. */
+  issue_type_ios?: string;
   how_to_fix_desc?: string;
-  issue_details?: { label?: string; value?: unknown }[];
+  issue_details?: { label?: string; value?: unknown; important?: boolean }[];
+  /** The rule's inputs for this element, among them what it expects (`expected_ratio`, …). */
+  rule_dynamic_meta?: Record<string, unknown>;
 }
 
 interface AppRule {
@@ -96,6 +100,12 @@ export type AppAccessibilityIssue = {
   screenshot?: string;
   /** How many more occurrences of this issue the report folded into it. */
   duplicate_count?: number;
+  /**
+   * What the rule measured on the element (a contrast issue's colours and ratio, a touch
+   * target's size, a font size, the label it found) and what it expects, so a fix can be
+   * sized.
+   */
+  measured?: Record<string, unknown>;
 };
 
 /** A report's issues counted by severity, by rule and by screen, largest first. */
@@ -105,8 +115,38 @@ export interface AppIssueSummary {
   by_screen: { screen: string; count: number }[];
 }
 
-export interface AppBuildReport {
-  records: AppAccessibilityIssue[];
+/** An issue as a page hands it out: what is its own, with its rule and screen named. */
+export type AppIssueRow = Omit<
+  AppAccessibilityIssue,
+  | "issue_type"
+  | "issue_description"
+  | "wcag"
+  | "screenshot"
+  | "how_to_fix"
+  | "component"
+> & {
+  /** The element's id or class; an element with neither is known by its rule. */
+  component?: string;
+  /** Only when it differs from the rule's usual fix, which is under the page's rules. */
+  how_to_fix?: string;
+};
+
+/** What a page's issues share, said once: per rule, and each screen's screenshot. */
+export interface AppIssuePageContext {
+  rules: Record<
+    string,
+    {
+      issue_type: string;
+      issue_description: string;
+      wcag: string;
+      how_to_fix: string;
+    }
+  >;
+  screens: Record<string, string>;
+}
+
+export interface AppBuildReport extends AppIssuePageContext {
+  records: AppIssueRow[];
   page_length: number;
   total_issues: number;
   next_page: number | null;
@@ -128,11 +168,16 @@ export interface AppBuildReport {
 }
 
 /** A manual (Workflow Analyzer) report's issues, read inline from its scanned screens. */
-export interface AppManualReport {
-  records: AppAccessibilityIssue[];
+export interface AppManualReport extends AppIssuePageContext {
+  records: AppIssueRow[];
   page_length: number;
-  /** Every occurrence the API lists; the dashboard folds duplicates it does not mark. */
+  /**
+   * The issues, duplicates left out as the dashboard leaves them out when `deduplicated`;
+   * else every occurrence the Manual Reports API lists, which does not mark duplicates.
+   */
   total_issues: number;
+  /** Read from the dashboard's own screens: duplicates left out, issues with their element. */
+  deduplicated: boolean;
   next_page: number | null;
   /** How many issues the pages after this one hold. */
   remaining: number;
@@ -265,13 +310,21 @@ function detailValue(value: unknown): unknown {
   }
 }
 
+/** An iOS element's details, under the names an Android element's go by. */
+const IOS_DETAILS: Record<string, string> = {
+  class: "className",
+  identifier: "accessibilityIdentifier",
+  visibleText: "text",
+};
+
 function elementOf(issue: AppRuleIssue): Record<string, unknown> {
   const element: Record<string, unknown> = {};
   for (const { label, value } of issue.issue_details ?? []) {
-    if (!label || !ELEMENT_DETAILS.has(label)) continue;
+    const name = label && (IOS_DETAILS[label] ?? label);
+    if (!name || !ELEMENT_DETAILS.has(name)) continue;
     const parsed = detailValue(value);
     if (parsed === "" || parsed === null || parsed === undefined) continue;
-    element[label] = parsed;
+    element[name] = parsed;
   }
   // The class is the element's kind even when the details leave it out.
   const className = issue.issue_class_android || issue.issue_class_ios;
@@ -298,6 +351,25 @@ function plainText(markup: string | undefined): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** A rule's inputs that say what it expects of the element; the rest describe the run. */
+const EXPECTED = /^(expected|desired|minimum)_/;
+
+function measuredOf(issue: AppRuleIssue): Record<string, unknown> | undefined {
+  const measured: Record<string, unknown> = {};
+  for (const { label, value, important } of issue.issue_details ?? []) {
+    if (!important || !label) continue;
+    if (ELEMENT_DETAILS.has(IOS_DETAILS[label] ?? label)) continue;
+    measured[label] = detailValue(value);
+  }
+  for (const [key, value] of Object.entries(issue.rule_dynamic_meta ?? {})) {
+    // The ratio as "4.5:1" says what expected_contrast_ratio's 4.5 does.
+    if (EXPECTED.test(key) && key !== "expected_contrast_ratio") {
+      measured[key] = value;
+    }
+  }
+  return Object.keys(measured).length ? measured : undefined;
+}
+
 /** Issues the dashboard does not count: hidden by the user, or marked as not an issue. */
 function isLeftOut(issue: AppRuleIssue): boolean {
   return issue.status === "hidden" || issue.status === "non_issue";
@@ -320,18 +392,23 @@ export function flattenAppSnapshots(
         .join("; ");
       for (const issue of rule.rule_issues ?? []) {
         if (isLeftOut(issue)) continue;
+        const element = elementOf(issue);
         rows.push({
           issue_type: rule.label,
           rule_id: rule.rule_id,
           severity: (rule.severity ?? "unknown").toLowerCase(),
           screen,
-          component:
+          // An iOS element's id is often only in its details, and its class in issue_type_ios.
+          component: String(
             issue.issue_id_android ||
-            issue.issue_id_ios ||
-            issue.issue_class_android ||
-            issue.issue_class_ios ||
-            rule.label,
-          element: elementOf(issue),
+              issue.issue_id_ios ||
+              element.accessibilityIdentifier ||
+              issue.issue_class_android ||
+              issue.issue_class_ios ||
+              issue.issue_type_ios ||
+              rule.label,
+          ),
+          element,
           issue_description: rule.description ?? "",
           how_to_fix: plainText(issue.how_to_fix_desc),
           wcag,
@@ -341,11 +418,89 @@ export function flattenAppSnapshots(
           ...(issue.duplication_count
             ? { duplicate_count: issue.duplication_count }
             : {}),
+          ...(measuredOf(issue) ? { measured: measuredOf(issue) } : {}),
         });
       }
     }
   });
   return sortBySeverity(rows);
+}
+
+/** The value most rows give, the first of them on a tie. */
+function mostCommon(values: string[]): string {
+  const counts = new Map<string, number>();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  let best = "";
+  let bestCount = 0;
+  for (const [v, n] of counts) {
+    if (n > bestCount) [best, bestCount] = [v, n];
+  }
+  return best;
+}
+
+/**
+ * An issue's name, description, WCAG criteria and fix are its rule's, and its screenshot is
+ * its screen's: two thirds of an issue's length, repeated on every one. Said once, under
+ * the page's rules and screens, a page holds about three times as many issues. An issue
+ * keeps its own fix only when it differs from its rule's usual one.
+ */
+export function compactAppIssues(all: AppAccessibilityIssue[]): {
+  rows: AppIssueRow[];
+  context: AppIssuePageContext;
+} {
+  const byRule = new Map<string, AppAccessibilityIssue[]>();
+  for (const row of all) {
+    byRule.set(row.rule_id, [...(byRule.get(row.rule_id) ?? []), row]);
+  }
+  const rules: AppIssuePageContext["rules"] = {};
+  for (const [ruleId, rows] of byRule) {
+    rules[ruleId] = {
+      issue_type: rows[0].issue_type,
+      issue_description: rows[0].issue_description,
+      wcag: rows[0].wcag,
+      how_to_fix: mostCommon(rows.map((r) => r.how_to_fix)),
+    };
+  }
+  const screens: Record<string, string> = {};
+  const rows = all.map((row): AppIssueRow => {
+    const {
+      issue_type,
+      issue_description,
+      wcag,
+      screenshot,
+      how_to_fix,
+      component,
+      ...own
+    } = row;
+    void issue_description;
+    void wcag;
+    if (screenshot) screens[own.screen] = screenshot;
+    return {
+      ...own,
+      ...(component !== issue_type ? { component } : {}),
+      ...(how_to_fix && how_to_fix !== rules[own.rule_id].how_to_fix
+        ? { how_to_fix }
+        : {}),
+    };
+  });
+  return { rows, context: { rules, screens } };
+}
+
+/** The rules and screens a page's issues name, and nothing else. */
+export function contextOf(
+  records: AppIssueRow[],
+  { rules, screens }: AppIssuePageContext,
+): AppIssuePageContext {
+  return {
+    rules: Object.fromEntries(
+      [...new Set(records.map((r) => r.rule_id))].map((id) => [id, rules[id]]),
+    ),
+    screens: Object.fromEntries(
+      [...new Set(records.map((r) => r.screen))]
+        .filter((screen) => screens[screen])
+        .map((screen) => [screen, screens[screen]]),
+    ),
+  };
 }
 
 function countsOf<T>(
@@ -399,6 +554,57 @@ function appIssueKey(row: AppAccessibilityIssue): string {
     .join("|");
 }
 
+/**
+ * The element an issue is on, whatever its rule: its id or class and its text or label. An
+ * element known only by its rule, with no text either, cannot be told apart from another.
+ */
+function elementIdentity(row: AppAccessibilityIssue): string | undefined {
+  const named = row.component !== row.issue_type;
+  const text =
+    row.element.text ??
+    row.element.accessibilityLabel ??
+    row.element.contentDescription ??
+    "";
+  if (!named && !text) return undefined;
+  return `${named ? row.component : ""}|${String(text)}`;
+}
+
+/** A screen is the same screen in another build when they share this much of its elements. */
+const SAME_SCREEN_SHARE = 0.25;
+
+/**
+ * The screens of one build no screen of the other resembles. Screens are named by scan
+ * order, so a screen is recognised by what is on it: one that shares under a quarter of its
+ * elements with every screen of the other build was not reached there, or changed entirely.
+ * A screen whose elements cannot be told apart is not set apart.
+ */
+function screensWithoutCounterpart(
+  from: AppAccessibilityIssue[],
+  to: AppAccessibilityIssue[],
+): Set<string> {
+  const elementsBy = (rows: AppAccessibilityIssue[]) => {
+    const screens = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const id = elementIdentity(row);
+      if (id === undefined) continue;
+      screens.set(row.screen, (screens.get(row.screen) ?? new Set()).add(id));
+    }
+    return screens;
+  };
+  const others = [...elementsBy(to).values()];
+  const without = new Set<string>();
+  for (const [screen, elements] of elementsBy(from)) {
+    const shared = Math.max(
+      0,
+      ...others.map(
+        (other) => [...elements].filter((e) => other.has(e)).length,
+      ),
+    );
+    if (shared / elements.size < SAME_SCREEN_SHARE) without.add(screen);
+  }
+  return without;
+}
+
 const sameFrame = (a: AppAccessibilityIssue, b: AppAccessibilityIssue) =>
   JSON.stringify(a.element.frame ?? null) ===
   JSON.stringify(b.element.frame ?? null);
@@ -407,15 +613,22 @@ const sameFrame = (a: AppAccessibilityIssue, b: AppAccessibilityIssue) =>
  * Which issues of two builds are the same issue. Issues that look alike (one rule on
  * elements known by neither id nor label) are paired one for one, those on the same screen
  * and spot first, then on the same screen, then any; what is left over in either build is
- * new or resolved. So new and still open add up to the later build's issues, and resolved
- * and still open to the earlier one's.
+ * new or resolved. When the builds scanned a different number of screens, a screen one of
+ * them has no counterpart for is set apart: an earlier screen's leftovers were not seen
+ * again (`unconfirmed`), and a later screen's were not looked for before (`first_scanned`).
+ * With as many screens in each, they correspond, and a screen with nothing left was fixed.
+ * So new, first scanned and still open add up to the later build's issues, and resolved,
+ * unconfirmed and still open to the earlier one's.
  */
 export function compareAppIssues(
   before: AppAccessibilityIssue[],
   after: AppAccessibilityIssue[],
+  { sameScreens = false }: { sameScreens?: boolean } = {},
 ): {
   added: AppAccessibilityIssue[];
+  first_scanned: AppAccessibilityIssue[];
   resolved: AppAccessibilityIssue[];
+  unconfirmed: AppAccessibilityIssue[];
   retained: number;
 } {
   const earlierByKey = new Map<string, AppAccessibilityIssue[]>();
@@ -444,9 +657,18 @@ export function compareAppIssues(
     }
   }
   const added = after.filter((row) => !matched.has(row));
+  const resolved = before.filter((row) => !matched.has(row));
+  const unreached = sameScreens
+    ? new Set<string>()
+    : screensWithoutCounterpart(before, after);
+  const unseen = sameScreens
+    ? new Set<string>()
+    : screensWithoutCounterpart(after, before);
   return {
-    added,
-    resolved: before.filter((row) => !matched.has(row)),
+    added: added.filter((row) => !unseen.has(row.screen)),
+    first_scanned: added.filter((row) => unseen.has(row.screen)),
+    resolved: resolved.filter((row) => !unreached.has(row.screen)),
+    unconfirmed: resolved.filter((row) => unreached.has(row.screen)),
     retained: after.length - added.length,
   };
 }
@@ -872,21 +1094,36 @@ export class AppAccessibilityApi {
   }
 
   /**
-   * A manual report's issues, every occurrence the API lists, most severe first. The
-   * dashboard's own count comes from the report's summary: it folds duplicates that the
-   * issue rows do not mark, so the two numbers are both given.
+   * A manual report's screens as the dashboard reads them, duplicates left out and each
+   * issue with its element, fix and measurements; undefined while that route answers an
+   * access key with a login redirect, as it does until it takes one.
    */
-  async appReportIssues(
+  private async dashboardScreens(
     reportId: string,
-    cursor = 0,
-    maxCharacterLength?: number,
-  ): Promise<AppManualReport> {
-    const detail = await this.manualReport(reportId);
-    if (!detail) {
-      throw new Error(
-        `No App Accessibility manual report with id "${reportId}". Pass the id from listAppAccessibilityReports (kind: manual), or the report's dashboard link (app-accessibility.browserstack.com/report/…) as reportUrl`,
-      );
+  ): Promise<AppSnapshot[] | undefined> {
+    const details: AppSnapshot[] = [];
+    for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
+      const resp = await apiClient
+        .get({
+          url: `${MANUAL_API_BASE}/app_scanner/${encodeURIComponent(reportId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
+          headers: this.headers(),
+          raise_error: false,
+        })
+        .catch(() => undefined);
+      const data = resp?.ok && resp.data?.success ? resp.data.data : undefined;
+      if (!Array.isArray(data?.details))
+        return page === 1 ? undefined : details;
+      details.push(...data.details);
+      if (!data.info?.next) break;
     }
+    return details;
+  }
+
+  /** Every occurrence the Manual Reports API lists, and the device the report ran on. */
+  private async manualApiScreens(reportId: string): Promise<{
+    details: AppSnapshot[];
+    device?: { model?: string; os?: string; os_version?: string };
+  }> {
     const details: AppSnapshot[] = [];
     let device:
       | { model?: string; os?: string; os_version?: string }
@@ -900,13 +1137,40 @@ export class AppAccessibilityApi {
       details.push(...(resp.data?.data ?? []));
       if (!resp.data?.pagination?.next) break;
     }
+    return { details, device };
+  }
+
+  /**
+   * A manual report's issues, most severe first: from the dashboard's own screens when the
+   * route takes the access key, so the count is the dashboard's and each issue names its
+   * element; else every occurrence the Manual Reports API lists, which marks neither
+   * duplicates nor elements, with the dashboard's count stated next to it.
+   */
+  async appReportIssues(
+    reportId: string,
+    cursor = 0,
+    maxCharacterLength?: number,
+  ): Promise<AppManualReport> {
+    const detail = await this.manualReport(reportId);
+    if (!detail) {
+      throw new Error(
+        `No App Accessibility manual report with id "${reportId}". Pass the id from listAppAccessibilityReports (kind: manual), or the report's dashboard link (app-accessibility.browserstack.com/report/…) as reportUrl`,
+      );
+    }
+    const dashboard = await this.dashboardScreens(reportId);
+    const { details, device } = dashboard
+      ? { details: dashboard, device: undefined }
+      : await this.manualApiScreens(reportId);
     const summary = detail.data?.issue_summary ?? {};
     const all = flattenAppSnapshots(details);
-    const page = pageOf(all, { nextPage: cursor, maxCharacterLength });
+    const { rows, context } = compactAppIssues(all);
+    const page = pageOf(rows, { nextPage: cursor, maxCharacterLength });
     return {
       ...page,
+      ...contextOf(page.records, context),
       total_issues: all.length,
       summary: summarizeAppIssues(all),
+      deduplicated: dashboard !== undefined,
       dashboard_count: summary.total ?? all.length,
       duplicate_occurrences: summary.severity_count?.duplicate_issues ?? 0,
       hidden_issues: summary.severity_count?.hidden_issues ?? 0,
@@ -1095,9 +1359,11 @@ export class AppAccessibilityApi {
     const { meta, details, hidden, more, scanCount } =
       await this.readBuild(buildId);
     const all = flattenAppSnapshots(details);
-    const page = pageOf(all, { nextPage: cursor, maxCharacterLength });
+    const { rows, context } = compactAppIssues(all);
+    const page = pageOf(rows, { nextPage: cursor, maxCharacterLength });
     return {
       ...page,
+      ...contextOf(page.records, context),
       total_issues: all.length,
       summary: summarizeAppIssues(all),
       hidden_issues: hidden,

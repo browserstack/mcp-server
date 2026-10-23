@@ -13,6 +13,7 @@ import {
   MAX_APP_BUILD_LIST_PAGES,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
 import {
+  compactAppIssues,
   flattenAppSnapshots,
   MAX_SNAPSHOT_PAGES,
 } from "../../src/tools/accessiblity-utils/app-report-fetcher.js";
@@ -29,6 +30,12 @@ const ok = (body: Record<string, unknown>) => ({
   status: 200,
   data: { success: true, ...body },
 });
+/** What the dashboard's routes answer an access key with until they take one. */
+const REDIRECT_TO_LOGIN = {
+  ok: false,
+  status: 302,
+  data: { success: false, message: "redirect_to_login" },
+};
 const missing = () => ({
   ok: false,
   status: 404,
@@ -428,7 +435,8 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
 
     // A page that holds the first row and not the second.
     const pageSize =
-      JSON.stringify(flattenAppSnapshots(SNAPSHOTS)[0]).length + 10;
+      JSON.stringify(compactAppIssues(flattenAppSnapshots(SNAPSHOTS)).rows[0])
+        .length + 10;
     const first = await fetcher().appBuildReport(BUILD_ID, 0, pageSize);
     expect(first.page_length).toBe(1);
     expect(first.next_page).toBe(JSON.stringify(first.records[0]).length);
@@ -729,10 +737,11 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
     ]);
   });
 
-  it("reads a manual report's issue occurrences from its screens, with the dashboard's own count", async () => {
+  it("falls back to the Manual Reports API's occurrences, with the dashboard's own count, while the dashboard's screens refuse the key", async () => {
     const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
     get
       .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(REDIRECT_TO_LOGIN)
       .mockResolvedValueOnce(
         ok({
           device: { model: "iPhone 15 Pro", os: "ios", os_version: "17.0" },
@@ -752,10 +761,12 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
 
     expect(urls()).toEqual([
       `${MANUAL_API}/reports/${REPORT_ID}`,
+      `${MANUAL_API}/app_scanner/${REPORT_ID}/snapshot?hide_duplicate_issues=true&page_size=50&page=1`,
       `${MANUAL_API}/reports/${REPORT_ID}/issues?page_size=50&page=1`,
       `${MANUAL_API}/reports/${REPORT_ID}/issues?page_size=50&page=2`,
     ]);
     expect(report).toMatchObject({
+      deduplicated: false,
       report_name: "Checkout walkthrough",
       status: "complete",
       scan_count: 2,
@@ -775,6 +786,33 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
       "serious",
       "moderate",
     ]);
+  });
+
+  it("reads a manual report's screens as the dashboard does: duplicates left out, each issue with its element and fix", async () => {
+    const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
+    get
+      .mockResolvedValueOnce(ok(DETAIL))
+      .mockResolvedValueOnce(
+        ok({ data: { details: [SNAPSHOTS[0]], info: { page: 1, next: 2 } } }),
+      )
+      .mockResolvedValueOnce(
+        ok({ data: { details: [SNAPSHOTS[1]], info: { page: 2, next: null } } }),
+      );
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(urls()).toEqual([
+      `${MANUAL_API}/reports/${REPORT_ID}`,
+      `${MANUAL_API}/app_scanner/${REPORT_ID}/snapshot?hide_duplicate_issues=true&page_size=50&page=1`,
+      `${MANUAL_API}/app_scanner/${REPORT_ID}/snapshot?hide_duplicate_issues=true&page_size=50&page=2`,
+    ]);
+    expect(report.deduplicated).toBe(true);
+    expect(report.total_issues).toBe(3);
+    const pay = report.records.find((r) => r.component === "com.example:id/btn_pay");
+    expect(pay?.element).toMatchObject({ className: "android.widget.Button" });
+    expect(report.rules["interactable-element-content-label"].how_to_fix).toBe(
+      "Ensure spokenDescription is defined.",
+    );
   });
 
   it("fails plainly when the manual report does not exist", async () => {

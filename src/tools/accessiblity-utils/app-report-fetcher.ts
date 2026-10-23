@@ -439,14 +439,23 @@ export class AppAccessibilityApi {
     private readonly headers: () => Record<string, string> | undefined,
   ) {}
 
-  /** The build's details, or undefined when the API does not know the id. */
+  /**
+   * The build's details, or undefined when the API does not know the id (its 404, which
+   * it also gives a malformed id). Any other failure is thrown with its status.
+   */
   async buildMeta(buildId: string): Promise<AppBuildMeta | undefined> {
     const resp = await apiClient.get({
       url: `${APP_API_BASE}/build/${encodeURIComponent(buildId)}`,
       headers: this.headers(),
       raise_error: false,
     });
-    return resp.ok ? resp.data?.meta_data : undefined;
+    if (resp.status === 404) return undefined;
+    if (!resp.ok) {
+      throw new Error(
+        `Could not look up App Accessibility build "${buildId}": HTTP ${resp.status}`,
+      );
+    }
+    return resp.data?.meta_data;
   }
 
   /**
@@ -507,13 +516,22 @@ export class AppAccessibilityApi {
     return buildId;
   }
 
-  /** The first SDK session of an App Automate build; a native build lists none. */
+  /**
+   * The first SDK session of an App Automate build; a native build lists none, and a build
+   * App Automate does not know is a 404. Any other failure is thrown: read as "no session",
+   * it would send an SDK build down the native path.
+   */
   private async anySdkSession(buildId: string): Promise<string | undefined> {
     const resp = await apiClient.get({
       url: `${sessionsListUrl(SessionType.AppAutomate, buildId)}?limit=1`,
       headers: this.headers(),
       raise_error: false,
     });
+    if (!resp.ok && resp.status !== 404) {
+      throw new Error(
+        `Could not list the sessions of App Automate build ${buildId}: HTTP ${resp.status}`,
+      );
+    }
     return resp.ok ? resp.data?.[0]?.automation_session?.hashed_id : undefined;
   }
 
@@ -557,6 +575,12 @@ export class AppAccessibilityApi {
         raise_error: false,
       });
       if (resp.ok) return resp.data?.input_capabilities?.project;
+      // Each framework's API answers 404 for the other's builds.
+      if (resp.status !== 404) {
+        throw new Error(
+          `Could not read App Automate build ${buildId} from the ${framework} API: HTTP ${resp.status}`,
+        );
+      }
     }
     return undefined;
   }
@@ -571,9 +595,14 @@ export class AppAccessibilityApi {
         headers: this.headers(),
         raise_error: false,
       });
+      if (!resp.ok) {
+        throw new Error(
+          `Could not list App Automate builds to find build ${buildId}: HTTP ${resp.status}`,
+        );
+      }
       const rows: {
         automation_build?: { hashed_id?: string; name?: string };
-      }[] = resp.ok && Array.isArray(resp.data) ? resp.data : [];
+      }[] = Array.isArray(resp.data) ? resp.data : [];
       const row = rows.find((r) => r.automation_build?.hashed_id === buildId);
       if (row) return row.automation_build?.name;
       if (rows.length < APP_AUTOMATE_BUILDS_PAGE_SIZE) break;
@@ -768,7 +797,15 @@ export class AppAccessibilityApi {
       const resp = await apiClient.get({
         url: `${APP_API_BASE}/build/${encodeURIComponent(buildId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
         headers: this.headers(),
+        raise_error: false,
       });
+      // A count over some of the screens would read as the build's, so a page that
+      // cannot be read fails the read.
+      if (!resp.ok) {
+        throw new Error(
+          `Could not read page ${page} of build ${buildId}'s scanned screens from the App Accessibility API: HTTP ${resp.status}`,
+        );
+      }
       const data = resp.data?.data;
       details.push(...(data?.details ?? []));
       hidden = data?.issue_counts?.hidden_issues ?? hidden;

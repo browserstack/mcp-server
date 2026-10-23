@@ -511,6 +511,40 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
       /No App Accessibility build/,
     );
   });
+
+  // Both APIs answer 404 for a build they do not know, a malformed id included; anything
+  // else (bad credentials, an outage) is not an answer about the build.
+  const failed = (status: number) => ({ ok: false, status, data: {} });
+
+  it("reports a failed web lookup as the failure, without asking the app API", async () => {
+    get.mockResolvedValueOnce(failed(401));
+
+    await expect(
+      fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID }),
+    ).rejects.toThrow(/HTTP 401/);
+    expect(urls()).toEqual([`${API}/automated-tests/v1/builds/${BUILD_ID}`]);
+  });
+
+  it("reports a failed app lookup as the failure, not as an unknown build", async () => {
+    get.mockResolvedValueOnce(missing()).mockResolvedValueOnce(failed(503));
+
+    const lookup = fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID });
+    await expect(lookup).rejects.toThrow(/HTTP 503/);
+    await expect(lookup).rejects.not.toThrow(/No Automated Tests/);
+  });
+
+  it("names the page and status when a screen page cannot be read", async () => {
+    get
+      .mockResolvedValueOnce(ok({ meta_data: META }))
+      .mockResolvedValueOnce(
+        ok({ data: { details: SNAPSHOTS, info: { next: 2 }, issue_counts: { hidden_issues: 0 } } }),
+      )
+      .mockResolvedValueOnce(failed(500));
+
+    await expect(fetcher().appBuildReport(BUILD_ID)).rejects.toThrow(
+      /page 2 of build .*HTTP 500/,
+    );
+  });
 });
 
 describe("AccessibilityReportFetcher and App Automate links", () => {
@@ -733,6 +767,44 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
         `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`,
       ),
     ).rejects.toThrow(/No session.*App Automate build/);
+  });
+
+  // Checked live: a native build lists no sessions (200, []), an id App Automate does not
+  // know answers 404 on each lookup, and a bad key 401. Only a 404 is a "not this one".
+  const link = `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`;
+  const failed = (status: number) => ({ ok: false, status, data: {} });
+
+  it("reports a failed session list as the failure, not as a native build", async () => {
+    get.mockResolvedValueOnce(failed(401));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 401/);
+    expect(urls()).toEqual([sessionsUrl]);
+  });
+
+  it("reports a failed native build lookup as the failure, not as an unknown build", async () => {
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce(failed(429));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 429/);
+    await expect(failure).rejects.not.toThrow(/No session found/);
+  });
+
+  it("reports a failed build list as the failure, not as an old build", async () => {
+    get
+      .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { input_capabilities: { project: "Checkout App" } },
+      })
+      .mockResolvedValueOnce(failed(503));
+
+    const failure = fetcher().sourceFromReportUrl(link);
+    await expect(failure).rejects.toThrow(/HTTP 503/);
+    await expect(failure).rejects.not.toThrow(/newest builds/);
   });
 });
 

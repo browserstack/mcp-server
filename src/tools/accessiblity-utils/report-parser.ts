@@ -1,7 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
 import { parse } from "csv-parse/sync";
 import logger from "../../logger.js";
-import { pageOf, sortBySeverity } from "./paginate.js";
+import { PAGE_CHARACTERS, pageOf, sortBySeverity } from "./paginate.js";
 
 type SimplifiedAccessibilityIssue = {
   issue_type: string;
@@ -261,7 +261,11 @@ export function compareIssues(
 
 export async function parseAccessibilityReportFromCSV(
   reportLink: string,
-  { maxCharacterLength = 5000, nextPage = 0, pageUrl }: PaginationOptions = {},
+  {
+    maxCharacterLength = PAGE_CHARACTERS,
+    nextPage = 0,
+    pageUrl,
+  }: PaginationOptions = {},
 ): Promise<PaginatedResult> {
   // 1) Download & parse
   const { parsed, columns } = await loadReport(reportLink);

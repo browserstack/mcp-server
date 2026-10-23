@@ -320,7 +320,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 | `takeAppScreenshot` | Launch the app on a specified device and capture a quick verification screenshot to confirm your app has launched. |
 | `listTestIds` | List the tests in a BrowserStack build (Automate or App Automate) with each test's `status` and `session_id`, optionally filtered by status (passed/failed/pending/skipped). The `session_id` feeds `getFailureLogs` and `fetchAutomationScreenshots` directly. |
 | `setupBrowserStackAppAutomateTests` | Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. With `accessibility: true`, the run also performs App Accessibility (WCAG) checks on the screens the tests interact with, and the output says what makes a scan happen and how to read the issues. |
-| `runAppTestsOnBrowserStack` | Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files. With `accessibility: true`, the build also performs App Accessibility (WCAG) checks, and the answer says how to read the issues once it finishes. |
+| `runAppTestsOnBrowserStack` | Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files. With `accessibility: true`, the build also performs App Accessibility (WCAG) checks, and the answer says how to read the issues once it finishes. The checks need a suite built with BrowserStack's instrumentation: for Espresso the Gradle plugin and Java SDK, for XCUITest the Swift SDK, embedded and initialized. |
 
 </details>
 
@@ -343,7 +343,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 | `startAccessibilityScan` | Start a web accessibility scan of a page URL and retrieve a local CSV report path. Mobile apps are scanned through an App Automate run instead (`setupBrowserStackAppAutomateTests` with `accessibility: true`). |
 | `createAccessibilityAuthConfig` | Create an authentication configuration (form-based or basic) for accessibility scans behind a login. |
 | `getAccessibilityAuthConfig` | Retrieve an existing accessibility authentication configuration by ID. |
-| `fetchAccessibilityIssues` | Fetch accessibility issues, with pagination, from a Website Scanner run, an Automated Tests build (web) or App Accessibility build (mobile app, by the build id the SDK prints), a Workflow Analyzer report, an App Accessibility manual report (`appReportId`), or a report's dashboard link. Waits while a report is still processing; for an app build with no scans, lists the likely causes. |
+| `fetchAccessibilityIssues` | Fetch accessibility issues, with pagination, from a Website Scanner run, an Automated Tests build (web) or App Accessibility build (mobile app, by the build id the SDK prints), a Workflow Analyzer report, an App Accessibility manual report (`appReportId`), or a report's dashboard link. Once the tests or scan have finished, waits while the report is still processing; a run still in progress is read as it is, with a note. For an app build with no scans, lists the likely causes. |
 | `listAppAccessibilityReports` | List App Accessibility (mobile app) work newest first, with the ids `fetchAccessibilityIssues` reads: a project's builds (`kind: automated`; without `projectName`, the projects), or the manual Workflow Analyzer reports (`kind: manual`). |
 
 </details>

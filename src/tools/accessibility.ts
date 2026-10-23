@@ -436,11 +436,6 @@ function appBuildDetails(report: AppBuildReport): string {
 }
 
 /**
- * Why a finished app build has no scans. Each cause here produced a run that finished
- * green with nothing scanned and no warning; they are listed most likely first, with what
- * the build's own details say ahead of the rest.
- */
-/**
  * Why a native (Espresso, XCUITest) build recorded no scans. The build request's flag only
  * turns the checks on: the suite itself must carry BrowserStack's instrumentation.
  */
@@ -468,6 +463,11 @@ function nativeFramework(
   return undefined;
 }
 
+/**
+ * Why a finished app build has no scans. Each cause here produced a run that finished
+ * green with nothing scanned and no warning; they are listed most likely first, with what
+ * the build's own details say ahead of the rest. A native build gets the native causes.
+ */
 function noScansNote(report: AppBuildReport): string[] {
   const native = nativeFramework(report.framework);
   if (native) {
@@ -717,6 +717,11 @@ async function appBuildMessages(
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues}) from the App Accessibility build below (${screens})`,
     appBuildDetails(report),
     ...(cursor === 0 ? summaryNote(report.summary, total_issues) : []),
+    ...(report.screens_read !== undefined
+      ? [
+          `Only the first ${report.screens_read} of the build's ${report.scan_count} scanned screens were read; the total counts the issues on those. The dashboard report has them all.`,
+        ]
+      : []),
     ...excludedIssuesNote(null, 0, report.hidden_issues),
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
     closingMessage(next_page, report.remaining, source, stillProcessing),

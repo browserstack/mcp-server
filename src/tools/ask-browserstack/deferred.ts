@@ -29,8 +29,18 @@ import {
   decisionUrl,
   parseAsk,
 } from "./stream.js";
-import { RELAY_OFF_DETAILS, buildResult } from "./relay.js";
-import { AgentRequest, AskResult, PermissionAsk, RelayMode } from "./types.js";
+import {
+  RELAY_OFF_DETAILS,
+  buildResult,
+  readAppliedBeforeStop,
+} from "./relay.js";
+import {
+  AgentRequest,
+  ApprovalRecord,
+  AskResult,
+  PermissionAsk,
+  RelayMode,
+} from "./types.js";
 
 /** What a parked run needs the caller to send back. */
 export interface ParkedAsk {
@@ -87,6 +97,10 @@ export function needsApprovalResult(
   runId: string,
   ask: ParkedAsk,
   product: string,
+  // From the parked payload: an earlier approved step already landed in this run.
+  appliedBeforeStop = false,
+  // The decision this call delivered, when it was a resume that parked again.
+  delivered: ApprovalRecord[] = [],
 ): AskResult {
   return {
     // NOT ok, and not an error either: nothing was applied and nothing failed. A caller
@@ -97,7 +111,10 @@ export function needsApprovalResult(
     // the one thing that must happen next is not something it can do by itself.
     answer:
       `A HUMAN MUST APPROVE THIS BEFORE IT CAN CONTINUE. BrowserStack AI stopped at: ` +
-      `${ask.description}. Nothing has been changed yet.\n\n` +
+      `${ask.description}. ` +
+      (appliedBeforeStop
+        ? "Changes approved earlier in this task have already been made; this one has not.\n\n"
+        : "Nothing has been changed yet.\n\n") +
       `Put this to the user and WAIT for their answer. If you have a way to ask them a ` +
       `structured question or show a confirmation — any prompt, question or approval ` +
       `affordance your client offers — use that; otherwise ask plainly in your reply. ` +
@@ -105,11 +122,11 @@ export function needsApprovalResult(
       `Do NOT decide on their behalf, and do not treat "it is what they asked for" as ` +
       `approval: they are being asked to confirm this specific change, which is a ` +
       `different question. Once they have answered, follow \`next_step\`.`,
-    approvals: [],
+    approvals: delivered,
     approvals_source: "atlas",
     elicitations: [],
     needs_approval: [{ description: ask.description, mode: ask.mode }],
-    applied_before_stop: false,
+    applied_before_stop: appliedBeforeStop,
     permission_relay: {
       used: true,
       reason: "",
@@ -160,7 +177,12 @@ export async function runDeferred(
       "askBrowserStackAI: run parked awaiting approval (run=%s)",
       parked.runId,
     );
-    return needsApprovalResult(parked.runId, parked.ask, product);
+    return needsApprovalResult(
+      parked.runId,
+      parked.ask,
+      product,
+      readAppliedBeforeStop(asRecord(response.body)) === true,
+    );
   }
   // No ask: an ordinary result, passed through the same builder the streaming path
   // uses so an entitlement refusal, a 401 and a plain failure all read identically
@@ -197,6 +219,7 @@ export async function runResumed(
       perm_id: permId,
       decision,
       reason: "",
+      contract: RELAY_CONTRACT,
       // Required. The run resumes on a fresh Agent that must be scoped before it can be
       // built, and Atlas deliberately will not take that scope from persisted state.
       product,
@@ -211,6 +234,12 @@ export async function runResumed(
     );
     return decisionUnknown();
   }
+
+  // This call's own decision: the trail of a two-call approval lives on the call that
+  // delivered it, since nothing is kept between calls.
+  const delivered: ApprovalRecord[] = [
+    { description: `approval ${permId}`, decision, reason: "" },
+  ];
 
   if (response.status === 404) {
     // The only failure worth its own words: there is no such parked run. It expired, it
@@ -232,11 +261,17 @@ export async function runResumed(
       "askBrowserStackAI: run parked again after a decision (run=%s)",
       runId,
     );
-    return needsApprovalResult(parked.runId, parked.ask, product);
+    return needsApprovalResult(
+      parked.runId,
+      parked.ask,
+      product,
+      readAppliedBeforeStop(asRecord(response.body)) === true,
+      delivered,
+    );
   }
   // Finished. Through the SAME builder the start path uses, so an entitlement refusal,
   // a 401 and a plain failure read identically whichever call produced them.
-  return buildResult(response, [], mode, product);
+  return buildResult(response, delivered, mode, product);
 }
 
 /** A resume that did not happen. Every field says "nothing changed", because in each

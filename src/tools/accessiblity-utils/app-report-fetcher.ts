@@ -102,6 +102,8 @@ export interface AppBuildReport {
   fup_capped: boolean;
   /** The test framework the build ran under, when the build's details name it. */
   framework?: string;
+  /** How many screens were read, when the snapshot page limit stopped short of them all. */
+  screens_read?: number;
 }
 
 /** The element details worth repeating; the rest are the rule's own inputs. */
@@ -425,12 +427,16 @@ export class AppAccessibilityApi {
     }
   }
 
-  /** Every scanned screen of the build, and how many issues the dashboard hides. */
+  /**
+   * Every scanned screen of the build, up to the page limit, how many issues the dashboard
+   * hides, and whether more screens lie past the limit.
+   */
   private async snapshots(
     buildId: string,
-  ): Promise<{ details: AppSnapshot[]; hidden: number }> {
+  ): Promise<{ details: AppSnapshot[]; hidden: number; more: boolean }> {
     const details: AppSnapshot[] = [];
     let hidden = 0;
+    let more = false;
     for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
       const resp = await apiClient.get({
         url: `${APP_API_BASE}/build/${encodeURIComponent(buildId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
@@ -439,9 +445,10 @@ export class AppAccessibilityApi {
       const data = resp.data?.data;
       details.push(...(data?.details ?? []));
       hidden = data?.issue_counts?.hidden_issues ?? hidden;
-      if (!data?.info?.next) break;
+      more = Boolean(data?.info?.next);
+      if (!more) break;
     }
-    return { details, hidden };
+    return { details, hidden, more };
   }
 
   async report(
@@ -456,10 +463,10 @@ export class AppAccessibilityApi {
       );
     }
     const scanCount = meta.issue_summary?.scan_count ?? 0;
-    const { details, hidden } =
+    const { details, hidden, more } =
       scanCount > 0
         ? await this.snapshots(buildId)
-        : { details: [], hidden: 0 };
+        : { details: [], hidden: 0, more: false };
     const all = flattenAppSnapshots(details);
     const page = pageOf(all, { nextPage: cursor, maxCharacterLength });
     return {
@@ -474,6 +481,7 @@ export class AppAccessibilityApi {
       ...(meta.session_data?.framework?.name
         ? { framework: meta.session_data.framework.name }
         : {}),
+      ...(more ? { screens_read: details.length } : {}),
     };
   }
 }

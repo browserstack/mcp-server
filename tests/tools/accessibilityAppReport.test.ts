@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 
 // Reading an App Accessibility (mobile app) build: its issues come inline from the App
 // Accessibility API's per-screen snapshots, not from a CSV export.
@@ -603,23 +603,33 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
   // failed search is that failure, and only the API's "No projects found" means no project.
   describe("when the project search does not answer", () => {
     const NAME = "Build #12: Checkout.apk v1.0";
-    const upToSearch = () =>
-      get
-        .mockResolvedValueOnce({ ok: true, status: 200, data: [] })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          data: { input_capabilities: { project: "Checkout App" } },
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          data: [{ automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: NAME } }],
-        });
     const link = `https://app-automate.browserstack.com/builds/${APP_AUTOMATE_BUILD}`;
+    afterEach(() => get.mockReset());
+    // Answered by URL, not by call order: which lookup comes first is the mapping's
+    // business, and these tests are about what the project search's answer means.
+    const searchAnswers = (search: Record<string, unknown>) =>
+      get.mockImplementation(async ({ url }: { url: string }) => {
+        if (url.includes("/sessions")) return { ok: true, status: 200, data: [] };
+        if (url.includes("/espresso/v2/builds/")) {
+          return {
+            ok: true,
+            status: 200,
+            data: { input_capabilities: { project: "Checkout App" } },
+          };
+        }
+        if (url.includes("builds.json")) {
+          return {
+            ok: true,
+            status: 200,
+            data: [{ automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: NAME } }],
+          };
+        }
+        if (url.includes("/project?name=")) return search;
+        return { ok: false, status: 404, data: { message: "Not Found" } };
+      });
 
     it("reports a failed search as the failure, not as accessibility being off", async () => {
-      upToSearch().mockResolvedValueOnce({ ok: false, status: 500, data: { message: "Internal error" } });
+      searchAnswers({ ok: false, status: 500, data: { message: "Internal error" } });
 
       const mapping = fetcher().sourceFromReportUrl(link);
 
@@ -628,13 +638,13 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
     });
 
     it("fails on a 404 that is not a 'none found' answer, such as a wrong route", async () => {
-      upToSearch().mockResolvedValueOnce({ ok: false, status: 404, data: { message: "Not Found" } });
+      searchAnswers({ ok: false, status: 404, data: { message: "Not Found" } });
 
       await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(/HTTP 404/);
     });
 
     it("reads 'No projects found' as no project, so no accessibility build", async () => {
-      upToSearch().mockResolvedValueOnce({ ok: false, status: 404, data: { message: "No projects found" } });
+      searchAnswers({ ok: false, status: 404, data: { message: "No projects found" } });
 
       await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(
         /accessibility was not on for this run/,

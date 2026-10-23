@@ -1,11 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import addAccessibilityTools from "../../src/tools/accessibility";
 
-vi.mock("../../src/tools/accessiblity-utils/accessibility-rag", () => ({
-  queryAccessibilityRAG: vi.fn().mockResolvedValue({
-    content: [{ type: "text", text: "WCAG guidelines say..." }],
-  }),
-}));
 vi.mock("../../src/tools/accessiblity-utils/scanner", () => ({
   AccessibilityScanner: vi.fn().mockImplementation(() => ({
     setAuth: vi.fn(),
@@ -95,23 +90,13 @@ describe("Accessibility Tools", () => {
     addAccessibilityTools(serverMock, mockConfig);
   });
 
-  it("registers all 5 accessibility tools", () => {
+  it("registers the 4 accessibility tools, and no longer accessibilityExpert", () => {
     const toolNames = serverMock.tool.mock.calls.map((c: any[]) => c[0]);
-    expect(toolNames).toContain("accessibilityExpert");
+    expect(toolNames).not.toContain("accessibilityExpert");
     expect(toolNames).toContain("startAccessibilityScan");
     expect(toolNames).toContain("createAccessibilityAuthConfig");
     expect(toolNames).toContain("getAccessibilityAuthConfig");
     expect(toolNames).toContain("fetchAccessibilityIssues");
-  });
-
-  it("accessibilityExpert — returns a response without crashing", async () => {
-    const result = await handlers["accessibilityExpert"](
-      { query: "What is WCAG?" },
-      { sendNotification: vi.fn(), _meta: {} },
-    );
-    expect(result).toBeDefined();
-    expect(result.content).toBeDefined();
-    expect(result.content.length).toBeGreaterThan(0);
   });
 
   it("createAccessibilityAuthConfig — response omits the stored site credentials", async () => {

@@ -1,4 +1,4 @@
-import { apiClient } from "../../lib/apiClient.js";
+import { apiClient, type RequestOptions } from "../../lib/apiClient.js";
 import { randomUUID } from "node:crypto";
 import logger from "../../logger.js";
 import {
@@ -35,11 +35,22 @@ export interface ScanSettings {
   advancedRules?: boolean;
 }
 
+/**
+ * Each read's timeout. apiClient sets none, so a status read the API never answered would
+ * hold the scan's wait forever; these endpoints answer in a second or two.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 export class AccessibilityScanner {
   private auth: { username: string; password: string } | undefined;
 
   public setAuth(auth: { username: string; password: string }): void {
     this.auth = auth;
+  }
+
+  /** The scanner's reads go through here, so none waits on the API without a timeout. */
+  private get<T = any>(options: RequestOptions) {
+    return apiClient.get<T>({ ...options, timeout: REQUEST_TIMEOUT_MS });
   }
 
   async startScan(
@@ -164,19 +175,17 @@ export class AccessibilityScanner {
     scanId: string,
     scanRunId: string,
   ): Promise<ScanSettings | undefined> {
-    const resp = await apiClient
-      .get({
-        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}`,
-        headers: {
-          Authorization:
-            "Basic " +
-            Buffer.from(
-              `${this.auth?.username}:${this.auth?.password}`,
-            ).toString("base64"),
-        },
-        raise_error: false,
-      })
-      .catch(() => undefined);
+    const resp = await this.get({
+      url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}`,
+      headers: {
+        Authorization:
+          "Basic " +
+          Buffer.from(`${this.auth?.username}:${this.auth?.password}`).toString(
+            "base64",
+          ),
+      },
+      raise_error: false,
+    }).catch(() => undefined);
     const run = resp?.ok ? resp.data?.data : undefined;
     if (!run) return undefined;
     return {
@@ -198,7 +207,7 @@ export class AccessibilityScanner {
     scanRunId: string,
   ): Promise<AccessibilityScanStatus> {
     try {
-      const response = await apiClient.get<AccessibilityScanStatus>({
+      const response = await this.get<AccessibilityScanStatus>({
         url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
         headers: {
           Authorization:

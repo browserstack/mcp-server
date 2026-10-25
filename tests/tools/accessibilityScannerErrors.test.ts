@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let nextResponse: any;
 vi.mock("../../src/lib/apiClient.js", () => ({
-  apiClient: { post: vi.fn(async () => nextResponse) },
+  apiClient: {
+    post: vi.fn(async () => nextResponse),
+    get: vi.fn(async () => nextResponse),
+  },
 }));
 vi.mock("../../src/logger.js", () => ({
   default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
@@ -37,5 +40,30 @@ describe("startScan surfaces the API's reason when success is false", () => {
       (e: Error) => e,
     );
     expect(err.message).toContain('{"success":false,"errors":[]}');
+  });
+});
+
+describe("the scanner's reads of a run", () => {
+  beforeEach(() => vi.resetModules());
+
+  // apiClient sets no timeout of its own, so a hung status read would hold the scan forever.
+  it("put a timeout on each request", async () => {
+    nextResponse = { ok: true, status: 200, data: { success: true, data: { status: "running" } } };
+    const { apiClient } = await import("../../src/lib/apiClient.js");
+    const { AccessibilityScanner } =
+      await import("../../src/tools/accessiblity-utils/scanner.js");
+    const scanner = new AccessibilityScanner();
+    scanner.setAuth({ username: "u", password: "p" });
+    const get = apiClient.get as unknown as ReturnType<typeof vi.fn>;
+    get.mockClear();
+
+    await scanner.pollStatus("1234", "5678");
+    await scanner.runSettings("1234", "5678");
+
+    expect(get).toHaveBeenCalledTimes(2);
+    for (const [options] of get.mock.calls) {
+      expect(options.timeout).toBeGreaterThan(0);
+      expect(options.timeout).toBeLessThan(60_000);
+    }
   });
 });

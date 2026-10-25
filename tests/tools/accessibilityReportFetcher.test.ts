@@ -11,7 +11,9 @@ import {
   EXPORT_WAIT_MS,
   ExportPendingError,
   IssueSource,
+  EXPORT_TASK_MAX_AGE_MS,
   MAX_SCAN_LIST_PAGES,
+  MAX_SCAN_RUN_PAGES,
   reportExports,
   MAX_REPORT_EXPORTS,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
@@ -238,8 +240,48 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl for Automate links", ()
       fetcher().sourceFromReportUrl(`${DASHBOARD}/${AUTOMATE_BUILD}`),
     ).resolves.toEqual({ kind: "build", buildId: BUILD_ID });
     expect(urls()[0]).toBe(
-      `https://api.browserstack.com/automate/builds/${AUTOMATE_BUILD}/sessions.json?limit=1`,
+      `https://api.browserstack.com/automate/builds/${AUTOMATE_BUILD}/sessions.json?limit=5`,
     );
+  });
+
+  it("tries the build's next session when one was not run through the SDK", async () => {
+    const OTHER = "9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c";
+    get
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [
+          { automation_session: { hashed_id: OTHER } },
+          { automation_session: { hashed_id: SESSION } },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: false, status: 404, data: { message: "Session not found" } })
+      .mockResolvedValueOnce(testCode(BUILD_ID))
+      .mockResolvedValueOnce(ok({ id: BUILD_ID }));
+
+    await expect(
+      fetcher().sourceFromReportUrl(`${DASHBOARD}/${AUTOMATE_BUILD}`),
+    ).resolves.toEqual({ kind: "build", buildId: BUILD_ID });
+    expect(urls().slice(1)).toEqual([
+      `${getAutomationBaseUrl()}/ext/v1/sessions/${OTHER}/testCode`,
+      testCodeUrl,
+      `${API}/automated-tests/v1/builds/${BUILD_ID}`,
+    ]);
+  });
+
+  it("says a build none of whose sessions ran through the SDK has no accessibility results", async () => {
+    get
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: [{ automation_session: { hashed_id: SESSION } }, { automation_session: { hashed_id: SESSION } }],
+      })
+      .mockResolvedValueOnce({ ok: false, status: 404, data: null })
+      .mockResolvedValueOnce(testCode(undefined));
+
+    await expect(
+      fetcher().sourceFromReportUrl(`${DASHBOARD}/${AUTOMATE_BUILD}`),
+    ).rejects.toThrow(/not linked to a BrowserStack SDK build/);
   });
 
   it("says a session not run through the SDK has no accessibility results", async () => {
@@ -402,26 +444,133 @@ describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
     expect(urls().filter((u) => u.includes("task_id=t%3A1"))).toHaveLength(7);
   });
 
-  it("hands back the export's task id when it is still running after the wait", async () => {
+  /** Runs a call until its export is handed back still pending, and returns the token for it. */
+  async function pendingToken(
+    source: IssueSource = SOURCE,
+    options: { stillProcessing?: boolean } = {},
+  ): Promise<string> {
     get.mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }));
     get.mockResolvedValue(pending);
-
-    const link = fetcher().getReportLink(SOURCE);
-    const outcome = expect(link).rejects.toMatchObject({ taskId: "t:1" });
+    const link = fetcher().getReportLink(source, options);
+    const outcome = link.catch((error) => error);
     await vi.advanceTimersByTimeAsync(EXPORT_WAIT_MS + 10_000);
-    await outcome;
-    await expect(link).rejects.toBeInstanceOf(ExportPendingError);
+    const error = await outcome;
+    expect(error).toBeInstanceOf(ExportPendingError);
+    get.mockReset();
+    return error.taskId;
+  }
+
+  it("hands back a token for the export when it is still running after the wait, not the bare task id", async () => {
+    const token = await pendingToken();
+
+    expect(token).not.toBe("t:1");
+    expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
   it("continues an export it was given instead of starting another", async () => {
+    const token = await pendingToken();
+    reportExports.clear();
     get.mockResolvedValueOnce(ok({ reportLink: "https://csv" }));
 
     await expect(
-      fetcher().getReportLink(SOURCE, { exportTaskId: "t:9" }),
+      fetcher().getReportLink(SOURCE, { exportTaskId: token }),
     ).resolves.toBe("https://csv");
     expect(urls()).toEqual([
-      "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/1234/scan_runs/issues?task_id=t%3A9",
+      "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/1234/scan_runs/issues?task_id=t%3A1",
     ]);
+  });
+
+  it("refuses an exportTaskId it did not hand out", async () => {
+    await expect(
+      fetcher().getReportLink(SOURCE, { exportTaskId: "t:9" }),
+    ).rejects.toThrow(/not an export this tool handed out: call without it/);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("refuses another report's export rather than keeping its CSV as this report's", async () => {
+    const token = await pendingToken();
+    const other: IssueSource = { kind: "scan", scanId: "1234", scanRunId: "9999" };
+
+    await expect(
+      fetcher().getReportLink(other, { exportTaskId: token }),
+    ).rejects.toThrow(/another report's export/);
+    expect(get).not.toHaveBeenCalled();
+    expect([...reportExports.keys()].some((key) => key.includes("9999"))).toBe(false);
+  });
+
+  it("matches a report however its ids were typed", async () => {
+    const token = await pendingToken();
+    get.mockResolvedValueOnce(ok({ reportLink: "https://csv" }));
+
+    const numeric = { kind: "scan", scanId: 1234, scanRunId: 5678 } as unknown as IssueSource;
+    await expect(
+      fetcher().getReportLink(numeric, { exportTaskId: token }),
+    ).resolves.toBe("https://csv");
+  });
+
+  it.each([
+    ["remembered from the previous call", false],
+    ["given as a token", true],
+  ])(
+    "starts the export again when the one %s has been pending too long",
+    async (_label, viaToken) => {
+      const token = await pendingToken();
+      if (viaToken) reportExports.clear();
+      vi.setSystemTime(Date.now() + EXPORT_TASK_MAX_AGE_MS);
+      get
+        .mockResolvedValueOnce(pending)
+        .mockResolvedValueOnce(ok({ task_id: "t:2", message: "started" }))
+        .mockResolvedValueOnce(ok({ reportLink: "https://csv" }));
+
+      await expect(
+        fetcher().getReportLink(SOURCE, viaToken ? { exportTaskId: token } : {}),
+      ).resolves.toBe("https://csv");
+      expect(urls()).toEqual([
+        `${API}/website-scanner/v1/scans/1234/scan_runs/issues?task_id=t%3A1`,
+        `${API}/website-scanner/v1/scans/1234/scan_runs/issues?scan_run_id=5678`,
+        `${API}/website-scanner/v1/scans/1234/scan_runs/issues?task_id=t%3A2`,
+      ]);
+    },
+  );
+
+  it("never sleeps past its wait budget", async () => {
+    get.mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }));
+    get.mockResolvedValue(pending);
+    const startedAt = Date.now();
+    let settledAt = 0;
+    let waitedMs = 0;
+
+    const link = fetcher()
+      .getReportLink(SOURCE)
+      .catch((error) => {
+        settledAt = Date.now();
+        waitedMs = error.waitedMs;
+      });
+    await vi.advanceTimersByTimeAsync(EXPORT_WAIT_MS + 10_000);
+    await link;
+
+    expect(settledAt - startedAt).toBeLessThanOrEqual(EXPORT_WAIT_MS);
+    expect(waitedMs).toBeLessThanOrEqual(EXPORT_WAIT_MS);
+  });
+
+  it("reports a failed poll with its HTTP status and forgets the export", async () => {
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }))
+      .mockResolvedValueOnce({ ok: false, status: 502, data: "<html>Bad Gateway</html>" });
+
+    await expect(fetcher().getReportLink(SOURCE)).rejects.toThrow(/HTTP 502/);
+    expect(get.mock.calls[1][0].raise_error).toBe(false);
+    expect(reportExports.size).toBe(0);
+  });
+
+  it("refuses a poll answer that is not an object instead of failing on it", async () => {
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }))
+      .mockResolvedValueOnce({ ok: true, status: 200, data: null });
+
+    await expect(fetcher().getReportLink(SOURCE)).rejects.toThrow(
+      /Failed to fetch report/,
+    );
   });
 
   it("continues the export a previous call started for the same report", async () => {
@@ -471,14 +620,47 @@ describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
     expect(urls().filter((u) => u.includes("scan_run_id="))).toHaveLength(2);
   });
 
+  it("continues a still-processing report's export while it is still processing", async () => {
+    await pendingToken(SOURCE, { stillProcessing: true });
+    get.mockResolvedValueOnce(ok({ reportLink: "https://csv?Expires=9999999999" }));
+
+    await expect(
+      fetcher().getReportLink(SOURCE, { stillProcessing: true }),
+    ).resolves.toBe("https://csv?Expires=9999999999");
+    expect(urls()).toEqual([`${API}/website-scanner/v1/scans/1234/scan_runs/issues?task_id=t%3A1`]);
+    expect(reportExports.size).toBe(0);
+  });
+
+  it("starts the finished report's export afresh rather than continuing one begun while it was processing", async () => {
+    await pendingToken(SOURCE, { stillProcessing: true });
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:2", message: "started" }))
+      .mockResolvedValueOnce(ok({ reportLink: "https://csv2?Expires=9999999999" }));
+
+    await expect(fetcher().getReportLink(SOURCE)).resolves.toBe(
+      "https://csv2?Expires=9999999999",
+    );
+    expect(urls()[0]).toContain("scan_run_id=5678");
+  });
+
+  it("does not keep the CSV of an export begun while the report was processing, even once it has finished", async () => {
+    const token = await pendingToken(SOURCE, { stillProcessing: true });
+    get.mockResolvedValueOnce(ok({ reportLink: "https://csv?Expires=9999999999" }));
+
+    await fetcher().getReportLink(SOURCE, { exportTaskId: token });
+
+    expect(reportExports.size).toBe(0);
+  });
+
   it("remembers a bounded number of reports' exports", async () => {
-    get.mockResolvedValue(ok({ reportLink: "https://csv?Expires=9999999999" }));
+    get.mockImplementation(async ({ url }: { url: string }) =>
+      url.includes("scan_run_id=")
+        ? ok({ task_id: "t:1", message: "started" })
+        : ok({ reportLink: "https://csv?Expires=9999999999" }),
+    );
 
     for (let run = 0; run < MAX_REPORT_EXPORTS + 5; run++) {
-      await fetcher().getReportLink(
-        { kind: "scan", scanId: "1234", scanRunId: String(run) },
-        { exportTaskId: `t:${run}` },
-      );
+      await fetcher().getReportLink({ kind: "scan", scanId: "1234", scanRunId: String(run) });
     }
 
     expect(reportExports.size).toBe(MAX_REPORT_EXPORTS);
@@ -551,6 +733,51 @@ describe("AccessibilityReportFetcher scan run history", () => {
     await expect(fetcher().previousScanRun("1234", "10")).resolves.toBeUndefined();
   });
 
+  // The walk stops at MAX_SCAN_RUN_PAGES; a run it did not reach is not the scan's first.
+  const runsPages = () => {
+    let page = 0;
+    get.mockImplementation(async () => {
+      page++;
+      return ok({
+        scanRuns: [{ id: 100 - page, scanDate: `2026-10-${String(30 - page).padStart(2, "0")}T00:00:00Z` }],
+        pagination: { hasNext: true, nextPage: `p${page + 1}` },
+      });
+    });
+  };
+
+  it("says when a run is not among the newest runs it read, rather than calling it the first", async () => {
+    runsPages();
+
+    await expect(fetcher().previousScanRun("1234", "5")).rejects.toThrow(
+      /Run 5 is not among scan 1234's newest runs.*scanRunId as compareWith/s,
+    );
+    expect(get).toHaveBeenCalledTimes(MAX_SCAN_RUN_PAGES);
+  });
+
+  it("says when the run before is older than the runs it read", async () => {
+    runsPages();
+
+    await expect(
+      fetcher().previousScanRun("1234", String(100 - MAX_SCAN_RUN_PAGES)),
+    ).rejects.toThrow(/older than the runs read.*scanRunId as compareWith/s);
+  });
+
+  it("says when a run is not a run of the scan", async () => {
+    get.mockResolvedValueOnce(
+      ok({ scanRuns: [{ id: 10, scanDate: "2026-10-21T11:14:51Z", issues: 160 }], pagination: { hasNext: false } }),
+    );
+
+    await expect(fetcher().previousScanRun("1234", "99")).rejects.toThrow(
+      /Run 99 is not a run of scan 1234/,
+    );
+  });
+
+  it("reports a failed read of the scan's runs rather than calling the run the first", async () => {
+    get.mockResolvedValueOnce(failed(500, ["Internal server Error"]));
+
+    await expect(fetcher().previousScanRun("1234", "10")).rejects.toThrow(/HTTP 500/);
+  });
+
   it("reads a run's changes since the previous run from its summary", async () => {
     get.mockResolvedValueOnce(
       ok({ scanRunId: 30, time: "2026-10-22T05:54:23Z", changesSinceLastRun: { newIssues: 2, retainedIssues: 145, resolvedIssues: 5 } }),
@@ -562,5 +789,35 @@ describe("AccessibilityReportFetcher scan run history", () => {
       resolvedIssues: 5,
     });
     expect(get.mock.calls[0][0].url).toBe(`${API}/website-scanner/v1/scans/1234/scan_runs/30`);
+  });
+});
+
+describe("AccessibilityReportFetcher requests", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    reportExports.clear();
+  });
+
+  // apiClient sets no timeout of its own, so a hung request would hold the call forever.
+  it("puts a timeout on each request, well inside a client's 60 s", async () => {
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }))
+      .mockResolvedValueOnce(ok({ reportLink: "https://csv" }))
+      .mockResolvedValueOnce(ok({ scanRuns: [], pagination: { hasNext: false } }))
+      .mockResolvedValueOnce(ok({ status: "completed" }))
+      .mockResolvedValueOnce(ok({ changesSinceLastRun: null }));
+    const f = fetcher();
+    const source: IssueSource = { kind: "scan", scanId: "1234", scanRunId: "5678" };
+
+    await f.getReportLink(source);
+    await f.previousScanRun("1234", "5678").catch(() => undefined);
+    await f.reportStatus(source);
+    await f.changesSinceLastRun("1234", "5678");
+
+    expect(get).toHaveBeenCalledTimes(5);
+    for (const [options] of get.mock.calls) {
+      expect(options.timeout).toBeGreaterThan(0);
+      expect(options.timeout).toBeLessThan(60_000);
+    }
   });
 });

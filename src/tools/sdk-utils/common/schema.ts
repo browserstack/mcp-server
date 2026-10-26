@@ -90,6 +90,13 @@ export const RunTestsOnBrowserStackParamsShape = {
     .describe(
       "Device objects array. Use the object format directly - no transformation needed. Add only when user explicitly requests devices. Examples: [{ platform: 'windows', osVersion: '11', browser: 'chrome', browserVersion: 'latest' }] or [{ platform: 'android', deviceName: 'Samsung Galaxy S24', osVersion: '14', browser: 'chrome' }].",
     ),
+  accessibility: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Run Accessibility (WCAG) checks during the tests: writes accessibility: true in browserstack.yml.",
+    ),
 };
 
 export const SetUpPercySchema = z.object(SetUpPercyParamsShape);

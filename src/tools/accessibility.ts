@@ -1011,6 +1011,59 @@ function pageNote(page: {
   ];
 }
 
+/**
+ * The pages of the newer run that did not load (an error page was scanned in their place),
+ * or whose earlier issues all gave way to new ones. Neither the scan nor the dashboard says
+ * so, and their real issues would otherwise read as fixed.
+ */
+function pagesNotLoadedNote(
+  diff: {
+    not_checked?: unknown[];
+    failed_pages?: string[];
+    not_checked_earlier?: unknown[];
+    failed_pages_earlier?: string[];
+    changed_pages?: string[];
+  },
+  runId: string,
+  baseRunId: string,
+): string[] {
+  const pages = (urls: string[]) =>
+    wrapUntrusted("report page addresses", JSON.stringify(urls));
+  // Worded for one page or several, one issue or several.
+  const one = (count: number, singular: string, plural: string) =>
+    count === 1 ? singular : plural;
+  const they = (n: number) => one(n, "it", "they");
+  const didNotLoad = (urls: string[], run: string) => {
+    const n = urls.length;
+    return `⚠️ ${one(n, "1 page", `${n} pages`)} did not load in run ${run}: ${one(n, "an error page was", "error pages were")} scanned in ${one(n, "its", "their")} place. The ${one(n, "error page's", "error pages'")} issues are not counted as`;
+  };
+  // A page that failed in both runs has no issues of its own in either.
+  const foundThere = (count: number, run: string, notCountedAs: string) =>
+    count > 0
+      ? `, and the ${one(count, "1 issue", `${count} issues`)} found there in run ${run} ${one(count, "is", "are")} not counted as ${notCountedAs}`
+      : "";
+  const failed = diff.failed_pages ?? [];
+  const failedEarlier = diff.failed_pages_earlier ?? [];
+  const changed = diff.changed_pages ?? [];
+  return [
+    ...(failed.length > 0
+      ? [
+          `${didNotLoad(failed, runId)} new${foundThere(diff.not_checked?.length ?? 0, baseRunId, "resolved (listed as not checked)")}. Scan again once ${they(failed.length)} ${one(failed.length, "loads", "load")}. ${pages(failed)}`,
+        ]
+      : []),
+    ...(failedEarlier.length > 0
+      ? [
+          `${didNotLoad(failedEarlier, baseRunId)} resolved${foundThere(diff.not_checked_earlier?.length ?? 0, runId, "new (listed as not checked against the earlier run)")}. Compare with a run in which ${they(failedEarlier.length)} loaded. ${pages(failedEarlier)}`,
+        ]
+      : []),
+    ...(changed.length > 0
+      ? [
+          `⚠️ None of the earlier issues on ${one(changed.length, "1 page remain, and it has", `${changed.length} pages remain, and they have`)} new ones: ${they(changed.length)} may not have loaded, or loaded something else, in run ${runId}. Check ${one(changed.length, "it", "them")} before calling those issues fixed. ${pages(changed)}`,
+        ]
+      : []),
+  ];
+}
+
 /** At most this many new and resolved issues are listed in a comparison. */
 const COMPARE_LIST_LIMIT = 50;
 
@@ -1090,8 +1143,17 @@ async function compareScanRuns(
     changes
       ? `The dashboard's comparison: ${changes.newIssues} new, ${changes.resolvedIssues} resolved, ${changes.retainedIssues} still open. Matching the issues by rule, element and page gives ${matched}.`
       : `Matching the issues by rule, element and page: ${matched}.`,
+    ...pagesNotLoadedNote(diff, source.scanRunId, baseRunId),
     `New issues: ${listed(diff.added)}`,
     `Resolved issues: ${listed(diff.resolved)}`,
+    ...(diff.not_checked?.length
+      ? [`Not checked (page did not load): ${listed(diff.not_checked)}`]
+      : []),
+    ...(diff.not_checked_earlier?.length
+      ? [
+          `Not checked against the earlier run (page did not load in run ${baseRunId}): ${listed(diff.not_checked_earlier)}`,
+        ]
+      : []),
     `CSV of each run, valid for about 12 hours: newer ${links[0]} , older ${links[1]}`,
   ]);
 }
@@ -1134,6 +1196,9 @@ function scanSettingsNote(
       settings.advancedRules !== undefined
         ? `advanced rules ${onOff(settings.advancedRules)}`
         : "",
+      settings.experimentalRules !== undefined
+        ? `experimental rules ${onOff(settings.experimentalRules)}`
+        : "",
     ]
       .filter(Boolean)
       .join(", ");
@@ -1173,6 +1238,7 @@ async function executeAccessibilityScan(
         bestPractices: args.bestPractices,
         needsReview: args.needsReview,
         advancedRules: args.advancedRules,
+        experimentalRules: args.experimentalRules,
       },
     );
   } catch (error) {
@@ -1476,6 +1542,10 @@ export default function addAccessibilityTools(
         .describe(
           'Also report "needs review" issues to check by hand (default true).',
         ),
+      experimentalRules: z
+        .boolean()
+        .optional()
+        .describe("Run the experimental accessibility rules (default true)."),
     },
     {
       title: "Start Accessibility Scan",

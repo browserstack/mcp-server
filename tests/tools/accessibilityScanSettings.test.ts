@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // A Website Scanner scan can be asked for a WCAG version and level, best practices, "needs
-// review" issues and advanced rules: the create-scan API takes them under scanSettings,
-// and anything left out takes the API's default.
+// review" issues, advanced rules and experimental rules: the create-scan API takes them
+// under scanSettings, and anything left out takes the API's default.
 
 const m = vi.hoisted(() => ({
   post: vi.fn(),
+  get: vi.fn(),
   startScan: vi.fn(),
   waitUntilComplete: vi.fn(),
   runSettings: vi.fn(),
@@ -13,7 +14,7 @@ const m = vi.hoisted(() => ({
   parse: vi.fn(),
 }));
 
-vi.mock("../../src/lib/apiClient.js", () => ({ apiClient: { post: m.post } }));
+vi.mock("../../src/lib/apiClient.js", () => ({ apiClient: { post: m.post, get: m.get } }));
 vi.mock("../../src/lib/local.js", () => ({
   isLocalURL: () => false,
   ensureLocalBinarySetup: vi.fn(),
@@ -86,10 +87,71 @@ describe("AccessibilityScanner.startScan", () => {
     ).rejects.toThrow(/A scan with this name already exists/);
   });
 
+  it("sends experimental rules off when asked, as false is a setting rather than a missing one", async () => {
+    await (await scanner()).startScan("checkout", ["https://shop.example/"], undefined, {
+      experimentalRules: false,
+    });
+
+    expect(m.post.mock.calls[0][0].body.scanSettings).toEqual({ experimentalRules: false });
+  });
+
   it("sends no scanSettings when none are given", async () => {
     await (await scanner()).startScan("checkout", ["https://shop.example/"]);
 
     expect(m.post.mock.calls[0][0].body).not.toHaveProperty("scanSettings");
+  });
+});
+
+// The run summary carries a run's WCAG version, best practices, needs review and advanced
+// rules, but not experimental rules: those are read from the scan's own settings (its
+// overview), which a scan started here has for this run alone.
+describe("AccessibilityScanner.runSettings", () => {
+  const SCANS = "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans";
+  const run = { ok: true, status: 200, data: { data: { wcagVersion: "wcag22aa", bestPractices: true, needsReview: true, advanced: true } } };
+
+  beforeEach(() => {
+    vi.resetModules();
+    m.get.mockReset();
+  });
+
+  async function scanner() {
+    const { AccessibilityScanner } = await vi.importActual<
+      typeof import("../../src/tools/accessiblity-utils/scanner.js")
+    >("../../src/tools/accessiblity-utils/scanner.js");
+    const s = new AccessibilityScanner();
+    s.setAuth({ username: "u", password: "p" });
+    return s;
+  }
+
+  it("reads experimental rules from the scan's own settings, as the run summary has none", async () => {
+    m.get.mockImplementation(async ({ url }: { url: string }) =>
+      url === `${SCANS}/7310042/overview`
+        ? { ok: true, status: 200, data: { data: { scanConfigInfo: { experimental: false } } } }
+        : run,
+    );
+
+    await expect((await scanner()).runSettings("7310042", "5520318")).resolves.toEqual({
+      wcagVersion: "wcag22aa",
+      bestPractices: true,
+      needsReview: true,
+      advancedRules: true,
+      experimentalRules: false,
+    });
+    expect(m.get.mock.calls.map(([o]) => o.url).sort()).toEqual([
+      `${SCANS}/7310042/overview`,
+      `${SCANS}/7310042/scan_runs/5520318`,
+    ]);
+  });
+
+  it("still reads the run's settings when the scan's own cannot be read", async () => {
+    m.get.mockImplementation(async ({ url }: { url: string }) =>
+      url.endsWith("/overview") ? { ok: false, status: 500, data: {} } : run,
+    );
+
+    const settings = await (await scanner()).runSettings("7310042", "5520318");
+
+    expect(settings).toMatchObject({ wcagVersion: "wcag22aa", advancedRules: true });
+    expect(settings).not.toHaveProperty("experimentalRules");
   });
 });
 
@@ -174,6 +236,30 @@ describe("startAccessibilityScan scan settings", () => {
     );
   });
 
+  it("passes experimental rules to the scan and reports them as the scan ran", async () => {
+    m.runSettings.mockResolvedValue({
+      wcagVersion: "wcag21aa",
+      bestPractices: false,
+      needsReview: true,
+      advancedRules: true,
+      experimentalRules: false,
+    });
+    const { run } = await tool();
+
+    const result = await run({
+      name: "checkout",
+      pageURL: "https://shop.example/",
+      experimentalRules: false,
+    });
+
+    expect(m.startScan).toHaveBeenCalledWith("checkout", ["https://shop.example/"], undefined, {
+      experimentalRules: false,
+    });
+    expect(text(result)).toContain(
+      "Scan settings, as the scan ran: WCAG 2.1 AA, best practices off, needs review on, advanced rules on, experimental rules off.",
+    );
+  });
+
   it("says only what was asked for when the run's settings cannot be read", async () => {
     m.runSettings.mockResolvedValue(undefined);
     const { run } = await tool();
@@ -189,6 +275,14 @@ describe("startAccessibilityScan scan settings", () => {
       "Scan settings asked for: WCAG 2.2 AAA, best practices on; anything not asked for takes the scan's default.",
     );
     expect(text(result)).not.toContain("(default)");
+  });
+
+  it("takes experimental rules only as on or off", async () => {
+    const { schema } = await tool();
+
+    expect(schema.experimentalRules.safeParse(false).success).toBe(true);
+    expect(schema.experimentalRules.safeParse(true).success).toBe(true);
+    expect(schema.experimentalRules.safeParse("off").success).toBe(false);
   });
 
   it("takes only the WCAG versions the API knows, RGAA 4.1 among them", async () => {

@@ -196,6 +196,54 @@ describe("fetchAccessibilityIssues comparing scan runs", () => {
     expect(text(result)).toMatch(/first run/);
   });
 
+  it("says when a page did not load in the later run, and does not count its issues as resolved", async () => {
+    m.previousScanRun.mockResolvedValue({ id: 5520296, scanDate: "2026-10-21T11:31:00.584Z" });
+    m.changesSinceLastRun.mockResolvedValue({ newIssues: 2, retainedIssues: 2, resolvedIssues: 6 });
+    m.compareIssues.mockReturnValue({
+      added: [],
+      resolved: [],
+      retained: 2,
+      not_checked: [{ issue_type: "label", severity: "critical", component: "input", affected_page: "https://shop.example/b" }],
+      failed_pages: ["https://shop.example/b"],
+      changed_pages: ["https://shop.example/c"],
+    });
+
+    const out = text(await fetchIssues()({ ...RUN, compareWith: "previous" }));
+
+    expect(out).toContain(
+      "⚠️ 1 page did not load in run 5520318: an error page was scanned in its place. The error page's issues are not counted as new, and the 1 issue found there in run 5520296 is not counted as resolved (listed as not checked). Scan again once it loads.",
+    );
+    expect(out).toContain(
+      "⚠️ None of the earlier issues on 1 page remain, and it has new ones: it may not have loaded, or loaded something else, in run 5520318. Check it before calling those issues fixed.",
+    );
+    // The addresses come from the report, so they are quoted as data.
+    expect(out.indexOf("https://shop.example/b")).toBeGreaterThan(out.indexOf("«UNTRUSTED"));
+    expect(out).toMatch(/Not checked \(page did not load\)/);
+  });
+
+  it("says when pages did not load in the earlier run, and does not count their issues now as new", async () => {
+    m.previousScanRun.mockResolvedValue({ id: 5520296, scanDate: "2026-10-21T11:31:00.584Z" });
+    m.changesSinceLastRun.mockResolvedValue({ newIssues: 3, retainedIssues: 2, resolvedIssues: 2 });
+    const issue = (page: string) => ({ issue_type: "label", severity: "critical", component: "input", affected_page: page });
+    m.compareIssues.mockReturnValue({
+      added: [],
+      resolved: [],
+      retained: 2,
+      not_checked: [],
+      failed_pages: [],
+      changed_pages: [],
+      not_checked_earlier: [issue("https://shop.example/b"), issue("https://shop.example/c"), issue("https://shop.example/c")],
+      failed_pages_earlier: ["https://shop.example/b", "https://shop.example/c"],
+    });
+
+    const out = text(await fetchIssues()({ ...RUN, compareWith: "previous" }));
+
+    expect(out).toContain(
+      "⚠️ 2 pages did not load in run 5520296: error pages were scanned in their place. The error pages' issues are not counted as resolved, and the 3 issues found there in run 5520318 are not counted as new (listed as not checked against the earlier run). Compare with a run in which they loaded.",
+    );
+    expect(out).toMatch(/Not checked against the earlier run \(page did not load in run 5520296\)/);
+  });
+
   it("compares Website Scanner runs only", async () => {
     const result = await fetchIssues()({ buildId: "q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja", compareWith: "previous" });
 

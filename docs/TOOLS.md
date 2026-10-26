@@ -329,7 +329,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 | Tool | What it does |
 |---|---|
-| `setupBrowserStackAutomateTests` | Integrate BrowserStack SDK and run web tests on BrowserStack. For visual testing/Percy, use the dedicated Percy tools. |
+| `setupBrowserStackAutomateTests` | Integrate BrowserStack SDK and run web tests on BrowserStack. `accessibility: true` scans every page state the tests drive (read the issues with `fetchAccessibilityIssues`). `runOnLocalBrowser: true` runs Selenium or Playwright tests in Chrome on the user's machine (`browserstackAutomation: false`), so no Automate license or session is used. For visual testing/Percy, use the dedicated Percy tools. |
 | `fetchAutomationScreenshots` | Fetch screenshots captured during a given Automate/App Automate session. |
 | `listSessions` | List the sessions in an Automate/App Automate build. Each record carries `sessionId`, `name`, `status`, `os`, `osVersion`, `browser`, `device`, `browserUrl` (dashboard link), and `videoUrl`, with optional `limit` / `offset` paging and a client-side `status` filter. Takes either the **hashed** build ID from the dashboard URL or the observability build id returned by `getBuildId` / `listBuildId` — an observability id is resolved to the hashed id automatically via the build's sessions. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`. |
 
@@ -340,7 +340,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 | Tool | What it does |
 |---|---|
-| `startAccessibilityScan` | Start a web accessibility scan of a page URL and retrieve a local CSV report path. Mobile apps are scanned through an App Automate run instead (`setupBrowserStackAppAutomateTests` with `accessibility: true`). |
+| `startAccessibilityScan` | Start a web accessibility scan of a page URL and retrieve a local CSV report path. A multi-step user flow is scanned through a test run instead (`setupBrowserStackAutomateTests` with `accessibility: true`), and mobile apps through an App Automate run (`setupBrowserStackAppAutomateTests` with `accessibility: true`). |
 | `accessibilityExpert` | Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices). |
 | `createAccessibilityAuthConfig` | Create an authentication configuration (form-based or basic) for accessibility scans behind a login. |
 | `getAccessibilityAuthConfig` | Retrieve an existing accessibility authentication configuration by ID. |

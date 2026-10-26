@@ -1446,7 +1446,7 @@ export default function addAccessibilityTools(
 
   tools.startAccessibilityScan = server.tool(
     "startAccessibilityScan",
-    "Scan a web page URL for accessibility issues and get a CSV report. For a mobile app, run it on App Automate with accessibility on (setupBrowserStackAppAutomateTests), then fetchAccessibilityIssues.",
+    "Scan one web page URL for accessibility issues (CSV). A user flow: setupBrowserStackAutomateTests, accessibility on. A mobile app: setupBrowserStackAppAutomateTests. Then fetchAccessibilityIssues.",
     {
       name: z.string().describe("Name of the accessibility scan"),
       pageURL: z

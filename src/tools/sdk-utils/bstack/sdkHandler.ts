@@ -12,6 +12,19 @@ import {
   SDKSupportedTestingFramework,
   SDKSupportedLanguage,
 } from "../common/types.js";
+import {
+  FLOW_TEST_STEP,
+  FRAMEWORK_ACCESSIBILITY_SETTING,
+  READ_ACCESSIBILITY_ISSUES_STEP,
+  localBrowser,
+  localRunIntro,
+  localRunUnsupported,
+  localSdkVersion,
+} from "./localRunSteps.js";
+
+function instruction(title: string, content: string): RunTestsStep {
+  return { type: "instruction", title, content };
+}
 
 export async function runBstackSDKOnly(
   input: RunTestsOnBrowserStackInput,
@@ -21,6 +34,28 @@ export async function runBstackSDKOnly(
   isPercyAutomate = false,
 ): Promise<RunTestsInstructionResult> {
   void config;
+  const accessibility = input.accessibility === true;
+  const runOnLocalBrowser = input.runOnLocalBrowser === true;
+  const framework = input.detectedBrowserAutomationFramework;
+
+  if (
+    runOnLocalBrowser &&
+    (framework === "cypress" || framework === "webdriverio")
+  ) {
+    return {
+      steps: [
+        {
+          type: "error",
+          title: "Local run not supported",
+          content: localRunUnsupported(framework),
+          isError: true,
+        },
+      ],
+      requiresPercy: false,
+      missingDependencies: [],
+    };
+  }
+
   const steps: RunTestsStep[] = [
     {
       type: "instruction",
@@ -51,10 +86,22 @@ export async function runBstackSDKOnly(
       }
     }) || [];
 
-  const validatedEnvironments = await validateDevices(
-    tupleTargets,
-    input.detectedBrowserAutomationFramework,
-  );
+  // A local run has one browser, this machine's Chrome, so there are no devices to validate.
+  const validatedEnvironments = runOnLocalBrowser
+    ? []
+    : await validateDevices(
+        tupleTargets,
+        input.detectedBrowserAutomationFramework,
+      );
+
+  if (runOnLocalBrowser) {
+    steps.push(
+      instruction(
+        "Run in a local browser",
+        localRunIntro(tupleTargets.length > 0),
+      ),
+    );
+  }
 
   // Handle frameworks with unique setup instructions that don't use browserstack.yml
   if (
@@ -76,6 +123,15 @@ export async function runBstackSDKOnly(
         });
       }
 
+      if (accessibility) {
+        steps.push(
+          instruction(
+            "Turn on accessibility checks",
+            `---STEP---\n${FRAMEWORK_ACCESSIBILITY_SETTING[framework]}`,
+          ),
+        );
+      }
+
       if (frameworkInstructions.run && !isPercyAutomate) {
         steps.push({
           type: "instruction",
@@ -83,6 +139,15 @@ export async function runBstackSDKOnly(
           content: frameworkInstructions.run,
         });
       }
+    }
+
+    if (accessibility) {
+      steps.push(
+        instruction(
+          "Read the accessibility issues",
+          READ_ACCESSIBILITY_ISSUES_STEP,
+        ),
+      );
     }
 
     return {
@@ -122,9 +187,21 @@ export async function runBstackSDKOnly(
     }
   }
 
+  if (runOnLocalBrowser) {
+    const sdkVersion = localSdkVersion(
+      input.detectedLanguage as SDKSupportedLanguage,
+    );
+    if (sdkVersion) {
+      steps.push(instruction("SDK version for a local run", sdkVersion));
+    }
+    steps.push(instruction("Browser for a local run", localBrowser(framework)));
+  }
+
   const ymlInstructions = generateBrowserStackYMLInstructions({
     validatedEnvironments,
     enablePercy: false,
+    accessibility,
+    runOnLocalBrowser,
     projectName: input.projectName,
   });
 
@@ -136,6 +213,10 @@ export async function runBstackSDKOnly(
     });
   }
 
+  if (accessibility) {
+    steps.push(instruction("Write a test for the flow", FLOW_TEST_STEP));
+  }
+
   if (frameworkInstructions) {
     if (frameworkInstructions.run && !isPercyAutomate) {
       steps.push({
@@ -144,6 +225,15 @@ export async function runBstackSDKOnly(
         content: frameworkInstructions.run,
       });
     }
+  }
+
+  if (accessibility) {
+    steps.push(
+      instruction(
+        "Read the accessibility issues",
+        READ_ACCESSIBILITY_ISSUES_STEP,
+      ),
+    );
   }
 
   return {

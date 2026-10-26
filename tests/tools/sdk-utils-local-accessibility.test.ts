@@ -99,7 +99,7 @@ describe("setupBrowserStackAutomateTests steps", () => {
     expect(readIssues).toBeGreaterThan(runTests);
   });
 
-  it("points a local Playwright run at Playwright's own Chromium", async () => {
+  it("points a local Playwright run at Playwright's full Chromium", async () => {
     const { text } = await run({
       projectName: "Checkout flow",
       detectedLanguage: "nodejs",
@@ -110,7 +110,11 @@ describe("setupBrowserStackAutomateTests steps", () => {
       runOnLocalBrowser: true,
     });
 
-    expect(text).toContain("bundled Chromium");
+    expect(text).toContain('channel: "chromium"');
+    expect(text).toContain(
+      "headless shell cannot load the accessibility scanner",
+    );
+    expect(text).toContain("Playwright's default 30-second test timeout fails");
     expect(text).toContain("1.73.2");
     expect(text).not.toContain("SE_FORCE_BROWSER_DOWNLOAD");
   });

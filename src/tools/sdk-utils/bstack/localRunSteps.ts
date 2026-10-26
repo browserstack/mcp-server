@@ -58,12 +58,14 @@ export function localSdkVersion(language: SDKSupportedLanguage): string {
 
 /**
  * Chrome 142 and later block the extension the SDK loads, so the run needs a browser that still
- * takes one: Chrome for Testing for Selenium, Playwright's own Chromium for Playwright.
+ * takes one: Chrome for Testing for Selenium, Playwright's full Chromium for Playwright. Playwright's
+ * default headless browser is a "headless shell" that takes no extension either: a local run on it
+ * reported every scan as succeeded, ~10 s each, and saved a report with no issues.
  */
 export function localBrowser(framework: string): string {
   if (framework === "playwright") {
     return `---STEP---
-Launch Playwright's bundled Chromium (the default \`chromium\` browser), not \`channel: "chrome"\` or \`channel: "msedge"\`: branded Chrome and Edge 142 and later block the accessibility scanner.`;
+Run Playwright on its full Chromium: set \`channel: "chromium"\` in the \`use\` block of playwright.config (and install it with \`npx playwright install chromium\`). Playwright's default headless shell cannot load the accessibility scanner, so its scans come back empty; branded Chrome and Edge 142 and later (\`channel: "chrome"\` / \`"msedge"\`) block it too.`;
   }
   return `---STEP---
 Run on Chrome for Testing: installed Chrome 142 and later blocks the accessibility scanner. Set this before the test run, and Selenium Manager downloads Chrome for Testing and uses it in place of the installed Chrome; the test code does not change:
@@ -79,7 +81,7 @@ export SE_FORCE_BROWSER_DOWNLOAD=true
  * minutes and a report a few more to process.
  */
 export const FLOW_TEST_STEP = `---STEP---
-If there is no test yet for the flow the user wants checked, write one: a single test that opens the start URL and performs each step of the flow in order, waiting for each page or element before acting on it. Read any login the site needs from environment variables, never from the file. Get it passing with the plain test command (without the BrowserStack SDK) before the run below: each try then takes seconds instead of a full scanned run.`;
+If there is no test yet for the flow the user wants checked, write one: a single test that opens the start URL and performs each step of the flow in order, waiting for each page or element before acting on it. Read any login the site needs from environment variables, never from the file. Get it passing with the plain test command (without the BrowserStack SDK) before the run below: each try then takes seconds instead of a full scanned run. Give the test a timeout of several minutes (e.g. 10): in the scanned run every action waits for a scan of a few seconds, so Playwright's default 30-second test timeout fails.`;
 
 export const READ_ACCESSIBILITY_ISSUES_STEP = `---STEP---
 Read the accessibility issues. When the run ends, the SDK prints a line like \`Visit https://accessibility.browserstack.com/automated-tests/...?thBuildId=<id> to view accessibility report\`. Pass that thBuildId as buildId to fetchAccessibilityIssues; it waits while the report finishes processing (a few minutes). Run the tests with the same BrowserStack account this MCP server uses, or the build is not found.`;

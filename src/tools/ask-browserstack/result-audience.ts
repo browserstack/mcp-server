@@ -97,6 +97,7 @@ export function internalView(payload: AskResult): Json | undefined {
   ]) {
     if (p[k] !== undefined && p[k] !== null) internal[k] = p[k];
   }
+  if (p.elicitations?.length) internal.elicitations = p.elicitations;
   const runId = (p.run as Json | undefined)?.run_id;
   if (runId) internal.run = { run_id: runId };
   if (Array.isArray(p.questions)) {

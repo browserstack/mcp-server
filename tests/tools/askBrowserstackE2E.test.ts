@@ -268,10 +268,14 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
     resetTokenCache();
     delete process.env.ASK_BROWSERSTACK_DISABLED;
     delete process.env.ASK_BROWSERSTACK_ENV;
+    // These suites pin the elicitation relay, which is opt-in; the default two-call
+    // flow is covered by the REMOTE_MCP suite below.
+    process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "elicit";
     vi.resetModules();
   });
 
   afterEach(() => {
+    delete process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT;
     delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
     delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
     resetTokenCache();
@@ -391,7 +395,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // refuse to park rather than hand back an ask nobody can answer.
       expect(stub.calls[0].body.permission_relay).toEqual({
         mode: "stream",
-        contract: 2,
+        contract: 3,
       });
 
       // 2. the prompt: framed with the product, Atlas's description verbatim, boolean confirm
@@ -426,6 +430,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
             decision: "allow",
             reason: "",
             product: "tm",
+            contract: 3,
           },
         });
 
@@ -497,6 +502,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         decision: "allow",
         reason: "",
         product: "tm",
+        contract: 3,
       });
       // And the two trails agree that it was approved.
       expect(payload.approvals[0]).toMatchObject({
@@ -590,6 +596,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         decision: "deny",
         reason: "declined",
         product: "tm",
+        contract: 3,
       });
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(payload.status).toBe("blocked");
@@ -614,6 +621,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         decision: "deny",
         reason: "declined",
         product: "tm",
+        contract: 3,
       });
       expect(payload.approvals[0].decision).toBe("deny");
     });
@@ -636,6 +644,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         decision: "deny",
         reason: "cancelled",
         product: "tm",
+        contract: 3,
       });
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(payload.approvals[0].reason).toBe("cancelled");
@@ -658,6 +667,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
           decision: "deny",
           reason: "timeout",
           product: "tm",
+          contract: 3,
         },
       });
       expect(payload.approvals[0].reason).toBe("timeout");
@@ -714,6 +724,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         decision: "deny",
         reason: "error",
         product: "tm",
+        contract: 3,
       });
       expect(payload.approvals[0]).toEqual({
         description: "Archive the plan.",
@@ -829,7 +840,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         reason: "disabled",
         detail: expect.stringContaining("NOBODY DECLINED THIS"),
       });
-      expect(payload.approvals).toEqual([]);
+      expect(payload.approvals ?? []).toEqual([]);
       // No gate ran, so Atlas omits the field and we must not invent a measured `false`.
       expect(payload.applied_before_stop).toBeNull();
       // A refusal is not a tool failure, and rendering it as one invites the retry loop
@@ -855,7 +866,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       });
 
       const { result, payload } = await call(server.getTools());
-      expect(payload.needs_approval).toEqual([]);
+      expect(payload.needs_approval ?? []).toEqual([]);
       expect(payload.status).toBe("ok");
       expect(payload.permission_relay).toEqual({
         used: true,
@@ -925,7 +936,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(payload.approvals_source).toBe("atlas");
       expect(payload.approvals[0].decision).toBe("deny");
       // ...and ours is empty, which is the ONLY record that no prompt ever appeared.
-      expect(payload.elicitations).toEqual([]);
+      expect(payload.elicitations ?? []).toEqual([]);
       expect(payload.applied_before_stop).toBe(false);
     });
 
@@ -1035,7 +1046,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(elicit).not.toHaveBeenCalled();
 
       expect(payload.status).toBe("blocked");
-      expect(payload.approvals).toEqual([]);
+      expect(payload.approvals ?? []).toEqual([]);
       expect(payload.approvals_source).toBe("mcp");
       expect(payload.applied_before_stop).toBeNull();
       expect(payload.needs_approval).toEqual(['Create folder "Regression".']);
@@ -1080,24 +1091,27 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // so this branch is no longer reachable from the factory — but the wire rule still
       // holds and must stay covered.
       const mcp = new McpServer({ name: "t", version: "0" });
-      const streamed = vi.fn(() => ({
-        async *[Symbol.asyncIterator]() {
-          yield { event: "result", data: { status: "ok", answer: "" } };
-        },
+      const deferred = vi.fn(async () => ({
+        status: 200,
+        body: { status: "ok", answer: "" },
       }));
       const tools = addAskBrowserStackAITool(mcp, {
         agentUrl: () => "https://atlas.example/agent",
         mintToken: async () => MINTED,
         credentialsFor: () => ({ username: "", accessKey: "" }),
-        streamTransport: streamed as never,
+        deferredTransport: deferred as never,
       });
 
       await call(tools);
       const body = (
-        streamed.mock.calls[0] as never as Record<string, unknown>[]
+        deferred.mock.calls[0] as never as Record<string, unknown>[]
       )[2];
       expect("user_id" in body).toBe(false);
-      expect(Object.keys(body).sort()).toEqual(["product", "task"]);
+      expect(Object.keys(body).sort()).toEqual([
+        "permission_relay",
+        "product",
+        "task",
+      ]);
     });
 
     it("signs in against the built-in staging endpoint when nothing is configured", async () => {
@@ -1275,7 +1289,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(payload.error).toMatch(/NOBODY DECLINED ANYTHING/);
       // Nothing was ever asked, so nothing can look like a refusal.
       expect(elicit).not.toHaveBeenCalled();
-      expect(payload.approvals).toEqual([]);
+      expect(payload.approvals ?? []).toEqual([]);
       expect(payload.applied_before_stop).toBeNull();
       // ...and the relay verdict must agree with `error` rather than contradict it.
       expect(payload.permission_relay).toEqual({
@@ -1301,7 +1315,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(payload.error).toMatch(/could not be reached/);
       expect(payload.permission_relay.used).toBe(false);
       expect(payload.permission_relay.reason).toBe("not_reached");
-      expect(payload.approvals).toEqual([]);
+      expect(payload.approvals ?? []).toEqual([]);
     });
 
     it("reads a 403 as 'AI is not enabled for your account', naming the product", async () => {
@@ -1336,7 +1350,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       });
       // Nothing ran, nobody was asked, and no gate reported anything.
       expect(elicit).not.toHaveBeenCalled();
-      expect(payload.approvals).toEqual([]);
+      expect(payload.approvals ?? []).toEqual([]);
       expect(payload.applied_before_stop).toBeNull();
       expect(payload.status).toBe("error");
       expect(result.isError).toBe(true);
@@ -1393,7 +1407,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         expect(payload.error).toContain(detail);
         expect(payload.permission_relay.reason).toBe("not_reached");
         expect(elicit).not.toHaveBeenCalled();
-        expect(payload.approvals).toEqual([]);
+        expect(payload.approvals ?? []).toEqual([]);
       },
     );
 
@@ -1452,6 +1466,10 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
     // the two tests that asserted the hosted deployment REFUSES — both gone with
     // `remote_mode`. What remains reaches into `addAskBrowserStackAITool` directly,
     // which is cheaper and asserts the transport rather than the refusal.
+
+    beforeEach(() => {
+      delete process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT;
+    });
 
     afterEach(() => {
       delete process.env.REMOTE_MCP;
@@ -1657,6 +1675,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // broken and nothing ever called it.
       vi.resetModules();
       delete process.env.REMOTE_MCP;
+      process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "elicit";
       const { addAskBrowserStackAITool } =
         await import("../../src/tools/ask-browserstack/register.js");
       const { McpServer: StdioMcpServer } =
@@ -1690,6 +1709,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
     it("stdio does not regress: the relay is still offered and still works", async () => {
       // REMOTE_MCP unset — byte-identical to every other test in this file.
+      process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "elicit";
       const server = await buildServer();
       fakeClient(server.getInstance(), { elicitation: {} }, [
         { action: "accept" },
@@ -1704,7 +1724,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // refuse to park rather than hand back an ask nobody can answer.
       expect(stub.calls[0].body.permission_relay).toEqual({
         mode: "stream",
-        contract: 2,
+        contract: 3,
       });
       expect(payload.permission_relay.used).toBe(true);
       expect(payload.permission_relay.reason).toBe("");
@@ -1713,6 +1733,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
     it('REMOTE_MCP="false" is stdio, not remote', async () => {
       vi.resetModules();
       process.env.REMOTE_MCP = "false";
+      process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "elicit";
       const { BrowserStackMcpServer } =
         await import("../../src/server-factory.js");
       const server = new BrowserStackMcpServer(CONFIG);
@@ -1783,22 +1804,21 @@ describe("askBrowserStackAI, against the injected seam", () => {
     // It is not sent on this route, so its absence must not refuse the call the way the
     // product-API path would.
     const mcp = new McpServer({ name: "t", version: "0" });
-    const streamed = vi.fn(() => ({
-      async *[Symbol.asyncIterator]() {
-        yield { event: "result", data: { status: "ok", answer: "" } };
-      },
+    const deferred = vi.fn(async () => ({
+      status: 200,
+      body: { status: "ok", answer: "" },
     }));
     const tools = addAskBrowserStackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
       mintToken: async () => MINTED,
       credentialsFor: () => ({ username: "ing_Xx", accessKey: "" }),
-      streamTransport: streamed as never,
+      deferredTransport: deferred as never,
     });
 
     const { payload } = await call(tools);
     expect(payload.ok).toBe(true);
-    expect(streamed).toHaveBeenCalledTimes(1);
-    expect((streamed.mock.calls[0] as never as unknown[])[2]).toMatchObject({
+    expect(deferred).toHaveBeenCalledTimes(1);
+    expect((deferred.mock.calls[0] as never as unknown[])[2]).toMatchObject({
       user_id: "ing_Xx",
     });
   });
@@ -1817,7 +1837,7 @@ describe("askBrowserStackAI, against the injected seam", () => {
       agentUrl: () => "https://atlas.example/agent",
       mintToken: async () => MINTED,
       credentialsFor: () => ({ username: "u", accessKey: "k" }),
-      streamTransport: (() => {
+      deferredTransport: (async () => {
         throw new Error("boom");
       }) as never,
     });
@@ -1908,11 +1928,13 @@ describe("the client works against both server generations", () => {
   beforeEach(() => {
     process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
     process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = AUTH_URL;
+    process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "elicit";
     resetTokenCache();
     vi.resetModules();
   });
 
   afterEach(() => {
+    delete process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT;
     delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
     delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
     resetTokenCache();

@@ -192,9 +192,10 @@ function startFailure(source: IssueSource, status: number, body: any): string {
     body?.data?.message ||
     `HTTP ${status}`;
   // The API takes only its own build id; the Automate build id is a 404 "Build not found".
+  // So is a right id whose build ran under another account than this server's credentials.
   const hint =
     status === 404 && source.kind === "build"
-      ? ". Pass the Accessibility build id: the thBuildId in the build's accessibility report link (40 lowercase letters and digits), not the Automate build id or the build name. For an Automate build or session, pass its Automate dashboard link as reportUrl"
+      ? ". Pass the Accessibility build id: the thBuildId in the build's accessibility report link (40 lowercase letters and digits), not the Automate build id or the build name. For an Automate build or session, pass its Automate dashboard link as reportUrl. If the id is right, the build ran under a different BrowserStack account than this server's"
       : "";
   return `Failed to initiate report: ${reason}${hint}`;
 }

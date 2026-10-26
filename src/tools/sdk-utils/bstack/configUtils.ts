@@ -1,16 +1,35 @@
 import { ValidatedEnvironment } from "../common/device-validator.js";
 
+// browserstackAutomation: false runs the tests in a browser on this machine; the SDK loads its
+// accessibility scanner into that browser, so no Automate session (or license) is used.
+const LOCAL_BROWSER_AUTOMATION = `
+# Run the tests in a browser on this machine instead of on BrowserStack:
+# no Automate session is used.
+browserstackAutomation: false
+`;
+
+// A local run drives this machine's Chrome, so there is one platform and no device to pick.
+// browserVersion has to stay: without it SDK 1.51.2 still scans every page, but reports the test
+// as not an accessibility test, so none of its issues reach the dashboard.
+const LOCAL_BROWSER_PLATFORM = `  - browserName: chrome
+    browserVersion: latest # required: without it no accessibility results are saved`;
+
 export function generateBrowserStackYMLInstructions(config: {
   validatedEnvironments?: ValidatedEnvironment[];
   platforms?: string[];
   enablePercy?: boolean;
+  accessibility?: boolean;
+  runOnLocalBrowser?: boolean;
   projectName: string;
 }): string {
   const enablePercy = config.enablePercy || false;
+  const runOnLocalBrowser = config.runOnLocalBrowser || false;
   const projectName = config.projectName || "BrowserStack Automate Build";
 
   // Generate platform configurations using the utility function
-  const platformConfigs = generatePlatformConfigs(config);
+  const platformConfigs = runOnLocalBrowser
+    ? LOCAL_BROWSER_PLATFORM
+    : generatePlatformConfigs(config);
 
   const stepTitle =
     "Create a browserstack.yml file in the project root with your validated device configurations:If already exists, update it with the following content for devices and project details.";
@@ -28,7 +47,7 @@ accessKey: <your_browserstack_access_key>
 # TODO: Replace these sample values with your actual project details
 projectName: ${projectName}
 buildName: ${buildName}
-
+${runOnLocalBrowser ? LOCAL_BROWSER_AUTOMATION : ""}
 # =======================================
 # Platforms (Browsers / Devices to test)
 # =======================================`;
@@ -51,14 +70,29 @@ parallelsPerPlatform: 1
 # =================
 # Local Testing
 # =================
-# Set to true to test local
-browserstackLocal: true
+${
+  runOnLocalBrowser
+    ? `# Not needed: the local browser reaches localhost and private sites directly
+browserstackLocal: false`
+    : `# Set to true to test local
+browserstackLocal: true`
+}
 
 # ===================
 # Debugging features
 # ===================
 debug: true # Visual logs, text logs, etc.
 testObservability: true # For Test Observability`;
+
+  if (config.accessibility) {
+    ymlContent += `
+
+# ========================
+# Accessibility Automation
+# ========================
+# Scans every page state the tests drive for accessibility issues.
+accessibility: true`;
+  }
 
   if (enablePercy) {
     ymlContent += `

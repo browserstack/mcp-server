@@ -90,7 +90,9 @@ describe("AccessibilityReportFetcher.getReportLink", () => {
         kind: "build",
         buildId: "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c",
       }),
-    ).rejects.toThrow(/Build not found.*thBuildId.*not the Automate build id/s);
+    ).rejects.toThrow(
+      /Build not found.*thBuildId.*not the Automate build id.*different BrowserStack account/s,
+    );
   });
 
   it("passes on the API's reason when it rejects a report id", async () => {

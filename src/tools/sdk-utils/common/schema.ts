@@ -90,6 +90,18 @@ export const RunTestsOnBrowserStackParamsShape = {
     .describe(
       "Device objects array. Use the object format directly - no transformation needed. Add only when user explicitly requests devices. Examples: [{ platform: 'windows', osVersion: '11', browser: 'chrome', browserVersion: 'latest' }] or [{ platform: 'android', deviceName: 'Samsung Galaxy S24', osVersion: '14', browser: 'chrome' }].",
     ),
+  accessibility: z
+    .boolean()
+    .optional()
+    .describe(
+      "Scan every page state the tests drive for accessibility issues. Turn on when the user wants the accessibility issues of a user flow or test suite; the issues are read afterwards with fetchAccessibilityIssues.",
+    ),
+  runOnLocalBrowser: z
+    .boolean()
+    .optional()
+    .describe(
+      "Run the tests in Chrome on the user's own machine instead of on BrowserStack, so no Automate license or session is used. Turn on when the user has no Automate license or asks to run locally. Selenium and Playwright only; devices are not used.",
+    ),
 };
 
 export const SetUpPercySchema = z.object(SetUpPercyParamsShape);

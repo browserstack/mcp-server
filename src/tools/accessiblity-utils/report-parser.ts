@@ -226,11 +226,13 @@ export type RunIssue = {
 };
 
 /**
- * Snippets only an error page shows: BrowserStack's Local connection page, and Chrome's
- * network error page. A page that fails to load is still "scanned", as one of these.
+ * Snippets only an error page shows: BrowserStack's Local connection page (its links carry
+ * ref=dashboard-privoxy-page), and Chrome's network error page. A page that fails to load
+ * is still "scanned", as one of these. A link to the Local docs, or a class merely starting
+ * with neterror, is not enough: a real page can have either.
  */
 const ERROR_PAGE_SNIPPET =
-  /dashboard-privoxy-page|browserstack\.com\/docs\/local-testing\/|main-frame-error|chrome-error:\/\/|\bneterror\b/i;
+  /dashboard-privoxy-page|id="main-frame-error"|chrome-error:\/\/|class="neterror[" ]/i;
 
 /** A page whose earlier issues are all gone and new ones appeared: worth a second look. */
 const CHANGED_PAGE_MIN_ISSUES = 2;
@@ -260,13 +262,36 @@ export async function loadMainIssues(reportLink: string): Promise<RunIssue[]> {
     });
 }
 
+/** A run's issues by page, with whether an error page was scanned in the page's place. */
+function issuesByPage(
+  issues: RunIssue[],
+): Map<string, { url: string; issues: RunIssue[]; failed: boolean }> {
+  const pages = new Map<
+    string,
+    { url: string; issues: RunIssue[]; failed: boolean }
+  >();
+  for (const issue of issues) {
+    const key = samePage(issue.affected_page ?? "");
+    let page = pages.get(key);
+    if (!page) {
+      page = { url: issue.affected_page, issues: [], failed: false };
+      pages.set(key, page);
+    }
+    page.issues.push(issue);
+    if (issue.on_error_page) page.failed = true;
+  }
+  return pages;
+}
+
 /**
  * Which issues of `current` are new since `base`, which of `base` are gone, and how many
- * remain. A page that did not load in `current` (an error page was scanned under its
- * address) is set apart: its earlier issues were not checked again, so they are
- * `not_checked` rather than resolved, and the error page's issues are not new. A page whose
- * earlier issues are all gone while new ones appeared is named in `changed_pages`, as it may
- * not have loaded either.
+ * remain, decided page by page. A page that did not load in one of the runs (an error page
+ * was scanned under its address) is set apart. Not loaded in `current`: its earlier issues
+ * were not checked again, so they are `not_checked` rather than resolved, and the error
+ * page's issues are not new. Not loaded in `base`: the error page's issues are not resolved,
+ * and the page's issues now are `not_checked_earlier` rather than new. A page whose earlier
+ * issues are all gone while new ones appeared is named in `changed_pages`, as it may not have
+ * loaded either.
  */
 export function compareIssues(
   base: RunIssue[],
@@ -277,44 +302,60 @@ export function compareIssues(
   retained: number;
   not_checked: RunIssue[];
   failed_pages: string[];
+  not_checked_earlier: RunIssue[];
+  failed_pages_earlier: string[];
   changed_pages: string[];
 } {
-  const before = new Set(base.map((issue) => issue.key));
-  const after = new Set(current.map((issue) => issue.key));
-  const page = (issue: RunIssue) => samePage(issue.affected_page ?? "");
-  const failed = new Map<string, string>();
-  for (const issue of current) {
-    if (issue.on_error_page) failed.set(page(issue), issue.affected_page);
+  const before = issuesByPage(base);
+  const after = issuesByPage(current);
+  const added: RunIssue[] = [];
+  const resolved: RunIssue[] = [];
+  const notChecked: RunIssue[] = [];
+  const notCheckedEarlier: RunIssue[] = [];
+  const failedPages: string[] = [];
+  const failedPagesEarlier: string[] = [];
+  const changedPages: string[] = [];
+  let retained = 0;
+  for (const key of new Set([...before.keys(), ...after.keys()])) {
+    const earlier = before.get(key);
+    const later = after.get(key);
+    if (later?.failed) failedPages.push(later.url);
+    if (earlier?.failed) failedPagesEarlier.push(earlier.url);
+    if (later?.failed || earlier?.failed) {
+      // Only the run in which the page loaded has its issues, and they cannot be matched.
+      if (!earlier?.failed) notChecked.push(...(earlier?.issues ?? []));
+      if (!later?.failed) notCheckedEarlier.push(...(later?.issues ?? []));
+      continue;
+    }
+    const earlierKeys = new Set(earlier?.issues.map((issue) => issue.key));
+    const laterKeys = new Set(later?.issues.map((issue) => issue.key));
+    const pageAdded = (later?.issues ?? []).filter(
+      (issue) => !earlierKeys.has(issue.key),
+    );
+    const pageResolved = (earlier?.issues ?? []).filter(
+      (issue) => !laterKeys.has(issue.key),
+    );
+    added.push(...pageAdded);
+    resolved.push(...pageResolved);
+    retained += (later?.issues.length ?? 0) - pageAdded.length;
+    if (
+      earlier &&
+      earlier.issues.length >= CHANGED_PAGE_MIN_ISSUES &&
+      pageResolved.length === earlier.issues.length &&
+      pageAdded.length > 0
+    ) {
+      changedPages.push(earlier.url);
+    }
   }
-  const added = current.filter(
-    (issue) => !before.has(issue.key) && !failed.has(page(issue)),
-  );
-  const gone = base.filter((issue) => !after.has(issue.key));
-  const resolved = gone.filter((issue) => !failed.has(page(issue)));
-  const changed = [
-    ...new Map(
-      resolved
-        .filter((issue) => {
-          const on = page(issue);
-          const earlier = base.filter((b) => page(b) === on);
-          return (
-            earlier.length >= CHANGED_PAGE_MIN_ISSUES &&
-            earlier.every((b) => !after.has(b.key)) &&
-            added.some((a) => page(a) === on)
-          );
-        })
-        .map((issue) => [page(issue), issue.affected_page]),
-    ).values(),
-  ];
   return {
     added: sortBySeverity(added),
     resolved: sortBySeverity(resolved),
-    retained: current.filter((issue) => before.has(issue.key)).length,
-    not_checked: sortBySeverity(
-      gone.filter((issue) => failed.has(page(issue))),
-    ),
-    failed_pages: [...failed.values()],
-    changed_pages: changed,
+    retained,
+    not_checked: sortBySeverity(notChecked),
+    failed_pages: failedPages,
+    not_checked_earlier: sortBySeverity(notCheckedEarlier),
+    failed_pages_earlier: failedPagesEarlier,
+    changed_pages: changedPages,
   };
 }
 

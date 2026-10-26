@@ -244,3 +244,85 @@ describe("compareIssues and a page that did not load in the later run", () => {
     expect(diff.resolved).toHaveLength(3);
   });
 });
+
+// The mirror case: the page failed to load in the earlier run. Its "issues" there were the
+// error page's, so they are not resolved, and the page's real issues now are not new.
+describe("compareIssues and a page that did not load in the earlier run", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const PAGE_A = "http://bs-local.com:3100/page-a.html";
+  const PAGE_B = "http://bs-local.com:3100/page-b.html";
+  const issueOn = (page: string, type: string, selector: string, snippet = "<x>") =>
+    row({ "Issue type": type, Component: selector, "CSS selector": selector, "Affected page": page, "HTML snippet": snippet, "Issue link": link(`${type}-${page}`) });
+  const errorPage = [
+    issueOn(PAGE_B, "keyboard-focus-visible", "a.docs", '<a href="https://www.browserstack.com/docs/local-testing/binary-params?ref=dashboard-privoxy-page" target="_blank">'),
+    issueOn(PAGE_B, "decorative-image", "img.logo", '<img src="https://cdn.example/logo.svg" alt="BrowserStack Logo">'),
+  ];
+
+  async function runs(earlierB: Record<string, string>[], laterB: Record<string, string>[]) {
+    serve([issueOn(PAGE_A, "css-orientation-lock", "html"), ...earlierB]);
+    const before = await loadMainIssues("https://csv-old");
+    serve([issueOn(PAGE_A, "css-orientation-lock", "html"), ...laterB]);
+    const after = await loadMainIssues("https://csv-new");
+    return compareIssues(before, after);
+  }
+
+  it("does not resolve the error page's issues, nor count the page's real issues as new", async () => {
+    const diff = await runs(errorPage, [
+      issueOn(PAGE_B, "label", "input#no-label"),
+      issueOn(PAGE_B, "button-name", "button#icon-btn"),
+    ]);
+
+    expect(diff.failed_pages).toEqual([]);
+    expect(diff.failed_pages_earlier).toEqual([PAGE_B]);
+    expect(diff.resolved).toEqual([]);
+    expect(diff.added).toEqual([]);
+    expect(diff.not_checked_earlier.map((r) => r.issue_type).sort()).toEqual(["button-name", "label"]);
+    expect(diff.retained).toBe(1);
+  });
+
+  it("compares nothing on a page that failed in both runs", async () => {
+    const diff = await runs(errorPage, errorPage);
+
+    expect(diff.failed_pages).toEqual([PAGE_B]);
+    expect(diff.failed_pages_earlier).toEqual([PAGE_B]);
+    expect(diff.resolved).toEqual([]);
+    expect(diff.added).toEqual([]);
+    expect(diff.not_checked).toEqual([]);
+    expect(diff.not_checked_earlier).toEqual([]);
+    expect(diff.retained).toBe(1);
+  });
+
+  it("does not take a real page that links to the Local docs, or names a class neterror-*, for an error page", async () => {
+    const diff = await runs(
+      [issueOn(PAGE_B, "label", "input#no-label")],
+      [
+        issueOn(PAGE_B, "link-name", "a.help", '<a class="help" href="https://www.browserstack.com/docs/local-testing/"></a>'),
+        issueOn(PAGE_B, "color-contrast", "div.neterror-banner", '<div class="neterror-banner">Offline?</div>'),
+      ],
+    );
+
+    expect(diff.failed_pages).toEqual([]);
+    expect(diff.failed_pages_earlier).toEqual([]);
+    expect(diff.added).toHaveLength(2);
+    expect(diff.resolved).toHaveLength(1);
+  });
+});
+
+describe("compareIssues on large runs", () => {
+  it("compares runs of thousands of issues without stalling", () => {
+    const issues = (n: number, rule: string) =>
+      Array.from({ length: n }, (_, i) => {
+        const page = `https://shop.example/p${i % 300}`;
+        return { key: `${rule}|#e${i}|${page}`, issue_type: rule, severity: "serious", component: "input", affected_page: page };
+      });
+
+    const started = performance.now();
+    const diff = compareIssues(issues(3000, "label"), issues(3000, "region"));
+
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(diff.resolved).toHaveLength(3000);
+    expect(diff.added).toHaveLength(3000);
+    expect(diff.changed_pages).toHaveLength(300);
+  });
+});

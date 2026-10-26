@@ -60,12 +60,14 @@ export function localSdkVersion(language: SDKSupportedLanguage): string {
  * Chrome 142 and later block the extension the SDK loads, so the run needs a browser that still
  * takes one: Chrome for Testing for Selenium, Playwright's full Chromium for Playwright. Playwright's
  * default headless browser is a "headless shell" that takes no extension either: a local run on it
- * reported every scan as succeeded, ~10 s each, and saved a report with no issues.
+ * reported every scan as succeeded, ~10 s each, and saved a report with no issues. And the Node SDK
+ * (1.75.1) reads `use.browserName` itself: left to Playwright's default, it throws in its support
+ * check and runs the test with no scans at all.
  */
 export function localBrowser(framework: string): string {
   if (framework === "playwright") {
     return `---STEP---
-Run Playwright on its full Chromium: set \`channel: "chromium"\` in the \`use\` block of playwright.config (and install it with \`npx playwright install chromium\`). Playwright's default headless shell cannot load the accessibility scanner, so its scans come back empty; branded Chrome and Edge 142 and later (\`channel: "chrome"\` / \`"msedge"\`) block it too.`;
+Run Playwright on its full Chromium, named in full: in the \`use\` block of playwright.config set both \`browserName: "chromium"\` and \`channel: "chromium"\`, and install it with \`npx playwright install chromium\` (Playwright needs Node.js 20 or later). Without an explicit \`browserName\` the SDK skips every scan ("Not a valid Accessibility Automation session"); Playwright's default headless shell cannot load the accessibility scanner, so its scans come back empty; branded Chrome and Edge 142 and later (\`channel: "chrome"\` / \`"msedge"\`) block it too.`;
   }
   return `---STEP---
 Run on Chrome for Testing: installed Chrome 142 and later blocks the accessibility scanner. Set this before the test run, and Selenium Manager downloads Chrome for Testing and uses it in place of the installed Chrome; the test code does not change:

@@ -110,6 +110,8 @@ describe("setupBrowserStackAutomateTests steps", () => {
       runOnLocalBrowser: true,
     });
 
+    // Both, by name: the SDK skips every scan when browserName is left to Playwright's default.
+    expect(text).toContain('browserName: "chromium"');
     expect(text).toContain('channel: "chromium"');
     expect(text).toContain(
       "headless shell cannot load the accessibility scanner",

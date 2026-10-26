@@ -123,7 +123,12 @@ async function connect(extra: Record<string, unknown> = {}) {
       name: "askBrowserStackAI",
       arguments: args,
     });
-    return JSON.parse(res.content[0].text);
+    // The user-facing block and the assistant-only block, merged back into one view.
+    const [shown, internal] = res.content;
+    const extra = internal
+      ? JSON.parse(internal.text.split("\n").slice(1).join("\n"))
+      : {};
+    return { ...JSON.parse(shown.text), ...extra };
   };
   return { call, started };
 }

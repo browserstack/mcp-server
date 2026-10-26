@@ -49,6 +49,7 @@ import {
   isEnabled,
 } from "./config.js";
 import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
+import { toAudienceResult } from "./result-audience.js";
 import { Credentials, agentHeaders } from "./egress.js";
 import {
   EVENT_PERMISSION,
@@ -228,12 +229,7 @@ function needsUploadResult(
 }
 
 function toResult(payload: AskResult): CallToolResult {
-  const failed =
-    payload.status === "error" || payload.status === "rate_limited";
-  return {
-    content: [{ type: "text", text: JSON.stringify(payload) }],
-    ...(failed ? { isError: true } : {}),
-  };
+  return toAudienceResult(payload);
 }
 
 function isTimeout(error: unknown): boolean {
@@ -626,11 +622,11 @@ export function addAskBrowserStackAITool(
       run_id: z
         .string()
         .optional()
-        .describe("`run_id` from a needs_approval result."),
+        .describe("Internal handle from needs_approval; never show it."),
       perm_id: z
         .string()
         .optional()
-        .describe("`perm_id` from that same result."),
+        .describe("Internal handle from that result; never show it."),
       decision: z
         .enum(["allow", "deny"])
         .optional()
@@ -638,9 +634,7 @@ export function addAskBrowserStackAITool(
       conversation_id: z
         .string()
         .optional()
-        .describe(
-          "From a previous result: continue or check that conversation.",
-        ),
+        .describe("Internal handle from a prior result; never show it."),
       answers: z
         .record(z.string(), z.union([z.string(), z.array(z.string())]))
         .optional()

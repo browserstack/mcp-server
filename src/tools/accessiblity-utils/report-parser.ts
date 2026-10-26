@@ -221,7 +221,19 @@ export type RunIssue = {
   severity: string;
   component: string;
   affected_page: string;
+  /** Found on an error page scanned in the page's place: the page did not load. */
+  on_error_page?: true;
 };
+
+/**
+ * Snippets only an error page shows: BrowserStack's Local connection page, and Chrome's
+ * network error page. A page that fails to load is still "scanned", as one of these.
+ */
+const ERROR_PAGE_SNIPPET =
+  /dashboard-privoxy-page|browserstack\.com\/docs\/local-testing\/|main-frame-error|chrome-error:\/\/|\bneterror\b/i;
+
+/** A page whose earlier issues are all gone and new ones appeared: worth a second look. */
+const CHANGED_PAGE_MIN_ISSUES = 2;
 
 /** A report's main issues that the dashboard counts (not hidden), keyed for comparing runs. */
 export async function loadMainIssues(reportLink: string): Promise<RunIssue[]> {
@@ -241,21 +253,68 @@ export async function loadMainIssues(reportLink: string): Promise<RunIssue[]> {
         severity: (row["Severity"] || "unknown").trim(),
         component: row["Component"],
         affected_page: row["Affected page"],
+        ...(ERROR_PAGE_SNIPPET.test(row["HTML snippet"] ?? "")
+          ? { on_error_page: true as const }
+          : {}),
       };
     });
 }
 
-/** Which issues of `current` are new since `base`, which of `base` are gone, and how many remain. */
+/**
+ * Which issues of `current` are new since `base`, which of `base` are gone, and how many
+ * remain. A page that did not load in `current` (an error page was scanned under its
+ * address) is set apart: its earlier issues were not checked again, so they are
+ * `not_checked` rather than resolved, and the error page's issues are not new. A page whose
+ * earlier issues are all gone while new ones appeared is named in `changed_pages`, as it may
+ * not have loaded either.
+ */
 export function compareIssues(
   base: RunIssue[],
   current: RunIssue[],
-): { added: RunIssue[]; resolved: RunIssue[]; retained: number } {
+): {
+  added: RunIssue[];
+  resolved: RunIssue[];
+  retained: number;
+  not_checked: RunIssue[];
+  failed_pages: string[];
+  changed_pages: string[];
+} {
   const before = new Set(base.map((issue) => issue.key));
   const after = new Set(current.map((issue) => issue.key));
+  const page = (issue: RunIssue) => samePage(issue.affected_page ?? "");
+  const failed = new Map<string, string>();
+  for (const issue of current) {
+    if (issue.on_error_page) failed.set(page(issue), issue.affected_page);
+  }
+  const added = current.filter(
+    (issue) => !before.has(issue.key) && !failed.has(page(issue)),
+  );
+  const gone = base.filter((issue) => !after.has(issue.key));
+  const resolved = gone.filter((issue) => !failed.has(page(issue)));
+  const changed = [
+    ...new Map(
+      resolved
+        .filter((issue) => {
+          const on = page(issue);
+          const earlier = base.filter((b) => page(b) === on);
+          return (
+            earlier.length >= CHANGED_PAGE_MIN_ISSUES &&
+            earlier.every((b) => !after.has(b.key)) &&
+            added.some((a) => page(a) === on)
+          );
+        })
+        .map((issue) => [page(issue), issue.affected_page]),
+    ).values(),
+  ];
   return {
-    added: sortBySeverity(current.filter((issue) => !before.has(issue.key))),
-    resolved: sortBySeverity(base.filter((issue) => !after.has(issue.key))),
+    added: sortBySeverity(added),
+    resolved: sortBySeverity(resolved),
     retained: current.filter((issue) => before.has(issue.key)).length,
+    not_checked: sortBySeverity(
+      gone.filter((issue) => failed.has(page(issue))),
+    ),
+    failed_pages: [...failed.values()],
+    changed_pages: changed,
   };
 }
 

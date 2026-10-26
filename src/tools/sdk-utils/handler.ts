@@ -89,6 +89,7 @@ export async function setUpPercyHandler(
       const percyWithBrowserstackSDKResult = runPercyWithBrowserstackSDK({
         ...percyInput,
         devices: [],
+        accessibility: false,
       });
       const hasPercySDKError =
         percyWithBrowserstackSDKResult.steps &&
@@ -125,6 +126,7 @@ export async function setUpPercyHandler(
             input.detectedBrowserAutomationFramework,
           detectedTestingFramework: input.detectedTestingFramework,
           devices: [],
+          accessibility: false,
         };
         const sdkResult = await runBstackSDKOnly(sdkInput, config, true);
         // Percy Automate instructions

@@ -1011,6 +1011,37 @@ function pageNote(page: {
   ];
 }
 
+/**
+ * The pages of the newer run that did not load (an error page was scanned in their place),
+ * or whose earlier issues all gave way to new ones. Neither the scan nor the dashboard says
+ * so, and their real issues would otherwise read as fixed.
+ */
+function pagesNotLoadedNote(
+  diff: {
+    not_checked?: unknown[];
+    failed_pages?: string[];
+    changed_pages?: string[];
+  },
+  runId: string,
+): string[] {
+  const pages = (urls: string[]) =>
+    wrapUntrusted("report page addresses", JSON.stringify(urls));
+  const failed = diff.failed_pages ?? [];
+  const changed = diff.changed_pages ?? [];
+  return [
+    ...(failed.length > 0
+      ? [
+          `⚠️ ${failed.length === 1 ? "1 page" : `${failed.length} pages`} did not load in run ${runId}: an error page was scanned in its place. Their ${diff.not_checked?.length ?? 0} issues from the earlier run are not counted as resolved (listed as not checked), and the error page's issues are not counted as new. Scan again once they load. ${pages(failed)}`,
+        ]
+      : []),
+    ...(changed.length > 0
+      ? [
+          `⚠️ None of the earlier issues on ${changed.length === 1 ? "1 page" : `${changed.length} pages`} remain, and they have new ones: they may not have loaded, or loaded something else, in run ${runId}. Check them before calling those issues fixed. ${pages(changed)}`,
+        ]
+      : []),
+  ];
+}
+
 /** At most this many new and resolved issues are listed in a comparison. */
 const COMPARE_LIST_LIMIT = 50;
 
@@ -1090,8 +1121,12 @@ async function compareScanRuns(
     changes
       ? `The dashboard's comparison: ${changes.newIssues} new, ${changes.resolvedIssues} resolved, ${changes.retainedIssues} still open. Matching the issues by rule, element and page gives ${matched}.`
       : `Matching the issues by rule, element and page: ${matched}.`,
+    ...pagesNotLoadedNote(diff, source.scanRunId),
     `New issues: ${listed(diff.added)}`,
     `Resolved issues: ${listed(diff.resolved)}`,
+    ...(diff.not_checked?.length
+      ? [`Not checked (page did not load): ${listed(diff.not_checked)}`]
+      : []),
     `CSV of each run, valid for about 12 hours: newer ${links[0]} , older ${links[1]}`,
   ]);
 }

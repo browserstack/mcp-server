@@ -180,3 +180,67 @@ describe("compareIssues", () => {
     expect(diff.retained).toBe(2);
   });
 });
+
+// A page that fails to load in a re-run is still "scanned": what gets scanned is an error page
+// (BrowserStack's Local connection page, or Chrome's network error page) filed under the
+// page's address. Its real issues then read as resolved and the error page's as new.
+describe("compareIssues and a page that did not load in the later run", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const PAGE_A = "http://bs-local.com:3100/page-a.html";
+  const PAGE_B = "http://bs-local.com:3100/page-b.html";
+  const issueOn = (page: string, type: string, selector: string, snippet = "<x>") =>
+    row({ "Issue type": type, Component: selector, "CSS selector": selector, "Affected page": page, "HTML snippet": snippet, "Issue link": link(`${type}-${page}`) });
+
+  async function runs(laterB: Record<string, string>[]) {
+    serve([
+      issueOn(PAGE_A, "css-orientation-lock", "html"),
+      issueOn(PAGE_B, "label", "input#no-label"),
+      issueOn(PAGE_B, "button-name", "button#icon-btn"),
+      issueOn(PAGE_B, "link-name", "a#icon-link"),
+    ]);
+    const before = await loadMainIssues("https://csv-old");
+    serve([issueOn(PAGE_A, "css-orientation-lock", "html"), ...laterB]);
+    const after = await loadMainIssues("https://csv-new");
+    return compareIssues(before, after);
+  }
+
+  it("sets apart, rather than resolves, the issues of a page that showed BrowserStack's connection error page", async () => {
+    const diff = await runs([
+      issueOn(PAGE_B, "keyboard-focus-visible", "a.docs", '<a href="https://www.browserstack.com/docs/local-testing/binary-params?ref=dashboard-privoxy-page" target="_blank">'),
+      issueOn(PAGE_B, "decorative-image", "img.logo", '<img src="https://cdn.example/logo.svg" alt="BrowserStack Logo">'),
+    ]);
+
+    expect(diff.failed_pages).toEqual([PAGE_B]);
+    expect(diff.resolved).toEqual([]);
+    expect(diff.not_checked.map((r) => r.issue_type).sort()).toEqual(["button-name", "label", "link-name"]);
+    expect(diff.added).toEqual([]);
+    expect(diff.retained).toBe(1);
+  });
+
+  it("knows Chrome's network error page too, as a public page that fails to load shows it", async () => {
+    const diff = await runs([
+      issueOn(PAGE_B, "landmark-one-main", "div#main-frame-error", '<div id="main-frame-error" class="interstitial-wrapper">'),
+    ]);
+
+    expect(diff.failed_pages).toEqual([PAGE_B]);
+    expect(diff.resolved).toEqual([]);
+  });
+
+  it("warns, without reclassifying, when every earlier issue on a page is gone and new ones appeared", async () => {
+    const diff = await runs([issueOn(PAGE_B, "region", "div.promo")]);
+
+    expect(diff.failed_pages).toEqual([]);
+    expect(diff.changed_pages).toEqual([PAGE_B]);
+    expect(diff.resolved).toHaveLength(3);
+    expect(diff.added.map((r) => r.issue_type)).toEqual(["region"]);
+  });
+
+  it("flags no page when its issues were simply fixed", async () => {
+    const diff = await runs([]);
+
+    expect(diff.failed_pages).toEqual([]);
+    expect(diff.changed_pages).toEqual([]);
+    expect(diff.resolved).toHaveLength(3);
+  });
+});

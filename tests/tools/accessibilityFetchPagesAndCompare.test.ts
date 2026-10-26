@@ -196,6 +196,29 @@ describe("fetchAccessibilityIssues comparing scan runs", () => {
     expect(text(result)).toMatch(/first run/);
   });
 
+  it("says when a page did not load in the later run, and does not count its issues as resolved", async () => {
+    m.previousScanRun.mockResolvedValue({ id: 5520296, scanDate: "2026-10-21T11:31:00.584Z" });
+    m.changesSinceLastRun.mockResolvedValue({ newIssues: 2, retainedIssues: 2, resolvedIssues: 6 });
+    m.compareIssues.mockReturnValue({
+      added: [],
+      resolved: [],
+      retained: 2,
+      not_checked: [{ issue_type: "label", severity: "critical", component: "input", affected_page: "https://shop.example/b" }],
+      failed_pages: ["https://shop.example/b"],
+      changed_pages: ["https://shop.example/c"],
+    });
+
+    const out = text(await fetchIssues()({ ...RUN, compareWith: "previous" }));
+
+    expect(out).toContain(
+      "⚠️ 1 page did not load in run 5520318: an error page was scanned in its place. Their 1 issues from the earlier run are not counted as resolved (listed as not checked), and the error page's issues are not counted as new. Scan again once they load.",
+    );
+    expect(out).toContain("⚠️ None of the earlier issues on 1 page remain, and they have new ones");
+    // The addresses come from the report, so they are quoted as data.
+    expect(out.indexOf("https://shop.example/b")).toBeGreaterThan(out.indexOf("«UNTRUSTED"));
+    expect(out).toMatch(/Not checked \(page did not load\)/);
+  });
+
   it("compares Website Scanner runs only", async () => {
     const result = await fetchIssues()({ buildId: "q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja", compareWith: "previous" });
 

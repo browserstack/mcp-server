@@ -5,6 +5,8 @@ export function generateBrowserStackYMLInstructions(config: {
   platforms?: string[];
   enablePercy?: boolean;
   projectName: string;
+  /** Run Accessibility checks during the tests. */
+  accessibility?: boolean;
 }): string {
   const enablePercy = config.enablePercy || false;
   const projectName = config.projectName || "BrowserStack Automate Build";
@@ -12,8 +14,9 @@ export function generateBrowserStackYMLInstructions(config: {
   // Generate platform configurations using the utility function
   const platformConfigs = generatePlatformConfigs(config);
 
+  // An existing file holds the user's own settings, so it is added to, not replaced.
   const stepTitle =
-    "Create a browserstack.yml file in the project root with your validated device configurations:If already exists, update it with the following content for devices and project details.";
+    "Create a browserstack.yml file in the project root with your validated device configurations. If the file already exists, add these keys to it and keep its other settings.";
 
   const buildName = `${projectName}-Build`;
 
@@ -59,6 +62,16 @@ browserstackLocal: true
 # ===================
 debug: true # Visual logs, text logs, etc.
 testObservability: true # For Test Observability`;
+
+  if (config.accessibility) {
+    ymlContent += `
+
+# ======================
+# Accessibility Testing
+# ======================
+# Runs Accessibility (WCAG) checks on the pages the tests visit.
+accessibility: true`;
+  }
 
   if (enablePercy) {
     ymlContent += `

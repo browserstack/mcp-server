@@ -126,6 +126,7 @@ export async function runBstackSDKOnly(
     validatedEnvironments,
     enablePercy: false,
     projectName: input.projectName,
+    accessibility: input.accessibility,
   });
 
   if (ymlInstructions) {
@@ -144,6 +145,15 @@ export async function runBstackSDKOnly(
         content: frameworkInstructions.run,
       });
     }
+  }
+
+  if (input.accessibility) {
+    steps.push({
+      type: "instruction",
+      title: "Read the accessibility issues",
+      content:
+        "When the run finishes, read its accessibility issues with fetchAccessibilityIssues: pass the Automate build's dashboard link as reportUrl, or the build id the BrowserStack SDK prints at the end of the run as buildId.",
+    });
   }
 
   return {

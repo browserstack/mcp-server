@@ -228,6 +228,33 @@ function needsUploadResult(
   };
 }
 
+/**
+ * A rate-limited answer to an approval or questions never reached the agent, so the
+ * run is still waiting on it. Keep the handles and say how to send it again; without
+ * them the client has nothing to retry with.
+ */
+function keepPendingAnswer(
+  result: AskResult,
+  params: Record<string, unknown>,
+): AskResult {
+  if (result.status !== "rate_limited") return result;
+  const out: AskResult & Record<string, unknown> = {
+    ...result,
+    conversation_id: String(params.run_id),
+    run_id: String(params.run_id),
+    perm_id: String(params.perm_id),
+    next_step: {
+      instruction:
+        "The answer was not delivered because of a rate limit; nothing changed and " +
+        "the task is still waiting on it. Wait about a minute, then call " +
+        "askBrowserStackAI again with exactly these params. Do not ask the user again.",
+      call: "askBrowserStackAI",
+      params,
+    },
+  };
+  return out;
+}
+
 function toResult(payload: AskResult): CallToolResult {
   return toAudienceResult(payload);
 }
@@ -730,7 +757,17 @@ export function addAskBrowserStackAITool(
               values: answers || {},
             } as never,
           );
-          return finish(conversationResult(reply, run_id, mode, product));
+          return finish(
+            keepPendingAnswer(
+              conversationResult(reply, run_id, mode, product),
+              {
+                product,
+                run_id,
+                perm_id,
+                answers: answers || {},
+              },
+            ),
+          );
         }
 
         // CHECKING on a conversation's agent.
@@ -755,17 +792,20 @@ export function addAskBrowserStackAITool(
           // A `query` sent here is ignored rather than rejected: the run's task is in
           // Atlas's checkpoint, so a model that resent it is redundant, not wrong.
           return finish(
-            await runResumed(
-              url,
-              headers,
-              run_id,
-              perm_id,
-              decision,
-              // The SAME transport the start uses: since the converged gate both calls
-              // POST and read back either a parked run or a finished one.
-              deferredTransport,
-              mode,
-              product,
+            keepPendingAnswer(
+              await runResumed(
+                url,
+                headers,
+                run_id,
+                perm_id,
+                decision,
+                // The SAME transport the start uses: since the converged gate both
+                // calls POST and read back either a parked run or a finished one.
+                deferredTransport,
+                mode,
+                product,
+              ),
+              { product, run_id, perm_id, decision },
             ),
           );
         }

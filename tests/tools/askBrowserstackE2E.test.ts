@@ -1597,6 +1597,61 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       }
     });
 
+    it("keeps a rate-limited approval answerable, with the same decision", async () => {
+      vi.resetModules();
+      process.env.REMOTE_MCP = "true";
+      try {
+        const { addAskBrowserStackAITool } =
+          await import("../../src/tools/ask-browserstack/register.js");
+        const { McpServer: RemoteMcpServer } =
+          await import("@modelcontextprotocol/sdk/server/mcp.js");
+        const remote = new RemoteMcpServer({ name: "t", version: "0" });
+        vi.spyOn(remote.server, "getClientCapabilities").mockReturnValue({
+          elicitation: {},
+        } as never);
+        const deferred = vi.fn(async () => ({
+          status: 429,
+          body: {
+            ok: false,
+            status: "rate_limited",
+            error: "You're sending requests too quickly.",
+          },
+        }));
+        const tools = addAskBrowserStackAITool(remote, {
+          agentUrl: () => "https://atlas.example/agent",
+          mintToken: async () => MINTED,
+          credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
+          deferredTransport: deferred as never,
+        });
+        const runId = "run-" + "d".repeat(32);
+        const permId = "perm-" + "c".repeat(32);
+
+        const { result, payload } = await call(tools, {
+          product: "tm",
+          run_id: runId,
+          perm_id: permId,
+          decision: "allow",
+        } as never);
+
+        expect(payload.status).toBe("rate_limited");
+        expect(result.isError).toBe(true);
+        expect(payload.conversation_id).toBe(runId);
+        expect(payload.perm_id).toBe(permId);
+        expect(payload.next_step).toEqual({
+          instruction: expect.stringContaining("Do not ask the user again"),
+          call: "askBrowserStackAI",
+          params: {
+            product: "tm",
+            run_id: runId,
+            perm_id: permId,
+            decision: "allow",
+          },
+        });
+      } finally {
+        vi.resetModules();
+      }
+    });
+
     it("positive control: the same seam IS called when not in remote mode", async () => {
       // Without this, the assertion above would pass just as happily if the seam were
       // broken and nothing ever called it.

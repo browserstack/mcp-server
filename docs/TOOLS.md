@@ -340,7 +340,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 | Tool | What it does |
 |---|---|
-| `startAccessibilityScan` | Start a web accessibility scan of a page URL and retrieve a local CSV report path. Mobile apps are scanned through an App Automate run instead (`setupBrowserStackAppAutomateTests` with `accessibility: true`). |
+| `startAccessibilityScan` | Start a web accessibility scan of a page URL and retrieve a local CSV report path. Optional settings: `wcagVersion` (WCAG 2.0–2.2 at A/AA/AAA, or RGAA 4.1), `bestPractices`, `needsReview`, `advancedRules` and `experimentalRules`; the answer states the settings the scan ran with. Mobile apps are scanned through an App Automate run instead (`setupBrowserStackAppAutomateTests` with `accessibility: true`). |
 | `accessibilityExpert` | Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices). |
 | `createAccessibilityAuthConfig` | Create an authentication configuration (form-based or basic) for accessibility scans behind a login. |
 | `getAccessibilityAuthConfig` | Retrieve an existing accessibility authentication configuration by ID. |

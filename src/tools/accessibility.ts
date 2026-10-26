@@ -1134,6 +1134,9 @@ function scanSettingsNote(
       settings.advancedRules !== undefined
         ? `advanced rules ${onOff(settings.advancedRules)}`
         : "",
+      settings.experimentalRules !== undefined
+        ? `experimental rules ${onOff(settings.experimentalRules)}`
+        : "",
     ]
       .filter(Boolean)
       .join(", ");
@@ -1173,6 +1176,7 @@ async function executeAccessibilityScan(
         bestPractices: args.bestPractices,
         needsReview: args.needsReview,
         advancedRules: args.advancedRules,
+        experimentalRules: args.experimentalRules,
       },
     );
   } catch (error) {
@@ -1476,6 +1480,10 @@ export default function addAccessibilityTools(
         .describe(
           'Also report "needs review" issues to check by hand (default true).',
         ),
+      experimentalRules: z
+        .boolean()
+        .optional()
+        .describe("Run the experimental accessibility rules (default true)."),
     },
     {
       title: "Start Accessibility Scan",

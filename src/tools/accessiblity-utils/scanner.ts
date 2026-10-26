@@ -33,6 +33,8 @@ export interface ScanSettings {
   needsReview?: boolean;
   /** Run the advanced rules (API default true). */
   advancedRules?: boolean;
+  /** Run the experimental rules (API default true). */
+  experimentalRules?: boolean;
 }
 
 export class AccessibilityScanner {
@@ -158,27 +160,37 @@ export class AccessibilityScanner {
   /**
    * The settings a run actually ran with, from its summary, or undefined when it cannot be
    * read. A setting left out takes the API's default, and the plan can turn advanced rules
-   * off, so what was asked for is not always what ran.
+   * off, so what was asked for is not always what ran. The summary has no experimental
+   * rules: they come from the scan's own settings, which a scan started here has for this
+   * run alone.
    */
   async runSettings(
     scanId: string,
     scanRunId: string,
   ): Promise<ScanSettings | undefined> {
-    const resp = await apiClient
-      .get({
-        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}`,
-        headers: {
-          Authorization:
-            "Basic " +
-            Buffer.from(
-              `${this.auth?.username}:${this.auth?.password}`,
-            ).toString("base64"),
-        },
-        raise_error: false,
-      })
-      .catch(() => undefined);
+    const read = (path: string) =>
+      apiClient
+        .get({
+          url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${path}`,
+          headers: {
+            Authorization:
+              "Basic " +
+              Buffer.from(
+                `${this.auth?.username}:${this.auth?.password}`,
+              ).toString("base64"),
+          },
+          raise_error: false,
+        })
+        .catch(() => undefined);
+    const [resp, overview] = await Promise.all([
+      read(`${scanId}/scan_runs/${scanRunId}`),
+      read(`${scanId}/overview`),
+    ]);
     const run = resp?.ok ? resp.data?.data : undefined;
     if (!run) return undefined;
+    const experimental = overview?.ok
+      ? overview.data?.data?.scanConfigInfo?.experimental
+      : undefined;
     return {
       ...(run.wcagVersion ? { wcagVersion: run.wcagVersion } : {}),
       ...(typeof run.bestPractices === "boolean"
@@ -189,6 +201,9 @@ export class AccessibilityScanner {
         : {}),
       ...(typeof run.advanced === "boolean"
         ? { advancedRules: run.advanced }
+        : {}),
+      ...(typeof experimental === "boolean"
+        ? { experimentalRules: experimental }
         : {}),
     };
   }

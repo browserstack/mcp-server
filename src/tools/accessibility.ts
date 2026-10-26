@@ -1424,7 +1424,7 @@ export default function addAccessibilityTools(
 
   tools.accessibilityExpert = server.tool(
     "accessibilityExpert",
-    "Answer accessibility, a11y, and WCAG questions using BrowserStack's accessibility knowledge base.",
+    "Answer accessibility, a11y, and WCAG questions using BrowserStack's accessibility knowledge base. To scan a user flow, even without an Automate license: setupBrowserStackAutomateTests.",
     {
       query: z
         .string()
@@ -1446,7 +1446,7 @@ export default function addAccessibilityTools(
 
   tools.startAccessibilityScan = server.tool(
     "startAccessibilityScan",
-    "Scan one web page URL for accessibility issues (CSV). A user flow: setupBrowserStackAutomateTests, accessibility on. A mobile app: setupBrowserStackAppAutomateTests. Then fetchAccessibilityIssues.",
+    "Scan a web page URL for accessibility issues. A user flow, no Automate license needed: setupBrowserStackAutomateTests (accessibility, runOnLocalBrowser). Mobile app: setupBrowserStackAppAutomateTests.",
     {
       name: z.string().describe("Name of the accessibility scan"),
       pageURL: z

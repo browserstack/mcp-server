@@ -119,6 +119,22 @@ describe("Accessibility Tools", () => {
     expect(buildId.description).toMatch(/App Accessibility/);
   });
 
+  // MCP clients that defer tools show the model only names until it loads one, and an agent
+  // reads "Automate" in setupBrowserStackAutomateTests as "needs an Automate license". The
+  // accessibility tools it does load have to say a flow runs without one.
+  it("points a user flow at a run that needs no Automate license", () => {
+    const description = (name: string) =>
+      serverMock.tool.mock.calls.find((c: any[]) => c[0] === name)[1];
+
+    for (const name of ["startAccessibilityScan", "accessibilityExpert"]) {
+      expect(description(name)).toContain("setupBrowserStackAutomateTests");
+      expect(description(name)).toMatch(/(no|without an) Automate license/);
+    }
+    expect(description("startAccessibilityScan")).toContain(
+      "runOnLocalBrowser",
+    );
+  });
+
   it("registers the 5 accessibility tools; App Accessibility's lists are capabilities, not a tool", () => {
     const toolNames = serverMock.tool.mock.calls.map((c: any[]) => c[0]);
     expect(toolNames).toContain("accessibilityExpert");

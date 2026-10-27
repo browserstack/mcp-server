@@ -859,6 +859,9 @@ describe("what a web report's answer says about its issues", () => {
       "Of the 5 issues, 1 needs review (a person has to confirm it) and 1 is a best practice, not a WCAG failure.",
     );
     expect(body).toContain("needs_review marks an issue the engine could not decide");
+    // A best-practice issue has no needs_review either, so the note must not call it a failure.
+    expect(body).toContain("Issues with neither needs_review nor best_practice are confirmed WCAG failures.");
+    expect(body).not.toContain("Issues without needs_review are confirmed failures.");
     expect(body).toContain('"needs_review": "unreviewed"');
     expect(body).toContain('"wcag": "SC 1.1.1"');
   });
@@ -916,6 +919,20 @@ describe("what a web report's answer says about its issues", () => {
     );
 
     expect(body).not.toMatch(/scan-details|site-scanner/);
+    expect(body).toContain("Scan ID: scan-42 and Scan Run ID: run-7");
+  });
+
+  it("links the scan's page when its CSV export is still being generated", async () => {
+    const LINK = "https://accessibility.browserstack.com/site-scanner/projects/Home%20page/builds?thBuildId=abc";
+    m.dashboardLink.mockResolvedValue(LINK);
+    m.getReportLink.mockRejectedValueOnce(new (ExportPendingError as any)("t:7", 45_000));
+
+    const body = text(
+      await handlers.startAccessibilityScan({ name: "Home page", pageURL: "https://site.example" }, CONTEXT),
+    );
+
+    expect(body).toMatch(/still being generated/);
+    expect(body.match(/Accessibility dashboard: (\S+)/)?.[1]).toBe(LINK);
     expect(body).toContain("Scan ID: scan-42 and Scan Run ID: run-7");
   });
 

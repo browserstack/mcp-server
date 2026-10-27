@@ -546,7 +546,7 @@ function summaryNote(summary: AppIssueSummary, total: number): string[] {
 }
 
 const REVIEW_TAGS_NOTE =
-  "needs_review marks an issue the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. best_practice marks a best practice rather than a WCAG failure, and wcag names the WCAG criteria an issue checks. Issues without needs_review are confirmed failures.";
+  "needs_review marks an issue the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. best_practice marks a best practice rather than a WCAG failure, and wcag names the WCAG criteria an issue checks. Issues with neither needs_review nor best_practice are confirmed WCAG failures.";
 
 /**
  * How many of a web report's issues still need a person to confirm them, and how many are
@@ -1511,7 +1511,8 @@ async function runAccessibilityScan(
   } catch (error) {
     if (error instanceof ExportPendingError) {
       return createSuccessResponse([
-        `Accessibility scan "${name}" completed. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+        `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
+        `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
         scanSettingsNote(settings, applied),
         ...exportPendingMessages(
           {

@@ -173,6 +173,23 @@ describe("a web report's needs-review and best-practice issues", () => {
     expect(summary.needs_review).toBe(1);
   });
 
+  it("reads a review status written with spaces around it, and an empty one as unreviewed", async () => {
+    get.mockResolvedValue({
+      ok: true,
+      statusText: "OK",
+      data: toCsv([
+        row({ "Issue type": "label", Severity: "serious", "Issue description": "l", "How to fix this issue": "f", "Needs review": "Yes", "Needs Review Status": " Confirmed " }),
+        row({ "Issue type": "region", Severity: "moderate", "Issue description": "r", "How to fix this issue": "f", "Needs review": "Yes", "Needs Review Status": "  " }),
+      ]),
+    });
+
+    const { records, summary } = await parseAccessibilityReportFromCSV("https://csv");
+
+    expect(records.find((r) => r.issue_type === "label")?.needs_review).toBe("confirmed");
+    expect(records.find((r) => r.issue_type === "region")?.needs_review).toBe("unreviewed");
+    expect(summary.needs_review).toBe(1);
+  });
+
   it("does the same when the report is read for one page", async () => {
     const { records, summary } = await parseAccessibilityReportFromCSV("https://csv", {
       pageUrl: "https://site.example/",

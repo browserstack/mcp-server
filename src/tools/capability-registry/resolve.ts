@@ -18,6 +18,8 @@ import { bind, GroupedArguments } from "./bind.js";
 import { authHeaders, Credentials, Transport } from "./egress.js";
 import { resolveScope, resolveTokenUrl } from "./oauth.js";
 import { AuthScheme } from "./types.js";
+import { openAsBlob } from "node:fs";
+import { basename } from "node:path";
 import { InvocationError } from "./index-loader.js";
 import { Capability } from "./types.js";
 
@@ -90,6 +92,32 @@ function assertTransportSafe(baseUrl: string): void {
   );
 }
 
+/**
+ * Turn a bound body into a FormData, streaming any `file` parameter from disk.
+ *
+ * `bind` has already canonicalised and checked the path, so what arrives here is a file
+ * this server is configured to read. The blob is opened rather than buffered: an app build
+ * runs to gigabytes and reading one into memory to post it is how a server falls over.
+ */
+async function multipartBody(
+  capability: Capability,
+  body: Record<string, unknown> | undefined,
+): Promise<FormData> {
+  const form = new FormData();
+  for (const param of capability.body || []) {
+    const value = body?.[param.name];
+    if (value === undefined || value === null) continue;
+    if (param.type === "file") {
+      const path = String(value);
+      const blob = await openAsBlob(path);
+      form.append(param.name, blob, basename(path));
+    } else {
+      form.append(param.name, String(value));
+    }
+  }
+  return form;
+}
+
 export async function invoke(
   capability: Capability,
   args: GroupedArguments,
@@ -106,14 +134,28 @@ export async function invoke(
   // Before binding would be wrong and after sending is too late: a scheme that mints a
   // token must not spend a round trip on a call that `bind` was going to reject anyway.
   const url = `${baseUrl.replace(/\/$/, "")}${bound.path}`;
-  const send = async () =>
-    transport(
-      capability.method,
-      url,
-      await authHeaders(credentials, auth, product),
-      bound.query,
-      bound.body,
-    );
+  const multipart =
+    capability.encoding === "multipart"
+      ? await multipartBody(capability, bound.body)
+      : undefined;
+  const send = async () => {
+    const headers = await authHeaders(credentials, auth, product);
+    if (multipart) {
+      // fetch writes its own Content-Type with the boundary. Leaving the JSON one on sends
+      // a body the product cannot parse, under a header that says it should be able to.
+      delete headers["Content-Type"];
+    }
+    const payload =
+      multipart ??
+      (bound.body === undefined && capability.send_empty_body
+        ? {}
+        : bound.body);
+    return transport(capability.method, url, headers, bound.query, payload, {
+      timeoutMs: capability.timeout_seconds
+        ? capability.timeout_seconds * 1000
+        : undefined,
+    });
+  };
 
   let response = await send();
 

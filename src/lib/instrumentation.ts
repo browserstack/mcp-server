@@ -64,7 +64,45 @@ function errorProperties(error: unknown) {
   };
 }
 
+const REGION_RESTRICTED_FIELDS = new Set([
+  "mcp_version",
+  "tool_name",
+  "mcp_client",
+  "node_version",
+  "is_remote",
+  "success",
+  "duration_ms",
+  "outcome",
+  "error_type",
+  "refusal_reason",
+  "product",
+  "entity",
+  "capability",
+  "capability_method",
+  "capability_path",
+  "capability_mode",
+  "results_returned",
+  "total_matched",
+  "truncated",
+  "weak_match",
+  "coverage",
+  "upstream_ok",
+  "upstream_status",
+  "feedback_category",
+]);
+
+function forDataRegion(
+  props: MCPEventPayload["event_properties"],
+): MCPEventPayload["event_properties"] {
+  const region = globalConfig.BROWSERSTACK_GRR_REGION;
+  if (!region || region === "us") return props;
+  return Object.fromEntries(
+    Object.entries(props).filter(([key]) => REGION_RESTRICTED_FIELDS.has(key)),
+  ) as MCPEventPayload["event_properties"];
+}
+
 function sendEvent(event: MCPEventPayload, config?: any): void {
+  event = { ...event, event_properties: forDataRegion(event.event_properties) };
   let authHeader: string | undefined;
   if (config) {
     try {

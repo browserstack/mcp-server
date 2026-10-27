@@ -1240,7 +1240,7 @@
         }
       },
       "InvalidPageToken": {
-        "description": "next_page was not a token from this list, had expired, or limit changed between pages.",
+        "description": "next_page was not a token from this list or had expired. On the Website Scanner lists, a limit that differs from the previous page also answers 422.",
         "schema": {
           "$schema": "Failure"
         }

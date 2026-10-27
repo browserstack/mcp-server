@@ -76,6 +76,24 @@ describe("the Web Accessibility capability index", () => {
     }
   });
 
+  it("says a changed limit is refused only by the lists that refuse it", () => {
+    // All six answer a bad next_page with 422 (InvalidPageToken). Only the Website Scanner
+    // lists also answer a changed limit with 422; the Automated Tests lists answer it with
+    // 400 (PagingChanged), and the Workflow Analyzer and Assisted Test lists do not check
+    // it, so their pages shift instead.
+    const invalidToken = web.responses.InvalidPageToken.description;
+    expect(invalidToken).toMatch(/Website Scanner lists/);
+    expect(invalidToken).not.toMatch(/^[^.]*limit changed/);
+    for (const name of [
+      "list_automated_tests_projects",
+      "list_automated_tests_builds",
+    ]) {
+      expect(capability(name).responses["400"]).toEqual({
+        $response: "PagingChanged",
+      });
+    }
+  });
+
   it("does not offer the parameters the API ignores", () => {
     // The public docs list these; the handlers never read them, so each would return the
     // whole account's list while looking filtered.

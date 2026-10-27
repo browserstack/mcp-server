@@ -159,6 +159,39 @@ function failed(
   message: string,
   extra?: Record<string, unknown>,
 ): CallToolResult {
+  return { ...body(message, extra), isError: true };
+}
+
+/**
+ * A refusal that is a QUESTION FOR THE USER, carried without `isError`.
+ *
+ * NOT EVERY REFUSAL IS A FAILURE. A routing clash is the gate working: the request really
+ * could have meant either product, and the only way forward is to ask. Flagging it as a
+ * tool error told the client the opposite — a session that hit the clash four times was
+ * rendered as "Used 4 tools (4 failed)" in red, which reads as a broken server rather than
+ * a question waiting for an answer, and invites the client's own retry-on-error path to
+ * resend a query that is designed never to get through unchanged.
+ *
+ * The payload is byte-for-byte what it was: `ok: false` still says no results came back,
+ * and the instructions the agent acts on are the same prose. Only the transport-level
+ * verdict changes, because that verdict was wrong.
+ *
+ * TELEMETRY IS DELIBERATELY UNCHANGED. The call is still recorded through `refuse` with
+ * its `refusal_reason`, so nothing disappears from BigQuery and the clash rate stays
+ * measurable. What a client shows the user and what the fleet counts are different
+ * questions, and `refusal_reason` is what tells the two apart.
+ */
+function clarification(
+  message: string,
+  extra?: Record<string, unknown>,
+): CallToolResult {
+  return body(message, extra);
+}
+
+function body(
+  message: string,
+  extra?: Record<string, unknown>,
+): CallToolResult {
   return {
     content: [
       {
@@ -166,7 +199,6 @@ function failed(
         text: JSON.stringify({ ok: false, error: message, ...extra }),
       },
     ],
-    isError: true,
   };
 }
 
@@ -262,6 +294,8 @@ export function addCapabilityRegistryTools(
     message: string,
     extra?: Record<string, unknown>,
     extras?: MCPEventExtras,
+    /** "question" drops `isError` — see `clarification`. The record is identical. */
+    outcome: "error" | "question" = "error",
   ): CallToolResult => {
     try {
       trackMCP(
@@ -274,8 +308,19 @@ export function addCapabilityRegistryTools(
     } catch {
       // Telemetry must not decide whether a tool call succeeds.
     }
-    return failed(message, extra);
+    return outcome === "question"
+      ? clarification(message, extra)
+      : failed(message, extra);
   };
+
+  /** A clash is a question, not a failure. Recorded exactly as a refusal still is. */
+  const askUser = (
+    tool: string,
+    reason: string,
+    message: string,
+    extra?: Record<string, unknown>,
+    extras?: MCPEventExtras,
+  ): CallToolResult => refuse(tool, reason, message, extra, extras, "question");
 
   tools.listProducts = server.tool(
     "listProducts",
@@ -776,7 +821,7 @@ export function addCapabilityRegistryTools(
             };
           });
           const named = anchor.products.length > 0;
-          return refuse(
+          return askUser(
             "searchCapability",
             "product_ambiguous",
             (blank

@@ -27,7 +27,7 @@ import {
   compareIssues,
   loadMainIssues,
   parseAccessibilityReportFromCSV,
-  type ReviewCounts,
+  type IssueSummary as WebIssueSummary,
 } from "./accessiblity-utils/report-parser.js";
 import { wrapUntrusted } from "../lib/untrusted-content.js";
 import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
@@ -545,26 +545,35 @@ function summaryNote(summary: AppIssueSummary, total: number): string[] {
   ];
 }
 
-const REVIEW_TAGS_NOTE =
-  "needs_review marks an issue the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. best_practice marks a best practice rather than a WCAG failure, and wcag names the WCAG criteria an issue checks. Issues without needs_review are confirmed failures.";
+/** How many rules and pages a web report's summary names; the rest are counted. */
+const SUMMARY_RULES = 20;
+const SUMMARY_PAGES = 10;
 
 /**
- * How many of a web report's issues still need a person to confirm them, and how many are
- * best practices: counted over the whole report, not just this page.
+ * A web report's issues at a glance, all of them rather than one page's: by severity, how
+ * many a person still has to confirm, how many are best practices, by rule and by page.
  */
-function reviewCountsNote(
-  counts: ReviewCounts | undefined,
+function webSummaryNote(
+  summary: WebIssueSummary | undefined,
   total: number,
-  records: { needs_review?: string; best_practice?: true }[],
 ): string[] {
-  const review = counts?.needs_review ?? 0;
-  const practice = counts?.best_practice ?? 0;
+  if (!summary || total === 0) return [];
   const one = (n: number, singular: string, plural: string) =>
     n === 1 ? singular : plural;
-  const parts = [
+  const rank = (severity: string) => {
+    const i = SEVERITY_ORDER.indexOf(severity);
+    return i === -1 ? SEVERITY_ORDER.length : i;
+  };
+  const severities = Object.entries(summary.by_severity)
+    .sort(([a], [b]) => rank(a) - rank(b))
+    .map(([severity, n]) => `${n} ${severity}`)
+    .join(", ");
+  const review = summary.needs_review;
+  const practice = summary.best_practice;
+  const notes = [
     ...(review > 0
       ? [
-          `${review} ${one(review, "needs review (a person has to confirm it)", "need review (a person has to confirm them)")}`,
+          `${review} ${one(review, "needs", "need")} review (a person has to confirm ${one(review, "it", "them")})`,
         ]
       : []),
     ...(practice > 0
@@ -573,15 +582,38 @@ function reviewCountsNote(
         ]
       : []),
   ];
-  const tagged =
-    parts.length > 0 ||
-    records.some((record) => record.needs_review || record.best_practice);
+  const listed = <T>(
+    rows: T[],
+    limit: number,
+    label: (row: T) => string,
+    rest: string,
+  ) => {
+    const more = rows.length - Math.min(rows.length, limit);
+    return `${rows.slice(0, limit).map(label).join(", ")}${more > 0 ? `, and ${more} more ${rest}` : ""}.`;
+  };
+  const pages = summary.by_page ?? [];
   return [
-    ...(parts.length > 0
-      ? [`Of the ${total} issues, ${parts.join(" and ")}.`]
-      : []),
-    ...(tagged ? [REVIEW_TAGS_NOTE] : []),
+    `Summary of the ${total} issues: ${severities}${notes.map((note) => `; ${note}`).join("")}.`,
+    wrapUntrusted(
+      "accessibility issue counts",
+      [
+        `By rule: ${listed(summary.by_rule, SUMMARY_RULES, (r) => `${r.issue_type} ${r.count}`, "rules")}`,
+        ...(pages.length > 0
+          ? [
+              `By page: ${listed(pages, SUMMARY_PAGES, (p) => `${p.url} ${p.count}`, "pages")}`,
+            ]
+          : []),
+      ].join("\n"),
+    ),
   ];
+}
+
+const WEB_ISSUES_NOTE =
+  "Each issue names its rule (issue_type): the rule's name, description, WCAG criteria and usual fix are under rules, and an issue has its own how_to_fix only when it differs. An issue with needs_review is one the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. Issues without needs_review are confirmed failures.";
+
+/** The CSV link, with what it is for: an answer gives a page of issues at a time. */
+function fullReportLine(reportLink: string): string {
+  return `The full list of issues is a CSV, valid for about 12 hours: download it when every issue is needed at once (this answer gives them a page at a time), from the following link: ${reportLink}`;
 }
 
 /** How many new and resolved issues a comparison lists per page. */
@@ -1002,6 +1034,7 @@ async function fetchAccessibilityIssues(
 
   const {
     records,
+    rules,
     summary,
     page_length,
     total_issues,
@@ -1021,10 +1054,12 @@ async function fetchAccessibilityIssues(
     ...processingNote(processing),
     ...(page ? pageNote(page) : []),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
-    ...reviewCountsNote(summary, total_issues, records),
+    // The whole report's counts, said on its first page.
+    ...(cursor ? [] : webSummaryNote(summary, total_issues)),
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
-    `You can also download the full report (CSV) from the following link, valid for about 12 hours: ${reportLink}`,
-    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
+    fullReportLine(reportLink),
+    WEB_ISSUES_NOTE,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
     closingMessage(next_page, remaining, source, stillProcessing, pageArg),
   ]);
 }
@@ -1432,28 +1467,29 @@ function createScanFailureResponse(
 
 function createScanSuccessResponse(
   name: string,
-  totalIssues: number,
-  pageLength: number,
-  records: any[],
+  report: Awaited<ReturnType<typeof parseAccessibilityReportFromCSV>>,
   scanId: string,
   scanRunId: string,
   reportUrl: string,
-  cursor: number | null,
-  duplicates: string[] = [],
+  dashboardLink: string | undefined,
   settings: ScanSettings = {},
   applied?: ScanSettings,
-  dashboardLink?: string,
-  reviewNotes: string[] = [],
 ): CallToolResult {
+  const cursor = report.next_page;
   const messages = [
     `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
     scanSettingsNote(settings, applied),
-    `You can also download the full report from the following link: ${reportUrl}`,
-    `We found ${totalIssues} issues. Below are the details of the ${pageLength} most critical issues.`,
-    ...reviewNotes,
-    ...duplicates,
-    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
+    fullReportLine(reportUrl),
+    `We found ${report.total_issues} issues. Below are the details of the ${report.page_length} most critical issues.`,
+    ...webSummaryNote(report.summary, report.total_issues),
+    ...excludedIssuesNote(
+      report.duplicate_issues,
+      report.unlinked_duplicates,
+      report.hidden_issues,
+    ),
+    WEB_ISSUES_NOTE,
+    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: report.records, rules: report.rules }))}`,
   ];
 
   if (cursor !== null) {
@@ -1527,31 +1563,15 @@ async function runAccessibilityScan(
     throw error;
   }
 
-  const {
-    records,
-    summary,
-    page_length,
-    total_issues,
-    next_page,
-    duplicate_issues,
-    unlinked_duplicates,
-    hidden_issues,
-  } = await parseAccessibilityReportFromCSV(reportLink);
-
   return createScanSuccessResponse(
     name,
-    total_issues,
-    page_length,
-    records,
+    await parseAccessibilityReportFromCSV(reportLink),
     scanId,
     scanRunId,
     reportLink,
-    next_page,
-    excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
+    dashboardLink,
     settings,
     applied,
-    dashboardLink,
-    reviewCountsNote(summary, total_issues, records),
   );
 }
 

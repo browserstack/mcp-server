@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   resolveBuild: vi.fn(async (source: unknown) => source),
   appBuildReport: vi.fn(),
   appReportIssues: vi.fn(),
+  findScanRun: vi.fn(),
   parse: vi.fn(),
 }));
 
@@ -24,7 +25,10 @@ vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
     runSettings = vi.fn().mockResolvedValue(undefined);
   },
 }));
-vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
+vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", async () => ({
+  ...(await vi.importActual<
+    typeof import("../../src/tools/accessiblity-utils/report-fetcher.js")
+  >("../../src/tools/accessiblity-utils/report-fetcher.js")),
   AccessibilityReportFetcher: class {
     setAuth = vi.fn();
     getReportLink = m.getReportLink;
@@ -33,6 +37,7 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     resolveBuild = m.resolveBuild;
     appBuildReport = m.appBuildReport;
     appReportIssues = m.appReportIssues;
+    findScanRun = m.findScanRun;
   },
   EXPORT_WAIT_MS: 45_000,
   ExportPendingError: class extends Error {
@@ -64,7 +69,10 @@ import addAccessibilityTools, {
   REPORT_STATUS_POLL_MS,
   REPORT_STATUS_WAIT_MS,
 } from "../../src/tools/accessibility.js";
-import { ExportPendingError } from "../../src/tools/accessiblity-utils/report-fetcher.js";
+import {
+  ExportPendingError,
+  ScanRunNotFoundError,
+} from "../../src/tools/accessiblity-utils/report-fetcher.js";
 
 const CONFIG = {
   "browserstack-username": "fake-user",
@@ -818,5 +826,137 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
     );
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("appReportId");
+  });
+});
+
+// A Website Scanner link is read by its run's build id (thBuildId), so it works however old the
+// scan is. The scan list is searched only when the API does not know the build id, so a link
+// that read before still reads; and a build id the build APIs do not know is tried as a run's.
+describe("fetchAccessibilityIssues and a report link read by its build id", () => {
+  let handlers: Record<string, (...args: any[]) => any>;
+  const TH = "k3v9q2m7x1c8b4n6z0w5r2t9y4p1s8d3f6g0h2ja";
+  const LINK = `https://accessibility.browserstack.com/site-scanner/projects/checkout%20fix/builds?thBuildId=${TH}&amp%3Brecurring=false`;
+  const CLEAN_LINK = `https://accessibility.browserstack.com/site-scanner/projects/checkout%20fix/builds?thBuildId=${TH}`;
+  const BY_BUILD = { kind: "scanBuild", thBuildId: TH, scanName: "checkout fix" };
+  const BY_IDS = { kind: "scan", scanId: "scan-42", scanRunId: "run-7" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.getReportLink.mockReset().mockResolvedValue("https://csv");
+    m.parse.mockResolvedValue(GROUPED);
+    m.reportStatus.mockResolvedValue(undefined);
+    m.resolveBuild.mockImplementation(async (source: unknown) => source);
+    m.sourceFromReportUrl.mockResolvedValue(BY_BUILD);
+    handlers = register();
+  });
+
+  it("reads a scanner link's run by its build id, and names it by its link for the next page", async () => {
+    const result = await handlers.fetchAccessibilityIssues({ reportUrl: LINK }, CONTEXT);
+
+    expect(result.isError).toBeFalsy();
+    expect(m.getReportLink).toHaveBeenCalledWith(BY_BUILD, expect.anything());
+    expect(m.findScanRun).not.toHaveBeenCalled();
+    const body = text(result);
+    expect(body).toContain(`Resolved the report link to Website Scanner run with build id ${TH}.`);
+    expect(body).toContain(
+      `Use fetchAccessibilityIssues with reportUrl: "${CLEAN_LINK}" and cursor: 140`,
+    );
+    expect(body).toMatch(/processing status was not checked/);
+  });
+
+  it("does not repeat the processing caveat on a later page", async () => {
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ reportUrl: LINK, cursor: 140 }, CONTEXT),
+    );
+
+    expect(body).not.toMatch(/processing status was not checked/);
+  });
+
+  it("continues a still-generating export through the same link", async () => {
+    m.getReportLink.mockRejectedValueOnce(new (ExportPendingError as any)("t:9", 45_000));
+
+    const body = text(await handlers.fetchAccessibilityIssues({ reportUrl: LINK }, CONTEXT));
+
+    expect(body).toContain(`reportUrl: "${CLEAN_LINK}" and exportTaskId: "t:9"`);
+  });
+
+  it("falls back to the scan list when the API does not know the run by its build id", async () => {
+    m.getReportLink
+      .mockRejectedValueOnce(new ScanRunNotFoundError(TH))
+      .mockResolvedValueOnce("https://csv");
+    m.findScanRun.mockResolvedValue(BY_IDS);
+
+    const result = await handlers.fetchAccessibilityIssues({ reportUrl: LINK }, CONTEXT);
+
+    expect(result.isError).toBeFalsy();
+    expect(m.findScanRun).toHaveBeenCalledWith(BY_BUILD);
+    expect(m.getReportLink).toHaveBeenLastCalledWith(BY_IDS, expect.anything());
+    const body = text(result);
+    expect(body).toMatch(/found in the scan list instead/);
+    expect(body).toContain(
+      'Use fetchAccessibilityIssues with scanId: "scan-42", scanRunId: "run-7" and cursor: 140',
+    );
+  });
+
+  it("says the API cannot read a run by its build id yet, where it has no such route", async () => {
+    m.getReportLink
+      .mockRejectedValueOnce(new ScanRunNotFoundError(TH, true))
+      .mockResolvedValueOnce("https://csv");
+    m.findScanRun.mockResolvedValue(BY_IDS);
+
+    const body = text(await handlers.fetchAccessibilityIssues({ reportUrl: LINK }, CONTEXT));
+
+    expect(body).toContain(
+      "This API does not read a run by its build id yet, so it was found in the scan list instead.",
+    );
+    expect(body).not.toMatch(/not visible to this account/);
+  });
+
+  it("says both ways failed when the scan list does not have the run either", async () => {
+    m.getReportLink.mockRejectedValue(new ScanRunNotFoundError(TH));
+    m.findScanRun.mockRejectedValue(
+      new Error("No Website Scanner scan among the most recent scans (15 pages) matches this link. Pass scanId and scanRunId instead"),
+    );
+
+    const result = await handlers.fetchAccessibilityIssues({ reportUrl: LINK }, CONTEXT);
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(/by the link's build id.*scan list found nothing either.*15 pages/s);
+  });
+
+  it("reads a build id the build APIs do not know as a Website Scanner run's", async () => {
+    m.resolveBuild.mockResolvedValue({ kind: "scanBuild", thBuildId: TH });
+
+    const result = await handlers.fetchAccessibilityIssues({ buildId: TH }, CONTEXT);
+
+    expect(result.isError).toBeFalsy();
+    expect(m.resolveBuild).toHaveBeenCalledWith({ kind: "build", buildId: TH }, { orScanRun: true });
+    expect(m.getReportLink).toHaveBeenCalledWith({ kind: "scanBuild", thBuildId: TH }, expect.anything());
+    const body = text(result);
+    expect(body).toContain(`Build id ${TH} is a Website Scanner run's build id; read it as one.`);
+    expect(body).toContain(`Use fetchAccessibilityIssues with buildId: "${TH}" and cursor: 140`);
+  });
+
+  it("points at the report link when the API cannot read a run by its build id yet", async () => {
+    m.resolveBuild.mockResolvedValue({ kind: "scanBuild", thBuildId: TH });
+    m.getReportLink.mockRejectedValue(new ScanRunNotFoundError(TH, true));
+
+    const result = await handlers.fetchAccessibilityIssues({ buildId: TH }, CONTEXT);
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(/cannot read a run by it yet: pass the scan's report link as reportUrl/);
+  });
+
+  it("names every API it asked when none knows the build id", async () => {
+    m.resolveBuild.mockResolvedValue({ kind: "scanBuild", thBuildId: TH });
+    m.getReportLink.mockRejectedValue(new ScanRunNotFoundError(TH));
+
+    const result = await handlers.fetchAccessibilityIssues({ buildId: TH }, CONTEXT);
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(
+      /No Automated Tests \(web\), App Accessibility or Website Scanner build with id/,
+    );
+    expect(m.findScanRun).not.toHaveBeenCalled();
   });
 });

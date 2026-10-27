@@ -262,7 +262,7 @@ describe("fetchAccessibilityIssues sources", () => {
         `Use fetchAccessibilityIssues with ${nextPageArgs} and cursor: 140`,
       );
       expect(body).toContain(
-        "The full list of issues is a CSV, valid for about 12 hours",
+        "download the full report (CSV) from the following link",
       );
       expect(body).toContain("https://csv\n");
     },
@@ -823,33 +823,21 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
   });
 });
 
-// A web report's answer counts the whole report, says which issues a person still has to
-// confirm, and names each rule's text once; and a scan's answer links the scan's own page.
+// A web report's answer says how many issues still need a person to confirm them and how many
+// are best practices, over the whole report; and a scan's answer links the scan's own page.
 describe("what a web report's answer says about its issues", () => {
   let handlers: Record<string, (...args: any[]) => any>;
-  const REPORT = {
-    records: [{ issue_type: "image-alt", severity: "critical", needs_review: "unreviewed" }],
-    rules: {
-      "image-alt": { name: "Images must have alternative text", description: "d", wcag: "SC 1.1.1", how_to_fix: "Add alt" },
-    },
-    summary: {
-      by_severity: { critical: 1, serious: 3, moderate: 1 },
-      by_rule: [
-        { issue_type: "color-contrast", count: 3 },
-        { issue_type: "image-alt", count: 1 },
-        { issue_type: "region", count: 1 },
-      ],
-      needs_review: 1,
-      best_practice: 1,
-    },
+  const report = (needs_review: number, best_practice: number, total_issues = 5) => ({
+    records: [{ issue_type: "image-alt", severity: "critical", needs_review: "unreviewed", wcag: "SC 1.1.1" }],
+    summary: { needs_review, best_practice },
     page_length: 1,
-    total_issues: 5,
+    total_issues,
     next_page: 90,
-    remaining: 4,
+    remaining: total_issues - 1,
     duplicate_issues: null,
     unlinked_duplicates: 0,
     hidden_issues: null,
-  };
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -857,42 +845,53 @@ describe("what a web report's answer says about its issues", () => {
     m.waitUntilComplete.mockResolvedValue("completed");
     m.getReportLink.mockResolvedValue("https://csv");
     m.reportStatus.mockResolvedValue(undefined);
-    m.parse.mockResolvedValue(REPORT);
+    m.parse.mockResolvedValue(report(1, 1));
     handlers = register();
   });
 
-  it("counts the whole report, says what needs review means, and gives the rules once", async () => {
+  const fetchBody = async () =>
+    text(await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT));
+
+  it("says how many issues need review and how many are best practices, and what the tags mean", async () => {
+    const body = await fetchBody();
+
+    expect(body).toContain(
+      "Of the 5 issues, 1 needs review (a person has to confirm it) and 1 is a best practice, not a WCAG failure.",
+    );
+    expect(body).toContain("needs_review marks an issue the engine could not decide");
+    expect(body).toContain('"needs_review": "unreviewed"');
+    expect(body).toContain('"wcag": "SC 1.1.1"');
+  });
+
+  it("words the counts for several issues", async () => {
+    m.parse.mockResolvedValue(report(161, 191, 527));
+
+    expect(await fetchBody()).toContain(
+      "Of the 527 issues, 161 need review (a person has to confirm them) and 191 are best practices, not WCAG failures.",
+    );
+  });
+
+  it("leaves out a count that is zero, and says nothing when both are", async () => {
+    m.parse.mockResolvedValue(report(0, 2));
+    const some = await fetchBody();
+    expect(some).toContain("Of the 5 issues, 2 are best practices, not WCAG failures.");
+    expect(some).not.toMatch(/need(s)? review \(/);
+
+    m.parse.mockResolvedValue({ ...report(0, 0), records: [{ issue_type: "label", severity: "serious" }] });
+    const none = await fetchBody();
+    expect(none).not.toContain("Of the 5 issues");
+    expect(none).not.toContain("needs_review marks");
+  });
+
+  it("gives the same counts in a scan's answer", async () => {
     const body = text(
-      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
+      await handlers.startAccessibilityScan({ name: "home", pageURL: "https://site.example" }, CONTEXT),
     );
 
     expect(body).toContain(
-      "Summary of the 5 issues: 1 critical, 3 serious, 1 moderate; 1 needs review (a person has to confirm it); 1 is a best practice, not a WCAG failure.",
+      "Of the 5 issues, 1 needs review (a person has to confirm it) and 1 is a best practice, not a WCAG failure.",
     );
-    expect(body).toMatch(/By rule: color-contrast 3, image-alt 1, region 1/);
-    expect(body).toContain("needs_review is one the engine could not decide, so a person confirms it");
-    expect(body).toContain('"rules"');
-    expect(body).toContain('"needs_review":"unreviewed"');
-  });
-
-  it("gives the whole report's counts on its first page only", async () => {
-    const body = text(
-      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7", cursor: 90 }, CONTEXT),
-    );
-
-    expect(body).not.toContain("Summary of the 5 issues");
-    expect(body).toContain("Retrieved 1 accessibility issues (Total: 5)");
-  });
-
-  it("says the CSV holds every issue, for an agent that needs them all at once", async () => {
-    for (const result of [
-      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
-      await handlers.startAccessibilityScan({ name: "home", pageURL: "https://site.example" }, CONTEXT),
-    ]) {
-      const body = text(result);
-      expect(body).toMatch(/full list of issues is a CSV.*every issue is needed at once/s);
-      expect(body.match(/following link: (\S+)/)?.[1]).toBe("https://csv");
-    }
+    expect(body.match(/following link: (\S+)/)?.[1]).toBe("https://csv");
   });
 
   it("links the scan's own dashboard page, from the scans list, not a link made from its name", async () => {

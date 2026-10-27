@@ -1,13 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
 import { parse } from "csv-parse/sync";
 import logger from "../../logger.js";
-import {
-  mostCommon,
-  PAGE_CHARACTERS,
-  pageOf,
-  severityRank,
-  sortBySeverity,
-} from "./paginate.js";
+import { PAGE_CHARACTERS, pageOf, sortBySeverity } from "./paginate.js";
 
 type SimplifiedAccessibilityIssue = {
   issue_type: string;
@@ -31,34 +25,14 @@ type SimplifiedAccessibilityIssue = {
    * "unreviewed" until someone does.
    */
   needs_review?: string;
-};
-
-/** An issue as a page hands it out: its rule's text is under the page's rules. */
-type IssueRow = Omit<
-  SimplifiedAccessibilityIssue,
-  "issue_description" | "how_to_fix"
-> & {
-  /** Only when it differs from its rule's description. */
-  issue_description?: string;
-  /** Only when it differs from its rule's usual fix. */
-  how_to_fix?: string;
-};
-
-/** A rule's text, the same on each of its issues. */
-type RuleText = {
-  name?: string;
-  description: string;
-  /** The WCAG success criteria it checks, as the report writes them. */
-  wcag?: string;
   /** A best practice, not a WCAG failure. */
   best_practice?: true;
-  how_to_fix: string;
+  /** The WCAG success criteria it checks, as the report writes them. */
+  wcag?: string;
 };
 
-export type IssueSummary = {
-  by_severity: Record<string, number>;
-  /** Largest first. */
-  by_rule: { issue_type: string; count: number }[];
+/** Of all the issues read, how many a person still has to confirm, and how many are best practices. */
+export type ReviewCounts = {
   /** Needs-review issues no one has confirmed yet. */
   needs_review: number;
   best_practice: number;
@@ -91,11 +65,9 @@ type PaginationOptions = {
 };
 
 type PaginatedResult = {
-  records: IssueRow[];
-  /** The rules this page's issues name. */
-  rules: Record<string, RuleText>;
-  /** All the issues read, not just this page's. */
-  summary: IssueSummary;
+  records: SimplifiedAccessibilityIssue[];
+  /** Counted over all the issues read, not just this page's. */
+  summary: ReviewCounts;
   /** Character offset for the next page, or null if done */
   page_length: number;
   /** Main issues only when the report is grouped, so it matches the run's issue count. */
@@ -117,6 +89,7 @@ const DUPLICATE_COLUMN = "Duplicate Issue of";
 const NEEDS_REVIEW_COLUMN = "Needs review";
 const REVIEW_STATUS_COLUMN = "Needs Review Status";
 const BEST_PRACTICE_COLUMN = "Best practice";
+const GUIDELINE_COLUMN = "Guideline(s)";
 const ISSUE_LINK_COLUMN = "Issue link";
 const STATUS_COLUMN = "Issue status";
 
@@ -141,20 +114,6 @@ function samePage(url: string): string {
   }
 }
 
-/**
- * How much of an issue's HTML snippet a page hands out. A snippet can be an element's whole
- * markup (thousands of characters for a container), which took most of a page by itself;
- * its opening tag, which says which element it is, comes first.
- */
-const SNIPPET_CHARACTERS = 400;
-
-function shortSnippet(snippet: string | undefined): string {
-  const text = snippet ?? "";
-  return text.length > SNIPPET_CHARACTERS
-    ? `${text.slice(0, SNIPPET_CHARACTERS)}… (${text.length - SNIPPET_CHARACTERS} more characters in the CSV)`
-    : text;
-}
-
 const isYes = (value: string | undefined) =>
   (value ?? "").trim().toLowerCase() === "yes";
 
@@ -166,7 +125,7 @@ function recordOfRow(
     issue_type: row["Issue type"],
     component: row["Component"],
     issue_description: row["Issue description"],
-    HTML_snippet: shortSnippet(row["HTML snippet"]),
+    HTML_snippet: row["HTML snippet"],
     how_to_fix: row["How to fix this issue"],
     severity: (row["Severity"] || "unknown").trim(),
     affected_page: row["Affected page"],
@@ -178,128 +137,22 @@ function recordOfRow(
           ).toLowerCase(),
         }
       : {}),
+    ...(isYes(row[BEST_PRACTICE_COLUMN])
+      ? { best_practice: true as const }
+      : {}),
+    ...(row[GUIDELINE_COLUMN] ? { wcag: row[GUIDELINE_COLUMN] } : {}),
     ...(hasSourceTest ? { source_test: row[SOURCE_TEST_COLUMN] } : {}),
   };
 }
 
-/**
- * Each rule's name, description, WCAG criteria and usual fix, from the report's rows: the
- * same on every issue of the rule, so said once under a page's rules. The usual fix is the
- * one most of its issues give; some rules (colour contrast) write the element's own values
- * into it.
- */
-function rulesOf(
-  rows: Record<string, string>[],
-  issues: SimplifiedAccessibilityIssue[],
-): Record<string, RuleText> {
-  const fixes = new Map<string, string[]>();
-  for (const issue of issues) {
-    const list = fixes.get(issue.issue_type) ?? [];
-    list.push(issue.how_to_fix ?? "");
-    fixes.set(issue.issue_type, list);
-  }
-  const rules: Record<string, RuleText> = {};
-  for (const row of rows) {
-    const type = row["Issue type"];
-    if (!type || rules[type]) continue;
-    rules[type] = {
-      ...(row["Issue name"] ? { name: row["Issue name"] } : {}),
-      description: row["Issue description"] ?? "",
-      ...(row["Guideline(s)"] ? { wcag: row["Guideline(s)"] } : {}),
-      ...(isYes(row[BEST_PRACTICE_COLUMN])
-        ? { best_practice: true as const }
-        : {}),
-      how_to_fix: mostCommon(
-        fixes.get(type) ?? [row["How to fix this issue"] ?? ""],
-      ),
-    };
-  }
-  return rules;
-}
-
-/** An issue without its rule's text, keeping its own description or fix where they differ. */
-function withoutRuleText(
-  issue: SimplifiedAccessibilityIssue,
-  rule: RuleText | undefined,
-): IssueRow {
-  const { issue_description, how_to_fix, ...own } = issue;
+/** How many of the issues still need a person to confirm them, and how many are best practices. */
+function reviewCountsOf(issues: SimplifiedAccessibilityIssue[]): ReviewCounts {
   return {
-    ...own,
-    ...(issue_description !== rule?.description ? { issue_description } : {}),
-    ...(how_to_fix !== rule?.how_to_fix ? { how_to_fix } : {}),
-  };
-}
-
-/** The whole report's issues at a glance: by severity and rule, and how many to confirm. */
-function summaryOf(
-  issues: SimplifiedAccessibilityIssue[],
-  rules: Record<string, RuleText>,
-): IssueSummary {
-  const bySeverity: Record<string, number> = {};
-  const byRule = new Map<string, number>();
-  for (const issue of issues) {
-    bySeverity[issue.severity] = (bySeverity[issue.severity] ?? 0) + 1;
-    byRule.set(issue.issue_type, (byRule.get(issue.issue_type) ?? 0) + 1);
-  }
-  return {
-    by_severity: bySeverity,
-    by_rule: [...byRule]
-      .map(([issue_type, count]) => ({ issue_type, count }))
-      .sort((a, b) => b.count - a.count),
     // A needs-review issue a person has confirmed is a confirmed failure.
     needs_review: issues.filter(
       (issue) => issue.needs_review && issue.needs_review !== "confirmed",
     ).length,
-    best_practice: issues.filter(
-      (issue) => rules[issue.issue_type]?.best_practice,
-    ).length,
-  };
-}
-
-/**
- * One page of issues, each without its rule's text, with the rules that page names and the
- * counts of all of them. Most severe first, and within a severity rule by rule, the most
- * common rule first: a page then names fewer rules, and a rule's text, counted against the
- * page's length the first time the page names it, is said once for all its issues there.
- */
-function pageWithRules(
-  all: SimplifiedAccessibilityIssue[],
-  rows: Record<string, string>[],
-  options: { maxCharacterLength: number; nextPage: number },
-) {
-  const rules = rulesOf(rows, all);
-  const summary = summaryOf(all, rules);
-  const ruleRank = new Map(
-    summary.by_rule.map(({ issue_type }, i) => [issue_type, i]),
-  );
-  const ordered = all
-    .map((issue, i) => ({ issue, i }))
-    .sort(
-      (a, b) =>
-        severityRank(a.issue.severity) - severityRank(b.issue.severity) ||
-        (ruleRank.get(a.issue.issue_type) ?? 0) -
-          (ruleRank.get(b.issue.issue_type) ?? 0) ||
-        a.i - b.i,
-    )
-    .map(({ issue }) => withoutRuleText(issue, rules[issue.issue_type]));
-  const named = new Set<string>();
-  const page = pageOf(ordered, {
-    ...options,
-    extraLength: (row) => {
-      if (named.has(row.issue_type)) return 0;
-      named.add(row.issue_type);
-      return JSON.stringify(rules[row.issue_type] ?? {}).length;
-    },
-  });
-  return {
-    ...page,
-    rules: Object.fromEntries(
-      [...new Set(page.records.map((r) => r.issue_type))].map((type) => [
-        type,
-        rules[type],
-      ]),
-    ),
-    summary,
+    best_practice: issues.filter((issue) => issue.best_practice).length,
   };
 }
 
@@ -567,9 +420,13 @@ export async function parseAccessibilityReportFromCSV(
 
   if (pageUrl) {
     const { all, page } = pageIssues(parsed, columns, pageUrl);
-    const slice = pageWithRules(all, parsed, { maxCharacterLength, nextPage });
+    const slice = pageOf(sortBySeverity(all), {
+      maxCharacterLength,
+      nextPage,
+    });
     return {
       ...slice,
+      summary: reviewCountsOf(all),
       total_issues: all.length,
       duplicate_issues: null,
       unlinked_duplicates: 0,
@@ -633,11 +490,12 @@ export async function parseAccessibilityReportFromCSV(
     else unlinkedDuplicates++;
   }
 
-  // 3) Most severe first, in pages by JSON length, each rule's text once per page
-  const page = pageWithRules(all, parsed, { maxCharacterLength, nextPage });
+  // 3) Most severe first, in pages by JSON length
+  const page = pageOf(sortBySeverity(all), { maxCharacterLength, nextPage });
 
   return {
     ...page,
+    summary: reviewCountsOf(all),
     total_issues: all.length,
     duplicate_issues: grouped ? duplicates : null,
     unlinked_duplicates: unlinkedDuplicates,

@@ -27,6 +27,12 @@ describe("a response whose body cannot be read", () => {
       {},
     );
     expect(result.status).toBe(0);
+    // And the advice is the one for a request that was SENT: the status line arrived, so
+    // the device may really have been allocated. "Could not be reached" would invite the
+    // retry that takes a second one.
+    expect(result.error).toMatch(/cut off while being read/);
+    expect(result.error).toMatch(/may have taken effect/);
+    expect(result.error).not.toMatch(/could not be reached/);
     expect(result.body).toBeNull();
     expect(result.error).toBeTruthy();
     vi.unstubAllGlobals();

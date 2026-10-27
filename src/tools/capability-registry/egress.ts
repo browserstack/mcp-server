@@ -59,6 +59,15 @@ export function timedOutMessage(timeoutMs: number): string {
   );
 }
 
+/** The reply had started arriving and then failed: the request was certainly sent. */
+export function replyCutOffMessage(detail: string): string {
+  return (
+    `the reply was cut off while being read (${detail}). The request was sent, so it ` +
+    "may have taken effect — check (list_app_builds, get_session, or the dashboard) " +
+    "before retrying."
+  );
+}
+
 /** What this server can put into a credential template. Nothing else is fillable. */
 const PLACEHOLDERS = ["username", "access_key"] as const;
 
@@ -260,6 +269,10 @@ export function fetchTransport(defaultTimeoutMs = 45_000): Transport {
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // Set once `fetch` resolves, i.e. the status line has arrived: from then on any failure
+    // — the abort timer firing mid-body, a dropped connection — is a reply that was cut off,
+    // not a product that could not be reached, and the advice differs.
+    let replied = false;
     try {
       const response = await fetch(target.toString(), {
         method,
@@ -280,20 +293,29 @@ export function fetchTransport(defaultTimeoutMs = 45_000): Transport {
         redirect: "manual",
         signal: controller.signal,
       });
+      replied = true;
       return {
         status: response.status,
         body: await readBody(response),
       };
     } catch (error) {
       // Upstream detail stays out of the reply; the resolver treats status 0 as a failed
-      // call. A cut-off is told apart from a refused connection, because the advice differs.
+      // call. A cut-off is told apart from a refused connection, because the advice
+      // differs — and a failure after the reply started is a cut-off whatever its class,
+      // since `readBody` wraps the abort in a plain Error.
       const timedOut = error instanceof Error && error.name === "AbortError";
       return {
         status: 0,
         body: null,
-        error: timedOut
-          ? timedOutMessage(timeoutMs)
-          : "the product could not be reached",
+        error: replied
+          ? replyCutOffMessage(
+              timedOut
+                ? `no answer within ${Math.round(timeoutMs / 1000)}s`
+                : "connection lost",
+            )
+          : timedOut
+            ? timedOutMessage(timeoutMs)
+            : "the product could not be reached",
       };
     } finally {
       clearTimeout(timer);

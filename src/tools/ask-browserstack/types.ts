@@ -7,11 +7,10 @@
  * other half will never send. Nothing here changes without changing that document first.
  */
 
-// a11y is deliberately ABSENT while Ask AI is in limited alpha. Atlas itself serves the
-// product; this tool just does not offer it yet. Re-adding it means this list, the `product`
-// describe text in register.ts, and the two a11y handoffs in tool-handoff.ts — which stop
-// pointing here precisely because the call would now be rejected.
-export const PRODUCTS = ["tm", "tra"] as const;
+// Dropping a product means this list, the `product` describe text in register.ts, and any
+// handoff in tool-handoff.ts that sends the model here with that product — the two a11y ones
+// do — or those handoffs become instructions to make a call the schema rejects.
+export const PRODUCTS = ["tm", "a11y", "tra"] as const;
 export type Product = (typeof PRODUCTS)[number];
 
 /** CONTRACT §2 — what Atlas emits on the run's stream when its gate needs a human. */

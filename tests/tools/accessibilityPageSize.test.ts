@@ -25,9 +25,11 @@ describe("the default page size", () => {
   });
 
   it("is the same for a CSV report", async () => {
+    // Each issue's rule text, its fix here, counts against the page the first time the page
+    // names the rule. (A long HTML snippet is cut short, so it cannot fill a page.)
     const header = '"Issue type","Severity","Component","Issue description","Affected page","HTML snippet","How to fix this issue"';
     const line = (n: number) =>
-      `"rule-${n}","serious","div","d","https://shop.example/","${"x".repeat(3000)}","fix"`;
+      `"rule-${n}","serious","div","d","https://shop.example/","<div>","${"x".repeat(3000)}"`;
     (apiClient.get as Mock).mockResolvedValue({
       ok: true,
       statusText: "OK",

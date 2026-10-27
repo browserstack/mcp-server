@@ -2,7 +2,7 @@ import { apiClient } from "../../lib/apiClient.js";
 import { SessionType } from "../../lib/constants.js";
 import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
-import { pageOf, sortBySeverity } from "./paginate.js";
+import { mostCommon, pageOf, sortBySeverity } from "./paginate.js";
 
 /**
  * App Accessibility: the issues of a mobile app build run through App Automate with
@@ -388,18 +388,6 @@ export function flattenAppSnapshots(
     }
   });
   return sortBySeverity(rows);
-}
-
-/** The value most rows give, the first of them on a tie. */
-function mostCommon(values: string[]): string {
-  const counts = new Map<string, number>();
-  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
-  let best = "";
-  let bestCount = 0;
-  for (const [v, n] of counts) {
-    if (n > bestCount) [best, bestCount] = [v, n];
-  }
-  return best;
 }
 
 /**

@@ -132,8 +132,10 @@ describe("parseAccessibilityReportFromCSV for one page", () => {
 describe("parseAccessibilityReportFromCSV paging", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  // Rule text (here, each rule's fix) counts against the page the first time the page names
+  // the rule; a long HTML snippet is cut short, so it cannot fill a page.
   it("hands out about 10,000 characters of issues per call by default", async () => {
-    serve([1, 2, 3, 4].map((n) => row({ "Issue type": `rule-${n}`, Component: "div", "Affected page": HOME, "Issue link": link(`p${n}`), "HTML snippet": "x".repeat(3000) })));
+    serve([1, 2, 3, 4].map((n) => row({ "Issue type": `rule-${n}`, Component: "div", "Affected page": HOME, "Issue link": link(`p${n}`), "How to fix this issue": "x".repeat(3000) })));
 
     const page = await parseAccessibilityReportFromCSV("https://csv");
 
@@ -144,7 +146,7 @@ describe("parseAccessibilityReportFromCSV paging", () => {
   it("still returns an issue larger than a page, so paging never stalls", async () => {
     serve([
       row({ "Issue type": "small", Component: "a", "Affected page": HOME, "Issue link": link("s") }),
-      row({ "Issue type": "huge", Component: "div", "Affected page": HOME, "Issue link": link("h"), "HTML snippet": "x".repeat(8000) }),
+      row({ "Issue type": "huge", Component: "div", "Affected page": HOME, "Issue link": link("h"), "How to fix this issue": "x".repeat(12_000) }),
       row({ "Issue type": "after", Component: "b", "Affected page": HOME, "Issue link": link("t") }),
     ]);
 

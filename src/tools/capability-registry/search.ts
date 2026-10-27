@@ -583,6 +583,115 @@ const IDENTITY_WEIGHT = 6;
 /** Words too common in this domain to settle a product on their own. */
 const GENERIC_ANCHORS = new Set(["test", "tests", "testing"]);
 
+/**
+ * A URL anywhere in the request, so the routing check can read its host and then stop
+ * reading the rest of it.
+ *
+ * Both shapes, because people paste both. The second is restricted to our own domain:
+ * a general scheme-less host pattern would swallow "e.g." and version numbers.
+ */
+const URL_ANYWHERE = /https?:\/\/\S+/gi;
+const BARE_BROWSERSTACK_HOST =
+  /\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.browserstack\.com(?:\/\S*)?/gi;
+
+/**
+ * The leading label of a BrowserStack hostname, and which registry product it is.
+ *
+ * `null` means a REAL BrowserStack product that this registry does not model — Automate,
+ * Live, Percy and the rest are served by the standalone tools. Both values matter and they
+ * mean different things: a mapped product settles the question, and a `null` says the
+ * question is not the registry's to ask about. Only an unrecognised host falls through to
+ * the words.
+ *
+ * ENTRIES COST NOTHING WHEN WRONG AND COST A BUG WHEN MISSING. A subdomain that does not
+ * exist is one no request will ever carry, so `observability` and `test-reporting` are
+ * both listed for the product that answers to both names. Omissions are the expensive
+ * direction, not spare entries.
+ *
+ * Regional and API variants are normalised onto these keys by `hostProduct` below rather
+ * than listed, so `test-management-eu` and `api-observability` need no entry of their own.
+ */
+const BROWSERSTACK_HOSTS: Record<string, string | null> = {
+  "test-management": "tm",
+  observability: "tra",
+  "test-reporting": "tra",
+  "app-accessibility": "app_accessibility",
+  automate: null,
+  "app-automate": null,
+  live: null,
+  "app-live": null,
+  accessibility: null,
+  percy: null,
+  scanner: null,
+};
+
+/** Regional editions of the same dashboard, which route exactly as the parent does. */
+const HOST_REGIONS = new Set(["eu", "in", "us", "au"]);
+
+/**
+ * The product a BrowserStack URL names, or `undefined` when the host says nothing.
+ *
+ * Returns `{ product: null }` for a host we recognise as a BrowserStack product the
+ * registry does not carry — distinct from `undefined`, which means "not our domain, or a
+ * subdomain nobody mapped".
+ */
+function hostProduct(url: string): { product: string | null } | undefined {
+  const host = url
+    .replace(/^https?:\/\//i, "")
+    .split(/[/?#]/)[0]
+    .toLowerCase();
+  if (!host.endsWith(".browserstack.com")) return undefined;
+  let label = host.slice(0, -".browserstack.com".length).split(".").pop() ?? "";
+  // `api-observability` is the same product as `observability`; the split between the
+  // dashboard host and the API host is ours, not something a user should have to know.
+  label = label.replace(/^api-/, "");
+  const parts = label.split("-");
+  if (parts.length > 1 && HOST_REGIONS.has(parts[parts.length - 1]))
+    parts.pop();
+  label = parts.join("-");
+  return label in BROWSERSTACK_HOSTS
+    ? { product: BROWSERSTACK_HOSTS[label] }
+    : undefined;
+}
+
+/**
+ * What the URLs in a request say, and the request with those URLs taken out of it.
+ *
+ * A URL IS EVIDENCE IN ITS HOST AND NOISE IN ITS PATH. `/dashboard/v2/builds/8f3/sessions`
+ * contributes `dashboard`, `build` and `session` — generic nouns several products claim —
+ * while the one decisive part, the subdomain, belongs to no product's vocabulary at all.
+ * So an Automate dashboard link, the most specific thing a user can hand over, was read as
+ * a three-way clash and the user was asked which product they meant. Reading the host and
+ * discarding the path is the whole of the fix.
+ */
+function routingFromUrls(query: string): {
+  settled?: string;
+  clash?: string[];
+  recognised: boolean;
+  rest: string;
+} {
+  const found = [
+    ...(query.match(URL_ANYWHERE) ?? []),
+    ...(query.match(BARE_BROWSERSTACK_HOST) ?? []),
+  ];
+  const rest = query
+    .replace(URL_ANYWHERE, " ")
+    .replace(BARE_BROWSERSTACK_HOST, " ");
+  if (found.length === 0) return { recognised: false, rest };
+
+  let recognised = false;
+  const inRegistry = new Set<string>();
+  for (const url of found) {
+    const hit = hostProduct(url);
+    if (!hit) continue;
+    recognised = true;
+    if (hit.product) inRegistry.add(hit.product);
+  }
+  if (inRegistry.size > 1)
+    return { clash: [...inRegistry].sort(), recognised, rest };
+  return { settled: [...inRegistry][0], recognised, rest };
+}
+
 export interface ProductAmbiguity {
   /** The products that claim the query's words. Empty when the query settles itself. */
   products: string[];
@@ -621,6 +730,21 @@ export function ambiguousProducts(
   const none: ProductAmbiguity = { products: [], terms: [] };
   if (terms(query).length === 0) return none;
 
+  // THE HOST DECIDES, BEFORE ANY WORD IS READ.
+  //
+  // A link to a product's own dashboard is a stronger statement of intent than anything
+  // the surrounding sentence can say, and the words left over are the ones that caused the
+  // false clash in the first place. So a recognised host settles it outright, a host whose
+  // product this registry does not carry says there is nothing here to ask about, and
+  // everything else carries on with the URLs stripped out.
+  const fromUrl = routingFromUrls(query || "");
+  if (fromUrl.clash)
+    return { products: fromUrl.clash, terms: ["the links in the request"] };
+  if (fromUrl.settled)
+    return { ...none, settled: fromUrl.settled, because: ["the link"] };
+  if (fromUrl.recognised) return none;
+  const asked = fromUrl.rest;
+
   /**
    * One spelling per word, so a plural cannot masquerade as a different term.
    *
@@ -632,7 +756,7 @@ export function ambiguousProducts(
    */
   const fold = (text: string): string => terms(text).map(singular).join(" ");
 
-  const asked_ = ` ${fold(query || "")} `;
+  const asked_ = ` ${fold(asked)} `;
 
   const owners = new Map<string, Set<string>>();
   for (const [product, entries] of Object.entries(vocabularyOf(products))) {

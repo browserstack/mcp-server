@@ -35,7 +35,7 @@ import {
   ResponseSelection,
   resolveResponses,
 } from "./index-loader.js";
-import { narrowResponse } from "./narrow.js";
+import { assertSelectable, narrowResponse } from "./narrow.js";
 import { invokeWithFallbacks } from "./fallback.js";
 import { invoke } from "./resolve.js";
 import {
@@ -158,6 +158,19 @@ export function addCapabilityRegistryToolsFromConfig(
     config,
   );
 }
+
+/**
+ * Titles for products whose index does not carry one yet.
+ *
+ * The infra indexes are authored here and declare `title`; tm, tra and loadtesting come
+ * out of the products-os export, which does not emit it yet, and re-formatting three
+ * 80k-line files to add one key was the wrong trade. These go away when the export does.
+ */
+const DEFAULT_TITLES: Record<string, string> = {
+  tm: "Test Management",
+  tra: "Test Reporting & Analytics",
+  loadtesting: "Load Testing",
+};
 
 function ok(payload: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(payload) }] };
@@ -352,7 +365,7 @@ export function addCapabilityRegistryTools(
         : undefined;
       /** The product's title for the question put to a person; the key stays the handle. */
       const label = (name: string) =>
-        registry.index.products[name]?.title ?? name;
+        registry.index.products[name]?.title ?? DEFAULT_TITLES[name] ?? name;
       const routing =
         ambiguity.products.length > 1
           ? {
@@ -433,8 +446,11 @@ export function addCapabilityRegistryTools(
         ...(routing ? { routing } : {}),
         products: registry.productNames().map((name) => ({
           name,
-          ...(registry.index.products[name].title
-            ? { title: registry.index.products[name].title }
+          ...((registry.index.products[name].title ?? DEFAULT_TITLES[name])
+            ? {
+                title:
+                  registry.index.products[name].title ?? DEFAULT_TITLES[name],
+              }
             : {}),
           summary: registry.index.products[name].summary,
           // THE ENTITIES AND WHAT EACH ONE IS. Routing is this tool's whole job, and a
@@ -1181,10 +1197,8 @@ export function addCapabilityRegistryTools(
         })
         .optional()
         .describe(
-          "ONLY for a capability whose contract carries `narrowable`, which names the " +
-            "fields this may use; on any other capability it is refused. Those endpoints " +
-            "take no filtering parameters of their own, so this is applied to the response " +
-            "here, and the result reports what it narrowed and from how many rows.",
+          "Only for a capability whose contract carries `narrowable`: narrows the response " +
+            "to those fields and reports what it narrowed.",
         ),
     },
     {
@@ -1260,6 +1274,11 @@ export function addCapabilityRegistryTools(
             identity,
           );
         }
+
+        // A `select` the capability cannot honour is refused HERE, with the other
+        // pre-flight checks: refusing it on the way back meant the request had already
+        // been sent — a device allocated, a build uploaded — and the answer thrown away.
+        assertSelectable(capability, input.select);
 
         if (capability.mode === "destructive") {
           // Refused before binding, so consent is never sought for something that cannot run.

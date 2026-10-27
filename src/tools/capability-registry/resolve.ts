@@ -150,7 +150,11 @@ export async function invoke(
       (bound.body === undefined && capability.send_empty_body
         ? {}
         : bound.body);
-    return transport(capability.method, url, headers, bound.query, payload);
+    return transport(capability.method, url, headers, bound.query, payload, {
+      timeoutMs: capability.timeout_seconds
+        ? capability.timeout_seconds * 1000
+        : undefined,
+    });
   };
 
   let response = await send();

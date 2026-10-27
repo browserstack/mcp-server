@@ -57,6 +57,7 @@
     "method": "POST",
     "path": "/wd/hub/session",
     "mode": "write",
+    "timeout_seconds": 180,
     "entity": "app_session",
     "intent": "Start a live Appium session on a real Android or iOS device with an uploaded app \u2014 use this before reading the screen, tapping, typing or swiping in the app.",
     "guidance": {
@@ -1089,6 +1090,7 @@
     "method": "POST",
     "path": "/app-automate/upload",
     "mode": "write",
+    "timeout_seconds": 600,
     "entity": "app_build",
     "intent": "Upload an app build to the device-session store \u2014 the one sessions here install from, separate from App Live's \u2014 from a public download link, and get back the bs:// URL a session installs. Use this to make a new .apk, .aab or .ipa available to the devices an agent drives.",
     "guidance": [
@@ -2877,6 +2879,7 @@
     "path": "/app-automate/upload",
     "host": "api",
     "mode": "write",
+    "timeout_seconds": 600,
     "entity": "app_build",
     "encoding": "multipart",
     "local_only": true,

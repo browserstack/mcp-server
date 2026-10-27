@@ -133,24 +133,40 @@ function assertKnownFields(
  * Returns `undefined` when there is nothing to do — no selection, or a capability that
  * declares none — so the caller hands back the original body and the default holds.
  */
-export function narrowResponse(
+/**
+ * Refuse a `select` the capability cannot honour — BEFORE anything is sent.
+ *
+ * This used to run only on the way back, inside `narrowResponse`, so a `create_session`
+ * carrying a bad `select` really allocated the device and then came back as an error with
+ * the session id dropped on the floor; the retry allocated a second one. It now runs with
+ * the other pre-flight checks, ahead of the write-consent prompt, and `narrowResponse`
+ * calls it again for the no-request path (`select` empty, or body not the declared shape).
+ */
+export function assertSelectable(
   capability: Capability,
-  body: unknown,
   selection: Selection | undefined,
-): { body: unknown; narrowing: Narrowing } | undefined {
-  if (!selection || isSelectionEmpty(selection)) return undefined;
-
+): void {
+  if (!selection || isSelectionEmpty(selection)) return;
   const declared = capability.narrowable;
   if (!declared)
     throw new InvocationError(
       "that capability does not support `select`: it returns the product's response as " +
         "sent. describeCapability names the ones that do, under `narrowable`.",
     );
-
   const allowed = declared.fields;
   assertKnownFields(Object.keys(selection.where ?? {}), allowed, "`where`");
   assertKnownFields(selection.distinct ?? [], allowed, "`distinct`");
   assertKnownFields(selection.fields ?? [], allowed, "`fields`");
+}
+
+export function narrowResponse(
+  capability: Capability,
+  body: unknown,
+  selection: Selection | undefined,
+): { body: unknown; narrowing: Narrowing } | undefined {
+  if (!selection || isSelectionEmpty(selection)) return undefined;
+  assertSelectable(capability, selection);
+  const declared = capability.narrowable!;
 
   const rows = rowsAt(body, declared.path);
   // A body that is not the shape the capability promised is handed back whole. Narrowing

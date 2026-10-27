@@ -251,6 +251,7 @@
     "method": "POST",
     "path": "/wd/hub/session",
     "mode": "write",
+    "timeout_seconds": 180,
     "entity": "browser_session",
     "intent": "Start a browser session on a real desktop or mobile browser and get a session id to drive it with \u2014 use this to open a page and interact with it step by step.",
     "guidance": {

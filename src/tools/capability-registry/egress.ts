@@ -40,7 +40,24 @@ export type Transport = (
   headers: Record<string, string>,
   query: Record<string, unknown>,
   body?: unknown,
+  options?: { timeoutMs?: number },
 ) => Promise<HttpResponse>;
+
+/**
+ * What a cut-off read is told, as opposed to a refused connection.
+ *
+ * Both used to be "the product could not be reached", and for a request that was SENT
+ * that is the wrong advice: a build upload or a device allocation cut off after the last
+ * byte may well have taken effect, and a caller told it was unreachable retries — and
+ * uploads twice, or holds two devices.
+ */
+export function timedOutMessage(timeoutMs: number): string {
+  return (
+    `no answer within ${Math.round(timeoutMs / 1000)}s. The request was sent, so it may ` +
+    "have taken effect — check (list_app_builds, get_session, or the dashboard) before " +
+    "retrying."
+  );
+}
 
 /** What this server can put into a credential template. Nothing else is fillable. */
 const PLACEHOLDERS = ["username", "access_key"] as const;
@@ -233,8 +250,9 @@ function truncate(text: string): string {
 }
 
 /** A fetch-based transport. Redirects are NOT followed. */
-export function fetchTransport(timeoutMs = 45_000): Transport {
-  return async (method, url, headers, query, body) => {
+export function fetchTransport(defaultTimeoutMs = 45_000): Transport {
+  return async (method, url, headers, query, body, options) => {
+    const timeoutMs = options?.timeoutMs ?? defaultTimeoutMs;
     const target = new URL(url);
     for (const [key, value] of Object.entries(query || {})) {
       if (value !== undefined && value !== null)
@@ -266,12 +284,16 @@ export function fetchTransport(timeoutMs = 45_000): Transport {
         status: response.status,
         body: await readBody(response),
       };
-    } catch {
-      // Upstream detail stays out of the reply; the resolver treats status 0 as a failed call.
+    } catch (error) {
+      // Upstream detail stays out of the reply; the resolver treats status 0 as a failed
+      // call. A cut-off is told apart from a refused connection, because the advice differs.
+      const timedOut = error instanceof Error && error.name === "AbortError";
       return {
         status: 0,
         body: null,
-        error: "the product could not be reached",
+        error: timedOut
+          ? timedOutMessage(timeoutMs)
+          : "the product could not be reached",
       };
     } finally {
       clearTimeout(timer);

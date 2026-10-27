@@ -239,25 +239,24 @@ describe("a capability with fallbacks", () => {
     expect(out.fallback).toBeUndefined();
   });
 
-  it("refuses a step that names a destructive capability", async () => {
-    const { sent, call } = harness(
-      [400, 200],
-      [{ when: { status: 400 }, capability: "delete_everything" }],
-    );
-    const out = await call({});
-    expect(out.ok).toBe(false);
-    expect(out.error).toMatch(/delete_everything.*destructive/);
-    expect(sent).toHaveLength(1);
+  it("refuses, at load, a step that names a destructive capability", () => {
+    // The loader checks every chain before a request can go out; the runtime guard in
+    // invokeWithFallbacks stays as the backstop behind it.
+    expect(() =>
+      harness(
+        [400, 200],
+        [{ when: { status: 400 }, capability: "delete_everything" }],
+      ),
+    ).toThrow(/delete_everything.*destructive/);
   });
 
-  it("refuses a step that names a capability the index does not have", async () => {
-    const { call } = harness(
-      [400, 200],
-      [{ when: { status: 400 }, capability: "no_such_thing" }],
-    );
-    const out = await call({});
-    expect(out.ok).toBe(false);
-    expect(out.error).toMatch(/unknown_capability: no_such_thing/);
+  it("refuses, at load, a step that names a capability the index does not define", () => {
+    expect(() =>
+      harness(
+        [400, 200],
+        [{ when: { status: 400 }, capability: "no_such_thing" }],
+      ),
+    ).toThrow(/no_such_thing.*does not define/);
   });
 });
 

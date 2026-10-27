@@ -318,6 +318,14 @@ export interface Capability {
    * the capability's guidance to state. Every attempt is reported with its status.
    */
   fallbacks?: Fallback[];
+  /**
+   * How long to wait for this one capability's answer, in seconds.
+   *
+   * The transport's default (45 s) fits a JSON API and not a build upload or a device
+   * allocation, both of which routinely run longer. A capability that can legitimately
+   * take minutes says so here; everything else keeps the default.
+   */
+  timeout_seconds?: number;
   paginated?: boolean;
   /** The largest page the operation declares. */
   max_page_size?: number;

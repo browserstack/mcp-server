@@ -79,11 +79,15 @@ describe("the routing question names products by title", () => {
     ]);
   });
 
-  it("falls back to the key for a product that declares no title", async () => {
+  it("falls back to the key for a product that declares no title, unless a default exists", async () => {
+    // tm's index does not carry a title yet (the export does not emit one), so the
+    // server supplies "Test Management"; mobiledevicecontrol has no default and reads as
+    // its key when the index gives none.
     const out = await listProducts(false)("end my session");
     expect(out.routing.question).toBe(
-      "Which product do you mean — mobiledevicecontrol or tm?",
+      "Which product do you mean — mobiledevicecontrol or Test Management?",
     );
     expect(out.products[0].title).toBeUndefined();
+    expect(out.products[1].title).toBe("Test Management");
   });
 });

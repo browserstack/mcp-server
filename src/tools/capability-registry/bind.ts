@@ -257,6 +257,15 @@ function coerceType(
     return value;
   }
   if (expected === "file") {
+    // NEVER ON THE HOSTED SERVER. `local_only` is what keeps file capabilities off the
+    // remote surface, and that is a flag an index author has to remember; this is the net
+    // under it. A hosted server has no business reading its own disk on a caller's behalf,
+    // whatever the index says.
+    if (appConfig.REMOTE_MCP)
+      throw new InvocationError(
+        `'${label}' is a file on the caller's own machine, which this server cannot read. ` +
+          "Use the form of this capability that takes a public link, or upload by hand.",
+      );
     // CHECKED HERE, not at egress: `bind` runs dry before the write-consent gate, so a path
     // that does not exist — or a base directory nobody configured — is refused before the
     // user is asked to approve an upload that was never going to happen.

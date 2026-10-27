@@ -148,6 +148,45 @@ function asReference(capability: Capability): Capability {
  * The object form is flattened away here, so no reader downstream sees anything but a plain
  * array, and which surface this is stays ours to know rather than a fact the caller acts on.
  */
+/** read < write < destructive; anything the gate does not recognise ranks highest. */
+function modeRank(mode: unknown): number {
+  return mode === "read" ? 0 : mode === "write" ? 1 : 2;
+}
+
+/**
+ * Refuse, at load, a fallback chain the runtime would have to refuse on the first call.
+ *
+ * `invokeWithFallbacks` already refuses a destructive or uncallable step, but it never
+ * compared the step's mode with the original's — so a read could have fallen back to a
+ * write sibling and run it without the consent prompt a write gets. Today's only chain
+ * (hide_keyboard → dismiss_keyboard_key) is write → write; this keeps the next index from
+ * opening that door, and reports an unknown target here rather than after a request has
+ * already gone out.
+ */
+function checkFallbacks(product: string, capabilities: Capability[]): void {
+  const byName = new Map(capabilities.map((c) => [c.name, c]));
+  for (const capability of capabilities) {
+    for (const step of capability.fallbacks ?? []) {
+      const target = byName.get(step.capability);
+      if (!target)
+        throw new IndexError(
+          `${product}.${capability.name} falls back to '${step.capability}', which the ` +
+            "index does not define",
+        );
+      if (target.mode === "destructive")
+        throw new IndexError(
+          `${product}.${capability.name} falls back to '${step.capability}', which is destructive`,
+        );
+      if (modeRank(target.mode) > modeRank(capability.mode))
+        throw new IndexError(
+          `${product}.${capability.name} (${capability.mode}) falls back to ` +
+            `'${step.capability}' (${target.mode}): a fallback may not need more consent ` +
+            "than the call that triggered it",
+        );
+    }
+  }
+}
+
 function withSurfaceGuidance(capability: Capability): Capability {
   const g = capability.guidance;
   if (!g || Array.isArray(g)) return capability;
@@ -379,13 +418,19 @@ export class CapabilityRegistry {
       this.byEndpoint.set(product, lookup);
       this.byName.set(product, names);
       this.withheld.set(product, withheld);
-      products[product] = withheld.size
-        ? {
-            ...bundle,
-            capabilities: enabled,
-            entities: stripDisabledFromEntities(bundle, withheld),
-          }
-        : bundle;
+      checkFallbacks(product, bundle.capabilities);
+      // ALWAYS THE PROCESSED PRODUCT. This used to fall back to the raw bundle when nothing
+      // was disabled, which quietly dropped the per-surface guidance (`withSurfaceGuidance`
+      // runs on the way into `enabled`) and the reference-only form from search,
+      // listProducts and describeEntity for any product with no `disabled` entry — exactly
+      // the first tm/tra export to use `local_only`.
+      products[product] = {
+        ...bundle,
+        capabilities: enabled,
+        entities: withheld.size
+          ? stripDisabledFromEntities(bundle, withheld)
+          : bundle.entities,
+      };
     }
 
     this.index = { ...index, products };

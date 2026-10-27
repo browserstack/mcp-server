@@ -92,14 +92,19 @@ describe("a disabled capability is absent from the loaded model", () => {
     expect(registryWith(product()).disabledCounts()).toEqual({ tm: 1 });
   });
 
-  it("reports nothing, and shares the bundle, when no capability is disabled", () => {
+  it("reports nothing, and keeps every capability, when none is disabled", () => {
     const products = {
       tm: { summary: "s", capabilities: [LIVE], entities: {} },
     };
     const registry = registryWith(products);
     expect(registry.disabledCounts()).toEqual({});
-    // Untouched products keep object identity — the filter allocates only where it must.
-    expect(registry.index.products.tm).toBe(products.tm);
+    // The product is always the processed one now — the raw bundle used to be shared
+    // when nothing was disabled, which dropped the per-surface guidance for exactly those
+    // products — so equality is by content, not identity.
+    expect(registry.index.products.tm).toEqual(products.tm);
+    expect(registry.index.products.tm.capabilities.map((c) => c.name)).toEqual([
+      LIVE.name,
+    ]);
   });
 });
 

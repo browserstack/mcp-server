@@ -309,7 +309,10 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const productText = shape?.product?.description as string;
       for (const value of values) expect(productText).toContain(`${value} (`);
 
-      for (const handoff of [NEEDS_A11Y_SCAN_ID, NEEDS_A11Y_CONFIG_ID]) {
+      // Report ids are listed by the web_accessibility capabilities now, so that hand-off
+      // no longer sends the model to Ask AI; the auth-config one still does.
+      expect(NEEDS_A11Y_SCAN_ID).not.toMatch(/askBrowserStackAI/);
+      for (const handoff of [NEEDS_A11Y_CONFIG_ID]) {
         const named = handoff.match(/askBrowserStackAI with product "([^"]+)"/)?.[1];
         expect(named).toBeDefined();
         expect(values).toContain(named);

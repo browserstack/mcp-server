@@ -1,0 +1,1274 @@
+{
+  "schema_version": 1,
+  "version": "1.0",
+  "build_id": "web_accessibility-v1.0-lists",
+  "web_accessibility": {
+    "summary": "BrowserStack Web Accessibility: WCAG accessibility reports for websites and web apps. Find the account's Workflow Analyzer reports from the browser extension, Website Scanner scans with their scan history, Automated Tests projects and builds from web tests executed with accessibility checks on, and Assisted Test reports, each with the id, creator, status and issue counts needed to pick one. Each list names the id the accessibility issue tool reads. These capabilities list reports; they do not read a report's individual issues, start scans, or change or delete anything. Mobile apps are covered by a separate product.",
+    "routing_terms": [
+      "web accessibility",
+      "website accessibility",
+      "web a11y",
+      "website scanner",
+      "site scanner",
+      "workflow analyzer",
+      "assisted test",
+      "automated tests accessibility"
+    ],
+    "auth": {
+      "type": "http",
+      "scheme": "basic"
+    },
+    "base_url": "https://api-accessibility.browserstack.com",
+    "capabilities": [
+      {
+        "name": "list_workflow_analyzer_reports",
+        "method": "GET",
+        "path": "/api/workflow-analyzer/v1/reports",
+        "mode": "read",
+        "entity": "workflow_analyzer_report",
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 99,
+            "default": 20,
+            "description": "Reports per page, 10 to 99. Send the same limit with every next_page: the token carries only the page number, so a different limit shifts the pages. 100 is not offered because it returns 30 reports and says there is no next page.",
+            "example": 50
+          },
+          {
+            "name": "next_page",
+            "type": "string",
+            "description": "The data.pagination.nextPage token from the previous page, sent back as given. page is not read: a call sending it gets the first page every time. A changed or expired token answers 422 'Invalid pagination token'.",
+            "example": "eyJhbGciOiJIUzI1NiJ9.eyJwYWdlIjoyfQ.signature"
+          }
+        ],
+        "intent": "List the account's Workflow Analyzer reports newest first, with each report's id, name, creator, status, settings and issue counts - use this to find someone's latest reports, a report by name, or the id that reads its issues.",
+        "guidance": [
+          "id is the workflowReportId fetchAccessibilityIssues takes to read a report's issues.",
+          "There is no filter by person, name or date: the list holds every report in the account, newest first. For someone's latest reports, read pages in order, with limit 99 to need fewer, and keep the rows whose createdBy.name or createdBy.id is theirs, stopping once you have enough.",
+          "Paging is data.pagination.hasNext and data.pagination.nextPage; send nextPage back as next_page with the same limit.",
+          "The settings sit under scanSettings, with wcagVersion an object of label and value, and the counts under issueSummary; the public API docs show both flat.",
+          "A limit outside 10 to 100 is not refused: a page of 20 comes back, and error says why.",
+          "These are web reports from the browser extension. A mobile app's Workflow Analyzer reports are App Accessibility manual reports, listed there."
+        ],
+        "returns": [
+          "data.reports.id",
+          "data.reports.name",
+          "data.reports.createdBy",
+          "data.reports.status",
+          "data.reports.scanSettings",
+          "data.reports.issueSummary",
+          "data.pagination.hasNext",
+          "data.pagination.nextPage"
+        ],
+        "paginated": true,
+        "max_page_size": 99,
+        "responses": {
+          "200": {
+            "$response": "ListWorkflowAnalyzerReports"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "422": {
+            "$response": "InvalidPageToken"
+          },
+          "502": {
+            "$response": "UpstreamFailure"
+          }
+        }
+      },
+      {
+        "name": "list_website_scanner_scans",
+        "method": "GET",
+        "path": "/api/website-scanner/v1/scans",
+        "mode": "read",
+        "entity": "website_scan",
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 25,
+            "default": 20,
+            "description": "Scans per page, 10 to 25. Above 25 the page still holds 25 scans but the next page starts past the ones in between, so they are skipped. With next_page, omit limit or send the same value: a different one answers 422.",
+            "example": 25
+          },
+          {
+            "name": "next_page",
+            "type": "string",
+            "description": "The data.pagination.nextPage token from the previous page, sent back as given. page is not read: a call sending it gets the first page every time. A changed or expired token answers 422 'Invalid pagination token'. page_size is not read either.",
+            "example": "eyJhbGciOiJIUzI1NiJ9.eyJwYWdlIjoyfQ.signature"
+          }
+        ],
+        "intent": "List the account's Website Scanner scans, most recently run first, with each scan's id, name, creator, dashboard link and latest run - use this to find a scan by name or person, or the scan and run ids that read its issues.",
+        "guidance": [
+          "id is the scanId fetchAccessibilityIssues takes, and lastScanDetails.scanRunId is the scanRunId of the scan's latest run; list_website_scanner_scan_runs gives the earlier ones.",
+          "scanUrl is the scan's report on the Accessibility dashboard: the link to give a user.",
+          "There is no filter: current_user_id, team, page and page_size are not read, and every scan in the account comes back. For one person's scans keep the rows whose createdBy.name or createdBy.id is theirs.",
+          "Pages run from the most recently scanned, but the rows within a page are sorted by scan id, so order them by lastScanDetails.lastScanDate.",
+          "createdBy is an object of id and name, not the bare user id the public docs show.",
+          "lastScanDetails.error can hold a message while scanStatus is completed: some pages failed, and reportSummary.failure counts them."
+        ],
+        "returns": [
+          "data.scans.id",
+          "data.scans.name",
+          "data.scans.createdBy",
+          "data.scans.scanUrl",
+          "data.scans.wcagVersion",
+          "data.scans.recurring",
+          "data.scans.lastScanDetails",
+          "data.pagination.hasNext",
+          "data.pagination.nextPage"
+        ],
+        "paginated": true,
+        "max_page_size": 25,
+        "responses": {
+          "200": {
+            "$response": "ListWebsiteScannerScans"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "422": {
+            "$response": "InvalidPageToken"
+          },
+          "502": {
+            "$response": "UpstreamFailure"
+          }
+        }
+      },
+      {
+        "name": "list_website_scanner_scan_runs",
+        "method": "GET",
+        "path": "/api/website-scanner/v1/scans/{scan_id}/scan_runs",
+        "mode": "read",
+        "entity": "scan_run",
+        "path_params": [
+          {
+            "name": "scan_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "The scan's id, from list_website_scanner_scans or the answer of startAccessibilityScan. A scan's name is not accepted.",
+            "example": 4123456
+          }
+        ],
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 100,
+            "default": 20,
+            "description": "Runs per page, 10 to 100. With next_page, omit limit or send the same value: a different one answers 422.",
+            "example": 50
+          },
+          {
+            "name": "next_page",
+            "type": "string",
+            "description": "The data.pagination.nextPage token from the previous page, sent back as given. page is not read: a call sending it gets the first page every time. A changed or expired token answers 422 'Invalid pagination token'.",
+            "example": "eyJhbGciOiJIUzI1NiJ9.eyJwYWdlIjoyfQ.signature"
+          }
+        ],
+        "intent": "List one Website Scanner scan's runs newest first, with each run's id, date, issue and component counts and how many pages loaded - use this to pick an earlier run or follow a site's issues over time.",
+        "guidance": [
+          "id is the scanRunId fetchAccessibilityIssues takes with this scan's scanId, also as compareWith.",
+          "Runs are ordered by scanDate, newest first. A run started by hand can carry a later id than a newer scheduled run, so do not order them by id.",
+          "reportSummary.failure counts the pages that did not load in that run; their issues are missing from its count.",
+          "An unknown scan answers 404 'Scan builds not found'."
+        ],
+        "returns": [
+          "data.scanRuns.id",
+          "data.scanRuns.scanDate",
+          "data.scanRuns.issues",
+          "data.scanRuns.componentCount",
+          "data.scanRuns.reportSummary",
+          "data.pagination.hasNext",
+          "data.pagination.nextPage"
+        ],
+        "paginated": true,
+        "max_page_size": 100,
+        "responses": {
+          "200": {
+            "$response": "ListWebsiteScannerScanRuns"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "422": {
+            "$response": "InvalidPageToken"
+          },
+          "404": {
+            "$response": "ScanNotFound"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "list_automated_tests_projects",
+        "method": "GET",
+        "path": "/api/automated-tests/v1/projects",
+        "mode": "read",
+        "entity": "automated_tests_project",
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 100,
+            "default": 10,
+            "description": "Projects per page, 10 to 100 (default 10). With next_page, omit limit or send the same value: a different one answers 400.",
+            "example": 50
+          },
+          {
+            "name": "next_page",
+            "type": "string",
+            "description": "The data.pagination.next_page token from the previous page, sent back as given. page is not read: a call sending it gets the first page every time. A changed or expired token answers 422 'Invalid pagination token'.",
+            "example": "eyJhbGciOiJIUzI1NiJ9.eyJwYWdlIjoyfQ.signature"
+          }
+        ],
+        "intent": "List the account's Automated Tests projects newest first, with each project's id, name and creation date - use this to find the project name that narrows its builds.",
+        "guidance": [
+          "There is no name filter: name and search are not read, and the whole list comes back, newest first.",
+          "list_automated_tests_builds narrows to a project by its name (project_name), not by this id.",
+          "Paging here is snake_case: data.pagination.has_next and data.pagination.next_page.",
+          "Website Scanner scans are not projects here; list them with list_website_scanner_scans."
+        ],
+        "returns": [
+          "data.projects.id",
+          "data.projects.name",
+          "data.projects.createdAt",
+          "data.pagination.has_next",
+          "data.pagination.next_page"
+        ],
+        "paginated": true,
+        "max_page_size": 100,
+        "responses": {
+          "200": {
+            "$response": "ListAutomatedTestsProjects"
+          },
+          "400": {
+            "$response": "PagingChanged"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "422": {
+            "$response": "InvalidPageToken"
+          },
+          "502": {
+            "$response": "UpstreamFailure"
+          }
+        }
+      },
+      {
+        "name": "list_automated_tests_builds",
+        "method": "GET",
+        "path": "/api/automated-tests/v1/builds",
+        "mode": "read",
+        "entity": "automated_tests_build",
+        "query": [
+          {
+            "name": "project_name",
+            "type": "string",
+            "description": "Keeps one project's builds: its full name, in any letter case. Part of a name matches nothing. Only this snake_case name is read: projectId, project_id and projectName are ignored, and every project's builds come back.",
+            "example": "Checkout web tests"
+          },
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 100,
+            "default": 10,
+            "description": "Builds per page, 10 to 100 (default 10). With next_page, omit limit or send the same value: a different one answers 400.",
+            "example": 50
+          },
+          {
+            "name": "next_page",
+            "type": "string",
+            "description": "The data.pagination.next_page token from the previous page, sent back as given. page is not read: a call sending it gets the first page every time. A changed or expired token answers 422 'Invalid pagination token'. Send project_name again, unchanged: a different one answers 400.",
+            "example": "eyJhbGciOiJIUzI1NiJ9.eyJwYWdlIjoyfQ.signature"
+          }
+        ],
+        "intent": "List the account's Automated Tests builds newest first, or one project's, with each build's id, number, name, creator, status and issue counts - use this to find a suite's latest run, someone's builds, or the build id that reads its issues.",
+        "guidance": [
+          "id is the 40-character build id fetchAccessibilityIssues takes as buildId, the thBuildId in the build's dashboard link.",
+          "A project_name that matches no project answers 200 with data null and info ['No Projects found']: no match, not an error.",
+          "Builds that ran without accessibility checks are left out, so a page can hold fewer rows than limit.",
+          "There is no filter by person: keep the rows whose createdBy.name or createdBy.userId is theirs.",
+          "summary (page, component and issue counts, test health) is present only on a completed build that ran tests; a completed build with no tests reads status failed.",
+          "Paging here is snake_case: data.pagination.has_next and data.pagination.next_page."
+        ],
+        "returns": [
+          "data.builds.id",
+          "data.builds.buildNumber",
+          "data.builds.name",
+          "data.builds.time",
+          "data.builds.createdBy",
+          "data.builds.projectId",
+          "data.builds.status",
+          "data.builds.wcagVersion",
+          "data.builds.summary",
+          "data.pagination.has_next",
+          "data.pagination.next_page",
+          "info"
+        ],
+        "paginated": true,
+        "max_page_size": 100,
+        "responses": {
+          "200": {
+            "$response": "ListAutomatedTestsBuilds"
+          },
+          "400": {
+            "$response": "PagingChanged"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "422": {
+            "$response": "InvalidPageToken"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "list_assisted_test_reports",
+        "method": "GET",
+        "path": "/api/assisted-test/v1/reports",
+        "mode": "read",
+        "entity": "assisted_test_report",
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 99,
+            "default": 20,
+            "description": "Reports per page, 10 to 99. Send the same limit with every next_page: the token carries only the page number, so a different limit shifts the pages. 100 is not offered because it returns 30 reports and says there is no next page.",
+            "example": 50
+          },
+          {
+            "name": "next_page",
+            "type": "string",
+            "description": "The data.pagination.nextPage token from the previous page, sent back as given. page is not read: a call sending it gets the first page every time. A changed or expired token answers 422 'Invalid pagination token'.",
+            "example": "eyJhbGciOiJIUzI1NiJ9.eyJwYWdlIjoyfQ.signature"
+          }
+        ],
+        "intent": "List the account's Assisted Test reports newest first, with each report's id, name, creator, status, test type and issue counts - use this to find a guided keyboard, forms or other assisted check someone ran.",
+        "guidance": [
+          "fetchAccessibilityIssues does not read Assisted Test reports: the counts here are what an agent can get, and the report itself is read on the Accessibility dashboard.",
+          "scanSettings.assistedTestType is a number: 0 keyboard, 1 interactive elements, 2 modals, 3 forms, 4 images, 5 layout, 6 tables, 7 responsiveness.",
+          "There is no filter by person, name or date: the list holds every report in the account, newest first; read pages in order, with limit 99 to need fewer, and keep the rows whose createdBy.name or createdBy.id is theirs.",
+          "Paging is data.pagination.hasNext and data.pagination.nextPage; send nextPage back as next_page with the same limit."
+        ],
+        "returns": [
+          "data.reports.id",
+          "data.reports.name",
+          "data.reports.createdBy",
+          "data.reports.status",
+          "data.reports.scanSettings",
+          "data.reports.issueSummary",
+          "data.pagination.hasNext",
+          "data.pagination.nextPage"
+        ],
+        "paginated": true,
+        "max_page_size": 99,
+        "responses": {
+          "200": {
+            "$response": "ListAssistedTestReports"
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "Forbidden"
+          },
+          "422": {
+            "$response": "InvalidPageToken"
+          },
+          "502": {
+            "$response": "UpstreamFailure"
+          }
+        }
+      }
+    ],
+    "entities": {
+      "workflow_analyzer_report": {
+        "entity": "workflow_analyzer_report",
+        "title": "Workflow Analyzer report",
+        "description": "The accessibility issues the Workflow Analyzer browser extension found on the web pages or flow one person scanned.",
+        "aliases": [
+          "workflow analyzer report",
+          "web workflow analyzer report",
+          "wa report",
+          "web accessibility report",
+          "browser extension report",
+          "accessibility toolkit report",
+          "extension scan"
+        ],
+        "id_convention": "A plain integer, discovered through the report list; it is the workflowReportId the accessibility issue tool reads.",
+        "parents": [],
+        "relations": [],
+        "capabilities": [
+          "list_workflow_analyzer_reports"
+        ],
+        "key_facts": [
+          "Reports are shared across the account, so the list holds everyone's; one person's are picked out by the creator on each row.",
+          "A report is created by scanning in the browser extension; there is nothing to create or delete here."
+        ]
+      },
+      "website_scan": {
+        "entity": "website_scan",
+        "title": "Website scan",
+        "description": "A Website Scanner scan: a saved set of web page addresses and accessibility settings, run once or on a recurring basis.",
+        "aliases": [
+          "website scan",
+          "website scanner",
+          "website scanner scan",
+          "site scanner",
+          "site scan",
+          "web scan",
+          "scan config",
+          "recurring scan"
+        ],
+        "id_convention": "A plain integer, discovered through the scan list or returned when a scan is started; a name is resolved to its id through that list.",
+        "parents": [],
+        "relations": [
+          {
+            "entity": "scan_run",
+            "via": "runs once, or again on each recurrence"
+          }
+        ],
+        "capabilities": [
+          "list_website_scanner_scans"
+        ],
+        "key_facts": [
+          "A scan's own row carries only its latest run; the earlier runs are listed per scan.",
+          "Scans are shared across the account, so the list holds everyone's."
+        ]
+      },
+      "scan_run": {
+        "entity": "scan_run",
+        "title": "Scan run",
+        "description": "One run of a Website Scanner scan, with the accessibility issues its pages had at that time.",
+        "aliases": [
+          "scan run",
+          "website scanner run",
+          "website scanner report",
+          "scan report",
+          "previous scan"
+        ],
+        "id_convention": "A plain integer, read together with its scan's id; discovered through the scan's run list.",
+        "parents": [
+          "website_scan"
+        ],
+        "relations": [
+          {
+            "entity": "website_scan",
+            "via": "belongs to one scan"
+          }
+        ],
+        "capabilities": [
+          "list_website_scanner_scan_runs"
+        ],
+        "key_facts": [
+          "A page that did not load in a run is still counted as scanned in some places; the run's failure count says how many did not load."
+        ]
+      },
+      "automated_tests_project": {
+        "entity": "automated_tests_project",
+        "title": "Automated Tests project",
+        "description": "A named group of web test builds that ran with accessibility checks on, usually one per test suite or site.",
+        "aliases": [
+          "automated tests project",
+          "web accessibility project",
+          "automate accessibility project",
+          "sdk accessibility project"
+        ],
+        "id_convention": "A plain integer; builds are narrowed to a project by its name, not by this id.",
+        "parents": [],
+        "relations": [
+          {
+            "entity": "automated_tests_build",
+            "via": "groups the builds reported under its name"
+          }
+        ],
+        "capabilities": [
+          "list_automated_tests_projects"
+        ],
+        "key_facts": [
+          "A project is created by the first test run reported under its name; there is nothing to create or delete here."
+        ]
+      },
+      "automated_tests_build": {
+        "entity": "automated_tests_build",
+        "title": "Automated Tests build",
+        "description": "One run of web tests with accessibility checks on, through Automate or the BrowserStack SDK, and the issues its pages produced.",
+        "aliases": [
+          "automated tests build",
+          "web accessibility build",
+          "automate accessibility build",
+          "sdk accessibility build",
+          "accessibility test run"
+        ],
+        "id_convention": "A 40-character string of lowercase letters and digits, the thBuildId in the build's dashboard link; discovered through the build list.",
+        "parents": [
+          "automated_tests_project"
+        ],
+        "relations": [
+          {
+            "entity": "automated_tests_project",
+            "via": "belongs to one project"
+          }
+        ],
+        "capabilities": [
+          "list_automated_tests_builds"
+        ],
+        "key_facts": [
+          "A build appears only if its tests ran with accessibility checks on.",
+          "status is the accessibility report's; a completed report whose build ran no tests reads failed."
+        ]
+      },
+      "assisted_test_report": {
+        "entity": "assisted_test_report",
+        "title": "Assisted Test report",
+        "description": "The issues one guided Assisted Test recorded on a web page: keyboard, forms, modals, images, tables and similar checks.",
+        "aliases": [
+          "assisted test report",
+          "assisted test",
+          "assisted testing report",
+          "guided accessibility test"
+        ],
+        "id_convention": "A plain integer, discovered through the report list.",
+        "parents": [],
+        "relations": [],
+        "capabilities": [
+          "list_assisted_test_reports"
+        ],
+        "key_facts": [
+          "Its individual issues are read on the Accessibility dashboard; the list gives its counts."
+        ]
+      }
+    },
+    "schemas": {
+      "Creator": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CamelPaging": {
+        "type": "object",
+        "description": "hasNext is false on the last page, where nextPage is null.",
+        "properties": {
+          "hasNext": {
+            "type": "boolean"
+          },
+          "nextPage": {
+            "type": "string"
+          }
+        }
+      },
+      "SnakePaging": {
+        "type": "object",
+        "description": "has_next is false on the last page, where next_page is null.",
+        "properties": {
+          "has_next": {
+            "type": "boolean"
+          },
+          "next_page": {
+            "type": "string"
+          }
+        }
+      },
+      "WcagVersion": {
+        "type": "object",
+        "description": "The standard checked against.",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "IssueSummary": {
+        "type": "object",
+        "properties": {
+          "componentCount": {
+            "type": "integer"
+          },
+          "issueCount": {
+            "type": "integer"
+          },
+          "pageCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "EngineInfo": {
+        "type": "object",
+        "properties": {
+          "testEngine": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "WorkflowAnalyzerReport": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The workflowReportId the accessibility issue tool reads."
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdBy": {
+            "$schema": "Creator"
+          },
+          "status": {
+            "type": "string",
+            "description": "completed once the report is processed."
+          },
+          "scanSettings": {
+            "type": "object",
+            "properties": {
+              "wcagVersion": {
+                "$schema": "WcagVersion"
+              },
+              "needsReview": {
+                "type": "boolean"
+              },
+              "bestPractices": {
+                "type": "boolean"
+              },
+              "advanced": {
+                "type": "boolean"
+              },
+              "experimental": {
+                "type": "boolean"
+              },
+              "scanType": {
+                "type": "string",
+                "description": "Full page, or Part of a page."
+              }
+            }
+          },
+          "engineInfo": {
+            "$schema": "EngineInfo"
+          },
+          "issueSummary": {
+            "$schema": "IssueSummary"
+          },
+          "teamId": {
+            "type": "integer",
+            "description": "Null when the report is not in a team."
+          }
+        }
+      },
+      "AssistedTestReport": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdBy": {
+            "$schema": "Creator"
+          },
+          "status": {
+            "type": "string"
+          },
+          "scanSettings": {
+            "type": "object",
+            "properties": {
+              "scanType": {
+                "type": "string",
+                "description": "Full page, or Part of a page."
+              },
+              "assistedTestType": {
+                "type": "integer",
+                "description": "0 keyboard, 1 interactive elements, 2 modals, 3 forms, 4 images, 5 layout, 6 tables, 7 responsiveness."
+              }
+            }
+          },
+          "engineInfo": {
+            "$schema": "EngineInfo"
+          },
+          "issueSummary": {
+            "$schema": "IssueSummary"
+          },
+          "teamId": {
+            "type": "integer",
+            "description": "Null when the report is not in a team."
+          }
+        }
+      },
+      "WebsiteScan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The scanId the accessibility issue tool reads."
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdBy": {
+            "$schema": "Creator"
+          },
+          "teamId": {
+            "type": "string",
+            "description": "* when the scan is shared with the whole account."
+          },
+          "wcagVersion": {
+            "type": "string",
+            "description": "A value such as wcag21aa."
+          },
+          "needsReview": {
+            "type": "boolean"
+          },
+          "bestPractices": {
+            "type": "boolean"
+          },
+          "advanced": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "description": "The latest run's report status."
+          },
+          "recurring": {
+            "type": "boolean"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "nextScanDate": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Null when the scan does not recur."
+          },
+          "pageCount": {
+            "type": "integer",
+            "description": "How many page addresses the scan holds."
+          },
+          "localTestingEnabled": {
+            "type": "boolean"
+          },
+          "authEnabled": {
+            "type": "boolean"
+          },
+          "cookiesEnabled": {
+            "type": "boolean"
+          },
+          "cookieConfigIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "isCookieDeleted": {
+            "type": "boolean"
+          },
+          "scanUrl": {
+            "type": "string",
+            "description": "The scan's report on the Accessibility dashboard."
+          },
+          "lastScanDetails": {
+            "type": "object",
+            "properties": {
+              "scanRunId": {
+                "type": "integer",
+                "description": "The latest run's id."
+              },
+              "lastScanDate": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "scanStatus": {
+                "type": "string",
+                "description": "completed or failed."
+              },
+              "issues": {
+                "type": "integer"
+              },
+              "reportSummary": {
+                "$schema": "PageLoadSummary"
+              },
+              "error": {
+                "type": "string",
+                "description": "Null, or why pages or the run failed."
+              }
+            }
+          }
+        }
+      },
+      "PageLoadSummary": {
+        "type": "object",
+        "description": "How the run's pages loaded.",
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "success": {
+            "type": "integer"
+          },
+          "failure": {
+            "type": "integer",
+            "description": "Pages that did not load."
+          },
+          "redirect": {
+            "type": "integer"
+          }
+        }
+      },
+      "ScanRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The scanRunId the accessibility issue tool reads."
+          },
+          "scanDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "issues": {
+            "type": "integer"
+          },
+          "componentCount": {
+            "type": "integer"
+          },
+          "reportSummary": {
+            "$schema": "PageLoadSummary"
+          }
+        }
+      },
+      "AutomatedTestsProject": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string",
+            "description": "What list_automated_tests_builds takes as project_name."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AutomatedTestsBuild": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The 40-character buildId the accessibility issue tool reads."
+          },
+          "buildNumber": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "projectId": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "description": "The accessibility report's status."
+          },
+          "wcagVersion": {
+            "$schema": "WcagVersion"
+          },
+          "needsReview": {
+            "type": "boolean"
+          },
+          "bestPractice": {
+            "type": "boolean"
+          },
+          "advanced": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "object",
+            "description": "Only on a completed build that ran tests.",
+            "properties": {
+              "pageCount": {
+                "type": "integer"
+              },
+              "componentCount": {
+                "type": "integer"
+              },
+              "issueCount": {
+                "type": "integer"
+              },
+              "severityBreakdown": {
+                "type": "object",
+                "properties": {
+                  "critical": {
+                    "type": "integer"
+                  },
+                  "serious": {
+                    "type": "integer"
+                  },
+                  "moderate": {
+                    "type": "integer"
+                  },
+                  "minor": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "health": {
+                "type": "object",
+                "description": "How the build's tests went.",
+                "properties": {
+                  "total": {
+                    "type": "integer"
+                  },
+                  "passed": {
+                    "type": "integer"
+                  },
+                  "failed": {
+                    "type": "integer"
+                  },
+                  "skipped": {
+                    "type": "integer"
+                  },
+                  "pending": {
+                    "type": "integer"
+                  },
+                  "unknown": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Failure": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "description": "Null on a failure."
+          },
+          "error": {
+            "type": "array",
+            "description": "The reasons, as text; a single string on some failures.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "responses": {
+      "ListWorkflowAnalyzerReports": {
+        "description": "A page of Workflow Analyzer reports, newest first.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "reports": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "WorkflowAnalyzerReport"
+                  }
+                },
+                "pagination": {
+                  "$schema": "CamelPaging"
+                }
+              }
+            },
+            "error": {
+              "type": "array",
+              "description": "Null, or notes such as a limit outside 10 to 100 that was replaced by the default.",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ListAssistedTestReports": {
+        "description": "A page of Assisted Test reports, newest first.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "reports": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "AssistedTestReport"
+                  }
+                },
+                "pagination": {
+                  "$schema": "CamelPaging"
+                }
+              }
+            },
+            "error": {
+              "type": "array",
+              "description": "Null, or notes such as a limit outside 10 to 100 that was replaced by the default.",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ListWebsiteScannerScans": {
+        "description": "A page of scans, most recently run first, sorted by id within the page.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "scans": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "WebsiteScan"
+                  }
+                },
+                "pagination": {
+                  "$schema": "CamelPaging"
+                }
+              }
+            },
+            "error": {
+              "type": "array",
+              "description": "Null, or notes such as a limit outside 10 to 100 that was replaced by the default.",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ListWebsiteScannerScanRuns": {
+        "description": "A page of one scan's runs, newest first.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "scanRuns": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "ScanRun"
+                  }
+                },
+                "pagination": {
+                  "$schema": "CamelPaging"
+                }
+              }
+            },
+            "error": {
+              "type": "array",
+              "description": "Null, or notes such as a limit outside 10 to 100 that was replaced by the default.",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ListAutomatedTestsProjects": {
+        "description": "A page of Automated Tests projects, newest first.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "projects": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "AutomatedTestsProject"
+                  }
+                },
+                "pagination": {
+                  "$schema": "SnakePaging"
+                }
+              }
+            },
+            "error": {
+              "type": "array",
+              "description": "Null, or notes such as a limit outside 10 to 100 that was replaced by the default.",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ListAutomatedTestsBuilds": {
+        "description": "A page of builds, newest first; data is null when project_name matched no project.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "builds": {
+                  "type": "array",
+                  "items": {
+                    "$schema": "AutomatedTestsBuild"
+                  }
+                },
+                "pagination": {
+                  "$schema": "SnakePaging"
+                }
+              }
+            },
+            "error": {
+              "type": "array",
+              "description": "Null, or notes such as a limit outside 10 to 100 that was replaced by the default.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "info": {
+              "type": "array",
+              "description": "['No Projects found'] when project_name matched no project.",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "The username or access key was not accepted ('Invalid credentials.'), or the plan has no API access ('You do not have access to External APIs.').",
+        "schema": {
+          "$schema": "Failure"
+        }
+      },
+      "Forbidden": {
+        "description": "The caller's role cannot view builds and reports, or the account is restricted to another region.",
+        "schema": {
+          "$schema": "Failure"
+        }
+      },
+      "InvalidPageToken": {
+        "description": "next_page was not a token from this list, had expired, or limit changed between pages.",
+        "schema": {
+          "$schema": "Failure"
+        }
+      },
+      "PagingChanged": {
+        "description": "limit or project_name differs from the request that produced next_page.",
+        "schema": {
+          "$schema": "Failure"
+        }
+      },
+      "ScanNotFound": {
+        "description": "No scan with this id in the account: error is 'Scan builds not found'.",
+        "schema": {
+          "$schema": "Failure"
+        }
+      },
+      "UpstreamFailure": {
+        "description": "The service holding the list did not answer; retry shortly.",
+        "schema": {
+          "$schema": "Failure"
+        }
+      },
+      "InternalServerError": {
+        "description": "The list could not be read; retry shortly.",
+        "schema": {
+          "$schema": "Failure"
+        }
+      }
+    }
+  }
+}

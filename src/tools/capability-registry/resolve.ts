@@ -27,9 +27,10 @@ export interface InvokeResult {
   /**
    * Whether this response is the whole answer.
    *
-   * False when the envelope itself says there is another page (`info.next`), so a caller
-   * knows to ask for one rather than assuming it has everything. This is a peek at one
-   * declared field, not a reshaping of the body.
+   * False when the envelope itself says there is another page (`info.next`, or
+   * `data.pagination.hasNext` / `has_next`), so a caller knows to ask for one rather than
+   * assuming it has everything. This is a peek at one declared field, not a reshaping of
+   * the body.
    */
   completed: boolean;
   /** The product's status, and its body exactly as sent. */
@@ -42,12 +43,18 @@ export interface InvokeResult {
 }
 
 function hasNextPage(body: unknown): boolean {
-  if (typeof body !== "object" || body === null || Array.isArray(body))
-    return false;
-  const info = (body as Record<string, unknown>).info;
-  if (typeof info !== "object" || info === null) return false;
-  const next = (info as Record<string, unknown>).next;
-  return next !== null && next !== undefined && next !== false;
+  const record = (value: unknown): Record<string, unknown> | undefined =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined;
+  const envelope = record(body);
+  if (!envelope) return false;
+  const next = record(envelope.info)?.next;
+  if (next !== null && next !== undefined && next !== false) return true;
+  // Accessibility's lists page under data.pagination instead, camelCase on some and
+  // snake_case on others.
+  const pagination = record(record(envelope.data)?.pagination);
+  return pagination?.hasNext === true || pagination?.has_next === true;
 }
 
 /**

@@ -876,6 +876,9 @@ describe("what a web report's answer says about its issues", () => {
     expect(body).toMatch(/By rule: color-contrast 3, image-alt 1, region 1\./);
     expect(body).toMatch(/By page: https:\/\/shop\.example\/ 3, https:\/\/shop\.example\/cart 2\./);
     expect(body).toContain("needs_review is one the engine could not decide, so a person confirms it");
+    // A best-practice issue has no needs_review either, so the note must not call it a failure.
+    expect(body).toContain("An issue with no needs_review, whose rule is not a best practice (best_practice under rules), is a confirmed WCAG failure.");
+    expect(body).not.toContain("Issues without needs_review are confirmed failures.");
     expect(body).toContain('"rules"');
     expect(body).toContain('"needs_review":"unreviewed"');
   });
@@ -888,7 +891,7 @@ describe("what a web report's answer says about its issues", () => {
     );
 
     expect(body).toContain("Summary of the 527 issues: 1 critical, 3 serious, 1 moderate; 161 need review (a person has to confirm them).");
-    expect(body).not.toContain("best practice");
+    expect(body).not.toMatch(/is a best practice, not|are best practices, not/);
   });
 
   it("names the 10 pages with most issues, and counts the rest", async () => {
@@ -954,6 +957,20 @@ describe("what a web report's answer says about its issues", () => {
     );
 
     expect(body).not.toMatch(/scan-details|site-scanner/);
+    expect(body).toContain("Scan ID: scan-42 and Scan Run ID: run-7");
+  });
+
+  it("links the scan's page when its CSV export is still being generated", async () => {
+    const LINK = "https://accessibility.browserstack.com/site-scanner/projects/Home%20page/builds?thBuildId=abc";
+    m.dashboardLink.mockResolvedValue(LINK);
+    m.getReportLink.mockRejectedValueOnce(new (ExportPendingError as any)("t:7", 45_000));
+
+    const body = text(
+      await handlers.startAccessibilityScan({ name: "Home page", pageURL: "https://site.example" }, CONTEXT),
+    );
+
+    expect(body).toMatch(/still being generated/);
+    expect(body.match(/Accessibility dashboard: (\S+)/)?.[1]).toBe(LINK);
     expect(body).toContain("Scan ID: scan-42 and Scan Run ID: run-7");
   });
 

@@ -129,6 +129,23 @@ describe("a web report's issues, rules and counts", () => {
     expect(summary.needs_review).toBe(1);
   });
 
+  it("reads a review status written with spaces around it, and an empty one as unreviewed", async () => {
+    get.mockResolvedValue({
+      ok: true,
+      statusText: "OK",
+      data: toCsv([
+        row({ "Issue type": "label", Severity: "serious", "Issue description": "l", "How to fix this issue": "f", "Needs review": "Yes", "Needs Review Status": " Confirmed " }),
+        row({ "Issue type": "region", Severity: "moderate", "Issue description": "r", "How to fix this issue": "f", "Needs review": "Yes", "Needs Review Status": "  " }),
+      ]),
+    });
+
+    const { records, summary } = await parseAccessibilityReportFromCSV("https://csv");
+
+    expect(records.find((r) => r.issue_type === "label")?.needs_review).toBe("confirmed");
+    expect(records.find((r) => r.issue_type === "region")?.needs_review).toBe("unreviewed");
+    expect(summary.needs_review).toBe(1);
+  });
+
   it("names each rule's text once, under rules, and keeps an issue's own fix only when it differs", async () => {
     const { records, rules } = await parseAccessibilityReportFromCSV("https://csv");
 

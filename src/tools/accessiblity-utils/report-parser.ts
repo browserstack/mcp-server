@@ -176,7 +176,7 @@ function recordOfRow(
     ...(isYes(row[NEEDS_REVIEW_COLUMN])
       ? {
           needs_review: (
-            row[REVIEW_STATUS_COLUMN] || "unreviewed"
+            (row[REVIEW_STATUS_COLUMN] ?? "").trim() || "unreviewed"
           ).toLowerCase(),
         }
       : {}),

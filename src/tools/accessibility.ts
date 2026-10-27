@@ -609,7 +609,7 @@ function webSummaryNote(
 }
 
 const WEB_ISSUES_NOTE =
-  "Each issue names its rule (issue_type): the rule's name, description, WCAG criteria and usual fix are under rules, and an issue has its own how_to_fix only when it differs. An issue with needs_review is one the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. Issues without needs_review are confirmed failures.";
+  "Each issue names its rule (issue_type): the rule's name, description, WCAG criteria and usual fix are under rules, and an issue has its own how_to_fix only when it differs. An issue with needs_review is one the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. An issue with no needs_review, whose rule is not a best practice (best_practice under rules), is a confirmed WCAG failure.";
 
 /** The CSV link, with what it is for: an answer gives a page of issues at a time. */
 function fullReportLine(reportLink: string): string {
@@ -1547,7 +1547,8 @@ async function runAccessibilityScan(
   } catch (error) {
     if (error instanceof ExportPendingError) {
       return createSuccessResponse([
-        `Accessibility scan "${name}" completed. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+        `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
+        `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
         scanSettingsNote(settings, applied),
         ...exportPendingMessages(
           {

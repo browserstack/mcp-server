@@ -38,7 +38,7 @@ describe("the Live tools say what they are for", () => {
     );
     for (const name of ["runAppLiveSession", "runBrowserLiveSession"]) {
       expect(described[name]).toMatch(/manual/);
-      expect(described[name]).toMatch(/cannot be driven/);
+      expect(described[name]).toMatch(/cannot drive it/);
     }
   });
 
@@ -71,6 +71,6 @@ describe("the Live tools say what they are for", () => {
     expect(described.runAppLiveSession).not.toMatch(/invokeCapability/);
     expect(described.runBrowserLiveSession).not.toMatch(/invokeCapability/);
     // the manual warning stays regardless
-    expect(described.runAppLiveSession).toMatch(/cannot be driven/);
+    expect(described.runAppLiveSession).toMatch(/cannot drive it/);
   });
 });

@@ -128,7 +128,7 @@ export default function addBrowserLiveTools(
   // Same rule as runAppLiveSession: Live is for a person, and an agent that picks it for a
   // click-by-locator task ends up reporting that Live cannot click by locator.
   const description =
-    "Open a manual Live browser session (desktop or mobile) for the user to operate by hand. It cannot be driven by the agent." +
+    "Open a manual Live browser session for the user to operate by hand; the agent cannot drive it." +
     (capabilityRegistryEnabled()
       ? " To click, type or read the page yourself, use a devicecontrol session via invokeCapability."
       : "");

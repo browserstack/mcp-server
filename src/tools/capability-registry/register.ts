@@ -1099,19 +1099,16 @@ export function addCapabilityRegistryTools(
 
   tools.invokeCapability = server.tool(
     "invokeCapability",
-    "Call a capability whose contract you have from describeCapability. Pass `name` exactly " +
-      "as given — that is the handle. Only when a result carries no `name` (some products " +
-      "do not publish them yet) pass `method` and `path` instead, exactly as returned. " +
-      "Arguments go in path_params / query / body under the spec's own names. One call " +
-      "makes exactly one request and returns the product's own response as sent — unless " +
-      "you pass `select`, which only capabilities whose contract carries `narrowable` " +
-      "accept, and which reports what it narrowed. When " +
-      "`completed` is false there is another page, which you fetch by sending the " +
-      "capability's own page parameter. If the mode is 'write' you MUST ask the user " +
-      "first, then resend with user_permission='granted' and a change_summary; both are " +
-      "recorded. Capabilities whose mode is 'destructive' (deletes) are refused outright — " +
-      "archiving, closing and merging are ordinary writes and DO run, so read the mode and " +
-      "intent before confirming with the user.",
+    "Call a capability whose contract you have from describeCapability. Pass `name` exactly a" +
+      "s given — that is the handle; only when a result carries no `name` pass `method` and `pa" +
+      "th` instead. Arguments go in path_params / query / body under the spec's own names. One " +
+      "call makes one request and returns the product's response as sent; `select` narrows it o" +
+      "nly where the contract carries `narrowable`, and reports what it narrowed. When `complet" +
+      "ed` is false there is another page, fetched with the capability's own page parameter. If" +
+      " the mode is 'write' you MUST ask the user first, then resend with user_permission='gran" +
+      "ted' and a change_summary; both are recorded. Capabilities whose mode is 'destructive' a" +
+      "re refused outright — archiving, closing and merging are ordinary writes and DO run, so " +
+      "read the mode and intent before confirming with the user.",
     {
       name: z
         .string()

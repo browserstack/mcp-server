@@ -48,13 +48,13 @@ describe("telemetry under BROWSERSTACK_GRR_REGION", () => {
         error_type: "Error",
         capability: "listTestRuns",
         upstream_status: 200,
-        feedback_category: "tool_error",
       });
       for (const field of [
         "error_message",
         "change_summary",
         "search_query",
         "feedback_message",
+        "feedback_category",
       ])
         expect(row).not.toHaveProperty(field);
     },

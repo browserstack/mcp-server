@@ -24,7 +24,7 @@ import addAskBrowserStackAITool from "./tools/ask-browserstack/register.js";
 import addCapabilityRegistryTools from "./tools/capability-registry/register.js";
 import { instrumentToolLatency } from "./lib/tool-latency.js";
 import { nodeUpgradeNotice } from "./lib/node-version-notice.js";
-import { FEEDBACK_INSTRUCTION } from "./lib/feedback-hint.js";
+import { FEEDBACK_INSTRUCTION, feedbackEnabled } from "./lib/feedback-hint.js";
 import addFeedbackTools from "./tools/feedback.js";
 
 /**
@@ -47,7 +47,10 @@ export class BrowserStackMcpServer {
         version: packageJson.version,
       },
       {
-        instructions: [nodeUpgradeNotice(), FEEDBACK_INSTRUCTION]
+        instructions: [
+          nodeUpgradeNotice(),
+          feedbackEnabled() ? FEEDBACK_INSTRUCTION : undefined,
+        ]
           .filter(Boolean)
           .join("\n"),
       },
@@ -82,7 +85,7 @@ export class BrowserStackMcpServer {
       // nothing (and logs why) when the artifact is absent, so a packaging problem cannot
       // take the other products' tools down with it.
       addCapabilityRegistryTools,
-      addFeedbackTools,
+      ...(feedbackEnabled() ? [addFeedbackTools] : []),
     ];
 
     toolAdders.forEach((adder) => {

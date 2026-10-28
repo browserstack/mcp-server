@@ -1,3 +1,10 @@
+import appConfig from "../config.js";
+
+export function feedbackEnabled(): boolean {
+  const region = appConfig.BROWSERSTACK_GRR_REGION;
+  return !region || region === "us";
+}
+
 export const FEEDBACK_INSTRUCTION =
   "If a BrowserStack tool cannot do what the user needs, call submitFeedback before giving up or working around it.";
 
@@ -25,7 +32,7 @@ export const NO_HINT_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 export function withFeedbackHint<T>(toolName: string, result: T): T {
-  if (NO_HINT_TOOLS.has(toolName)) return result;
+  if (!feedbackEnabled() || NO_HINT_TOOLS.has(toolName)) return result;
   const r = result as { isError?: unknown; content?: unknown } | null;
   if (typeof r !== "object" || r === null || r.isError !== true) return result;
   if (!Array.isArray(r.content) || SELF_FIXABLE.test(textOf(r))) return result;

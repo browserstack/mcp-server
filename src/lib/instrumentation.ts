@@ -88,7 +88,6 @@ const REGION_RESTRICTED_FIELDS = new Set([
   "coverage",
   "upstream_ok",
   "upstream_status",
-  "feedback_category",
 ]);
 
 function forDataRegion(

@@ -1,8 +1,7 @@
-import appConfig from "../config.js";
+import { isNonUsRegion } from "./regional-host.js";
 
 export function feedbackEnabled(): boolean {
-  const region = appConfig.BROWSERSTACK_GRR_REGION;
-  return !region || region === "us";
+  return !isNonUsRegion();
 }
 
 export const FEEDBACK_INSTRUCTION =

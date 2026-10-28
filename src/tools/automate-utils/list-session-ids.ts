@@ -53,14 +53,16 @@ interface SessionListItem {
 export function sessionsListUrl(
   sessionType: SessionType,
   buildId: string,
-  host?: string,
+  host = getRegionalHost(
+    sessionType === SessionType.Automate ? "automateApi" : "appAutomateUpload",
+  ),
 ): string {
   const encodedBuildId = encodeURIComponent(buildId);
   switch (sessionType) {
     case SessionType.Automate:
-      return `${host ?? "https://api.browserstack.com"}/automate/builds/${encodedBuildId}/sessions.json`;
+      return `${host}/automate/builds/${encodedBuildId}/sessions.json`;
     case SessionType.AppAutomate:
-      return `${host ?? "https://api-cloud.browserstack.com"}/app-automate/builds/${encodedBuildId}/sessions.json`;
+      return `${host}/app-automate/builds/${encodedBuildId}/sessions.json`;
     default: {
       const _exhaustive: never = sessionType;
       throw new Error(`Unsupported session type: ${_exhaustive}`);

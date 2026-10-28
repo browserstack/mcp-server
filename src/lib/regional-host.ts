@@ -54,6 +54,11 @@ export function hostFor(kind: RegionalHostKind, region: GrrRegion): string {
   return HOSTS[kind][region];
 }
 
+export function isNonUsRegion(): boolean {
+  const region = appConfig.BROWSERSTACK_GRR_REGION;
+  return region !== undefined && region !== "us";
+}
+
 export function getRegionalHost(kind: RegionalHostKind): string {
   if (
     kind === "automationApi" &&

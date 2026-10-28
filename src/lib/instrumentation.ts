@@ -7,6 +7,7 @@ const packageJson = require("../../package.json");
 import { apiClient } from "./apiClient.js";
 import globalConfig from "../config.js";
 import { redact } from "../tools/capability-registry/redact.js";
+import { isNonUsRegion } from "./regional-host.js";
 
 const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
 
@@ -64,7 +65,7 @@ function errorProperties(error: unknown) {
   };
 }
 
-const REGION_RESTRICTED_FIELDS = new Set([
+const NON_US_REGION_FIELDS = new Set([
   "mcp_version",
   "tool_name",
   "mcp_client",
@@ -93,10 +94,9 @@ const REGION_RESTRICTED_FIELDS = new Set([
 function forDataRegion(
   props: MCPEventPayload["event_properties"],
 ): MCPEventPayload["event_properties"] {
-  const region = globalConfig.BROWSERSTACK_GRR_REGION;
-  if (!region || region === "us") return props;
+  if (!isNonUsRegion()) return props;
   return Object.fromEntries(
-    Object.entries(props).filter(([key]) => REGION_RESTRICTED_FIELDS.has(key)),
+    Object.entries(props).filter(([key]) => NON_US_REGION_FIELDS.has(key)),
   ) as MCPEventPayload["event_properties"];
 }
 

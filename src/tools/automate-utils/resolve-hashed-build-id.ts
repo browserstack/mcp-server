@@ -30,7 +30,9 @@ export function isHashedBuildId(id: string): boolean {
 export function sessionDetailsUrl(
   sessionType: SessionType,
   sessionId: string,
-  host = "https://api.browserstack.com",
+  host = getRegionalHost(
+    sessionType === SessionType.Automate ? "automateApi" : "appAutomateApi",
+  ),
 ): string {
   const encoded = encodeURIComponent(sessionId);
   switch (sessionType) {

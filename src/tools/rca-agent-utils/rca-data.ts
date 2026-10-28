@@ -1,4 +1,5 @@
 import { RCAState, RCATestCase, RCAResponse } from "./types.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 interface ScanProgressContext {
   sendNotification: (notification: any) => Promise<void>;
@@ -243,7 +244,7 @@ export async function getRCAData(
   testIds: number[],
   authString: string,
   context?: ScanProgressContext,
-  host = "https://api-observability.browserstack.com",
+  host = getRegionalHost("observabilityApi"),
 ): Promise<RCAResponse> {
   const pollInterval = 5000;
   const timeout = 40000;

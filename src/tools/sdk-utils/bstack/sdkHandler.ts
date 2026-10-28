@@ -76,11 +76,32 @@ export async function runBstackSDKOnly(
         });
       }
 
+      // Neither framework reads browserstack.yml: each turns accessibility on in its own file.
+      if (input.accessibility) {
+        steps.push({
+          type: "instruction",
+          title: "Turn on Accessibility Testing",
+          content:
+            input.detectedBrowserAutomationFramework === "cypress"
+              ? 'In browserstack.json, add "accessibility": true under run_settings, keeping the file\'s other settings. It runs Accessibility (WCAG) checks on the pages the tests visit.'
+              : "In your WebdriverIO config, add accessibility: true to the browserstack service's options (services: [['browserstack', { accessibility: true, ... }]]), keeping its other options. It runs Accessibility (WCAG) checks on the pages the tests visit.",
+        });
+      }
+
       if (frameworkInstructions.run && !isPercyAutomate) {
         steps.push({
           type: "instruction",
           title: "Run the tests",
           content: frameworkInstructions.run,
+        });
+      }
+
+      if (input.accessibility) {
+        steps.push({
+          type: "instruction",
+          title: "Read the accessibility issues",
+          content:
+            "When the run finishes, read its accessibility issues with fetchAccessibilityIssues: pass the Automate build's dashboard link, printed during the run, as reportUrl.",
         });
       }
     }
@@ -126,6 +147,7 @@ export async function runBstackSDKOnly(
     validatedEnvironments,
     enablePercy: false,
     projectName: input.projectName,
+    accessibility: input.accessibility,
   });
 
   if (ymlInstructions) {
@@ -144,6 +166,15 @@ export async function runBstackSDKOnly(
         content: frameworkInstructions.run,
       });
     }
+  }
+
+  if (input.accessibility) {
+    steps.push({
+      type: "instruction",
+      title: "Read the accessibility issues",
+      content:
+        "When the run finishes, read its accessibility issues with fetchAccessibilityIssues: pass the Automate build's dashboard link as reportUrl, or the build id the BrowserStack SDK prints at the end of the run as buildId.",
+    });
   }
 
   return {

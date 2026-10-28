@@ -169,6 +169,61 @@ async function takeAppScreenshot(args: {
   }
 }
 
+/**
+ * What a native suite needs for App Accessibility to scan it. The build request's flag
+ * turns the checks on, but only a suite built with BrowserStack's instrumentation records
+ * scans; without it the run finishes with none, and nothing says why.
+ */
+const NATIVE_ACCESSIBILITY_SETUP: Record<string, string> = {
+  Espresso:
+    "The test suite must be built with BrowserStack's Gradle plugin and SDK, or the run records no scans: classpath 'com.browserstack:gradle-tool:latest.release' in the root build.gradle, id 'com.browserstack.gradle-tool' in the app's plugins, and androidTestImplementation 'com.browserstack:browserstack-java-sdk:latest.release' (1.31.0 or newer). The app also needs internet permission. Test Observability is turned on for the build as well: Espresso's App Accessibility report is generated through it.",
+  XCUITest:
+    "The UI test target must embed and initialize the BrowserStack Swift SDK (BrowserstackSwiftSDK.xcframework, or the Swift package), or the run records no scans: set NSPrincipalClass to BrowserstackSwiftSDK.BrowserstackSwiftSDK in the test target's Info.plist, or call BrowserstackSwiftSDK.init() in the test class's init(). Swift 5.4+ and iOS 14+.",
+};
+
+/**
+ * The run's build, the devices it runs on and, with accessibility on, where its issues are
+ * read once it finishes.
+ */
+function runStartedMessage(
+  framework: string,
+  buildId: string,
+  accessibility: boolean,
+  devices: string,
+): string {
+  const link = `https://app-automate.browserstack.com/builds/${buildId}`;
+  const a11y = accessibility
+    ? `\n\n♿ App Accessibility checks are on. ${NATIVE_ACCESSIBILITY_SETUP[framework] ?? ""}\nWhen the build finishes (typically 10–20 minutes), read the issues with fetchAccessibilityIssues, reportUrl: ${link} — it maps the build to its accessibility report and waits while the report is still processing.`
+    : "";
+  return `✅ ${framework} run started successfully!\n\n🔧 Build ID: ${buildId}\n🔗 View your build: ${link}${devices}${a11y}`;
+}
+
+/**
+ * The devices a run asks for, and any version the resolver swapped for the closest one App
+ * Automate lists: a run on another OS version than requested is easy to miss otherwise.
+ * "latest" and other non-numeric versions are expected to resolve, so they are not flagged.
+ */
+function devicesNote(
+  requested: Array<Array<string>>,
+  resolved: Array<{ deviceName?: string; osVersion: string }>,
+): string {
+  if (requested.length === 0) return "";
+  const lines = [
+    `📱 Devices: ${resolved.map((d) => `${d.deviceName}-${d.osVersion}`).join(", ")}`,
+  ];
+  requested.forEach(([, , askedVersion], i) => {
+    const got = resolved[i];
+    const asked = parseFloat(askedVersion);
+    if (!got || Number.isNaN(asked) || asked === parseFloat(got.osVersion)) {
+      return;
+    }
+    lines.push(
+      `⚠️ ${got.deviceName}: version ${askedVersion} is not listed on App Automate, so the run uses ${got.osVersion}, the closest it lists.`,
+    );
+  });
+  return `\n\n${lines.join("\n")}`;
+}
+
 //Runs AppAutomate tests on BrowserStack by uploading app and test suite, then triggering a test run.
 async function runAppTestsOnBrowserStack(
   args: {
@@ -179,9 +234,11 @@ async function runAppTestsOnBrowserStack(
     devices: Array<Array<string>>;
     project: string;
     detectedAutomationFramework: string;
+    accessibility?: boolean;
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
+  const accessibility = args.accessibility === true;
   // Validate that either paths or URLs are provided for both app and test suite
   if (!args.browserstackAppUrl && !args.appPath) {
     throw new Error(
@@ -194,8 +251,16 @@ async function runAppTestsOnBrowserStack(
     );
   }
 
-  // Validate devices against real BrowserStack device data
-  await validateAppAutomateDevices(args.devices);
+  // Validate devices against real BrowserStack device data, and ask for them as App Automate
+  // lists them: a version given as "14" is "14.0" there, and a run asking for "-14" waits for
+  // a device that never matches.
+  const validated = await validateAppAutomateDevices(args.devices);
+  const deviceStrings =
+    args.devices.length > 0
+      ? validated.map((device) => `${device.deviceName}-${device.osVersion}`)
+      : [];
+  const devices =
+    args.devices.length > 0 ? devicesNote(args.devices, validated) : "";
 
   switch (args.detectedAutomationFramework) {
     case AppTestPlatform.ESPRESSO: {
@@ -223,25 +288,25 @@ async function runAppTestsOnBrowserStack(
           logger.info(`Test suite uploaded. URL: ${test_suite_url}`);
         }
 
-        // Convert array format to string format for Espresso
-        const deviceStrings = args.devices.map((device) => {
-          const [, deviceName, osVersion] = device;
-          return `${deviceName}-${osVersion}`;
-        });
-
         const build_id = await triggerEspressoBuild(
           app_url,
           test_suite_url,
           deviceStrings,
           args.project,
           config,
+          { accessibility },
         );
 
         return {
           content: [
             {
               type: "text",
-              text: `✅ Espresso run started successfully!\n\n🔧 Build ID: ${build_id}\n🔗 View your build: https://app-automate.browserstack.com/builds/${build_id}`,
+              text: runStartedMessage(
+                "Espresso",
+                build_id,
+                accessibility,
+                devices,
+              ),
             },
           ],
         };
@@ -275,24 +340,24 @@ async function runAppTestsOnBrowserStack(
           logger.info(`Test suite uploaded. URL: ${test_suite_url}`);
         }
 
-        // Convert array format to string format for XCUITest
-        const deviceStrings = args.devices.map((device) => {
-          const [, deviceName, osVersion] = device;
-          return `${deviceName}-${osVersion}`;
-        });
-
         const build_id = await triggerXcuiBuild(
           app_url,
           test_suite_url,
           deviceStrings,
           args.project,
           config,
+          { accessibility },
         );
         return {
           content: [
             {
               type: "text",
-              text: `✅ XCUITest run started successfully!\n\n🔧 Build ID: ${build_id}\n🔗 View your build: https://app-automate.browserstack.com/builds/${build_id}`,
+              text: runStartedMessage(
+                "XCUITest",
+                build_id,
+                accessibility,
+                devices,
+              ),
             },
           ],
         };

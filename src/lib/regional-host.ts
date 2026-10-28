@@ -36,6 +36,16 @@ const HOSTS = {
     eu: "https://accessibility-eu.browserstack.com",
     in: "https://accessibility-in.browserstack.com",
   },
+  appAccessibilityApi: {
+    us: "https://api-app-accessibility.browserstack.com",
+    eu: "https://api-app-accessibility-eu.browserstack.com",
+    in: "https://api-app-accessibility-in.browserstack.com",
+  },
+  appAccessibilityDashboard: {
+    us: "https://app-accessibility.browserstack.com",
+    eu: "https://app-accessibility-eu.browserstack.com",
+    in: "https://app-accessibility-in.browserstack.com",
+  },
   observabilityApi: {
     us: "https://api-observability.browserstack.com",
     eu: "https://api-observability-eu.browserstack.com",

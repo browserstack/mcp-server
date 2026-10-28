@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AskError } from "../../src/tools/ask-browserstack/config.js";
 import { resetTokenCache } from "../../src/tools/ask-browserstack/central-oauth.js";
 import { addAskBrowserStackAITool } from "../../src/tools/ask-browserstack/register.js";
+import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "../../src/tools/tool-handoff.js";
 
 // `apiClient` adapted onto the global `fetch` stub these tests already install.
 //
@@ -294,20 +295,25 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(description).toMatch(/One task per call/);
     });
 
-    it("offers tm and tra only — a11y is not on the tool while it is in alpha", async () => {
-      // Atlas serves a11y; this TOOL does not offer it yet. Pinned because dropping a
-      // product is a one-word edit that four other places have to agree with, and the two
-      // a11y handoffs in tool-handoff.ts used to send the model here with product "a11y" —
-      // which the schema now rejects, so a silent re-add would strand them again.
+    it("offers tm, a11y and tra, and every handoff that names a product names one of them", async () => {
+      // Pinned because changing a product is a one-word edit that other places have to agree
+      // with: the `product` describe text, and the a11y handoffs in tool-handoff.ts, which
+      // send the model here with product "a11y". Drop a11y from the enum without moving those
+      // and they become instructions to make a call the schema rejects.
       const server = await buildServer();
       const shape = (server.getTools().askBrowserStackAI as any).inputSchema?.shape;
       const values = shape?.product?._def?.values ?? shape?.product?.options;
 
-      expect(values).toEqual(["tm", "tra"]);
-      expect(values).not.toContain("a11y");
+      expect(values).toEqual(["tm", "a11y", "tra"]);
 
-      const description = (server.getTools().askBrowserStackAI as any).description as string;
-      expect(description).not.toMatch(/a11y/);
+      const productText = shape?.product?.description as string;
+      for (const value of values) expect(productText).toContain(`${value} (`);
+
+      for (const handoff of [NEEDS_A11Y_SCAN_ID, NEEDS_A11Y_CONFIG_ID]) {
+        const named = handoff.match(/askBrowserStackAI with product "([^"]+)"/)?.[1];
+        expect(named).toBeDefined();
+        expect(values).toContain(named);
+      }
     });
 
     it("relays an ask, approves it, and forwards the caller's own credentials", async () => {

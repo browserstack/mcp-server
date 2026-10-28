@@ -60,6 +60,12 @@ describe("getRegionalHost", () => {
     expect(getRegionalHost("accessibilityDashboard")).toBe(
       "https://accessibility-eu.browserstack.com",
     );
+    expect(getRegionalHost("appAccessibilityApi")).toBe(
+      "https://api-app-accessibility-eu.browserstack.com",
+    );
+    expect(getRegionalHost("appAccessibilityDashboard")).toBe(
+      "https://app-accessibility-eu.browserstack.com",
+    );
     expect(getRegionalHost("observabilityApi")).toBe(
       "https://api-observability-eu.browserstack.com",
     );

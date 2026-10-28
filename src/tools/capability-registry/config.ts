@@ -101,15 +101,67 @@ function credentialsFrom(config: BrowserStackConfig): Credentials {
  * Refusing rather than guessing is deliberate: a guessed host fails as a DNS error or a 404
  * that reads like the caller's problem, when it is our missing configuration.
  */
+/**
+ * The host a capability named, as opposed to the product's own.
+ *
+ * `_HOST_` is in the override variable deliberately. The environment-suffixed form is
+ * `CAPABILITY_REGISTRY_BASE_URL_<PRODUCT>_<ENV>`, so a bare
+ * `CAPABILITY_REGISTRY_BASE_URL_APPAUTOMATE_HUB` would mean the hub host or the "hub"
+ * environment depending on which the reader had in mind — and whichever the code chose,
+ * the other reading sends a call to the wrong origin silently.
+ *
+ * A named environment refuses rather than falling back to the declared host, for the same
+ * reason the product-level resolver does: a preprod session must not reach production
+ * because nobody defined preprod's hub.
+ */
+function resolveNamedHost(
+  product: string,
+  key: string,
+  host: string,
+  source: HostSource | undefined,
+  environment: string | undefined,
+): string {
+  const trim = (url: string) => url.replace(/\/$/, "");
+  const suffix = `${key}_HOST_${host.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
+  const override = process.env[`CAPABILITY_REGISTRY_BASE_URL_${suffix}`];
+  if (override) return trim(override);
+
+  if (environment) {
+    throw new InvocationError(
+      `environment '${environment}' has no '${host}' host for product '${product}'. Set ` +
+        `CAPABILITY_REGISTRY_BASE_URL_${suffix}.`,
+    );
+  }
+
+  const declared = source?.hosts?.[host];
+  if (declared) return trim(declared);
+
+  const known = Object.keys(source?.hosts ?? {});
+  throw new InvocationError(
+    `that capability is served from the '${host}' host, which product '${product}' does ` +
+      `not declare. ` +
+      (known.length
+        ? `Its index defines: ${known.join(", ")}.`
+        : `Its index defines no named hosts.`) +
+      ` Set CAPABILITY_REGISTRY_BASE_URL_${suffix} to override.`,
+  );
+}
+
 export async function resolveBaseUrl(
   product: string,
   config: BrowserStackConfig,
   source?: HostSource,
   transport?: Transport,
+  host?: string,
 ): Promise<string> {
   const key = product.toUpperCase();
   const environment = selectedEnvironment();
   const trim = (url: string) => url.replace(/\/$/, "");
+
+  // A capability that names a host is asking for one fixed origin, so none of the rungs
+  // below apply: discovery answers with the product's own host, and the declared
+  // `base_url` cannot serve this capability's paths at all.
+  if (host) return resolveNamedHost(product, key, host, source, environment);
 
   const explicit = process.env[`CAPABILITY_REGISTRY_BASE_URL_${key}`];
   if (explicit) return trim(explicit);

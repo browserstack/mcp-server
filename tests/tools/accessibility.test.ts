@@ -28,37 +28,40 @@ vi.mock("../../src/tools/accessiblity-utils/report-parser", () => ({
     pageLength: 1,
   }),
 }));
-vi.mock("../../src/tools/accessiblity-utils/auth-config", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("../../src/tools/accessiblity-utils/auth-config")
-    >();
-  return {
-    ...actual,
-    AccessibilityAuthConfig: class {
-      setAuth = vi.fn();
-      createBasicAuthConfig = vi.fn().mockResolvedValue({
-        data: {
-          id: "auth-1",
-          name: "test",
-          username: "site-user",
-          password: "super-secret-site-password",
-        },
-      });
-      createFormAuthConfig = vi.fn().mockResolvedValue({
-        data: { id: "auth-2", name: "test-form" },
-      });
-      getAuthConfig = vi.fn().mockResolvedValue({
-        data: {
-          id: "auth-1",
-          name: "test",
-          username: "site-user",
-          password: "super-secret-site-password",
-        },
-      });
-    },
-  };
-});
+vi.mock(
+  "../../src/tools/accessiblity-utils/auth-config",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("../../src/tools/accessiblity-utils/auth-config")
+      >();
+    return {
+      ...actual,
+      AccessibilityAuthConfig: class {
+        setAuth = vi.fn();
+        createBasicAuthConfig = vi.fn().mockResolvedValue({
+          data: {
+            id: "auth-1",
+            name: "test",
+            username: "site-user",
+            password: "super-secret-site-password",
+          },
+        });
+        createFormAuthConfig = vi.fn().mockResolvedValue({
+          data: { id: "auth-2", name: "test-form" },
+        });
+        getAuthConfig = vi.fn().mockResolvedValue({
+          data: {
+            id: "auth-1",
+            name: "test",
+            username: "site-user",
+            password: "super-secret-site-password",
+          },
+        });
+      },
+    };
+  },
+);
 vi.mock("../../src/lib/get-auth", () => ({
   getBrowserStackAuth: vi.fn().mockReturnValue("fake-user:fake-key"),
 }));
@@ -66,6 +69,11 @@ vi.mock("../../src/logger", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() },
 }));
 vi.mock("../../src/lib/instrumentation", () => ({ trackMCP: vi.fn() }));
+// apiClient reaches the server entry through lib/utils; it must not start the server.
+vi.mock("../../src/index", () => ({
+  trackMCP: vi.fn(),
+  PackageJsonVersion: "0.0.0",
+}));
 
 const mockConfig = {
   "browserstack-username": "fake-user",
@@ -82,7 +90,9 @@ describe("Accessibility Tools", () => {
     serverMock = {
       tool: vi.fn((...toolArgs: any[]) => {
         const name = toolArgs[0] as string;
-        const handler = toolArgs[toolArgs.length - 1] as (...args: any[]) => any;
+        const handler = toolArgs[toolArgs.length - 1] as (
+          ...args: any[]
+        ) => any;
         handlers[name] = handler;
       }),
       server: {
@@ -95,13 +105,28 @@ describe("Accessibility Tools", () => {
     addAccessibilityTools(serverMock, mockConfig);
   });
 
-  it("registers all 5 accessibility tools", () => {
+  it("says where mobile app accessibility is served, as the scan tool takes web pages only", () => {
+    const description = (name: string) =>
+      serverMock.tool.mock.calls.find((c: any[]) => c[0] === name)[1];
+
+    expect(description("startAccessibilityScan")).toMatch(/web page/i);
+    expect(description("startAccessibilityScan")).toContain(
+      "setupBrowserStackAppAutomateTests",
+    );
+    const buildId = serverMock.tool.mock.calls.find(
+      (c: any[]) => c[0] === "fetchAccessibilityIssues",
+    )[2].buildId;
+    expect(buildId.description).toMatch(/App Accessibility/);
+  });
+
+  it("registers the 5 accessibility tools; App Accessibility's lists are capabilities, not a tool", () => {
     const toolNames = serverMock.tool.mock.calls.map((c: any[]) => c[0]);
     expect(toolNames).toContain("accessibilityExpert");
     expect(toolNames).toContain("startAccessibilityScan");
     expect(toolNames).toContain("createAccessibilityAuthConfig");
     expect(toolNames).toContain("getAccessibilityAuthConfig");
     expect(toolNames).toContain("fetchAccessibilityIssues");
+    expect(toolNames).not.toContain("listAppAccessibilityReports");
   });
 
   it("accessibilityExpert — returns a response without crashing", async () => {
@@ -116,7 +141,13 @@ describe("Accessibility Tools", () => {
 
   it("createAccessibilityAuthConfig — response omits the stored site credentials", async () => {
     const result = await handlers["createAccessibilityAuthConfig"](
-      { type: "basic", name: "test-auth", username: "user", password: "pass", url: "https://example.com/login" },
+      {
+        type: "basic",
+        name: "test-auth",
+        username: "user",
+        password: "pass",
+        url: "https://example.com/login",
+      },
       { sendNotification: vi.fn(), _meta: {} },
     );
     expect(result).toBeDefined();
@@ -131,7 +162,9 @@ describe("Accessibility Tools", () => {
   });
 
   it("createAccessibilityAuthConfig — elicits credentials from the user when the client supports it and they are not passed as args", async () => {
-    serverMock.server.getClientCapabilities.mockReturnValue({ elicitation: {} });
+    serverMock.server.getClientCapabilities.mockReturnValue({
+      elicitation: {},
+    });
     serverMock.server.elicitInput.mockResolvedValue({
       action: "accept",
       content: { username: "elicited-user", password: "elicited-pass" },
@@ -161,7 +194,13 @@ describe("Accessibility Tools", () => {
 
   it("createAccessibilityAuthConfig — FAIL: form auth without required selectors returns error", async () => {
     const result = await handlers["createAccessibilityAuthConfig"](
-      { type: "form", name: "test-form", username: "user", password: "pass", url: "https://example.com" },
+      {
+        type: "form",
+        name: "test-form",
+        username: "user",
+        password: "pass",
+        url: "https://example.com",
+      },
       { sendNotification: vi.fn(), _meta: {} },
     );
     // Should return an error because form auth requires selectors

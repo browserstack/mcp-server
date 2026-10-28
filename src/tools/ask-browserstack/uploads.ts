@@ -138,7 +138,10 @@ function notFound(name: string, baseDir: string): string {
     : `No file named "${name}" in the upload folder, which has no files that can be attached.`;
 }
 
-/** Upload every file and return the attachment ids, in order. All or nothing. */
+/**
+ * Upload every file and return the attachment ids, in order. The checks are all or nothing;
+ * the uploads are not: if one fails, the ones before it stay reserved until they expire.
+ */
 export async function uploadFiles(
   names: string[],
   deps: UploadDeps,
@@ -261,11 +264,12 @@ function checkRemoteFile(file: RemoteFile): {
   mime: string;
 } {
   const p = String(file?.name ?? "").trim();
-  // `-F file=@path` reads `;` and `"` as its own syntax, and a line break would end the
-  // command: such a path is refused rather than escaped into something else.
-  if (!p || /[;"\r\n\0]/.test(p)) {
+  // `-F file=@path` reads `;` and `"` as its own syntax (older curl also splits on `,`),
+  // and a line break would end the command: such a path is refused rather than escaped
+  // into something else.
+  if (!p || /[;,"\r\n\0]/.test(p)) {
     throw new UploadError(
-      `"${p}" cannot be uploaded this way; rename the file without ; or " in its path.`,
+      `"${p}" cannot be uploaded this way; rename the file without ; , or " in its path.`,
     );
   }
   const base = path.basename(p.replace(/\\/g, "/"));

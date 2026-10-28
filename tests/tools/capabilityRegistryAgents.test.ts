@@ -137,6 +137,10 @@ describe("the tools surface the handoff", () => {
     expect(out.use_agent.product).toBe("tm");
     expect(out.use_agent.next_step).toMatch(/askBrowserStackAI/);
     expect(out.use_agent.next_step).toMatch(/verbatim/);
+    // An account without Ask AI must still be able to finish the task.
+    expect(out.use_agent.next_step).toMatch(
+      /not enabled on this account: then do the task with the capabilities/,
+    );
     expect(out.capabilities.length).toBeGreaterThan(0);
   });
 

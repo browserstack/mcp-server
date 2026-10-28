@@ -296,6 +296,21 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
     expect((await buildServer()).getTools().askBrowserStackAI).toBeUndefined();
   });
 
+  it("refuses to answer an agent's questions without answers, before sending anything", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const server = await buildServer();
+    const { result, payload } = await call(server.getTools(), {
+      product: "tm",
+      run_id: "run-" + "a".repeat(32),
+      perm_id: "wfq-" + "c".repeat(32),
+    } as any);
+
+    expect(result.isError).toBe(true);
+    expect(payload.error).toMatch(/Pass the user's answers/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   describe("the client CAN elicit", () => {
     it("advertises itself as the fallback, so specific tools win when one fits", async () => {
       // The description is the ONLY thing steering tool choice — the client picks from these

@@ -713,6 +713,21 @@ export function addAskBrowserStackAITool(
       // would have run in.
       const mode = relayMode(server);
 
+      // Answering an agent's questions without answers would post an empty reply, which
+      // the agent reads as the user's. Refused before anything is sent.
+      if (
+        run_id &&
+        perm_id?.startsWith(RUN_QUESTION_PREFIX) &&
+        answers === undefined
+      ) {
+        return toResult(
+          errorResult(
+            "Pass the user's answers to `questions` as `answers`, by question id. Nothing was sent.",
+            approvals,
+          ),
+        );
+      }
+
       try {
         const url = deps.agentUrl();
         // Signed in BEFORE the listener is opened and before the run starts. Minting
@@ -752,7 +767,7 @@ export function addAskBrowserStackAITool(
             {
               ask_id: perm_id,
               product,
-              values: answers || {},
+              values: answers,
             } as never,
           );
           return finish(
@@ -762,7 +777,7 @@ export function addAskBrowserStackAITool(
                 product,
                 run_id,
                 perm_id,
-                answers: answers || {},
+                answers,
               },
             ),
           );

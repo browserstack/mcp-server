@@ -104,6 +104,7 @@ export function agentHandoff(product: string, matches: AgentMatch[]) {
       `This task belongs to a BrowserStack AI agent. Call askBrowserStackAI with product ` +
       `'${product}' and the user's request as \`query\`, verbatim, including any ` +
       "requirement text they gave. It picks and runs the agent. Do not rebuild the task " +
-      "from capabilities.",
+      "from capabilities, unless askBrowserStackAI says Ask AI is not enabled on this " +
+      "account: then do the task with the capabilities instead.",
   };
 }

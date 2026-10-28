@@ -75,9 +75,10 @@ describe("prepareRemoteUploads", () => {
   });
 
   it.each([
-    [{ name: "a;b.pdf", bytes: 3 }, /without ; or "/],
-    [{ name: 'a"b.pdf', bytes: 3 }, /without ; or "/],
-    [{ name: "a\nb.pdf", bytes: 3 }, /without ; or "/],
+    [{ name: "a;b.pdf", bytes: 3 }, /without ; , or "/],
+    [{ name: 'a"b.pdf', bytes: 3 }, /without ; , or "/],
+    [{ name: "a\nb.pdf", bytes: 3 }, /without ; , or "/],
+    [{ name: "a,b.pdf", bytes: 3 }, /without ; , or "/],
     [{ name: "run.sh", bytes: 3 }, /cannot be attached/],
     [{ name: "prd.pdf", bytes: 0 }, /exact size in bytes/],
     [{ name: "prd.pdf", bytes: 1.5 }, /exact size in bytes/],

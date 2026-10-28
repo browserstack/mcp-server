@@ -9,6 +9,8 @@ import {
   AccessibilityReportFetcher,
   EXPORT_WAIT_MS,
   ExportPendingError,
+  ScanRunNotFoundError,
+  scanRunLink,
   type IssueSource,
 } from "./accessiblity-utils/report-fetcher.js";
 import {
@@ -212,6 +214,11 @@ function sourceArgs(source: IssueSource): string {
   switch (source.kind) {
     case "scan":
       return `scanId: "${source.scanId}", scanRunId: "${source.scanRunId}"`;
+    // A run read by its build id is named by its link again, or, given as a build id, by that.
+    case "scanBuild":
+      return source.scanName !== undefined
+        ? `reportUrl: "${scanRunLink(source)}"`
+        : `buildId: "${source.thBuildId}"`;
     case "build":
     case "appBuild":
       return `buildId: "${source.buildId}"`;
@@ -227,6 +234,8 @@ function describeSource(source: IssueSource): string {
   switch (source.kind) {
     case "scan":
       return `Website Scanner scan ${source.scanId}, run ${source.scanRunId}`;
+    case "scanBuild":
+      return `Website Scanner run with build id ${source.thBuildId}`;
     case "build":
       return `Automated Tests build ${source.buildId}`;
     case "workflow":
@@ -883,11 +892,68 @@ async function fetchAccessibilityIssues(
     requested.kind === "link"
       ? await reportFetcher.sourceFromReportUrl(requested.reportUrl)
       : requested;
-  // A build id names a web build or a mobile app build; the APIs tell which.
-  const source = await reportFetcher.resolveBuild(named);
+  // A build id names a web build, a mobile app build, or a Website Scanner run (a scanner
+  // link's thBuildId); the APIs tell which.
+  let source = await reportFetcher.resolveBuild(named, { orScanRun: true });
+  // Comparing runs needs the scan's ids, which only the scan list maps a build id to.
+  if (compareWith !== undefined && source.kind === "scanBuild") {
+    source = await reportFetcher.findScanRun(source);
+  }
   // Two scan runs are compared through their CSV exports; two app builds, here below.
   if (compareWith !== undefined && source.kind === "scan") {
     return compareScanRuns(source, compareWith, config, context);
+  }
+  const pageArg = pageUrl ? `, pageUrl: "${pageUrl}"` : "";
+  const notes: string[] = [];
+  // A run named by its build id is read by it, which works however old the scan is. If the
+  // API does not know it by that id, the scan list is searched as before.
+  let reportLink: string | undefined;
+  if (source.kind === "scanBuild") {
+    try {
+      reportLink = await reportFetcher.getReportLink(source, {
+        exportTaskId,
+        onWait: exportProgress(context),
+      });
+      if (named.kind === "build") {
+        notes.push(
+          `Build id ${source.thBuildId} is a Website Scanner run's build id; read it as one.`,
+        );
+      }
+      if (cursor === 0) {
+        notes.push(
+          "Read by the run's build id, so its processing status was not checked: a scan that finished in the last few minutes may still be adding issues.",
+        );
+      }
+    } catch (error) {
+      if (error instanceof ExportPendingError) {
+        return createSuccessResponse(
+          exportPendingMessages(source, error, pageArg),
+        );
+      }
+      if (!(error instanceof ScanRunNotFoundError)) throw error;
+      if (source.scanName === undefined) {
+        throw new Error(
+          error.routeMissing
+            ? `No Automated Tests (web) or App Accessibility build with id "${source.thBuildId}". If it is a Website Scanner run's build id, this API cannot read a run by it yet: pass the scan's report link as reportUrl instead`
+            : `No Automated Tests (web), App Accessibility or Website Scanner build with id "${source.thBuildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl`,
+        );
+      }
+      const why = error.routeMissing
+        ? "This API does not read a run by its build id yet"
+        : "The API could not read this run by the link's build id (not found, or not visible to this account)";
+      try {
+        source = await reportFetcher.findScanRun(source);
+      } catch (searchError) {
+        throw new Error(
+          `${why}, and searching the scan list found nothing either: ${
+            searchError instanceof Error
+              ? searchError.message
+              : String(searchError)
+          }`,
+        );
+      }
+      notes.push(`${why}, so it was found in the scan list instead.`);
+    }
   }
   if (compareWith !== undefined && source.kind !== "appBuild") {
     return createErrorResponse(
@@ -903,10 +969,12 @@ async function fetchAccessibilityIssues(
   const stillProcessing =
     processing.status !== undefined &&
     PROCESSING_STATUSES.has(processing.status);
-  const preface =
-    requested.kind === "link"
+  const preface = [
+    ...(requested.kind === "link"
       ? [`Resolved the report link to ${describeSource(source)}.`]
-      : [];
+      : []),
+    ...notes,
+  ];
 
   if (source.kind === "appBuild" && compareWith !== undefined) {
     return compareAppBuilds(
@@ -943,10 +1011,8 @@ async function fetchAccessibilityIssues(
     );
   }
 
-  const pageArg = pageUrl ? `, pageUrl: "${pageUrl}"` : "";
-  let reportLink: string;
   try {
-    reportLink = await reportFetcher.getReportLink(source, {
+    reportLink ??= await reportFetcher.getReportLink(source, {
       exportTaskId,
       onWait: exportProgress(context),
       stillProcessing,
@@ -1079,10 +1145,13 @@ async function compareScanRuns(
   context?: ScanProgressContext,
 ): Promise<CallToolResult> {
   const reportFetcher = await initializeReportFetcher(config);
-  const source =
+  const named =
     requested.kind === "link"
       ? await reportFetcher.sourceFromReportUrl(requested.reportUrl)
       : requested;
+  // Runs are compared by their scan's ids, which only the scan list maps a build id to.
+  const source =
+    named.kind === "scanBuild" ? await reportFetcher.findScanRun(named) : named;
   if (source.kind !== "scan") {
     return createErrorResponse(
       'compareWith compares Website Scanner runs: pass the newer run (scanId and scanRunId, or its report link) and compareWith: "previous" or the older run\'s scanRunId.',
@@ -1710,7 +1779,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          "A web or app report dashboard link (scan, build, manual report), a scanner share link, or an (App) Automate link.",
+          "A dashboard link to a scan, build, Workflow Analyzer or manual report, a scanner share link, or an (App) Automate link.",
         ),
       cursor: z
         .number()

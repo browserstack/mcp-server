@@ -29,15 +29,50 @@ interface ReportResponse {
 /**
  * What to read issues from: a Website Scanner run, an Automated Tests build, a Workflow
  * Analyzer report, or an App Accessibility build (a mobile app run through App Automate).
+ * A Website Scanner run is named by its ids, or (`scanBuild`) by the build id its dashboard
+ * link carries, which the API reads without the ids.
  */
 export type IssueSource =
   | { kind: "scan"; scanId: string; scanRunId: string }
+  | ScanBuildSource
   | { kind: "build"; buildId: string }
   | { kind: "workflow"; reportId: string }
   | { kind: "appBuild"; buildId: string }
   | { kind: "appReport"; reportId: string };
 
+/** A Website Scanner run named by its build id (a dashboard link's thBuildId), and the scan's name when a link gave it. */
+export type ScanBuildSource = {
+  kind: "scanBuild";
+  thBuildId: string;
+  scanName?: string;
+};
+
 const API_BASE = "https://api-accessibility.browserstack.com/api";
+const DASHBOARD = "https://accessibility.browserstack.com";
+
+/**
+ * The API does not know a Website Scanner run by this build id, or not for this account:
+ * a 404, which the API gives alike for an unknown id and one the caller may not see. An
+ * API that does not have the route yet answers a 404 page instead (`routeMissing`).
+ */
+export class ScanRunNotFoundError extends Error {
+  constructor(
+    readonly thBuildId: string,
+    readonly routeMissing = false,
+  ) {
+    super(
+      routeMissing
+        ? "This API does not read a Website Scanner run by its build id yet"
+        : `No Website Scanner run with build id ${thBuildId} that this account can read`,
+    );
+    this.name = "ScanRunNotFoundError";
+  }
+}
+
+/** The dashboard link of a run named by its build id, without the extra query a copied link carries. */
+export function scanRunLink(source: ScanBuildSource): string {
+  return `${DASHBOARD}/site-scanner/projects/${encodeURIComponent(source.scanName ?? "")}/builds?thBuildId=${encodeURIComponent(source.thBuildId)}`;
+}
 
 /**
  * How far a report link's scan is searched for. The scan list has no name or link filter and
@@ -163,6 +198,14 @@ function exportUrls(source: IssueSource): {
         poll: (taskId) => `${route}?task_id=${q(taskId)}`,
       };
     }
+    case "scanBuild": {
+      // The run's issues by its build id; the poll finds the run again from the task id.
+      const route = `${API_BASE}/website-scanner/v1/scan_runs/issues`;
+      return {
+        start: `${route}?thBuildId=${q(source.thBuildId)}`,
+        poll: (taskId) => `${route}?task_id=${q(taskId)}`,
+      };
+    }
     case "build": {
       const route = `${API_BASE}/automated-tests/v1/builds/issues`;
       return {
@@ -231,11 +274,11 @@ export class AccessibilityReportFetcher {
 
   /**
    * The source a dashboard report link points at. An Automated Tests link carries the build
-   * id itself. An Automate build or session link is mapped to that build through a session
-   * (see buildOfAutomateSession). A Website Scanner link carries the thBuildId of one run,
-   * which only the scan list can map to ids: each scan there carries its latest run's link.
-   * A link to an older run therefore matches no scan, and is reported as such rather than
-   * guessed at. An App Accessibility link names its build by project, name and number,
+   * id itself, and a Workflow Analyzer report link its report id (`ids`). An Automate build
+   * or session link is mapped to that build through a session (see buildOfAutomateSession).
+   * A Website Scanner link carries the build id (thBuildId) of one run, which the API reads
+   * directly (`scanBuild`); only what needs the scan's ids searches the scan list for it
+   * (findScanRun). An App Accessibility link names its build by project, name and number,
    * which the project's build list maps to the id. An App Automate build or session link
    * maps to the accessibility build through a session's test code.
    */
@@ -250,6 +293,24 @@ export class AccessibilityReportFetcher {
     // link it shows as its reportUrl parameter.
     const shared = url?.searchParams.get("reportUrl");
     if (shared && shared !== reportUrl) return this.sourceFromReportUrl(shared);
+    const reportPage = url?.pathname.match(
+      /\/(workflow-analyzer|reports|assisted-test)\/report\/?$/,
+    )?.[1];
+    if (url && reportPage === "assisted-test") {
+      throw new Error(
+        "This is an Assisted Test report link: fetchAccessibilityIssues does not read Assisted Test reports. It reads Website Scanner runs, Automated Tests and App Accessibility builds, and Workflow Analyzer reports",
+      );
+    }
+    const reportIds = reportPage ? url?.searchParams.get("ids") : null;
+    if (reportIds) {
+      const ids = reportIds.split(",").map((id) => id.trim());
+      if (ids.length > 1) {
+        throw new Error(
+          `This link opens several Workflow Analyzer reports (${ids.length}). Pass the one to read as workflowReportId`,
+        );
+      }
+      return { kind: "workflow", reportId: ids[0] };
+    }
     const manualReportId = url && manualReportIdFromDashboardLink(url);
     if (manualReportId) return { kind: "appReport", reportId: manualReportId };
     const appBuildId =
@@ -274,10 +335,14 @@ export class AccessibilityReportFetcher {
       /\/site-scanner\/projects\/([^/]+)\/builds/,
     )?.[1];
     if (thBuildId && scanName) {
-      return this.findScanRun(thBuildId, decodeURIComponent(scanName));
+      return {
+        kind: "scanBuild",
+        thBuildId,
+        scanName: decodeURIComponent(scanName),
+      };
     }
     throw new Error(
-      "This link does not name a report the API can look up. Pass an Automated Tests or Website Scanner report link from the Accessibility dashboard (both carry thBuildId), an App Accessibility build link (automated-tests/projects/…/builds/…), an Automate or App Automate build or session link, a scanner share link, an App Accessibility manual report link (report/…), or the ids: scanId with scanRunId, buildId, workflowReportId, or appReportId",
+      "This link does not name a report the API can look up. Pass an Automated Tests or Website Scanner report link from the Accessibility dashboard (both carry thBuildId), a Workflow Analyzer report link (workflow-analyzer/report?ids=…), an App Accessibility build link (automated-tests/projects/…/builds/…), an Automate or App Automate build or session link, a scanner share link, an App Accessibility manual report link (report/…), or the ids: scanId with scanRunId, buildId, workflowReportId, or appReportId",
     );
   }
 
@@ -285,9 +350,12 @@ export class AccessibilityReportFetcher {
    * A build id names a web build or a mobile app build: both are TestHub ids, and only the
    * API that ran the build knows it. The web API is asked first; a build it does not know
    * that the App Accessibility API does is an app build. One neither knows is refused
-   * here, naming both.
+   * here, naming both, or with `orScanRun` taken as a Website Scanner run's build id.
    */
-  async resolveBuild(source: IssueSource): Promise<IssueSource> {
+  async resolveBuild(
+    source: IssueSource,
+    { orScanRun = false }: { orScanRun?: boolean } = {},
+  ): Promise<IssueSource> {
     if (source.kind !== "build") return source;
     // Only a 404 means the web API does not know the id: any other failure is not an
     // answer about the build, and asking the app API next would hide it.
@@ -310,6 +378,9 @@ export class AccessibilityReportFetcher {
     }
     const meta = await this.app.buildMeta(source.buildId);
     if (meta) return { kind: "appBuild", buildId: source.buildId };
+    // A Website Scanner run's build id (a scanner link's thBuildId) is a TestHub id too, which
+    // only the scanner's issues route knows: the caller reads it there, and says so if not.
+    if (orScanRun) return { kind: "scanBuild", thBuildId: source.buildId };
     throw new Error(
       `No Automated Tests (web) or App Accessibility build with id "${source.buildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl`,
     );
@@ -411,11 +482,16 @@ export class AccessibilityReportFetcher {
     return { kind: "build", buildId };
   }
 
-  /** Walk the newest scans for the one whose own link carries this thBuildId. */
-  private async findScanRun(
-    thBuildId: string,
-    scanName: string,
-  ): Promise<IssueSource> {
+  /**
+   * A run named by its build id, as its scan's ids: the newest scans are walked for the one
+   * whose own link carries this thBuildId. What needs the ids (comparing runs) uses this, as
+   * does a link the API does not know by its build id.
+   */
+  async findScanRun({ thBuildId, scanName }: ScanBuildSource): Promise<{
+    kind: "scan";
+    scanId: string;
+    scanRunId: string;
+  }> {
     let nextPage: string | undefined;
     let sameName: number | undefined;
     for (let page = 0; page < MAX_SCAN_LIST_PAGES; page++) {
@@ -440,7 +516,7 @@ export class AccessibilityReportFetcher {
             scanRunId: String(scanRunId),
           };
         }
-        if (sameName === undefined && scan.name === scanName) {
+        if (sameName === undefined && scanName && scan.name === scanName) {
           sameName = scan.id;
         }
       }
@@ -495,6 +571,12 @@ export class AccessibilityReportFetcher {
         raise_error: false,
       });
       const initData: ReportInitResponse = initResp.data;
+      if (source.kind === "scanBuild" && initResp.status === 404) {
+        reportExports.delete(key);
+        // The API's own 404 is JSON; a 404 page means the route is not there.
+        const routeMissing = typeof initData !== "object" || initData === null;
+        throw new ScanRunNotFoundError(source.thBuildId, routeMissing);
+      }
       if (!initResp.ok || !initData?.success) {
         throw new Error(startFailure(source, initResp.status, initData));
       }
@@ -590,6 +672,9 @@ export class AccessibilityReportFetcher {
               `${API_BASE}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/${q(source.scanRunId)}/status`,
             )
           )?.status;
+        case "scanBuild":
+          // A run's status is read by its scan's ids, which a build id does not give.
+          return undefined;
         case "workflow":
           return (
             await this.getData(

@@ -267,7 +267,7 @@ export async function updateTestCase(
 - **Automation Status**: ${tc.automation_status ?? "N/A"}
 
 **View on BrowserStack Dashboard:**
-https://test-management.browserstack.com/projects/${projectId}/folders/${tc.folder_id}/test-cases/${tc.identifier}
+${tmBaseUrl}/projects/${projectId}/folders/${tc.folder_id}/test-cases/${tc.identifier}
 
 The test case has been updated successfully and is now available in your BrowserStack Test Management project.`,
         },

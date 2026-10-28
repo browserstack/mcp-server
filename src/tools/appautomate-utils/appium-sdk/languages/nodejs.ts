@@ -6,10 +6,13 @@ import {
   combineInstructions,
 } from "../index.js";
 
-export function getNodejsSDKCommand(testingFramework: string): string {
+export function getNodejsSDKCommand(
+  testingFramework: string,
+  options: { accessibility?: boolean } = {},
+): string {
   switch (testingFramework) {
     case "webdriverio":
-      return getWebDriverIOCommand();
+      return getWebDriverIOCommand(options);
     case "nightwatch":
       return getNightwatchCommand();
     case "jest":
@@ -65,7 +68,16 @@ export function getNodejsAppInstructions(
   }
 }
 
-function getWebDriverIOCommand(): string {
+function getWebDriverIOCommand({
+  accessibility = false,
+}: { accessibility?: boolean } = {}): string {
+  const accessibilityConfig = accessibility
+    ? `accessibility: true,
+        accessibilityOptions: {
+          wcagVersion: 'wcag22aa',
+          includeIssueType: { bestPractice: true },
+        },`
+    : "accessibility: false,";
   const prerequisiteStep = createStep(
     "Prerequisite Setup:",
     `a. Ensure you do not modify or replace any existing local driver code, 
@@ -82,9 +94,15 @@ export BROWSERSTACK_ACCESS_KEY="<your_browserstack_access_key>"
 \`\`\``,
   );
 
+  // App Accessibility needs @wdio/browserstack-service 8.42.0+ on WDIO v8, or 9.6.0+ on v9.
   const installStep = createStep(
     "Install BrowserStack WDIO service:",
-    `\`\`\`bash
+    accessibility
+      ? `\`\`\`bash
+npm install @wdio/browserstack-service@^9.6.0 --save-dev
+\`\`\`
+App Accessibility needs WebdriverIO v8 or v9: on WebdriverIO v8, install @wdio/browserstack-service@^8.42.0 instead.`
+      : `\`\`\`bash
 npm install @wdio/browserstack-service@^7 --save-dev
 \`\`\``,
   );
@@ -102,7 +120,7 @@ exports.config = {
       {
         app: 'bs://sample.app',
         browserstackLocal: true,
-        accessibility: false,
+        ${accessibilityConfig}
         testObservabilityOptions: {
           buildName: "bstack-demo",
           projectName: "BrowserStack Sample",
@@ -114,7 +132,7 @@ exports.config = {
   capabilities: [{
     'bstack:options': {
       deviceName: 'Samsung Galaxy S22 Ultra',
-      platformVersion: '12.0',
+      ${accessibility ? "osVersion" : "platformVersion"}: '12.0',
       platformName: 'android',
     }
   }],

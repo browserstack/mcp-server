@@ -15,6 +15,10 @@ import {
   getAppSDKPrefixCommand,
   generateAppBrowserStackYMLInstructions,
 } from "./index.js";
+import {
+  getAppAccessibilityChecksInstructions,
+  getAppAccessibilityNotSetUpInstructions,
+} from "./languages/accessibility.js";
 
 import {
   AppSDKSupportedLanguage,
@@ -56,6 +60,7 @@ export async function setupAppAutomateHandler(
     ]) ?? [];
   const appPath = input.appPath as string;
   const framework = input.detectedFramework as SupportedFramework;
+  const accessibility = input.accessibility === true;
 
   //Validating if supported framework or not
   validateSupportforAppAutomate(framework, language, testingFramework);
@@ -77,6 +82,7 @@ export async function setupAppAutomateHandler(
     language,
     testingFramework,
     appPath,
+    { accessibility },
   );
 
   if (sdkCommand) {
@@ -90,6 +96,7 @@ export async function setupAppAutomateHandler(
       platforms,
       testingFramework,
       projectName: input.project as string,
+      accessibility,
     },
     appPath,
   );
@@ -119,6 +126,16 @@ export async function setupAppAutomateHandler(
 
   if (projectInstructions) {
     instructions.push({ content: projectInstructions, type: "run" });
+  }
+
+  // Step 5: What makes an accessibility scan happen, and how to read the issues
+  if (accessibility) {
+    instructions.push({
+      content:
+        getAppAccessibilityNotSetUpInstructions(testingFramework) ??
+        getAppAccessibilityChecksInstructions(language, testingFramework),
+      type: "run",
+    });
   }
 
   const combinedInstructions = instructions

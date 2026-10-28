@@ -153,25 +153,23 @@ const DESCRIPTION =
   // tool that is not enabled for the account cannot do the job at all — so "there is a
   // per-account gate, fall back to the individual tools" is the most useful thing to say
   // first. Parenthesised so it reads as a status note, not as the tool's purpose.
-  "(Alpha, limited availability. Enabled per account and per product; if it is not enabled " +
-  "the call returns an entitlement error, nothing runs, and you should complete the task " +
-  "with the individual tools instead. To request access, the user should contact their " +
-  "BrowserStack account owner.) " +
+  "(Alpha, limited availability. Enabled per account and product; if not, the call returns " +
+  "an entitlement error, nothing runs, and you complete the task with the individual tools " +
+  "instead. Access: the user's BrowserStack account owner.) " +
   "Use this when no other BrowserStack tool here fits the task, or when the ones you tried " +
   "did not get you there. Prefer a specific tool whenever one fits: it is faster and more " +
-  "predictable than handing the job to an agent. " +
+  "predictable. " +
   // The one exception the registry can name. Generating test cases from a PRD LOOKS like a
   // fit for createTestCase, so without this the fallback framing above wins and the
   // client writes the cases itself, skipping the agent that owns the task.
-  "The exception is a task a capability tool hands over as `agent_match` or `use_agent` " +
-  "(e.g. generating or updating test cases from a requirement, finding duplicates): send " +
-  "it here in the user's words. " +
-  "Otherwise, describe what you want in plain language and BrowserStack's agent decides " +
-  "which calls to make, then returns its answer plus the steps it took. Anything that would " +
-  "change data pauses and asks you to confirm it first; deletes are refused outright. " +
-  "Put that confirmation to the user and answer with what THEY say — never decide on " +
-  "their behalf. If it cannot be put to anyone, the run is read-only and everything it " +
-  "wanted to change comes back in `needs_approval` instead. One task per call.";
+  "Except: a task handed over as `agent_match` or `use_agent` (e.g. cases from a " +
+  "requirement) comes here in the user's words. " +
+  "Otherwise, describe what you want in plain language; BrowserStack's agent picks the " +
+  "calls and returns its answer plus the steps it took. Anything that would change data " +
+  "pauses and asks you to confirm it first; deletes are refused outright. Put that " +
+  "confirmation to the user and answer with what THEY say — never decide for them. If " +
+  "no one can be asked, the run is read-only and what it wanted to change comes back in " +
+  "`needs_approval`. One task per call.";
 
 const FILES_NEED_SIZES =
   "This BrowserStack MCP server cannot read your files, so each one is sent from your " +
@@ -626,7 +624,7 @@ export function addAskBrowserStackAITool(
       product: z
         .enum(PRODUCTS)
         .describe(
-          "Which product to work in: tm (Test Management), " +
+          "Which product to work in: tm (Test Management), a11y (Accessibility), " +
             "tra (Test Reporting & Analytics).",
         ),
       // OPTIONAL, because a resume does not carry one. `next_step` tells the model to

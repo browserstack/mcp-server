@@ -118,6 +118,55 @@ export interface ResponseDoc extends ComponentRef {
 }
 
 /** A capability, keyed by the endpoint it exposes. There is deliberately no name. */
+/**
+ * How to call the endpoint correctly, optionally split by which surface is serving it.
+ *
+ * A plain array is shared — true wherever this runs, which is almost everything, and the
+ * form every shipped index already uses. The object form adds lines that are true on only
+ * one surface: `local` where the server sits beside the user, `remote` where it does not.
+ * `shared` is the same list the plain array would have been, so a capability can carry
+ * facts of both kinds without repeating any of them.
+ *
+ * The loader folds the applicable half into one array before anything reads it, so a
+ * caller is handed exactly the guidance that applies to the server it is talking to and
+ * never has to work out which half was meant for it. The split itself is ours to know:
+ * these keys do not survive into what describeCapability or searchCapability return.
+ *
+ * WHY A LINE IS SURFACE-SPECIFIC RATHER THAN SHARED: on a remote server, advice about the
+ * caller's own filesystem is not merely useless but wrong — it would have an agent tell the
+ * user to configure a machine they are not on. And for a `local_only` capability, `remote`
+ * is where "what to do instead" lives, which searchCapability puts in front of the caller
+ * before they pick anything, let alone call it.
+ */
+export type Guidance =
+  | string[]
+  | { shared?: string[]; local?: string[]; remote?: string[] };
+
+/**
+ * The guidance lines as a plain array, whichever form was authored.
+ *
+ * The loader flattens the object form at load, so everything downstream genuinely does hold
+ * an array — this exists so that is checked rather than asserted, and so a capability read
+ * straight from a file (a test, a checker) behaves the same as one from the registry.
+ * Without the surface to decide between them, only the shared lines can be returned.
+ */
+export function guidanceLines(guidance?: Guidance): string[] {
+  if (!guidance) return [];
+  return Array.isArray(guidance) ? guidance : (guidance.shared ?? []);
+}
+
+/** One step of a capability's `fallbacks` chain. */
+export interface Fallback {
+  /** Runs when the latest response carried this status. */
+  when: { status: number };
+  /** The sibling capability to call, by published name, in the same product. */
+  capability: string;
+  /** The body to send it — authored, never the caller's. */
+  body?: Record<string, unknown>;
+  /** Query parameters to send it, if it takes any. */
+  query?: Record<string, unknown>;
+}
+
 export interface Capability {
   /**
    * The caller-facing handle — the snake-cased `operationId`, unique within its product.
@@ -132,20 +181,31 @@ export interface Capability {
   name?: string;
   method: string;
   path: string;
+  /**
+   * Which of the product's named `hosts` serves this one capability, when it is not the
+   * product's own `base_url`.
+   *
+   * A product is normally one host. App Automate is not: the account-level API (devices,
+   * app builds, plan, session records) answers on one origin and the Appium hub that
+   * drives the device answers on another, and neither serves the other's paths. Splitting
+   * them into two products would split one entity too — the session a hub capability
+   * creates is the session the account-level API reports on — and a caller holding the id
+   * would have to know it had changed products to use it.
+   *
+   * Unset means the product's own host, so every existing index is unaffected. A name that
+   * `hosts` does not define is refused by name at invocation rather than quietly falling
+   * back, because the fallback would send the call to a host that cannot serve the path and
+   * return a 404 that reads like the caller's mistake.
+   */
+  host?: string;
   mode: Mode;
   entity: string;
   path_params?: WireParam[];
   query?: WireParam[];
   body?: WireParam[];
   intent?: string;
-  /**
-   * How to call the endpoint correctly.
-   *
-   * ABSENT from the released artifact — the export dropped it, and the shape-change note
-   * does not say whether that was intended. Kept optional and still scored by search so the
-   * server works either way; nothing may depend on it being present.
-   */
-  guidance?: string[];
+  /** How to call it; see `Guidance` for the local/remote split. */
+  guidance?: Guidance;
   /** Allowlisted row fields. Absent when `shape` is "discovered". */
   returns?: string[];
   /** "discovered" when the product declares no response schema for this operation. */
@@ -171,6 +231,101 @@ export interface Capability {
    * suppression must not be ignored for arriving in an unexpected shape.
    */
   disabled?: boolean;
+  /**
+   * Withheld when the server is not running on the caller's own machine.
+   *
+   * Some capabilities only mean anything when the person and the process share a computer:
+   * one that reads a file the caller names is the clear case. On a remote server that path
+   * resolves against the OPERATOR's disk, so honouring it would read one user's files on
+   * another's behalf — the capability does not become unreliable there, it becomes wrong.
+   *
+   * Distinct from `disabled`, which withholds a capability everywhere. This one is a claim
+   * about where it can run, so the same artifact serves both deployments: a local server
+   * publishes it and a remote one does not.
+   *
+   * FAILS CLOSED in the same way, and takes the same `capability_disabled` path at
+   * invocation, so a caller holding the handle is told the absence is deliberate rather
+   * than hunting for a synonym.
+   */
+  local_only?: boolean;
+
+  /**
+   * FALSE when this build publishes the capability for reference but will not call it.
+   *
+   * Set by the loader, never authored: it is the surface's answer, not the artifact's.
+   */
+  invocable?: boolean;
+  /**
+   * How the request body is encoded. Absent means JSON, which is every capability today.
+   *
+   * `multipart` exists for endpoints that take the bytes of a file rather than a reference
+   * to one. A capability declaring it must also declare a `file` parameter, and should be
+   * `local_only`: the path names the caller's own machine.
+   */
+  encoding?: "multipart";
+  /**
+   * Send `{}` rather than no body at all, for an endpoint that takes no parameters.
+   *
+   * Normally a capability with nothing to send sends nothing, which is right for a REST API
+   * and wrong for W3C WebDriver: Chrome answers 400 "invalid argument" to a parameterless
+   * POST with the body omitted and 200 to the same call carrying `{}`. Appium tolerates the
+   * omission, which is why the identical capability needs this on Automate and not on App
+   * Automate.
+   *
+   * Opt-in per capability rather than a rule for every bodyless POST, because 27 of those
+   * exist across the shipped indexes and changing what reaches their products is not
+   * something this can verify.
+   */
+  send_empty_body?: boolean;
+  /**
+   * This capability's array response may be narrowed by the server, on these fields.
+   *
+   * THE PRODUCT CANNOT DO IT. Declaring this is a statement that the endpoint offers no
+   * filtering of its own — not that ours is more convenient. `/automate/browsers.json`
+   * returns 5,251 rows and ignores every query parameter it is given, so a caller asking
+   * which browsers run on Windows had to receive 604 KB and find out itself.
+   *
+   * Where the wire DOES filter, declare the parameters and let the product filter: a
+   * server-side pass still transfers the whole response and still costs the round trip,
+   * and it moves the contract off the product and onto us.
+   *
+   * Unset — which is every other capability — means `select` is refused outright and the
+   * response is handed back exactly as sent.
+   */
+  narrowable?: {
+    /** The only fields `select` may name. Anything else is refused with this list. */
+    fields: string[];
+    /**
+     * Dotted path to the array inside the body; omitted when the body IS the array.
+     * Siblings of the array are preserved, so an envelope survives the narrowing.
+     */
+    path?: string;
+    /** One line for the contract: why this is here rather than on the wire. */
+    note?: string;
+  };
+  /**
+   * What to try next when the product refuses THIS call, in order.
+   *
+   * The one authored exception to one-request-one-response. Each step names a sibling
+   * capability in the same product and the fixed body to send it; the original call's
+   * path parameters are carried over, nothing else. A step runs only when the LATEST
+   * response has the status it names, and the chain stops at the first 2xx.
+   *
+   * Exists for hide_keyboard on an iPhone: the keyboard has no dismiss key, so the plain
+   * call is refused, and the only way on is to press one of the keys it does carry. The
+   * caller's consent covers the chain, because the chain is this capability's published
+   * contract — so what a step may do (press Return, which an app may treat as submit) is
+   * the capability's guidance to state. Every attempt is reported with its status.
+   */
+  fallbacks?: Fallback[];
+  /**
+   * How long to wait for this one capability's answer, in seconds.
+   *
+   * The transport's default (45 s) fits a JSON API and not a build upload or a device
+   * allocation, both of which routinely run longer. A capability that can legitimately
+   * take minutes says so here; everything else keeps the default.
+   */
+  timeout_seconds?: number;
   paginated?: boolean;
   /** The largest page the operation declares. */
   max_page_size?: number;
@@ -320,6 +475,14 @@ export interface AgentDoc {
 }
 
 export interface ProductIndex {
+  /**
+   * The product's name as a person would say it — "Mobile Device Control", not the key.
+   *
+   * The key stays the handle every call takes; this is what the routing question and
+   * the product listing show, because "which do you mean — mobiledevicecontrol or tm?"
+   * is a question asked in our vocabulary rather than the user's.
+   */
+  title?: string;
   summary: string;
   /**
    * BrowserStack AI agents for this product. Absent means none, and they are only shown
@@ -367,6 +530,18 @@ export interface ProductIndex {
    * (see `discovery.probePath`); declare it when the derived choice would be wrong.
    */
   probe_path?: string;
+  /**
+   * Additional hosts this product is served from, by name, for capabilities that declare
+   * `host`.
+   *
+   * DISTINCT FROM `base_urls`, which is a list of CANDIDATES for one host — probed in turn
+   * so a region-sharded product lands on the account's own region. These are several hosts
+   * that all serve the product at once, each addressing a different part of it, and the
+   * capability says which it needs rather than the server discovering it.
+   *
+   * `base_url` remains the default for every capability that names no host.
+   */
+  hosts?: Record<string, string>;
   capabilities: Capability[];
   entities: Record<string, EntityDoc>;
   paging?: Record<string, PagingRule>;

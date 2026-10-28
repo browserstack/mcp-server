@@ -8,6 +8,12 @@
  * Grouping removes the collision AND the rename, so a caller sends the spec's own names.
  */
 
+import appConfig from "../../config.js";
+import {
+  APP_BINARY_EXTENSIONS,
+  MAX_APP_UPLOAD_BYTES,
+  validateUploadPath,
+} from "../../lib/upload-validator.js";
 import { InvocationError } from "./index-loader.js";
 import { Capability, WireConstraints, WireParam } from "./types.js";
 
@@ -243,6 +249,44 @@ function coerceType(
   label = param.name,
 ): unknown {
   const expected = param.type;
+  if (expected === "any") {
+    // PASSES THROUGH UNTOUCHED, which is the whole point of declaring it. A polymorphic
+    // parameter reached the string branch and arrived as text: WebDriver's frame id takes a
+    // number, an element reference or null, and `null` sent as "null" is refused as an
+    // invalid argument — a failure that reads like the caller chose the wrong frame.
+    return value;
+  }
+  if (expected === "file") {
+    // NEVER ON THE HOSTED SERVER. `local_only` is what keeps file capabilities off the
+    // remote surface, and that is a flag an index author has to remember; this is the net
+    // under it. A hosted server has no business reading its own disk on a caller's behalf,
+    // whatever the index says.
+    if (appConfig.REMOTE_MCP)
+      throw new InvocationError(
+        `'${label}' is a file on the caller's own machine, which this server cannot read. ` +
+          "Use the form of this capability that takes a public link, or upload by hand.",
+      );
+    // CHECKED HERE, not at egress: `bind` runs dry before the write-consent gate, so a path
+    // that does not exist — or a base directory nobody configured — is refused before the
+    // user is asked to approve an upload that was never going to happen.
+    //
+    // The rules are the ones the server already applies to every other upload, so the
+    // answer does not depend on which surface asked.
+    const given = String(value ?? "").trim();
+    if (!given)
+      throw new InvocationError(`'${label}' must be a path to a file`);
+    try {
+      return validateUploadPath(given, {
+        allowedExtensions: APP_BINARY_EXTENSIONS,
+        maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+        allowedBaseDir: appConfig.UPLOAD_BASE_DIR,
+      });
+    } catch (error) {
+      throw new InvocationError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
   if (expected === "object" || expected === "array") {
     // An opaque body object is passed through as given: the spec does not describe its
     // fields, so validating or reshaping it would mean inventing a contract.
@@ -310,6 +354,34 @@ function coerceType(
   const untyped = !expected;
   if (untyped && (typeof value === "object" || typeof value === "boolean")) {
     return value;
+  }
+
+  // A DECLARED STRING IS NOT A LICENCE TO STRINGIFY ANYTHING.
+  //
+  // The untyped case above was fixed because `String(value)` destroyed objects the spec had
+  // declined to describe. A DECLARED string was left stringifying whatever arrived, and it
+  // is the worse of the two: an object sent for `create_test_case_comment`'s `comment` was
+  // serialised to the literal text "[object Object]", the API accepted it, the write
+  // returned 200, and the agent reported success in good faith. tm exposes no comment
+  // delete, so that text is now permanently on the case.
+  //
+  // A 400 teaches the caller what it got wrong. A 200 that stores "[object Object]" teaches
+  // it nothing and cannot be undone, so refuse here rather than let it reach the wire.
+  //
+  // `null` passes through instead of becoming the five characters "null", which no API has
+  // ever wanted: several string parameters document null as the way to CLEAR a field —
+  // `test_plan_id` says "send null or '' to unlink" — and stringifying it silently sent a
+  // value where the caller meant to send an absence.
+  if (expected === "string") {
+    if (value === null || value === undefined) return value;
+    if (typeof value === "object") {
+      throw new InvocationError(
+        `'${label}' must be a string, and was ${Array.isArray(value) ? "a list" : "an object"}. ` +
+          `Serialising it would send the text ` +
+          `${JSON.stringify(Array.isArray(value) ? "[object Array]" : "[object Object]")} ` +
+          `rather than its contents, and the call would succeed with that stored.`,
+      );
+    }
   }
 
   const text = String(value);

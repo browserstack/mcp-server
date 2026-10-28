@@ -410,7 +410,7 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
       next_page: null,
       hidden_issues: 1,
       fup_capped: false,
-      dashboard_link: `${DASHBOARD}/automated-tests/projects/123456/builds/Checkout+Build/8`,
+      dashboard_link: `${DASHBOARD}/automated-tests/projects/123456/builds/Checkout+Build/8?thBuildId=${BUILD_ID}`,
     });
     expect(report.records.map((r) => r.severity)).toEqual([
       "critical",

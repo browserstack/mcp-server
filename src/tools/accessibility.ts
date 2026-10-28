@@ -27,6 +27,7 @@ import {
   compareIssues,
   loadMainIssues,
   parseAccessibilityReportFromCSV,
+  type IssueSummary as WebIssueSummary,
 } from "./accessiblity-utils/report-parser.js";
 import { wrapUntrusted } from "../lib/untrusted-content.js";
 import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
@@ -544,6 +545,77 @@ function summaryNote(summary: AppIssueSummary, total: number): string[] {
   ];
 }
 
+/** How many rules and pages a web report's summary names; the rest are counted. */
+const SUMMARY_RULES = 20;
+const SUMMARY_PAGES = 10;
+
+/**
+ * A web report's issues at a glance, all of them rather than one page's: by severity, how
+ * many a person still has to confirm, how many are best practices, by rule and by page.
+ */
+function webSummaryNote(
+  summary: WebIssueSummary | undefined,
+  total: number,
+): string[] {
+  if (!summary || total === 0) return [];
+  const one = (n: number, singular: string, plural: string) =>
+    n === 1 ? singular : plural;
+  const rank = (severity: string) => {
+    const i = SEVERITY_ORDER.indexOf(severity);
+    return i === -1 ? SEVERITY_ORDER.length : i;
+  };
+  const severities = Object.entries(summary.by_severity)
+    .sort(([a], [b]) => rank(a) - rank(b))
+    .map(([severity, n]) => `${n} ${severity}`)
+    .join(", ");
+  const review = summary.needs_review;
+  const practice = summary.best_practice;
+  const notes = [
+    ...(review > 0
+      ? [
+          `${review} ${one(review, "needs", "need")} review (a person has to confirm ${one(review, "it", "them")})`,
+        ]
+      : []),
+    ...(practice > 0
+      ? [
+          `${practice} ${one(practice, "is a best practice, not a WCAG failure", "are best practices, not WCAG failures")}`,
+        ]
+      : []),
+  ];
+  const listed = <T>(
+    rows: T[],
+    limit: number,
+    label: (row: T) => string,
+    rest: string,
+  ) => {
+    const more = rows.length - Math.min(rows.length, limit);
+    return `${rows.slice(0, limit).map(label).join(", ")}${more > 0 ? `, and ${more} more ${rest}` : ""}.`;
+  };
+  const pages = summary.by_page ?? [];
+  return [
+    `Summary of the ${total} issues: ${severities}${notes.map((note) => `; ${note}`).join("")}.`,
+    wrapUntrusted(
+      "accessibility issue counts",
+      [
+        `By rule: ${listed(summary.by_rule, SUMMARY_RULES, (r) => `${r.issue_type} ${r.count}`, "rules")}`,
+        ...(pages.length > 0
+          ? [
+              `By page: ${listed(pages, SUMMARY_PAGES, (p) => `${p.url} ${p.count}`, "pages")}`,
+            ]
+          : []),
+      ].join("\n"),
+    ),
+  ];
+}
+
+const WEB_ISSUES_NOTE =
+  "Each issue names its rule (issue_type): the rule's name, description, WCAG criteria and usual fix are under rules, and an issue has its own how_to_fix only when it differs. An issue with needs_review is one the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. An issue with no needs_review, whose rule is not a best practice (best_practice under rules), is a confirmed WCAG failure.";
+
+/** The CSV link, with what it is for: an answer gives a page of issues at a time. */
+function fullReportLine(reportLink: string): string {
+  return `The full list of issues is a CSV, valid for about 12 hours: download it when every issue is needed at once (this answer gives them a page at a time), from the following link: ${reportLink}`;
+}
+
 /** How many new and resolved issues a comparison lists per page. */
 const COMPARE_LIST_MAX = 50;
 
@@ -962,6 +1034,8 @@ async function fetchAccessibilityIssues(
 
   const {
     records,
+    rules,
+    summary,
     page_length,
     total_issues,
     next_page,
@@ -980,9 +1054,12 @@ async function fetchAccessibilityIssues(
     ...processingNote(processing),
     ...(page ? pageNote(page) : []),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
+    // The whole report's counts, said on its first page.
+    ...(cursor ? [] : webSummaryNote(summary, total_issues)),
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
-    `You can also download the full report (CSV) from the following link, valid for about 12 hours: ${reportLink}`,
-    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
+    fullReportLine(reportLink),
+    WEB_ISSUES_NOTE,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
     closingMessage(next_page, remaining, source, stillProcessing, pageArg),
   ]);
 }
@@ -1363,36 +1440,56 @@ async function executeGetAuthConfig(
   }
 }
 
+/**
+ * Where to see a scan in the dashboard: its own page, as the scans list links it. A scan's
+ * page is named by its build, so a link made from the scan's name does not open it.
+ */
+function scanDashboardNote(
+  dashboardLink: string | undefined,
+  scanId: string,
+): string {
+  return dashboardLink
+    ? `Its page in the Accessibility dashboard: ${dashboardLink}`
+    : `See it under Website Scanner in the Accessibility dashboard (scan ID ${scanId}).`;
+}
+
 function createScanFailureResponse(
   name: string,
   status: string,
+  scanId: string,
+  scanRunId: string,
+  dashboardLink: string | undefined,
 ): CallToolResult {
   return createErrorResponse(
-    `❌ Accessibility scan "${name}" failed with status: ${status} , check the BrowserStack dashboard for more details [https://scanner.browserstack.com/site-scanner/scan-details/${name}].`,
+    `❌ Accessibility scan "${name}" failed with status: ${status}. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}. The dashboard says why. ${scanDashboardNote(dashboardLink, scanId)}`,
   );
 }
 
 function createScanSuccessResponse(
   name: string,
-  totalIssues: number,
-  pageLength: number,
-  records: any[],
+  report: Awaited<ReturnType<typeof parseAccessibilityReportFromCSV>>,
   scanId: string,
   scanRunId: string,
   reportUrl: string,
-  cursor: number | null,
-  duplicates: string[] = [],
+  dashboardLink: string | undefined,
   settings: ScanSettings = {},
   applied?: ScanSettings,
 ): CallToolResult {
+  const cursor = report.next_page;
   const messages = [
-    `Accessibility scan "${name}" completed. check the BrowserStack dashboard for more details [https://scanner.browserstack.com/site-scanner/scan-details/${name}].`,
+    `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
     scanSettingsNote(settings, applied),
-    `You can also download the full report from the following link: ${reportUrl}`,
-    `We found ${totalIssues} issues. Below are the details of the ${pageLength} most critical issues.`,
-    ...duplicates,
-    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify(records, null, 2))}`,
+    fullReportLine(reportUrl),
+    `We found ${report.total_issues} issues. Below are the details of the ${report.page_length} most critical issues.`,
+    ...webSummaryNote(report.summary, report.total_issues),
+    ...excludedIssuesNote(
+      report.duplicate_issues,
+      report.unlinked_duplicates,
+      report.hidden_issues,
+    ),
+    WEB_ISSUES_NOTE,
+    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: report.records, rules: report.rules }))}`,
   ];
 
   if (cursor !== null) {
@@ -1427,10 +1524,19 @@ async function runAccessibilityScan(
 
   const status = await scanner.waitUntilComplete(scanId, scanRunId, context);
   if (status !== "completed") {
-    return createScanFailureResponse(name, status);
+    return createScanFailureResponse(
+      name,
+      status,
+      scanId,
+      scanRunId,
+      await scanner.dashboardLink(scanId),
+    );
   }
 
-  const applied = await scanner.runSettings(scanId, scanRunId);
+  const [applied, dashboardLink] = await Promise.all([
+    scanner.runSettings(scanId, scanRunId),
+    scanner.dashboardLink(scanId),
+  ]);
   const reportFetcher = await initializeReportFetcher(config);
   let reportLink: string;
   try {
@@ -1441,7 +1547,8 @@ async function runAccessibilityScan(
   } catch (error) {
     if (error instanceof ExportPendingError) {
       return createSuccessResponse([
-        `Accessibility scan "${name}" completed. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+        `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
+        `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
         scanSettingsNote(settings, applied),
         ...exportPendingMessages(
           {
@@ -1457,26 +1564,13 @@ async function runAccessibilityScan(
     throw error;
   }
 
-  const {
-    records,
-    page_length,
-    total_issues,
-    next_page,
-    duplicate_issues,
-    unlinked_duplicates,
-    hidden_issues,
-  } = await parseAccessibilityReportFromCSV(reportLink);
-
   return createScanSuccessResponse(
     name,
-    total_issues,
-    page_length,
-    records,
+    await parseAccessibilityReportFromCSV(reportLink),
     scanId,
     scanRunId,
     reportLink,
-    next_page,
-    excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
+    dashboardLink,
     settings,
     applied,
   );

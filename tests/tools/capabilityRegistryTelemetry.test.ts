@@ -245,6 +245,42 @@ describe("capability registry telemetry", () => {
     expect(last.search_query).toBe("find cases assigned to [email]");
   });
 
+  it("records an entity only when the product defines it", async () => {
+    const server = await buildServer();
+    const search = (entity: string) =>
+      call(server, "searchCapability", {
+        product: "tm",
+        product_choice: "user_confirmed",
+        query: "list",
+        entity,
+      });
+
+    await search("attachment");
+    expect((await rowsFor("searchCapability")).at(-1).entity).toBe(
+      "attachment",
+    );
+    await search("Acme release 4.2");
+    expect((await rowsFor("searchCapability")).at(-1).entity).toBeUndefined();
+  });
+
+  it("does not record an unknown product name", async () => {
+    const server = await buildServer();
+    await call(server, "searchCapability", {
+      product: "Acme internal",
+      query: "list",
+    });
+    await call(server, "describeEntity", {
+      product: "Acme internal",
+      entity: "x",
+    });
+
+    for (const tool of ["searchCapability", "describeEntity"]) {
+      const last = (await rowsFor(tool)).at(-1);
+      expect(last.refusal_reason).toBe("unknown_product");
+      expect(last.product).toBeUndefined();
+    }
+  });
+
   it("does not put registry fields on other tools' rows", async () => {
     const server = await buildServer();
     await call(server, "listProducts", {});

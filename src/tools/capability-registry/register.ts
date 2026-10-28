@@ -522,8 +522,6 @@ export function addCapabilityRegistryTools(
           "describeEntity",
           "unknown_product",
           `unknown product '${product}'`,
-          undefined,
-          { product },
         );
       const doc = bundle.entities[entity];
       if (!doc) {
@@ -697,7 +695,6 @@ export function addCapabilityRegistryTools(
           `No product named '${product}'. Call listProducts — passing the user's request ` +
             "as `query` — for the names, and for whether the products clash over it.",
           {},
-          { product },
         );
       }
       if (!isBrowseQuery(query)) {
@@ -872,7 +869,10 @@ export function addCapabilityRegistryTools(
       // call succeeded.
       track("searchCapability", {
         product,
-        entity,
+        entity:
+          entity && registry.index.products[product].entities?.[entity]
+            ? entity
+            : undefined,
         search_query: redact(query),
         results_returned: hits.length,
         total_matched: rest.total_matched,

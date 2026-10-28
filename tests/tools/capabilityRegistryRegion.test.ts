@@ -228,6 +228,16 @@ describe("tra follows BROWSERSTACK_GRR_REGION", () => {
     expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(DECLARED);
   });
 
+  it("sends app_accessibility to its EU host too", async () => {
+    process.env.BROWSERSTACK_GRR_REGION = "eu";
+    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    expect(
+      await resolveBaseUrl("app_accessibility", CONFIG, {
+        base_url: "https://api-app-accessibility.browserstack.com",
+      }),
+    ).toBe("https://api-app-accessibility-eu.browserstack.com");
+  });
+
   it("lets an explicit override win over the region", async () => {
     process.env.BROWSERSTACK_GRR_REGION = "eu";
     process.env.CAPABILITY_REGISTRY_BASE_URL_TRA = "https://tra-preprod.example";

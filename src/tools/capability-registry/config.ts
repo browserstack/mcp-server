@@ -53,9 +53,9 @@ function environmentMap(): Record<string, Record<string, string>> {
  *
  * The general mechanism lives in `discovery.ts` and is driven by the index's `base_urls`.
  * This map is the bridge for products that predate that: tm's hosts are still hardcoded in
- * `lib/tm-base-url.ts` and shared with the hand-written Test Management tools. tra follows
- * BROWSERSTACK_GRR_REGION through `lib/regional-host.ts`, like the hand-written Test Reporting
- * tools. Once a product.yaml declares `base_urls`, its entry can go and nothing else changes.
+ * `lib/tm-base-url.ts` and shared with the hand-written Test Management tools. tra and
+ * app_accessibility follow BROWSERSTACK_GRR_REGION through `lib/regional-host.ts`, like the
+ * hand-written tools for the same products. Once a product.yaml declares `base_urls`, its entry can go and nothing else changes.
  */
 const BUILTIN_DISCOVERY: Record<
   string,
@@ -63,6 +63,7 @@ const BUILTIN_DISCOVERY: Record<
 > = {
   tm: getTMBaseURL,
   tra: async () => getRegionalHost("observabilityApi"),
+  app_accessibility: async () => getRegionalHost("appAccessibilityApi"),
 };
 
 /** True when this product's host is account-specific and must be discovered per call. */

@@ -1678,24 +1678,28 @@ export default function addAccessibilityTools(
       scanId: z
         .string()
         .optional()
-        .describe("Website Scanner: the scan id from startAccessibilityScan."),
+        .describe(
+          "Website Scanner scan id: from startAccessibilityScan or list_website_scanner_scans (searchCapability).",
+        ),
       scanRunId: z
         .string()
         .optional()
         .describe(
-          "Website Scanner: the scan run id from startAccessibilityScan.",
+          "Website Scanner run id: from startAccessibilityScan, or list_website_scanner_scan_runs (searchCapability).",
         ),
       buildId: z
         .string()
         .regex(/^[a-z0-9]{40}$/, "40 lowercase letters and digits")
         .optional()
         .describe(
-          "Web or App Accessibility build id: the SDK's testhub id, a web link's thBuildId, or an app build via searchCapability.",
+          "Web or App Accessibility build id: the SDK's testhub id, a link's thBuildId, or one listed via searchCapability.",
         ),
       workflowReportId: z
         .string()
         .optional()
-        .describe("Workflow Analyzer: the report's numeric id."),
+        .describe(
+          "Workflow Analyzer report id: from its link, or list_workflow_analyzer_reports (searchCapability).",
+        ),
       appReportId: z
         .string()
         .regex(

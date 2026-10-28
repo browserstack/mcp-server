@@ -3,7 +3,12 @@
   "version": "1.46",
   "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
   "tm": {
-    "routing_terms": ["team", "setting", "workspace", "suite"],
+    "routing_terms": [
+      "team",
+      "setting",
+      "workspace",
+      "suite"
+    ],
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. A run is executed against a named configuration and environment, and records the app version and build its results came from. Destructive capabilities exist and always need explicit human approval.",
     "capabilities": [
       {
@@ -116,7 +121,7 @@
               },
               {
                 "name": "execution_id",
-                "type": "integer"
+                "type": "string"
               }
             ]
           }
@@ -125,10 +130,10 @@
         "guidance": [
           "Queued, not applied: the 200 {success: true} only means the job was accepted. Re-read the run's test cases to confirm the assignees actually changed.",
           "`assignee` is an email (or TM user id) resolved inside the run's group. An address that does not resolve is skipped silently — that case keeps its old assignee and nothing is reported.",
-          "Send `assignee: null` on an entry to unassign that case.",
-          "Each entry must carry `test_case_id` (TC-NNN) or `execution_id`; an entry with neither is dropped. Add `configuration_id` to target one configuration row when the case is mapped to several — omit it and every row for that case is reassigned.",
-          "The body is not validated before the 200: a missing or empty `assign_to` still answers 200 {success: true} and changes nothing.",
-          "Assignment is reversible — assign again (or to null) to undo."
+          "`assignee` is required on every entry and must be a string: `assignee: null` is rejected with a 400 (\"assignee should be a string\"), so null cannot be used to unassign a case.",
+          "Each entry must carry `test_case_id` (TC-NNN) or `execution_id` (a string, not a number); an entry with neither, or with any key other than those and `assignee` / `configuration_id`, is rejected with a 400. Add `configuration_id` (an integer) to target one configuration row when the case is mapped to several — omit it and every row for that case is reassigned.",
+          "A body without an `assign_to` array is rejected with a 400 before anything is queued. An empty `assign_to` array passes validation, answers 200 {success: true} and changes nothing.",
+          "Assignment is reversible — assign again to undo."
         ],
         "returns": [
           "success"
@@ -1213,6 +1218,11 @@
             "description": "Planned execution date for each selected execution."
           },
           {
+            "name": "elapsed_time",
+            "type": "integer",
+            "description": "Time spent on the case, as a non-negative integer. Only recorded when exactly one case is selected and a status is being set; ignored for a multi-case selection, and a blank or negative value is dropped."
+          },
+          {
             "name": "custom_fields",
             "type": "object",
             "description": "Result-level custom field values, keyed by custom field id."
@@ -1587,6 +1597,72 @@
               }
             ],
             "json_path": "/test_case/reviewers"
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "description": "Title edit. `prefix` or `suffix` prepends or appends the value to each selected case's existing title; it cannot replace a title outright.",
+            "fields": [
+              {
+                "name": "operation",
+                "type": "string",
+                "required": true,
+                "values": [
+                  "prefix",
+                  "suffix",
+                  "ignore"
+                ]
+              },
+              {
+                "name": "value",
+                "type": "string",
+                "maxLength": 500
+              }
+            ],
+            "json_path": "/test_case/name"
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "description": "Description text.",
+            "fields": [
+              {
+                "name": "operation",
+                "type": "string",
+                "required": true,
+                "values": [
+                  "replace",
+                  "ignore"
+                ]
+              },
+              {
+                "name": "value",
+                "type": "string"
+              }
+            ],
+            "json_path": "/test_case/description"
+          },
+          {
+            "name": "background",
+            "type": "string",
+            "description": "Background text.",
+            "fields": [
+              {
+                "name": "operation",
+                "type": "string",
+                "required": true,
+                "values": [
+                  "replace",
+                  "empty",
+                  "ignore"
+                ]
+              },
+              {
+                "name": "value",
+                "type": "string"
+              }
+            ],
+            "json_path": "/test_case/background"
           }
         ],
         "intent": "Bulk edit test cases with per-field add / remove / replace operations (PREFERRED bulk write).",
@@ -3661,9 +3737,10 @@
               "boolean",
               "int",
               "date",
-              "nested_dropdown"
+              "nested_dropdown",
+              "jira_lookup"
             ],
-            "description": "Data type. Use THIS vocabulary — the legacy `field_*` spellings that the project form-fields read returns (field_dropdown, field_string, …) are rejected here. `url` and `nested_dropdown` are not valid when entity_type is TestCaseStep."
+            "description": "Data type. Use THIS vocabulary — the legacy `field_*` spellings that the project form-fields read returns (field_dropdown, field_string, …) are rejected here. `nested_dropdown` is valid only for TestCase and `url` is not valid for TestCaseStep. `jira_lookup` needs `jira_binding`, is not valid for TestCaseStep or BuildCustomFields, and is refused unless the workspace has Jira lookup fields enabled."
           },
           {
             "name": "entity_type",
@@ -3673,10 +3750,11 @@
               "TestResult",
               "TestPlan",
               "ExploratorySession",
-              "TestCaseStep"
+              "TestCaseStep",
+              "BuildCustomFields"
             ],
             "default": "TestCase",
-            "description": "Which entity the field hangs off; a field belongs to exactly one and cannot be moved later. Any other value → 400 'Invalid Params'. TestCaseStep additionally requires the group's step-custom-fields flag."
+            "description": "Which entity the field hangs off; a field belongs to exactly one and cannot be moved later. Any other value → 400 'Invalid Params'. TestCaseStep additionally requires the group's step-custom-fields flag. BuildCustomFields defines a field on test runs."
           },
           {
             "name": "is_required",
@@ -3688,7 +3766,7 @@
             "name": "datasets",
             "type": "array",
             "required": true,
-            "description": "REQUIRED for every field type — omitting it (or sending a non-array) is a 400. Carries the option values and the project scope. An empty array passes validation but leaves the field linked to nothing.",
+            "description": "REQUIRED for every field type except jira_lookup (which is not checked against it) — omitting it (or sending a non-array) is a 400. Carries the option values and the project scope. An empty array passes validation but leaves the field linked to nothing.",
             "fields": [
               {
                 "name": "linked_projects",
@@ -3749,6 +3827,71 @@
             "name": "parent_custom_field_id",
             "type": "integer",
             "description": "Adds a child level under an existing nested_dropdown field. When present the handler validates ONLY field_name and forwards the rest untouched — field_type, is_required and datasets are not checked at all."
+          },
+          {
+            "name": "jira_binding",
+            "type": "object",
+            "description": "Required when field_type is `jira_lookup`; omit for every other type. Names the Jira field the lookup reads from. All keys except options_path and search_path are mandatory and non-empty.",
+            "fields": [
+              {
+                "name": "integration_key",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Key of the Jira integration the lookup reads from."
+              },
+              {
+                "name": "organisation_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira organisation the integration belongs to."
+              },
+              {
+                "name": "project_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira project the lookup is scoped to."
+              },
+              {
+                "name": "ticket_type_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira ticket (issue) type the lookup is scoped to."
+              },
+              {
+                "name": "jira_field_key",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Key of the Jira field whose values are offered."
+              },
+              {
+                "name": "jira_field_schema",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Schema type of that Jira field."
+              },
+              {
+                "name": "options_path",
+                "type": "string",
+                "description": "Optional path used to read the field's options; may be null."
+              },
+              {
+                "name": "search_path",
+                "type": "string",
+                "description": "Optional path used to search the field's options; may be null."
+              },
+              {
+                "name": "is_multi",
+                "type": "boolean",
+                "required": true,
+                "description": "Whether the Jira field accepts several values."
+              }
+            ]
           }
         ],
         "intent": "Define a new custom field for the workspace — pick its data type, whether it is mandatory, and (via datasets) which projects get it and what option values it offers",
@@ -3770,7 +3913,7 @@
           }
         },
         "guidance": [
-          "`datasets` is required for EVERY field type, dropdown or not. The validator only checks it is an array, so `datasets: []` passes — and creates a field linked to no project, invisible everywhere. Send one entry carrying `linked_projects` if you want the field to appear.",
+          "`datasets` is required for EVERY field type except jira_lookup, dropdown or not. The validator only checks it is an array, so `datasets: []` passes — and creates a field linked to no project, invisible everywhere. Send one entry carrying `linked_projects` if you want the field to appear.",
           "`is_required` must be a literal JSON boolean. The string \"true\" fails the check and the whole call comes back 400 {success:false, error:'Invalid Params'} with no indication of which field was wrong — that one error covers field_type, field_name, is_required, place_holder_text, default_value, levels and datasets alike.",
           "`default_value` is read ONLY when field_type is `boolean`; for every other type the handler forces it to null before sending upstream. Setting a default on a string/int/date field through this call is impossible.",
           "field_name is stripped before both the duplicate check and storage, so \" Priority \" is stored as \"Priority\" and collides with the reserved name. Reserved names (Title, Description, Preconditions, Steps, Result, Attachments, State, Owner, Priority, Type of Test Case, Automation Status, Tags, Jira Issues, Asana Issues, Review Status) return 400 'Field with same name already exists. Use a unique name.'; TestPlan and ExploratorySession fields may reuse 'Automation Status' and 'Type of Test Case'.",
@@ -3778,7 +3921,9 @@
           "Inside a `datasets` entry, `linked_to_all_projects: true` makes the handler expand the link list to every project in the workspace (capped at 3000) before sending. That flag works HERE but is ignored by the standalone add-a-dataset call.",
           "entity_type `TestCaseStep` is accepted only when the group has step custom fields enabled; otherwise 400 'Step custom fields are not enabled for this group.'. Step fields also cannot be `url` or `nested_dropdown`.",
           "The response echoes only the stored field attributes — no options, no project links. Read the field back, or read the project's form fields, to confirm what the datasets actually produced.",
-          "Nothing here is project-scoped: the definition is created for the whole workspace and the datasets decide where it shows up. Name the projects you are about to affect before creating."
+          "Nothing here is project-scoped: the definition is created for the whole workspace and the datasets decide where it shows up. Name the projects you are about to affect before creating.",
+          "A `jira_lookup` field takes a `jira_binding` instead of options and datasets. Without a valid binding the call is 400 'A valid jira_binding is required for jira_lookup custom fields.', and a workspace without Jira lookup fields enabled gets 400 'Jira Lookup custom fields are not enabled for this group.'.",
+          "entity_type `BuildCustomFields` defines a test-run field: it can never be mandatory (is_required is stored as false whatever you send), and it has its own reserved names (Name, Title, Description, Owner, State, Tags, Configurations, Test Plan, Attachments, Jira Issues, Asana Issues) in place of the list above."
         ],
         "returns": [
           "success",
@@ -6206,7 +6351,8 @@
         ],
         "intent": "Create a new test result for a test case in a test run",
         "guidance": [
-          "This is how a pass or fail is recorded against a case in a run. Editing the run or the case does not record an outcome."
+          "This is how a pass or fail is recorded against a case in a run. Editing the run or the case does not record an outcome.",
+          "A 202 means the result was queued, not written: the case is still being added to the run. The body then carries only `success`, `status: \"QUEUED\"` and `message` under `data`, with no `test-result`. Do not resend it. Only a plain result (status, description, issues) is queued this way; one carrying attachments, custom fields, elapsed time or step ids keeps the original error instead."
         ],
         "returns": [
           "id",
@@ -6223,8 +6369,32 @@
           "finished_at"
         ],
         "responses": {
-          "201": {
+          "200": {
             "$response": "TestResultCreateResponse"
+          },
+          "202": {
+            "description": "The test case is still being added to this run, so the result was queued and will be recorded when it lands. Body is {data: {success: true, status: 'QUEUED', message}} with no `test-result`.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "QUEUED"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -6437,7 +6607,7 @@
           "Attachments require a multipart/form-data request: JSON body in a `payload` part, each file in its own part, and every name in `attachments` must match a part's filename or the request is rejected. Limits are 10 files per result, 100 per request, 50 MB per file, and filenames must be unique across the request.",
           "The `attachments` array in the response is the bind result, not the stored attachment records — each entry carries the attachment id, the filename, a time-limited url and the expiry of that url. `attachment_errors` appears only when a bind failed, and `dropped_attachments` only on a bulk request where a rejected entry or an unresolvable inline reference left files behind.",
           "Attachments cannot be combined with step_results on the same bulk entry — that request is rejected 400.",
-          "Success is HTTP 200 here, not the 201 the v1 create returns.",
+          "Success is HTTP 200. The exception is a single-form submission for a case that is still being added to the run: that answers 202 with only `success: true`, `status: \"QUEUED\"` and `message` — no `test-result` — and the result is recorded once the case lands, so do not resend it.",
           "Requires the execute permission on the run; a caller without it gets 403 before anything is written."
         ],
         "returns": [
@@ -6455,6 +6625,25 @@
         "responses": {
           "200": {
             "$response": "V2TestRunResultSubmitResponse"
+          },
+          "202": {
+            "description": "Single form only: the test case is still being added to this run, so the result was queued and will be recorded when it lands. Body is {success: true, status: 'QUEUED', message} with no `test-result`.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "status": {
+                  "type": "string",
+                  "example": "QUEUED"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid params, unconfigured status for every entry, every case blocked by the review-status gate, or a multipart/attachment rejection. Bulk bodies carry per-case `results` entries with an `error.code` such as INVALID_STATUS_VALUE or REVIEW_STATUS_GATE.",
@@ -9709,7 +9898,8 @@
           "The response carries datasets with their project links but NOT their option values. Read a dataset's options through the dataset options list.",
           "Paging is per dataset row and is controlled only by `p`; the page size is fixed at 30 and `per_page` is ignored. `info` carries the page metadata.",
           "`linked_to_all_projects` on a dataset is computed by comparing its linked project count against the workspace project count — it is derived, not a stored flag.",
-          "A field id that does not exist comes back as a bare 404 {success:false} with no message; id 0 is a 400 'Invalid Params'."
+          "A field id that does not exist comes back as a bare 404 {success:false} with no message; id 0 is a 400 'Invalid Params'.",
+          "`jira_binding` appears only on a `jira_lookup` field and is left out for every other type. Read it here before editing such a field: the edit call replaces the stored binding when you send one and keeps it when you do not."
         ],
         "query": [
           {
@@ -9737,6 +9927,7 @@
           "default_value",
           "datasets",
           "levels",
+          "jira_binding",
           "type"
         ]
       },
@@ -10084,11 +10275,15 @@
           "scheduled_run_time",
           "actual_end_time",
           "updated_at",
-          "message"
+          "message",
+          "last_completed_scan_at",
+          "scan_in_progress",
+          "feature_enabled",
+          "entitled"
         ],
         "responses": {
           "200": {
-            "description": "The latest dedupe job for the project. When no job has ever run, only {status:'NOT_ENABLED', message:'No dedupe job found for this project'} is returned and the job fields are absent.",
+            "description": "The latest dedupe pipeline job for the project plus workspace gates. When no job has ever run, only {status:'NOT_ENABLED', message:'No dedupe job found for this project', last_completed_scan_at:null, scan_in_progress:false} and the gates are returned; the job fields are absent.",
             "schema": {
               "type": "object",
               "properties": {
@@ -10138,6 +10333,24 @@
                 "message": {
                   "type": "string",
                   "description": "Present only with NOT_ENABLED: 'No dedupe job found for this project'."
+                },
+                "last_completed_scan_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "nullable": true,
+                  "description": "When the most recent COMPLETED scan finished; null when none has completed. Can be set while status shows a newer job in flight."
+                },
+                "scan_in_progress": {
+                  "type": "boolean",
+                  "description": "Whether a scan is running now. A QUEUED job counts only when a scan was explicitly requested and is waiting to start; a queued scheduled run does not."
+                },
+                "feature_enabled": {
+                  "type": "boolean",
+                  "description": "Whether duplicate detection is switched on for the workspace. Omitted, together with `entitled`, if the gates could not be resolved."
+                },
+                "entitled": {
+                  "type": "boolean",
+                  "description": "Whether the workspace's plan includes duplicate detection. Omitted, together with `feature_enabled`, if the gates could not be resolved."
                 }
               }
             }
@@ -10159,7 +10372,8 @@
           "Statuses are not just running/done. COMPLETED, FAILED, CANCELLED, RETRY_FAILED, STATISTICAL_FAILED, CLUSTERING_FAILED, CLUSTERING_LIMIT and LLM_ANALYSIS_SKIPPED are terminal; QUEUED, PENDING, IN_PROGRESS, CLUSTER, CLUSTERING, BACKFILLING, RETRY, STATISTICAL_RETRY and CLUSTERING_RETRY mean a scan is still in flight and the duplicates listing may be incomplete.",
           "This is a plain read of the last job record — it does not start a scan, and nothing in this API can. Scans are scheduled by the dedupe pipeline.",
           "Unlike the rest of this family, no role permission is checked here; project access is enough.",
-          "The documented 400 for a missing project id is unreachable through this route, since the id is a required path segment."
+          "The documented 400 for a missing project id is unreachable through this route, since the id is a required path segment.",
+          "`feature_enabled` and `entitled` are workspace gates carried on every reply, so 'detection is off for this workspace' is now distinguishable from 'no scan has run yet'. `scan_in_progress` is the reliable in-flight signal (a QUEUED status alone does not mean a scan is running), `last_completed_scan_at` tells you whether any scan has ever finished, and realtime checks are not scans and never show up in `status`. The gates can be absent if they could not be resolved."
         ]
       },
       {
@@ -10306,6 +10520,7 @@
           "ai_score",
           "reason",
           "duplicate_type",
+          "realtime_run_id",
           "test_cases",
           "identifier",
           "folder_id",
@@ -11251,7 +11466,9 @@
           "default_value",
           "option_values",
           "field_values",
-          "sort_options"
+          "sort_options",
+          "parent_custom_field_id",
+          "jira_binding"
         ],
         "responses": {
           "200": {
@@ -14010,6 +14227,18 @@
               300
             ],
             "description": "Alias for page_size, and it WINS when both are sent. Same 30-or-300 restriction."
+          },
+          {
+            "name": "updated_after",
+            "type": "string",
+            "example": "2026-01-01T00:00:00Z",
+            "description": "Inclusive lower bound on the result's last-update time. YYYY-MM-DD or a full ISO-8601 timestamp such as 2026-01-15T09:00:00Z. May be sent on its own. A malformed value is a 400."
+          },
+          {
+            "name": "updated_before",
+            "type": "string",
+            "example": "2026-03-31T23:59:59Z",
+            "description": "Inclusive upper bound on the result's last-update time. YYYY-MM-DD or a full ISO-8601 timestamp such as 2026-01-15T09:00:00Z. May be sent on its own. A malformed value is a 400."
           }
         ],
         "intent": "Read what was recorded for one test case in one test run — every execution logged against it, with status, notes, linked defects, custom fields and configuration",
@@ -15063,6 +15292,24 @@
               "identifier-desc"
             ],
             "description": "Sort order. Forwarded WITHOUT validation on this route (the active listing validates the same parameter), so a typo is passed upstream rather than returning a 400."
+          },
+          {
+            "name": "include_sub_plans",
+            "type": "boolean",
+            "default": false,
+            "description": "Only the exact value true counts; anything else is false. By default only top-level archived plans are listed. With true, archived sub-plans are mixed into the same pages, so a parent and its children can land on different pages. Ignored when q[parent_plan_id] is sent."
+          },
+          {
+            "name": "q",
+            "type": "object",
+            "fields": [
+              {
+                "name": "parent_plan_id",
+                "type": "integer",
+                "example": 12
+              }
+            ],
+            "description": "Nested filter object, not a string. Only parent_plan_id is read on this route: send it to list that one parent's archived sub-plans (all of them, whatever their status) instead of the top-level archived plans. Other keys, and a plain-text q, are ignored - use `search` for free text."
           }
         ],
         "intent": "Page through the test plans that have been ARCHIVED in a project — the place to find a plan to restore; archived plans do not appear in the normal plan listing at all",
@@ -15103,7 +15350,7 @@
           "This is a fixed literal route on the plan collection — it takes no plan id. It is a different endpoint from the plan detail read that sits on the same path prefix.",
           "Gated on the group archive flag: when it is off the call is 404 {success: false, errors: 'Feature not available'}, which means the feature is unavailable, not that nothing is archived.",
           "Needs the test-plan DELETE permission, not view — a user who can list plans normally can still be 403'd here.",
-          "Archived SUB-plans are not listed; there is no include_sub_plans switch on this route. Only top-level archived plans come back.",
+          "By default only top-level archived plans are listed. Send include_sub_plans=true to get archived sub-plans mixed into the same pages (a parent and its children may then fall on different pages), or q[parent_plan_id] to fetch one parent's archived sub-plans directly, regardless of their status.",
           "Rows are serialized exactly like the active listing (same fields, plus record_status: 'archived'), so anything that consumes the normal plan list works unchanged here.",
           "Page size is fixed at 30; page with `p` and stop using the `info` envelope. There is no `count` object on this response, unlike the active listing.",
           "To put a plan back, pass its integer id to the bulk-retrieve capability."
@@ -15341,6 +15588,11 @@
             "name": "owner",
             "type": "string",
             "description": "The 'My duplicates' tab. ANY non-empty value scopes the listing to pairs involving the CALLER's own test cases — the value itself is discarded, so this cannot select another user. Omit for all duplicates in the project."
+          },
+          {
+            "name": "realtime_run_id",
+            "type": "string",
+            "description": "Narrows the listing to the pairs produced by one realtime duplicate check, taking the `realtime_run_id` a pair carries. Digits only. A value that is not a realtime run id is silently ignored and the full listing comes back, so an unfamiliar id never errors."
           }
         ],
         "intent": "List the AI-suggested duplicate test-case pairs awaiting review in a project, highest-confidence first — optionally only those involving one test case, or only the caller's own",
@@ -16698,10 +16950,11 @@
               "TestResult",
               "TestPlan",
               "ExploratorySession",
-              "TestCaseStep"
+              "TestCaseStep",
+              "BuildCustomFields"
             ],
             "default": "TestCase",
-            "description": "Which entity's fields to list. Any other value is a 400 'Invalid Params'. TestCaseStep returns an empty list when the group's step-custom-fields flag is off."
+            "description": "Which entity's fields to list. Any other value is a 400 'Invalid Params'. TestCaseStep returns an empty list when the group's step-custom-fields flag is off. BuildCustomFields lists test-run fields; it has no system fields."
           },
           {
             "name": "field_source",
@@ -16805,6 +17058,7 @@
           "type",
           "field_values",
           "linked_to_all_projects",
+          "jira_binding",
           "count",
           "page",
           "page_size",
@@ -17380,18 +17634,11 @@
           {
             "name": "issues",
             "type": "array",
-            "fields": [
-              {
-                "name": "issue_id",
-                "type": "string"
-              },
-              {
-                "name": "issue_type",
-                "type": "string"
-              }
-            ],
             "json_path": "/test_run/issues",
-            "description": "Linked defects. Each entry is an object; a bare string entry is coerced to {issue_id: ...} but loses the tracker type."
+            "description": "Linked defects as plain issue key strings, e.g. [\"PROJ-12\"]. Objects such as {issue_id, issue_type} are rejected with a 400 on a JSON body. Each key is recorded against the default Jira tracker type.",
+            "example": [
+              "PROJ-12"
+            ]
           },
           {
             "name": "test_plan_id",
@@ -19246,9 +19493,10 @@
               "boolean",
               "int",
               "date",
-              "nested_dropdown"
+              "nested_dropdown",
+              "jira_lookup"
             ],
-            "description": "REQUIRED for validation. Send the field's CURRENT type — this surface does not compare it to what is stored, it forwards it."
+            "description": "REQUIRED for validation. Send the field's CURRENT type — this surface does not compare it to what is stored, it forwards it. It must be valid for entity_type: nested_dropdown is TestCase-only, and jira_lookup is not valid for TestCaseStep or BuildCustomFields."
           },
           {
             "name": "is_required",
@@ -19264,10 +19512,11 @@
               "TestResult",
               "TestPlan",
               "ExploratorySession",
-              "TestCaseStep"
+              "TestCaseStep",
+              "BuildCustomFields"
             ],
             "default": "TestCase",
-            "description": "Used only to select the valid field_type set and the reserved-name list; never sent upstream, so it cannot move the field to a different entity. Send the field's real entity_type."
+            "description": "Used only to select the valid field_type set and the reserved-name list; never sent upstream, so it cannot move the field to a different entity. Send the field's real entity_type. BuildCustomFields selects the test-run rules, where is_required is always stored as false."
           },
           {
             "name": "place_holder_text",
@@ -19279,6 +19528,71 @@
             "name": "default_value",
             "type": "boolean",
             "description": "Applied only when field_type is `boolean`. For any other type the handler sends null regardless of what you pass, clearing any stored default."
+          },
+          {
+            "name": "jira_binding",
+            "type": "object",
+            "description": "Only for a `jira_lookup` field. Supplying it re-binds the field, so send the complete binding; omitting it leaves the stored binding unchanged. A malformed binding is 400 'Invalid Params'. All keys except options_path and search_path are mandatory and non-empty.",
+            "fields": [
+              {
+                "name": "integration_key",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Key of the Jira integration the lookup reads from."
+              },
+              {
+                "name": "organisation_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira organisation the integration belongs to."
+              },
+              {
+                "name": "project_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira project the lookup is scoped to."
+              },
+              {
+                "name": "ticket_type_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira ticket (issue) type the lookup is scoped to."
+              },
+              {
+                "name": "jira_field_key",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Key of the Jira field whose values are offered."
+              },
+              {
+                "name": "jira_field_schema",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Schema type of that Jira field."
+              },
+              {
+                "name": "options_path",
+                "type": "string",
+                "description": "Optional path used to read the field's options; may be null."
+              },
+              {
+                "name": "search_path",
+                "type": "string",
+                "description": "Optional path used to search the field's options; may be null."
+              },
+              {
+                "name": "is_multi",
+                "type": "boolean",
+                "required": true,
+                "description": "Whether the Jira field accepts several values."
+              }
+            ]
           }
         ],
         "intent": "Rename a custom field, or change whether it is mandatory, its placeholder or its boolean default — a full replace of the field's attributes, not a partial edit",
@@ -19310,7 +19624,9 @@
           "Datasets, options and project links are NOT touched here — this call carries no `datasets` key upstream. Change option values through the dataset option calls and project scope through the dataset project-mapping call.",
           "Renaming onto a reserved name (Title, Description, Priority, State, Owner, Tags, …) is a 400, except when the field already carries that name — an import-created field keeps its name and stays editable.",
           "There is no version history for a field definition: an overwritten label, placeholder or default cannot be restored. A rename is workspace-wide and lands in every project the field's datasets link to.",
-          "Upstream duplicate-name errors come back verbatim; every other upstream failure is masked as 400 {success:false, message:'The API request is invalid or improperly formed'}, and a field id that does not exist comes back as a bare 404 {success:false} with no message."
+          "Upstream duplicate-name errors come back verbatim; every other upstream failure is masked as 400 {success:false, message:'The API request is invalid or improperly formed'}, and a field id that does not exist comes back as a bare 404 {success:false} with no message.",
+          "To change which Jira field a `jira_lookup` field reads from, send `jira_binding` along with the usual field_name, field_type (`jira_lookup`) and is_required; leaving it out keeps the current binding. Read the field first to get the current one.",
+          "entity_type `BuildCustomFields` applies the test-run rules: is_required is stored as false whatever you send, and the reserved-name list is the run form's (Name, Title, Description, Owner, State, Tags, Configurations, Test Plan, Attachments, Jira Issues, Asana Issues)."
         ],
         "returns": [
           "success",
@@ -20187,6 +20503,7 @@
           "There is no undo and no history — the previous value is gone the moment the write lands. Re-read get_project_settings first if you need to be able to restore it.",
           "Feature-gated for the whole endpoint: without the new-project-settings flag for the group or user the call fails 422 'Feature not available' before any key is examined.",
           "Per-setting gates, all raised before the write: review_approve and the two eligible-review-status settings need a Team Pro plan (422); part_11_reauth and part_11_reauth_send_for_review need an Enterprise plan (422); the four timer settings need the project-settings write permission (403 'Only admins can update Time Tracking settings').",
+          "Gates on the later settings, also raised before the write: state_automation_send_for_review (enabling only) needs an Enterprise plan, Review & Approve on and the general project-settings permission; multi_tcid_tagging needs the general project-settings permission (403); multi_level_approval_enabled=false is 422 while cases await L2 review; jira_mapping_mode outside standard/advanced is 400.",
           "test_case_id_prefix is validated twice — locally against 2-10 uppercase alphanumerics starting with a letter and not equal to 'TC', then against the backing service for reserved prefixes and cross-project collisions. Either failure returns 400 with the reason, and it is checked before anything else in the body is written.",
           "The two eligible-review-status settings take a comma-separated list drawn from approved / rejected / in_review / pending / changes_requested. An unknown token fails the whole request with 400; an empty string is valid and means gating is OFF.",
           "Values are stored as strings in an EAV table, so send booleans as the strings \"true\"/\"false\" and numbers as numeric strings; that is also how they read back.",
@@ -20235,6 +20552,11 @@
             "description": "Require re-authentication specifically when sending for review. Requires an Enterprise plan — otherwise 422."
           },
           {
+            "name": "state_automation_send_for_review",
+            "type": "string",
+            "description": "Automatically move test cases from Draft to Active when they are sent for review. Enabling needs an Enterprise plan, Review & Approve already on (in this body or stored) and the general project-settings permission, else 403 or 422. Turning it off is always allowed. Send \"true\"/\"false\" as strings."
+          },
+          {
             "name": "preferred_jira_host",
             "type": "string",
             "description": "Default Jira site URL used when linking issues from this project."
@@ -20270,6 +20592,16 @@
             "description": "Allow-list of Jira site URLs that may create or update requirements, as a JSON-ENCODED ARRAY STRING (e.g. the JSON text of an array of site URLs). Omitting the key means all hosts are allowed; the string \"[]\" means none."
           },
           {
+            "name": "jira_mapping_mode",
+            "type": "string",
+            "values": [
+              "standard",
+              "advanced"
+            ],
+            "example": "standard",
+            "description": "Requirements and defects Jira mapping mode. Any value other than standard or advanced fails the request with 400. When never set, the project behaves as advanced."
+          },
+          {
             "name": "time_tracking_enabled",
             "type": "string",
             "description": "Per-project master switch for the manual-execution timer; the feature is on only when this is exactly \"true\". Requires the project-settings write permission — 403 otherwise."
@@ -20303,6 +20635,20 @@
             "name": "test_plan_review_default_state",
             "type": "string",
             "description": "The review state newly created test plans start in."
+          },
+          {
+            "name": "multi_level_approval_enabled",
+            "type": "string",
+            "description": "Add an optional second (L2) approval level to test-case review. Send \"true\"/\"false\" as strings. Turning it off is refused with 422 while any test case still awaits L2 review - resolve those first. When on, `l1_approved` is also accepted in the eligible-review-status lists."
+          },
+          {
+            "name": "multi_tcid_tagging",
+            "type": "string",
+            "values": [
+              "true",
+              "false"
+            ],
+            "description": "Allow tagging a test case with several external test-case ids. On by default: an unset project has it enabled, and only an explicit \"false\" turns it off. Anything other than true/false is 400. Needs the general project-settings permission - 403 otherwise."
           }
         ],
         "returns": [
@@ -20332,9 +20678,8 @@
           {
             "name": "projectId",
             "type": "integer",
-            "required": true,
             "example": 10000,
-            "description": "Integer project id the rewritten filter rows are filed under. Not enforced by the server: omit it and rows are written against project 0 and become invisible, at 200. Send the report's own project id."
+            "description": "Integer project id the rewritten filter rows are filed under. Optional: when omitted it is taken from the project id in the path. If sent it takes precedence over the path, so send the report's own project id."
           },
           {
             "name": "project_ids",
@@ -20658,7 +21003,7 @@
         "guidance": [
           "This PATCH is a FULL REPLACE, not a merge. `title`, `description`, `report_type`, `report_timeframe`, `report_creation_mode` and `is_dynamic` are written from the body unconditionally, so any one you omit is set to NULL. Read the report first and send the complete object back with your change applied.",
           "Omitting `frequency` / `frequency_details` UNSCHEDULES the report: both columns are nulled and it stops emailing. Resend the persisted values to keep the schedule. Likewise `custom_date_range` is nulled whenever `report_timeframe` is not `custom`.",
-          "`projectId` in the body is effectively required even though it is not marked so: it is the project every rewritten filter row is filed under. Omit it and the rows are written against project 0, which no read ever finds — the call still returns 200 with a report whose filters have silently vanished.",
+          "`projectId` is optional: omitted, it defaults to the project id in the path, which is what the rewritten filter rows are filed under. If you do send it, it wins over the path value, so make it the report's own project id.",
           "`report_filters` is authoritative: a key you omit has its stored rows deleted. Send the full filter set, not a delta. Use the report read and get_selected_report_testcases to recover the current values first.",
           "Filters are only rewritten for Test Run Summary, Test Run Detailed Report, Test Plan Summary, Test Plan Detailed Report, Test Case Activity, User Workload Report, Requirement Traceability Report and Exploratory Session Summary. On `Defects Summary` / `Defects Detailed Report`, or when `report_type` is omitted, the filter update is skipped entirely and `report_filters` comes back null — at 200.",
           "There is no undo and no version history. The previous definition and its filter rows are gone once this returns.",
@@ -21184,18 +21529,11 @@
           {
             "name": "issues",
             "type": "array",
-            "fields": [
-              {
-                "name": "issue_id",
-                "type": "string"
-              },
-              {
-                "name": "issue_type",
-                "type": "string"
-              }
-            ],
             "json_path": "/test_run/issues",
-            "description": "Linked defects. Each entry is an object; a bare string entry is coerced to {issue_id: ...} but loses the tracker type."
+            "description": "Linked defects as plain issue key strings, e.g. [\"PROJ-12\"]. Objects such as {issue_id, issue_type} are rejected with a 400 on a JSON body. Each key is recorded against the default Jira tracker type.",
+            "example": [
+              "PROJ-12"
+            ]
           },
           {
             "name": "test_plan_id",
@@ -22325,6 +22663,18 @@
             "format": "date",
             "example": "2026-03-31",
             "description": "Upper bound on close date, YYYY-MM-DD. Sending either closed bound also forces the result to CLOSED runs only, whatever include_closed says."
+          },
+          {
+            "name": "updated_after",
+            "type": "string",
+            "example": "2026-01-01T00:00:00Z",
+            "description": "Inclusive lower bound on the run's last-update time, for picking up recent changes. YYYY-MM-DD or a full ISO-8601 timestamp such as 2026-01-15T09:00:00Z. May be sent on its own. A malformed value is a 400."
+          },
+          {
+            "name": "updated_before",
+            "type": "string",
+            "example": "2026-03-31T23:59:59Z",
+            "description": "Inclusive upper bound on the run's last-update time. YYYY-MM-DD or a full ISO-8601 timestamp such as 2026-01-15T09:00:00Z. May be sent on its own. A malformed value is a 400."
           }
         ],
         "intent": "Find test runs in a project — filter by owner, lifecycle state, linked plan or date to locate a run, count how many there are, or collect the run ids you need before linking runs to a test plan",
@@ -22493,18 +22843,11 @@
           {
             "name": "issues",
             "type": "array",
-            "fields": [
-              {
-                "name": "issue_id",
-                "type": "string"
-              },
-              {
-                "name": "issue_type",
-                "type": "string"
-              }
-            ],
             "json_path": "/test_run/issues",
-            "description": "Linked defects. Each entry is an object; a bare string entry is coerced to {issue_id: ...} but loses the tracker type."
+            "description": "Linked defects as plain issue key strings, e.g. [\"PROJ-12\"]. Objects such as {issue_id, issue_type} are rejected with a 400 on a JSON body. Each key is recorded against the default Jira tracker type.",
+            "example": [
+              "PROJ-12"
+            ]
           },
           {
             "name": "test_plan_id",
@@ -22785,13 +23128,28 @@
             "minimum": 1,
             "maximum": 300,
             "description": "Alias for count, read only when count is absent. Same 300 ceiling and the same 400 above it."
+          },
+          {
+            "name": "q",
+            "type": "object",
+            "fields": [
+              {
+                "name": "tp_custom_fields",
+                "type": "object"
+              },
+              {
+                "name": "match",
+                "type": "object"
+              }
+            ],
+            "description": "Nested filter object, not a string. Only tp_custom_fields is applied: an object keyed by the plan custom-field id, narrowing the list to plans with those values; a malformed value is refused with 400. `match` sets per-field match modes and only has effect alongside tp_custom_fields. Any other key is ignored silently."
           }
         ],
         "intent": "List the test plans in a project — the read that turns a plan name the user said into the TP-NNN id every other plan call needs, and answers 'what plans do we have?'",
         "guidance": [
           "Page with `p` (NOT `page`) and size with `count` (or `page_size`). Default 30, hard ceiling 300 — asking for more errors instead of clamping, so ask for 300 in one go rather than walking 30 at a time.",
           "Deep paging is capped on rows, not pages: once p x page_size passes the account's limit (30,000 by default) the call returns 429 'request_limit_exceeded'.",
-          "There is NO filtering on this route — no name search, status, owner, tag or sort parameter is read here. Page through and match client-side, or use the v1 plan listing, which does take status/sort/include_sub_plans.",
+          "The only filter on this route is by plan custom-field values, through `q`. There is no name search, status, owner, tag or sort parameter, so for anything else page through and match client-side, or use the v1 plan listing, which does take status/sort/include_sub_plans.",
           "Whether sub-plans (STP-NNN) appear among these rows is decided by the backing service and is not steerable from here. Read each row's parent_plan_id rather than assuming, and list a parent's children through the sub-plans listing.",
           "Rows are the same plan shape the single-plan read returns, minus the embedded runs. Carry `identifier` (TP-NNN / STP-NNN) forward — it is what the v2 plan paths take, not the numeric id the v1 plan capabilities use.",
           "Page against the `info` envelope (page, page_size, count, next, prev) instead of probing for an empty page."
@@ -22937,6 +23295,19 @@
             "description": "Resolves the keys in `issues` against a connected tracker, adding ticket metadata. Needs BOTH name ('jira') and host; a host that matches no JIRA site connected to the caller's account fails the call with 'Invalid issue tracker'. Omit it and issues are stored as bare jira references."
           },
           {
+            "name": "owner",
+            "type": "string",
+            "example": "user@example.com",
+            "json_path": "/test_plan/owner",
+            "description": "Email address of a user in the same account to make the plan owner, e.g. user@example.com. An email that matches no user in the account is refused with 400, never silently replaced by the caller. Omit to keep the default (the calling user)."
+          },
+          {
+            "name": "custom_fields",
+            "type": "object",
+            "json_path": "/test_plan/custom_fields",
+            "description": "Custom-field values keyed by the project's custom-field NAME, e.g. {\"Release\": \"2.0\"}. A name the project does not define fails the call with 400 naming it, rather than being dropped. Dropdown labels are resolved to their options. Omit or send empty to write none."
+          },
+          {
             "name": "created_at",
             "type": "string",
             "format": "date-time",
@@ -22955,9 +23326,9 @@
         "guidance": [
           "Send the fields flat. The `test_plan` wrapper is added for you from each field's json_path, and sending your own wrapper — `test_plan`, `plan` or `sub_test_plan` — is rejected before the call as an unknown body key.",
           "The plan is always created in the `new` state: a plan_status in the create body is not read at all. Move it to started/completed afterwards with the update capability.",
-          "Owner is always the calling user — there is no owner field on this route, unlike the v1 create.",
+          "Owner defaults to the calling user. Pass `owner` as the email of a user in the same account to assign someone else; an email that matches no user is a 400, not a fallback to the caller.",
           "This route always creates a TOP-LEVEL plan: a parent_plan_id you send is filtered out before the plan is built, so the created plan has no parent and the response never carries a parent_plan_id key at all - not even as null. To create a child, use the sub-plan create under its parent; parentage cannot be changed afterwards on v2.",
-          "Reviewers, attachments and custom fields are v1-only on plans; sending them here changes nothing and is not reported.",
+          "Reviewers and attachments are v1-only on plans; sending them here changes nothing and is not reported.",
           "Recoverable: a plan created by mistake can be archived or deleted afterwards, so nothing here is one-way.",
           "The response is the created plan under `test_plan`; take `identifier` (TP-NNN) from it. There is no numeric id field, but the numeric plan id and project id are both embedded in the web-app link under urls.self - that is where to recover the numeric id the v1 plan capabilities take."
         ],
@@ -23179,6 +23550,19 @@
             },
             "json_path": "/sub_test_plan/issue_tracker",
             "description": "Resolves the keys in `issues` against a connected tracker. Needs BOTH name ('jira') and host; a host matching no JIRA site connected to the caller's account fails the call with 'Invalid issue tracker'."
+          },
+          {
+            "name": "owner",
+            "type": "string",
+            "example": "user@example.com",
+            "json_path": "/sub_test_plan/owner",
+            "description": "Email address of a user in the same account to make the plan owner, e.g. user@example.com. An email that matches no user in the account is refused with 400, never silently replaced by the caller. Omit to keep the default (the calling user)."
+          },
+          {
+            "name": "custom_fields",
+            "type": "object",
+            "json_path": "/sub_test_plan/custom_fields",
+            "description": "Custom-field values keyed by the project's custom-field NAME, e.g. {\"Release\": \"2.0\"}. A name the project does not define fails the call with 400 naming it, rather than being dropped. Dropdown labels are resolved to their options. Omit or send empty to write none."
           }
         ],
         "intent": "Break a test plan into a child plan — use this when a release plan needs per-team, per-phase or per-platform slices that each hold their own runs",
@@ -23260,6 +23644,18 @@
             "default": 1,
             "minimum": 1,
             "description": "PAGE NUMBER, and the parameter really is named `p`. `page=2` is not read: you silently get page 1 again. This is the ONLY paging control here — the page size is fixed."
+          },
+          {
+            "name": "updated_after",
+            "type": "string",
+            "example": "2026-01-15T09:00:00Z",
+            "description": "Only runs updated at or after this time. ISO-8601 date or timestamp, e.g. 2026-01-15 or 2026-01-15T09:00:00Z. Either bound may be sent alone. A value that does not parse is refused."
+          },
+          {
+            "name": "updated_before",
+            "type": "string",
+            "example": "2026-02-15T09:00:00Z",
+            "description": "Only runs updated at or before this time. ISO-8601 date or timestamp, e.g. 2026-01-15 or 2026-01-15T09:00:00Z. Either bound may be sent alone. A value that does not parse is refused."
           }
         ],
         "intent": "List the test runs that belong to a test plan, with each run's state, assignee and pass/fail progress — the read behind 'how is this release going?' and 'which runs are in this plan?'",
@@ -23431,6 +23827,19 @@
             },
             "json_path": "/test_plan/issue_tracker",
             "description": "Resolves the keys in `issues` against a connected tracker. Needs BOTH name ('jira') and host; a host matching no JIRA site connected to the caller's account fails the call with 'Invalid issue tracker'."
+          },
+          {
+            "name": "owner",
+            "type": "string",
+            "example": "user@example.com",
+            "json_path": "/test_plan/owner",
+            "description": "Email address of a user in the same account to reassign the plan to, e.g. user@example.com. An email that matches no user is refused with 400 and nothing is saved. Omit to leave the owner unchanged."
+          },
+          {
+            "name": "custom_fields",
+            "type": "object",
+            "json_path": "/test_plan/custom_fields",
+            "description": "Custom-field values keyed by the project's custom-field NAME. Only the names you send change; omitting or sending empty leaves existing values untouched. A name the project does not define fails the call with 400 naming it and nothing is saved."
           }
         ],
         "intent": "Change an existing test plan or sub-plan — rename it, move its dates, retag it, relink issues, or start/complete it; note that attaching or detaching a test run is NOT done from the plan on v2, it is set on the run",
@@ -23443,7 +23852,7 @@
           "Clearing is not possible through this call: empty strings and empty arrays are read as 'not sent' for name, description, tags and issues.",
           "Send the fields flat. The `test_plan` wrapper is added for you from each field's json_path — including when the target is a sub-plan (STP-NNN), where `sub_test_plan` is NOT the key this route reads. Sending your own wrapper is rejected before the call as an unknown body key.",
           "parent_plan_id comes back only when the plan you edited is a sub-plan, carrying the parent's TP-NNN; a top-level plan's response omits the key entirely rather than returning null. This call cannot change parentage, so the field never appears or disappears as a result of the edit. sub_plans_count is always present, and test_runs and links are not - they belong to the single-plan read.",
-          "Owner, reviewers, attachments, custom fields and re-parenting are v1-only on plans; sending them here changes nothing and is not reported.",
+          "Reviewers, attachments and re-parenting are v1-only on plans; sending them here changes nothing and is not reported.",
           "A rejected edit returns 400 with {success: false, error: ...} and saves nothing — the plan is left exactly as it was."
         ],
         "returns": [
@@ -23508,14 +23917,25 @@
             "maximum": 300,
             "default": 30,
             "description": "Rows per page. Defaults to 30 and the real ceiling is 300 — a larger value is REFUSED with 400 'Page limit exceeds the maximum limit of 300', not clamped, so ask for 300 directly on a large workspace. The published spec claims a maximum of 100; the code enforces 300."
+          },
+          {
+            "name": "entity_type",
+            "type": "string",
+            "values": [
+              "TestCase",
+              "TestResult",
+              "TestPlan"
+            ],
+            "default": "TestCase",
+            "description": "Which entity's fields to list. Any other value is 400 'Invalid entity_type. Supported values: TestCase, TestResult, TestPlan'. Exploratory-session and step fields are not served here."
           }
         ],
-        "intent": "Discover the test-case custom fields defined in this workspace — list each field with its name, type, required flag and linked-project count, and pick up the numeric field id needed before reading, editing or filling in a field",
+        "intent": "Discover the test-case custom fields defined in this workspace (or the test-result or test-plan ones, via entity_type) — list each field with its name, type, required flag and linked-project count, and pick up the numeric field id needed before reading, editing or filling in a field",
         "guidance": [
           "Page with `p` and `count` — not `page` / `per_page`, which this listing ignores. `count` above 300 is a 400 naming the limit, so request 300 when you want the workspace in as few calls as possible.",
-          "Only TestCase fields are listed. The entity type is fixed server-side, so test-result, test-plan and exploratory-session fields never appear here whatever you send — the workspace field listing on the admin-settings surface is the one that covers those.",
+          "Only fields of one entity are listed, TestCase unless entity_type says TestResult or TestPlan. Exploratory-session and step fields never appear here — the workspace field listing on the admin-settings surface is the one that covers those.",
           "Rows are field metadata only: no dropdown options, no dataset and no list of linked projects, just a linked_projects_count. Read the field's datasets when you need the option values or the actual project links.",
-          "This is the newer public custom-fields surface. The admin-settings custom-field capabilities read the same stored definitions but answer in a different envelope and cover every entity type — prefer this one for test-case fields, and fall back to those for result/plan fields and for dataset or option editing.",
+          "This is the newer public custom-fields surface. The admin-settings custom-field capabilities read the same stored definitions but answer in a different envelope and cover every entity type — prefer this one for test-case fields, and fall back to those for exploratory-session and step fields and for dataset or option editing.",
           "Carry the numeric `id` from each row forward: that is exactly what the single-field read and the field edit take in their path.",
           "Needs the field-view permission when role-based access is on. Without it the answer is 403 'This action is not permitted for the user', not an empty list."
         ],
@@ -23578,10 +23998,11 @@
               "boolean",
               "int",
               "date",
-              "nested_dropdown"
+              "nested_dropdown",
+              "jira_lookup"
             ],
             "example": "dropdown",
-            "description": "The kind of field. Mandatory in practice even though the body schema marks nothing required — anything outside this list is a flat 400 'Invalid Params'. It is fixed for the life of the field: the edit capability will not change it.",
+            "description": "The kind of field. Mandatory in practice even though the body schema marks nothing required — anything outside this list is a flat 400 'Invalid Params'. It is fixed for the life of the field: the edit capability will not change it. nested_dropdown is valid only for TestCase. jira_lookup needs jira_binding and a workspace with Jira lookup fields enabled.",
             "minLength": 1
           },
           {
@@ -23616,10 +24037,12 @@
             "name": "entity_type",
             "type": "string",
             "values": [
-              "TestCase"
+              "TestCase",
+              "TestResult",
+              "TestPlan"
             ],
             "default": "TestCase",
-            "description": "What the field attaches to. Only TestCase exists on this route — any other value is 400 'Only TestCase entity type is supported'. Result, plan and exploratory-session fields are created on the admin-settings surface instead."
+            "description": "What the field attaches to; TestCase by default, and TestResult and TestPlan are accepted too. Any other value is 400 'Invalid entity_type. Supported values: TestCase, TestResult, TestPlan'. Exploratory-session and step fields are created on the admin-settings surface instead."
           },
           {
             "name": "options",
@@ -23734,6 +24157,71 @@
                 "description": "Option rows; each may carry a children array one tier down for nested_dropdown."
               }
             ]
+          },
+          {
+            "name": "jira_binding",
+            "type": "object",
+            "description": "Required when field_type is `jira_lookup`; omit for every other type. Names the Jira field the lookup reads from. All keys except options_path and search_path are mandatory and non-empty.",
+            "fields": [
+              {
+                "name": "integration_key",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Key of the Jira integration the lookup reads from."
+              },
+              {
+                "name": "organisation_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira organisation the integration belongs to."
+              },
+              {
+                "name": "project_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira project the lookup is scoped to."
+              },
+              {
+                "name": "ticket_type_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira ticket (issue) type the lookup is scoped to."
+              },
+              {
+                "name": "jira_field_key",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Key of the Jira field whose values are offered."
+              },
+              {
+                "name": "jira_field_schema",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Schema type of that Jira field."
+              },
+              {
+                "name": "options_path",
+                "type": "string",
+                "description": "Optional path used to read the field's options; may be null."
+              },
+              {
+                "name": "search_path",
+                "type": "string",
+                "description": "Optional path used to search the field's options; may be null."
+              },
+              {
+                "name": "is_multi",
+                "type": "boolean",
+                "required": true,
+                "description": "Whether the Jira field accepts several values."
+              }
+            ]
           }
         ],
         "intent": "Define a new test-case custom field — choose its type, name it, say whether filling it is mandatory, and optionally give a dropdown its choices and link it to the projects that should offer it",
@@ -23743,12 +24231,13 @@
           "The returned custom_field is partly an echo of the request: options, assigned_projects, applies_to_all_projects and link_to_future_projects are replayed from what you sent (or defaulted to false / empty), not read back from storage. Only id, field_name, field_type, entity_type and is_required are authoritative.",
           "assigned_projects takes PR-NNN identifiers, not numeric project ids, and one unresolvable identifier fails the whole create with 400 — resolve the projects first. applies_to_all_projects:true instead walks every project in the workspace (up to about 3000) and links them all, which is a slow call on a large account.",
           "default_value cannot be set at create time for any type. Create the field, then set it through the field edit capability, where a boolean default is sent as the string 'true' or 'false'.",
-          "These names are reserved and rejected with 400 'Field with same name already exists. Use a unique name.': Title, Description, Preconditions, Steps, Result, Attachments, State, Owner, Priority, Type of Test Case, Automation Status, Tags, Jira Issues, Asana Issues, Review Status.",
+          "These names are reserved and rejected with 400 'Field with same name already exists. Use a unique name.': Title, Description, Preconditions, Steps, Result, Attachments, State, Owner, Priority, Type of Test Case, Automation Status, Tags, Jira Issues, Asana Issues, Review Status. TestPlan fields may reuse 'Automation Status' and 'Type of Test Case'.",
           "Choose the type carefully — it can never be edited. Changing a field's type in practice means deleting it and creating it again, which destroys every value already stored on test cases.",
-          "nested_dropdown needs levels with at least two entries (name + level_type each) and the parent_custom_field_id key present even when null. To append one more tier to an existing nested field, send parent_custom_field_id plus field_name and nothing else.",
-          "Same stored fields as the admin-settings create capability, different contract: this route is TestCase-only, takes PR-NNN project identifiers rather than numeric ids, and answers with a serialized custom_field object instead of the raw upstream record.",
+          "nested_dropdown (TestCase only) needs levels with at least two entries (name + level_type each) and the parent_custom_field_id key present even when null. To append one more tier to an existing nested field, send parent_custom_field_id plus field_name and nothing else.",
+          "Same stored fields as the admin-settings create capability, different contract: this route covers TestCase, TestResult and TestPlan fields only, takes PR-NNN project identifiers rather than numeric ids, and answers with a serialized custom_field object instead of the raw upstream record.",
           "Needs the field-write permission; 403 otherwise. The new field can be removed again, but any values captured on test cases in the meantime go with it.",
-          "The reply is built by one shared serializer that omits any field without a value, so several keys are simply absent rather than null — and two booleans, `is_bulk_editable` and `is_filterable`, are omitted when FALSE as well as when unset, so you cannot tell those apart from the response."
+          "The reply is built by one shared serializer that omits any field without a value, so several keys are simply absent rather than null — and two booleans, `is_bulk_editable` and `is_filterable`, are omitted when FALSE as well as when unset, so you cannot tell those apart from the response.",
+          "A `jira_lookup` field carries a `jira_binding` instead of options. Without a valid binding the call is 400 'A valid jira_binding is required for jira_lookup custom fields.', and a workspace without Jira lookup fields enabled gets 400 'Jira Lookup custom fields are not enabled for this group.'."
         ],
         "returns": [
           "success",
@@ -23855,7 +24344,8 @@
           "dataset_ids",
           "datasets_url",
           "dataset_urls",
-          "linked_projects_count"
+          "linked_projects_count",
+          "jira_binding"
         ],
         "responses": {
           "200": {
@@ -24026,6 +24516,71 @@
                 "description": "Position of the tier."
               }
             ]
+          },
+          {
+            "name": "jira_binding",
+            "type": "object",
+            "description": "Only for a `jira_lookup` field. Supplying it re-binds the field, so send the complete binding; omitting it leaves the stored binding unchanged. Same shape as on create: all keys except options_path and search_path are mandatory and non-empty.",
+            "fields": [
+              {
+                "name": "integration_key",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Key of the Jira integration the lookup reads from."
+              },
+              {
+                "name": "organisation_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira organisation the integration belongs to."
+              },
+              {
+                "name": "project_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira project the lookup is scoped to."
+              },
+              {
+                "name": "ticket_type_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira ticket (issue) type the lookup is scoped to."
+              },
+              {
+                "name": "jira_field_key",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Key of the Jira field whose values are offered."
+              },
+              {
+                "name": "jira_field_schema",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Schema type of that Jira field."
+              },
+              {
+                "name": "options_path",
+                "type": "string",
+                "description": "Optional path used to read the field's options; may be null."
+              },
+              {
+                "name": "search_path",
+                "type": "string",
+                "description": "Optional path used to search the field's options; may be null."
+              },
+              {
+                "name": "is_multi",
+                "type": "boolean",
+                "required": true,
+                "description": "Whether the Jira field accepts several values."
+              }
+            ]
           }
         ],
         "intent": "Change an existing test-case custom field — rename it, make it mandatory or optional, adjust its placeholder or default value, replace a dropdown's choices, or change which projects offer it",
@@ -24040,7 +24595,8 @@
           "The two halves are not atomic. Field attributes are written first, the dataset second, so a failure on the dataset call leaves the rename or required-flag change already applied. Re-read the field before retrying.",
           "The response replays options, assigned_projects, applies_to_all_projects and link_to_future_projects from your request rather than from storage — only the field attributes in it are read back. Confirm project links and option values by reading the field's datasets.",
           "Needs the field-write permission; 403 otherwise. Unknown id is 404, a non-integer id is 400.",
-          "The reply is built by one shared serializer that omits any field without a value, so several keys are simply absent rather than null — and two booleans, `is_bulk_editable` and `is_filterable`, are omitted when FALSE as well as when unset, so you cannot tell those apart from the response."
+          "The reply is built by one shared serializer that omits any field without a value, so several keys are simply absent rather than null — and two booleans, `is_bulk_editable` and `is_filterable`, are omitted when FALSE as well as when unset, so you cannot tell those apart from the response.",
+          "To change which Jira field a `jira_lookup` field reads from, send `jira_binding`; it is applied with the attribute changes and leaving it out keeps the current binding. Read the field first to see the current one."
         ],
         "returns": [
           "success",
@@ -28310,7 +28866,7 @@
             "name": "issue_id",
             "type": "string",
             "example": "TES-121",
-            "description": "The tracker ticket key the case should be unlinked from. Accepted and echoed through, but NOT used to select which link is removed: the server matches on the case, the group and the tracker type only. Send it for the refreshed list that comes back, and see the guidance if the case has more than one linked ticket."
+            "description": "The tracker ticket key the case should be unlinked from. Optional, but send it: it scopes which link is removed, so a case linked to several tickets in the same tracker loses only the link to this one. Omitted, the first matching link on the case is removed. Also determines the refreshed list that comes back."
           },
           {
             "name": "p",
@@ -28323,7 +28879,7 @@
         "guidance": [
           "On the failure path the body is just `success` and `status`, with no collection — identical to the test-run unlink, which shares this render. A caller reading the documented success shape finds nothing and cannot tell 'no such link' from 'wrong call' without checking `success` first.",
           "A failure does not change the transport status: the refusal arrives as a 200 carrying a success flag set to false and a 404 inside the body. Always read the success flag — checking the status alone reports every miss as a win.",
-          "Which link is removed is decided by the test case, the caller's group and the tracker type, not by the ticket you name. If the case is linked to several tickets in the same tracker, the first matching link is removed and it may not be the one you meant — read the case's linked tickets first and expect to verify afterwards.",
+          "The link removed is matched on the test case, the caller's group, the tracker type and, when sent, the ticket named in issue_id. Always send issue_id: without it, a case linked to several tickets in the same tracker loses its first matching link, which may not be the one you meant. Verify afterwards.",
           "On success the refreshed list of test cases still linked to the ticket is returned, so no follow-up read is needed to confirm.",
           "Nothing is deleted: the case, the run and the ticket all survive and the same link can be created again.",
           "Nothing is written back to the external tracker — the ticket itself is not modified.",
@@ -28434,7 +28990,7 @@
             "name": "issue_id",
             "type": "string",
             "example": "TES-121",
-            "description": "The tracker ticket key the run should be unlinked from. Accepted and echoed through, but NOT used to select which link is removed: the server matches on the run, the group and the tracker type only. Send it for the refreshed list that comes back."
+            "description": "The tracker ticket key the run should be unlinked from. Optional, but send it: it scopes which link is removed, so a run linked to several tickets in the same tracker loses only the link to this one. Omitted, the first matching link on the run is removed. Also determines the refreshed list that comes back."
           },
           {
             "name": "build_id",
@@ -28452,7 +29008,7 @@
         "guidance": [
           "On the failure path the whole body is just `success` and `status` — there is no `test_runs` array. A caller reading the documented success shape finds nothing and cannot tell 'no such link' from 'wrong call' without checking `success` first.",
           "A failure does not change the transport status: the refusal arrives as a 200 carrying a success flag set to false and a 404 inside the body. The same is true when the project id is missing or the run belongs to another group. Always read the success flag.",
-          "Which link is removed is decided by the test run, the caller's group and the tracker type, not by the ticket you name. If the run is linked to several tickets in the same tracker, the first matching link is removed — verify afterwards.",
+          "The link removed is matched on the test run, the caller's group, the tracker type and, when sent, the ticket named in issue_id. Always send issue_id: without it, a run linked to several tickets in the same tracker loses its first matching link, which may not be the one you meant. Verify afterwards.",
           "The run is resolved inside a project, so the project id must accompany the run id even though the ticket is the subject of the call.",
           "On success the refreshed list of test runs still linked to the ticket is returned.",
           "Nothing is deleted: the run and the ticket both survive and the same link can be created again. Nothing is written back to the external tracker.",
@@ -33933,6 +34489,11 @@
               "exact",
               "semantic"
             ]
+          },
+          "realtime_run_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Id of the realtime duplicate check that produced this pair; null for pairs found by the scheduled scan."
           },
           "test_cases": {
             "type": "array",
@@ -43531,6 +44092,59 @@
           }
         },
         "description": "Response body of `TestRunWriteResponse`, promoted so privatised per-capability rows can compose on it with allOf. The response entry keeps its own copy for direct consumers."
+      },
+      "JiraLookupBinding": {
+        "type": "object",
+        "description": "The binding stored on a jira_lookup custom field: which Jira field its values are looked up from. Returned verbatim as it was supplied when the field was created or re-bound.",
+        "properties": {
+          "integration_key": {
+            "type": "string"
+          },
+          "organisation_id": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "ticket_type_id": {
+            "type": "string"
+          },
+          "jira_field_key": {
+            "type": "string"
+          },
+          "jira_field_schema": {
+            "type": "string"
+          },
+          "options_path": {
+            "type": "string",
+            "nullable": true
+          },
+          "search_path": {
+            "type": "string",
+            "nullable": true
+          },
+          "is_multi": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ResultCustomField__GetProjectFormFields": {
+        "description": "A custom field row on the project test-case form: the shared custom-field row plus the two keys this read adds when they apply.",
+        "allOf": [
+          {
+            "$schema": "ResultCustomField"
+          }
+        ],
+        "properties": {
+          "parent_custom_field_id": {
+            "type": "integer",
+            "description": "Present only on a level field of a nested_dropdown; the id of the field it belongs to."
+          },
+          "jira_binding": {
+            "$schema": "JiraLookupBinding",
+            "description": "Present only on a jira_lookup field; omitted for every other type."
+          }
+        }
       }
     },
     "responses": {
@@ -45180,51 +45794,51 @@
           "$schema": "TestRunFormFieldsResponse"
         }
       },
-        "TestRunEditSelectionResponse": {
-          "description": "A test run's stored case selection and editable fields, as the full edit form reads them before an edit.",
-          "schema": {
-            "type": "object",
-            "properties": {
-              "data": {
-                "type": "object",
-                "properties": {
-                  "success": {
-                    "type": "boolean"
-                  },
-                  "selection": {
-                    "type": "object",
-                    "description": "The run's stored case selection: {select_all, unique_test_case_count, folders}, where `folders` maps a folder id (string) to {test_case_select_all, selected_test_cases, deselected_test_cases}. Can be {}. Not kept in step with the add-only and remove calls."
-                  },
-                  "shared_selection": {
-                    "type": "object",
-                    "nullable": true,
-                    "description": "Cases shared in from other projects, keyed by project; null when the run has none."
-                  },
-                  "test_run": {
-                    "$schema": "TestRun"
-                  },
-                  "dynamic_filter": {
-                    "type": "object",
-                    "nullable": true,
-                    "description": "The dynamic-run filter rule; null for a static run."
-                  },
-                  "filters": {
-                    "type": "object",
-                    "nullable": true,
-                    "description": "Same content as dynamic_filter, under its alias."
-                  },
-                  "trtc_configuration_mappings": {
-                    "type": "array",
-                    "description": "Per-configuration case mappings; a run without configurations returns one default entry with configuration_id null and select_all true.",
-                    "items": {
-                      "type": "object"
-                    }
+      "TestRunEditSelectionResponse": {
+        "description": "A test run's stored case selection and editable fields, as the full edit form reads them before an edit.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "selection": {
+                  "type": "object",
+                  "description": "The run's stored case selection: {select_all, unique_test_case_count, folders}, where `folders` maps a folder id (string) to {test_case_select_all, selected_test_cases, deselected_test_cases}. Can be {}. Not kept in step with the add-only and remove calls."
+                },
+                "shared_selection": {
+                  "type": "object",
+                  "nullable": true,
+                  "description": "Cases shared in from other projects, keyed by project; null when the run has none."
+                },
+                "test_run": {
+                  "$schema": "TestRun"
+                },
+                "dynamic_filter": {
+                  "type": "object",
+                  "nullable": true,
+                  "description": "The dynamic-run filter rule; null for a static run."
+                },
+                "filters": {
+                  "type": "object",
+                  "nullable": true,
+                  "description": "Same content as dynamic_filter, under its alias."
+                },
+                "trtc_configuration_mappings": {
+                  "type": "array",
+                  "description": "Per-configuration case mappings; a run without configurations returns one default entry with configuration_id null and select_all true.",
+                  "items": {
+                    "type": "object"
                   }
                 }
               }
             }
           }
-        },
+        }
+      },
       "TestRunsSelectionResponse": {
         "description": "The test CASES a selection resolves to (this endpoint returns cases, not runs).\n`selected` is present only when show='all', and lists the ids of the returned rows that also\nmatch the `q` filter.\n",
         "schema": {
@@ -45815,7 +46429,8 @@
                     "boolean",
                     "int",
                     "date",
-                    "nested_dropdown"
+                    "nested_dropdown",
+                    "jira_lookup"
                   ],
                   "description": "Stored type. Always the stored value, never the one sent on an edit."
                 },
@@ -45826,7 +46441,7 @@
                 "entity_type": {
                   "type": "string",
                   "example": "TestCase",
-                  "description": "Always TestCase on this surface."
+                  "description": "The entity the field belongs to: TestCase, TestResult or TestPlan."
                 },
                 "is_required": {
                   "type": "boolean",
@@ -45933,7 +46548,8 @@
                     "boolean",
                     "int",
                     "date",
-                    "nested_dropdown"
+                    "nested_dropdown",
+                    "jira_lookup"
                   ]
                 },
                 "field_name": {
@@ -46004,6 +46620,10 @@
                 "linked_projects_count": {
                   "type": "integer",
                   "description": "How many projects the field is linked to. Included only when it has a value — the serializer omits it otherwise, so absence is not the same as a false or empty value."
+                },
+                "jira_binding": {
+                  "$schema": "JiraLookupBinding",
+                  "description": "Present only on a jira_lookup field; omitted for every other type."
                 }
               }
             }
@@ -46745,7 +47365,8 @@
                     "boolean",
                     "int",
                     "date",
-                    "nested_dropdown"
+                    "nested_dropdown",
+                    "jira_lookup"
                   ],
                   "description": "Canonical spelling, not the legacy field_* form the project form-field reads return."
                 },
@@ -46829,7 +47450,8 @@
                     "boolean",
                     "int",
                     "date",
-                    "nested_dropdown"
+                    "nested_dropdown",
+                    "jira_lookup"
                   ]
                 },
                 "system_name": {
@@ -46906,6 +47528,10 @@
                       }
                     }
                   }
+                },
+                "jira_binding": {
+                  "$schema": "JiraLookupBinding",
+                  "description": "Present only on a jira_lookup field; omitted for every other type."
                 }
               }
             }
@@ -47008,6 +47634,10 @@
                   "linked_to_all_projects": {
                     "type": "boolean",
                     "description": "Derived by comparing linked_projects_count against the workspace project count; always true on system rows."
+                  },
+                  "jira_binding": {
+                    "$schema": "JiraLookupBinding",
+                    "description": "Present only on a jira_lookup custom field; omitted on every other row."
                   }
                 }
               }
@@ -47294,7 +47924,7 @@
               "type": "array",
               "description": "Every TestCase custom field this project shows, unpaginated. Same row shape as the test-result custom fields listing; rows on a nested_dropdown field additionally carry parent_custom_field_id. `field_type` is the legacy field_* spelling. Empty when the path carried no project.",
               "items": {
-                "$schema": "ResultCustomField"
+                "$schema": "ResultCustomField__GetProjectFormFields"
               }
             },
             "default_fields": {
@@ -48213,7 +48843,7 @@
         }
       },
       "V1ArchivedTestPlanListResponse": {
-        "description": "A page of ARCHIVED v1 test plans. Rows are serialized exactly like the active listing (so record_status is 'archived'), but there is no `count` rollup on this response and archived sub-plans are never included.\n",
+        "description": "A page of ARCHIVED v1 test plans. Rows are serialized exactly like the active listing (so record_status is 'archived'), but there is no `count` rollup on this response. Archived sub-plans are included only when include_sub_plans or q[parent_plan_id] asks for them.\n",
         "schema": {
           "type": "object",
           "properties": {
@@ -50415,6 +51045,6 @@
         ]
       }
     },
-    "version": "1.37"
+    "version": "1.38"
   }
 }

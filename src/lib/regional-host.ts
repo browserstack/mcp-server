@@ -26,6 +26,16 @@ const HOSTS = {
     eu: "hub-eu-only.browserstack.com",
     in: "hub-aps-only.browserstack.com",
   },
+  automateHubUrl: {
+    us: "https://hub.browserstack.com",
+    eu: "https://hub-eu-only.browserstack.com",
+    in: "https://hub-aps-only.browserstack.com",
+  },
+  appAutomateHubUrl: {
+    us: "https://hub-cloud.browserstack.com",
+    eu: "https://hub-eu-only.browserstack.com",
+    in: "https://hub-aps-only.browserstack.com",
+  },
   accessibilityApi: {
     us: "https://api-accessibility.browserstack.com",
     eu: "https://api-accessibility-eu.browserstack.com",

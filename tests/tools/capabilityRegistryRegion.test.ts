@@ -238,6 +238,44 @@ describe("tra follows BROWSERSTACK_GRR_REGION", () => {
     ).toBe("https://api-app-accessibility-eu.browserstack.com");
   });
 
+  it("does not probe the tra base_urls when a region is set", async () => {
+    process.env.BROWSERSTACK_GRR_REGION = "in";
+    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    const transport = vi.fn();
+    const source = {
+      base_urls: [
+        DECLARED,
+        "https://api-observability-eu.browserstack.com",
+        "https://api-observability-in.browserstack.com",
+      ],
+      probe_path: "/api/v1/access",
+    };
+    expect(await resolveBaseUrl("tra", CONFIG, source, transport as any)).toBe(
+      "https://api-observability-in.browserstack.com",
+    );
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["devicecontrol", "https://hub.browserstack.com", "https://api.browserstack.com", "https://hub-eu-only.browserstack.com", "https://api-eu-only.browserstack.com"],
+    ["mobiledevicecontrol", "https://hub-cloud.browserstack.com", "https://api-cloud.browserstack.com", "https://hub-eu-only.browserstack.com", "https://api-eu-only.browserstack.com"],
+  ])(
+    "routes %s and its api host under eu, and keeps the declared hosts when unset",
+    async (product, hub, api, euHub, euApi) => {
+      const source = { base_url: hub, hosts: { api } };
+      process.env.BROWSERSTACK_GRR_REGION = "eu";
+      let { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+      expect(await resolveBaseUrl(product, CONFIG, source)).toBe(euHub);
+      expect(await resolveBaseUrl(product, CONFIG, source, undefined, "api")).toBe(euApi);
+
+      vi.resetModules();
+      delete process.env.BROWSERSTACK_GRR_REGION;
+      ({ resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js"));
+      expect(await resolveBaseUrl(product, CONFIG, source)).toBe(hub);
+      expect(await resolveBaseUrl(product, CONFIG, source, undefined, "api")).toBe(api);
+    },
+  );
+
   it("lets an explicit override win over the region", async () => {
     process.env.BROWSERSTACK_GRR_REGION = "eu";
     process.env.CAPABILITY_REGISTRY_BASE_URL_TRA = "https://tra-preprod.example";

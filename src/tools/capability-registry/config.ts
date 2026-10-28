@@ -18,7 +18,11 @@ import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { discoverBaseUrl, HostSource } from "./discovery.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
 import { FLAT_SUFFIX, INDEX_FILE, InvocationError } from "./index-loader.js";
-import { getRegionalHost } from "../../lib/regional-host.js";
+import {
+  getRegionalHost,
+  isNonUsRegion,
+  RegionalHostKind,
+} from "../../lib/regional-host.js";
 
 /**
  * The environment this DEPLOYMENT points at, e.g. "preprod".
@@ -53,18 +57,39 @@ function environmentMap(): Record<string, Record<string, string>> {
  *
  * The general mechanism lives in `discovery.ts` and is driven by the index's `base_urls`.
  * This map is the bridge for products that predate that: tm's hosts are still hardcoded in
- * `lib/tm-base-url.ts` and shared with the hand-written Test Management tools. tra and
- * app_accessibility follow BROWSERSTACK_GRR_REGION through `lib/regional-host.ts`, like the
- * hand-written tools for the same products. Once a product.yaml declares `base_urls`, its entry can go and nothing else changes.
+ * `lib/tm-base-url.ts` and shared with the hand-written Test Management tools. Once a
+ * product.yaml declares `base_urls`, its entry can go and nothing else changes.
  */
 const BUILTIN_DISCOVERY: Record<
   string,
   (config: BrowserStackConfig) => Promise<string>
 > = {
   tm: getTMBaseURL,
-  tra: async () => getRegionalHost("observabilityApi"),
-  app_accessibility: async () => getRegionalHost("appAccessibilityApi"),
 };
+
+/**
+ * Hosts used when BROWSERSTACK_GRR_REGION is a non-US region, ahead of discovery and the
+ * index's declared hosts. `hosts` covers the capabilities that name a host.
+ */
+const REGIONAL_HOSTS: Record<
+  string,
+  { base: RegionalHostKind; hosts?: Record<string, RegionalHostKind> }
+> = {
+  tra: { base: "observabilityApi" },
+  app_accessibility: { base: "appAccessibilityApi" },
+  devicecontrol: { base: "automateHubUrl", hosts: { api: "automateApi" } },
+  mobiledevicecontrol: {
+    base: "appAutomateHubUrl",
+    hosts: { api: "appAutomateUpload" },
+  },
+};
+
+function regionalHost(product: string, host?: string): string | undefined {
+  if (!isNonUsRegion()) return undefined;
+  const entry = REGIONAL_HOSTS[product];
+  const kind = host ? entry?.hosts?.[host] : entry?.base;
+  return kind ? getRegionalHost(kind) : undefined;
+}
 
 /** True when this product's host is account-specific and must be discovered per call. */
 export function isRegionSharded(product: string, source?: HostSource): boolean {
@@ -134,6 +159,9 @@ function resolveNamedHost(
     );
   }
 
+  const regional = regionalHost(product, host);
+  if (regional) return regional;
+
   const declared = source?.hosts?.[host];
   if (declared) return trim(declared);
 
@@ -196,6 +224,9 @@ export async function resolveBaseUrl(
     );
     return trim(source.base_url);
   };
+
+  const regional = regionalHost(product);
+  if (regional) return regional;
 
   if ((source?.base_urls?.length ?? 0) > 0) {
     try {

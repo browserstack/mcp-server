@@ -1185,12 +1185,16 @@ export class AppAccessibilityApi {
     return justBefore && ref(justBefore, false);
   }
 
-  /** The build's page on the App Accessibility dashboard, when its project can be found. */
+  /**
+   * The build's page on the App Accessibility dashboard, when its project can be found. The
+   * page loads the build from its thBuildId parameter, not the path: without it the page
+   * shows an error.
+   */
   private async dashboardLink(meta: AppBuildMeta): Promise<string | undefined> {
     try {
       const projectId = await this.projectId(meta.project_name);
       if (projectId === undefined) return undefined;
-      return `${APP_DASHBOARD}/automated-tests/projects/${projectId}/builds/${meta.normalised_name}/${meta.build_id}`;
+      return `${APP_DASHBOARD}/automated-tests/projects/${projectId}/builds/${meta.normalised_name}/${meta.build_id}?thBuildId=${encodeURIComponent(meta.th_build_id)}`;
     } catch {
       return undefined;
     }

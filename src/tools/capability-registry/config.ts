@@ -77,6 +77,7 @@ const REGIONAL_HOSTS: Record<
 > = {
   tra: { base: "observabilityApi" },
   app_accessibility: { base: "appAccessibilityApi" },
+  web_accessibility: { base: "accessibilityApi" },
   devicecontrol: { base: "automateHubUrl", hosts: { api: "automateApi" } },
   mobiledevicecontrol: {
     base: "appAutomateHubUrl",

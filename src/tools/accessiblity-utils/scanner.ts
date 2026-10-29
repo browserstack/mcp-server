@@ -217,7 +217,7 @@ export class AccessibilityScanner {
   async dashboardLink(scanId: string): Promise<string | undefined> {
     const resp = await apiClient
       .get({
-        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans",
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans`,
         headers: {
           Authorization:
             "Basic " +

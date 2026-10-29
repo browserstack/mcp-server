@@ -1,7 +1,7 @@
-import { isNonUsRegion } from "./regional-host.js";
+import { currentRegionScope, isRestrictedRegion } from "./region-context.js";
 
 export function feedbackEnabled(): boolean {
-  return !isNonUsRegion();
+  return !isRestrictedRegion(currentRegionScope()?.account);
 }
 
 export const FEEDBACK_INSTRUCTION =

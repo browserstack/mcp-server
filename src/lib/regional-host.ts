@@ -82,20 +82,33 @@ export function currentRegion(): GrrRegion | undefined {
   return regionOf(currentRegionScope()?.account);
 }
 
-/** True for an account in a region other than the US, whether or not it is routed here. */
-export function isNonUsRegion(): boolean {
-  const region = currentRegion();
-  return region !== undefined && region !== "us";
+export const REGION_UNKNOWN_MESSAGE =
+  "Could not confirm your BrowserStack account's region. Please retry in a few seconds.";
+
+/** Thrown instead of guessing a host when the account's region could not be looked up. */
+export class AccountRegionUnknownError extends Error {
+  constructor() {
+    super(REGION_UNKNOWN_MESSAGE);
+    this.name = "AccountRegionUnknownError";
+  }
 }
 
-/** The region whose hosts this call uses. */
+/** Throws when this call's account region could not be looked up. */
+export function assertRegionKnown(): void {
+  if (currentRegionScope()?.account === "unknown") {
+    throw new AccountRegionUnknownError();
+  }
+}
+
+/** The region whose hosts this call uses; throws when the region is unknown. */
 export function routedRegion(): RoutedRegion {
+  assertRegionKnown();
   return currentRegion() === "eu" ? "eu" : "us";
 }
 
 /** True when this call goes to regional hosts rather than the defaults. */
 export function usesRegionalHosts(): boolean {
-  return routedRegion() !== "us";
+  return currentRegion() === "eu";
 }
 
 /** REST host for a session's product: App Automate or Automate. */

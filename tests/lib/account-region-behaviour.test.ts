@@ -58,10 +58,10 @@ describe("the account's region", () => {
     ]);
   });
 
-  it("keeps the US hosts when the lookup failed", async () => {
+  it("refuses to pick a host when the lookup failed", async () => {
     regions.set("someone", "unknown");
-    expect(await tmHostTool(configFor("someone"))()).toBe(
-      "https://test-management.browserstack.com",
+    await expect(tmHostTool(configFor("someone"))()).rejects.toThrow(
+      /Could not confirm your BrowserStack account's region/,
     );
   });
 

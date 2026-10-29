@@ -16,12 +16,18 @@ async function baseUrl(region: string | undefined, o11yBaseUrl: string) {
 const DEFAULT = "https://api-automation.browserstack.com";
 
 describe("getO11yBaseUrl", () => {
-  it.each([undefined, "us", "in", "unknown"])(
+  it.each([undefined, "us", "in"])(
     "keeps the US host when the region is %s",
     async (region) => {
       expect(await baseUrl(region, DEFAULT)).toBe(DEFAULT);
     },
   );
+
+  it("refuses to pick a host when the region is unknown", async () => {
+    await expect(baseUrl("unknown", DEFAULT)).rejects.toThrow(
+      /Could not confirm your BrowserStack account's region/,
+    );
+  });
 
   it("follows the eu region", async () => {
     expect(await baseUrl("eu", DEFAULT)).toBe(

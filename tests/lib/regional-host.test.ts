@@ -26,7 +26,7 @@ async function loadModule(
 }
 
 describe("getRegionalHost", () => {
-  it.each([undefined, "us", "unknown"])(
+  it.each([undefined, "us"])(
     "keeps every host on its US default when the region is %s",
     async (region) => {
       const { getRegionalHost } = await loadModule(region);
@@ -46,6 +46,15 @@ describe("getRegionalHost", () => {
       expect(getRegionalHost("automationApi")).toBe(PROD_AUTOMATION);
     },
   );
+
+  it("refuses to pick a host when the region is unknown", async () => {
+    const { getRegionalHost, sessionApiHost } = await loadModule("unknown");
+    expect(() => getRegionalHost("automateApi")).toThrow(
+      /Could not confirm your BrowserStack account's region/,
+    );
+    expect(() => getRegionalHost("accessibilityApi")).toThrow();
+    expect(() => sessionApiHost("automate")).toThrow();
+  });
 
   it("routes every product to its EU host when the region is eu", async () => {
     const { getRegionalHost } = await loadModule("eu");

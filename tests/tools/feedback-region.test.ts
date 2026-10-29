@@ -31,7 +31,7 @@ const failure = () => ({
 });
 
 describe("submitFeedback by the account's region", () => {
-  it.each(["eu", "in"])(
+  it.each(["eu", "in", "unknown"])(
     "is not registered, instructed or hinted when the region is %s",
     async (region) => {
       const { server, instructions, hinted } = await load(region);

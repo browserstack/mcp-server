@@ -228,13 +228,27 @@ describe("products follow the account's region", () => {
     );
   });
 
-  it.each([undefined, "us", "unknown"])(
+  it.each([undefined, "us"])(
     "keeps the US host when the region is %s",
     async (region) => {
       const resolveBaseUrl = await resolveIn(region);
       expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(DECLARED);
     },
   );
+
+  it("refuses a regional product when the region is unknown", async () => {
+    const resolveBaseUrl = await resolveIn("unknown");
+    await expect(
+      resolveBaseUrl("tra", CONFIG, { base_url: DECLARED }),
+    ).rejects.toThrow(/Could not confirm your BrowserStack account's region/);
+  });
+
+  it("still probes Test Management when the region is unknown", async () => {
+    const resolveBaseUrl = await resolveIn("unknown");
+    expect(await resolveBaseUrl("tm", CONFIG)).toBe(
+      "https://test-management-eu.browserstack.com",
+    );
+  });
 
   it("sends app_accessibility to its EU host too", async () => {
     const resolveBaseUrl = await resolveIn("eu");

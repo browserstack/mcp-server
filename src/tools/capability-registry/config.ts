@@ -19,6 +19,7 @@ import { discoverBaseUrl, HostSource } from "./discovery.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
 import { FLAT_SUFFIX, INDEX_FILE, InvocationError } from "./index-loader.js";
 import {
+  assertRegionKnown,
   getRegionalHost,
   usesRegionalHosts,
   RegionalHostKind,
@@ -87,10 +88,12 @@ const REGIONAL_HOSTS: Record<
 };
 
 function regionalHost(product: string, host?: string): string | undefined {
-  if (!usesRegionalHosts()) return undefined;
   const entry = REGIONAL_HOSTS[product];
   const kind = host ? entry?.hosts?.[host] : entry?.base;
-  return kind ? getRegionalHost(kind) : undefined;
+  if (!kind) return undefined;
+  // Test Management finds the account's region by probing; the others need it known.
+  if (kind !== "testManagement") assertRegionKnown();
+  return usesRegionalHosts() ? getRegionalHost(kind) : undefined;
 }
 
 /** True when this product's host is account-specific and must be discovered per call. */

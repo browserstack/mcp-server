@@ -348,6 +348,12 @@ searchCapability  →  describeCapability  →  invokeCapability
 | `list_app_accessibility_builds` | List an App Accessibility project's builds newest first, with each build's id, status, app and issue counts - use this to find the latest run, a build by name, or one person's builds. |
 | `list_app_accessibility_projects` | List the account's App Accessibility projects newest first, or find one by name - use this to get the project id that lists its builds. |
 | `list_manual_app_accessibility_reports` | List manual App Accessibility reports (App Live sessions scanned with Workflow Analyzer) newest first, with each report's id, app, status and issue counts - use this to find a report QA shared or the latest manual scan of an app. |
+| `list_assisted_test_reports` | List the account's Assisted Test reports newest first, with each report's id, name, creator, status, test type and issue counts - use this to find a guided keyboard, forms or other assisted check someone ran. |
+| `list_automated_tests_builds` | List the account's Automated Tests builds newest first, or one project's, with each build's id, number, name, creator, status and issue counts - use this to find a suite's latest run, someone's builds, or the build id that reads its issues. |
+| `list_automated_tests_projects` | List the account's Automated Tests projects newest first, with each project's id, name and creation date - use this to find the project name that narrows its builds. |
+| `list_website_scanner_scan_runs` | List one Website Scanner scan's runs newest first, with each run's id, date, issue and component counts and how many pages loaded - use this to pick an earlier run or follow a site's issues over time. |
+| `list_website_scanner_scans` | List the account's Website Scanner scans, most recently run first, with each scan's id, name, creator, dashboard link and latest run - use this to find a scan by name or person, or the scan and run ids that read its issues. |
+| `list_workflow_analyzer_reports` | List the account's Workflow Analyzer reports newest first, with each report's id, name, creator, status, settings and issue counts - use this to find someone's latest reports, a report by name, or the id that reads its issues. |
 
 </details>
 

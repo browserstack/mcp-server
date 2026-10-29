@@ -209,6 +209,34 @@ export class AccessibilityScanner {
     };
   }
 
+  /**
+   * A scan's own page in the dashboard, as the scans list links it (`scanUrl`), or
+   * undefined when it cannot be read. The page is named by the scan's build, so it cannot
+   * be made from the scan's name; a scan just started is on the list's first page.
+   */
+  async dashboardLink(scanId: string): Promise<string | undefined> {
+    const resp = await apiClient
+      .get({
+        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans",
+        headers: {
+          Authorization:
+            "Basic " +
+            Buffer.from(
+              `${this.auth?.username}:${this.auth?.password}`,
+            ).toString("base64"),
+        },
+        raise_error: false,
+      })
+      .catch(() => undefined);
+    if (!resp?.ok) return undefined;
+    const scans: { id?: unknown; scanUrl?: unknown }[] =
+      resp.data?.data?.scans ?? [];
+    const link = scans.find(
+      (scan) => String(scan.id) === String(scanId),
+    )?.scanUrl;
+    return typeof link === "string" && link ? link : undefined;
+  }
+
   async pollStatus(
     scanId: string,
     scanRunId: string,

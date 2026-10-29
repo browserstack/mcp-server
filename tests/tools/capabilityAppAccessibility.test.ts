@@ -75,7 +75,7 @@ describe("the App Accessibility capability index", () => {
 
   it.each([
     ["List my App Accessibility reports"],
-    ["Show the Workflow Analyzer reports QA ran last week"],
+    ["Show the manual app accessibility reports QA ran last week"],
     ["What builds does my app accessibility project have?"],
   ])("routes %j to App Accessibility without asking", (query) => {
     expect(ambiguousProducts(products, query).settled).toBe(

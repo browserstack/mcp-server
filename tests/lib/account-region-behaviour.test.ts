@@ -65,9 +65,17 @@ describe("the account's region", () => {
     );
   });
 
+  it.each(["eu", "in"])(
+    "sends no telemetry outside a tool call for a %s account",
+    async (region) => {
+      regions.set("user", region);
+      trackMCP("started", clientInfo, undefined, configFor("user"));
+      await settle();
+      expect(rows()).toHaveLength(0);
+    },
+  );
+
   it.each([
-    ["eu", true],
-    ["in", true],
     ["unknown", true],
     ["us", false],
   ])(
@@ -85,16 +93,14 @@ describe("the account's region", () => {
     },
   );
 
-  it("limits telemetry inside a tool call for an EU account", async () => {
+  it("sends no telemetry inside a tool call for an EU account", async () => {
     await withAccountRegion("eu", () =>
       withToolCall("listTestCases", () => clientInfo, configFor("x"), async () => ({
         content: [{ type: "text", text: "Project PR-1 not found" }],
         isError: true,
       })),
     );
-    const row = rows().at(-1);
-    expect(row).toMatchObject({ tool_name: "listTestCases", outcome: "error_result" });
-    expect(row).not.toHaveProperty("error_message");
+    expect(rows()).toHaveLength(0);
   });
 
   it.each(["eu", "in"])(

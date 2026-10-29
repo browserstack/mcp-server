@@ -32,6 +32,12 @@ export function regionOf(
   return account && account !== "unknown" ? account : undefined;
 }
 
+/** True for an EU or IN account: no telemetry is sent for it. */
+export function isTelemetryOff(account: AccountRegion | undefined): boolean {
+  const region = regionOf(account);
+  return region !== undefined && region !== "us";
+}
+
 /** True when telemetry must be limited to usage fields; an unknown account counts. */
 export function isRestrictedRegion(
   account: AccountRegion | undefined,

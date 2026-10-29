@@ -21,44 +21,57 @@ const config = {
 const lastRow = () =>
   (apiClient.post as any).mock.calls.at(-1)[0].body.event_properties;
 
+const rowCount = () => (apiClient.post as any).mock.calls.length;
+
 describe("telemetry by the account's region", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it.each(["eu", "in", "unknown"])(
-    "drops free text but keeps usage fields when the region is %s",
-    (region) => {
-      withAccountRegion(region as any, () =>
-        trackMCP("invokeCapability", clientInfo, new Error("boom"), config, {
-          capability: "listTestRuns",
-          upstream_status: 200,
-          change_summary: "close the checkout regression run",
-          search_query: "checkout runs",
-          feedback_message: "it failed",
-          feedback_category: "tool_error",
-        }),
-      );
-      const row = lastRow();
-      expect(row).toMatchObject({
-        tool_name: "invokeCapability",
-        mcp_client: "claude-code",
-        success: false,
-        error_type: "Error",
+  it.each(["eu", "in"])("sends nothing for a %s account", async (region) => {
+    withAccountRegion(region as any, () =>
+      trackMCP("invokeCapability", clientInfo, new Error("boom"), config, {
+        capability: "listTestRuns",
+      }),
+    );
+    await withAccountRegion(region as any, () =>
+      withToolCall("listTestCases", () => clientInfo, config, async () => ({
+        content: [{ type: "text", text: "ok" }],
+      })),
+    );
+    expect(rowCount()).toBe(0);
+  });
+
+  it("drops free text but keeps usage fields when the lookup failed", () => {
+    withAccountRegion("unknown", () =>
+      trackMCP("invokeCapability", clientInfo, new Error("boom"), config, {
         capability: "listTestRuns",
         upstream_status: 200,
-      });
-      for (const field of [
-        "error_message",
-        "change_summary",
-        "search_query",
-        "feedback_message",
-        "feedback_category",
-      ])
-        expect(row).not.toHaveProperty(field);
-    },
-  );
+        change_summary: "close the checkout regression run",
+        search_query: "checkout runs",
+        feedback_message: "it failed",
+        feedback_category: "tool_error",
+      }),
+    );
+    const row = lastRow();
+    expect(row).toMatchObject({
+      tool_name: "invokeCapability",
+      mcp_client: "claude-code",
+      success: false,
+      error_type: "Error",
+      capability: "listTestRuns",
+      upstream_status: 200,
+    });
+    for (const field of [
+      "error_message",
+      "change_summary",
+      "search_query",
+      "feedback_message",
+      "feedback_category",
+    ])
+      expect(row).not.toHaveProperty(field);
+  });
 
-  it("drops the error text of a returned failure inside withToolCall", async () => {
-    await withAccountRegion("eu", () =>
+  it("drops the error text of a returned failure when the lookup failed", async () => {
+    await withAccountRegion("unknown", () =>
       withToolCall("listTestCases", () => clientInfo, config, async () => ({
         content: [{ type: "text", text: "Project PR-1 not found" }],
         isError: true,

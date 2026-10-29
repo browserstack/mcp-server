@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import logger from "../logger.js";
 import { BrowserStackConfig } from "./types.js";
 import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
@@ -7,25 +8,46 @@ const AUTH_TOKEN_URL = "https://auth.browserstack.com/oauth2/v2/token";
 const SCOPE = "oauth_user_profile";
 const LOOKUP_TIMEOUT_MS = 5_000;
 /** How long a failed lookup answers "unknown" before the next call tries again. */
-export const RETRY_AFTER_MS = 30_000;
+export const RETRY_AFTER_MS = 5_000;
+/** How long a looked-up region is reused before it is looked up again. */
+export const REGION_TTL_MS = 60 * 60_000;
+const MAX_ENTRIES = 1_000;
 
 interface Lookup {
   settled?: AccountRegion;
+  settledAt?: number;
   pending?: Promise<AccountRegion>;
   failedAt?: number;
 }
 
-// Keyed on the config object a server was built with, so an entry belongs to that one
-// server and is collected with it; nothing is shared between servers or accounts.
-const lookups = new WeakMap<object, Lookup>();
+// Keyed on a hash of the credentials, so servers built per request for the same account
+// share one lookup. Holds only the region; bounded, oldest entry evicted first.
+const lookups = new Map<string, Lookup>();
+
+function keyFor(config: BrowserStackConfig): string {
+  return createHash("sha256")
+    .update(
+      `${config["browserstack-username"]}\0${config["browserstack-access-key"]}`,
+    )
+    .digest("hex");
+}
+
+function remember(key: string, entry: Lookup): void {
+  lookups.delete(key);
+  lookups.set(key, entry);
+  if (lookups.size > MAX_ENTRIES) {
+    lookups.delete(lookups.keys().next().value!);
+  }
+}
 
 /** Reads `user.grr.region` from the token; an account with no region is a US account. */
 export function regionFromToken(token: string): AccountRegion {
   const payload = JSON.parse(
     Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"),
   );
-  const region = payload?.user?.grr?.region;
-  if (region === undefined || region === null || region === "") return "us";
+  const raw = payload?.user?.grr?.region;
+  if (raw === undefined || raw === null || raw === "") return "us";
+  const region = String(raw).toLowerCase();
   return (GRR_REGIONS as readonly string[]).includes(region)
     ? (region as GrrRegion)
     : "unknown";
@@ -57,9 +79,9 @@ async function lookUp(
 }
 
 /**
- * The account's region, looked up once per config. Returned directly once known so
- * callers that cannot wait (telemetry) stay synchronous; undefined without credentials.
- * Only an answer is kept: after a failure this is "unknown" for RETRY_AFTER_MS, and the
+ * The account's region, looked up once per account and kept for REGION_TTL_MS. Returned
+ * directly once known so callers that cannot wait (telemetry) stay synchronous; undefined
+ * without credentials. After a failure this is "unknown" for RETRY_AFTER_MS, and the
  * next call after that looks up again.
  */
 export function accountRegion(
@@ -71,8 +93,11 @@ export function accountRegion(
   ) {
     return undefined;
   }
-  const lookup = lookups.get(config);
-  if (lookup?.settled) return lookup.settled;
+  const key = keyFor(config);
+  const lookup = lookups.get(key);
+  if (lookup?.settled && Date.now() - lookup.settledAt! < REGION_TTL_MS) {
+    return lookup.settled;
+  }
   if (lookup?.pending) return lookup.pending;
   if (
     lookup?.failedAt !== undefined &&
@@ -89,8 +114,9 @@ export function accountRegion(
       return "unknown";
     }
     entry.settled = region;
+    entry.settledAt = Date.now();
     return region;
   });
-  lookups.set(config, entry);
+  remember(key, entry);
   return entry.pending;
 }

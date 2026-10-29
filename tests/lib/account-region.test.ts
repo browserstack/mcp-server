@@ -20,14 +20,17 @@ vi.mock("../../src/logger.js", () => ({
 import {
   accountRegion,
   regionFromToken,
+  REGION_TTL_MS,
   RETRY_AFTER_MS,
 } from "../../src/lib/account-region.js";
 
 const tokenWith = (user: unknown) =>
   `h.${Buffer.from(JSON.stringify({ user })).toString("base64url")}.s`;
 
-const config = () => ({
-  "browserstack-username": "user",
+// Lookups are kept per account, so each test uses an account of its own.
+let accounts = 0;
+const config = (username = `user-${++accounts}`) => ({
+  "browserstack-username": username,
   "browserstack-access-key": "key",
 });
 
@@ -44,6 +47,10 @@ describe("regionFromToken", () => {
     ["an empty region", { grr: { region: "" } }],
   ])("treats %s as a US account", (_, user) => {
     expect(regionFromToken(tokenWith(user))).toBe("us");
+  });
+
+  it("reads a region in any case", () => {
+    expect(regionFromToken(tokenWith({ grr: { region: "EU" } }))).toBe("eu");
   });
 
   it("does not guess at a region it does not know", () => {
@@ -71,7 +78,7 @@ describe("accountRegion", () => {
 
   it("mints a user profile token with the config's credentials", async () => {
     mintImpl = async () => tokenWith({ grr: { region: "eu" } });
-    expect(await accountRegion(config())).toBe("eu");
+    expect(await accountRegion(config("user"))).toBe("eu");
     expect(mintCalls).toEqual([
       expect.objectContaining({
         url: "https://auth.browserstack.com/oauth2/v2/token",
@@ -82,7 +89,7 @@ describe("accountRegion", () => {
     ]);
   });
 
-  it("looks up once per config and answers directly once known", async () => {
+  it("looks up once per account and answers directly once known", async () => {
     mintImpl = async () => tokenWith({ grr: { region: "in" } });
     const cfg = config();
     const first = accountRegion(cfg);
@@ -92,7 +99,22 @@ describe("accountRegion", () => {
     expect(mintCalls).toHaveLength(1);
   });
 
-  it("looks up each config on its own", async () => {
+  it("shares one lookup between configs for the same account", async () => {
+    mintImpl = async () => tokenWith({ grr: { region: "eu" } });
+    const [a, b] = [config("shared"), config("shared")];
+    const [first, second] = await Promise.all([
+      accountRegion(a),
+      accountRegion(b),
+    ]);
+    expect([first, second, accountRegion(config("shared"))]).toEqual([
+      "eu",
+      "eu",
+      "eu",
+    ]);
+    expect(mintCalls).toHaveLength(1);
+  });
+
+  it("looks up each account on its own", async () => {
     const tokens = [tokenWith({ grr: { region: "eu" } }), tokenWith({})];
     mintImpl = async () => tokens.shift()!;
     expect(await accountRegion(config())).toBe("eu");
@@ -131,6 +153,17 @@ describe("accountRegion", () => {
       vi.advanceTimersByTime(RETRY_AFTER_MS - 1);
       expect(accountRegion(cfg)).toBe("unknown");
       expect(mintCalls).toHaveLength(1);
+    });
+
+    it("looks up a known region again once it expires", async () => {
+      mintImpl = async () => tokenWith({ grr: { region: "eu" } });
+      const cfg = config();
+      expect(await accountRegion(cfg)).toBe("eu");
+      vi.advanceTimersByTime(REGION_TTL_MS - 1);
+      expect(accountRegion(cfg)).toBe("eu");
+      vi.advanceTimersByTime(1);
+      expect(await accountRegion(cfg)).toBe("eu");
+      expect(mintCalls).toHaveLength(2);
     });
 
     it("looks up again after the retry delay and keeps the answer", async () => {

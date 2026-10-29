@@ -38,6 +38,8 @@ import {
 import { assertSelectable, narrowResponse } from "./narrow.js";
 import { invokeWithFallbacks } from "./fallback.js";
 import { invoke } from "./resolve.js";
+import { detachImage } from "./media.js";
+import { maybeCompressBase64 } from "../../lib/image.js";
 import {
   ambiguousProducts,
   productAnchors,
@@ -1358,6 +1360,32 @@ export function addCapabilityRegistryTools(
           // before, and one whose first call succeeded has nothing to report.
           ...(attempts ? { fallback: { attempts } } : {}),
         };
+        // AN IMAGE LEAVES THE JSON. Where the capability says its body carries one, the
+        // base64 is lifted out and sent as an MCP image block beside the text, so the
+        // client renders it and the model sees a picture rather than paying for every
+        // character of it as text. Only on a success: an error body is the diagnosis and
+        // goes back whole. Large images are compressed the way the legacy screenshot
+        // tools compress theirs, so the hosted server's response stays bounded.
+        const detached = result.ok
+          ? detachImage(capability, answer.http_response.body)
+          : { body: answer.http_response.body };
+        const image = detached.image
+          ? {
+              type: "image" as const,
+              data: await maybeCompressBase64(detached.image.data),
+              mimeType: detached.image.mimeType,
+            }
+          : undefined;
+        const text = image
+          ? {
+              ...answer,
+              http_response: { ...answer.http_response, body: detached.body },
+              image: {
+                mime: detached.image!.mimeType,
+                bytes: detached.image!.bytes,
+              },
+            }
+          : answer;
         // The one row for a completed invoke. invoke() returns a 4xx/5xx rather than
         // throwing, so `success` keeps its tool-level meaning and these two fields carry
         // whether the product call worked. Status 0 means it could not be reached.
@@ -1373,8 +1401,11 @@ export function addCapabilityRegistryTools(
                 narrowed_to: narrowed.narrowing.to,
               }
             : {}),
+          ...(detached.image ? { image_bytes: detached.image.bytes } : {}),
         });
-        return ok(answer);
+        return image
+          ? { content: [{ type: "text", text: JSON.stringify(text) }, image] }
+          : ok(text);
       } catch (error) {
         if (error instanceof InvocationError)
           return refuse(

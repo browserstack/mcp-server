@@ -8,6 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import appConfig from "../../config.js";
+import { checkMedia } from "./media.js";
 import { basename, dirname } from "node:path";
 import {
   Capability,
@@ -419,6 +420,11 @@ export class CapabilityRegistry {
       this.byName.set(product, names);
       this.withheld.set(product, withheld);
       checkFallbacks(product, bundle.capabilities);
+      try {
+        checkMedia(product, bundle.capabilities);
+      } catch (error) {
+        throw new IndexError((error as Error).message);
+      }
       // ALWAYS THE PROCESSED PRODUCT. This used to fall back to the raw bundle when nothing
       // was disabled, which quietly dropped the per-surface guidance (`withSurfaceGuidance`
       // runs on the way into `enabled`) and the reference-only form from search,

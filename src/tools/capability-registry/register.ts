@@ -38,7 +38,7 @@ import {
 import { assertSelectable, narrowResponse } from "./narrow.js";
 import { invokeWithFallbacks } from "./fallback.js";
 import { invoke } from "./resolve.js";
-import { detachImage } from "./media.js";
+import { decodedLength, detachImage, noteImage } from "./media.js";
 import { maybeCompressBase64 } from "../../lib/image.js";
 import {
   ambiguousProducts,
@@ -1365,25 +1365,44 @@ export function addCapabilityRegistryTools(
         // client renders it and the model sees a picture rather than paying for every
         // character of it as text. Only on a success: an error body is the diagnosis and
         // goes back whole. Large images are compressed the way the legacy screenshot
-        // tools compress theirs, so the hosted server's response stays bounded.
+        // tools compress theirs, so the hosted server's response stays bounded — and the
+        // note and the reported size describe the block as attached, not as received.
+        //
+        // THE CAPABILITY THAT ANSWERED DECIDES. After a fallback chain the 2xx body is the
+        // last step's, so its `media` (or lack of one) is what applies, not the original's.
+        const answered = attempts
+          ? registry.byNameLookup(
+              attempts[attempts.length - 1].capability,
+              product,
+            ).capability
+          : capability;
         const detached = result.ok
-          ? detachImage(capability, answer.http_response.body)
-          : { body: answer.http_response.body };
-        const image = detached.image
-          ? {
-              type: "image" as const,
-              data: await maybeCompressBase64(detached.image.data),
-              mimeType: detached.image.mimeType,
-            }
+          ? detachImage(answered, answer.http_response.body)
           : undefined;
-        const text = image
+        const attached = detached
+          ? await maybeCompressBase64(detached.data)
+          : undefined;
+        const attachedBytes = attached ? decodedLength(attached) : 0;
+        const image =
+          detached && attached
+            ? {
+                type: "image" as const,
+                data: attached,
+                mimeType: detached.mimeType,
+              }
+            : undefined;
+        const text = detached
           ? {
               ...answer,
-              http_response: { ...answer.http_response, body: detached.body },
-              image: {
-                mime: detached.image!.mimeType,
-                bytes: detached.image!.bytes,
+              http_response: {
+                ...answer.http_response,
+                body: noteImage(
+                  answer.http_response.body,
+                  detached,
+                  attachedBytes,
+                ),
               },
+              image: { mime: detached.mimeType, bytes: attachedBytes },
             }
           : answer;
         // The one row for a completed invoke. invoke() returns a 4xx/5xx rather than
@@ -1401,7 +1420,12 @@ export function addCapabilityRegistryTools(
                 narrowed_to: narrowed.narrowing.to,
               }
             : {}),
-          ...(detached.image ? { image_bytes: detached.image.bytes } : {}),
+          ...(detached
+            ? {
+                image_bytes: attachedBytes,
+                image_bytes_received: detached.bytes,
+              }
+            : {}),
         });
         return image
           ? { content: [{ type: "text", text: JSON.stringify(text) }, image] }

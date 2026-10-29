@@ -8,59 +8,39 @@
  * what the model actually looks at, and it is billed as an image, not as a wall of tokens.
  *
  * A capability says where its image sits with `media: {mime, json_path}`. On a 2xx the
- * string at that path is detached, the body keeps a short note in its place, and the
- * image rides alongside the JSON as a second content block. A body that carries no string
- * there — an error envelope, an empty screen — is handed back untouched, so nothing a
- * product sends is ever lost to this step.
+ * string at that path is detached, and once the caller has compressed it a note with the
+ * size ACTUALLY attached goes in its place. A body that carries no string there — an
+ * error envelope, an empty screen — is handed back untouched, so nothing a product sends
+ * is ever lost to this step.
  */
 import { Capability } from "./types.js";
 
-/** What an MCP client will render. Anything else would arrive as an opaque attachment. */
-const RENDERABLE = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-]);
+/**
+ * The one type `media.mime` may declare. The compressor re-encodes anything over 1 MB as
+ * PNG, so a JPEG declared here would be attached as PNG under a JPEG label; until the
+ * compressor keeps the source format, the index may only promise what the block will be.
+ */
+export const MEDIA_TYPES = ["image/png"] as const;
 
 export interface DetachedImage {
   /** Base64 of the image, exactly as the product sent it. */
   data: string;
   mimeType: string;
-  /** Decoded size, so the caller can be told what it was handed. */
+  /** Decoded size as sent, before any compression. */
   bytes: number;
+  /** Where in the body it sat, so a note can be put there once the real size is known. */
+  keys: string[];
 }
 
-/** Refuse an index whose `media` could not be acted on, at load rather than at the call. */
-export function checkMedia(product: string, capabilities: Capability[]): void {
-  for (const capability of capabilities) {
-    const media = capability.media;
-    if (!media) continue;
-    if (!RENDERABLE.has(media.mime))
-      throw new Error(
-        `${product}.${capability.name}: media.mime '${media.mime}' is not an image type a ` +
-          `client renders (${[...RENDERABLE].join(", ")})`,
-      );
-    if (!media.json_path.startsWith("/"))
-      throw new Error(
-        `${product}.${capability.name}: media.json_path '${media.json_path}' must be a ` +
-          "JSON pointer, starting with '/'",
-      );
-  }
-}
-
-/**
- * The body with the image replaced by a note, and the image itself — or the body as it
- * was, when there is nothing at the path to detach.
- */
+/** The image at the capability's `media.json_path`, or nothing when the body has none there. */
 export function detachImage(
   capability: Capability,
   body: unknown,
-): { body: unknown; image?: DetachedImage } {
+): DetachedImage | undefined {
   const media = capability.media;
-  if (!media) return { body };
+  if (!media) return undefined;
   const keys = media.json_path.split("/").slice(1).map(unescapePointer);
-  if (!keys.length) return { body };
+  if (!keys.length) return undefined;
 
   const parent = keys
     .slice(0, -1)
@@ -68,19 +48,37 @@ export function detachImage(
       (node, key) => (isRecord(node) ? node[key] : undefined),
       body,
     );
-  const last = keys[keys.length - 1];
-  if (!isRecord(parent)) return { body };
-  const value = parent[last];
-  if (typeof value !== "string" || !value) return { body };
-
-  const bytes = decodedLength(value);
-  const image = { data: value, mimeType: media.mime, bytes };
-  const replaced = setAt(
-    body,
+  if (!isRecord(parent)) return undefined;
+  const value = parent[keys[keys.length - 1]];
+  if (typeof value !== "string" || !value) return undefined;
+  return {
+    data: value,
+    mimeType: media.mime,
+    bytes: decodedLength(value),
     keys,
-    `<${media.mime}, ${describeSize(bytes)}, attached to this result as an image>`,
+  };
+}
+
+/**
+ * The body with a note where the image was, naming what is attached: the type and the
+ * size of the block the client receives, which after compression is not the size sent.
+ */
+export function noteImage(
+  body: unknown,
+  image: DetachedImage,
+  attachedBytes: number,
+): unknown {
+  return setAt(
+    body,
+    image.keys,
+    `<${image.mimeType}, ${describeSize(attachedBytes)}, attached to this result as an image>`,
   );
-  return { body: replaced, image };
+}
+
+/** Decoded byte count of a base64 string, without decoding it. */
+export function decodedLength(base64: string): number {
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.floor((base64.length * 3) / 4) - padding;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -100,12 +98,6 @@ function setAt(body: unknown, keys: string[], leaf: unknown): unknown {
     ...body,
     [head]: rest.length ? setAt(body[head], rest, leaf) : leaf,
   };
-}
-
-/** Decoded byte count of a base64 string, without decoding it. */
-function decodedLength(base64: string): number {
-  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
-  return Math.floor((base64.length * 3) / 4) - padding;
 }
 
 function describeSize(bytes: number): string {

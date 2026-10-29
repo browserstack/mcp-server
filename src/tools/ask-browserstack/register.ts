@@ -49,6 +49,7 @@ import {
   isEnabled,
 } from "./config.js";
 import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
+import { toAudienceResult } from "./result-audience.js";
 import { Credentials, agentHeaders } from "./egress.js";
 import {
   EVENT_PERMISSION,
@@ -62,6 +63,12 @@ import {
 } from "./stream.js";
 import type { AgentStreamTransport, DeferredTransport } from "./stream.js";
 import {
+  MAX_FILES,
+  RemoteUpload,
+  prepareRemoteUploads,
+  uploadFiles,
+} from "./uploads.js";
+import {
   decisionUnknown,
   incompleteResume,
   missingQuery,
@@ -70,6 +77,15 @@ import {
   runDeferred,
   runResumed,
 } from "./deferred.js";
+import {
+  GetTransport,
+  RUN_QUESTION_PREFIX,
+  answerUrl,
+  conversationResult,
+  conversationUrl,
+  fetchGetTransport,
+  withConversation,
+} from "./workflows.js";
 import {
   buildResult,
   decide,
@@ -113,6 +129,10 @@ export interface AskDeps {
   streamTransport?: AgentStreamTransport;
   /** The deferred START (one request, one JSON response). Substituted in tests. */
   deferredTransport?: DeferredTransport;
+  /** Reads where a conversation stands. Substituted in tests. */
+  getTransport?: GetTransport;
+  /** The HTTP client attachments are uploaded with. Substituted in tests. */
+  uploadFetch?: typeof fetch;
 }
 
 /**
@@ -133,19 +153,31 @@ const DESCRIPTION =
   // tool that is not enabled for the account cannot do the job at all — so "there is a
   // per-account gate, fall back to the individual tools" is the most useful thing to say
   // first. Parenthesised so it reads as a status note, not as the tool's purpose.
-  "(Alpha, limited availability. Enabled per account and per product; if it is not enabled " +
-  "the call returns an entitlement error, nothing runs, and you should complete the task " +
-  "with the individual tools instead. To request access, the user should contact their " +
-  "BrowserStack account owner.) " +
+  "(Alpha, limited availability. Enabled per account and product; if not, the call returns " +
+  "an entitlement error, nothing runs, and you complete the task with the individual tools " +
+  "instead. Access: the user's BrowserStack account owner.) " +
   "Use this when no other BrowserStack tool here fits the task, or when the ones you tried " +
   "did not get you there. Prefer a specific tool whenever one fits: it is faster and more " +
-  "predictable than handing the job to an agent. " +
-  "Otherwise, describe what you want in plain language and BrowserStack's agent decides " +
-  "which calls to make, then returns its answer plus the steps it took. Anything that would " +
-  "change data pauses and asks you to confirm it first; deletes are refused outright. " +
-  "Put that confirmation to the user and answer with what THEY say — never decide on " +
-  "their behalf. If it cannot be put to anyone, the run is read-only and everything it " +
-  "wanted to change comes back in `needs_approval` instead. One task per call.";
+  "predictable. " +
+  // The one exception the registry can name. Generating test cases from a PRD LOOKS like a
+  // fit for createTestCase, so without this the fallback framing above wins and the
+  // client writes the cases itself, skipping the agent that owns the task.
+  "Except: a task handed over as `agent_match` or `use_agent` (e.g. cases from a " +
+  "requirement) comes here in the user's words. " +
+  "Otherwise, describe what you want in plain language; BrowserStack's agent picks the " +
+  "calls and returns its answer plus the steps it took. Anything that would change data " +
+  "pauses and asks you to confirm it first; deletes are refused outright. Put that " +
+  "confirmation to the user and answer with what THEY say — never decide for them. If " +
+  "no one can be asked, the run is read-only and what it wanted to change comes back in " +
+  "`needs_approval`. One task per call.";
+
+const FILES_NEED_SIZES =
+  "This BrowserStack MCP server cannot read your files, so each one is sent from your " +
+  "machine: pass `files` as { name: its path, bytes: its exact size } (for example from " +
+  "`wc -c`), and run the commands the result returns.";
+const FILES_NEED_RELAY =
+  "Attaching files needs a client that can show BrowserStack's confirmations, and this one " +
+  "cannot. Paste the requirement's text instead.";
 
 /**
  * `isError` marks a call that FAILED, not one that was refused.
@@ -155,13 +187,78 @@ const DESCRIPTION =
  * — worse — invites it to retry, which is exactly the "retry forever" loop the distinct
  * `permission_relay` reasons exist to prevent. `ok` still means `status === "ok"`.
  */
-function toResult(payload: AskResult): CallToolResult {
-  const failed =
-    payload.status === "error" || payload.status === "rate_limited";
+/**
+ * Hosted: the files are reserved, not sent. Nothing ran; the caller runs each command on
+ * the user's machine, then sends the same task again with the ids.
+ */
+function needsUploadResult(
+  uploads: RemoteUpload[],
+  product: string,
+  query: string,
+  conversationId?: string,
+): AskResult {
   return {
-    content: [{ type: "text", text: JSON.stringify(payload) }],
-    ...(failed ? { isError: true } : {}),
+    ok: false,
+    status: "needs_upload",
+    answer: null,
+    approvals: [],
+    approvals_source: "mcp",
+    elicitations: [],
+    needs_approval: [],
+    applied_before_stop: null,
+    permission_relay: { used: false, reason: "", detail: "" },
+    atlas_response: null,
+    uploads,
+    next_step: {
+      instruction:
+        "Nothing has run yet. Run each `command` in the user's terminal, from the folder " +
+        "the file path is relative to (on Windows, in PowerShell, use `curl.exe`). Each " +
+        "must succeed; " +
+        "the uploads expire in 15 minutes. Then call askBrowserStackAI again with these " +
+        "params.",
+      call: "askBrowserStackAI",
+      params: {
+        product,
+        query,
+        attachment_ids: uploads.map((u) => u.attachment_id),
+        ...(conversationId ? { conversation_id: conversationId } : {}),
+      },
+    },
   };
+}
+
+/**
+ * A rate-limited answer to an approval or questions that never reached the agent leaves
+ * the run waiting on it. Keep the handles and say how to send it again; without them the
+ * client has nothing to retry with. A 429 can also carry a run that consumed the answer
+ * and hit the limit later: that one already has a trail, and a resend would contradict it.
+ */
+function keepPendingAnswer(
+  result: AskResult,
+  params: Record<string, unknown>,
+): AskResult {
+  if (result.status !== "rate_limited") return result;
+  // Not `approvals`: that holds the decision recorded here, sent or not.
+  if (result.applied_before_stop || result.answer) return result;
+  const out: AskResult & Record<string, unknown> = {
+    ...result,
+    conversation_id: String(params.run_id),
+    run_id: String(params.run_id),
+    perm_id: String(params.perm_id),
+    next_step: {
+      instruction:
+        "The answer was not delivered because of a rate limit; nothing changed and " +
+        "the task is still waiting on it. Wait about a minute, then call " +
+        "askBrowserStackAI again with exactly these params. Do not ask the user again.",
+      call: "askBrowserStackAI",
+      params,
+    },
+  };
+  return out;
+}
+
+function toResult(payload: AskResult): CallToolResult {
+  return toAudienceResult(payload);
 }
 
 function isTimeout(error: unknown): boolean {
@@ -339,6 +436,7 @@ async function runStreamed(
         decision: decision.decision,
         reason: decision.reason || "",
         product,
+        contract: RELAY_CONTRACT,
       });
     } catch {
       // This request can carry the continuation, so a lost reply is NOT "nothing
@@ -486,38 +584,16 @@ async function runStreamed(
 }
 
 export function relayMode(server: McpServer): RelayMode {
-  // An explicit transport wins over whatever the deployment implies. `REMOTE_MCP`
-  // cannot select `deferred` from a local stdio install — that flag makes this
-  // entrypoint exit, because the hosted deployment runs remote-mcp-server instead — so
-  // without this there is no way to exercise the two-call flow anywhere it can be
-  // watched. "elicit" forces the other direction for the same reason.
-  const forced = appConfig.ASK_BROWSERSTACK_RELAY_TRANSPORT;
-  if (forced === "deferred") return "deferred";
-  if (forced !== "elicit" && appConfig.REMOTE_MCP) {
-    // DEFERRED, unconditionally, and not because elicitation would be worse here — it
-    // would be better. It is what makes this process stateful: a suspended
-    // `elicitation/create` pins an McpServer in one pod's heap until the answer
-    // arrives, so the hosted deployment would have to keep sessions, pin requests to a
-    // pod and cap how many can be alive. Deferred removes the suspension, and with it
-    // the reason any of that exists.
-    //
-    // THERE IS NO OPT-IN ANY MORE. `ASK_BROWSERSTACK_ALLOW_REMOTE_RELAY` gated this
-    // while relaying meant elicitation — it was a guard against switching on the
-    // stateful thing, and that thing is gone. Two better switches remain: this tool's
-    // own `ASK_BROWSERSTACK_DISABLED`, which is read per call and so does not need a
-    // pod roll, and Atlas's `delegation.permission_relay`, which turns the relay off
-    // for every client at once from a config change.
-    return "deferred";
+  // THE TWO-CALL APPROVAL IS THE DEFAULT, on every deployment: `needs_approval` comes
+  // back to the model, which asks the user and calls again with their decision — the
+  // same shape `invokeCapability` uses, and one that works on every client. Elicitation
+  // is kept only behind an explicit `ASK_BROWSERSTACK_RELAY_TRANSPORT=elicit`.
+  if (appConfig.ASK_BROWSERSTACK_RELAY_TRANSPORT === "elicit") {
+    return server.server.getClientCapabilities()?.elicitation
+      ? "offered"
+      : "no_human";
   }
-  // stdio keeps elicitation, deliberately: one process, nothing to pin, and the client
-  // renders the prompt so the model cannot fabricate the answer. Nothing is gained by
-  // making a local install pay the two-call cost.
-  //
-  // The real gate here: can THIS client be asked? A client that never declared
-  // `elicitation` gets a read-only run whatever the deployment.
-  return server.server.getClientCapabilities()?.elicitation
-    ? "offered"
-    : "no_human";
+  return "deferred";
 }
 
 export function addAskBrowserStackAITool(
@@ -533,6 +609,7 @@ export function addAskBrowserStackAITool(
   // Resolved here with the others: one place decides which transports this
   // registration uses, so a test substituting one is not surprised by another.
   const deferredTransport = deps.deferredTransport || fetchDeferredTransport();
+  const getTransport = deps.getTransport || fetchGetTransport();
   const tools: Record<string, RegisteredTool> = {};
 
   /** Instrumentation in the house style, and never fatal to the call it wraps. */
@@ -574,15 +651,38 @@ export function addAskBrowserStackAITool(
       run_id: z
         .string()
         .optional()
-        .describe("`run_id` from a needs_approval result."),
+        .describe("Internal handle from needs_approval; never show it."),
       perm_id: z
         .string()
         .optional()
-        .describe("`perm_id` from that same result."),
+        .describe("Internal handle from that result; never show it."),
       decision: z
         .enum(["allow", "deny"])
         .optional()
         .describe("The user's answer. Never assume allow — ask them."),
+      conversation_id: z
+        .string()
+        .optional()
+        .describe("Internal handle from a prior result; never show it."),
+      answers: z
+        .record(z.string(), z.union([z.string(), z.array(z.string())]))
+        .optional()
+        .describe("Answers to `questions`, by question id."),
+      files: z
+        .array(
+          z.union([
+            z.string(),
+            z.object({ name: z.string(), bytes: z.number().int().positive() }),
+          ]),
+        )
+        .max(MAX_FILES)
+        .optional()
+        .describe("Files to attach. Hosted: {name, bytes} (wc -c)."),
+      attachment_ids: z
+        .array(z.string().regex(/^att_[0-9a-f]{32}$/))
+        .max(MAX_FILES)
+        .optional()
+        .describe("From needs_upload, once its commands ran."),
     },
     {
       // It can write now, which is the whole point of the relay. Destructive operations
@@ -598,7 +698,17 @@ export function addAskBrowserStackAITool(
       title: "Ask BrowserStack AI (Alpha)",
     },
     async (
-      { product, query, run_id, perm_id, decision },
+      {
+        product,
+        query,
+        run_id,
+        perm_id,
+        decision,
+        conversation_id,
+        answers,
+        files,
+        attachment_ids,
+      },
       extra,
     ): Promise<CallToolResult> => {
       track("askBrowserStackAI");
@@ -607,12 +717,86 @@ export function addAskBrowserStackAITool(
       // would have run in.
       const mode = relayMode(server);
 
+      // Answering an agent's questions without answers would post an empty reply, which
+      // the agent reads as the user's. Refused before anything is sent.
+      if (
+        run_id &&
+        perm_id?.startsWith(RUN_QUESTION_PREFIX) &&
+        answers === undefined
+      ) {
+        return toResult(
+          errorResult(
+            "Pass the user's answers to `questions` as `answers`, by question id. Nothing was sent.",
+            approvals,
+          ),
+        );
+      }
+
       try {
         const url = deps.agentUrl();
         // Signed in BEFORE the listener is opened and before the run starts. Minting
         // lazily mid-call would put a token round-trip inside the window where a human is
         // being prompted, and a mint that failed there would strand an open port.
         const headers = agentHeaders(await deps.mintToken());
+
+        // Upload progress, for a client that shows it. An agent run is never waited on
+        // here: its state is returned and the caller checks back (`next_step`).
+        const progressToken = extra?._meta?.progressToken;
+        let progressCount = 0;
+        const notify = (message: string): void => {
+          if (progressToken === undefined) return;
+          progressCount += 1;
+          void extra
+            ?.sendNotification({
+              method: "notifications/progress",
+              params: { progressToken, progress: progressCount, message },
+            })
+            .catch(() => undefined);
+        };
+        let attached: string[] = [];
+        const finish = (result: AskResult): CallToolResult =>
+          toResult(
+            withConversation(
+              attached.length ? { ...result, attachments: attached } : result,
+              result.atlas_response,
+              product,
+            ),
+          );
+
+        // ANSWERING an agent's questions: `run_id` is the conversation.
+        if (run_id && perm_id && perm_id.startsWith(RUN_QUESTION_PREFIX)) {
+          const reply = await deferredTransport(
+            answerUrl(url, run_id),
+            headers,
+            {
+              ask_id: perm_id,
+              product,
+              values: answers,
+            } as never,
+          );
+          return finish(
+            keepPendingAnswer(
+              conversationResult(reply, run_id, mode, product),
+              {
+                product,
+                run_id,
+                perm_id,
+                answers,
+              },
+            ),
+          );
+        }
+
+        // CHECKING on a conversation's agent.
+        if (conversation_id && !run_id && !(query && query.trim())) {
+          const now = await getTransport(
+            conversationUrl(url, conversation_id, product),
+            headers,
+          );
+          return toResult(
+            conversationResult(now, conversation_id, mode, product),
+          );
+        }
 
         // RESUMING a parked run: no new run, no task — just the decision and the
         // remainder. FIRST, because the arguments are mutually exclusive with starting
@@ -624,18 +808,21 @@ export function addAskBrowserStackAITool(
           }
           // A `query` sent here is ignored rather than rejected: the run's task is in
           // Atlas's checkpoint, so a model that resent it is redundant, not wrong.
-          return toResult(
-            await runResumed(
-              url,
-              headers,
-              run_id,
-              perm_id,
-              decision,
-              // The SAME transport the start uses: since the converged gate both calls
-              // POST and read back either a parked run or a finished one.
-              deferredTransport,
-              mode,
-              product,
+          return finish(
+            keepPendingAnswer(
+              await runResumed(
+                url,
+                headers,
+                run_id,
+                perm_id,
+                decision,
+                // The SAME transport the start uses: since the converged gate both
+                // calls POST and read back either a parked run or a finished one.
+                deferredTransport,
+                mode,
+                product,
+              ),
+              { product, run_id, perm_id, decision },
             ),
           );
         }
@@ -647,6 +834,53 @@ export function addAskBrowserStackAITool(
           return toResult(missingQuery());
         }
         const body: AgentRequest = { task: query, product };
+        if (conversation_id) body.conversation_id = conversation_id;
+
+        const wantsFiles = Boolean(files?.length || attachment_ids?.length);
+        // Files belong to a conversation, which needs the approval relay.
+        if (wantsFiles && mode !== "offered" && mode !== "deferred") {
+          return toResult(errorResult(FILES_NEED_RELAY, approvals));
+        }
+        if (files && files.length) {
+          if (appConfig.REMOTE_MCP) {
+            // The hosted server cannot read the user's disk: reserve each upload and
+            // hand back the command that sends it, then the caller comes back.
+            const sized = files.filter(
+              (f): f is { name: string; bytes: number } =>
+                typeof f !== "string",
+            );
+            if (sized.length !== files.length) {
+              return toResult(errorResult(FILES_NEED_SIZES, approvals));
+            }
+            const uploads = await prepareRemoteUploads(sized, {
+              agentUrl: url,
+              headers,
+              product,
+              fetchImpl: deps.uploadFetch,
+            });
+            return toResult(
+              needsUploadResult(uploads, product, query, conversation_id),
+            );
+          }
+          const uploaded = await uploadFiles(
+            files.map((f) => (typeof f === "string" ? f : f.name)),
+            {
+              agentUrl: url,
+              headers,
+              product,
+              baseDir: appConfig.UPLOAD_BASE_DIR,
+              progress: notify,
+              fetchImpl: deps.uploadFetch,
+            },
+          );
+          body.attachment_ids = uploaded.map((f) => f.id);
+          attached = uploaded.map((f) => f.name);
+        }
+        if (attachment_ids && attachment_ids.length) {
+          body.attachment_ids = [
+            ...new Set([...(body.attachment_ids || []), ...attachment_ids]),
+          ];
+        }
 
         // Attribution, and now belt-and-braces rather than the source of truth: the minted
         // JWT is user-attested, so Atlas sets `principal_verified=True` and takes the acting
@@ -661,7 +895,7 @@ export function addAskBrowserStackAITool(
         // while a human decides — see `deferred.ts` for why that matters here and why
         // stdio does not use it.
         if (mode === "deferred") {
-          return toResult(
+          return finish(
             await runDeferred(
               url,
               headers,
@@ -691,7 +925,7 @@ export function addAskBrowserStackAITool(
         // `product` reaches the result so an entitlement refusal can name it: the flags
         // are per product, and a bare "not enabled" sends the user to their admin
         // asking about the wrong thing.
-        return toResult(
+        return finish(
           await runStreamed(
             server,
             streamTransport,

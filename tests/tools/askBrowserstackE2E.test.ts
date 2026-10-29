@@ -53,7 +53,6 @@ vi.mock("../../src/lib/apiClient.js", () => ({
   },
 }));
 
-
 const CONFIG = {
   "browserstack-username": "ing_Xx",
   "browserstack-access-key": "SECRET",
@@ -125,7 +124,9 @@ function atlas(options: {
   const jsonResponse = (status: number, payload: unknown) => ({
     ok: status >= 200 && status < 300,
     status,
-    headers: { get: (k: string) => (k === "content-type" ? "application/json" : "") },
+    headers: {
+      get: (k: string) => (k === "content-type" ? "application/json" : ""),
+    },
     json: async () => payload,
   });
 
@@ -154,13 +155,15 @@ function atlas(options: {
         return jsonResponse(status, { detail: "no such run" });
       }
       const remaining = (options.asks || []).slice(decisions.length);
-      return jsonResponse(200, remaining.length ? parkPayload(remaining[0]) : payloadFor());
+      return jsonResponse(
+        200,
+        remaining.length ? parkPayload(remaining[0]) : payloadFor(),
+      );
     }
 
     const body = JSON.parse(init.body);
     calls.push({ url: String(url), headers: init.headers, body });
     if (options.throws) throw new Error("connection reset");
-
 
     // No relay asked for, or an Atlas that does not know A1: a plain JSON body. The
     // tool's stream transport degrades to a single `result`, which is exactly how it
@@ -177,7 +180,11 @@ function atlas(options: {
           // ONE ask, then the run parks and the stream ends. A second ask cannot exist
           // yet — the gate is serial — and it arrives on the decision's reply instead.
           controller.enqueue(
-            frame("permission", { ...first, product: body.product, mode: "ask-always" }),
+            frame("permission", {
+              ...first,
+              product: body.product,
+              mode: "ask-always",
+            }),
           );
           controller.enqueue(frame("result", parkPayload(first)));
         } else {
@@ -229,7 +236,9 @@ function fakeClient(
   capabilities: Record<string, unknown> | undefined,
   answers: any[] = [],
 ) {
-  vi.spyOn(mcp.server, "getClientCapabilities").mockReturnValue(capabilities as never);
+  vi.spyOn(mcp.server, "getClientCapabilities").mockReturnValue(
+    capabilities as never,
+  );
   const elicit = vi.spyOn(mcp.server, "elicitInput");
   for (const answer of answers) {
     if (answer instanceof Error) elicit.mockRejectedValueOnce(answer);
@@ -238,9 +247,19 @@ function fakeClient(
   return elicit;
 }
 
-async function call(tools: Record<string, any>, args = { product: "tm", query: "make a folder" }) {
+async function call(
+  tools: Record<string, any>,
+  args = { product: "tm", query: "make a folder" },
+) {
   const result = await tools.askBrowserStackAI.handler(args, {} as any);
-  return { result, payload: JSON.parse(result.content[0].text) };
+  // The user-facing block and the assistant-only block, merged back into one view.
+  const internal = result.content[1]
+    ? JSON.parse(result.content[1].text.split("\n").slice(1).join("\n"))
+    : {};
+  return {
+    result,
+    payload: { ...JSON.parse(result.content[0].text), ...internal },
+  };
 }
 
 describe("askBrowserStackAI, end to end through the server factory", () => {
@@ -250,10 +269,14 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
     resetTokenCache();
     delete process.env.ASK_BROWSERSTACK_DISABLED;
     delete process.env.ASK_BROWSERSTACK_ENV;
+    // These suites pin the elicitation relay, which is opt-in; the default two-call
+    // flow is covered by the REMOTE_MCP suite below.
+    process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "elicit";
     vi.resetModules();
   });
 
   afterEach(() => {
+    delete process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT;
     delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
     delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
     resetTokenCache();
@@ -264,11 +287,28 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
   it("registers alongside the existing surface, and honours its kill switch", async () => {
     const server = await buildServer();
     expect(server.getTools().askBrowserStackAI).toBeDefined();
-    expect(server.getTools().listTestCases ?? server.getTools().createTestCase).toBeDefined();
+    expect(
+      server.getTools().listTestCases ?? server.getTools().createTestCase,
+    ).toBeDefined();
 
     process.env.ASK_BROWSERSTACK_DISABLED = "true";
     vi.resetModules();
     expect((await buildServer()).getTools().askBrowserStackAI).toBeUndefined();
+  });
+
+  it("refuses to answer an agent's questions without answers, before sending anything", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const server = await buildServer();
+    const { result, payload } = await call(server.getTools(), {
+      product: "tm",
+      run_id: "run-" + "a".repeat(32),
+      perm_id: "wfq-" + "c".repeat(32),
+    } as any);
+
+    expect(result.isError).toBe(true);
+    expect(payload.error).toMatch(/Pass the user's answers/);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   describe("the client CAN elicit", () => {
@@ -277,16 +317,23 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // words before any call happens — so the fallback framing has to be in it, and near
       // the front where it is read.
       const server = await buildServer();
-      const description = (server.getTools().askBrowserStackAI as any).description as string;
+      const description = (server.getTools().askBrowserStackAI as any)
+        .description as string;
 
       // The alpha/entitlement note leads now — a tool that may not be enabled for the
       // account is worth saying before what it does — but the fallback framing has to
       // survive, because that is what stops the model reaching for this over a specific
       // tool. Both are asserted, and the alpha note is asserted to come FIRST.
       expect(description).toMatch(/^\(Alpha, limited availability\./);
-      expect(description).toMatch(/complete the task with the individual tools instead/);
-      expect(description).toMatch(/Use this when no other BrowserStack tool here fits/);
-      expect(description).toMatch(/or when the ones you tried did not get you there/);
+      expect(description).toMatch(
+        /complete the task with the individual tools instead/,
+      );
+      expect(description).toMatch(
+        /Use this when no other BrowserStack tool here fits/,
+      );
+      expect(description).toMatch(
+        /or when the ones you tried did not get you there/,
+      );
       expect(description).toMatch(/Prefer a specific tool whenever one fits/);
       // ...and it still says what it does and what consent looks like.
       expect(description).toMatch(/plain language/);
@@ -301,7 +348,8 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // send the model here with product "a11y". Drop a11y from the enum without moving those
       // and they become instructions to make a call the schema rejects.
       const server = await buildServer();
-      const shape = (server.getTools().askBrowserStackAI as any).inputSchema?.shape;
+      const shape = (server.getTools().askBrowserStackAI as any).inputSchema
+        ?.shape;
       const values = shape?.product?._def?.values ?? shape?.product?.options;
 
       expect(values).toEqual(["tm", "a11y", "tra"]);
@@ -325,12 +373,20 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         { action: "accept", content: { confirm: true } },
       ]);
       const stub = atlas({
-        asks: [{ perm_id: PERM_A, description: "Create folder \"Regression\"." }],
+        asks: [{ perm_id: PERM_A, description: 'Create folder "Regression".' }],
         payload: () => ({
-          ok: true, status: "ok", answer: "Created folder 12.", steps: [],
+          ok: true,
+          status: "ok",
+          answer: "Created folder 12.",
+          steps: [],
           // Atlas's authoritative trail, with the `applied` bit only it can fill in.
           approvals: [
-            { description: "Create folder \"Regression\".", decision: "allow", reason: "", applied: true },
+            {
+              description: 'Create folder "Regression".',
+              decision: "allow",
+              reason: "",
+              applied: true,
+            },
           ],
           applied_before_stop: false,
           permission_relay: { used: true, reason: "" },
@@ -360,21 +416,26 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // `contract` rides along: it is what lets Atlas tell this client from every
       // published build that cannot complete an approval, and its absence makes Atlas
       // refuse to park rather than hand back an ask nobody can answer.
-      expect(stub.calls[0].body.permission_relay)
-        .toEqual({ mode: "stream", contract: 2 });
+      expect(stub.calls[0].body.permission_relay).toEqual({
+        mode: "stream",
+        contract: 3,
+      });
 
       // 2. the prompt: framed with the product, Atlas's description verbatim, boolean confirm
       expect(elicit).toHaveBeenCalledTimes(1);
       const request = elicit.mock.calls[0][0] as any;
       expect(request.message).toBe(
         "BrowserStack AI (Test Management) needs your approval to continue:\n\n" +
-          "Create folder \"Regression\".",
+          'Create folder "Regression".',
       );
       // NOTHING IS REQUESTED. A `confirm` boolean here made the approve button unable to
       // approve — the client rendered a form field and submitted its unset value, so an
       // approval came back as a refusal. The action is the whole answer now, and this
       // assertion is what stops the field creeping back.
-      expect(request.requestedSchema).toEqual({ type: "object", properties: {} });
+      expect(request.requestedSchema).toEqual({
+        type: "object",
+        properties: {},
+      });
       expect(request.requestedSchema.required).toBeUndefined();
       expect(Object.keys(request.requestedSchema.properties)).toEqual([]);
       // The inner rung of the timeout ladder, shorter than Atlas's 300s gate.
@@ -385,22 +446,39 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         // 200, and the body carries `product`: the decision request is what resumes the
         // run, and the run comes back on a fresh Agent that must be scoped before it
         // can be built.
-        .toEqual({ status: 200, body: {
-          perm_id: PERM_A, decision: "allow", reason: "", product: "tm" } });
+        .toEqual({
+          status: 200,
+          body: {
+            perm_id: PERM_A,
+            decision: "allow",
+            reason: "",
+            product: "tm",
+            contract: 3,
+          },
+        });
 
       // 4. the result
       expect(payload.ok).toBe(true);
       expect(payload.answer).toBe("Created folder 12.");
       // Atlas's trail wins, carrying the applied bit; ours is kept beside it.
       expect(payload.approvals_source).toBe("atlas");
-      expect(payload.approvals).toEqual([{
-        description: "Create folder \"Regression\".", decision: "allow", reason: "",
-        applied: true, outcome: "approved, and the change went through",
-      }]);
-      expect(payload.elicitations).toEqual([{
-        description: "Create folder \"Regression\".", decision: "allow", reason: "",
-        outcome: "approved; whether the change went through was not reported",
-      }]);
+      expect(payload.approvals).toEqual([
+        {
+          description: 'Create folder "Regression".',
+          decision: "allow",
+          reason: "",
+          applied: true,
+          outcome: "approved, and the change went through",
+        },
+      ]);
+      expect(payload.elicitations).toEqual([
+        {
+          description: 'Create folder "Regression".',
+          decision: "allow",
+          reason: "",
+          outcome: "approved; whether the change went through was not reported",
+        },
+      ]);
       expect(payload.applied_before_stop).toBe(false);
       expect(payload.permission_relay.used).toBe(true);
     });
@@ -414,13 +492,25 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         { action: "accept" },
       ]);
       const stub = atlas({
-        asks: [{ perm_id: PERM_A, description: 'Creating the root folder "askrelay-smoke-1".' }],
-        payload: () => ({
-          ok: true, status: "ok", answer: "Created it.", steps: [],
-          approvals: [{
+        asks: [
+          {
+            perm_id: PERM_A,
             description: 'Creating the root folder "askrelay-smoke-1".',
-            decision: "allow", reason: "", applied: true,
-          }],
+          },
+        ],
+        payload: () => ({
+          ok: true,
+          status: "ok",
+          answer: "Created it.",
+          steps: [],
+          approvals: [
+            {
+              description: 'Creating the root folder "askrelay-smoke-1".',
+              decision: "allow",
+              reason: "",
+              applied: true,
+            },
+          ],
           applied_before_stop: false,
           permission_relay: { used: true, reason: "" },
         }),
@@ -430,12 +520,25 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       expect(elicit).toHaveBeenCalledTimes(1);
       // On the wire to Atlas: an allow, not a denial.
-      expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "allow", reason: "", product: "tm" });
+      expect(stub.decisions[0].body).toEqual({
+        perm_id: PERM_A,
+        decision: "allow",
+        reason: "",
+        product: "tm",
+        contract: 3,
+      });
       // And the two trails agree that it was approved.
-      expect(payload.approvals[0]).toMatchObject({ decision: "allow", applied: true });
-      expect(payload.elicitations[0]).toMatchObject({ decision: "allow", reason: "" });
-      expect(payload.approvals[0].outcome).toBe("approved, and the change went through");
+      expect(payload.approvals[0]).toMatchObject({
+        decision: "allow",
+        applied: true,
+      });
+      expect(payload.elicitations[0]).toMatchObject({
+        decision: "allow",
+        reason: "",
+      });
+      expect(payload.approvals[0].outcome).toBe(
+        "approved, and the change went through",
+      );
       expect(payload.status).toBe("ok");
     });
 
@@ -443,14 +546,28 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // The module's default export is a Proxy, so it is swapped wholesale rather than spied.
       const { setLogger } = await import("../../src/logger.js");
       const lines: string[] = [];
-      const capture = (...args: unknown[]) => lines.push(args.map(String).join(" "));
+      const capture = (...args: unknown[]) =>
+        lines.push(args.map(String).join(" "));
       const previous = (await import("pino")).pino({ level: "silent" });
-      setLogger({ info: capture, warn: capture, error: capture, debug: capture, flush: () => {} });
+      setLogger({
+        info: capture,
+        warn: capture,
+        error: capture,
+        debug: capture,
+        flush: () => {},
+      });
 
       const server = await buildServer();
-      fakeClient(server.getInstance(), { elicitation: {} }, [{ action: "accept" }]);
+      fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "accept" },
+      ]);
       atlas({
-        asks: [{ perm_id: PERM_A, description: 'Creating the root folder "askrelay-smoke-1".' }],
+        asks: [
+          {
+            perm_id: PERM_A,
+            description: 'Creating the root folder "askrelay-smoke-1".',
+          },
+        ],
       });
 
       try {
@@ -459,8 +576,10 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         setLogger(previous);
       }
 
-      const answered = lines.filter((line) => line.includes("elicitation answered"));
-      expect(answered).toHaveLength(1);   // once per ask, never per retry
+      const answered = lines.filter((line) =>
+        line.includes("elicitation answered"),
+      );
+      expect(answered).toHaveLength(1); // once per ask, never per retry
       expect(answered[0]).toContain("action=accept");
       expect(answered[0]).toContain("content=absent");
       // The whole point: readable next time, and safe to leave switched on.
@@ -478,9 +597,16 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const stub = atlas({
         asks: [{ perm_id: PERM_A, description: "Delete the sprint." }],
         payload: () => ({
-          status: "blocked", answer: "", needs_approval: ["Delete the sprint."],
+          status: "blocked",
+          answer: "",
+          needs_approval: ["Delete the sprint."],
           approvals: [
-            { description: "Delete the sprint.", decision: "deny", reason: "declined", applied: false },
+            {
+              description: "Delete the sprint.",
+              decision: "deny",
+              reason: "declined",
+              applied: false,
+            },
           ],
           applied_before_stop: false,
         }),
@@ -488,8 +614,13 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
 
-      expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "declined", product: "tm" });
+      expect(stub.decisions[0].body).toEqual({
+        perm_id: PERM_A,
+        decision: "deny",
+        reason: "declined",
+        product: "tm",
+        contract: 3,
+      });
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(payload.status).toBe("blocked");
       expect(payload.approvals[0].reason).toBe("declined");
@@ -500,26 +631,44 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
     it("denies a decline", async () => {
       const server = await buildServer();
-      fakeClient(server.getInstance(), { elicitation: {} }, [{ action: "decline" }]);
-      const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Archive the plan." }] });
+      fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "decline" },
+      ]);
+      const stub = atlas({
+        asks: [{ perm_id: PERM_A, description: "Archive the plan." }],
+      });
 
       const { payload } = await call(server.getTools());
-      expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "declined", product: "tm" });
+      expect(stub.decisions[0].body).toEqual({
+        perm_id: PERM_A,
+        decision: "deny",
+        reason: "declined",
+        product: "tm",
+        contract: 3,
+      });
       expect(payload.approvals[0].decision).toBe("deny");
     });
 
     it("denies a cancel as 'nobody was there', not as a refusal, and does not retry", async () => {
       const server = await buildServer();
-      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [{ action: "cancel" }]);
-      const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Archive the plan." }] });
+      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "cancel" },
+      ]);
+      const stub = atlas({
+        asks: [{ perm_id: PERM_A, description: "Archive the plan." }],
+      });
 
       const { payload } = await call(server.getTools());
 
       // This is the security property: an unattended run cannot self-approve, and a second
       // prompt would only be an attempt to wear a human down.
-      expect(stub.decisions[0].body)
-        .toEqual({ perm_id: PERM_A, decision: "deny", reason: "cancelled", product: "tm" });
+      expect(stub.decisions[0].body).toEqual({
+        perm_id: PERM_A,
+        decision: "deny",
+        reason: "cancelled",
+        product: "tm",
+        contract: 3,
+      });
       expect(elicit).toHaveBeenCalledTimes(1);
       expect(payload.approvals[0].reason).toBe("cancelled");
     });
@@ -529,12 +678,21 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       fakeClient(server.getInstance(), { elicitation: {} }, [
         new McpError(ErrorCode.RequestTimeout, "timed out"),
       ]);
-      const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Archive the plan." }] });
+      const stub = atlas({
+        asks: [{ perm_id: PERM_A, description: "Archive the plan." }],
+      });
 
       const { payload } = await call(server.getTools());
-      expect(stub.decisions[0])
-        .toEqual({ status: 200, body: {
-          perm_id: PERM_A, decision: "deny", reason: "timeout", product: "tm" } });
+      expect(stub.decisions[0]).toEqual({
+        status: 200,
+        body: {
+          perm_id: PERM_A,
+          decision: "deny",
+          reason: "timeout",
+          product: "tm",
+          contract: 3,
+        },
+      });
       expect(payload.approvals[0].reason).toBe("timeout");
     });
 
@@ -558,10 +716,11 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       ]);
       atlas({ asks: [{ perm_id: PERM_A, description: "Archive the plan." }] });
 
-      await server.getTools().askBrowserStackAI.handler(
-        { product: "tm", query: "make a folder" },
-        { requestId: 4242 } as never,
-      );
+      await server
+        .getTools()
+        .askBrowserStackAI.handler({ product: "tm", query: "make a folder" }, {
+          requestId: 4242,
+        } as never);
 
       expect(elicit).toHaveBeenCalledTimes(1);
       const options = elicit.mock.calls[0][1];
@@ -570,8 +729,12 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
     it("fails closed with a non-200 when the relay breaks in an unexpected way", async () => {
       const server = await buildServer();
-      fakeClient(server.getInstance(), { elicitation: {} }, [new Error("client went away")]);
-      const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Archive the plan." }] });
+      fakeClient(server.getInstance(), { elicitation: {} }, [
+        new Error("client went away"),
+      ]);
+      const stub = atlas({
+        asks: [{ perm_id: PERM_A, description: "Archive the plan." }],
+      });
 
       const { payload } = await call(server.getTools());
       // A1 inverts WHERE the break shows up. Under A2 the callback answered 500 and
@@ -580,11 +743,18 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // out its 300s gate. The invariant is the same and it is the one that matters: a
       // broken channel never becomes an approval.
       expect(stub.decisions[0].body).toEqual({
-        perm_id: PERM_A, decision: "deny", reason: "error", product: "tm",
+        perm_id: PERM_A,
+        decision: "deny",
+        reason: "error",
+        product: "tm",
+        contract: 3,
       });
       expect(payload.approvals[0]).toEqual({
-        description: "Archive the plan.", decision: "deny", reason: "error",
-        outcome: "refused: the approval channel broke before any answer arrived",
+        description: "Archive the plan.",
+        decision: "deny",
+        reason: "error",
+        outcome:
+          "refused: the approval channel broke before any answer arrived",
       });
     });
 
@@ -609,7 +779,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
       expect(elicit).toHaveBeenCalledTimes(1);
-      expect(stub.decisions).toHaveLength(1);      // sent once, never re-sent
+      expect(stub.decisions).toHaveLength(1); // sent once, never re-sent
       expect(payload.ok).toBe(false);
       expect(payload.status).not.toBe("ok");
     });
@@ -622,15 +792,26 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       ]);
       atlas({
         asks: [
-          { perm_id: PERM_A, description: "Create folder \"Regression\"." },
+          { perm_id: PERM_A, description: 'Create folder "Regression".' },
           { perm_id: PERM_B, description: "Move 40 test cases into it." },
         ],
         payload: () => ({
-          status: "blocked", answer: "Created the folder; the move was refused.",
+          status: "blocked",
+          answer: "Created the folder; the move was refused.",
           needs_approval: ["Move 40 test cases into it."],
           approvals: [
-            { description: "Create folder \"Regression\".", decision: "allow", reason: "", applied: true },
-            { description: "Move 40 test cases into it.", decision: "deny", reason: "declined", applied: false },
+            {
+              description: 'Create folder "Regression".',
+              decision: "allow",
+              reason: "",
+              applied: true,
+            },
+            {
+              description: "Move 40 test cases into it.",
+              decision: "deny",
+              reason: "declined",
+              applied: false,
+            },
           ],
           // Atlas's own verdict: it stopped on a refusal AND something had already changed.
           applied_before_stop: true,
@@ -642,9 +823,17 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // READ from Atlas, which is the only side that knows the folder creation landed.
       expect(payload.applied_before_stop).toBe(true);
       expect(payload.approvals_source).toBe("atlas");
-      expect(payload.approvals.map((a: any) => a.decision)).toEqual(["allow", "deny"]);
-      expect(payload.approvals.map((a: any) => a.applied)).toEqual([true, false]);
-      expect(payload.approvals[0].outcome).toBe("approved, and the change went through");
+      expect(payload.approvals.map((a: any) => a.decision)).toEqual([
+        "allow",
+        "deny",
+      ]);
+      expect(payload.approvals.map((a: any) => a.applied)).toEqual([
+        true,
+        false,
+      ]);
+      expect(payload.approvals[0].outcome).toBe(
+        "approved, and the change went through",
+      );
       expect(payload.approvals[1].outcome).toBe("refused: a human said no");
       expect(payload.needs_approval).toEqual(["Move 40 test cases into it."]);
     });
@@ -656,22 +845,25 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // ignored it and ran read-only. Nobody was ever asked.
       const stub = atlas({
         payload: () => ({
-          ok: true, status: "blocked", answer: "I could not create the folder.", steps: [],
-          needs_approval: ["Create folder \"Regression\"."],
+          ok: true,
+          status: "blocked",
+          answer: "I could not create the folder.",
+          steps: [],
+          needs_approval: ['Create folder "Regression".'],
           permission_relay: { used: false, reason: "disabled" },
         }),
       });
 
       const { result, payload } = await call(server.getTools());
 
-      expect(stub.calls[0].body.permission_relay).toBeDefined();   // we DID offer it
-      expect(elicit).not.toHaveBeenCalled();                        // Atlas never called back
+      expect(stub.calls[0].body.permission_relay).toBeDefined(); // we DID offer it
+      expect(elicit).not.toHaveBeenCalled(); // Atlas never called back
       expect(payload.permission_relay).toEqual({
         used: false,
         reason: "disabled",
         detail: expect.stringContaining("NOBODY DECLINED THIS"),
       });
-      expect(payload.approvals).toEqual([]);
+      expect(payload.approvals ?? []).toEqual([]);
       // No gate ran, so Atlas omits the field and we must not invent a measured `false`.
       expect(payload.applied_before_stop).toBeNull();
       // A refusal is not a tool failure, and rendering it as one invites the retry loop
@@ -688,27 +880,38 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         asks: [{ perm_id: PERM_A, description: "Create folder." }],
         // Exactly what public() emits when nothing needed approval: the key is absent.
         payload: () => ({
-          ok: true, status: "ok", answer: "Created folder 12.", steps: [],
+          ok: true,
+          status: "ok",
+          answer: "Created folder 12.",
+          steps: [],
           permission_relay: { used: true, reason: "" },
         }),
       });
 
       const { result, payload } = await call(server.getTools());
-      expect(payload.needs_approval).toEqual([]);
+      expect(payload.needs_approval ?? []).toEqual([]);
       expect(payload.status).toBe("ok");
       expect(payload.permission_relay).toEqual({
-        used: true, reason: "", detail: expect.stringContaining("asked before each change"),
+        used: true,
+        reason: "",
+        detail: expect.stringContaining("asked before each change"),
       });
       expect(result.isError).toBeUndefined();
     });
 
     it("marks a genuine failure as an error but a refusal as a result", async () => {
       const server = await buildServer();
-      fakeClient(server.getInstance(), { elicitation: {} }, [{ action: "decline" }]);
+      fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "decline" },
+      ]);
       atlas({
         asks: [{ perm_id: PERM_A, description: "Delete the sprint." }],
         payload: () => ({
-          ok: true, status: "rate_limited", answer: "", error: "too many runs", steps: [],
+          ok: true,
+          status: "rate_limited",
+          answer: "",
+          error: "too many runs",
+          steps: [],
         }),
       });
 
@@ -732,9 +935,16 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const stub = atlas({
         // No asks: Atlas refused the step without ever putting one on the stream.
         payload: () => ({
-          status: "blocked", answer: "", needs_approval: ["Create folder."],
+          status: "blocked",
+          answer: "",
+          needs_approval: ["Create folder."],
           approvals: [
-            { description: "Create folder.", decision: "deny", reason: "error", applied: false },
+            {
+              description: "Create folder.",
+              decision: "deny",
+              reason: "error",
+              applied: false,
+            },
           ],
           applied_before_stop: false,
           permission_relay: { used: true, reason: "" },
@@ -743,13 +953,13 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       const { payload } = await call(server.getTools());
 
-      expect(stub.decisions).toEqual([]);          // we answered nothing
-      expect(elicit).not.toHaveBeenCalled();       // and nobody was prompted
+      expect(stub.decisions).toEqual([]); // we answered nothing
+      expect(elicit).not.toHaveBeenCalled(); // and nobody was prompted
       // Atlas's is authoritative...
       expect(payload.approvals_source).toBe("atlas");
       expect(payload.approvals[0].decision).toBe("deny");
       // ...and ours is empty, which is the ONLY record that no prompt ever appeared.
-      expect(payload.elicitations).toEqual([]);
+      expect(payload.elicitations ?? []).toEqual([]);
       expect(payload.applied_before_stop).toBe(false);
     });
 
@@ -761,8 +971,11 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       atlas({
         asks: [{ perm_id: PERM_A, description: "Create folder." }],
         payload: () => ({
-          status: "ok", answer: "done",
-          approvals: [{ description: "Create folder.", decision: "allow", reason: "" }],
+          status: "ok",
+          answer: "done",
+          approvals: [
+            { description: "Create folder.", decision: "allow", reason: "" },
+          ],
           // and no applied_before_stop either
         }),
       });
@@ -790,13 +1003,22 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         { action: "accept" },
       ]);
       const stub = atlas({
-        asks: [{ perm_id: PERM_A, description: 'Creating the "Regression" folder.' }],
+        asks: [
+          { perm_id: PERM_A, description: 'Creating the "Regression" folder.' },
+        ],
         payload: () => ({
-          ok: false, status: "error", answer: "The folder was not created.", steps: [],
-          approvals: [{
-            description: 'Creating the "Regression" folder.',
-            decision: "allow", reason: "", applied: false,
-          }],
+          ok: false,
+          status: "error",
+          answer: "The folder was not created.",
+          steps: [],
+          approvals: [
+            {
+              description: 'Creating the "Regression" folder.',
+              decision: "allow",
+              reason: "",
+              applied: false,
+            },
+          ],
           applied_before_stop: false,
           permission_relay: { used: true, reason: "" },
         }),
@@ -829,8 +1051,9 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       const elicit = fakeClient(server.getInstance(), { roots: {} }, []);
       const stub = atlas({
         payload: () => ({
-          status: "blocked", answer: "I could not create the folder.",
-          needs_approval: ["Create folder \"Regression\"."],
+          status: "blocked",
+          answer: "I could not create the folder.",
+          needs_approval: ['Create folder "Regression".'],
         }),
       });
 
@@ -838,15 +1061,18 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       // Absence is what selects Atlas's read-only HeadlessGate — not an empty object.
       expect("permission_relay" in stub.calls[0].body).toBe(false);
-      expect(Object.keys(stub.calls[0].body).sort())
-        .toEqual(["product", "task", "user_id"]);
+      expect(Object.keys(stub.calls[0].body).sort()).toEqual([
+        "product",
+        "task",
+        "user_id",
+      ]);
       expect(elicit).not.toHaveBeenCalled();
 
       expect(payload.status).toBe("blocked");
-      expect(payload.approvals).toEqual([]);
+      expect(payload.approvals ?? []).toEqual([]);
       expect(payload.approvals_source).toBe("mcp");
       expect(payload.applied_before_stop).toBeNull();
-      expect(payload.needs_approval).toEqual(["Create folder \"Regression\"."]);
+      expect(payload.needs_approval).toEqual(['Create folder "Regression".']);
       expect(payload.permission_relay).toEqual({
         used: false,
         reason: "no_human",
@@ -857,10 +1083,14 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
     it("does not depend on sampling, which Claude Code does not declare", async () => {
       const server = await buildServer();
       // Exactly what Claude Code sends: roots and elicitation, no sampling.
-      fakeClient(server.getInstance(), { roots: { listChanged: true }, elicitation: {} }, [
-        { action: "accept", content: { confirm: true } },
-      ]);
-      const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Create folder." }] });
+      fakeClient(
+        server.getInstance(),
+        { roots: { listChanged: true }, elicitation: {} },
+        [{ action: "accept", content: { confirm: true } }],
+      );
+      const stub = atlas({
+        asks: [{ perm_id: PERM_A, description: "Create folder." }],
+      });
 
       const { payload } = await call(server.getTools());
       expect(stub.calls[0].body.permission_relay).toBeDefined();
@@ -879,27 +1109,32 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
   });
 
   describe("POST /agent authentication — CONTRACT v1.2", () => {
-    it("omits user_id entirely, never as \"\", when no username is available", async () => {
+    it('omits user_id entirely, never as "", when no username is available', async () => {
       // Driven through the seam: with central auth a blank username cannot sign in at all,
       // so this branch is no longer reachable from the factory — but the wire rule still
       // holds and must stay covered.
       const mcp = new McpServer({ name: "t", version: "0" });
-      const streamed = vi.fn(() => ({
-        async *[Symbol.asyncIterator]() {
-          yield { event: "result", data: { status: "ok", answer: "" } };
-        },
+      const deferred = vi.fn(async () => ({
+        status: 200,
+        body: { status: "ok", answer: "" },
       }));
       const tools = addAskBrowserStackAITool(mcp, {
         agentUrl: () => "https://atlas.example/agent",
         mintToken: async () => MINTED,
         credentialsFor: () => ({ username: "", accessKey: "" }),
-        streamTransport: streamed as never,
+        deferredTransport: deferred as never,
       });
 
       await call(tools);
-      const body = (streamed.mock.calls[0] as never as Record<string, unknown>[])[2];
+      const body = (
+        deferred.mock.calls[0] as never as Record<string, unknown>[]
+      )[2];
       expect("user_id" in body).toBe(false);
-      expect(Object.keys(body).sort()).toEqual(["product", "task"]);
+      expect(Object.keys(body).sort()).toEqual([
+        "permission_relay",
+        "product",
+        "task",
+      ]);
     });
 
     it("signs in against the built-in staging endpoint when nothing is configured", async () => {
@@ -912,9 +1147,10 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         return {
           status: 200,
           headers: { get: () => "application/json" },
-          json: async () => (String(url).includes("oauth2")
-            ? { access_token: MINTED, expires_in: 3600 }
-            : { ok: true, status: "ok", answer: "" }),
+          json: async () =>
+            String(url).includes("oauth2")
+              ? { access_token: MINTED, expires_in: 3600 }
+              : { ok: true, status: "ok", answer: "" },
         };
       });
       const server = await buildServer();
@@ -954,8 +1190,8 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       await call(server.getTools());
       await call(server.getTools());
       await call(server.getTools());
-      expect(stub.calls).toHaveLength(3);   // three runs...
-      expect(stub.mints).toHaveLength(1);   // ...one sign-in
+      expect(stub.calls).toHaveLength(3); // three runs...
+      expect(stub.mints).toHaveLength(1); // ...one sign-in
     });
 
     it("never puts the access key or the minted token in the result", async () => {
@@ -1001,7 +1237,9 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       const { result, payload } = await call(server.getTools());
 
-      expect(payload.error).toMatch(/credentials were rejected by BrowserStack auth \(HTTP 401\)/);
+      expect(payload.error).toMatch(
+        /credentials were rejected by BrowserStack auth \(HTTP 401\)/,
+      );
       expect(payload.error).toMatch(/BROWSERSTACK_ACCESS_KEY/);
       // Only the status crosses. Not the body, not the key it contained.
       expect(result.content[0].text).not.toContain("SECRET");
@@ -1028,7 +1266,8 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
     });
 
     it("refuses before any network call when a credential is missing", async () => {
-      const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
+      const { BrowserStackMcpServer } =
+        await import("../../src/server-factory.js");
       const server = new BrowserStackMcpServer({
         "browserstack-username": "ing_Xx",
         "browserstack-access-key": "",
@@ -1038,7 +1277,9 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       vi.stubGlobal("fetch", fetchSpy);
 
       const { payload } = await call(server.getTools());
-      expect(payload.error).toMatch(/BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);
+      expect(payload.error).toMatch(
+        /BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/,
+      );
       // Our missing configuration, not the user's password being wrong.
       expect(payload.error).not.toMatch(/rejected/);
       expect(fetchSpy).not.toHaveBeenCalled();
@@ -1047,12 +1288,15 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
     it("reads a 401 as rejected credentials, not as anyone declining", async () => {
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
-      vi.stubGlobal("fetch", withAuth(async () => ({
-        status: 401,
-        headers: { get: () => "application/json" },
-        // Exactly what Atlas answers a bad bearer with: no `error` string of its own.
-        json: async () => ({ detail: "unauthorized" }),
-      })));
+      vi.stubGlobal(
+        "fetch",
+        withAuth(async () => ({
+          status: 401,
+          headers: { get: () => "application/json" },
+          // Exactly what Atlas answers a bad bearer with: no `error` string of its own.
+          json: async () => ({ detail: "unauthorized" }),
+        })),
+      );
 
       const { result, payload } = await call(server.getTools());
 
@@ -1060,19 +1304,23 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(result.isError).toBe(true);
       // The THIRD failure mode: we signed in fine, Atlas refused the token. It must not
       // read as "your password is wrong" — it is a server misconfiguration.
-      expect(payload.error).toMatch(/Signing in with your BrowserStack credentials SUCCEEDED/);
+      expect(payload.error).toMatch(
+        /Signing in with your BrowserStack credentials SUCCEEDED/,
+      );
       expect(payload.error).toMatch(/YOUR CREDENTIALS ARE NOT THE PROBLEM/);
       expect(payload.error).toMatch(/delegation\.required_scope/);
       expect(payload.error).toMatch(/NOBODY DECLINED ANYTHING/);
       // Nothing was ever asked, so nothing can look like a refusal.
       expect(elicit).not.toHaveBeenCalled();
-      expect(payload.approvals).toEqual([]);
+      expect(payload.approvals ?? []).toEqual([]);
       expect(payload.applied_before_stop).toBeNull();
       // ...and the relay verdict must agree with `error` rather than contradict it.
       expect(payload.permission_relay).toEqual({
         used: false,
         reason: "not_reached",
-        detail: expect.stringContaining("NOTHING WAS ASKED AND NOTHING WAS REFUSED"),
+        detail: expect.stringContaining(
+          "NOTHING WAS ASKED AND NOTHING WAS REFUSED",
+        ),
       });
     });
 
@@ -1090,26 +1338,34 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(payload.error).toMatch(/could not be reached/);
       expect(payload.permission_relay.used).toBe(false);
       expect(payload.permission_relay.reason).toBe("not_reached");
-      expect(payload.approvals).toEqual([]);
+      expect(payload.approvals ?? []).toEqual([]);
     });
 
     it("reads a 403 as 'AI is not enabled for your account', naming the product", async () => {
       const server = await buildServer();
       const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
-      vi.stubGlobal("fetch", withAuth(async () => ({
-        status: 403,
-        headers: { get: () => "application/json" },
-        json: async () => ({ detail: "agent is not enabled for this account" }),
-      })));
+      vi.stubGlobal(
+        "fetch",
+        withAuth(async () => ({
+          status: 403,
+          headers: { get: () => "application/json" },
+          json: async () => ({
+            detail: "agent is not enabled for this account",
+          }),
+        })),
+      );
 
       const { result, payload } = await call(server.getTools(), {
-        product: "tra", query: "why did the nightly build fail",
+        product: "tra",
+        query: "why did the nightly build fail",
       });
 
       expect(payload.error).toContain(
         "Ask AI (Alpha) is not enabled for `tra` on this account.",
       );
-      expect(payload.error).toMatch(/Authentication succeeded and nothing was run/);
+      expect(payload.error).toMatch(
+        /Authentication succeeded and nothing was run/,
+      );
       expect(payload.permission_relay).toEqual({
         used: false,
         reason: "not_entitled",
@@ -1117,7 +1373,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       });
       // Nothing ran, nobody was asked, and no gate reported anything.
       expect(elicit).not.toHaveBeenCalled();
-      expect(payload.approvals).toEqual([]);
+      expect(payload.approvals ?? []).toEqual([]);
       expect(payload.applied_before_stop).toBeNull();
       expect(payload.status).toBe("error");
       expect(result.isError).toBe(true);
@@ -1127,11 +1383,17 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // Keyed on the status, never the prose.
       const server = await buildServer();
       fakeClient(server.getInstance(), { elicitation: {} }, []);
-      vi.stubGlobal("fetch", withAuth(async () => ({
-        status: 403,
-        headers: { get: () => "application/json" },
-        json: async () => ({ detail: "some entirely new sentence", code: "whatever" }),
-      })));
+      vi.stubGlobal(
+        "fetch",
+        withAuth(async () => ({
+          status: 403,
+          headers: { get: () => "application/json" },
+          json: async () => ({
+            detail: "some entirely new sentence",
+            code: "whatever",
+          }),
+        })),
+      );
 
       const { payload } = await call(server.getTools());
       expect(payload.permission_relay.reason).toBe("not_entitled");
@@ -1141,34 +1403,49 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
     it.each([
       [400, "task is required"],
       [503, "delegation is not enabled"],
-    ])("reads a %i pre-run refusal as nothing-asked, and says why", async (status, detail) => {
-      const server = await buildServer();
-      const elicit = fakeClient(server.getInstance(), { elicitation: {} }, []);
-      // Exactly what Atlas answers with before the delegation layer: a bare detail.
-      vi.stubGlobal("fetch", withAuth(async () => ({
-        status,
-        headers: { get: () => "application/json" },
-        json: async () => ({ detail }),
-      })));
+    ])(
+      "reads a %i pre-run refusal as nothing-asked, and says why",
+      async (status, detail) => {
+        const server = await buildServer();
+        const elicit = fakeClient(
+          server.getInstance(),
+          { elicitation: {} },
+          [],
+        );
+        // Exactly what Atlas answers with before the delegation layer: a bare detail.
+        vi.stubGlobal(
+          "fetch",
+          withAuth(async () => ({
+            status,
+            headers: { get: () => "application/json" },
+            json: async () => ({ detail }),
+          })),
+        );
 
-      const { result, payload } = await call(server.getTools());
+        const { result, payload } = await call(server.getTools());
 
-      expect(payload.status).toBe("error");
-      expect(result.isError).toBe(true);
-      expect(payload.error).toContain(`HTTP ${status}`);
-      expect(payload.error).toContain(detail);
-      expect(payload.permission_relay.reason).toBe("not_reached");
-      expect(elicit).not.toHaveBeenCalled();
-      expect(payload.approvals).toEqual([]);
-    });
+        expect(payload.status).toBe("error");
+        expect(result.isError).toBe(true);
+        expect(payload.error).toContain(`HTTP ${status}`);
+        expect(payload.error).toContain(detail);
+        expect(payload.permission_relay.reason).toBe("not_reached");
+        expect(elicit).not.toHaveBeenCalled();
+        expect(payload.approvals ?? []).toEqual([]);
+      },
+    );
 
     it("keeps a 401 and a permission denial from reading alike", async () => {
       const server = await buildServer();
-      fakeClient(server.getInstance(), { elicitation: {} }, [{ action: "decline" }]);
+      fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "decline" },
+      ]);
       atlas({
         asks: [{ perm_id: PERM_A, description: "Delete the sprint." }],
         payload: () => ({
-          ok: true, status: "blocked", answer: "", steps: [],
+          ok: true,
+          status: "blocked",
+          answer: "",
+          steps: [],
           needs_approval: ["Delete the sprint."],
           permission_relay: { used: true, reason: "" },
         }),
@@ -1179,14 +1456,18 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       expect(payload.status).toBe("blocked");
       expect(result.isError).toBeUndefined();
       expect(payload.error).toBeUndefined();
-      expect(payload.approvals[0]).toMatchObject({ decision: "deny", reason: "declined" });
+      expect(payload.approvals[0]).toMatchObject({
+        decision: "deny",
+        reason: "declined",
+      });
     });
 
     it("an environment selector no longer changes anything", async () => {
       // The map and ASK_BROWSERSTACK_ENV are gone; a leftover selector must be inert rather
       // than quietly repointing the tool.
       process.env.ASK_BROWSERSTACK_ENV = "prod";
-      process.env.ASK_BROWSERSTACK_ATLAS_URL_PROD = "https://should-be-ignored.example";
+      process.env.ASK_BROWSERSTACK_ATLAS_URL_PROD =
+        "https://should-be-ignored.example";
       try {
         const server = await buildServer();
         fakeClient(server.getInstance(), { roots: {} }, []);
@@ -1208,6 +1489,10 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
     // the two tests that asserted the hosted deployment REFUSES — both gone with
     // `remote_mode`. What remains reaches into `addAskBrowserStackAITool` directly,
     // which is cheaper and asserts the transport rather than the refusal.
+
+    beforeEach(() => {
+      delete process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT;
+    });
 
     afterEach(() => {
       delete process.env.REMOTE_MCP;
@@ -1232,31 +1517,32 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       vi.resetModules();
       process.env.REMOTE_MCP = "true";
       try {
-        const { addAskBrowserStackAITool } = await import(
-          "../../src/tools/ask-browserstack/register.js"
-        );
-        const { McpServer: RemoteMcpServer } = await import(
-          "@modelcontextprotocol/sdk/server/mcp.js"
-        );
+        const { addAskBrowserStackAITool } =
+          await import("../../src/tools/ask-browserstack/register.js");
+        const { McpServer: RemoteMcpServer } =
+          await import("@modelcontextprotocol/sdk/server/mcp.js");
         const streamed = vi.fn(() => ({
           async *[Symbol.asyncIterator]() {
             yield { event: "result", data: { status: "ok", answer: "" } };
           },
         }));
         const remote = new RemoteMcpServer({ name: "t", version: "0" });
-        vi.spyOn(remote.server, "getClientCapabilities")
-          .mockReturnValue({ elicitation: {} } as never);
+        vi.spyOn(remote.server, "getClientCapabilities").mockReturnValue({
+          elicitation: {},
+        } as never);
         const deferred = vi.fn(async () => ({
           status: 200,
           body: {
             status: "needs_approval",
             run_id: "run-abc",
-            asks: [{
-              perm_id: "perm-" + "a".repeat(32),
-              product: "tm",
-              mode: "ask-always",
-              description: "Creating the new project",
-            }],
+            asks: [
+              {
+                perm_id: "perm-" + "a".repeat(32),
+                product: "tm",
+                mode: "ask-always",
+                description: "Creating the new project",
+              },
+            ],
           },
         }));
         const tools = addAskBrowserStackAITool(remote, {
@@ -1269,8 +1555,9 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
         const { payload } = await call(tools);
         // The deferred transport carried it; the stream was never opened.
-        expect((deferred.mock.calls[0] as never as unknown[])[2])
-          .toMatchObject({ permission_relay: { mode: "deferred" } });
+        expect((deferred.mock.calls[0] as never as unknown[])[2]).toMatchObject(
+          { permission_relay: { mode: "deferred" } },
+        );
         expect(streamed).not.toHaveBeenCalled();
         // Parked, not finished, and carrying what the second call needs.
         expect(payload.status).toBe("needs_approval");
@@ -1304,31 +1591,32 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       vi.resetModules();
       process.env.REMOTE_MCP = "true";
       try {
-        const { addAskBrowserStackAITool } = await import(
-          "../../src/tools/ask-browserstack/register.js"
-        );
-        const { McpServer: RemoteMcpServer } = await import(
-          "@modelcontextprotocol/sdk/server/mcp.js"
-        );
+        const { addAskBrowserStackAITool } =
+          await import("../../src/tools/ask-browserstack/register.js");
+        const { McpServer: RemoteMcpServer } =
+          await import("@modelcontextprotocol/sdk/server/mcp.js");
         const streamed = vi.fn(() => ({
           async *[Symbol.asyncIterator]() {
             yield { event: "result", data: { status: "ok", answer: "" } };
           },
         }));
         const remote = new RemoteMcpServer({ name: "t", version: "0" });
-        vi.spyOn(remote.server, "getClientCapabilities")
-          .mockReturnValue({ roots: {} } as never);      // no elicitation
+        vi.spyOn(remote.server, "getClientCapabilities").mockReturnValue({
+          roots: {},
+        } as never); // no elicitation
         const deferred = vi.fn(async () => ({
           status: 200,
           body: {
             status: "needs_approval",
             run_id: "run-xyz",
-            asks: [{
-              perm_id: "perm-" + "b".repeat(32),
-              product: "tm",
-              mode: "ask-always",
-              description: "Creating the new project",
-            }],
+            asks: [
+              {
+                perm_id: "perm-" + "b".repeat(32),
+                product: "tm",
+                mode: "ask-always",
+                description: "Creating the new project",
+              },
+            ],
           },
         }));
         const tools = addAskBrowserStackAITool(remote, {
@@ -1340,10 +1628,110 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
         });
 
         const { payload } = await call(tools);
-        expect((deferred.mock.calls[0] as never as unknown[])[2])
-          .toMatchObject({ permission_relay: { mode: "deferred" } });
+        expect((deferred.mock.calls[0] as never as unknown[])[2]).toMatchObject(
+          { permission_relay: { mode: "deferred" } },
+        );
         expect(payload.status).toBe("needs_approval");
         expect(payload.permission_relay.reason).not.toBe("no_human");
+      } finally {
+        vi.resetModules();
+      }
+    });
+
+    it("keeps a rate-limited approval answerable, with the same decision", async () => {
+      vi.resetModules();
+      process.env.REMOTE_MCP = "true";
+      try {
+        const { addAskBrowserStackAITool } =
+          await import("../../src/tools/ask-browserstack/register.js");
+        const { McpServer: RemoteMcpServer } =
+          await import("@modelcontextprotocol/sdk/server/mcp.js");
+        const remote = new RemoteMcpServer({ name: "t", version: "0" });
+        vi.spyOn(remote.server, "getClientCapabilities").mockReturnValue({
+          elicitation: {},
+        } as never);
+        const deferred = vi.fn(async () => ({
+          status: 429,
+          body: {
+            ok: false,
+            status: "rate_limited",
+            error: "You're sending requests too quickly.",
+          },
+        }));
+        const tools = addAskBrowserStackAITool(remote, {
+          agentUrl: () => "https://atlas.example/agent",
+          mintToken: async () => MINTED,
+          credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
+          deferredTransport: deferred as never,
+        });
+        const runId = "run-" + "d".repeat(32);
+        const permId = "perm-" + "c".repeat(32);
+
+        const { result, payload } = await call(tools, {
+          product: "tm",
+          run_id: runId,
+          perm_id: permId,
+          decision: "allow",
+        } as never);
+
+        expect(payload.status).toBe("rate_limited");
+        expect(result.isError).toBe(true);
+        expect(payload.conversation_id).toBe(runId);
+        expect(payload.perm_id).toBe(permId);
+        expect(payload.next_step).toEqual({
+          instruction: expect.stringContaining("Do not ask the user again"),
+          call: "askBrowserStackAI",
+          params: {
+            product: "tm",
+            run_id: runId,
+            perm_id: permId,
+            decision: "allow",
+          },
+        });
+      } finally {
+        vi.resetModules();
+      }
+    });
+
+    it("does not ask to resend a decision the run already acted on before the limit", async () => {
+      vi.resetModules();
+      process.env.REMOTE_MCP = "true";
+      try {
+        const { addAskBrowserStackAITool } =
+          await import("../../src/tools/ask-browserstack/register.js");
+        const { McpServer: RemoteMcpServer } =
+          await import("@modelcontextprotocol/sdk/server/mcp.js");
+        const remote = new RemoteMcpServer({ name: "t", version: "0" });
+        vi.spyOn(remote.server, "getClientCapabilities").mockReturnValue({
+          elicitation: {},
+        } as never);
+        const deferred = vi.fn(async () => ({
+          status: 429,
+          body: {
+            ok: false,
+            status: "rate_limited",
+            answer: "Saved 6 test cases, then hit the rate limit.",
+            error: "You're sending requests too quickly.",
+          },
+        }));
+        const tools = addAskBrowserStackAITool(remote, {
+          agentUrl: () => "https://atlas.example/agent",
+          mintToken: async () => MINTED,
+          credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
+          deferredTransport: deferred as never,
+        });
+
+        const { payload } = await call(tools, {
+          product: "tm",
+          run_id: "run-" + "d".repeat(32),
+          perm_id: "perm-" + "c".repeat(32),
+          decision: "allow",
+        } as never);
+
+        expect(payload.status).toBe("rate_limited");
+        expect(JSON.stringify(payload.next_step ?? "")).not.toMatch(
+          /not delivered|Do not ask the user again/,
+        );
       } finally {
         vi.resetModules();
       }
@@ -1354,12 +1742,11 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // broken and nothing ever called it.
       vi.resetModules();
       delete process.env.REMOTE_MCP;
-      const { addAskBrowserStackAITool } = await import(
-        "../../src/tools/ask-browserstack/register.js"
-      );
-      const { McpServer: StdioMcpServer } = await import(
-        "@modelcontextprotocol/sdk/server/mcp.js"
-      );
+      process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "elicit";
+      const { addAskBrowserStackAITool } =
+        await import("../../src/tools/ask-browserstack/register.js");
+      const { McpServer: StdioMcpServer } =
+        await import("@modelcontextprotocol/sdk/server/mcp.js");
 
       const streamed = vi.fn(() => ({
         async *[Symbol.asyncIterator]() {
@@ -1368,8 +1755,9 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       }));
 
       const stdio = new StdioMcpServer({ name: "t", version: "0" });
-      vi.spyOn(stdio.server, "getClientCapabilities")
-        .mockReturnValue({ elicitation: {} } as never);
+      vi.spyOn(stdio.server, "getClientCapabilities").mockReturnValue({
+        elicitation: {},
+      } as never);
       const tools = addAskBrowserStackAITool(stdio, {
         agentUrl: () => "https://atlas.example/agent",
         mintToken: async () => MINTED,
@@ -1381,35 +1769,47 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // Without this the assertion above would pass just as happily if the relay were
       // never offered to anyone.
       expect(streamed).toHaveBeenCalledTimes(1);
-      expect((streamed.mock.calls[0] as never as unknown[])[2])
-        .toMatchObject({ permission_relay: { mode: "stream" } });
+      expect((streamed.mock.calls[0] as never as unknown[])[2]).toMatchObject({
+        permission_relay: { mode: "stream" },
+      });
     });
 
     it("stdio does not regress: the relay is still offered and still works", async () => {
       // REMOTE_MCP unset — byte-identical to every other test in this file.
+      process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "elicit";
       const server = await buildServer();
       fakeClient(server.getInstance(), { elicitation: {} }, [
         { action: "accept" },
       ]);
-      const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Create folder." }] });
+      const stub = atlas({
+        asks: [{ perm_id: PERM_A, description: "Create folder." }],
+      });
 
       const { payload } = await call(server.getTools());
       // `contract` rides along: it is what lets Atlas tell this client from every
       // published build that cannot complete an approval, and its absence makes Atlas
       // refuse to park rather than hand back an ask nobody can answer.
-      expect(stub.calls[0].body.permission_relay)
-        .toEqual({ mode: "stream", contract: 2 });
+      expect(stub.calls[0].body.permission_relay).toEqual({
+        mode: "stream",
+        contract: 3,
+      });
       expect(payload.permission_relay.used).toBe(true);
       expect(payload.permission_relay.reason).toBe("");
     });
 
-    it("REMOTE_MCP=\"false\" is stdio, not remote", async () => {
+    it('REMOTE_MCP="false" is stdio, not remote', async () => {
       vi.resetModules();
       process.env.REMOTE_MCP = "false";
-      const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
+      process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "elicit";
+      const { BrowserStackMcpServer } =
+        await import("../../src/server-factory.js");
       const server = new BrowserStackMcpServer(CONFIG);
-      fakeClient(server.getInstance(), { elicitation: {} }, [{ action: "accept" }]);
-      const stub = atlas({ asks: [{ perm_id: PERM_A, description: "Create folder." }] });
+      fakeClient(server.getInstance(), { elicitation: {} }, [
+        { action: "accept" },
+      ]);
+      const stub = atlas({
+        asks: [{ perm_id: PERM_A, description: "Create folder." }],
+      });
 
       const { payload } = await call(server.getTools());
       expect(stub.calls[0].body.permission_relay).toBeDefined();
@@ -1425,9 +1825,10 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       return {
         status: 200,
         headers: { get: () => "application/json" },
-        json: async () => (String(url).includes("oauth2")
-          ? { access_token: MINTED, expires_in: 3600 }
-          : { ok: true, status: "ok", answer: "" }),
+        json: async () =>
+          String(url).includes("oauth2")
+            ? { access_token: MINTED, expires_in: 3600 }
+            : { ok: true, status: "ok", answer: "" },
       };
     });
     const server = await buildServer();
@@ -1470,23 +1871,23 @@ describe("askBrowserStackAI, against the injected seam", () => {
     // It is not sent on this route, so its absence must not refuse the call the way the
     // product-API path would.
     const mcp = new McpServer({ name: "t", version: "0" });
-    const streamed = vi.fn(() => ({
-      async *[Symbol.asyncIterator]() {
-        yield { event: "result", data: { status: "ok", answer: "" } };
-      },
+    const deferred = vi.fn(async () => ({
+      status: 200,
+      body: { status: "ok", answer: "" },
     }));
     const tools = addAskBrowserStackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
       mintToken: async () => MINTED,
       credentialsFor: () => ({ username: "ing_Xx", accessKey: "" }),
-      streamTransport: streamed as never,
+      deferredTransport: deferred as never,
     });
 
     const { payload } = await call(tools);
     expect(payload.ok).toBe(true);
-    expect(streamed).toHaveBeenCalledTimes(1);
-    expect((streamed.mock.calls[0] as never as unknown[])[2])
-      .toMatchObject({ user_id: "ing_Xx" });
+    expect(deferred).toHaveBeenCalledTimes(1);
+    expect((deferred.mock.calls[0] as never as unknown[])[2]).toMatchObject({
+      user_id: "ing_Xx",
+    });
   });
 
   it("reports a transport failure with nothing left to clean up", async () => {
@@ -1496,12 +1897,14 @@ describe("askBrowserStackAI, against the injected seam", () => {
     // What is left worth pinning is that the failure still surfaces as a clean result
     // rather than an exception escaping the tool.
     const mcp = new McpServer({ name: "t", version: "0" });
-    vi.spyOn(mcp.server, "getClientCapabilities").mockReturnValue({ elicitation: {} } as never);
+    vi.spyOn(mcp.server, "getClientCapabilities").mockReturnValue({
+      elicitation: {},
+    } as never);
     const tools = addAskBrowserStackAITool(mcp, {
       agentUrl: () => "https://atlas.example/agent",
       mintToken: async () => MINTED,
       credentialsFor: () => ({ username: "u", accessKey: "k" }),
-      streamTransport: (() => {
+      deferredTransport: (async () => {
         throw new Error("boom");
       }) as never,
     });
@@ -1548,7 +1951,10 @@ describe("next_step can be followed exactly as written", () => {
     } as never);
 
     expect(decisions).toHaveLength(1);
-    expect(decisions[0].body).toMatchObject({ perm_id: PERM_A, decision: "allow" });
+    expect(decisions[0].body).toMatchObject({
+      perm_id: PERM_A,
+      decision: "allow",
+    });
     expect(payload.status).toBe("ok");
   });
 
@@ -1559,7 +1965,9 @@ describe("next_step can be followed exactly as written", () => {
     const server = await buildServer();
     fakeClient(server.getInstance(), undefined, []);
 
-    const { payload } = await call(server.getTools(), { product: "tm" } as never);
+    const { payload } = await call(server.getTools(), {
+      product: "tm",
+    } as never);
 
     expect(payload.status).toBe("error");
     expect(String(payload.error)).toMatch(/`query` is required to start a run/);
@@ -1587,11 +1995,13 @@ describe("the client works against both server generations", () => {
   beforeEach(() => {
     process.env.ASK_BROWSERSTACK_ATLAS_URL = "https://atlas.example";
     process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL = AUTH_URL;
+    process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT = "elicit";
     resetTokenCache();
     vi.resetModules();
   });
 
   afterEach(() => {
+    delete process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT;
     delete process.env.ASK_BROWSERSTACK_ATLAS_URL;
     delete process.env.ASK_BROWSERSTACK_AUTH_TOKEN_URL;
     resetTokenCache();
@@ -1609,7 +2019,8 @@ describe("the client works against both server generations", () => {
     const stub = async (url: string, init: any) => {
       if (String(url) === AUTH_URL) {
         return {
-          ok: true, status: 200,
+          ok: true,
+          status: 200,
           headers: { get: () => "application/json" },
           json: async () => ({ access_token: MINTED, expires_in: 3600 }),
         };
@@ -1619,7 +2030,8 @@ describe("the client works against both server generations", () => {
         answered();
         // 204 — acknowledged, nothing carried. The run continues on the stream.
         return {
-          ok: true, status: 204,
+          ok: true,
+          status: 204,
           headers: { get: () => "" },
           json: async () => null,
         };
@@ -1642,7 +2054,8 @@ describe("the client works against both server generations", () => {
         },
       });
       return {
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         headers: {
           get: (k: string) => (k === "content-type" ? "text/event-stream" : ""),
         },

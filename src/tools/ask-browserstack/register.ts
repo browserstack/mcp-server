@@ -212,7 +212,8 @@ function needsUploadResult(
     next_step: {
       instruction:
         "Nothing has run yet. Run each `command` in the user's terminal, from the folder " +
-        "the file path is relative to (on Windows use `curl.exe`). Each must succeed; " +
+        "the file path is relative to (on Windows, in PowerShell, use `curl.exe`). Each " +
+        "must succeed; " +
         "the uploads expire in 15 minutes. Then call askBrowserStackAI again with these " +
         "params.",
       call: "askBrowserStackAI",
@@ -227,15 +228,18 @@ function needsUploadResult(
 }
 
 /**
- * A rate-limited answer to an approval or questions never reached the agent, so the
- * run is still waiting on it. Keep the handles and say how to send it again; without
- * them the client has nothing to retry with.
+ * A rate-limited answer to an approval or questions that never reached the agent leaves
+ * the run waiting on it. Keep the handles and say how to send it again; without them the
+ * client has nothing to retry with. A 429 can also carry a run that consumed the answer
+ * and hit the limit later: that one already has a trail, and a resend would contradict it.
  */
 function keepPendingAnswer(
   result: AskResult,
   params: Record<string, unknown>,
 ): AskResult {
   if (result.status !== "rate_limited") return result;
+  // Not `approvals`: that holds the decision recorded here, sent or not.
+  if (result.applied_before_stop || result.answer) return result;
   const out: AskResult & Record<string, unknown> = {
     ...result,
     conversation_id: String(params.run_id),

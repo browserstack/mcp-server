@@ -144,6 +144,18 @@ describe("the tools surface the handoff", () => {
     expect(out.capabilities.length).toBeGreaterThan(0);
   });
 
+  it("searchCapability still hands over when user_words only settle the product", async () => {
+    const t = await tools();
+    const out = body(
+      await t.searchCapability.handler({
+        query: "generate test cases from this PRD",
+        user_words: "test management",
+        product: "tm",
+      }),
+    );
+    expect(Object.keys(out)[0]).toBe("use_agent");
+  });
+
   it("searchCapability says nothing about agents for a plain CRUD ask", async () => {
     const t = await tools();
     const out = body(

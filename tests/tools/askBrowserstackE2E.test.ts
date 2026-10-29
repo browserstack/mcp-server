@@ -1690,6 +1690,50 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       }
     });
 
+    it("does not ask to resend a decision the run already acted on before the limit", async () => {
+      vi.resetModules();
+      process.env.REMOTE_MCP = "true";
+      try {
+        const { addAskBrowserStackAITool } =
+          await import("../../src/tools/ask-browserstack/register.js");
+        const { McpServer: RemoteMcpServer } =
+          await import("@modelcontextprotocol/sdk/server/mcp.js");
+        const remote = new RemoteMcpServer({ name: "t", version: "0" });
+        vi.spyOn(remote.server, "getClientCapabilities").mockReturnValue({
+          elicitation: {},
+        } as never);
+        const deferred = vi.fn(async () => ({
+          status: 429,
+          body: {
+            ok: false,
+            status: "rate_limited",
+            answer: "Saved 6 test cases, then hit the rate limit.",
+            error: "You're sending requests too quickly.",
+          },
+        }));
+        const tools = addAskBrowserStackAITool(remote, {
+          agentUrl: () => "https://atlas.example/agent",
+          mintToken: async () => MINTED,
+          credentialsFor: () => ({ username: "ing_Xx", accessKey: "SECRET" }),
+          deferredTransport: deferred as never,
+        });
+
+        const { payload } = await call(tools, {
+          product: "tm",
+          run_id: "run-" + "d".repeat(32),
+          perm_id: "perm-" + "c".repeat(32),
+          decision: "allow",
+        } as never);
+
+        expect(payload.status).toBe("rate_limited");
+        expect(JSON.stringify(payload.next_step ?? "")).not.toMatch(
+          /not delivered|Do not ask the user again/,
+        );
+      } finally {
+        vi.resetModules();
+      }
+    });
+
     it("positive control: the same seam IS called when not in remote mode", async () => {
       // Without this, the assertion above would pass just as happily if the seam were
       // broken and nothing ever called it.

@@ -912,7 +912,12 @@ export function addCapabilityRegistryTools(
       // leads, so it is read before the shortlist that would otherwise be acted on.
       const agentMatches = isBrowseQuery(query)
         ? []
-        : matchAgents(reachableAgents(product), user_words || query);
+        : // `user_words` settles the product, not the task, so it is matched WITH the
+          // query: alone it drops the words ("generate", "PRD") that name the agent.
+          matchAgents(
+            reachableAgents(product),
+            [query, user_words].filter(Boolean).join(" "),
+          );
       track("searchCapability", {
         product,
         entity,

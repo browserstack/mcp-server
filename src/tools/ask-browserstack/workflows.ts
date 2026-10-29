@@ -158,13 +158,18 @@ export function withConversation(
     if (payload[key] !== undefined) out[key] = payload[key];
   }
   const call = "askBrowserStackAI";
+  // `product` is required by the schema, so params without it are rejected before the
+  // handler runs.
+  const follow = product
+    ? { product, conversation_id: conversationId }
+    : { conversation_id: conversationId };
   if (result.status === "running") {
     out.next_step = {
       instruction:
         "A BrowserStack AI agent is still working on this. Call askBrowserStackAI " +
         "again with this conversation_id and no query to check on it.",
       call,
-      params: { conversation_id: conversationId },
+      params: follow,
     };
   } else if (result.status === "needs_input") {
     const sheet = questionsOf(payload);
@@ -180,22 +185,23 @@ export function withConversation(
         answers: "{ question id: the user's answer }",
       },
     };
+  } else if (result.status === "needs_approval" || result.next_step) {
+    // Already says how to go on (the approval to answer, or a retry): `actions` must not
+    // replace it, or the decision is never sent.
   } else if (Array.isArray(payload.actions) && payload.actions.length) {
     out.next_step = {
       instruction:
         "Offer the user these `actions`. To choose one, call askBrowserStackAI with " +
         "its `reply` as query and this conversation_id.",
       call,
-      params: { conversation_id: conversationId },
+      params: follow,
     };
-  } else if (result.status === "needs_approval") {
-    // `needsApprovalResult` already says how to answer.
-  } else if (!result.next_step) {
+  } else {
     out.next_step = {
       instruction:
         "To follow up on this, pass this conversation_id with your next query.",
       call,
-      params: { conversation_id: conversationId },
+      params: follow,
     };
   }
   return out;

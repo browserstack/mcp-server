@@ -78,6 +78,7 @@ describe("prepareRemoteUploads", () => {
     [{ name: "a;b.pdf", bytes: 3 }, /without ; , or "/],
     [{ name: 'a"b.pdf', bytes: 3 }, /without ; , or "/],
     [{ name: "a\nb.pdf", bytes: 3 }, /without ; , or "/],
+    [{ name: "~/Downloads/prd.pdf", bytes: 3 }, /pass the full path/],
     [{ name: "a,b.pdf", bytes: 3 }, /without ; , or "/],
     [{ name: "run.sh", bytes: 3 }, /cannot be attached/],
     [{ name: "prd.pdf", bytes: 0 }, /exact size in bytes/],

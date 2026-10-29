@@ -272,6 +272,12 @@ function checkRemoteFile(file: RemoteFile): {
       `"${p}" cannot be uploaded this way; rename the file without ; , or " in its path.`,
     );
   }
+  // The command quotes the path, and a shell does not expand `~` inside quotes.
+  if (p.startsWith("~")) {
+    throw new UploadError(
+      `"${p}" starts with ~, which the upload command cannot expand; pass the full path.`,
+    );
+  }
   const base = path.basename(p.replace(/\\/g, "/"));
   const ext = path.extname(base).toLowerCase();
   const mime = MIME_BY_EXT[ext];

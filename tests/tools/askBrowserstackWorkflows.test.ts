@@ -38,12 +38,44 @@ describe("a running agent", () => {
         "A BrowserStack AI agent is still working on this. Call askBrowserStackAI " +
         "again with this conversation_id and no query to check on it.",
       call: "askBrowserStackAI",
-      params: { conversation_id: "run-abc" },
+      params: { product: "tm", conversation_id: "run-abc" },
     });
   });
 
   it("leaves a result with no conversation untouched", () => {
     const result = { ...base, status: "ok" } as AskResult;
     expect(withConversation(result, { answer: "x" })).toBe(result);
+  });
+});
+
+describe("actions", () => {
+  const actions = [{ label: "Generate", reply: "Generate" }];
+
+  it("are offered with params the schema accepts", () => {
+    const out = withConversation(
+      { ...base, status: "ok" } as AskResult,
+      { conversation_id: "run-abc", actions },
+      "tm",
+    );
+    expect(out.next_step?.params).toEqual({
+      product: "tm",
+      conversation_id: "run-abc",
+    });
+  });
+
+  it("do not replace how to answer a pending approval, or a retry", () => {
+    const approval = {
+      instruction: "answer the approval",
+      call: "askBrowserStackAI",
+      params: { run_id: "run-abc", perm_id: "perm-1", decision: "<allow|deny>" },
+    };
+    for (const status of ["needs_approval", "rate_limited"]) {
+      const out = withConversation(
+        { ...base, status, next_step: approval } as unknown as AskResult,
+        { conversation_id: "run-abc", actions },
+        "tm",
+      );
+      expect(out.next_step).toEqual(approval);
+    }
   });
 });

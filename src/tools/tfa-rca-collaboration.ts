@@ -30,6 +30,7 @@ import {
   fetchTestsInFailureTheme,
   ListTestsInFailureThemeArgs,
 } from "./tfa-rca-utils/build-failure-themes.js";
+import { bindAccountRegion } from "../lib/tool-latency.js";
 
 const TOOL_NAME = "tfaRcaTurn";
 const GET_RESULT_TOOL_NAME = "getTfaTurnResult";
@@ -294,5 +295,7 @@ export default function addTfaRcaCollaborationTools(
     },
   );
 
+  // Registered by the hosted wrapper after the server is built, so bind them here too.
+  bindAccountRegion(tools, config);
   return tools;
 }

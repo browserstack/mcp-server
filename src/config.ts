@@ -42,7 +42,7 @@ const DEFAULT_BROWSERSTACK_O11Y_UI_BASE_URL =
   "https://automation.browserstack.com";
 
 // BROWSERSTACK_GRR_REGION: "us", "eu" or "in"; unset means not configured. Invalid values fail at startup.
-const GRR_REGIONS = ["us", "eu", "in"] as const;
+export const GRR_REGIONS = ["us", "eu", "in"] as const;
 export type GrrRegion = (typeof GRR_REGIONS)[number];
 
 function parseGrrRegion(raw: string | undefined): GrrRegion | undefined {

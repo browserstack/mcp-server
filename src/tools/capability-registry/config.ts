@@ -68,7 +68,7 @@ const BUILTIN_DISCOVERY: Record<
 };
 
 /**
- * Hosts used when BROWSERSTACK_GRR_REGION is a non-US region, ahead of discovery and the
+ * Hosts used when the region is non-US, ahead of discovery and the
  * index's declared hosts. `hosts` covers the capabilities that name a host.
  */
 const REGIONAL_HOSTS: Record<

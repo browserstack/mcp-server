@@ -5,7 +5,7 @@ import { getBrowserStackAuth } from "./get-auth.js";
 import appConfig from "../config.js";
 import { getRegionalHost, hostFor, isNonUsRegion } from "./regional-host.js";
 
-// Probe order when BROWSERSTACK_GRR_REGION is not set.
+// Probe order when no non-US region is known.
 const TM_BASE_URLS = (["us", "eu", "in"] as const).map((r) =>
   hostFor("testManagement", r),
 );

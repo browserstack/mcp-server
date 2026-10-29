@@ -22,7 +22,12 @@ import { BrowserStackConfig } from "./lib/types.js";
 import addRCATools from "./tools/rca-agent.js";
 import addAskBrowserStackAITool from "./tools/ask-browserstack/register.js";
 import addCapabilityRegistryTools from "./tools/capability-registry/register.js";
-import { instrumentToolLatency } from "./lib/tool-latency.js";
+import {
+  bindAccountRegion,
+  instrumentToolLatency,
+} from "./lib/tool-latency.js";
+import { accountRegion } from "./lib/account-region.js";
+import { withAccountRegion } from "./lib/region-context.js";
 import { nodeUpgradeNotice } from "./lib/node-version-notice.js";
 import { FEEDBACK_INSTRUCTION, feedbackEnabled } from "./lib/feedback-hint.js";
 import addFeedbackTools from "./tools/feedback.js";
@@ -34,6 +39,18 @@ import addFeedbackTools from "./tools/feedback.js";
 export class BrowserStackMcpServer {
   public server: McpServer;
   public tools: Record<string, RegisteredTool> = {};
+
+  /**
+   * Looks up the account's region first, so the tool list and instructions match it.
+   * The constructor alone still routes each call by region, but lists tools for the
+   * process-wide BROWSERSTACK_GRR_REGION.
+   */
+  static async create(
+    config: BrowserStackConfig,
+  ): Promise<BrowserStackMcpServer> {
+    const account = await accountRegion(config);
+    return withAccountRegion(account, () => new BrowserStackMcpServer(config));
+  }
 
   constructor(private config: BrowserStackConfig) {
     logger.info(
@@ -103,6 +120,8 @@ export class BrowserStackMcpServer {
       () => this.server.server.getClientVersion() ?? {},
       this.config,
     );
+    // Outermost, so telemetry and error hints also see the account's region.
+    bindAccountRegion(this.tools, this.config);
   }
 
   /**

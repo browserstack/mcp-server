@@ -12,3 +12,9 @@ vi.mock("sharp", () => {
   sharp.concurrency = vi.fn();
   return { default: sharp };
 });
+
+// No account region lookups against BrowserStack auth: tests use BROWSERSTACK_GRR_REGION.
+// tests/lib/account-region.test.ts unmocks it.
+vi.mock("../src/lib/account-region.js", () => ({
+  accountRegion: () => undefined,
+}));

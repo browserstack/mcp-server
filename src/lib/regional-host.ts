@@ -1,5 +1,6 @@
 import appConfig, { GrrRegion } from "../config.js";
 import { SessionType } from "./constants.js";
+import { currentRegionScope, regionOf } from "./region-context.js";
 
 type Hosts = Record<GrrRegion, string>;
 
@@ -85,8 +86,13 @@ export function isRegionalHostname(
   );
 }
 
+/** This call's region: the account's when known, otherwise BROWSERSTACK_GRR_REGION. */
+export function currentRegion(): GrrRegion | undefined {
+  return regionOf(currentRegionScope()?.account);
+}
+
 export function isNonUsRegion(): boolean {
-  const region = appConfig.BROWSERSTACK_GRR_REGION;
+  const region = currentRegion();
   return region !== undefined && region !== "us";
 }
 
@@ -125,5 +131,5 @@ export function getRegionalHost(kind: RegionalHostKind): string {
     );
     if (override) return override;
   }
-  return hostFor(kind, appConfig.BROWSERSTACK_GRR_REGION ?? "us");
+  return hostFor(kind, currentRegion() ?? "us");
 }

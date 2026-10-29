@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.unmock("../../src/lib/account-region.js");
 
@@ -20,6 +20,7 @@ vi.mock("../../src/logger.js", () => ({
 import {
   accountRegion,
   regionFromToken,
+  RETRY_AFTER_MS,
 } from "../../src/lib/account-region.js";
 
 const tokenWith = (user: unknown) =>
@@ -99,10 +100,51 @@ describe("accountRegion", () => {
     expect(mintCalls).toHaveLength(2);
   });
 
+  it("keeps an unrecognised region as an answer", async () => {
+    mintImpl = async () => tokenWith({ grr: { region: "apac" } });
+    const cfg = config();
+    expect(await accountRegion(cfg)).toBe("unknown");
+    expect(accountRegion(cfg)).toBe("unknown");
+    expect(mintCalls).toHaveLength(1);
+  });
+
   it("answers unknown when the lookup fails", async () => {
     mintImpl = async () => {
       throw new Error("auth could not be reached");
     };
     expect(await accountRegion(config())).toBe("unknown");
+  });
+
+  describe("after a failed lookup", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-29T10:00:00Z"));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it("answers unknown without looking up again until the retry delay", async () => {
+      mintImpl = async () => {
+        throw new Error("auth could not be reached");
+      };
+      const cfg = config();
+      expect(await accountRegion(cfg)).toBe("unknown");
+      vi.advanceTimersByTime(RETRY_AFTER_MS - 1);
+      expect(accountRegion(cfg)).toBe("unknown");
+      expect(mintCalls).toHaveLength(1);
+    });
+
+    it("looks up again after the retry delay and keeps the answer", async () => {
+      mintImpl = async () => {
+        throw new Error("auth could not be reached");
+      };
+      const cfg = config();
+      expect(await accountRegion(cfg)).toBe("unknown");
+
+      mintImpl = async () => tokenWith({ grr: { region: "eu" } });
+      vi.advanceTimersByTime(RETRY_AFTER_MS);
+      expect(await accountRegion(cfg)).toBe("eu");
+      expect(accountRegion(cfg)).toBe("eu");
+      expect(mintCalls).toHaveLength(2);
+    });
   });
 });

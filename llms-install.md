@@ -123,7 +123,6 @@ Optional environment variables for the local server:
 | --- | --- |
 | `MCP_UPLOAD_BASE_DIR` | Directory that file-upload tools (`uploadProductRequirementFile`, `takeAppScreenshot`, `runAppTestsOnBrowserStack`, `runAppLiveSession`) may read from. Uploads are restricted to this directory. |
 | `BROWSERSTACK_LOCAL_OPTION_<KEY>` | Passes an option to the BrowserStack Local tunnel, e.g. `BROWSERSTACK_LOCAL_OPTION_PROXYHOST`. Only needed when testing sites behind a firewall or on localhost. |
-| `BROWSERSTACK_GRR_REGION` | For accounts with Geo Region Restriction (GRR): `eu` or `in` sends Test Management, Automate, App Automate, Accessibility and Test Reporting calls to that region's endpoints. Leave unset (or `us`) otherwise. |
 
 ## Verify the install
 

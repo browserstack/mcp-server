@@ -6,10 +6,13 @@ import { AccountRegion, GRR_REGIONS, GrrRegion } from "./region-context.js";
 const AUTH_TOKEN_URL = "https://auth.browserstack.com/oauth2/v2/token";
 const SCOPE = "oauth_user_profile";
 const LOOKUP_TIMEOUT_MS = 5_000;
+/** How long a failed lookup answers "unknown" before the next call tries again. */
+export const RETRY_AFTER_MS = 30_000;
 
 interface Lookup {
   settled?: AccountRegion;
-  pending: Promise<AccountRegion>;
+  pending?: Promise<AccountRegion>;
+  failedAt?: number;
 }
 
 // Keyed on the config object a server was built with, so an entry belongs to that one
@@ -28,7 +31,10 @@ export function regionFromToken(token: string): AccountRegion {
     : "unknown";
 }
 
-async function lookUp(config: BrowserStackConfig): Promise<AccountRegion> {
+/** The account's region, or null when BrowserStack auth could not answer. */
+async function lookUp(
+  config: BrowserStackConfig,
+): Promise<AccountRegion | null> {
   try {
     const token = await mintCentralToken({
       url: AUTH_TOKEN_URL,
@@ -46,13 +52,15 @@ async function lookUp(config: BrowserStackConfig): Promise<AccountRegion> {
     logger.warn(
       `Could not look up the account's region: ${(error as Error)?.message}`,
     );
-    return "unknown";
+    return null;
   }
 }
 
 /**
  * The account's region, looked up once per config. Returned directly once known so
  * callers that cannot wait (telemetry) stay synchronous; undefined without credentials.
+ * Only an answer is kept: after a failure this is "unknown" for RETRY_AFTER_MS, and the
+ * next call after that looks up again.
  */
 export function accountRegion(
   config: BrowserStackConfig | undefined,
@@ -63,13 +71,26 @@ export function accountRegion(
   ) {
     return undefined;
   }
-  let lookup = lookups.get(config);
-  if (!lookup) {
-    const entry: Lookup = {
-      pending: lookUp(config).then((region) => (entry.settled = region)),
-    };
-    lookup = entry;
-    lookups.set(config, entry);
+  const lookup = lookups.get(config);
+  if (lookup?.settled) return lookup.settled;
+  if (lookup?.pending) return lookup.pending;
+  if (
+    lookup?.failedAt !== undefined &&
+    Date.now() - lookup.failedAt < RETRY_AFTER_MS
+  ) {
+    return "unknown";
   }
-  return lookup.settled ?? lookup.pending;
+
+  const entry: Lookup = {};
+  entry.pending = lookUp(config).then((region) => {
+    entry.pending = undefined;
+    if (region === null) {
+      entry.failedAt = Date.now();
+      return "unknown";
+    }
+    entry.settled = region;
+    return region;
+  });
+  lookups.set(config, entry);
+  return entry.pending;
 }

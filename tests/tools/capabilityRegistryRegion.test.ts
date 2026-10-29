@@ -201,8 +201,16 @@ describe("multiple environments, the way Atlas defines them", () => {
   });
 });
 
-describe("tra follows BROWSERSTACK_GRR_REGION", () => {
+describe("products follow the account's region", () => {
   const DECLARED = "https://api-observability.browserstack.com";
+
+  // resolveBaseUrl as called inside a tool call for an account in `region`.
+  async function resolveIn(region: string | undefined) {
+    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    const { withAccountRegion } = await import("../../src/lib/region-context.js");
+    return (...args: Parameters<typeof resolveBaseUrl>) =>
+      withAccountRegion(region as any, () => resolveBaseUrl(...args));
+  }
 
   beforeEach(() => {
     vi.resetModules();
@@ -210,27 +218,26 @@ describe("tra follows BROWSERSTACK_GRR_REGION", () => {
   });
 
   afterEach(() => {
-    delete process.env.BROWSERSTACK_GRR_REGION;
     delete process.env.CAPABILITY_REGISTRY_BASE_URL_TRA;
   });
 
-  it("sends an EU deployment to the EU host, though the index declares the US one", async () => {
-    process.env.BROWSERSTACK_GRR_REGION = "eu";
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+  it("sends an EU account to the EU host, though the index declares the US one", async () => {
+    const resolveBaseUrl = await resolveIn("eu");
     expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(
       "https://api-observability-eu.browserstack.com",
     );
   });
 
-  it("keeps the US host when the region is unset", async () => {
-    delete process.env.BROWSERSTACK_GRR_REGION;
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
-    expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(DECLARED);
-  });
+  it.each([undefined, "us", "unknown"])(
+    "keeps the US host when the region is %s",
+    async (region) => {
+      const resolveBaseUrl = await resolveIn(region);
+      expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(DECLARED);
+    },
+  );
 
   it("sends app_accessibility to its EU host too", async () => {
-    process.env.BROWSERSTACK_GRR_REGION = "eu";
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    const resolveBaseUrl = await resolveIn("eu");
     expect(
       await resolveBaseUrl("app_accessibility", CONFIG, {
         base_url: "https://api-app-accessibility.browserstack.com",
@@ -239,8 +246,7 @@ describe("tra follows BROWSERSTACK_GRR_REGION", () => {
   });
 
   it("sends web_accessibility to its regional host", async () => {
-    process.env.BROWSERSTACK_GRR_REGION = "in";
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    const resolveBaseUrl = await resolveIn("in");
     expect(
       await resolveBaseUrl("web_accessibility", CONFIG, {
         base_url: "https://api-accessibility.browserstack.com",
@@ -248,9 +254,8 @@ describe("tra follows BROWSERSTACK_GRR_REGION", () => {
     ).toBe("https://api-accessibility-in.browserstack.com");
   });
 
-  it("does not probe the tra base_urls when a region is set", async () => {
-    process.env.BROWSERSTACK_GRR_REGION = "in";
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+  it("does not probe the tra base_urls when the account's region is known", async () => {
+    const resolveBaseUrl = await resolveIn("in");
     const transport = vi.fn();
     const source = {
       base_urls: [
@@ -270,26 +275,22 @@ describe("tra follows BROWSERSTACK_GRR_REGION", () => {
     ["devicecontrol", "https://hub.browserstack.com", "https://api.browserstack.com", "https://hub-eu-only.browserstack.com", "https://api-eu-only.browserstack.com"],
     ["mobiledevicecontrol", "https://hub-cloud.browserstack.com", "https://api-cloud.browserstack.com", "https://hub-eu-only.browserstack.com", "https://api-eu-only.browserstack.com"],
   ])(
-    "routes %s and its api host under eu, and keeps the declared hosts when unset",
+    "routes %s and its api host for an EU account, and keeps the declared hosts otherwise",
     async (product, hub, api, euHub, euApi) => {
       const source = { base_url: hub, hosts: { api } };
-      process.env.BROWSERSTACK_GRR_REGION = "eu";
-      let { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
-      expect(await resolveBaseUrl(product, CONFIG, source)).toBe(euHub);
-      expect(await resolveBaseUrl(product, CONFIG, source, undefined, "api")).toBe(euApi);
+      const inEu = await resolveIn("eu");
+      expect(await inEu(product, CONFIG, source)).toBe(euHub);
+      expect(await inEu(product, CONFIG, source, undefined, "api")).toBe(euApi);
 
-      vi.resetModules();
-      delete process.env.BROWSERSTACK_GRR_REGION;
-      ({ resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js"));
-      expect(await resolveBaseUrl(product, CONFIG, source)).toBe(hub);
-      expect(await resolveBaseUrl(product, CONFIG, source, undefined, "api")).toBe(api);
+      const inUs = await resolveIn("us");
+      expect(await inUs(product, CONFIG, source)).toBe(hub);
+      expect(await inUs(product, CONFIG, source, undefined, "api")).toBe(api);
     },
   );
 
   it("lets an explicit override win over the region", async () => {
-    process.env.BROWSERSTACK_GRR_REGION = "eu";
     process.env.CAPABILITY_REGISTRY_BASE_URL_TRA = "https://tra-preprod.example";
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    const resolveBaseUrl = await resolveIn("eu");
     expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(
       "https://tra-preprod.example",
     );

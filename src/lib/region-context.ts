@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import appConfig, { GrrRegion } from "../config.js";
+
+export const GRR_REGIONS = ["us", "eu", "in"] as const;
+export type GrrRegion = (typeof GRR_REGIONS)[number];
 
 /** The account's region from BrowserStack auth, or "unknown" when the lookup failed. */
 export type AccountRegion = GrrRegion | "unknown";
@@ -23,19 +25,16 @@ export function currentRegionScope(): RegionScope | undefined {
   return scope.getStore();
 }
 
-/** The account's region when it is known, otherwise BROWSERSTACK_GRR_REGION. */
+/** The account's region, or undefined when it is not known. */
 export function regionOf(
   account: AccountRegion | undefined,
 ): GrrRegion | undefined {
-  if (account && account !== "unknown") return account;
-  return appConfig.BROWSERSTACK_GRR_REGION;
+  return account && account !== "unknown" ? account : undefined;
 }
 
 /** True when telemetry must be limited to usage fields; an unknown account counts. */
 export function isRestrictedRegion(
   account: AccountRegion | undefined,
 ): boolean {
-  const region = regionOf(account);
-  if (region) return region !== "us";
-  return account === "unknown";
+  return account === "unknown" || (account !== undefined && account !== "us");
 }

@@ -1,8 +1,7 @@
 import logger from "../logger.js";
-import { GRR_REGIONS, GrrRegion } from "../config.js";
 import { BrowserStackConfig } from "./types.js";
 import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
-import { AccountRegion } from "./region-context.js";
+import { AccountRegion, GRR_REGIONS, GrrRegion } from "./region-context.js";
 
 const AUTH_TOKEN_URL = "https://auth.browserstack.com/oauth2/v2/token";
 const SCOPE = "oauth_user_profile";

@@ -108,7 +108,7 @@ describe("getTMBaseURL — failure details", () => {
   });
 });
 
-describe("getTMBaseURL — BROWSERSTACK_GRR_REGION", () => {
+describe("getTMBaseURL — account region", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -117,11 +117,16 @@ describe("getTMBaseURL — BROWSERSTACK_GRR_REGION", () => {
     vi.resetModules();
     vi.doMock("../../src/config", () => ({
       __esModule: true,
-      default: { REMOTE_MCP: false, BROWSERSTACK_GRR_REGION: region },
+      default: { REMOTE_MCP: false },
     }));
     const apiClientMod = await import("../../src/lib/apiClient");
     const tmMod = await import("../../src/lib/tm-base-url");
-    return { apiClient: apiClientMod.apiClient, getTMBaseURL: tmMod.getTMBaseURL };
+    const { withAccountRegion } = await import("../../src/lib/region-context");
+    return {
+      apiClient: apiClientMod.apiClient,
+      getTMBaseURL: (config: typeof mockConfig) =>
+        withAccountRegion(region as any, () => tmMod.getTMBaseURL(config)),
+    };
   }
 
   it.each([
@@ -133,7 +138,7 @@ describe("getTMBaseURL — BROWSERSTACK_GRR_REGION", () => {
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
-  it.each([undefined, "us"])("%s keeps the US → EU → IN probe", async (region) => {
+  it.each([undefined, "us", "unknown"])("%s keeps the US → EU → IN probe", async (region) => {
     const { apiClient, getTMBaseURL } = await loadWithRegion(region);
     (apiClient.get as any)
       .mockResolvedValueOnce({ ok: false, status: 401 })

@@ -1,6 +1,6 @@
-import appConfig, { GrrRegion } from "../config.js";
+import appConfig from "../config.js";
 import { SessionType } from "./constants.js";
-import { currentRegionScope, regionOf } from "./region-context.js";
+import { currentRegionScope, GrrRegion, regionOf } from "./region-context.js";
 
 type Hosts = Record<GrrRegion, string>;
 
@@ -86,7 +86,7 @@ export function isRegionalHostname(
   );
 }
 
-/** This call's region: the account's when known, otherwise BROWSERSTACK_GRR_REGION. */
+/** This call's account region; undefined outside a call or when the lookup failed. */
 export function currentRegion(): GrrRegion | undefined {
   return regionOf(currentRegionScope()?.account);
 }

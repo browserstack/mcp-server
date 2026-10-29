@@ -10,15 +10,6 @@ vi.mock("../../src/lib/account-region.js", () => ({
 vi.mock("../../src/lib/apiClient.js", () => ({
   apiClient: { post: vi.fn().mockResolvedValue({ status: 200, data: {} }) },
 }));
-vi.mock("../../src/config.js", async (importOriginal) => {
-  const actual: any = await importOriginal();
-  return {
-    ...actual,
-    default: { ...actual.default, BROWSERSTACK_GRR_REGION: undefined },
-  };
-});
-
-import appConfig from "../../src/config.js";
 import { apiClient } from "../../src/lib/apiClient.js";
 import { getRegionalHost } from "../../src/lib/regional-host.js";
 import { bindAccountRegion } from "../../src/lib/tool-latency.js";
@@ -49,14 +40,9 @@ function tmHostTool(config: ReturnType<typeof configFor>) {
   return tools.probe.handler as () => Promise<string>;
 }
 
-function setFlag(region: string | undefined) {
-  (appConfig as any).BROWSERSTACK_GRR_REGION = region;
-}
-
 describe("the account's region", () => {
   beforeEach(() => {
     regions.clear();
-    setFlag(undefined);
     (apiClient.post as any).mockClear();
   });
 
@@ -72,19 +58,10 @@ describe("the account's region", () => {
     ]);
   });
 
-  it("wins over BROWSERSTACK_GRR_REGION when known", async () => {
-    regions.set("eu-user", "eu");
-    setFlag("us");
-    expect(await tmHostTool(configFor("eu-user"))()).toBe(
-      "https://test-management-eu.browserstack.com",
-    );
-  });
-
-  it("falls back to BROWSERSTACK_GRR_REGION when the lookup failed", async () => {
+  it("keeps the US hosts when the lookup failed", async () => {
     regions.set("someone", "unknown");
-    setFlag("in");
     expect(await tmHostTool(configFor("someone"))()).toBe(
-      "https://test-management-in.browserstack.com",
+      "https://test-management.browserstack.com",
     );
   });
 

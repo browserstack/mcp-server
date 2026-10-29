@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 const PROD_AUTOMATION = "https://api-automation.browserstack.com";
 
-// Re-imported per test so each case sees its own mocked config.
+// Re-imported per test so each case sees its own mocked config; every export is called
+// inside a tool call for an account in `region`.
 async function loadModule(
   region: string | undefined,
   automationBaseUrl: string | undefined = PROD_AUTOMATION,
@@ -10,16 +11,22 @@ async function loadModule(
   vi.resetModules();
   vi.doMock("../../src/config", () => ({
     __esModule: true,
-    default: {
-      BROWSERSTACK_GRR_REGION: region,
-      BROWSERSTACK_AUTOMATION_BASE_URL: automationBaseUrl,
-    },
+    default: { BROWSERSTACK_AUTOMATION_BASE_URL: automationBaseUrl },
   }));
-  return import("../../src/lib/regional-host");
+  const mod = await import("../../src/lib/regional-host");
+  const { withAccountRegion } = await import("../../src/lib/region-context");
+  const inRegion = <T extends (...args: any[]) => any>(fn: T) =>
+    ((...args: Parameters<T>) =>
+      withAccountRegion(region as any, () => fn(...args))) as T;
+  return {
+    getRegionalHost: inRegion(mod.getRegionalHost),
+    sessionApiHost: inRegion(mod.sessionApiHost),
+    isRegionalHostname: inRegion(mod.isRegionalHostname),
+  };
 }
 
 describe("getRegionalHost", () => {
-  it.each([undefined, "us"])(
+  it.each([undefined, "us", "unknown"])(
     "keeps every host on its US default when the region is %s",
     async (region) => {
       const { getRegionalHost } = await loadModule(region);
@@ -141,47 +148,5 @@ describe("isRegionalHostname", () => {
     expect(
       isRegionalHostname("appAccessibilityDashboard", "evil.example.com"),
     ).toBe(false);
-  });
-});
-
-describe("BROWSERSTACK_GRR_REGION parsing", () => {
-  const original = process.env.BROWSERSTACK_GRR_REGION;
-
-  afterEach(() => {
-    if (original === undefined) delete process.env.BROWSERSTACK_GRR_REGION;
-    else process.env.BROWSERSTACK_GRR_REGION = original;
-  });
-
-  async function loadConfig(value: string | undefined) {
-    vi.resetModules();
-    vi.doUnmock("../../src/config");
-    if (value === undefined) delete process.env.BROWSERSTACK_GRR_REGION;
-    else process.env.BROWSERSTACK_GRR_REGION = value;
-    return (await import("../../src/config")).default;
-  }
-
-  it.each([
-    [undefined, undefined],
-    ["", undefined],
-    ["us", "us"],
-    [" EU ", "eu"],
-    ["in", "in"],
-  ])("reads %j as %s", async (value, expected) => {
-    expect((await loadConfig(value)).BROWSERSTACK_GRR_REGION).toBe(expected);
-  });
-
-  it("is ignored in remote mode, where one value would apply to every tenant", async () => {
-    process.env.REMOTE_MCP = "true";
-    try {
-      expect((await loadConfig("eu")).BROWSERSTACK_GRR_REGION).toBeUndefined();
-    } finally {
-      delete process.env.REMOTE_MCP;
-    }
-  });
-
-  it("refuses an unknown region at startup instead of defaulting to US", async () => {
-    await expect(loadConfig("uk")).rejects.toThrow(
-      /Invalid BROWSERSTACK_GRR_REGION "uk"/,
-    );
   });
 });

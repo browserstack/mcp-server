@@ -42,8 +42,8 @@ export class BrowserStackMcpServer {
 
   /**
    * Looks up the account's region first, so the tool list and instructions match it.
-   * The constructor alone still routes each call by region, but lists tools for the
-   * process-wide BROWSERSTACK_GRR_REGION.
+   * The constructor alone still routes each call by region, but lists tools as for a
+   * US account.
    */
   static async create(
     config: BrowserStackConfig,

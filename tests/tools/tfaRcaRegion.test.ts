@@ -4,23 +4,24 @@ async function baseUrl(region: string | undefined, o11yBaseUrl: string) {
   vi.resetModules();
   vi.doMock("../../src/config", () => ({
     __esModule: true,
-    default: {
-      BROWSERSTACK_GRR_REGION: region,
-      O11Y_TFA_RCA_BASE_URL: o11yBaseUrl,
-    },
+    default: { O11Y_TFA_RCA_BASE_URL: o11yBaseUrl },
   }));
   const { getO11yBaseUrl } = await import(
     "../../src/tools/tfa-rca-utils/constants"
   );
-  return getO11yBaseUrl();
+  const { withAccountRegion } = await import("../../src/lib/region-context");
+  return withAccountRegion(region as any, () => getO11yBaseUrl());
 }
 
 const DEFAULT = "https://api-automation.browserstack.com";
 
 describe("getO11yBaseUrl", () => {
-  it("keeps the US host when no region is set", async () => {
-    expect(await baseUrl(undefined, DEFAULT)).toBe(DEFAULT);
-  });
+  it.each([undefined, "us", "unknown"])(
+    "keeps the US host when the region is %s",
+    async (region) => {
+      expect(await baseUrl(region, DEFAULT)).toBe(DEFAULT);
+    },
+  );
 
   it.each([
     ["eu", "https://api-automation-eu.browserstack.com"],

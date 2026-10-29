@@ -246,29 +246,37 @@ describe("products follow the account's region", () => {
   });
 
   it("sends web_accessibility to its regional host", async () => {
-    const resolveBaseUrl = await resolveIn("in");
+    const resolveBaseUrl = await resolveIn("eu");
     expect(
       await resolveBaseUrl("web_accessibility", CONFIG, {
         base_url: "https://api-accessibility.browserstack.com",
       }),
-    ).toBe("https://api-accessibility-in.browserstack.com");
+    ).toBe("https://api-accessibility-eu.browserstack.com");
   });
 
-  it("does not probe the tra base_urls when the account's region is known", async () => {
-    const resolveBaseUrl = await resolveIn("in");
-    const transport = vi.fn();
-    const source = {
-      base_urls: [
-        DECLARED,
-        "https://api-observability-eu.browserstack.com",
-        "https://api-observability-in.browserstack.com",
-      ],
-      probe_path: "/api/v1/access",
-    };
-    expect(await resolveBaseUrl("tra", CONFIG, source, transport as any)).toBe(
+  const TRA_SOURCE = {
+    base_urls: [
+      DECLARED,
+      "https://api-observability-eu.browserstack.com",
       "https://api-observability-in.browserstack.com",
+    ],
+    probe_path: "/api/v1/access",
+  };
+
+  it("does not probe the tra base_urls for an EU account", async () => {
+    const resolveBaseUrl = await resolveIn("eu");
+    const transport = vi.fn();
+    expect(await resolveBaseUrl("tra", CONFIG, TRA_SOURCE, transport as any)).toBe(
+      "https://api-observability-eu.browserstack.com",
     );
     expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("probes the tra base_urls for an account in a region not routed here", async () => {
+    const resolveBaseUrl = await resolveIn("in");
+    const transport = vi.fn(async () => ({ status: 401 }));
+    await resolveBaseUrl("tra", CONFIG, TRA_SOURCE, transport as any).catch(() => {});
+    expect(transport).toHaveBeenCalledTimes(TRA_SOURCE.base_urls.length);
   });
 
   it.each([

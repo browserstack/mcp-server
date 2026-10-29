@@ -16,18 +16,17 @@ async function baseUrl(region: string | undefined, o11yBaseUrl: string) {
 const DEFAULT = "https://api-automation.browserstack.com";
 
 describe("getO11yBaseUrl", () => {
-  it.each([undefined, "us", "unknown"])(
+  it.each([undefined, "us", "in", "unknown"])(
     "keeps the US host when the region is %s",
     async (region) => {
       expect(await baseUrl(region, DEFAULT)).toBe(DEFAULT);
     },
   );
 
-  it.each([
-    ["eu", "https://api-automation-eu.browserstack.com"],
-    ["in", "https://api-automation-in.browserstack.com"],
-  ])("follows the %s region", async (region, host) => {
-    expect(await baseUrl(region, DEFAULT)).toBe(host);
+  it("follows the eu region", async () => {
+    expect(await baseUrl("eu", DEFAULT)).toBe(
+      "https://api-automation-eu.browserstack.com",
+    );
   });
 
   it("lets an explicit O11Y_TFA_RCA_BASE_URL win", async () => {

@@ -129,16 +129,15 @@ describe("getTMBaseURL — account region", () => {
     };
   }
 
-  it.each([
-    ["eu", "https://test-management-eu.browserstack.com"],
-    ["in", "https://test-management-in.browserstack.com"],
-  ])("region %s uses its host directly, like every other product", async (region, url) => {
-    const { apiClient, getTMBaseURL } = await loadWithRegion(region);
-    await expect(getTMBaseURL(mockConfig)).resolves.toBe(url);
+  it("an EU account uses its host directly, like every other product", async () => {
+    const { apiClient, getTMBaseURL } = await loadWithRegion("eu");
+    await expect(getTMBaseURL(mockConfig)).resolves.toBe(
+      "https://test-management-eu.browserstack.com",
+    );
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
-  it.each([undefined, "us", "unknown"])("%s keeps the US → EU → IN probe", async (region) => {
+  it.each([undefined, "us", "in", "unknown"])("%s keeps the US → EU → IN probe", async (region) => {
     const { apiClient, getTMBaseURL } = await loadWithRegion(region);
     (apiClient.get as any)
       .mockResolvedValueOnce({ ok: false, status: 401 })

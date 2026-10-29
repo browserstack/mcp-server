@@ -2,15 +2,15 @@ import { z } from "zod";
 
 import appConfig from "../../config.js";
 import {
-  currentRegion,
   hostFor,
   hostOverride,
+  routedRegion,
 } from "../../lib/regional-host.js";
 
 export function getO11yBaseUrl(): string {
   return (
     hostOverride(appConfig.O11Y_TFA_RCA_BASE_URL, "automationApi") ??
-    hostFor("automationApi", currentRegion() ?? "us")
+    hostFor("automationApi", routedRegion())
   );
 }
 

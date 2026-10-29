@@ -3,21 +3,23 @@ import logger from "../logger.js";
 import { BrowserStackConfig } from "./types.js";
 import { getBrowserStackAuth } from "./get-auth.js";
 import appConfig from "../config.js";
-import { getRegionalHost, hostFor, isNonUsRegion } from "./regional-host.js";
+import { getRegionalHost, usesRegionalHosts } from "./regional-host.js";
 
-// Probe order when no non-US region is known.
-const TM_BASE_URLS = (["us", "eu", "in"] as const).map((r) =>
-  hostFor("testManagement", r),
-);
+// Probe order when the account has no regional hosts here.
+const TM_BASE_URLS = [
+  "https://test-management.browserstack.com",
+  "https://test-management-eu.browserstack.com",
+  "https://test-management-in.browserstack.com",
+] as const;
 
 let cachedBaseUrl: string | null = null;
 
 export async function getTMBaseURL(
   config: BrowserStackConfig,
 ): Promise<string> {
-  // An EU/IN region is used as given, like every other product. Unset or `us` keeps the
-  // probe below, so existing EU/IN accounts that never set the flag keep working.
-  if (isNonUsRegion()) {
+  // A routed region is used as given, like every other product. Any other account keeps
+  // the probe below.
+  if (usesRegionalHosts()) {
     return getRegionalHost("testManagement");
   }
 

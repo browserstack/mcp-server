@@ -81,13 +81,12 @@ describe("getRegionalHost", () => {
     );
   });
 
-  it("routes Automate to api-aps-only when the region is in", async () => {
+  it("keeps the default hosts for a region it does not route", async () => {
     const { getRegionalHost } = await loadModule("in");
-    expect(getRegionalHost("automateApi")).toBe(
-      "https://api-aps-only.browserstack.com",
-    );
-    expect(getRegionalHost("appAutomateHub")).toBe(
-      "hub-aps-only.browserstack.com",
+    expect(getRegionalHost("automateApi")).toBe("https://api.browserstack.com");
+    expect(getRegionalHost("appAutomateHub")).toBe("hub.browserstack.com");
+    expect(getRegionalHost("testManagement")).toBe(
+      "https://test-management.browserstack.com",
     );
   });
 
@@ -124,13 +123,13 @@ describe("getRegionalHost", () => {
 });
 
 describe("sessionApiHost", () => {
-  it("picks the session's product host in the configured region", async () => {
-    const { sessionApiHost } = await loadModule("in");
+  it("picks the session's product host in the account's region", async () => {
+    const { sessionApiHost } = await loadModule("eu");
     expect(sessionApiHost("automate")).toBe(
-      "https://api-aps-only.browserstack.com",
+      "https://api-eu-only.browserstack.com",
     );
     expect(sessionApiHost("app-automate")).toBe(
-      "https://api-aps-only.browserstack.com",
+      "https://api-eu-only.browserstack.com",
     );
   });
 });
@@ -141,7 +140,6 @@ describe("isRegionalHostname", () => {
     for (const host of [
       "app-accessibility.browserstack.com",
       "app-accessibility-eu.browserstack.com",
-      "app-accessibility-in.browserstack.com",
     ]) {
       expect(isRegionalHostname("appAccessibilityDashboard", host)).toBe(true);
     }

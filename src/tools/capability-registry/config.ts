@@ -20,7 +20,7 @@ import { Credentials, Transport, fetchTransport } from "./egress.js";
 import { FLAT_SUFFIX, INDEX_FILE, InvocationError } from "./index-loader.js";
 import {
   getRegionalHost,
-  isNonUsRegion,
+  usesRegionalHosts,
   RegionalHostKind,
 } from "../../lib/regional-host.js";
 
@@ -68,7 +68,7 @@ const BUILTIN_DISCOVERY: Record<
 };
 
 /**
- * Hosts used when the region is non-US, ahead of discovery and the
+ * Hosts used when the account's region is routed here, ahead of discovery and the
  * index's declared hosts. `hosts` covers the capabilities that name a host.
  */
 const REGIONAL_HOSTS: Record<
@@ -87,7 +87,7 @@ const REGIONAL_HOSTS: Record<
 };
 
 function regionalHost(product: string, host?: string): string | undefined {
-  if (!isNonUsRegion()) return undefined;
+  if (!usesRegionalHosts()) return undefined;
   const entry = REGIONAL_HOSTS[product];
   const kind = host ? entry?.hosts?.[host] : entry?.base;
   return kind ? getRegionalHost(kind) : undefined;

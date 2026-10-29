@@ -3,7 +3,7 @@ import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { SessionType } from "../../lib/constants.js";
 import { validateLogResponse } from "./utils.js";
-import { getRegionalHost } from "../../lib/regional-host.js";
+import { sessionApiHost } from "../../lib/regional-host.js";
 
 export async function retrieveSessionVideo(
   sessionId: string,
@@ -12,9 +12,7 @@ export async function retrieveSessionVideo(
 ): Promise<string> {
   const product =
     sessionType === SessionType.AppAutomate ? "app-automate" : "automate";
-  const host = getRegionalHost(
-    sessionType === SessionType.AppAutomate ? "appAutomateApi" : "automateApi",
-  );
+  const host = sessionApiHost(sessionType);
   const url = `${host}/${product}/sessions/${encodeURIComponent(sessionId)}.json`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");

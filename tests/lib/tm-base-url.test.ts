@@ -125,7 +125,6 @@ describe("getTMBaseURL — BROWSERSTACK_GRR_REGION", () => {
   }
 
   it.each([
-    ["us", "https://test-management.browserstack.com"],
     ["eu", "https://test-management-eu.browserstack.com"],
     ["in", "https://test-management-in.browserstack.com"],
   ])("region %s uses its host directly, like every other product", async (region, url) => {
@@ -134,8 +133,8 @@ describe("getTMBaseURL — BROWSERSTACK_GRR_REGION", () => {
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
-  it("unset keeps the US → EU → IN probe for accounts that never set the flag", async () => {
-    const { apiClient, getTMBaseURL } = await loadWithRegion(undefined);
+  it.each([undefined, "us"])("%s keeps the US → EU → IN probe", async (region) => {
+    const { apiClient, getTMBaseURL } = await loadWithRegion(region);
     (apiClient.get as any)
       .mockResolvedValueOnce({ ok: false, status: 401 })
       .mockResolvedValueOnce({ ok: true });

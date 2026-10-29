@@ -18,7 +18,6 @@ import {
   GET_BUILD_ID_PARAMS,
   LIST_TEST_IDS_PARAMS,
 } from "./rca-agent-utils/constants.js";
-import { getRegionalHost } from "../lib/regional-host.js";
 
 // Tool function to fetch build ID
 export async function getBuildIdTool(
@@ -115,12 +114,7 @@ export async function fetchRCADataTool(
     // Limit to first 3 test IDs for performance
     const testIds = args.testId;
 
-    const rcaData = await getRCAData(
-      testIds,
-      authString,
-      undefined,
-      getRegionalHost("observabilityApi"),
-    );
+    const rcaData = await getRCAData(testIds, authString);
 
     const formattedData = formatRCAData(rcaData);
 
@@ -166,7 +160,6 @@ export async function listTestIdsTool(
       authString,
       status,
       includeFailureDetail,
-      getRegionalHost("automationApi"),
     );
 
     return {

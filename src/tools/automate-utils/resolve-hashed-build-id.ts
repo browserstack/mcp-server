@@ -5,7 +5,7 @@ import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
 import { extractTestIds } from "../rca-agent-utils/get-failed-test-id.js";
 import { TestRun } from "../rca-agent-utils/types.js";
-import { getRegionalHost } from "../../lib/regional-host.js";
+import { getRegionalHost, sessionApiHost } from "../../lib/regional-host.js";
 
 // Observability (Test Reporting & Analytics) build ids are usually UUIDs but
 // some are 40-char hex, the same shape as Automate / App Automate "hashed ids".
@@ -30,9 +30,7 @@ export function isHashedBuildId(id: string): boolean {
 export function sessionDetailsUrl(
   sessionType: SessionType,
   sessionId: string,
-  host = getRegionalHost(
-    sessionType === SessionType.Automate ? "automateApi" : "appAutomateApi",
-  ),
+  host = sessionApiHost(sessionType),
 ): string {
   const encoded = encodeURIComponent(sessionId);
   switch (sessionType) {
@@ -61,13 +59,7 @@ export async function resolveBuildIdFromSession(
   const auth = Buffer.from(authString).toString("base64");
 
   const response = await apiClient.get({
-    url: sessionDetailsUrl(
-      sessionType,
-      sessionId,
-      getRegionalHost(
-        sessionType === SessionType.Automate ? "automateApi" : "appAutomateApi",
-      ),
-    ),
+    url: sessionDetailsUrl(sessionType, sessionId),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,

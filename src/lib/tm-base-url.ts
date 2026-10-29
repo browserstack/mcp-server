@@ -3,7 +3,7 @@ import logger from "../logger.js";
 import { BrowserStackConfig } from "./types.js";
 import { getBrowserStackAuth } from "./get-auth.js";
 import appConfig from "../config.js";
-import { getRegionalHost, hostFor } from "./regional-host.js";
+import { getRegionalHost, hostFor, isNonUsRegion } from "./regional-host.js";
 
 // Probe order when BROWSERSTACK_GRR_REGION is not set.
 const TM_BASE_URLS = (["us", "eu", "in"] as const).map((r) =>
@@ -15,9 +15,9 @@ let cachedBaseUrl: string | null = null;
 export async function getTMBaseURL(
   config: BrowserStackConfig,
 ): Promise<string> {
-  // A configured region is used as given, like every other product. Unset keeps the
+  // An EU/IN region is used as given, like every other product. Unset or `us` keeps the
   // probe below, so existing EU/IN accounts that never set the flag keep working.
-  if (appConfig.BROWSERSTACK_GRR_REGION) {
+  if (isNonUsRegion()) {
     return getRegionalHost("testManagement");
   }
 

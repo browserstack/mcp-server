@@ -44,7 +44,7 @@ export interface SelfHealingReport {
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
-import { getRegionalHost } from "../../lib/regional-host.js";
+import { getRegionalHost, sessionApiHost } from "../../lib/regional-host.js";
 
 type SessionType = "automate" | "app-automate";
 
@@ -133,9 +133,7 @@ export async function getSelfHealSelectors(
   const auth = Buffer.from(authString).toString("base64");
   const productPath =
     sessionType === "app-automate" ? "app-automate" : "automate";
-  const host = getRegionalHost(
-    sessionType === "app-automate" ? "appAutomateApi" : "automateApi",
-  );
+  const host = sessionApiHost(sessionType);
   const url = `${host}/${productPath}/sessions/${sessionId}/logs`;
 
   const response = await apiClient.get({

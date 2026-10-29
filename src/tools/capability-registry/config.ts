@@ -75,13 +75,14 @@ const REGIONAL_HOSTS: Record<
   string,
   { base: RegionalHostKind; hosts?: Record<string, RegionalHostKind> }
 > = {
+  tm: { base: "testManagement" },
   tra: { base: "observabilityApi" },
   app_accessibility: { base: "appAccessibilityApi" },
   web_accessibility: { base: "accessibilityApi" },
   devicecontrol: { base: "automateHubUrl", hosts: { api: "automateApi" } },
   mobiledevicecontrol: {
     base: "appAutomateHubUrl",
-    hosts: { api: "appAutomateUpload" },
+    hosts: { api: "appAutomateCloud" },
   },
 };
 

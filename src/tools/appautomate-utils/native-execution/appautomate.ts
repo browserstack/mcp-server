@@ -157,7 +157,7 @@ export async function uploadApp(
   formData.append("file", fs.createReadStream(safePath));
 
   const response = await apiClient.post<UploadResponse>({
-    url: `${getRegionalHost("appAutomateUpload")}/app-automate/upload`,
+    url: `${getRegionalHost("appAutomateCloud")}/app-automate/upload`,
     headers: {
       ...formData.getHeaders(),
       Authorization:
@@ -219,7 +219,7 @@ export async function uploadEspressoApp(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     appPath,
-    `${getRegionalHost("appAutomateUpload")}/app-automate/espresso/v2/app`,
+    `${getRegionalHost("appAutomateCloud")}/app-automate/espresso/v2/app`,
     "app_url",
     config,
     { allowedExtensions: [".apk", ".aab"] },
@@ -233,7 +233,7 @@ export async function uploadEspressoTestSuite(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     testSuitePath,
-    `${getRegionalHost("appAutomateUpload")}/app-automate/espresso/v2/test-suite`,
+    `${getRegionalHost("appAutomateCloud")}/app-automate/espresso/v2/test-suite`,
     "test_suite_url",
     config,
     { allowedExtensions: [".apk"] },
@@ -247,7 +247,7 @@ export async function uploadXcuiApp(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     appPath,
-    `${getRegionalHost("appAutomateUpload")}/app-automate/xcuitest/v2/app`,
+    `${getRegionalHost("appAutomateCloud")}/app-automate/xcuitest/v2/app`,
     "app_url",
     config,
     { allowedExtensions: [".ipa"] },
@@ -261,7 +261,7 @@ export async function uploadXcuiTestSuite(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     testSuitePath,
-    `${getRegionalHost("appAutomateUpload")}/app-automate/xcuitest/v2/test-suite`,
+    `${getRegionalHost("appAutomateCloud")}/app-automate/xcuitest/v2/test-suite`,
     "test_suite_url",
     config,
     { allowedExtensions: [".zip"] },
@@ -303,7 +303,7 @@ export async function triggerEspressoBuild(
     "Basic " + Buffer.from(getBrowserStackAuth(config)).toString("base64");
 
   const response = await apiClient.post({
-    url: `${getRegionalHost("appAutomateUpload")}/app-automate/espresso/v2/build`,
+    url: `${getRegionalHost("appAutomateCloud")}/app-automate/espresso/v2/build`,
     headers: {
       Authorization: authHeader,
       "Content-Type": "application/json",
@@ -339,7 +339,7 @@ export async function triggerXcuiBuild(
   };
 
   const response = await apiClient.post({
-    url: `${getRegionalHost("appAutomateUpload")}/app-automate/xcuitest/v2/build`,
+    url: `${getRegionalHost("appAutomateCloud")}/app-automate/xcuitest/v2/build`,
     headers: {
       Authorization:
         "Basic " +

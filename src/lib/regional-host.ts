@@ -1,4 +1,5 @@
 import appConfig, { GrrRegion } from "../config.js";
+import { SessionType } from "./constants.js";
 
 type Hosts = Record<GrrRegion, string>;
 
@@ -16,7 +17,7 @@ const HOSTS = {
   },
   automateApi: AUTOMATE_API,
   appAutomateApi: AUTOMATE_API,
-  appAutomateUpload: {
+  appAutomateCloud: {
     us: "https://api-cloud.browserstack.com",
     eu: AUTOMATE_API.eu,
     in: AUTOMATE_API.in,
@@ -74,18 +75,55 @@ export function hostFor(kind: RegionalHostKind, region: GrrRegion): string {
   return HOSTS[kind][region];
 }
 
+/** True when `hostname` is `kind`'s host in any region, so a link from any region resolves. */
+export function isRegionalHostname(
+  kind: RegionalHostKind,
+  hostname: string,
+): boolean {
+  return Object.values(HOSTS[kind]).some(
+    (host) => new URL(host).hostname === hostname,
+  );
+}
+
 export function isNonUsRegion(): boolean {
   const region = appConfig.BROWSERSTACK_GRR_REGION;
   return region !== undefined && region !== "us";
 }
 
+/** REST host for a session's product: App Automate or Automate. */
+export function sessionApiHost(sessionType: string): string {
+  return getRegionalHost(
+    sessionType === SessionType.AppAutomate ? "appAutomateApi" : "automateApi",
+  );
+}
+
+/**
+ * An env var's host when it points somewhere other than `kind`'s US default, without a
+ * trailing slash; undefined when it is unset or names the default in any spelling.
+ */
+export function hostOverride(
+  url: string | undefined,
+  kind: RegionalHostKind,
+): string | undefined {
+  const value = url?.trim().replace(/\/+$/, "");
+  if (!value) return undefined;
+  try {
+    if (new URL(value).origin === new URL(HOSTS[kind].us).origin) {
+      return undefined;
+    }
+  } catch {
+    // Not a URL: pass it through as given.
+  }
+  return value;
+}
+
 export function getRegionalHost(kind: RegionalHostKind): string {
-  if (
-    kind === "automationApi" &&
-    appConfig.BROWSERSTACK_AUTOMATION_BASE_URL &&
-    appConfig.BROWSERSTACK_AUTOMATION_BASE_URL !== HOSTS.automationApi.us
-  ) {
-    return appConfig.BROWSERSTACK_AUTOMATION_BASE_URL;
+  if (kind === "automationApi") {
+    const override = hostOverride(
+      appConfig.BROWSERSTACK_AUTOMATION_BASE_URL,
+      kind,
+    );
+    if (override) return override;
   }
   return hostFor(kind, appConfig.BROWSERSTACK_GRR_REGION ?? "us");
 }

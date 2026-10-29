@@ -1,9 +1,13 @@
 import { z } from "zod";
 
 import appConfig from "../../config.js";
+import { hostFor, hostOverride } from "../../lib/regional-host.js";
 
 export function getO11yBaseUrl(): string {
-  return appConfig.O11Y_TFA_RCA_BASE_URL;
+  return (
+    hostOverride(appConfig.O11Y_TFA_RCA_BASE_URL, "automationApi") ??
+    hostFor("automationApi", appConfig.BROWSERSTACK_GRR_REGION ?? "us")
+  );
 }
 
 export function getO11yUiBaseUrl(): string {

@@ -126,7 +126,10 @@ const config = new Config(
     : undefined,
   (process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT || "").trim().toLowerCase() ||
     undefined,
-  parseGrrRegion(process.env.BROWSERSTACK_GRR_REGION),
+  // Process-wide, so ignored in remote (multi-tenant) mode, where it would apply to every tenant.
+  process.env.REMOTE_MCP === "true"
+    ? undefined
+    : parseGrrRegion(process.env.BROWSERSTACK_GRR_REGION),
 );
 
 export default config;

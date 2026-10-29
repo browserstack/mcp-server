@@ -26,7 +26,7 @@ describe("getRegionalHost", () => {
       expect(getRegionalHost("automateApi")).toBe(
         "https://api.browserstack.com",
       );
-      expect(getRegionalHost("appAutomateUpload")).toBe(
+      expect(getRegionalHost("appAutomateCloud")).toBe(
         "https://api-cloud.browserstack.com",
       );
       expect(getRegionalHost("appAutomateHub")).toBe("hub.browserstack.com");
@@ -48,7 +48,7 @@ describe("getRegionalHost", () => {
     expect(getRegionalHost("appAutomateApi")).toBe(
       "https://api-eu-only.browserstack.com",
     );
-    expect(getRegionalHost("appAutomateUpload")).toBe(
+    expect(getRegionalHost("appAutomateCloud")).toBe(
       "https://api-eu-only.browserstack.com",
     );
     expect(getRegionalHost("appAutomateHub")).toBe(
@@ -90,9 +90,57 @@ describe("getRegionalHost", () => {
     expect(getRegionalHost("automationApi")).toBe(staging);
   });
 
+  it.each([`${PROD_AUTOMATION}/`, " https://API-AUTOMATION.browserstack.com "])(
+    "treats %j as the default, not an override",
+    async (spelling) => {
+      const { getRegionalHost } = await loadModule("eu", spelling);
+      expect(getRegionalHost("automationApi")).toBe(
+        "https://api-automation-eu.browserstack.com",
+      );
+    },
+  );
+
+  it("drops a trailing slash from a real override", async () => {
+    const { getRegionalHost } = await loadModule(
+      "eu",
+      "https://api-automation-preprod.bsstag.com/",
+    );
+    expect(getRegionalHost("automationApi")).toBe(
+      "https://api-automation-preprod.bsstag.com",
+    );
+  });
+
   it("falls back to the US api-automation host when the config omits it", async () => {
     const { getRegionalHost } = await loadModule(undefined, undefined);
     expect(getRegionalHost("automationApi")).toBe(PROD_AUTOMATION);
+  });
+});
+
+describe("sessionApiHost", () => {
+  it("picks the session's product host in the configured region", async () => {
+    const { sessionApiHost } = await loadModule("in");
+    expect(sessionApiHost("automate")).toBe(
+      "https://api-aps-only.browserstack.com",
+    );
+    expect(sessionApiHost("app-automate")).toBe(
+      "https://api-aps-only.browserstack.com",
+    );
+  });
+});
+
+describe("isRegionalHostname", () => {
+  it("accepts a link from any region, whatever the configured region", async () => {
+    const { isRegionalHostname } = await loadModule("eu");
+    for (const host of [
+      "app-accessibility.browserstack.com",
+      "app-accessibility-eu.browserstack.com",
+      "app-accessibility-in.browserstack.com",
+    ]) {
+      expect(isRegionalHostname("appAccessibilityDashboard", host)).toBe(true);
+    }
+    expect(
+      isRegionalHostname("appAccessibilityDashboard", "evil.example.com"),
+    ).toBe(false);
   });
 });
 
@@ -120,6 +168,15 @@ describe("BROWSERSTACK_GRR_REGION parsing", () => {
     ["in", "in"],
   ])("reads %j as %s", async (value, expected) => {
     expect((await loadConfig(value)).BROWSERSTACK_GRR_REGION).toBe(expected);
+  });
+
+  it("is ignored in remote mode, where one value would apply to every tenant", async () => {
+    process.env.REMOTE_MCP = "true";
+    try {
+      expect((await loadConfig("eu")).BROWSERSTACK_GRR_REGION).toBeUndefined();
+    } finally {
+      delete process.env.REMOTE_MCP;
+    }
   });
 
   it("refuses an unknown region at startup instead of defaulting to US", async () => {

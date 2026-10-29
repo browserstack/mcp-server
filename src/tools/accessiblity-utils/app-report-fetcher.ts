@@ -3,7 +3,10 @@ import { SessionType } from "../../lib/constants.js";
 import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
 import { mostCommon, pageOf, sortBySeverity } from "./paginate.js";
-import { getRegionalHost } from "../../lib/regional-host.js";
+import {
+  getRegionalHost,
+  isRegionalHostname,
+} from "../../lib/regional-host.js";
 
 /**
  * App Accessibility: the issues of a mobile app build run through App Automate with
@@ -27,7 +30,7 @@ const BUILD_LIST_PAGE_SIZE = 30;
 
 /** A native build is found by name in the account's App Automate build list, newest first. */
 const appAutomateBuildsUrl = () =>
-  `${getRegionalHost("appAutomateUpload")}/app-automate/builds.json`;
+  `${getRegionalHost("appAutomateCloud")}/app-automate/builds.json`;
 const APP_AUTOMATE_BUILDS_PAGE_SIZE = 100;
 export const MAX_APP_AUTOMATE_BUILD_PAGES = 3;
 /** A native run's accessibility build is created as the run starts: seconds apart, in practice. */
@@ -654,7 +657,8 @@ function appAutomateIds(
 
 /** The id a manual report's dashboard link names (`/report/{uuid}`), if it is one. */
 export function manualReportIdFromDashboardLink(url: URL): string | undefined {
-  if (url.hostname !== new URL(appDashboard()).hostname) return undefined;
+  if (!isRegionalHostname("appAccessibilityDashboard", url.hostname))
+    return undefined;
   return url.pathname.match(/^\/report\/([0-9a-f-]{36})\/?$/i)?.[1];
 }
 
@@ -722,7 +726,8 @@ export class AppAccessibilityApi {
    * carries TestHub's name for the build, which the filter does not match.)
    */
   async buildIdFromDashboardLink(url: URL): Promise<string | undefined> {
-    if (url.hostname !== new URL(appDashboard()).hostname) return undefined;
+    if (!isRegionalHostname("appAccessibilityDashboard", url.hostname))
+      return undefined;
     const build = buildOfDashboardLink(url);
     if (!build) return undefined;
     // The name in the link is TestHub's, which can differ from the build's own: with no
@@ -849,7 +854,7 @@ export class AppAccessibilityApi {
   ): Promise<{ project?: string; startedAt?: number } | undefined> {
     for (const framework of ["espresso", "xcuitest"]) {
       const resp = await apiClient.get({
-        url: `${getRegionalHost("appAutomateUpload")}/app-automate/${framework}/v2/builds/${encodeURIComponent(buildId)}`,
+        url: `${getRegionalHost("appAutomateCloud")}/app-automate/${framework}/v2/builds/${encodeURIComponent(buildId)}`,
         headers: this.headers(),
         raise_error: false,
       });

@@ -4,7 +4,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import globalConfig from "../../config.js";
-import { getRegionalHost } from "../../lib/regional-host.js";
+import { sessionApiHost } from "../../lib/regional-host.js";
 import { MAX_LOG_BYTES } from "../failurelogs-utils/utils.js";
 
 export const MAX_SCREENSHOT_BYTES = globalConfig.REMOTE_MCP
@@ -20,7 +20,7 @@ async function extractScreenshotUrls(
   const auth = Buffer.from(authString).toString("base64");
 
   const isAutomate = sessionType === SessionType.Automate;
-  const host = getRegionalHost(isAutomate ? "automateApi" : "appAutomateApi");
+  const host = sessionApiHost(sessionType);
   const baseUrl = `${host}/${isAutomate ? "automate" : "app-automate"}`;
 
   const url = `${baseUrl}/sessions/${sessionId}/logs`;

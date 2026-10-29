@@ -54,7 +54,7 @@ export function sessionsListUrl(
   sessionType: SessionType,
   buildId: string,
   host = getRegionalHost(
-    sessionType === SessionType.Automate ? "automateApi" : "appAutomateUpload",
+    sessionType === SessionType.Automate ? "automateApi" : "appAutomateCloud",
   ),
 ): string {
   const encodedBuildId = encodeURIComponent(buildId);
@@ -126,15 +126,7 @@ export async function listSessionIds(
   }
 
   const response = await apiClient.get({
-    url: sessionsListUrl(
-      args.sessionType,
-      buildId,
-      getRegionalHost(
-        args.sessionType === SessionType.Automate
-          ? "automateApi"
-          : "appAutomateUpload",
-      ),
-    ),
+    url: sessionsListUrl(args.sessionType, buildId),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,

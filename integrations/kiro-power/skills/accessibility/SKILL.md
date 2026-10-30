@@ -1,6 +1,6 @@
 ---
 name: accessibility
-description: Scan a page for accessibility issues with BrowserStack, page through the results, handle pages behind a login, and answer WCAG questions from BrowserStack's knowledge base
+description: Scan a page for accessibility issues with BrowserStack, page through the results, handle pages behind a login, and answer WCAG questions from BrowserStack's knowledge base. Use when the user mentions accessibility, a11y, WCAG, ADA, contrast or screen readers, or asks to scan a page.
 ---
 
 # Accessibility scans and WCAG questions
@@ -12,7 +12,7 @@ Load this skill when the user says "accessibility", "a11y", "WCAG", "ADA", "cont
 ## Scan a page
 
 1. Need a URL and a scan name. Make the name short and specific, for example `checkout-page-oct-13`.
-2. Call `startAccessibilityScan` with `name` and `pageURL`. Add `wcagVersion` (for example `wcag22aa`; default `wcag21aa`) or `advancedRules: true` only if the user asks for them.
+2. Call `startAccessibilityScan` with `name` and `pageURL`. Add `wcagVersion` (for example `wcag22aa`; default `wcag21aa`) only if the user asks. Advanced rules run by default; pass `advancedRules: false` only if the user asks to skip them.
 3. The response lists the total and the top issues with severity, component, HTML snippet and how to fix. Present those first.
 4. For more, call `fetchAccessibilityIssues` with the `scanId`, `scanRunId` and the `cursor` the previous response gave. Each page returns about eight issues and the next cursor. Stop when the user has enough; do not fetch all pages by default.
 5. The CSV download link expires in hours; offer it, do not rely on it later.

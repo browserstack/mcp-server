@@ -1,6 +1,6 @@
 ---
 name: live
-description: Open a URL on a real desktop browser or mobile device in BrowserStack Live for a quick manual check
+description: Open a URL on a real desktop browser or mobile device in BrowserStack Live for a quick manual check. Use when the user wants to open or check a website on a specific browser, OS or mobile device.
 ---
 
 # BrowserStack Live: manual check on a real browser

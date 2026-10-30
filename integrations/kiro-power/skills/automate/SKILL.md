@@ -1,6 +1,6 @@
 ---
 name: automate
-description: Set up the BrowserStack SDK in a Playwright, Selenium, Cypress or WebdriverIO project, run the suite on real browsers in BrowserStack Automate, then debug failures with root-cause analysis, logs and self-healed selectors
+description: Set up the BrowserStack SDK in a Playwright, Selenium, Cypress or WebdriverIO project, run the suite on real browsers in BrowserStack Automate, then debug failures with root-cause analysis, logs and self-healed selectors. Use when the user wants to run Playwright, Selenium, Cypress or WebdriverIO tests on BrowserStack, or asks why a web test or build failed.
 ---
 
 # BrowserStack Automate: run web tests and debug failures
@@ -21,7 +21,7 @@ Only when the user names them, up to three. Each entry has `platform` (windows, 
 
 ### Step 3: Setup
 
-`setupBrowserStackAutomateTests` with `projectName`, the three detected values and the devices. It returns nine steps: install the SDK, run the SDK setup command, add a package script, export credentials, write `browserstack.yml` with the validated platforms, run. Apply them in order. Credentials belong in environment variables or the yml placeholders; never commit a real key and never ask for one in chat.
+`setupBrowserStackAutomateTests` with `projectName`, the three detected values and the devices. It returns ordered steps, such as: install the SDK, run the SDK setup command, add a package script, export credentials, write `browserstack.yml` with the validated platforms, run. Apply them in order. Credentials belong in environment variables or the yml placeholders; never commit a real key and never ask for one in chat.
 
 ### Step 4: Run and verify
 
@@ -38,6 +38,8 @@ Run the suite with the script the setup added. Then `getBuildId` with the projec
 `fetchRCA` with up to three test ids as **numbers**: `listTestIds` returns them as strings, so convert `"4430179170"` to `4430179170` or the call is rejected. It returns the cause in one sentence, a failure type (AUTOMATION_BUG, PRODUCT_BUG, ENVIRONMENT), the log evidence, an evidence strength, and a suggested fix marked as a proposal. For most failures this is the whole diagnosis. If RCA is unavailable, go to logs.
 
 ### Step 3: Logs, for `sessionType: automate` only
+
+`getFailureLogs` with the session id, `sessionType: "automate"` and the `logTypes` below.
 
 | Use | Why |
 |---|---|

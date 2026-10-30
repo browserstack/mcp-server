@@ -1,13 +1,13 @@
 ---
 name: test-reporting-analytics
-description: Investigate builds, tests, unique errors, flakiness, quality gates and trends in BrowserStack Test Reporting & Analytics through the capability registry
+description: Investigate builds, tests, unique errors, flakiness, quality gates and trends in BrowserStack Test Reporting & Analytics through the capability registry. Use when the user asks about build trends, unique errors, flaky tests, quality gates, test health or comparing builds.
 ---
 
 # Investigate test results in Test Reporting & Analytics
 
 Load this skill when the user says "build trends", "unique errors", "quality gate", "flaky over time", "compare two builds", "test health", "dashboard", "which tests always fail", or asks about a build beyond a single failure. For one failed test's cause, `automate` or `app-automate` is faster.
 
-**Governing rule: resolve the project, then the build, then drill in. Reads only.** Test Reporting is almost entirely read-only analysis. Reach it through `searchCapability` → `describeCapability` → `invokeCapability` with `product: "tra"`. Two listing capabilities quietly subscribe the user to project notifications; avoid them (see below).
+**Governing rule: resolve the project, then the build, then drill in.** Test Reporting is mostly read-only analysis. A few capabilities change data, such as `create_self_healing_pr`, the `trigger_*_rca` family and `link_bug_to_test_run`: show the user what will change, wait for an explicit yes, then invoke with `user_permission: "granted"` and a `change_summary`. Reach it through `searchCapability` → `describeCapability` → `invokeCapability` with `product: "tra"`. Two listing capabilities quietly subscribe the user to project notifications; avoid them (see below).
 
 ## Step 0: Product routing
 
@@ -44,7 +44,7 @@ The reference file `references/workflows.md` lists the product workflows by enti
 
 ## Read the flags before you explain
 
-`listTestIds` with `includeFailureDetail: true` and `fetchBuildInsights` return `is_flaky`, `is_always_failing`, `is_new_failure` and failure categories. Lead with them: a new failure after a passing history is a regression; an always-failing test is tech debt; a flaky one needs stabilising, not debugging. Then drill in only where the flags point.
+`listTestIds` with `includeFailureDetail: true` returns `is_flaky`, `is_always_failing`, `is_new_failure` and failure categories. Lead with them: a new failure after a passing history is a regression; an always-failing test is tech debt; a flaky one needs stabilising, not debugging. Then drill in only where the flags point.
 
 ## Result card
 

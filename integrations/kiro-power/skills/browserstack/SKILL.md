@@ -25,7 +25,7 @@ A failed test with no product named: ask "web or mobile app?", then `automate` o
 
 ## Ready check
 
-Nothing to run up front. The hosted server authenticates with OAuth; the first tool call either works or Kiro opens the sign-in page. Never ask for a BrowserStack username or access key in chat. If a user is on the local server instead, credentials live in their MCP config file, not in the conversation.
+Nothing to run up front. The hosted server authenticates with OAuth; the first tool call either works or Kiro opens the sign-in page. Never ask for a BrowserStack username or access key in chat.
 
 ## Rules every skill follows
 

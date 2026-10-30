@@ -1,6 +1,6 @@
 ---
 name: test-management
-description: Create and organise projects, folders, test cases, test runs, test plans and results in BrowserStack Test Management, through the capability registry, confirming before every write
+description: Create and organise projects, folders, test cases, test runs, test plans and results in BrowserStack Test Management, through the capability registry, confirming before every write. Use when the user mentions test cases, test runs, test plans, folders, test results, Test Management, or ids like PR-, TC- or TR-.
 ---
 
 # Work in BrowserStack Test Management
@@ -23,7 +23,7 @@ Every workflow is scoped to a project identifier of the form `PR-xxxxx`. If the 
 
 The reference file `references/workflows.md` lists the product workflows grouped by entity, with the capability names behind each. Use it to turn a user request into the product's own words before searching, and to recognise when a request spans several workflows.
 
-Named tools exist for the common path and skip the registry: `createProjectOrFolder`, `createTestCase`, `updateTestCase`, `listTestCases`, `listFolders`, `listTestCaseTemplates`, `createTestRun`, `listTestRuns`, `updateTestRun`, `addTestResult`, `listTestPlans`, `getTestPlan`, `listSubTestPlans`, `getSubTestPlan`. Prefer them when they match exactly.
+Named tools exist for the common path and skip the registry: `createProjectOrFolder`, `createTestCase`, `updateTestCase`, `listTestCases`, `listFolders`, `listTestCaseTemplates`, `createTestRun`, `listTestRuns`, `updateTestRun`, `addTestResult`, `listTestPlans`, `getTestPlan`, `listSubTestPlans`, `getSubTestPlan`. When one matches exactly it replaces search and describe. The ones that change data (`createProjectOrFolder`, `createTestCase`, `updateTestCase`, `createTestRun`, `updateTestRun`, `addTestResult`) need the same confirmation as a registry write.
 
 ## Step 3: Describe, then invoke
 
@@ -46,7 +46,7 @@ Named tools exist for the common path and skip the registry: `createProjectOrFol
 
 ## Before any write
 
-Show the user exactly what will be created or changed: project, folder, title, steps, run name, case list. Then invoke with permission granted. Report the identifier the product returns and the dashboard link.
+Show the user exactly what will be created or changed: project, folder, title, steps, run name, case list. Wait for an explicit yes, then invoke with permission granted or call the named tool. Report the identifier the product returns and the dashboard link.
 
 ## Result card
 

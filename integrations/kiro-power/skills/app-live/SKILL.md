@@ -1,6 +1,6 @@
 ---
 name: app-live
-description: Open an uploaded mobile app on a real Android or iOS device in BrowserStack App Live for a manual check or crash debugging
+description: Open an uploaded mobile app on a real Android or iOS device in BrowserStack App Live for a manual check or crash debugging. Use when the user wants to try or debug their mobile app by hand on a real Android or iOS device.
 ---
 
 # BrowserStack App Live: manual check of a mobile app

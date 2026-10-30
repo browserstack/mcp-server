@@ -1,6 +1,6 @@
 ---
 name: app-automate
-description: Run mobile app test suites on real devices in BrowserStack App Automate, Appium via the SDK or pre-built Espresso and XCUITest by upload, then debug failures with root-cause analysis, Appium and device logs
+description: Run mobile app test suites on real devices in BrowserStack App Automate, Appium via the SDK or pre-built Espresso and XCUITest by upload, then debug failures with root-cause analysis, Appium and device logs. Use when the user wants to run Appium, Espresso or XCUITest suites on real devices, or asks why a mobile test or build failed.
 ---
 
 # BrowserStack App Automate: run mobile app tests and debug failures
@@ -43,6 +43,8 @@ Load this skill when the user has a mobile test suite or a failed mobile build: 
 `fetchRCA` with up to three test ids as **numbers**: `listTestIds` returns them as strings, so convert `"4430179170"` to `4430179170` or the call is rejected. It returns the cause, a failure type, log evidence, evidence strength and a proposed fix. It reads Appium, device and network logs for you.
 
 ### Step 3: Logs, for `sessionType: app-automate` only
+
+`getFailureLogs` with the session id, `sessionType: "app-automate"` and the `logTypes` below.
 
 | Use | Why |
 |---|---|

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "browserstack",
+  "version": "1.0.0",
+  "description": "Run, debug and manage tests on real browsers and devices with BrowserStack: live sessions, Playwright/Selenium/Appium runs, failure logs and root-cause analysis, accessibility scans, Test Management, and Test Reporting & Analytics.",
+  "author": {
+    "name": "BrowserStack",
+    "url": "https://www.browserstack.com",
+    "email": "support@browserstack.com"
+  },
+  "keywords": [
+    "browserstack", "browserstack automate", "app automate", "browserstack live", "test observability",
+    "cross-browser testing", "cross browser", "browser compatibility", "real device testing", "real devices",
+    "device cloud", "device lab", "device farm", "mobile emulator", "android emulator", "ios simulator",
+    "mobile testing", "safari testing", "parallel testing",
+    "playwright", "selenium", "cypress", "appium", "webdriverio", "espresso", "xcuitest",
+    "e2e testing", "end-to-end testing", "test automation",
+    "flaky test", "flaky tests", "failed build", "test failure", "root cause analysis", "self-healing", "broken locator",
+    "accessibility testing", "accessibility scan", "wcag", "a11y", "color contrast", "screen reader", "ada compliance",
+    "test management", "test cases", "test run", "test plan"
+  ],
+  "license": "AGPL-3.0-only",
+  "homepage": "https://www.browserstack.com/docs/browserstack-mcp-server",
+  "repository": "https://github.com/browserstack/mcp-server"
+}

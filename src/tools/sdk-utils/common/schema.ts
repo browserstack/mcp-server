@@ -120,9 +120,7 @@ export const RunPercyScanParamsShape = {
     ),
   integrationType: z
     .nativeEnum(PercyIntegrationTypeEnum)
-    .describe(
-      "'web' or 'automate'. If unspecified, ask the user.",
-    ),
+    .describe("'web' or 'automate'. If unspecified, ask the user."),
 };
 
 export const FetchPercyChangesParamsShape = {

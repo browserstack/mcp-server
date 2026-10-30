@@ -37,25 +37,13 @@ export interface TestCaseUpdateRequest {
 }
 
 export const UpdateTestCaseSchema = z.object({
-  project_identifier: z
-    .string()
-    .describe(
-      "Project ID of the test case.",
-    ),
+  project_identifier: z.string().describe("Project ID of the test case."),
   test_case_identifier: z
     .string()
-    .describe(
-      "Test case ID (from listTestCases).",
-    ),
+    .describe("Test case ID (from listTestCases)."),
   name: z.string().optional().describe("Updated name of the test case."),
-  description: z
-    .string()
-    .optional()
-    .describe("Updated description."),
-  preconditions: z
-    .string()
-    .optional()
-    .describe("Updated preconditions."),
+  description: z.string().optional().describe("Updated description."),
+  preconditions: z.string().optional().describe("Updated preconditions."),
   test_case_steps: z
     .array(
       z.object({
@@ -65,11 +53,7 @@ export const UpdateTestCaseSchema = z.object({
     )
     .optional()
     .describe("Updated steps and expected results."),
-  owner: z
-    .string()
-    .email()
-    .optional()
-    .describe("Owner email."),
+  owner: z.string().email().optional().describe("Owner email."),
   priority: z
     .string()
     .optional()
@@ -89,19 +73,12 @@ export const UpdateTestCaseSchema = z.object({
   status: z
     .string()
     .optional()
-    .describe(
-      "e.g. 'active', 'draft', 'in_review', 'outdated', 'rejected'.",
-    ),
-  tags: z
-    .array(z.string())
-    .optional()
-    .describe("Replacement tags."),
+    .describe("e.g. 'active', 'draft', 'in_review', 'outdated', 'rejected'."),
+  tags: z.array(z.string()).optional().describe("Replacement tags."),
   issues: z
     .array(z.string())
     .optional()
-    .describe(
-      "Replacement Jira/Asana/Azure issue IDs.",
-    ),
+    .describe("Replacement Jira/Asana/Azure issue IDs."),
   custom_fields: z
     .record(
       z.string(),
@@ -113,9 +90,7 @@ export const UpdateTestCaseSchema = z.object({
       ]),
     )
     .optional()
-    .describe(
-      "Custom field NAME to value; array for multi-select.",
-    ),
+    .describe("Custom field NAME to value; array for multi-select."),
 });
 
 /**

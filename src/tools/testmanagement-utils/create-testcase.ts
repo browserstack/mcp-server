@@ -95,15 +95,8 @@ export const CreateTestCaseSchema = z.object({
     .string()
     .describe("Folder id. If none, offer createProjectOrFolder."),
   name: z.string().describe("Name of the test case."),
-  description: z
-    .string()
-    .optional()
-    .describe("Brief description."),
-  owner: z
-    .string()
-    .email()
-    .describe("Owner email.")
-    .optional(),
+  description: z.string().optional().describe("Brief description."),
+  owner: z.string().email().describe("Owner email.").optional(),
   preconditions: z
     .string()
     .optional()
@@ -124,44 +117,30 @@ export const CreateTestCaseSchema = z.object({
     ),
   issue_tracker: z
     .object({
-      name: z
-        .string()
-        .describe(
-          "'jira', 'azure' or 'asana'.",
-        ),
+      name: z.string().describe("'jira', 'azure' or 'asana'."),
       host: z.string().url().describe("Base URL of the issue tracker."),
     })
     .optional(),
   tags: z
     .array(z.string())
     .optional()
-    .describe(
-      "Tags, as an array (not a JSON string).",
-    ),
+    .describe("Tags, as an array (not a JSON string)."),
   custom_fields: z
     .record(z.string(), customFieldValueSchema)
     .optional()
-    .describe(
-      "Custom field NAME to value; array for multi-select.",
-    ),
+    .describe("Custom field NAME to value; array for multi-select."),
   automation_status: z
     .string()
     .optional()
-    .describe(
-      "e.g. 'not_automated', 'automated', 'automation_not_required'.",
-    ),
+    .describe("e.g. 'not_automated', 'automated', 'automation_not_required'."),
   priority: z
     .string()
     .optional()
-    .describe(
-      "e.g. 'High', 'medium'; varies per project; default Medium.",
-    ),
+    .describe("e.g. 'High', 'medium'; varies per project; default Medium."),
   case_type: z
     .string()
     .optional()
-    .describe(
-      "Test case type (varies per project); omit for default.",
-    ),
+    .describe("Test case type (varies per project); omit for default."),
   template: z
     .string()
     .optional()

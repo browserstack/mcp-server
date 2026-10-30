@@ -7,6 +7,7 @@ import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
 import globalConfig from "../config.js";
+import { versionString } from "../lib/version-keyword.js";
 
 // Define the schema shape
 const LiveArgsShape = {
@@ -19,16 +20,13 @@ const LiveArgsShape = {
     .describe(
       "Desktop OS ('Windows' or 'OS X') or mobile OS ('android','ios','winphone')",
     ),
-  desiredOSVersion: z
-    .string()
-    .describe(
-      "Version number or 'latest'/'oldest'; macOS takes names, e.g. 'Sequoia'.",
-    ),
+  desiredOSVersion: versionString().describe(
+    "Version number or 'latest'/'oldest'; macOS takes names, e.g. 'Sequoia'.",
+  ),
   desiredBrowser: z
     .enum(["chrome", "firefox", "safari", "edge", "ie"])
     .describe("Browser for desktop (Chrome, IE, Firefox, Safari, Edge)"),
-  desiredBrowserVersion: z
-    .string()
+  desiredBrowserVersion: versionString()
     .optional()
     .describe("Desktop browser version, or 'latest' / 'oldest'."),
   desiredDevice: z.string().optional().describe("Device name for mobile"),

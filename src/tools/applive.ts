@@ -7,6 +7,7 @@ import logger from "../logger.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
+import { versionString } from "../lib/version-keyword.js";
 
 /**
  * Launches an App Live Session on BrowserStack.
@@ -101,9 +102,9 @@ export default function addAppLiveTools(
         .describe(
           "Exact device name, e.g. 'iPhone 15 Pro Max'. Ask the user; never assume.",
         ),
-      desiredPlatformVersion: z
-        .string()
-        .describe("Version number, or 'latest' / 'oldest'."),
+      desiredPlatformVersion: versionString().describe(
+        "Version number, or 'latest' / 'oldest'.",
+      ),
       desiredPlatform: z
         .enum(["android", "ios"])
         .describe(

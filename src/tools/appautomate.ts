@@ -10,6 +10,7 @@ import { remote } from "webdriverio";
 import { AppTestPlatform } from "./appautomate-utils/native-execution/types.js";
 import { setupAppAutomateHandler } from "./appautomate-utils/appium-sdk/handler.js";
 import { validateAppAutomateDevices } from "./sdk-utils/common/device-validator.js";
+import { versionString } from "../lib/version-keyword.js";
 
 import {
   SETUP_APP_AUTOMATE_DESCRIPTION,
@@ -385,11 +386,9 @@ export default function addAppAutomationTools(
       desiredPhone: z
         .string()
         .describe("Exact device name, e.g. 'iPhone 15 Pro Max'. Ask the user."),
-      desiredPlatformVersion: z
-        .string()
-        .describe(
-          "The platform version to run the app on. Use 'latest' or 'oldest' for dynamic resolution.",
-        ),
+      desiredPlatformVersion: versionString().describe(
+        "Version number, or 'latest' / 'oldest'.",
+      ),
       desiredPlatform: z
         .enum([Platform.ANDROID, Platform.IOS])
         .describe("Platform to run the app on. Either 'android' or 'ios'."),

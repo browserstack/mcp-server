@@ -21,7 +21,7 @@ Every workflow is scoped to a project identifier of the form `PR-xxxxx`. If the 
 
 `searchCapability` with `product: "tm"` and the user's goal in their own words, for example "create a test case in a folder", "add results to a run", "list test plans". Read `mode` on each result: `read` runs immediately, `write` needs the confirmation above. If the response says `weak_match`, use the `suggested_vocabulary` it returns and search again with the product's term; do not invoke an unconfirmed match.
 
-The reference file `references/workflows.md` lists all 103 product workflows grouped by entity, with the capability names behind each. Use it to turn a user request into the product's own words before searching, and to recognise when a request spans several workflows.
+The reference file `references/workflows.md` lists the product workflows grouped by entity, with the capability names behind each. Use it to turn a user request into the product's own words before searching, and to recognise when a request spans several workflows.
 
 Named tools exist for the common path and skip the registry: `createProjectOrFolder`, `createTestCase`, `updateTestCase`, `listTestCases`, `listFolders`, `listTestCaseTemplates`, `createTestRun`, `listTestRuns`, `updateTestRun`, `addTestResult`, `listTestPlans`, `getTestPlan`, `listSubTestPlans`, `getSubTestPlan`. Prefer them when they match exactly.
 

@@ -40,7 +40,7 @@ Named tools cover the common path without the registry: `getBuildId` (current us
 | Trends over weeks | "testing trends" | flakiness, stability, performance cards |
 | Self-healed locators across a build | "self-healing report" | healed pairs and review verdicts |
 
-The reference file `references/workflows.md` lists all 58 product workflows by entity with the capability names behind each. Use it to put the user's request into the product's words before searching.
+The reference file `references/workflows.md` lists the product workflows by entity with the capability names behind each. Use it to put the user's request into the product's words before searching.
 
 ## Read the flags before you explain
 

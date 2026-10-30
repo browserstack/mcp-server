@@ -46,7 +46,7 @@ Run the suite with the script the setup added. Then `getBuildId` with the projec
 | `video` | the session recording link |
 | never `sessionLogs` first | the raw driver log, often hundreds of thousands of characters even for a short test. Request it only by explicit user ask and summarise from the file, never into context |
 
-One `logTypes` entry per `getFailureLogs` call. `fetchAutomationScreenshots` returns captures only when the SDK took them; "none found" is normal.
+`logTypes` takes several types in one call; request only the ones the failure needs. `fetchAutomationScreenshots` returns captures only when the SDK took them; "none found" is normal.
 
 ### Step 4: Broken locators
 

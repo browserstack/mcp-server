@@ -52,7 +52,7 @@ Load this skill when the user has a mobile test suite or a failed mobile build: 
 | `video` | the session recording link |
 | rejected | `sessionLogs`, `consoleLogs`, `networkLogs` are Automate-only; the tool refuses them for this type |
 
-One `logTypes` entry per call. `fetchAutomationScreenshots` returns captures only when taken; "none found" is normal.
+`logTypes` takes several types in one call; request only the ones the failure needs. `fetchAutomationScreenshots` returns captures only when taken; "none found" is normal.
 
 ### Step 4: Broken locators
 

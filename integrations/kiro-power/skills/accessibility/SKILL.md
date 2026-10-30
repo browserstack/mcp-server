@@ -25,7 +25,8 @@ Load this skill when the user says "accessibility", "a11y", "WCAG", "ADA", "cont
 
 1. `createAccessibilityAuthConfig` with a `name`, `type` (`form` or `basic`), the login `url`, and for form auth the CSS selectors for username, password and submit. Omit `username` and `password`; the tool asks the user for them so they never pass through chat.
 2. It returns a numeric config id. Pass it as `authConfigId` to `startAccessibilityScan`.
-3. `getAccessibilityAuthConfig` with the id confirms it exists. Keep the id in the conversation; if it is lost, `askBrowserStackAI` with product `a11y` can look it up.
+3. Keep the id in the conversation for later scans. If it is lost, create a new config.
+4. If the tool replies that username and password are required, the client could not prompt for them. Tell the user to create the auth config in the BrowserStack Accessibility dashboard and share its id, or to pass the credentials themselves. Never ask for a password in chat.
 
 ## WCAG questions
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "1.46",
-  "build_id": "cb63a4a5_2026-09-16T18:02:57Z",
+  "build_id": "35a5ad5a_2026-10-30T04:46:03Z",
   "tm": {
     "routing_terms": [
       "team",
@@ -4141,14 +4141,14 @@
             "name": "owner",
             "type": "integer",
             "example": 42,
-            "description": "TCM user id of the session owner. This is the field to use: it is translated to the upstream user id here. An id matching no user in this group is accepted and stored as no assignee.",
+            "description": "TCM user id of the session owner; must belong to the caller's group, otherwise the call fails with 422 'Invalid owner: user must be a member of this group.' A blank value leaves the session unassigned. `assignee` is an alias; `owner` wins when both are sent.",
             "json_path": "/exploratory_session/owner"
           },
           {
             "name": "assignee",
             "type": "integer",
             "example": 42,
-            "description": "NOT a safe alias on create — unlike `owner` it is forwarded without translation to an upstream user id, so it sets the wrong user. Use `owner` instead. Ignored entirely when `owner` is also present.",
+            "description": "Alias for `owner`: a TCM user id in the caller's group, translated the same way. Ignored when `owner` is also present. A user outside the group fails with 422 'Invalid assignee: user must be a member of this group.'",
             "json_path": "/exploratory_session/assignee"
           },
           {
@@ -4309,8 +4309,8 @@
         "guidance": [
           "Send the fields flat. The `exploratory_session` wrapper is added for you from each field's json_path, and sending your own is rejected before the call as an unknown body key. A 400 naming a missing `exploratory_session` means the body reached the server empty, not that you must nest it.",
           "`title` is the only field the store requires. Everything else is optional.",
-          "Set the assignee with `owner` (a TCM user id) — NOT with `assignee`. On this create path only `owner` is translated to the upstream user id; `assignee` is forwarded raw and lands as a wrong or invalid user. On update both are translated, so the two endpoints disagree.",
-          "An `owner` that resolves to no user in this group does not fail: the session is created 201 with no assignee at all. Re-read the session if the assignment matters.",
+          "Set the assignee with `owner` or its alias `assignee` (a TCM user id); both are translated to the upstream user id, and `owner` wins when both are sent.",
+          "An `owner` or `assignee` that is not a member of the caller's group is refused with 422 'Invalid owner: user must be a member of this group.' ('Invalid assignee: ...' when sent as `assignee`). A blank value creates the session with no assignee.",
           "`issues` is forgiving in dangerous ways. A list of bare strings is accepted and coerced to {issue_id, issue_type:'jira'}. Jira ids are validated against ^[A-Z][A-Z0-9]*-[0-9]+$ and a bad one fails the whole call. But a list whose entries are neither strings nor objects carrying both issue_id and issue_type is silently replaced with an empty list — the session is created with no issues and no error. Each entry may also carry a `metadata` object ({url, ticket_id, title, display_category, issue_category}) even though only issue_id/issue_type are declared.",
           "Issue linking happens asynchronously after the 201, so the session in the response does not yet show the links. Re-read it, or read the session's defects, to confirm.",
           "`attachments` are integer ActiveStorage blob ids from a prior generic attachment upload — not file content, and not URLs. A blob already attached to another entity is refused with 422 'the attachment has been referenced elsewhere'. Unknown ids only error when NONE of them exist; a mixed list quietly attaches the ids that resolve and drops the rest.",
@@ -12409,7 +12409,7 @@
         ],
         "responses": {
           "200": {
-            "$response": "GetReportTestCases"
+            "$response": "GetReportTestCases__GetSelectedReportTestcases"
           },
           "400": {
             "$response": "BadRequest"
@@ -12429,7 +12429,7 @@
         },
         "guidance": [
           "Use this before editing a report's case selection. The report edit treats `report_filters.test_cases` as authoritative and deletes what you omit, and a flat id list cannot express folder-level or project-level 'select all' — this returns the exact object to send back.",
-          "`selection` is the primary project's saved selection (`{}` when nothing is saved); `shared_selection` is `{ \"<project_id>\": <selection> }` for the report's other projects on a cross-project report, and `{}` otherwise. `selection_data` is the project's full folder/case tree used to render the picker, not the saved selection — do not confuse the two.",
+          "`selection` is the primary project's saved selection. When nothing is saved it is `{}`, except on a single-project report whose project case tree is non-empty: there `selection` is filled with the same tree as `selection_data`, so a populated `selection` does not prove anything was saved. Cross-project reports keep `{}`. `shared_selection` is `{ \"<project_id>\": <selection> }` for the report's other projects on a cross-project report, and `{}` otherwise. `selection_data` is the project's full folder/case tree used to render the picker.",
           "Despite the name it is not traceability-specific: it works for any report type. It simply returns an unfiltered project selection tree when the report has no case filters saved.",
           "Unlike the other report reads, the `project_id` in the path IS used — `selection_data` is built for that project, so pass the report's own project or the tree will not match the saved ids.",
           "Case ids inside the selection are INTEGERS (the numeric id), not TC-NNN identifiers.",
@@ -14874,7 +14874,7 @@
           {
             "name": "shared_selection",
             "type": "object",
-            "description": "Accepted by the parameter filter but NOT read by this action — cases shared in from other projects are not resolved here. Use the count endpoint if you need shared selections accounted for."
+            "description": "Cases shared in from other projects, as a map of project id to a selection object with the same inner shape as `selection`. Top level, not inside `selection`. Used to resolve those cases only when non-empty; an empty map is ignored."
           }
         ],
         "intent": "Resolve a folder/case selection into the actual list of test cases it covers — use it to preview or page through what a run create or edit would pull in before committing it",
@@ -14935,7 +14935,7 @@
           "Page size is the `count` field, not `per_page`, and it caps at 20000; leaving it out gives 30 rows, which is how a selection preview looks far smaller than the run it will create.",
           "`selected` only appears when show='all'. In the default mode the rows already ARE the filtered set, so its absence is not a failure.",
           "Folder ids are STRING keys in the `folders` map, while the case ids inside are integers. Mixing those up drops the folder silently.",
-          "shared_selection is ignored here. A selection that pulls cases from other projects will preview short.",
+          "Cases shared in from other projects are resolved only if you send `shared_selection` (a top-level map of project id to selection). Leave it out and a selection that pulls cases from other projects previews short.",
           "The response is flat — {success, info, test_cases, selected} with no `data` envelope.",
           "Needs the test-run write permission even though it only reads — a viewer-only role is 403'd.",
           "The rows here are the RAW case record, not the shared test-case serializer used by every other test-case route. `automation_status` is a plain string, the folder key is `folder_id` (not `test_case_folder_id`), case type arrives as the bare string `type`, and priority, status, case_type, tags, issues, custom_fields and steps are NOT returned at all. Read the case detail route if you need those."
@@ -15872,7 +15872,7 @@
             "name": "q[assignee]",
             "type": "integer",
             "example": 42,
-            "description": "TCM user id of the session assignee; translated to a BrowserStack user id before the query is sent. Wins over q[owner] when both are given. An id that resolves to no user is sent as null instead of erroring."
+            "description": "TCM user id of the session assignee; translated to a BrowserStack user id before the query is sent. Wins over q[owner] when both are given. An id that does not resolve to a user in the caller's group returns an empty list with count 0 instead of ignoring the filter."
           },
           {
             "name": "q[owner]",
@@ -15884,7 +15884,7 @@
             "name": "q[created_by]",
             "type": "integer",
             "example": 10,
-            "description": "TCM user id of the session creator; translated to a BrowserStack user id. An unresolvable id is sent as null rather than rejected."
+            "description": "TCM user id of the session creator; translated to a BrowserStack user id. An id that does not resolve to a user in the caller's group returns an empty list with count 0 instead of ignoring the filter."
           },
           {
             "name": "q[created_at_from]",
@@ -15980,7 +15980,10 @@
         "paginated": true,
         "responses": {
           "200": {
-            "$response": "ExploratorySessionListV1Response"
+            "description": "Paged list of exploratory sessions. Top level, no data envelope.",
+            "schema": {
+              "$schema": "ExploratorySessionListV1Response__ListExploratorySessions"
+            }
           },
           "400": {
             "$response": "BadRequest"
@@ -16002,9 +16005,9 @@
           "The default listing hides closed work: when q[session_state] is omitted the handler substitutes 'active'. Pass q[session_state]=closed explicitly to find a finished session, and expect a session to vanish from the default list the moment it is closed.",
           "Paging is driven by `p`, NOT `page`. `page` is read by nothing on this path. A `p` that is not a positive integer is rejected globally as 400 {success:false, error:'Invalid Params'} before the action runs.",
           "`per_page` is accepted and ignored — the handler overwrites it with the fixed limit of 30 rows. There is no way to ask for a larger page; walk `p` until a page comes back short.",
-          "q[assignee] / q[owner] / q[created_by] take TCM user ids (integers) and are translated to BrowserStack user ids before the query is sent. q[owner] is only a fallback for q[assignee] — if both are present, q[assignee] wins. An id that matches no user in this group is not an error: the filter is sent as null and you get back a result set that silently does not mean what you asked for.",
+          "q[assignee] / q[owner] / q[created_by] take TCM user ids (integers) and are translated to BrowserStack user ids before the query is sent. q[owner] is only a fallback for q[assignee] — if both are present, q[assignee] wins. An id that does not resolve to a user in the caller's group is not ignored: the call returns an empty 200 list with `count` 0 (an integer, not the per-state object).",
           "sort_by is a single combined token ('id-asc', 'id-desc', 'title-asc', 'title-desc') — there is no separate sort_order. Anything else is 400 'Invalid sort_by value.'.",
-          "`count` is an OBJECT of per-state totals ({active, closed}), not the number of rows matching your filter. The row total lives in info.count. Do not use `count` to size a pagination loop.",
+          "`count` is an OBJECT of per-state totals ({active, closed}), not the number of rows matching your filter, except that it is the integer 0 when a user filter does not resolve (see above). The row total lives in info.count. Do not use `count` to size a pagination loop.",
           "Rows are NOT put through the custom-field normaliser that the single-session read applies, so custom_fields on a list row is the raw upstream shape (or absent). Re-read the session by id if you need normalised custom fields.",
           "assignee / created_by / closed_by come back as user objects resolved from the local user table, and resolve to null when the underlying user is not a TM user in this group — a null assignee here does not prove the session is unassigned.",
           "Take `id` (integer) from a row and carry it as session_id into the logs, defects, close, clone, update and delete calls. `identifier` (ES-NNN) is display-only and is not accepted by any route on this entity.",
@@ -19876,14 +19879,14 @@
             "name": "owner",
             "type": "integer",
             "example": 55,
-            "description": "TCM user id of the new owner; translated to the upstream user id. Wins over `assignee` when both are sent. An unresolvable id clears the assignee instead of failing.",
+            "description": "TCM user id of the new owner; must belong to the caller's group, otherwise the call fails with 422 'Invalid owner: user must be a member of this group.' A blank value clears the assignee. Wins over `assignee` when both are sent.",
             "json_path": "/exploratory_session/owner"
           },
           {
             "name": "assignee",
             "type": "integer",
             "example": 55,
-            "description": "Genuine alias for `owner` on this endpoint — both are translated here. (On create only `owner` is, so prefer `owner` in code shared between the two.)",
+            "description": "Alias for `owner`, used when `owner` is absent. Same rules: a TCM user id in the caller's group, otherwise 422 'Invalid assignee: user must be a member of this group.'; a blank value clears the assignee.",
             "json_path": "/exploratory_session/assignee"
           },
           {
@@ -20009,7 +20012,7 @@
           "Scalar fields are patched by presence: only title, description, charter, timebox_duration, duration, actual_duration, folder_id and test_plan_id keys actually present in the body are sent. Omitted keys are left alone.",
           "The collection fields are NOT patched, they are replaced. Sending `tags`, `configurations`, `issues` or `attachments` overwrites the whole list; sending an empty array clears it. Omitting the key is the only way to leave a collection untouched.",
           "Replacing `attachments` detaches every blob you left out and frees it for reuse. An invalid set is rejected with 422 whose body is the bare JSON string \"attachment is invalid\" — not the usual {success:false, message} envelope, so do not parse it like one.",
-          "`owner` and `assignee` are both translated to the upstream user id here (unlike create, where only `owner` is). `owner` wins when both are sent. An id that resolves to no user clears the assignee rather than failing.",
+          "`owner` and `assignee` are both TCM user ids, translated to the upstream user id; `owner` wins when both are sent. An id that is not a member of the caller's group is refused with 422 'Invalid owner: user must be a member of this group.' ('Invalid assignee: ...' when sent as `assignee`); a blank value clears the assignee.",
           "There is no way to change `session_state` through this call, and no reopen endpoint exists — closing a session is one-way.",
           "`name` is accepted by the request schema and then dropped by the parameter filter; retitle with `title`.",
           "Exploratory sessions keep no version history and there is no undo: an overwritten title, description, charter or tag list cannot be restored.",
@@ -20738,7 +20741,7 @@
               "requirements"
             ],
             "example": "last_one_week",
-            "description": "The window the report covers. `custom` REQUIRES `custom_date_range` (omitting it is an unhandled 500); any other value NULLS the stored custom_date_range. The five entity timeframes carry no dates and each reads one matching `report_filters` key."
+            "description": "The window the report covers. `custom` REQUIRES `custom_date_range` (omitting it is a 422); any other value NULLS the stored custom_date_range. The five entity timeframes carry no dates and each reads one matching `report_filters` key."
           },
           {
             "name": "report_creation_mode",
@@ -20754,7 +20757,7 @@
           {
             "name": "is_dynamic",
             "type": "boolean",
-            "description": "Written unconditionally from the body — omit it and the report's dynamic flag is set to null (unlike create, it is not inferred from the filters)."
+            "description": "Whether the report re-resolves its selection each run. Omit it and the stored value is kept; it is overwritten only when the key is sent. Unlike create, it is never inferred from the filters."
           },
           {
             "name": "grain",
@@ -20930,7 +20933,7 @@
             "name": "custom_date_range",
             "type": "string",
             "example": "2025-04-16 2025-04-24",
-            "description": "\"YYYY-MM-DD YYYY-MM-DD\", space separated. REQUIRED when report_timeframe is `custom` (omitting it is a 500); NULLED on the record for every other timeframe."
+            "description": "\"YYYY-MM-DD YYYY-MM-DD\", space separated. REQUIRED when report_timeframe is `custom` (omitting it is a 422); NULLED on the record for every other timeframe."
           },
           {
             "name": "users",
@@ -21001,7 +21004,7 @@
           }
         },
         "guidance": [
-          "This PATCH is a FULL REPLACE, not a merge. `title`, `description`, `report_type`, `report_timeframe`, `report_creation_mode` and `is_dynamic` are written from the body unconditionally, so any one you omit is set to NULL. Read the report first and send the complete object back with your change applied.",
+          "This PATCH is a FULL REPLACE, not a merge. `title`, `description`, `report_type`, `report_timeframe` and `report_creation_mode` are written from the body unconditionally, so any one you omit is set to NULL. `is_dynamic` is the exception: omit it and the stored value is kept. Read the report first and send the complete object back with your change applied.",
           "Omitting `frequency` / `frequency_details` UNSCHEDULES the report: both columns are nulled and it stops emailing. Resend the persisted values to keep the schedule. Likewise `custom_date_range` is nulled whenever `report_timeframe` is not `custom`.",
           "`projectId` is optional: omitted, it defaults to the project id in the path, which is what the rewritten filter rows are filed under. If you do send it, it wins over the path value, so make it the report's own project id.",
           "`report_filters` is authoritative: a key you omit has its stored rows deleted. Send the full filter set, not a delta. Use the report read and get_selected_report_testcases to recover the current values first.",
@@ -44145,6 +44148,63 @@
             "description": "Present only on a jira_lookup field; omitted for every other type."
           }
         }
+      },
+      "ExploratorySessionListV1Response__ListExploratorySessions": {
+        "type": "object",
+        "description": "Paged list of exploratory sessions. Top level, no data envelope.",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "exploratory_sessions": {
+            "type": "array",
+            "items": {
+              "$schema": "ExploratorySessionListRow"
+            }
+          },
+          "info": {
+            "type": "object",
+            "description": "Pagination metadata. Falls back to {page:1, page_size:<default>, count:0, prev:null, next:null} when upstream omits it.",
+            "properties": {
+              "page": {
+                "type": "integer",
+                "example": 1
+              },
+              "page_size": {
+                "type": "integer",
+                "example": 30
+              },
+              "count": {
+                "type": "integer",
+                "description": "Total rows matching the query — this, not the top-level `count`, is the number to paginate against.",
+                "example": 150
+              },
+              "prev": {
+                "type": "integer",
+                "nullable": true
+              },
+              "next": {
+                "type": "integer",
+                "nullable": true
+              }
+            }
+          },
+          "count": {
+            "nullable": true,
+            "description": "Normally an object of per-state session totals for the project ({active, closed}) — NOT the number of rows returned or matched. It is the integer 0 instead when a q[assignee], q[owner] or q[created_by] filter does not resolve to a user in the caller's group; that response is an empty list.",
+            "properties": {
+              "active": {
+                "type": "integer",
+                "example": 12
+              },
+              "closed": {
+                "type": "integer",
+                "example": 138
+              }
+            }
+          }
+        }
       }
     },
     "responses": {
@@ -49554,6 +49614,53 @@
             }
           }
         }
+      },
+      "GetReportTestCases__GetSelectedReportTestcases": {
+        "description": "Successfully fetched report testcases details",
+        "schema": {
+          "type": "object",
+          "required": [
+            "success",
+            "selection_data"
+          ],
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "example": true
+            },
+            "selection_data": {
+              "$schema": "SelectionData"
+            },
+            "selection": {
+              "type": "object",
+              "description": "The primary project's persisted folder-structured test-case selection (with select_all / per-folder flags + unique_test_case_count), in the same shape as the test-run edit/selection endpoint. `{}` when the report has no saved selection, except on a single-project report whose project case tree is non-empty: there it is filled with the same tree as `selection_data`. Used by the Edit dialog to re-check saved test cases (including folder/project-level select_all, which the flat ids cannot represent).",
+              "example": {
+                "select_all": false,
+                "folders": {
+                  "827": {
+                    "test_case_select_all": false,
+                    "selected_test_cases": [
+                      1515
+                    ],
+                    "deselected_test_cases": []
+                  }
+                },
+                "unique_test_case_count": 1
+              }
+            },
+            "shared_selection": {
+              "type": "object",
+              "description": "Per-project folder-structured selection for the report's non-primary projects, keyed by project id ({ \"<project_id>\": <selection> }). Present only for cross-project Test Case Activity reports; `{}` otherwise.",
+              "example": {
+                "10209": {
+                  "select_all": true,
+                  "folders": {},
+                  "unique_test_case_count": 2
+                }
+              }
+            }
+          }
+        }
       }
     },
     "paging": {
@@ -51045,6 +51152,6 @@
         ]
       }
     },
-    "version": "1.38"
+    "version": "1.39"
   }
 }

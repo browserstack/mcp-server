@@ -1,7 +1,20 @@
-import { currentRegionScope, isRestrictedRegion } from "./region-context.js";
+import {
+  currentRegionScope,
+  isRestrictedRegion,
+  isTelemetryOff,
+} from "./region-context.js";
 
+/** Whether this call may send feedback; not while the account's region is unknown. */
 export function feedbackEnabled(): boolean {
   return !isRestrictedRegion(currentRegionScope()?.account);
+}
+
+/**
+ * Whether to list submitFeedback. An unknown region may be looked up later in the
+ * session, so it stays listed and each call decides.
+ */
+export function feedbackListed(): boolean {
+  return !isTelemetryOff(currentRegionScope()?.account);
 }
 
 export const FEEDBACK_INSTRUCTION =

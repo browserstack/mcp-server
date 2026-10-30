@@ -29,7 +29,7 @@ import {
 import { accountRegion } from "./lib/account-region.js";
 import { withAccountRegion } from "./lib/region-context.js";
 import { nodeUpgradeNotice } from "./lib/node-version-notice.js";
-import { FEEDBACK_INSTRUCTION, feedbackEnabled } from "./lib/feedback-hint.js";
+import { FEEDBACK_INSTRUCTION, feedbackListed } from "./lib/feedback-hint.js";
 import addFeedbackTools from "./tools/feedback.js";
 
 /**
@@ -66,7 +66,7 @@ export class BrowserStackMcpServer {
       {
         instructions: [
           nodeUpgradeNotice(),
-          feedbackEnabled() ? FEEDBACK_INSTRUCTION : undefined,
+          feedbackListed() ? FEEDBACK_INSTRUCTION : undefined,
         ]
           .filter(Boolean)
           .join("\n"),
@@ -102,7 +102,7 @@ export class BrowserStackMcpServer {
       // nothing (and logs why) when the artifact is absent, so a packaging problem cannot
       // take the other products' tools down with it.
       addCapabilityRegistryTools,
-      ...(feedbackEnabled() ? [addFeedbackTools] : []),
+      ...(feedbackListed() ? [addFeedbackTools] : []),
     ];
 
     toolAdders.forEach((adder) => {

@@ -24,6 +24,8 @@ import {
   RETRY_AFTER_MS,
 } from "../../src/lib/account-region.js";
 
+const settleLookups = () => new Promise((resolve) => setImmediate(resolve));
+
 const tokenWith = (user: unknown) =>
   `h.${Buffer.from(JSON.stringify({ user })).toString("base64url")}.s`;
 
@@ -155,14 +157,37 @@ describe("accountRegion", () => {
       expect(mintCalls).toHaveLength(1);
     });
 
+    it("keeps the last known region when a refresh fails", async () => {
+      mintImpl = async () => tokenWith({ grr: { region: "eu" } });
+      const cfg = config();
+      expect(await accountRegion(cfg)).toBe("eu");
+
+      mintImpl = async () => {
+        throw new Error("auth could not be reached");
+      };
+      vi.advanceTimersByTime(REGION_TTL_MS);
+      expect(accountRegion(cfg)).toBe("eu");
+      await settleLookups();
+      expect(accountRegion(cfg)).toBe("eu");
+      expect(mintCalls).toHaveLength(2);
+
+      mintImpl = async () => tokenWith({});
+      vi.advanceTimersByTime(RETRY_AFTER_MS);
+      expect(accountRegion(cfg)).toBe("eu");
+      await settleLookups();
+      expect(accountRegion(cfg)).toBe("us");
+      expect(mintCalls).toHaveLength(3);
+    });
+
     it("looks up a known region again once it expires", async () => {
       mintImpl = async () => tokenWith({ grr: { region: "eu" } });
       const cfg = config();
       expect(await accountRegion(cfg)).toBe("eu");
       vi.advanceTimersByTime(REGION_TTL_MS - 1);
       expect(accountRegion(cfg)).toBe("eu");
+      expect(mintCalls).toHaveLength(1);
       vi.advanceTimersByTime(1);
-      expect(await accountRegion(cfg)).toBe("eu");
+      expect(accountRegion(cfg)).toBe("eu");
       expect(mintCalls).toHaveLength(2);
     });
 

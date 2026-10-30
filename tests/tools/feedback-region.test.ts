@@ -31,7 +31,7 @@ const failure = () => ({
 });
 
 describe("submitFeedback by the account's region", () => {
-  it.each(["eu", "in", "unknown"])(
+  it.each(["eu", "in"])(
     "is not registered, instructed or hinted when the region is %s",
     async (region) => {
       const { server, instructions, hinted } = await load(region);
@@ -40,6 +40,13 @@ describe("submitFeedback by the account's region", () => {
       expect(hinted(failure())).toBe(false);
     },
   );
+
+  it("stays listed but is not hinted when the region is unknown", async () => {
+    const { server, instructions, hinted } = await load("unknown");
+    expect(server.getTool("submitFeedback")).toBeDefined();
+    expect(instructions).toContain("submitFeedback");
+    expect(hinted(failure())).toBe(false);
+  });
 
   it.each([undefined, "us"])(
     "is registered, instructed and hinted when the region is %s",

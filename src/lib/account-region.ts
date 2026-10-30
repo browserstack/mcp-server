@@ -79,10 +79,11 @@ async function lookUp(
 }
 
 /**
- * The account's region, looked up once per account and kept for REGION_TTL_MS. Returned
- * directly once known so callers that cannot wait (telemetry) stay synchronous; undefined
- * without credentials. After a failure this is "unknown" for RETRY_AFTER_MS, and the
- * next call after that looks up again.
+ * The account's region, looked up once per account and refreshed after REGION_TTL_MS.
+ * Returned directly once known so callers that cannot wait (telemetry) stay synchronous;
+ * undefined without credentials. A refresh keeps answering the last known region, and
+ * keeps it if the refresh fails. With no region known, a failure answers "unknown" for
+ * RETRY_AFTER_MS, and the next call after that looks up again.
  */
 export function accountRegion(
   config: BrowserStackConfig | undefined,
@@ -93,30 +94,35 @@ export function accountRegion(
   ) {
     return undefined;
   }
+  const now = Date.now();
   const key = keyFor(config);
   const lookup = lookups.get(key);
-  if (lookup?.settled && Date.now() - lookup.settledAt! < REGION_TTL_MS) {
+  if (lookup?.settled && now - lookup.settledAt! < REGION_TTL_MS) {
     return lookup.settled;
   }
-  if (lookup?.pending) return lookup.pending;
+  if (lookup?.pending) return lookup.settled ?? lookup.pending;
   if (
     lookup?.failedAt !== undefined &&
-    Date.now() - lookup.failedAt < RETRY_AFTER_MS
+    now - lookup.failedAt < RETRY_AFTER_MS
   ) {
-    return "unknown";
+    return lookup.settled ?? "unknown";
   }
 
-  const entry: Lookup = {};
+  const entry: Lookup = {
+    settled: lookup?.settled,
+    settledAt: lookup?.settledAt,
+  };
   entry.pending = lookUp(config).then((region) => {
     entry.pending = undefined;
     if (region === null) {
       entry.failedAt = Date.now();
-      return "unknown";
+      return entry.settled ?? "unknown";
     }
     entry.settled = region;
     entry.settledAt = Date.now();
+    entry.failedAt = undefined;
     return region;
   });
   remember(key, entry);
-  return entry.pending;
+  return entry.settled ?? entry.pending;
 }

@@ -107,3 +107,46 @@ describe("getTMBaseURL — failure details", () => {
     expect(err.message).toMatch(/HTTP 503/);
   });
 });
+
+describe("getTMBaseURL — account region", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function loadWithRegion(region: string | undefined) {
+    vi.resetModules();
+    vi.doMock("../../src/config", () => ({
+      __esModule: true,
+      default: { REMOTE_MCP: false },
+    }));
+    const apiClientMod = await import("../../src/lib/apiClient");
+    const tmMod = await import("../../src/lib/tm-base-url");
+    const { withAccountRegion } = await import("../../src/lib/region-context");
+    return {
+      apiClient: apiClientMod.apiClient,
+      getTMBaseURL: (config: typeof mockConfig) =>
+        withAccountRegion(region as any, () => tmMod.getTMBaseURL(config)),
+    };
+  }
+
+  it("an EU account uses its host directly, like every other product", async () => {
+    const { apiClient, getTMBaseURL } = await loadWithRegion("eu");
+    await expect(getTMBaseURL(mockConfig)).resolves.toBe(
+      "https://test-management-eu.browserstack.com",
+    );
+    expect(apiClient.get).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, "us", "in", "unknown"])("%s keeps the US → EU → IN probe", async (region) => {
+    const { apiClient, getTMBaseURL } = await loadWithRegion(region);
+    (apiClient.get as any)
+      .mockResolvedValueOnce({ ok: false, status: 401 })
+      .mockResolvedValueOnce({ ok: true });
+    await expect(getTMBaseURL(mockConfig)).resolves.toBe(
+      "https://test-management-eu.browserstack.com",
+    );
+    expect(
+      (apiClient.get as any).mock.calls.map((c: any[]) => new URL(c[0].url).host),
+    ).toEqual(["test-management.browserstack.com", "test-management-eu.browserstack.com"]);
+  });
+});

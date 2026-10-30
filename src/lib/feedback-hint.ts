@@ -1,3 +1,22 @@
+import {
+  currentRegionScope,
+  isRestrictedRegion,
+  isTelemetryOff,
+} from "./region-context.js";
+
+/** Whether this call may send feedback; not while the account's region is unknown. */
+export function feedbackEnabled(): boolean {
+  return !isRestrictedRegion(currentRegionScope()?.account);
+}
+
+/**
+ * Whether to list submitFeedback. An unknown region may be looked up later in the
+ * session, so it stays listed and each call decides.
+ */
+export function feedbackListed(): boolean {
+  return !isTelemetryOff(currentRegionScope()?.account);
+}
+
 export const FEEDBACK_INSTRUCTION =
   "If a BrowserStack tool cannot do what the user needs, call submitFeedback before giving up or working around it.";
 
@@ -25,7 +44,7 @@ export const NO_HINT_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 export function withFeedbackHint<T>(toolName: string, result: T): T {
-  if (NO_HINT_TOOLS.has(toolName)) return result;
+  if (!feedbackEnabled() || NO_HINT_TOOLS.has(toolName)) return result;
   const r = result as { isError?: unknown; content?: unknown } | null;
   if (typeof r !== "object" || r === null || r.isError !== true) return result;
   if (!Array.isArray(r.content) || SELF_FIXABLE.test(textOf(r))) return result;

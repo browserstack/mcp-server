@@ -200,3 +200,121 @@ describe("multiple environments, the way Atlas defines them", () => {
       .rejects.toThrow(/environment 'preprod' has no host/);
   });
 });
+
+describe("products follow the account's region", () => {
+  const DECLARED = "https://api-observability.browserstack.com";
+
+  // resolveBaseUrl as called inside a tool call for an account in `region`.
+  async function resolveIn(region: string | undefined) {
+    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
+    const { withAccountRegion } = await import("../../src/lib/region-context.js");
+    return (...args: Parameters<typeof resolveBaseUrl>) =>
+      withAccountRegion(region as any, () => resolveBaseUrl(...args));
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_TRA;
+  });
+
+  afterEach(() => {
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_TRA;
+  });
+
+  it("sends an EU account to the EU host, though the index declares the US one", async () => {
+    const resolveBaseUrl = await resolveIn("eu");
+    expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(
+      "https://api-observability-eu.browserstack.com",
+    );
+  });
+
+  it.each([undefined, "us"])(
+    "keeps the US host when the region is %s",
+    async (region) => {
+      const resolveBaseUrl = await resolveIn(region);
+      expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(DECLARED);
+    },
+  );
+
+  it("refuses a regional product when the region is unknown", async () => {
+    const resolveBaseUrl = await resolveIn("unknown");
+    await expect(
+      resolveBaseUrl("tra", CONFIG, { base_url: DECLARED }),
+    ).rejects.toThrow(/Could not confirm your BrowserStack account's region/);
+  });
+
+  it("still probes Test Management when the region is unknown", async () => {
+    const resolveBaseUrl = await resolveIn("unknown");
+    expect(await resolveBaseUrl("tm", CONFIG)).toBe(
+      "https://test-management-eu.browserstack.com",
+    );
+  });
+
+  it("sends app_accessibility to its EU host too", async () => {
+    const resolveBaseUrl = await resolveIn("eu");
+    expect(
+      await resolveBaseUrl("app_accessibility", CONFIG, {
+        base_url: "https://api-app-accessibility.browserstack.com",
+      }),
+    ).toBe("https://api-app-accessibility-eu.browserstack.com");
+  });
+
+  it("sends web_accessibility to its regional host", async () => {
+    const resolveBaseUrl = await resolveIn("eu");
+    expect(
+      await resolveBaseUrl("web_accessibility", CONFIG, {
+        base_url: "https://api-accessibility.browserstack.com",
+      }),
+    ).toBe("https://api-accessibility-eu.browserstack.com");
+  });
+
+  const TRA_SOURCE = {
+    base_urls: [
+      DECLARED,
+      "https://api-observability-eu.browserstack.com",
+      "https://api-observability-in.browserstack.com",
+    ],
+    probe_path: "/api/v1/access",
+  };
+
+  it("does not probe the tra base_urls for an EU account", async () => {
+    const resolveBaseUrl = await resolveIn("eu");
+    const transport = vi.fn();
+    expect(await resolveBaseUrl("tra", CONFIG, TRA_SOURCE, transport as any)).toBe(
+      "https://api-observability-eu.browserstack.com",
+    );
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("probes the tra base_urls for an account in a region not routed here", async () => {
+    const resolveBaseUrl = await resolveIn("in");
+    const transport = vi.fn(async () => ({ status: 401 }));
+    await resolveBaseUrl("tra", CONFIG, TRA_SOURCE, transport as any).catch(() => {});
+    expect(transport).toHaveBeenCalledTimes(TRA_SOURCE.base_urls.length);
+  });
+
+  it.each([
+    ["devicecontrol", "https://hub.browserstack.com", "https://api.browserstack.com", "https://hub-eu-only.browserstack.com", "https://api-eu-only.browserstack.com"],
+    ["mobiledevicecontrol", "https://hub-cloud.browserstack.com", "https://api-cloud.browserstack.com", "https://hub-eu-only.browserstack.com", "https://api-eu-only.browserstack.com"],
+  ])(
+    "routes %s and its api host for an EU account, and keeps the declared hosts otherwise",
+    async (product, hub, api, euHub, euApi) => {
+      const source = { base_url: hub, hosts: { api } };
+      const inEu = await resolveIn("eu");
+      expect(await inEu(product, CONFIG, source)).toBe(euHub);
+      expect(await inEu(product, CONFIG, source, undefined, "api")).toBe(euApi);
+
+      const inUs = await resolveIn("us");
+      expect(await inUs(product, CONFIG, source)).toBe(hub);
+      expect(await inUs(product, CONFIG, source, undefined, "api")).toBe(api);
+    },
+  );
+
+  it("lets an explicit override win over the region", async () => {
+    process.env.CAPABILITY_REGISTRY_BASE_URL_TRA = "https://tra-preprod.example";
+    const resolveBaseUrl = await resolveIn("eu");
+    expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(
+      "https://tra-preprod.example",
+    );
+  });
+});

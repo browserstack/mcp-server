@@ -3,18 +3,22 @@ import { SessionType } from "../../lib/constants.js";
 import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
 import { mostCommon, pageOf, sortBySeverity } from "./paginate.js";
+import {
+  getRegionalHost,
+  isRegionalHostname,
+} from "../../lib/regional-host.js";
 
 /**
  * App Accessibility: the issues of a mobile app build run through App Automate with
  * accessibility on. Unlike the web products there is no CSV export behind an access key,
  * so the issues come inline, one API page per batch of scanned screens.
  */
-export const APP_API_BASE =
-  "https://api-app-accessibility.browserstack.com/automate/api/v1";
-export const APP_DASHBOARD = "https://app-accessibility.browserstack.com";
+export const appApiBase = () =>
+  `${getRegionalHost("appAccessibilityApi")}/automate/api/v1`;
+export const appDashboard = () => getRegionalHost("appAccessibilityDashboard");
 /** Manual (Workflow Analyzer) reports recorded on the dashboard: a separate, older route. */
-export const MANUAL_API_BASE =
-  "https://api-app-accessibility.browserstack.com/api/v1";
+export const manualApiBase = () =>
+  `${getRegionalHost("appAccessibilityApi")}/api/v1`;
 
 /** Screens per API page, and how many pages a build or report is read across (1,000 screens). */
 const SNAPSHOT_PAGE_SIZE = 50;
@@ -25,8 +29,8 @@ export const MAX_APP_BUILD_LIST_PAGES = 3;
 const BUILD_LIST_PAGE_SIZE = 30;
 
 /** A native build is found by name in the account's App Automate build list, newest first. */
-const APP_AUTOMATE_BUILDS_URL =
-  "https://api-cloud.browserstack.com/app-automate/builds.json";
+const appAutomateBuildsUrl = () =>
+  `${getRegionalHost("appAutomateCloud")}/app-automate/builds.json`;
 const APP_AUTOMATE_BUILDS_PAGE_SIZE = 100;
 export const MAX_APP_AUTOMATE_BUILD_PAGES = 3;
 /** A native run's accessibility build is created as the run starts: seconds apart, in practice. */
@@ -653,7 +657,8 @@ function appAutomateIds(
 
 /** The id a manual report's dashboard link names (`/report/{uuid}`), if it is one. */
 export function manualReportIdFromDashboardLink(url: URL): string | undefined {
-  if (url.hostname !== new URL(APP_DASHBOARD).hostname) return undefined;
+  if (!isRegionalHostname("appAccessibilityDashboard", url.hostname))
+    return undefined;
   return url.pathname.match(/^\/report\/([0-9a-f-]{36})\/?$/i)?.[1];
 }
 
@@ -702,7 +707,7 @@ export class AppAccessibilityApi {
    */
   async buildMeta(buildId: string): Promise<AppBuildMeta | undefined> {
     const resp = await apiClient.get({
-      url: `${APP_API_BASE}/build/${encodeURIComponent(buildId)}`,
+      url: `${appApiBase()}/build/${encodeURIComponent(buildId)}`,
       headers: this.headers(),
       raise_error: false,
     });
@@ -721,7 +726,8 @@ export class AppAccessibilityApi {
    * carries TestHub's name for the build, which the filter does not match.)
    */
   async buildIdFromDashboardLink(url: URL): Promise<string | undefined> {
-    if (url.hostname !== new URL(APP_DASHBOARD).hostname) return undefined;
+    if (!isRegionalHostname("appAccessibilityDashboard", url.hostname))
+      return undefined;
     const build = buildOfDashboardLink(url);
     if (!build) return undefined;
     // The name in the link is TestHub's, which can differ from the build's own: with no
@@ -848,7 +854,7 @@ export class AppAccessibilityApi {
   ): Promise<{ project?: string; startedAt?: number } | undefined> {
     for (const framework of ["espresso", "xcuitest"]) {
       const resp = await apiClient.get({
-        url: `https://api-cloud.browserstack.com/app-automate/${framework}/v2/builds/${encodeURIComponent(buildId)}`,
+        url: `${getRegionalHost("appAutomateCloud")}/app-automate/${framework}/v2/builds/${encodeURIComponent(buildId)}`,
         headers: this.headers(),
         raise_error: false,
       });
@@ -898,7 +904,7 @@ export class AppAccessibilityApi {
   ): Promise<string | undefined> {
     for (let page = 0; page < MAX_APP_AUTOMATE_BUILD_PAGES; page++) {
       const resp = await apiClient.get({
-        url: `${APP_AUTOMATE_BUILDS_URL}?limit=${APP_AUTOMATE_BUILDS_PAGE_SIZE}&offset=${page * APP_AUTOMATE_BUILDS_PAGE_SIZE}`,
+        url: `${appAutomateBuildsUrl()}?limit=${APP_AUTOMATE_BUILDS_PAGE_SIZE}&offset=${page * APP_AUTOMATE_BUILDS_PAGE_SIZE}`,
         headers: this.headers(),
         raise_error: false,
       });
@@ -928,7 +934,7 @@ export class AppAccessibilityApi {
    */
   private async projectsNamed(name: string): Promise<AppProjectRow[]> {
     const data = await this.listing(
-      `${APP_API_BASE}/project?name=${encodeURIComponent(name)}`,
+      `${appApiBase()}/project?name=${encodeURIComponent(name)}`,
       `the App Accessibility projects named "${name}"`,
     );
     return data.projects ?? [];
@@ -960,7 +966,7 @@ export class AppAccessibilityApi {
    */
   async manualReport(reportId: string): Promise<any | undefined> {
     const resp = await apiClient.get({
-      url: `${MANUAL_API_BASE}/reports/${encodeURIComponent(reportId)}`,
+      url: `${manualApiBase()}/reports/${encodeURIComponent(reportId)}`,
       headers: this.headers(),
       raise_error: false,
     });
@@ -988,7 +994,7 @@ export class AppAccessibilityApi {
     for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
       const resp = await apiClient
         .get({
-          url: `${MANUAL_API_BASE}/app_scanner/${encodeURIComponent(reportId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
+          url: `${manualApiBase()}/app_scanner/${encodeURIComponent(reportId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
           headers: this.headers(),
           raise_error: false,
         })
@@ -1015,7 +1021,7 @@ export class AppAccessibilityApi {
       | undefined;
     for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
       const resp = await apiClient.get({
-        url: `${MANUAL_API_BASE}/reports/${encodeURIComponent(reportId)}/issues?page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
+        url: `${manualApiBase()}/reports/${encodeURIComponent(reportId)}/issues?page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
         headers: this.headers(),
         raise_error: false,
       });
@@ -1073,7 +1079,7 @@ export class AppAccessibilityApi {
       ...(device?.model
         ? { device: `${device.model}, ${device.os} ${device.os_version}` }
         : {}),
-      dashboard_link: `${APP_DASHBOARD}/report/${reportId}`,
+      dashboard_link: `${appDashboard()}/report/${reportId}`,
       ...(more ? { screens_read: details.length } : {}),
     };
   }
@@ -1108,7 +1114,7 @@ export class AppAccessibilityApi {
     const named = buildName ? `build_name=${q(buildName)}&` : "";
     for (let page = 1; page <= MAX_APP_BUILD_LIST_PAGES; page++) {
       const data = await this.listing(
-        `${APP_API_BASE}/project/${q(String(projectId))}/build?${named}page_size=${BUILD_LIST_PAGE_SIZE}&page=${page}`,
+        `${appApiBase()}/project/${q(String(projectId))}/build?${named}page_size=${BUILD_LIST_PAGE_SIZE}&page=${page}`,
         `page ${page} of App Accessibility project ${projectId}'s builds`,
       );
       const more = Boolean(data.info?.next);
@@ -1182,7 +1188,7 @@ export class AppAccessibilityApi {
     try {
       const projectId = await this.projectId(meta.project_name);
       if (projectId === undefined) return undefined;
-      return `${APP_DASHBOARD}/automated-tests/projects/${projectId}/builds/${meta.normalised_name}/${meta.build_id}?thBuildId=${encodeURIComponent(meta.th_build_id)}`;
+      return `${appDashboard()}/automated-tests/projects/${projectId}/builds/${meta.normalised_name}/${meta.build_id}?thBuildId=${encodeURIComponent(meta.th_build_id)}`;
     } catch {
       return undefined;
     }
@@ -1200,7 +1206,7 @@ export class AppAccessibilityApi {
     let more = false;
     for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
       const resp = await apiClient.get({
-        url: `${APP_API_BASE}/build/${encodeURIComponent(buildId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
+        url: `${appApiBase()}/build/${encodeURIComponent(buildId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
         headers: this.headers(),
         raise_error: false,
       });

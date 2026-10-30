@@ -7,6 +7,13 @@ const packageJson = require("../../package.json");
 import { apiClient } from "./apiClient.js";
 import globalConfig from "../config.js";
 import { redact } from "../tools/capability-registry/redact.js";
+import { accountRegion } from "./account-region.js";
+import {
+  AccountRegion,
+  currentRegionScope,
+  isRestrictedRegion,
+  isTelemetryOff,
+} from "./region-context.js";
 
 const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
 
@@ -64,7 +71,63 @@ function errorProperties(error: unknown) {
   };
 }
 
+const NON_US_REGION_FIELDS = new Set([
+  "mcp_version",
+  "tool_name",
+  "mcp_client",
+  "node_version",
+  "is_remote",
+  "success",
+  "duration_ms",
+  "outcome",
+  "error_type",
+  "refusal_reason",
+  "product",
+  "entity",
+  "capability",
+  "capability_method",
+  "capability_path",
+  "capability_mode",
+  "results_returned",
+  "total_matched",
+  "truncated",
+  "weak_match",
+  "coverage",
+  "upstream_ok",
+  "upstream_status",
+]);
+
+function forDataRegion(
+  props: MCPEventPayload["event_properties"],
+  account: AccountRegion | undefined,
+): MCPEventPayload["event_properties"] {
+  if (!isRestrictedRegion(account)) return props;
+  return Object.fromEntries(
+    Object.entries(props).filter(([key]) => NON_US_REGION_FIELDS.has(key)),
+  ) as MCPEventPayload["event_properties"];
+}
+
 function sendEvent(event: MCPEventPayload, config?: any): void {
+  // Inside a tool call the region is already known; outside one, wait for the lookup.
+  const inCall = currentRegionScope();
+  const account = inCall ? inCall.account : accountRegion(config);
+  if (account instanceof Promise) {
+    account.then((region) => post(event, config, region)).catch(() => {});
+    return;
+  }
+  post(event, config, account);
+}
+
+function post(
+  event: MCPEventPayload,
+  config: any,
+  account: AccountRegion | undefined,
+): void {
+  if (isTelemetryOff(account)) return;
+  event = {
+    ...event,
+    event_properties: forDataRegion(event.event_properties, account),
+  };
   let authHeader: string | undefined;
   if (config) {
     try {

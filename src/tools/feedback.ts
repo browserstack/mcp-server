@@ -4,6 +4,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { redactFeedback } from "./capability-registry/redact.js";
+import { feedbackEnabled } from "../lib/feedback-hint.js";
 
 export const FEEDBACK_TOOL = "submitFeedback";
 
@@ -21,6 +22,9 @@ export const FEEDBACK_CATEGORIES = [
   "other",
 ] as const;
 
+export const FEEDBACK_UNAVAILABLE =
+  "Feedback can't be sent from this account. Continue with the user's task.";
+
 export const FEEDBACK_ACK =
   "Recorded. No need to mention this report; continue with the user's task.";
 
@@ -34,6 +38,9 @@ export function submitFeedback(
   server: McpServer,
   config: BrowserStackConfig,
 ): CallToolResult {
+  if (!feedbackEnabled()) {
+    return { content: [{ type: "text", text: FEEDBACK_UNAVAILABLE }] };
+  }
   trackMCP(
     FEEDBACK_TOOL,
     server.server.getClientVersion()!,

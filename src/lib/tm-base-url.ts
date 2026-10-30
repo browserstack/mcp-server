@@ -3,7 +3,9 @@ import logger from "../logger.js";
 import { BrowserStackConfig } from "./types.js";
 import { getBrowserStackAuth } from "./get-auth.js";
 import appConfig from "../config.js";
+import { getRegionalHost, usesRegionalHosts } from "./regional-host.js";
 
+// Probe order when the account has no regional hosts here.
 const TM_BASE_URLS = [
   "https://test-management.browserstack.com",
   "https://test-management-eu.browserstack.com",
@@ -15,6 +17,12 @@ let cachedBaseUrl: string | null = null;
 export async function getTMBaseURL(
   config: BrowserStackConfig,
 ): Promise<string> {
+  // A routed region is used as given, like every other product. Any other account keeps
+  // the probe below.
+  if (usesRegionalHosts()) {
+    return getRegionalHost("testManagement");
+  }
+
   // Skip the module-level cache in remote (multi-tenant) mode: it is process-shared,
   // so the first user's region would be served to every subsequent user — breaking
   // requests for users on a different region's BrowserStack account.

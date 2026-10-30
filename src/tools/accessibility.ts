@@ -1624,7 +1624,7 @@ export default function addAccessibilityTools(
         .enum(Object.keys(WCAG_VERSIONS) as [keyof typeof WCAG_VERSIONS])
         .optional()
         .describe(
-          'WCAG version and level to check against, e.g. "wcag22aa", or "rgaa41" for RGAA 4.1 (default "wcag21aa").',
+          'WCAG level, e.g. "wcag22aa" or "rgaa41" (default "wcag21aa").',
         ),
       bestPractices: z
         .boolean()
@@ -1747,8 +1747,7 @@ export default function addAccessibilityTools(
 
   tools.getAccessibilityAuthConfig = server.tool(
     "getAccessibilityAuthConfig",
-    "Retrieve an existing authentication configuration by ID." +
-      NEEDS_A11Y_CONFIG_ID,
+    "Get an accessibility auth config by ID." + NEEDS_A11Y_CONFIG_ID,
     {
       configId: z.number().describe("ID of the auth configuration to retrieve"),
     },
@@ -1773,26 +1772,26 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          "Website Scanner scan id: from startAccessibilityScan or list_website_scanner_scans (searchCapability).",
+          "Website Scanner scan id (startAccessibilityScan or searchCapability).",
         ),
       scanRunId: z
         .string()
         .optional()
         .describe(
-          "Website Scanner run id: from startAccessibilityScan, or list_website_scanner_scan_runs (searchCapability).",
+          "Website Scanner run id (startAccessibilityScan or searchCapability).",
         ),
       buildId: z
         .string()
         .regex(/^[a-z0-9]{40}$/, "40 lowercase letters and digits")
         .optional()
         .describe(
-          "Web or App Accessibility build id: the SDK's testhub id, a link's thBuildId, or one listed via searchCapability.",
+          "Web/App Accessibility build id: SDK testhub id or a link's thBuildId.",
         ),
       workflowReportId: z
         .string()
         .optional()
         .describe(
-          "Workflow Analyzer report id: from its link, or list_workflow_analyzer_reports (searchCapability).",
+          "Workflow Analyzer report id, from its link or searchCapability.",
         ),
       appReportId: z
         .string()
@@ -1802,38 +1801,34 @@ export default function addAccessibilityTools(
         )
         .optional()
         .describe(
-          "Manual App Accessibility report id (a UUID), from its /report/ link or a report listed via searchCapability.",
+          "Manual App Accessibility report UUID, from its /report/ link.",
         ),
       reportUrl: z
         .string()
         .optional()
         .describe(
-          "A web or app report dashboard link (scan, build, manual report), a scanner share link, or an (App) Automate link.",
+          "Any web/app accessibility report, scanner share, or Automate link.",
         ),
       cursor: z
         .number()
         .optional()
         .describe(
-          "Character offset for pagination (default: 0); with compareWith, how many issues are already listed.",
+          "Pagination offset (default 0); with compareWith, issues already listed.",
         ),
       pageUrl: z
         .string()
         .optional()
-        .describe(
-          "Only the issues on this page URL, counted as the dashboard's page view counts them.",
-        ),
+        .describe("Only the issues on this page URL."),
       compareWith: z
         .string()
         .optional()
         .describe(
-          '"previous", or an older scanRunId of the same scan, or an earlier app build\'s id or link; lists new and resolved issues.',
+          '"previous", an older scanRunId, or an earlier app build id/link; lists new and resolved issues.',
         ),
       exportTaskId: z
         .string()
         .optional()
-        .describe(
-          "Continue a CSV export that an earlier call said is still being generated.",
-        ),
+        .describe("Continue a CSV export that is still being generated."),
     },
     {
       title: "Fetch Accessibility Issues",

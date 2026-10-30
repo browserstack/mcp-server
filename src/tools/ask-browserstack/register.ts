@@ -133,19 +133,13 @@ const DESCRIPTION =
   // tool that is not enabled for the account cannot do the job at all — so "there is a
   // per-account gate, fall back to the individual tools" is the most useful thing to say
   // first. Parenthesised so it reads as a status note, not as the tool's purpose.
-  "(Alpha, limited availability. Enabled per account and per product; if it is not enabled " +
-  "the call returns an entitlement error, nothing runs, and you should complete the task " +
-  "with the individual tools instead. To request access, the user should contact their " +
-  "BrowserStack account owner.) " +
-  "Use this when no other BrowserStack tool here fits the task, or when the ones you tried " +
-  "did not get you there. Prefer a specific tool whenever one fits: it is faster and more " +
-  "predictable than handing the job to an agent. " +
-  "Otherwise, describe what you want in plain language and BrowserStack's agent decides " +
-  "which calls to make, then returns its answer plus the steps it took. Anything that would " +
-  "change data pauses and asks you to confirm it first; deletes are refused outright. " +
-  "Put that confirmation to the user and answer with what THEY say — never decide on " +
-  "their behalf. If it cannot be put to anyone, the run is read-only and everything it " +
-  "wanted to change comes back in `needs_approval` instead. One task per call.";
+  "(Alpha, limited availability. If not enabled it returns an entitlement error; complete " +
+  "the task with the individual tools instead.) Use this when no other BrowserStack tool " +
+  "here fits, or when the ones you tried did not get you there. Prefer a specific tool " +
+  "whenever one fits. Describe the task in plain language. A data change asks you to " +
+  "confirm first: put it to the user, never decide for them; deletes are refused " +
+  "outright. If no one can confirm, the run is read-only and changes come back in " +
+  "`needs_approval`. One task per call.";
 
 /**
  * `isError` marks a call that FAILED, not one that was refused.
@@ -551,8 +545,7 @@ export function addAskBrowserStackAITool(
       product: z
         .enum(PRODUCTS)
         .describe(
-          "Which product to work in: tm (Test Management), a11y (Accessibility), " +
-            "tra (Test Reporting & Analytics).",
+          "Product: tm (Test Management), a11y (Accessibility), tra (Test Reporting & Analytics).",
         ),
       // OPTIONAL, because a resume does not carry one. `next_step` tells the model to
       // call again "with exactly these params" — `product`, `run_id`, `perm_id`,

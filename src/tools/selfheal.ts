@@ -568,11 +568,7 @@ export default function addSelfHealTools(
 
   tools.fetchSelfHealedSelectors = server.tool(
     "fetchSelfHealedSelectors",
-    "Fetch BrowserStack self-healed selectors plus the test source code for " +
-      "the run. Provide exactly one of `sessionId` (single Automate / " +
-      "App-Automate session) or `buildUuid` (full self-healing report for a " +
-      "build). Pass the returned locator pairs to `prepareSelfHealingPlan` " +
-      "to plan edits." +
+    "Fetch self-healed selectors and the test source. Pass exactly one of `sessionId` or `buildUuid`; give the pairs to prepareSelfHealingPlan." +
       NEEDS_SESSION_ID,
     {
       sessionId: z
@@ -653,17 +649,7 @@ export default function addSelfHealTools(
 
   tools.prepareSelfHealingPlan = server.tool(
     "prepareSelfHealingPlan",
-    "Build a self-healing edit plan that bundles locator pairs with test " +
-      "source code for the calling LLM to apply with its own editing tools. " +
-      "This tool does NOT modify files — it returns structured context so " +
-      "the LLM can edit only the relevant call sites (avoids blind " +
-      "find/replace across shared ids/classes). `sessions` accepts the " +
-      "canonical shape `[{sessionId, locators: [{original, healed, " +
-      "thought?}]}]`, a single session object, an envelope `{sessions: " +
-      "[...]}`, the raw report `{healing_logs: [...]}` (with " +
-      "`healed_selectors` aliasing `locators`), and snake_case keys " +
-      "(`session_id`, `original_locator`, `healed_locator`, " +
-      "`healing_thought`)." +
+    "Build an edit plan from healed locator pairs plus test source; it does NOT modify files. `sessions`: [{sessionId, locators: [{original, healed}]}] or the raw healing report." +
       NEEDS_SESSION_ID,
     {
       sessions: sessionsFieldSchema.describe(

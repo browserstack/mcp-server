@@ -7,6 +7,7 @@ import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
 import globalConfig from "../config.js";
+import { versionString } from "../lib/version-keyword.js";
 
 // Define the schema shape
 const LiveArgsShape = {
@@ -19,20 +20,15 @@ const LiveArgsShape = {
     .describe(
       "Desktop OS ('Windows' or 'OS X') or mobile OS ('android','ios','winphone')",
     ),
-  desiredOSVersion: z
-    .string()
-    .describe(
-      "The OS version must be specified as a version number (e.g., '10', '14.0') or as a keyword such as 'latest' or 'oldest'. Normalize variations like 'newest' or 'most recent' to 'latest', and terms like 'earliest' or 'first' to 'oldest'. For macOS, version names (e.g., 'Sequoia') must be used instead of numeric versions.",
-    ),
+  desiredOSVersion: versionString().describe(
+    "Version number or 'latest'/'oldest'; macOS takes names, e.g. 'Sequoia'.",
+  ),
   desiredBrowser: z
     .enum(["chrome", "firefox", "safari", "edge", "ie"])
     .describe("Browser for desktop (Chrome, IE, Firefox, Safari, Edge)"),
-  desiredBrowserVersion: z
-    .string()
+  desiredBrowserVersion: versionString()
     .optional()
-    .describe(
-      "Browser version for desktop (e.g. '133.2', 'latest'). If the user says 'latest', 'newest', or similar, normalize it to 'latest'. Likewise, convert terms like 'earliest' or 'oldest' to 'oldest'.",
-    ),
+    .describe("Desktop browser version, or 'latest' / 'oldest'."),
   desiredDevice: z.string().optional().describe("Device name for mobile"),
 };
 

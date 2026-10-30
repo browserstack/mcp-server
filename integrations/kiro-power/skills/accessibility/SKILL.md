@@ -12,18 +12,20 @@ Load this skill when the user says "accessibility", "a11y", "WCAG", "ADA", "cont
 ## Scan a page
 
 1. Need a URL and a scan name. Make the name short and specific, for example `checkout-page-oct-13`.
-2. Call `startAccessibilityScan` with `name` and `pageURL`. Add `advancedRules: true` only if the user asks for the fuller rule set.
+2. Call `startAccessibilityScan` with `name` and `pageURL`. Add `wcagVersion` (for example `wcag22aa`; default `wcag21aa`) or `advancedRules: true` only if the user asks for them.
 3. The response lists the total and the top issues with severity, component, HTML snippet and how to fix. Present those first.
 4. For more, call `fetchAccessibilityIssues` with the `scanId`, `scanRunId` and the `cursor` the previous response gave. Each page returns about eight issues and the next cursor. Stop when the user has enough; do not fetch all pages by default.
 5. The CSV download link expires in hours; offer it, do not rely on it later.
 
-No tool lists past scans. If the user asks about an earlier scan and you do not have its ids, run a new one rather than guessing.
+## Earlier scans, builds and reports
+
+`fetchAccessibilityIssues` reads from exactly one source: `scanId` + `scanRunId`, an accessibility `buildId`, a `workflowReportId`, an `appReportId`, or a dashboard `reportUrl`. If the user pastes a link, pass it as `reportUrl`. If they name an earlier scan or build without ids, find it with `searchCapability` (products `web_accessibility` or `app_accessibility`) rather than starting a new scan. To show what changed, pass `compareWith: "previous"`; the response lists new and resolved issues.
 
 ## Pages behind a login
 
 1. `createAccessibilityAuthConfig` with a `name`, `type` (`form` or `basic`), the login `url`, and for form auth the CSS selectors for username, password and submit. Omit `username` and `password`; the tool asks the user for them so they never pass through chat.
 2. It returns a numeric config id. Pass it as `authConfigId` to `startAccessibilityScan`.
-3. `getAccessibilityAuthConfig` with the id confirms it exists. No tool lists configs; keep the id in the conversation.
+3. `getAccessibilityAuthConfig` with the id confirms it exists. Keep the id in the conversation; if it is lost, `askBrowserStackAI` with product `a11y` can look it up.
 
 ## WCAG questions
 

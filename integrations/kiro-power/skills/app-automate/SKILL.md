@@ -14,7 +14,7 @@ Load this skill when the user has a mobile test suite or a failed mobile build: 
 ### Path 1: Appium project
 
 1. Detect language (java, nodejs, python, ruby, csharp) and runner; confirm in one line.
-2. `setupBrowserStackAppAutomateTests` takes `appPath` as a local .apk or .ipa path and uploads it. It does not accept a `bs://` id; give it a file.
+2. `setupBrowserStackAppAutomateTests` takes `appPath` as a local .apk or .ipa path, which it uploads, or a `bs://` id from an earlier upload. Ask the user which they have; never invent a `bs://` id.
 3. Devices only when named, up to three, each with `platform`, `deviceName`, `osVersion`, exact names.
 4. Apply the returned SDK instructions with approval, then run the suite with the project's normal command.
 
@@ -40,7 +40,7 @@ Load this skill when the user has a mobile test suite or a failed mobile build: 
 
 ### Step 2: Root cause first
 
-`fetchRCA` with up to three numeric test ids. It returns the cause, a failure type, log evidence, evidence strength and a proposed fix. It reads Appium, device and network logs for you.
+`fetchRCA` with up to three test ids as **numbers**: `listTestIds` returns them as strings, so convert `"4430179170"` to `4430179170` or the call is rejected. It returns the cause, a failure type, log evidence, evidence strength and a proposed fix. It reads Appium, device and network logs for you.
 
 ### Step 3: Logs, for `sessionType: app-automate` only
 
@@ -79,6 +79,6 @@ One `logTypes` entry per call. `fetchAutomationScreenshots` returns captures onl
 ## Never
 
 - Never run the Espresso or XCUITest path without both uploads confirmed.
-- Never pass a local path to `runAppTestsOnBrowserStack`, or a `bs://` id to the SDK setup.
+- Never pass a local path to `runAppTestsOnBrowserStack`; it takes `bs://` ids only.
 - Never request Automate-only log types for this session type.
 - Never apply a fix without a yes, and never ask for credentials.

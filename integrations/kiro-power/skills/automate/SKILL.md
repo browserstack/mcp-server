@@ -35,7 +35,7 @@ Run the suite with the script the setup added. Then `getBuildId` with the projec
 
 ### Step 2: Root cause first
 
-`fetchRCA` with up to three numeric test ids. It returns the cause in one sentence, a failure type (AUTOMATION_BUG, PRODUCT_BUG, ENVIRONMENT), the log evidence, an evidence strength, and a suggested fix marked as a proposal. For most failures this is the whole diagnosis. If RCA is unavailable, go to logs.
+`fetchRCA` with up to three test ids as **numbers**: `listTestIds` returns them as strings, so convert `"4430179170"` to `4430179170` or the call is rejected. It returns the cause in one sentence, a failure type (AUTOMATION_BUG, PRODUCT_BUG, ENVIRONMENT), the log evidence, an evidence strength, and a suggested fix marked as a proposal. For most failures this is the whole diagnosis. If RCA is unavailable, go to logs.
 
 ### Step 3: Logs, for `sessionType: automate` only
 

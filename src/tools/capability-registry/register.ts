@@ -1048,8 +1048,7 @@ export function addCapabilityRegistryTools(
         .string()
         .optional()
         .describe(
-          "The capability's published name, exactly as returned (e.g. 'create_test_run_by_integer_id'). " +
-            "Preferred over method/path.",
+          "Capability name exactly as returned. Preferred over method/path.",
         ),
       method: z
         .string()
@@ -1112,8 +1111,7 @@ export function addCapabilityRegistryTools(
         })
         .optional()
         .describe(
-          "Only for a capability whose contract carries `narrowable`: narrows the response " +
-            "to those fields and reports what it narrowed.",
+          "Fields to keep; only when the contract carries `narrowable`.",
         ),
     },
     {

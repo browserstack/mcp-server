@@ -52,9 +52,7 @@ export const SETUP_APP_AUTOMATE_DESCRIPTION =
 export const SETUP_APP_AUTOMATE_SCHEMA = {
   detectedFramework: z
     .nativeEnum(AppSDKSupportedFrameworkEnum)
-    .describe(
-      "The mobile automation framework configured in the project. Example: 'appium'",
-    ),
+    .describe("Mobile automation framework, e.g. 'appium'."),
 
   detectedTestingFramework: z
     .nativeEnum(AppSDKSupportedTestingFrameworkEnum)
@@ -64,9 +62,7 @@ export const SETUP_APP_AUTOMATE_SCHEMA = {
 
   detectedLanguage: z
     .nativeEnum(AppSDKSupportedLanguageEnum)
-    .describe(
-      "The programming language used in the project. Supports Java and C#. Example: 'java', 'csharp'",
-    ),
+    .describe("Project language, e.g. 'java', 'csharp'."),
 
   devices: z
     .array(MobileDeviceSchema)
@@ -78,9 +74,7 @@ export const SETUP_APP_AUTOMATE_SCHEMA = {
 
   appPath: z
     .string()
-    .describe(
-      "Path to the mobile app file (.apk for Android, .ipa for iOS). Can be a local file path or a BrowserStack app URL (bs://)",
-    ),
+    .describe("Local .apk/.ipa path or a BrowserStack app URL (bs://)."),
   project: z
     .string()
     .optional()
@@ -90,7 +84,5 @@ export const SETUP_APP_AUTOMATE_SCHEMA = {
     .boolean()
     .optional()
     .default(false)
-    .describe(
-      "Run App Accessibility (WCAG) checks on the screens the tests touch; Android 11+ or iOS 14+.",
-    ),
+    .describe("Run App Accessibility (WCAG) checks; Android 11+ or iOS 14+."),
 };

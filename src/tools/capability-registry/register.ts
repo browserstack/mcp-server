@@ -35,6 +35,8 @@ import {
   ResponseSelection,
   resolveResponses,
 } from "./index-loader.js";
+import { assertSelectable, narrowResponse } from "./narrow.js";
+import { invokeWithFallbacks } from "./fallback.js";
 import { invoke } from "./resolve.js";
 import {
   ambiguousProducts,
@@ -45,7 +47,7 @@ import {
   terms,
   vocabularyOf,
 } from "./search.js";
-import { Mode } from "./types.js";
+import { Mode, guidanceLines } from "./types.js";
 
 export const PERMISSION_VALUES = ["not_asked", "granted", "denied"] as const;
 
@@ -64,7 +66,7 @@ export interface RegistryDeps {
    * Per-product base URL. Never baked into the artifact — it is environment AND account
    * specific: tm is region-sharded, so this is resolved per call, not once at startup.
    */
-  baseUrlFor: (product: string) => Promise<string>;
+  baseUrlFor: (product: string, host?: string) => Promise<string>;
   credentialsFor: () => Credentials;
   transport?: Transport;
 }
@@ -138,8 +140,14 @@ export function addCapabilityRegistryToolsFromConfig(
       registry,
       // The whole product bundle, not just its host: a region-sharded product declares
       // several candidates and the probe needs an endpoint from its own capabilities.
-      baseUrlFor: (product) =>
-        resolveBaseUrl(product, config, registry.index.products[product]),
+      baseUrlFor: (product, host) =>
+        resolveBaseUrl(
+          product,
+          config,
+          registry.index.products[product],
+          undefined,
+          host,
+        ),
       // Read per call, not captured: the remote server rebuilds config per session, so a
       // captured credential would outlive the session it belongs to.
       credentialsFor: () => ({
@@ -150,6 +158,19 @@ export function addCapabilityRegistryToolsFromConfig(
     config,
   );
 }
+
+/**
+ * Titles for products whose index does not carry one yet.
+ *
+ * The infra indexes are authored here and declare `title`; tm, tra and loadtesting come
+ * out of the products-os export, which does not emit it yet, and re-formatting three
+ * 80k-line files to add one key was the wrong trade. These go away when the export does.
+ */
+const DEFAULT_TITLES: Record<string, string> = {
+  tm: "Test Management",
+  tra: "Test Reporting & Analytics",
+  loadtesting: "Load Testing",
+};
 
 function ok(payload: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(payload) }] };
@@ -228,7 +249,12 @@ export function addCapabilityRegistryTools(
    * below pin each branch against the message its source actually produces; if you reword
    * a refusal, one of them will tell you.
    */
-  const invocationReason = (message: string): string => {
+  const invocationReason = (message: string, error?: unknown): string => {
+    // A WITHHELD HANDLE IS REPORTED TO THE CALLER AS NOT FOUND, so the message cannot be
+    // what distinguishes it. The flag on the error can, which keeps the refusal countable
+    // without the wording admitting the capability exists.
+    if (error instanceof InvocationError && error.withheld)
+      return "capability_disabled";
     if (message.startsWith("unknown_capability:")) return "unknown_capability";
     if (message.startsWith("unknown_endpoint:")) return "unknown_endpoint";
     // The outcome this PR turns on: 46 of 244 capabilities are withheld, so this is the
@@ -337,13 +363,16 @@ export function addCapabilityRegistryTools(
                 : { verdict: "settled", product: ambiguity.settled },
           )
         : undefined;
+      /** The product's title for the question put to a person; the key stays the handle. */
+      const label = (name: string) =>
+        registry.index.products[name]?.title ?? DEFAULT_TITLES[name] ?? name;
       const routing =
         ambiguity.products.length > 1
           ? {
               verdict: "products_clash" as const,
               note:
                 `These products clash over ${ambiguity.terms.map((t) => `'${t}'`).join(", ")} — ` +
-                `the same word means something different in ${ambiguity.products.join(" and ")}. ` +
+                `the same word means something different in ${ambiguity.products.map(label).join(" and ")}. ` +
                 "ASK THE USER which they mean before searching or invoking anything; do not " +
                 "search each product in turn and merge the results. Searching before you " +
                 "ask will be refused: send the user's answer in `user_words` with this " +
@@ -351,9 +380,10 @@ export function addCapabilityRegistryTools(
               routing_token: listingToken,
               shared_terms: ambiguity.terms,
               products: ambiguity.products,
-              question: `Which product do you mean — ${ambiguity.products.join(" or ")}?`,
+              question: `Which product do you mean — ${ambiguity.products.map(label).join(" or ")}?`,
               senses: ambiguity.products.map((name) => ({
                 product: name,
+                title: label(name),
                 means: ambiguity.terms
                   .map((term) => {
                     const entities =
@@ -390,6 +420,7 @@ export function addCapabilityRegistryTools(
                 routing_token: listingToken,
                 question: `Which product do you mean — ${registry
                   .productNames()
+                  .map(label)
                   .join(" or ")}?`,
               }
             : query
@@ -415,6 +446,12 @@ export function addCapabilityRegistryTools(
         ...(routing ? { routing } : {}),
         products: registry.productNames().map((name) => ({
           name,
+          ...((registry.index.products[name].title ?? DEFAULT_TITLES[name])
+            ? {
+                title:
+                  registry.index.products[name].title ?? DEFAULT_TITLES[name],
+              }
+            : {}),
           summary: registry.index.products[name].summary,
           // THE ENTITIES AND WHAT EACH ONE IS. Routing is this tool's whole job, and a
           // product summary alone does not do it: "add a tag to xyz test" reads as
@@ -876,8 +913,8 @@ export function addCapabilityRegistryTools(
           mode: capability.mode,
           entity: capability.entity,
           ...(capability.intent ? { intent: capability.intent } : {}),
-          ...(capability.guidance?.length
-            ? { guidance: capability.guidance }
+          ...(guidanceLines(capability.guidance).length
+            ? { guidance: guidanceLines(capability.guidance) }
             : {}),
         })),
         ...rest,
@@ -1002,8 +1039,37 @@ export function addCapabilityRegistryTools(
         // Dropped rather than overwritten: the raw field holds `{"$response": …}` pointers,
         // and spreading the capability would leak them through whenever the resolved value
         // is absent.
-        const { responses: unresolved, method, path, ...contract } = capability;
+        //
+        // THE WIRE FIELDS GO WITH IT, for the same reason the route does: they describe how
+        // WE reach the product, not anything the caller supplies or acts on. `host` names
+        // which of the product's origins serves this one capability; `encoding` and
+        // `send_empty_body` say how the request body is framed; `local_only` and `disabled`
+        // are claims about which surface publishes it, already answered by the capability
+        // being present at all. A contract that shows them invites a caller to reason about
+        // plumbing it cannot influence — and `host: "api"` was doing exactly that in a
+        // shipped describe response.
+        //
+        // `invocable` STAYS, and is the one of these that is not plumbing. Presence says the
+        // capability is published, which is not the same as callable: a reference-only entry
+        // is published precisely so search can still find it and say what to do instead.
+        // Stripping the flag would leave that fact only in a prose guidance line.
+        const {
+          responses: unresolved,
+          method,
+          path,
+          host,
+          encoding,
+          send_empty_body,
+          local_only,
+          disabled,
+          ...contract
+        } = capability;
         void unresolved;
+        void host;
+        void encoding;
+        void send_empty_body;
+        void local_only;
+        void disabled;
         return ok({
           // No build_id here either, same reason. `product` stays: describeCapability
           // resolves by NAME and its product argument is optional, so the answer has to
@@ -1027,7 +1093,7 @@ export function addCapabilityRegistryTools(
         if (error instanceof InvocationError)
           return refuse(
             "describeCapability",
-            invocationReason(error.message),
+            invocationReason(error.message, error),
             error.message,
             undefined,
             identity,
@@ -1049,17 +1115,16 @@ export function addCapabilityRegistryTools(
 
   tools.invokeCapability = server.tool(
     "invokeCapability",
-    "Call a capability whose contract you have from describeCapability. Pass `name` exactly " +
-      "as given — that is the handle. Only when a result carries no `name` (some products " +
-      "do not publish them yet) pass `method` and `path` instead, exactly as returned. " +
-      "Arguments go in path_params / query / body under the spec's own names. One call " +
-      "makes exactly one request and returns the product's own response untouched; when " +
-      "`completed` is false there is another page, which you fetch by sending the " +
-      "capability's own page parameter. If the mode is 'write' you MUST ask the user " +
-      "first, then resend with user_permission='granted' and a change_summary; both are " +
-      "recorded. Capabilities whose mode is 'destructive' (deletes) are refused outright — " +
-      "archiving, closing and merging are ordinary writes and DO run, so read the mode and " +
-      "intent before confirming with the user.",
+    "Call a capability whose contract you have from describeCapability. Pass `name` exactly a" +
+      "s given — that is the handle; only when a result carries no `name` pass `method` and `pa" +
+      "th` instead. Arguments go in path_params / query / body under the spec's own names. One " +
+      "call makes one request and returns the product's response as sent; `select` narrows it o" +
+      "nly where the contract carries `narrowable`, and reports what it narrowed. When `complet" +
+      "ed` is false there is another page, fetched with the capability's own page parameter. If" +
+      " the mode is 'write' you MUST ask the user first, then resend with user_permission='gran" +
+      "ted' and a change_summary; both are recorded. Capabilities whose mode is 'destructive' a" +
+      "re refused outright — archiving, closing and merging are ordinary writes and DO run, so " +
+      "read the mode and intent before confirming with the user.",
     {
       name: z
         .string()
@@ -1108,6 +1173,33 @@ export function addCapabilityRegistryTools(
         .string()
         .optional()
         .describe("What will change. Required for writes."),
+      select: z
+        .object({
+          where: z
+            .record(z.string(), z.any())
+            .optional()
+            .describe(
+              "Field -> the value it must take, or an array of accepted values. Strings " +
+                "match case-insensitively.",
+            ),
+          distinct: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Return one row per distinct combination of these fields and nothing else — " +
+                "the cheapest way to ask what values exist.",
+            ),
+          fields: z
+            .array(z.string())
+            .optional()
+            .describe("Keep only these fields on each row."),
+          limit: z.number().optional().describe("At most this many rows."),
+        })
+        .optional()
+        .describe(
+          "Only for a capability whose contract carries `narrowable`: narrows the response " +
+            "to those fields and reports what it narrowed.",
+        ),
     },
     {
       title: "Invoke Capability",
@@ -1165,6 +1257,29 @@ export function addCapabilityRegistryTools(
           body: input.body,
         };
 
+        if (capability.invocable === false) {
+          // THE ONE PLACE describe AND invoke DIVERGE, deliberately. Everywhere else a name
+          // that describes is a name that invokes, and breaking that is its own bug class —
+          // but a reference-only capability exists precisely to be read and not called. The
+          // refusal carries the instruction, because the note is the whole point of it
+          // still being published.
+          return refuse(
+            "invokeCapability",
+            "capability_not_invocable",
+            `${handle} cannot be called on this server. ` +
+              (guidanceLines(capability.guidance)[0] ??
+                "Describe it for what to do instead.") +
+              " Follow that instead of retrying.",
+            undefined,
+            identity,
+          );
+        }
+
+        // A `select` the capability cannot honour is refused HERE, with the other
+        // pre-flight checks: refusing it on the way back meant the request had already
+        // been sent — a device allocated, a build uploaded — and the answer thrown away.
+        assertSelectable(capability, input.select);
+
         if (capability.mode === "destructive") {
           // Refused before binding, so consent is never sought for something that cannot run.
           return refuse(
@@ -1207,15 +1322,42 @@ export function addCapabilityRegistryTools(
           }
         }
 
-        const result = await invoke(
+        // The base URL is resolved per target rather than once: a fallback step may sit
+        // on a different named host from the capability that declared it.
+        const { result, attempts } = await invokeWithFallbacks(
           capability,
           args,
-          await deps.baseUrlFor(product),
-          deps.credentialsFor(),
-          transport,
-          registry.index.products[product]?.auth,
-          product,
+          async (target, targetArgs) =>
+            invoke(
+              target,
+              targetArgs,
+              await deps.baseUrlFor(product, target.host),
+              deps.credentialsFor(),
+              transport,
+              registry.index.products[product]?.auth,
+              product,
+            ),
+          (name) => registry.byNameLookup(name, product).capability,
         );
+        // NARROWING IS APPLIED TO A SUCCESS ONLY. A 4xx body is the diagnosis the caller
+        // needs whole, and a selection that happened to match none of its keys would
+        // quietly empty it. `narrowResponse` refuses an unsupported `select` by throwing,
+        // which lands in the InvocationError branch below with the accepted fields listed.
+        const narrowed = result.ok
+          ? narrowResponse(capability, result.http_response.body, input.select)
+          : undefined;
+        const answer = {
+          ...(narrowed
+            ? {
+                ...result,
+                http_response: { ...result.http_response, body: narrowed.body },
+                narrowed: narrowed.narrowing,
+              }
+            : result),
+          // Only when the chain ran: a capability without `fallbacks` answers exactly as
+          // before, and one whose first call succeeded has nothing to report.
+          ...(attempts ? { fallback: { attempts } } : {}),
+        };
         // The one row for a completed invoke. invoke() returns a 4xx/5xx rather than
         // throwing, so `success` keeps its tool-level meaning and these two fields carry
         // whether the product call worked. Status 0 means it could not be reached.
@@ -1224,13 +1366,20 @@ export function addCapabilityRegistryTools(
           upstream_ok: result.ok,
           upstream_status: result.http_response.status,
           change_summary: redact(input.change_summary),
+          ...(attempts ? { fallback_steps: attempts.length - 1 } : {}),
+          ...(narrowed
+            ? {
+                narrowed_from: narrowed.narrowing.from,
+                narrowed_to: narrowed.narrowing.to,
+              }
+            : {}),
         });
-        return ok(result);
+        return ok(answer);
       } catch (error) {
         if (error instanceof InvocationError)
           return refuse(
             "invokeCapability",
-            invocationReason(error.message),
+            invocationReason(error.message, error),
             error.message,
             undefined,
             identity,

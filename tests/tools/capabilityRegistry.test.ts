@@ -458,6 +458,22 @@ describe("invoke — one request, response returned untouched", () => {
     expect(result.completed).toBe(false);
   });
 
+  // Accessibility's lists page with a token under data.pagination (camelCase on some lists,
+  // snake_case on others) rather than info.next. Read as complete, an agent would stop at
+  // the first 20 reports and answer "the last report Priya ran" from the wrong page.
+  it.each([
+    [{ success: true, data: { reports: [], pagination: { hasNext: true, nextPage: "t" } } }, false],
+    [{ success: true, data: { builds: [], pagination: { has_next: true, next_page: "t" } } }, false],
+    [{ success: true, data: { scans: [], pagination: { hasNext: false, nextPage: null } } }, true],
+    [{ success: true, data: null, info: ["No Projects found"] }, true],
+  ])("reads another page from a data.pagination envelope (%#)", async (body, completed) => {
+    const result = await invoke(
+      LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
+      "https://a11y.example", credentials, async () => ({ status: 200, body }),
+    );
+    expect(result.completed).toBe(completed);
+  });
+
   it("mirrors a non-2xx and lets the product's own body explain it", async () => {
     const transport = async () => ({
       status: 422,

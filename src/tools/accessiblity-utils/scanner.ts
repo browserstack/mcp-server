@@ -20,6 +20,23 @@ export interface AccessibilityScanStatus {
   errors?: string[];
 }
 
+/**
+ * What a Website Scanner scan checks for, as the create-scan API takes it under
+ * scanSettings. A setting left out takes the API's default.
+ */
+export interface ScanSettings {
+  /** The WCAG version and level, such as "wcag22aa", or "rgaa41" (API default "wcag21aa"). */
+  wcagVersion?: string;
+  /** Report best-practice issues too (API default false). */
+  bestPractices?: boolean;
+  /** Report issues that need a manual review (API default true). */
+  needsReview?: boolean;
+  /** Run the advanced rules (API default true). */
+  advancedRules?: boolean;
+  /** Run the experimental rules (API default true). */
+  experimentalRules?: boolean;
+}
+
 export class AccessibilityScanner {
   private auth: { username: string; password: string } | undefined;
 
@@ -31,7 +48,7 @@ export class AccessibilityScanner {
     name: string,
     urlList: string[],
     authConfigId?: number,
-    advancedRules?: boolean,
+    settings: ScanSettings = {},
   ): Promise<AccessibilityScanResponse> {
     if (!this.auth?.username || !this.auth?.password) {
       throw new Error(
@@ -80,14 +97,15 @@ export class AccessibilityScanner {
       }
     });
 
+    const scanSettings = Object.fromEntries(
+      Object.entries(settings).filter(([, value]) => value !== undefined),
+    );
     const baseRequestBody = {
       name,
       urlList: transformedUrlList,
       recurring: false,
       ...(authConfigId && { authConfigId }),
-      ...(advancedRules !== undefined && {
-        scanSettings: { advancedRules },
-      }),
+      ...(Object.keys(scanSettings).length > 0 && { scanSettings }),
     };
 
     let requestBody = baseRequestBody;
@@ -121,19 +139,101 @@ export class AccessibilityScanner {
         );
       return data;
     } catch (err: any) {
-      // apiClient throws generic errors, try to extract message
-      if (err?.response?.status === 422) {
+      // apiClient throws generic errors, try to extract message. A 422 also refuses a
+      // setting (a WCAG version the API does not take), so its own reason comes first.
+      const data = err?.response?.data;
+      const reason =
+        data?.error ||
+        data?.message ||
+        (Array.isArray(data?.errors) ? data.errors.join(", ") : undefined);
+      if (err?.response?.status === 422 && !reason) {
         throw new Error(
           "A scan with this name already exists. please update the name and run again.",
         );
       }
-      const msg =
-        err?.response?.data?.error ||
-        err?.response?.data?.message ||
-        err?.message ||
-        String(err);
-      throw new Error(`Failed to start scan: ${msg}`);
+      throw new Error(
+        `Failed to start scan: ${reason || err?.message || String(err)}`,
+      );
     }
+  }
+
+  /**
+   * The settings a run actually ran with, from its summary, or undefined when it cannot be
+   * read. A setting left out takes the API's default, and the plan can turn advanced rules
+   * off, so what was asked for is not always what ran. The summary has no experimental
+   * rules: they come from the scan's own settings, which a scan started here has for this
+   * run alone.
+   */
+  async runSettings(
+    scanId: string,
+    scanRunId: string,
+  ): Promise<ScanSettings | undefined> {
+    const read = (path: string) =>
+      apiClient
+        .get({
+          url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${path}`,
+          headers: {
+            Authorization:
+              "Basic " +
+              Buffer.from(
+                `${this.auth?.username}:${this.auth?.password}`,
+              ).toString("base64"),
+          },
+          raise_error: false,
+        })
+        .catch(() => undefined);
+    const [resp, overview] = await Promise.all([
+      read(`${scanId}/scan_runs/${scanRunId}`),
+      read(`${scanId}/overview`),
+    ]);
+    const run = resp?.ok ? resp.data?.data : undefined;
+    if (!run) return undefined;
+    const experimental = overview?.ok
+      ? overview.data?.data?.scanConfigInfo?.experimental
+      : undefined;
+    return {
+      ...(run.wcagVersion ? { wcagVersion: run.wcagVersion } : {}),
+      ...(typeof run.bestPractices === "boolean"
+        ? { bestPractices: run.bestPractices }
+        : {}),
+      ...(typeof run.needsReview === "boolean"
+        ? { needsReview: run.needsReview }
+        : {}),
+      ...(typeof run.advanced === "boolean"
+        ? { advancedRules: run.advanced }
+        : {}),
+      ...(typeof experimental === "boolean"
+        ? { experimentalRules: experimental }
+        : {}),
+    };
+  }
+
+  /**
+   * A scan's own page in the dashboard, as the scans list links it (`scanUrl`), or
+   * undefined when it cannot be read. The page is named by the scan's build, so it cannot
+   * be made from the scan's name; a scan just started is on the list's first page.
+   */
+  async dashboardLink(scanId: string): Promise<string | undefined> {
+    const resp = await apiClient
+      .get({
+        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans",
+        headers: {
+          Authorization:
+            "Basic " +
+            Buffer.from(
+              `${this.auth?.username}:${this.auth?.password}`,
+            ).toString("base64"),
+        },
+        raise_error: false,
+      })
+      .catch(() => undefined);
+    if (!resp?.ok) return undefined;
+    const scans: { id?: unknown; scanUrl?: unknown }[] =
+      resp.data?.data?.scans ?? [];
+    const link = scans.find(
+      (scan) => String(scan.id) === String(scanId),
+    )?.scanUrl;
+    return typeof link === "string" && link ? link : undefined;
   }
 
   async pollStatus(

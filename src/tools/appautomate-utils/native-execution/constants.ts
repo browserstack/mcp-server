@@ -59,4 +59,11 @@ export const RUN_APP_AUTOMATE_SCHEMA = {
     .describe(
       "The automation framework used in the project, such as 'espresso' (Android) or 'xcuitest' (iOS).",
     ),
+  accessibility: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "App Accessibility checks on screens the tests touch (Android 11+, iOS 14+); suite must be built with BrowserStack's SDK.",
+    ),
 };

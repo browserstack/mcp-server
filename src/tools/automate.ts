@@ -36,7 +36,7 @@ export async function fetchAutomationScreenshotsTool(
         content: [
           {
             type: "text",
-            text: "No screenshots found in the session or some unexpected error occurred",
+            text: "No screenshots found in the session logs. Run with browserstack.debug: true to capture visual-log screenshots.",
           },
         ],
         isError: true,
@@ -46,7 +46,7 @@ export async function fetchAutomationScreenshotsTool(
     const results = screenshots.map((screenshot, index) => ({
       type: "image" as const,
       data: screenshot.base64,
-      mimeType: "image/png",
+      mimeType: screenshot.mimeType,
       _meta: { url: screenshot.url, index: index + 1 },
     }));
 

@@ -1,0 +1,3782 @@
+{
+ "schema_version": 1,
+ "version": "1.0",
+ "build_id": "6782f7e_2026-10-16T13:54:22Z",
+ "mobiledevicecontrol": {
+  "title": "Mobile Device Control",
+  "summary": "Mobile device control: run a real Android or iOS device and drive the app on it step by step. The account side lists the devices this account can use, including private ones, uploads and lists app builds, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link and video \u2014 after the device is released. The session side starts a device with an installed build and drives it: find elements and read their text, position and attributes, tap them, type, swipe, screenshot, press keys, rotate, switch between the native app and a web view, move between the native app and a web view, and launch or close apps. Apps are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Browsers are not here \u2014 those are device control, which drives a page rather than an installed app \u2014 and neither is App Live: it has no API an agent can drive, so agent sessions run here, on real devices, and consume the account's device minutes. A build must exist before a session starts; it is uploaded here from a public link, or from a file on the user's own machine when the server runs there. App Live keeps a separate store, so an app uploaded for manual App Live testing is not available to sessions here. Media for camera injection must come from elsewhere. The default Appium server is 1.x and rejects every `mobile:` command; ask for 2.19.0.",
+  "routing_terms": [
+   "app automate",
+   "app build",
+   "app for automation",
+   "appium",
+   "appium session",
+   "close app",
+   "device control",
+   "device list",
+   "device property",
+   "drive a device",
+   "drive the app",
+   "foreground app",
+   "getprop",
+   "hardware button",
+   "home button",
+   "keyboard",
+   "keyboard open",
+   "launch app",
+   "local build",
+   "mobile app",
+   "mobile device control",
+   "os build",
+   "parallel sessions",
+   "plan",
+   "private device",
+   "public link",
+   "real device",
+   "restart app",
+   "screenshot",
+   "scroll",
+   "session video",
+   "swipe",
+   "tap",
+   "upload apk",
+   "upload app",
+   "upload app for device",
+   "upload ipa",
+   "volume",
+   "webdriver"
+  ],
+  "base_url": "https://hub-cloud.browserstack.com",
+  "auth": {
+   "type": "http",
+   "scheme": "basic"
+  },
+  "capabilities": [
+   {
+    "name": "create_session",
+    "method": "POST",
+    "path": "/wd/hub/session",
+    "mode": "write",
+    "timeout_seconds": 180,
+    "entity": "app_session",
+    "intent": "Start a live Appium session on a real Android or iOS device with an uploaded app \u2014 use this before reading the screen, tapping, typing or swiping in the app.",
+    "guidance": {
+     "shared": [
+      "The app must already be uploaded: pass the bs:// URL from upload_app_build or list_app_builds, or the custom_id it was uploaded under, which always resolves to the newest build with that id.",
+      "Allocation and app install usually take 20\u201330 seconds; the response carries the new session id at value.sessionId \u2014 carry it into every other app_session call.",
+      "The session ends itself after idle_timeout seconds with no command (90 by default, 900 at most) and after 2 hours in total. Keep calling, or call get_window_rect as a cheap keep-alive, while deciding the next step.",
+      "Every session occupies a device and consumes device minutes until it ends: always finish with set_session_status and then delete_session.",
+      "To let a person watch the device live while the agent drives it, set interactive_debugging true and leave video on; they then open the running session on the session dashboard and start the interactive session there. That window is two-way: a person's taps and scrolls reach the same device, so ask them to watch only, or find the element you are about to act on again before every action.",
+      "device_name and platform_version must be a combination mobile device control offers; an unknown pair fails with a session-not-created error naming the capability.",
+      "Set appium_version to 2.19.0 for any session that will scroll with scroll_gesture, dismiss an iOS keyboard with dismiss_keyboard_key, or use any other mobile: capability; the default server is 1.x and answers those with a 404 listing the commands it does know.",
+      "enable_biometric, enable_camera_image_injection and upload_media only take effect when set here \u2014 none of them can be turned on once the session is running.",
+      "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
+      "device_name and platform_version come from list_devices; get_plan first if sessions are queueing rather than starting.",
+      "Treat a response without value.sessionId as a failed start even when the status is 200, and treat a failed call the same way: allocation can outlast the client's own timeout, so BrowserStack may have started a session the answer never named. One is then holding a device and consuming minutes until its idle timeout.",
+      "After a start that failed or returned no session id, look for a session left running on the account and end it rather than starting another.",
+      "The response carries no link of any kind \u2014 it is the session id and the negotiated capabilities only. Call get_session for the links: browser_url to watch the run on the dashboard, and public_url to share it with someone who has no BrowserStack account.",
+      "LANGUAGE AND LOCALE LAND IN DIFFERENT PLACES ON THE TWO PLATFORMS. On Android they change the device, and the app with it \u2014 measured with language de and locale DE: the system's own permission dialog came up in German and the app rendered German throughout. On iOS they leave the device alone \u2014 Settings and General stay in English \u2014 and apply to the app under test at launch. Either way nothing is visible unless the app actually ships that language, so test with an app that does and read the strings back with get_element_text rather than trusting the call's 200.",
+      "Both are accepted without complaint on both platforms, so a 200 says nothing about whether anything changed. There is also no way to confirm the device locale from inside the session: read_device_property refuses getprop persist.sys.locale and ro.product.locale as unsupported commands. Judge it from what is on screen.",
+      "Someone can only WATCH AND INTERACT if interactive_debugging was set true in this call \u2014 it cannot be turned on once the session is running, it is off by default on Android, and it needs video left on. Ask for it up front when a person is going to follow along, because the alternative is restarting the session."
+     ],
+     "local": [
+      "ON THE USER'S OWN MACHINE YOU CAN OPEN THE LIVE VIEW FOR THEM. This call returns only value.sessionId; call get_session straight after it, then run the shell command open \"<browser_url>\" on macOS or xdg-open \"<browser_url>\" on Linux, and say you opened the session on the session dashboard \u2014 it needs a BrowserStack login in that browser. Set interactive_debugging true in this call when they should be able to tap as well as watch; without it the view is watch-only."
+     ],
+     "remote": [
+      "THIS CALL RETURNS NO LINK \u2014 only value.sessionId. Nothing here can open a browser for the user either: this surface makes HTTP requests, and on a remote server there is no browser to open. So never say a live view was opened. If the user may want to watch, call get_session straight after this and give them browser_url in the same reply, which is the session on the dashboard and needs a BrowserStack login. public_url needs no login but carries an auth token, so offer it only when they ask to share outside the team."
+     ]
+    },
+    "body": [
+     {
+      "name": "platform_name",
+      "type": "string",
+      "required": true,
+      "values": [
+       "android",
+       "ios"
+      ],
+      "json_path": "/capabilities/alwaysMatch/platformName",
+      "example": "android"
+     },
+     {
+      "name": "device_name",
+      "type": "string",
+      "required": true,
+      "json_path": "/capabilities/alwaysMatch/appium:deviceName",
+      "description": "Device model exactly as list_devices gives it.",
+      "example": "Google Pixel 6"
+     },
+     {
+      "name": "platform_version",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/appium:platformVersion",
+      "description": "OS version of that device, as list_devices gives it. Omit to let BrowserStack pick one for the device.",
+      "example": "12.0"
+     },
+     {
+      "name": "app",
+      "type": "string",
+      "required": true,
+      "json_path": "/capabilities/alwaysMatch/appium:app",
+      "description": "The bs:// app URL returned by upload_app_build, or the custom_id given at upload time (the latest app with that id is used).",
+      "example": "bs://0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "auto_grant_permissions",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/appium:autoGrantPermissions",
+      "description": "Android only: grant every runtime permission at install so permission dialogs do not appear.",
+      "example": true
+     },
+     {
+      "name": "idle_timeout",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 900,
+      "default": 90,
+      "json_path": "/capabilities/alwaysMatch/bstack:options/idleTimeout",
+      "description": "Seconds the session may sit without a command before BrowserStack ends it. Raise it when an agent drives the session step by step and may pause to think, or while a human watches; the device is held, and billed, for the whole idle period.",
+      "example": 300
+     },
+     {
+      "name": "appium_version",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/appiumVersion",
+      "description": "Appium server version to run. The default is 1.x, which has none of the `mobile:` commands execute_script relies on \u2014 they come back 404 with a list of what that server does support. Set 2.19.0 unless something needs the older server.",
+      "example": "2.19.0"
+     },
+     {
+      "name": "project_name",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/projectName",
+      "description": "Groups sessions on the session dashboard.",
+      "example": "Mobile checkout"
+     },
+     {
+      "name": "build_name",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/buildName",
+      "description": "Build the session is filed under on the dashboard.",
+      "example": "nightly"
+     },
+     {
+      "name": "session_name",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/sessionName",
+      "description": "Name shown for this session on the dashboard.",
+      "example": "sign in and add to basket"
+     },
+     {
+      "name": "interactive_debugging",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/interactiveDebugging",
+      "description": "Let a person watch and interact with the device from the dashboard while the session runs. Off by default on Android; needs video left on.",
+      "example": true
+     },
+     {
+      "name": "video",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/video",
+      "description": "Record a video of the session, viewable on the dashboard afterwards. On by default; set false to skip recording when the screen shows sensitive data. interactive_debugging stops working if this is false.",
+      "default": true,
+      "example": false
+     },
+     {
+      "name": "automation_name",
+      "type": "string",
+      "values": [
+       "UiAutomator2",
+       "XCUITest"
+      ],
+      "json_path": "/capabilities/alwaysMatch/appium:automationName",
+      "description": "Driver to use. Omit to let the hub pick by platform; name it when a session must not fall back to another driver.",
+      "example": "UiAutomator2"
+     },
+     {
+      "name": "auto_accept_alerts",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/appium:autoAcceptAlerts",
+      "description": "iOS only: dismiss system dialogs automatically. Leave false to see and answer permission prompts yourself.",
+      "example": false
+     },
+     {
+      "name": "new_command_timeout",
+      "type": "integer",
+      "minimum": 0,
+      "json_path": "/capabilities/alwaysMatch/appium:newCommandTimeout",
+      "description": "Seconds the Appium server itself waits for the next command before ending the session. Distinct from idle_timeout, which is BrowserStack's own backstop; the shorter of the two wins.",
+      "example": 300
+     },
+     {
+      "name": "language",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/appium:language",
+      "description": "Language code applied at session start. On Android it sets the DEVICE language \u2014 the system's own dialogs render in it \u2014 and the app follows. On iOS it does NOT change the device: Settings stays in English, and the code is applied to the app under test at launch instead.",
+      "example": "de"
+     },
+     {
+      "name": "locale",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/appium:locale",
+      "description": "Region applied with `language`, same split: the device on Android, the app under test on iOS. Android takes a bare region code such as DE.",
+      "example": "DE"
+     },
+     {
+      "name": "timezone",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/timezone",
+      "description": "Device time zone, as a city name rather than an offset.",
+      "example": "Paris"
+     },
+     {
+      "name": "gps_location",
+      "type": "string",
+      "pattern": "^-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?$",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/gpsLocation",
+      "description": "Starting GPS position as 'latitude,longitude'. Use set_geo_location to move it later.",
+      "example": "48.8566,2.3522"
+     },
+     {
+      "name": "network_profile",
+      "type": "string",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/networkProfile",
+      "values": [
+       "no-network",
+       "2g-gprs-good",
+       "2g-gprs-lossy",
+       "3g-umts-good",
+       "3g-umts-lossy",
+       "4g-lte-good",
+       "4g-lte-advanced-good",
+       "4g-lte-advanced-lossy"
+      ],
+      "description": "Start the session under a named network profile. set_session_network changes it later.",
+      "example": "3g-umts-good"
+     },
+     {
+      "name": "network_logs",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/networkLogs",
+      "description": "Capture the app's network traffic, readable from the session afterwards.",
+      "example": true
+     },
+     {
+      "name": "enable_biometric",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/enableBiometric",
+      "description": "Instrument the app so a fingerprint, Touch ID or Face ID prompt can be answered during the session. Must be set at start; it cannot be turned on later.",
+      "example": true
+     },
+     {
+      "name": "enable_camera_image_injection",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/enableCameraImageInjection",
+      "description": "Instrument the app so an uploaded image can be fed to its camera. Must be set at start; it cannot be turned on later.",
+      "example": true
+     },
+     {
+      "name": "upload_media",
+      "type": "array",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/uploadMedia",
+      "maxItems": 10,
+      "description": "media:// URLs of files to preload into the device's gallery or storage before the app opens.",
+      "example": [
+       "media://0123456789abcdef0123456789abcdef01234567"
+      ]
+     },
+     {
+      "name": "device_tunnel",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/deviceTunnel",
+      "description": "Open a tunnel to the device. Private (dedicated) devices only; BrowserStack rejects it on shared ones.",
+      "example": true
+     }
+    ],
+    "returns": [
+     "value.sessionId",
+     "value.capabilities"
+    ],
+    "responses": {
+     "200": {
+      "description": "Session created.",
+      "schema": {
+       "$schema": "NewSessionResponse"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     },
+     "500": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_page_source",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/source",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Read the full UI tree of the screen currently shown in the app \u2014 use this to see what is on screen and choose what to tap, type into or scroll before acting.",
+    "guidance": [
+     "Not published: the whole tree runs to tens of kilobytes, more than a caller can read. Find the elements you need with find_element or find_elements and read them with get_element_text, get_element_rect and get_element_attribute."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "description": "value.sessionId from create_session.",
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The UI tree as an XML string.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "find_element",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/element",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Locate one element on the current screen by id, accessibility id, XPath or UiAutomator selector \u2014 use this to get the element id that click_element and send_keys act on.",
+    "guidance": [
+     "The element id comes back under the W3C key value[\"element-6066-11e4-a52e-4f735466cecf\"]; pass that string as element_id.",
+     "Locators by platform: resource-id \u2192 \"id\", content-desc (Android) or name (iOS) \u2192 \"accessibility id\", visible text \u2192 xpath such as //*[@text='Submit'] on Android or -ios predicate string label == 'Submit' on iOS. Once you hold an element, get_element_attribute reads its ids and get_element_text what it says.",
+     "No match is a 404 with error \"no such element\" \u2014 the screen may have changed, or the element may be off-screen and need a scroll first; find it again after the scroll. \"No such element\" is also the cheapest way to confirm something is NOT on screen.",
+     "\"-android uiautomator\" accepts a UiSelector expression, which can scroll an element into view: new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text(\"Checkout\")).",
+     "find_elements answers the same query with a list and never a 404, which is how to ask whether something is present without treating absence as a failure."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "using",
+      "type": "string",
+      "required": true,
+      "values": [
+       "id",
+       "accessibility id",
+       "xpath",
+       "class name",
+       "-android uiautomator",
+       "-ios predicate string",
+       "-ios class chain"
+      ],
+      "example": "accessibility id"
+     },
+     {
+      "name": "value",
+      "type": "string",
+      "required": true,
+      "description": "The selector itself, interpreted according to using.",
+      "example": "cart-button"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The matching element reference.",
+      "schema": {
+       "$schema": "ElementResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "click_element",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/click",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Tap an element in the app \u2014 use this to press a button, open a menu item, select a list row or focus a field found with find_element.",
+    "guidance": [
+     "element_id must come from find_element on the current screen; after the screen changes it is stale and fails with \"stale element reference\".",
+     "To tap something that has no usable locator, take the centre of a nearby element's get_element_rect and tap the coordinates with perform_actions instead.",
+     "Confirm the tap had the intended effect \u2014 a 200 only means it was delivered: find an element the new screen should carry, or read a label with get_element_text before and after.",
+     "A keyboard covers the lower part of the screen and a tap aimed underneath it lands on the keyboard while still reporting success. When the target sits low, call is_keyboard_shown and then hide_keyboard before tapping."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "value[\"element-6066-11e4-a52e-4f735466cecf\"] from find_element.",
+      "example": "00000000-0000-0001-ffff-ffff00000012"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Tap delivered; value is null.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "send_keys",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/value",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Type text into an input field in the app \u2014 use this to fill a search box, login form or any editable field found with find_element.",
+    "guidance": [
+     "WHETHER THIS REPLACES OR APPENDS DEPENDS ON THE PLATFORM: on Android it replaces whatever the field already holds, and on iOS it appends to it. Typing twice into one iOS field therefore leaves both values joined. Read the field back with get_element_text whenever the resulting value matters.",
+     "The element must be an editable field (EditText on Android, TextField on iOS); typing into anything else fails with \"invalid element state\".",
+     "The on-screen keyboard may stay open afterwards and cover lower elements \u2014 check is_keyboard_shown, and compare get_element_rect of the next target with the screen's lower part, before the next tap.",
+     "clear_element empties a field, and on iOS \u2014 where this APPENDS \u2014 it is the only way to take back what is already there. It answers 200 whether or not the field changed, so read the field back with get_element_text rather than trusting the status.",
+     "The keyboard is usually left open afterwards. On Android and on an iPad, hide_keyboard closes it. On an iPhone it cannot be closed without submitting, so read hide_keyboard's guidance before planning a tap below the field.",
+     "Sending a newline closes the keyboard on iOS by pressing Return, which an app that commits on editing-ended will treat as a submit \u2014 the field resets and the value moves wherever the app sends it. The commit is the app's doing, not the newline's: dismissing the same field any other way can commit it too. See hide_keyboard."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "example": "00000000-0000-0001-ffff-ffff00000012"
+     }
+    ],
+    "body": [
+     {
+      "name": "text",
+      "type": "string",
+      "required": true,
+      "description": "The characters to type.",
+      "example": "hello"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Text typed; value is null.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "clear_element",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/clear",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Empty an editable field in the app \u2014 use this before typing when the field already holds something and you need to replace rather than add to it.",
+    "guidance": [
+     "Takes no parameters of its own.",
+     "CONFIRM IT ACTUALLY EMPTIED THE FIELD by reading it back with get_element_text: this endpoint can answer 200 without the field changing, and the status alone does not tell you which happened.",
+     "Needed far more on iOS than on Android: send_keys REPLACES the field's contents on Android, so clearing first is usually unnecessary there, while on iOS it APPENDS and this is the only way to take back what is already in the field.",
+     "The element must be an editable field \u2014 EditText on Android, TextField on iOS. Anything else answers \"invalid element state\".",
+     "The element_id must come from find_element on the current screen; after the screen changes it is stale and fails with \"stale element reference\"."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element.",
+      "example": "element-6066-11e4-a52e-4f735466cecf"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Field emptied; value is null. The null says the call was accepted, not that the field changed \u2014 read the field back to know that.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "send_empty_body": true
+   },
+   {
+    "name": "perform_actions",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/actions",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Perform touch gestures on the device screen by coordinates \u2014 tap a point, swipe or scroll a list, long-press, or drag \u2014 using W3C pointer actions.",
+    "guidance": [
+     "Coordinates are device pixels on Android and points on iOS \u2014 the space get_element_rect and get_window_rect report in; take them from there rather than from a screenshot, whose height can include the system bars.",
+     "Tap: one touch pointer with pointerMove(duration 0, x, y), pointerDown(button 0), pause(100), pointerUp(button 0).",
+     "Swipe up to scroll content down: pointerMove to a low point, pointerDown, pointerMove(duration 600) to a higher point, pointerUp. Keep the start and end inside the scrollable element's get_element_rect. For a plain scroll or swipe, scroll_gesture (Android) and scroll_view (iOS) need no coordinates at all.",
+     "Long-press: replace the pause duration with 1000 or more.",
+     "For a scroll without computing coordinates, scroll_gesture is simpler on Android and reports whether more content remains; on iOS use scroll_view; compute a swipe here only when neither fits.",
+     "To go back on an iOS screen that ignores press_back, swipe in from the left edge: a pointer sequence starting at exactly x=0 and moving right in several short steps. A single long move does not register."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "actions",
+      "type": "array",
+      "required": true,
+      "description": "W3C input sources. For touch use one source of type \"pointer\" with parameters {\"pointerType\":\"touch\"} and an actions list of pointerMove / pointerDown / pause / pointerUp items.",
+      "fields": [
+       {
+        "name": "type",
+        "type": "string",
+        "required": true,
+        "values": [
+         "pointer",
+         "key",
+         "none"
+        ]
+       },
+       {
+        "name": "id",
+        "type": "string",
+        "required": true
+       },
+       {
+        "name": "parameters",
+        "type": "object"
+       },
+       {
+        "name": "actions",
+        "type": "array",
+        "required": true
+       }
+      ],
+      "example": [
+       {
+        "type": "pointer",
+        "id": "finger1",
+        "parameters": {
+         "pointerType": "touch"
+        },
+        "actions": [
+         {
+          "type": "pointerMove",
+          "duration": 0,
+          "x": 540,
+          "y": 1900
+         },
+         {
+          "type": "pointerDown",
+          "button": 0
+         },
+         {
+          "type": "pointerMove",
+          "duration": 600,
+          "x": 540,
+          "y": 700
+         },
+         {
+          "type": "pointerUp",
+          "button": 0
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Gesture performed; value is null.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "400": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "scroll_gesture",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Swipe or scroll a region of the screen in a direction \u2014 use this to move through a list or page, or to swipe left and right through a carousel of cards, without working out start and end coordinates yourself.",
+    "guidance": [
+     "ANDROID ONLY. On iOS this is a 405 \"unknown method\"; scroll_view is the iOS counterpart.",
+     "The returned value is true when the view can still scroll further in that direction and false when it cannot \u2014 but the FIRST scroll of a freshly opened list can answer false while the screen moved and more content followed, so treat false as a hint and confirm by finding the element you expect before deciding you are at the end.",
+     "A HORIZONTAL SWIPE IS THE SAME CALL with direction left or right: a rectangle covering the carousel's band of the screen, taken from get_window_rect, is enough \u2014 no element bounds are needed, and perform_actions is the harder way to do the same thing. DIRECTION NAMES WHERE THE CONTENT COMES FROM, as with a list: down brings what is below into view (the finger moves up), so right brings the NEXT card and left the previous one.",
+     "The area is a rectangle in screen pixels \u2014 get_window_rect gives the screen size to base it on \u2014 and percent is how far to scroll within it, 0 to 1.",
+     "Needs Appium 2.x: set appium_version to 2.19.0 at session start, since the default 1.x server answers mobile: commands with a 404 listing what it does know."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "example": "mobile: scrollGesture",
+      "values": [
+       "mobile: scrollGesture"
+      ]
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object: the rectangle to scroll inside, the direction (up, down, left or right), and how far.",
+      "example": [
+       {
+        "left": 100,
+        "top": 500,
+        "width": 880,
+        "height": 1500,
+        "direction": "down",
+        "percent": 0.8
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Command result; its shape depends on the command.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     },
+     "500": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "scroll_view",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Swipe or scroll a scrollable view on iOS in a direction, or until a named element is visible \u2014 use this to move through a list or a long screen, or to swipe left and right through a carousel.",
+    "guidance": [
+     "iOS ONLY, and the counterpart of scroll_gesture. On Android the same command exists with a different shape and answers 400 \"invalid argument\" naming strategy and selector as missing; use scroll_gesture there.",
+     "Scroll by direction with {\"direction\":\"down\"}, or stop when something comes into view with {\"predicateString\":\"name == 'Submit'\", \"toVisible\": true} \u2014 the second is the reliable way to reach a known control without guessing how far to go.",
+     "A HORIZONTAL SWIPE IS THE SAME CALL with direction left or right, optionally with elementId naming the carousel; no coordinates are needed.",
+     "Pass elementId in args to scroll inside that view rather than the whole screen; without one it scrolls the first scrollable view it finds, which may not be the one you meant.",
+     "Needs Appium 2.x: set appium_version to 2.19.0 at session start, since the default 1.x server answers mobile: commands with a 404 listing what it does know.",
+     "Confirm the screen actually moved \u2014 find the element you were scrolling toward, or compare get_element_rect of one element before and after \u2014 since this answers 200 even on a screen with nothing scrollable: a 200 only says the gesture was delivered."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "values": [
+       "mobile: scroll"
+      ],
+      "example": "mobile: scroll"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object: a direction, or a predicateString with toVisible, optionally with elementId naming the view to scroll inside.",
+      "example": [
+       {
+        "direction": "down"
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Command result; its shape depends on the command.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     },
+     "500": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "dismiss_keyboard_key",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Close the on-screen keyboard by pressing one of its own keys \u2014 use this on an iPhone, where the plain hide_keyboard is refused.",
+    "guidance": [
+     "hide_keyboard already presses these keys on an iPhone when its plain call is refused \u2014 Done-type keys first, then Return \u2014 and reports each attempt. Call this directly to press exactly the key you choose: Return alone, or every key but Return when a submit must not happen.",
+     "The key must EXIST on that keyboard or this returns the same 400: list the keyboard's keys with find_elements using class name XCUIElementTypeKey and read each with get_element_text, then pick from the keys that are really there. An iPad carries \"Hide keyboard\"; an iPhone keyboard of this kind usually offers only Return.",
+     "Several candidates may be listed in one call and it costs nothing, but it still fails when the keyboard carries none of them \u2014 measured with [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"].",
+     "PRESSING RETURN SUBMITS. An app that commits when the field stops being edited will commit however the keyboard is closed, so check the field afterwards rather than assuming only the keyboard moved.",
+     "Confirm with is_keyboard_shown; on Android and on an iPad hide_keyboard closes it on its own."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "example": "mobile: hideKeyboard",
+      "values": [
+       "mobile: hideKeyboard"
+      ]
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object whose keys field lists the key names to try, in order.",
+      "example": [
+       {
+        "keys": [
+         "Done",
+         "done",
+         "Hide keyboard",
+         "Dismiss"
+        ]
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Command result; its shape depends on the command.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     },
+     "500": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "execute_script",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Run an Appium mobile command or a BrowserStack session command \u2014 scroll a list, press a hardware key, launch or close an app, or mark the session passed or failed.",
+    "guidance": [
+     "set_session_status is the capability for marking a session passed or failed, and works after the session has ended too. Only reach for the browserstack_executor setSessionStatus action here when something has to happen from inside the running session.",
+     "Keep any executor reason to one plain line under 256 characters with no escape sequences such as newlines.",
+     "Android scroll: script \"mobile: scrollGesture\" with args [{\"left\":100,\"top\":500,\"width\":880,\"height\":1500,\"direction\":\"down\",\"percent\":0.8}] \u2014 value true means more content remains below.",
+     "Which mobile: commands exist depends on the Appium version the session runs. The default Android version is Appium 1.x, which supports scrollGesture, swipeGesture, flingGesture, dragGesture, longClickGesture, doubleClickGesture and pinch gestures, but NOT mobile: pressKey \u2014 that needs a session started with appium_version 2.x or later.",
+     "An unsupported command fails with 404 \"unknown command\", and the message lists every mobile: command the session does support \u2014 read it rather than retrying variants."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "description": "Either \"mobile: <command>\" or a string beginning \"browserstack_executor: \" followed by a JSON object with action and arguments.",
+      "example": "mobile: scrollGesture"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Arguments for the command \u2014 for mobile: commands a one-element array holding an options object; for browserstack_executor an empty array.",
+      "example": [
+       {
+        "left": 100,
+        "top": 500,
+        "width": 880,
+        "height": 1500,
+        "direction": "down",
+        "percent": 0.8
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Command result; its shape depends on the command.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     },
+     "500": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "get_window_rect",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/window/rect",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Get the device screen size in pixels \u2014 use this to plan gesture coordinates, or as a cheap keep-alive so an idle session is not ended while deciding the next step.",
+    "guidance": [
+     "On Android the height is the WHOLE screen including the status bar \u2014 2340 on a Galaxy S24 whose usable area starts 91px down \u2014 so the top strip of that rectangle is not the app's. On iOS it is the app's window in points."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value.width",
+     "value.height",
+     "value.x",
+     "value.y"
+    ],
+    "responses": {
+     "200": {
+      "description": "Screen rectangle.",
+      "schema": {
+       "$schema": "RectResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "delete_session",
+    "method": "DELETE",
+    "path": "/wd/hub/session/{session_id}",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "End a live device session and release the device \u2014 use this when the flow is finished, after marking the session passed or failed.",
+    "guidance": [
+     "There is no way to resume an ended session; any further step needs create_session again, which reinstalls the app.",
+     "The session's video, logs and pass/fail status stay on the session dashboard after it ends.",
+     "Mark the result with set_session_status first \u2014 it also works after the session has ended, so this is an ordering preference rather than a last chance."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "state",
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "state is \"success\" and value an empty string; the body is the hub's own, not the W3C null.",
+      "schema": {
+       "$schema": "SessionDeletedResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "list_devices",
+    "method": "GET",
+    "path": "/app-automate/devices.json",
+    "mode": "read",
+    "entity": "device",
+    "intent": "List the real Android and iOS devices this account can run an app session on, with the exact device names and OS versions a session accepts.",
+    "guidance": [
+     "The device and os_version strings must be passed to create_session exactly as they appear here; a near miss is rejected rather than substituted.",
+     "One model appears once per OS version it is offered on, so the same device name repeats across rows.",
+     "This is what the account is entitled to, not what is free right now \u2014 a listed device can still be busy when a session starts.",
+     "There is no filtering on the wire: the whole catalogue comes back and the caller narrows it.",
+     "realMobile is true for physical devices and absent or false for emulators."
+    ],
+    "returns": [
+     "device",
+     "os",
+     "os_version",
+     "device_tier",
+     "device_limit",
+     "realMobile"
+    ],
+    "responses": {
+     "200": {
+      "description": "Every device the account can use.",
+      "schema": {
+       "$schema": "DeviceList"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "list_dedicated_devices",
+    "method": "GET",
+    "path": "/app-automate/dedicated_devices.json",
+    "mode": "read",
+    "entity": "device",
+    "intent": "List the account's private (dedicated) devices \u2014 use this to find devices reserved for this team rather than shared with other customers.",
+    "guidance": [
+     "An account without a private device cloud gets an empty array, which is an answer and not an error.",
+     "Rows come back as the product sends them and carry more fields than the public catalogue; read the keys rather than assuming the public shape.",
+     "Private devices are the only ones a device tunnel can be opened on."
+    ],
+    "returns": [
+     "device",
+     "os",
+     "os_version"
+    ],
+    "responses": {
+     "200": {
+      "description": "The account's private devices, or an empty array.",
+      "schema": {
+       "$schema": "DedicatedDeviceList"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "get_plan",
+    "method": "GET",
+    "path": "/app-automate/plan.json",
+    "mode": "read",
+    "entity": "plan",
+    "intent": "Show the device-session plan and how many parallel sessions are running, queued and allowed \u2014 check this before starting a session or a batch of them.",
+    "guidance": [
+     "A session start blocks and then queues when parallel_sessions_running has reached parallel_sessions_max_allowed, so a start that seems slow is usually this.",
+     "team_parallel_sessions_max_allowed is the ceiling shared across everyone on the team and can be lower than the account's own maximum.",
+     "The counts are account-wide and include sessions other people and CI started, not only this caller's."
+    ],
+    "returns": [
+     "automate_plan",
+     "parallel_sessions_running",
+     "parallel_sessions_max_allowed",
+     "team_parallel_sessions_max_allowed",
+     "queued_sessions",
+     "queued_sessions_max_allowed",
+     "terminal_access"
+    ],
+    "responses": {
+     "200": {
+      "description": "Plan name and parallel usage.",
+      "schema": {
+       "$schema": "Plan"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "upload_app_build",
+    "method": "POST",
+    "path": "/app-automate/upload",
+    "mode": "write",
+    "timeout_seconds": 600,
+    "entity": "app_build",
+    "intent": "Upload an app build to the device-session store \u2014 the one sessions here install from, separate from App Live's \u2014 from a public download link, and get back the bs:// URL a session installs. Use this to make a new .apk, .aab or .ipa available to the devices an agent drives.",
+    "guidance": [
+     "APP LIVE KEEPS A SEPARATE STORE. An app uploaded for App Live (manual, exploratory testing in a person's browser) is not available here, and one uploaded here does not appear in App Live \u2014 so when the app is going to be driven by you, tapped, typed into or scrolled by capability calls, upload it HERE, whatever the user calls the testing. The bs:// this returns is the one create_session installs.",
+     "Only the download-link form can be used here. The same endpoint also accepts a multipart upload carrying the file itself, which this surface cannot send \u2014 so for a build that exists only on the caller's own machine, give them that multipart request to run themselves and take the bs:// url it returns. The upload answers with the bs:// url directly: there is no intermediate storage, no presigned url and no second call. There is no way to hand the bytes over from here.",
+     "The url must be https and reachable by BrowserStack without credentials; a link behind a login fails on their side, not the caller's.",
+     "Pass custom_id to give the build a stable name, then later sessions can use that name in place of the bs:// URL and always get the newest build under it.",
+     "Re-uploading under the same custom_id adds a new build rather than replacing the old one; both stay listed.",
+     "Builds expire after 30 days, so a bs:// URL held from an earlier run can stop working.",
+     "Uploading a large build can take minutes \u2014 the call does not return until BrowserStack has fetched the whole file.",
+     "upload_app_build_from_file takes a build that is on this machine instead, where the server runs beside the user. It is not offered on a remote server, where a path would name the operator's disk rather than theirs.",
+     "Before uploading at all, check list_app_builds \u2014 a build from an earlier run is still usable for 30 days, and on a remote server reusing one is the only route that needs nothing from the user."
+    ],
+    "body": [
+     {
+      "name": "url",
+      "type": "string",
+      "required": true,
+      "format": "uri",
+      "description": "Public https link BrowserStack downloads the build from.",
+      "example": "https://example.com/builds/app-release.apk"
+     },
+     {
+      "name": "custom_id",
+      "type": "string",
+      "maxLength": 100,
+      "description": "Stable name for the build, reusable in place of the bs:// URL.",
+      "example": "my-app-staging"
+     }
+    ],
+    "returns": [
+     "app_url",
+     "custom_id",
+     "shareable_id"
+    ],
+    "responses": {
+     "200": {
+      "description": "The uploaded build.",
+      "schema": {
+       "$schema": "AppUpload"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "list_app_builds",
+    "method": "GET",
+    "path": "/app-automate/recent_apps",
+    "mode": "read",
+    "entity": "app_build",
+    "intent": "List the app builds this user has uploaded, newest first, with their bs:// URLs \u2014 use this to reuse an existing build instead of uploading again.",
+    "guidance": [
+     "An account with no uploads answers with a message object or a 404 rather than an empty array; treat both as 'nothing uploaded yet'.",
+     "This is only the calling user's own uploads \u2014 use list_team_app_builds for everyone on the team.",
+     "app_url is what create_session takes; app_id is an internal identifier and is not accepted there.",
+     "On a remote server this is the first thing to try: uploading from a path is not offered there, so an existing build is the only app a session can install without either a public link or the user running an upload by hand."
+    ],
+    "query": [
+     {
+      "name": "limit",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "example": 20,
+      "description": "How many builds to return."
+     }
+    ],
+    "returns": [
+     "app_name",
+     "app_version",
+     "app_url",
+     "app_id",
+     "custom_id",
+     "uploaded_at",
+     "shareable_id"
+    ],
+    "responses": {
+     "200": {
+      "description": "Recently uploaded builds, newest first.",
+      "schema": {
+       "$schema": "AppBuildList"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "list_team_app_builds",
+    "method": "GET",
+    "path": "/app-automate/recent_group_apps",
+    "mode": "read",
+    "entity": "app_build",
+    "intent": "List app builds uploaded by anyone on the team, newest first \u2014 use this to find a colleague's or CI's build rather than only your own.",
+    "guidance": [
+     "Same rows as list_app_builds, widened to the whole team; a build you uploaded appears in both.",
+     "An empty team history answers with a message object or a 404 rather than an empty array."
+    ],
+    "query": [
+     {
+      "name": "limit",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "example": 20,
+      "description": "How many builds to return."
+     }
+    ],
+    "returns": [
+     "app_name",
+     "app_version",
+     "app_url",
+     "app_id",
+     "custom_id",
+     "uploaded_at",
+     "shareable_id"
+    ],
+    "responses": {
+     "200": {
+      "description": "The team's recently uploaded builds.",
+      "schema": {
+       "$schema": "AppBuildList"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "get_app_builds_by_custom_id",
+    "method": "GET",
+    "path": "/app-automate/recent_apps/{custom_id}",
+    "mode": "read",
+    "entity": "app_build",
+    "intent": "List every build uploaded under one custom id, newest first \u2014 use this to resolve a stable build name to the bs:// URL of its latest version.",
+    "guidance": [
+     "The newest build under the id is the first row; passing the custom id itself to create_session has the same effect and is usually simpler.",
+     "An unknown custom id answers with a message object or a 404, not an empty array."
+    ],
+    "path_params": [
+     {
+      "name": "custom_id",
+      "type": "string",
+      "required": true,
+      "description": "The stable name a build was uploaded under.",
+      "example": "my-app-staging"
+     }
+    ],
+    "returns": [
+     "app_name",
+     "app_version",
+     "app_url",
+     "app_id",
+     "custom_id",
+     "uploaded_at",
+     "shareable_id"
+    ],
+    "responses": {
+     "200": {
+      "description": "Builds under that custom id.",
+      "schema": {
+       "$schema": "AppBuildList"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "get_session",
+    "method": "GET",
+    "path": "/app-automate/sessions/{session_id}.json",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Get a session's record: its status, device, duration, the shareable public link, the video, and which app build ran \u2014 use this for the links to share or to check how a finished session ended.",
+    "guidance": [
+     "browser_url is the session on the dashboard and needs a BrowserStack login \u2014 this is the link to give someone on the team who wants to watch or review the run.",
+     "public_url opens without any login, so it is the one to send outside the team; it carries an auth token, so treat it as a secret and do not paste it anywhere public.",
+     "video_url is only complete once the session has ended; during a run it may be missing or still filling.",
+     "This works for any session on the account, including ones this caller did not start.",
+     "status is the status that was set on the session; browserstack_status is what BrowserStack itself observed, and the two can disagree when a run was marked by hand.",
+     "app_details carries the build that ran, including its custom id, which is how to tell which version a past session used."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "status",
+     "reason",
+     "device",
+     "os",
+     "os_version",
+     "duration",
+     "browser_url",
+     "public_url",
+     "video_url",
+     "build_name",
+     "project_name",
+     "created_at",
+     "app_details",
+     "browserstack_status",
+     "hashed_id",
+     "name"
+    ],
+    "responses": {
+     "200": {
+      "description": "The session record.",
+      "schema": {
+       "$schema": "SessionDetails"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "set_session_status",
+    "method": "PUT",
+    "path": "/app-automate/sessions/{session_id}.json",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Mark a session passed or failed with a reason, so the dashboard shows the outcome \u2014 use this to record the verdict of what was driven on the device.",
+    "guidance": [
+     "Works after the session has ended as well as during it, so the verdict can be set once the result is known.",
+     "Only 'passed' and 'failed' are accepted; any other value is rejected with a 422.",
+     "reason is truncated at 255 characters.",
+     "An unset session shows as neither passed nor failed on the dashboard, which reads as an abandoned run."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "status",
+      "type": "string",
+      "required": true,
+      "values": [
+       "passed",
+       "failed"
+      ],
+      "example": "passed"
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "maxLength": 255,
+      "description": "Short explanation shown beside the status.",
+      "example": "The app behaved as expected"
+     }
+    ],
+    "returns": [
+     "status",
+     "reason",
+     "hashed_id",
+     "name",
+     "device",
+     "os",
+     "os_version",
+     "build_name",
+     "project_name"
+    ],
+    "responses": {
+     "200": {
+      "description": "The updated session record.",
+      "schema": {
+       "$schema": "SessionStatusUpdate"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api"
+   },
+   {
+    "name": "set_session_network",
+    "method": "PUT",
+    "path": "/app-automate/sessions/{session_id}/update_network.json",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Change the network conditions of a running session to a named profile \u2014 use this to see how the app behaves on a slow or absent connection.",
+    "guidance": [
+     "Mid-session changes take a named profile only; custom bandwidth or latency values are rejected with a 422.",
+     "'reset' restores the device's normal connection.",
+     "The session must still be running; this cannot be applied to a finished one.",
+     "To start a session already under a profile, pass network_profile to create_session instead."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "networkProfile",
+      "type": "string",
+      "required": true,
+      "values": [
+       "no-network",
+       "2g-gprs-good",
+       "2g-gprs-lossy",
+       "3g-umts-good",
+       "3g-umts-lossy",
+       "4g-lte-good",
+       "4g-lte-advanced-good",
+       "4g-lte-advanced-lossy",
+       "reset"
+      ],
+      "example": "3g-umts-good"
+     }
+    ],
+    "returns": [
+     "message"
+    ],
+    "responses": {
+     "200": {
+      "description": "Acknowledgement that the profile was applied.",
+      "schema": {
+       "$schema": "MessageResponse"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    },
+    "host": "api",
+    "disabled": true
+   },
+   {
+    "name": "take_screenshot",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/screenshot",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Take a screenshot of what is on the device right now, as a base64 PNG \u2014 use this to see the screen as a user would, including anything the UI tree does not describe.",
+    "guidance": [
+     "The image is returned inline as base64 in value and a phone screen runs to hundreds of kilobytes, so fetch it only when the picture is needed and prefer find_element with get_element_text for deciding what to act on.",
+     "Screenshot pixels are the device's full resolution and can be taller than the rectangle get_window_rect reports, because that excludes the system bars; scale before reusing screenshot coordinates for gestures.",
+     "A screen the app marks secure comes back black, which is the app's doing and not a failure."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Base64-encoded PNG of the screen.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "press_back",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/back",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Go back one screen \u2014 use this to leave a detail page, close a dialog, or undo a navigation step.",
+    "guidance": [
+     "On Android this is the system back button and is the reliable way back.",
+     "On iOS this works on a screen that uses a standard navigation bar, where it acts on the bar's own back control. A screen that draws its own header instead is left where it was, and the call still answers 200 \u2014 so confirm by finding an element of the screen you expect rather than from the status.",
+     "Pressing back on the first screen of an app can send the app to the background and show the home screen; find one of the app's own elements afterwards to confirm where you are \u2014 \"no such element\" means it went to the background.",
+     "The response is null on success and says nothing about whether the screen actually changed.",
+     "When an iOS screen ignores it, swipe in from the left edge with perform_actions: start at exactly x=0 and move in several short steps. One long move, or a start at x=2, is ignored."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_orientation",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/orientation",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Read whether the device is currently portrait or landscape.",
+    "guidance": [
+     "The value is upper case, PORTRAIT or LANDSCAPE."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The current orientation.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "set_orientation",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/orientation",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Rotate the device to portrait or landscape \u2014 use this to test a layout in the other orientation.",
+    "guidance": [
+     "An app that locks its orientation refuses the rotation with a 400 'invalid element state' saying the screen could not be changed; that is the app's choice, not a broken call.",
+     "The value must be upper case, PORTRAIT or LANDSCAPE.",
+     "Element positions and the window rectangle change after a rotation, so re-read get_element_rect and get_window_rect before acting on coordinates.",
+     "The response carries the new orientation on Android and null on iOS, so treat a 200 rather than the value as the sign it worked, and read get_orientation if the value matters."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "orientation",
+      "type": "string",
+      "required": true,
+      "values": [
+       "PORTRAIT",
+       "LANDSCAPE"
+      ],
+      "example": "LANDSCAPE"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The orientation now in effect.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "list_contexts",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/contexts",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "List the contexts available on screen \u2014 the native app and any web views \u2014 so a hybrid app's web content can be driven.",
+    "guidance": [
+     "NATIVE_APP is always present; a web view appears as a WEBVIEW_ prefixed name only while one is actually on screen.",
+     "A screen with no web view returns NATIVE_APP alone, which means the content is native and not that something failed."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The available context names.",
+      "schema": {
+       "$schema": "StringListResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "set_context",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/context",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Switch between the native app and a web view \u2014 use this when the part of the screen you need to drive is web content inside the app.",
+    "guidance": [
+     "Use a name exactly as list_contexts returned it; an invented WEBVIEW name is rejected.",
+     "In a web view, selectors change: find_element then takes css selector and get_element_text reads the page's text rather than a native label.",
+     "Switch back to NATIVE_APP before driving native controls again.",
+     "A web view's name carries the process id of the app that owns it, so it differs between sessions and after the app restarts. Read it from list_contexts each time rather than reusing one seen earlier."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "description": "Context name from list_contexts.",
+      "example": "NATIVE_APP"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "hide_keyboard",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/appium/device/hide_keyboard",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Close the on-screen keyboard \u2014 use this when it covers a button or field you need to tap after typing.",
+    "guidance": [
+     "On a plain success the response is true when a keyboard was dismissed and false when none was showing; false is not an error. A success reached through the chain below carries the key press's own null value instead.",
+     "A tap aimed at a control hidden behind the keyboard lands on the keyboard instead and reports success, so close it first rather than afterwards.",
+     "ON AN iPHONE THE PLAIN CALL IS REFUSED AND A CHAIN RUNS INSTEAD. That keyboard has no dismiss key, so the product answers 400 \"Did not know how to dismiss the keyboard\"; this then presses a key the keyboard actually carries \u2014 Done, Hide keyboard or Dismiss where one exists, and failing that Return. On an iPad the plain call closes it, because that keyboard carries \"Hide keyboard\"; on Android it closes it; neither runs the chain.",
+     "THE RESPONSE LISTS EVERY ATTEMPT WITH ITS STATUS under fallback.attempts, so read which one closed it. When the last attempt's keys include Return, Return is what was pressed \u2014 and in many apps that is a submit: a search runs, a form goes. Read the field and the screen back before assuming only the keyboard moved.",
+     "When no attempt answers 200 the keyboard stays up and the last 400 is the answer: the app offers no way to close it from outside, which a person on the phone would hit too. dismiss_keyboard_key is the same key press on its own, for trying exactly the key you choose \u2014 Return alone, or everything but Return.",
+     "GESTURES DO NOT DISMISS IT. Tapping an empty area above the keyboard returns 200 and changes nothing, and so does a drag downward over it \u2014 including one that starts well above the keyboard's top and moves through it in short steps, which is the form that works on a screen whose scroll view dismisses on drag. This app's does not, and neither gesture moved it.",
+     "WHETHER THE FIELD SURVIVES IS THE APP'S BUSINESS, NOT THE KEYBOARD'S. An app that commits on editing-ended will commit however the keyboard is dismissed \u2014 closing an iPad keyboard this way still moved the text out of the field. So do not expect any dismissal to be side-effect free; check the app's own behaviour. On Android it closes the keyboard, answers true, and leaves the field as it was.",
+     "is_keyboard_shown reports the state this changes, and is the reliable way to tell whether the keyboard actually went away."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "fallbacks": [
+     {
+      "when": {
+       "status": 400
+      },
+      "capability": "dismiss_keyboard_key",
+      "body": {
+       "script": "mobile: hideKeyboard",
+       "args": [
+        {
+         "keys": [
+          "Done",
+          "done",
+          "Hide keyboard",
+          "Dismiss"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "when": {
+       "status": 400
+      },
+      "capability": "dismiss_keyboard_key",
+      "body": {
+       "script": "mobile: hideKeyboard",
+       "args": [
+        {
+         "keys": [
+          "Return",
+          "return",
+          "Go",
+          "go",
+          "Next",
+          "next",
+          "Search",
+          "search"
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "True when a keyboard was dismissed.",
+      "schema": {
+       "$schema": "BooleanValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "set_geo_location",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/location",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Move the device's simulated GPS position \u2014 use this to test location-dependent behaviour without starting a new session.",
+    "guidance": [
+     "The response is a position reading that does not reliably reflect the value just sent: on Android it has come back as the device's previous location. Confirm it afterwards \u2014 with get_geo_location on Android, or get_simulated_location on iOS.",
+     "latitude, longitude and altitude must be nested under a location object.",
+     "altitude is required by the wire format even when it does not matter; send 0.",
+     "The app may cache its last fix, so a change can need the app to request location again before it is visible.",
+     "Latitude and longitude are applied as sent; altitude is not preserved and reads back as 0, so do not rely on it."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "location",
+      "type": "object",
+      "required": true,
+      "description": "The position to move to.",
+      "fields": [
+       {
+        "name": "latitude",
+        "type": "number",
+        "required": true,
+        "minimum": -90,
+        "maximum": 90,
+        "example": 48.8566
+       },
+       {
+        "name": "longitude",
+        "type": "number",
+        "required": true,
+        "minimum": -180,
+        "maximum": 180,
+        "example": 2.3522
+       },
+       {
+        "name": "altitude",
+        "type": "number",
+        "required": true,
+        "example": 0
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "A position reading, which may be the location before the change rather than after it.",
+      "schema": {
+       "$schema": "LocationResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "get_geo_location",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/location",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Read the device's current simulated GPS position \u2014 use this to confirm a location change took effect.",
+    "guidance": [
+     "Android only \u2014 iOS answers 500, saying the command is not supported. Read the position on iOS with get_simulated_location instead.",
+     "On Android this is the authoritative reading, and worth making when set_geo_location's own response is in doubt."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The current position.",
+      "schema": {
+       "$schema": "LocationResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "push_file",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/appium/device/push_file",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Write a file onto the device from base64 content \u2014 use this to put test data, a fixture or a document where the app will read it.",
+    "guidance": [
+     "data must be base64; to push text, encode it first. A file on the caller's own disk cannot be sent as a path, only as its encoded content.",
+     "Android takes an absolute path such as /sdcard/Download/data.json.",
+     "iOS takes an app-container path in the form @bundle.id:documents/data.json and can only write inside apps that allow it.",
+     "The file lasts only as long as the session; the device is wiped afterwards.",
+     "The response is null on success and does not confirm the file is readable by the app."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "path",
+      "type": "string",
+      "required": true,
+      "description": "Destination path on the device.",
+      "example": "/sdcard/Download/data.json"
+     },
+     {
+      "name": "data",
+      "type": "string",
+      "required": true,
+      "description": "Base64-encoded file content.",
+      "example": "aGVsbG8="
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "pull_file",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/appium/device/pull_file",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Read a file off the device as base64 \u2014 use this to check what the app wrote, such as a log, an export or a saved document.",
+    "guidance": [
+     "The content comes back base64-encoded in value and must be decoded; a large file is returned whole, so pull only what is needed.",
+     "Paths are the same as for push_file: absolute on Android, @bundle.id:documents/... on iOS.",
+     "A missing path is a 404 rather than empty content.",
+     "This is POST because the path travels in the body; it changes nothing on the device."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "path",
+      "type": "string",
+      "required": true,
+      "description": "Path to read on the device.",
+      "example": "/sdcard/Download/data.json"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Base64-encoded file content.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "press_keycode",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/appium/device/press_keycode",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Press a hardware or system key on an Android device by its key code \u2014 use this for home, enter, delete, volume or any key with no on-screen control.",
+    "guidance": [
+     "Android only. iOS has no equivalent: use press_back to go back, and press_button for home and the volume keys.",
+     "Common codes: 3 home, 4 back, 66 enter, 67 delete, 61 tab, 82 menu, 84 search, 187 app switch, 24 volume up, 25 volume down, 26 power.",
+     "press_back is the clearer way to send 4.",
+     "The response is null on success and says nothing about what the key did.",
+     "Called on iOS this is a 405 \"unknown method\" rather than a silent no-op; use press_back or press_button there."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "keycode",
+      "type": "integer",
+      "required": true,
+      "minimum": 0,
+      "maximum": 400,
+      "description": "Android KeyEvent code.",
+      "example": 66
+     },
+     {
+      "name": "metastate",
+      "type": "integer",
+      "minimum": 0,
+      "description": "Modifier bitmask, e.g. 1 for shift.",
+      "example": 1
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     },
+     "405": {
+      "description": "The command is not implemented on this platform, as \"unknown method\".",
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_current_app",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Find out which app is in the foreground right now \u2014 use this to confirm the app under test is showing and not the home screen or another app.",
+    "guidance": [
+     "Returns the Android package name; it answers with the launcher's package when the app has been sent to the background.",
+     "This is the quickest way to learn the app under test's own package id, which launch_app and terminate_app both need.",
+     "Android only; get_active_app_info is the iOS equivalent and returns an object rather than a string.",
+     "Called on iOS this is a 405 \"unknown method\" rather than a silent no-op; use get_active_app_info there."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "values": [
+       "mobile: getCurrentPackage"
+      ],
+      "example": "mobile: getCurrentPackage"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Always empty.",
+      "example": []
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The foreground app's package name.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     },
+     "405": {
+      "description": "The command is not implemented on this platform, as \"unknown method\".",
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "launch_app",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Bring an app to the foreground, starting it if it is not running \u2014 use this to open the app under test, return to it, or switch to another installed app.",
+    "guidance": [
+     "The app is named INSIDE `args`, which is the one object there: args [{\"appId\": \"com.example.app\"}] on Android, args [{\"bundleId\": \"com.example.app\"}] on iOS. Sending appId or bundleId as a top-level body field is refused here before anything is sent \u2014 \"unknown body: bundleId. accepted: args, script\" \u2014 and sending the wrong one for the platform is refused by the product with a 400 \"invalid argument\" naming the parameter it wanted, with no action taken.",
+     "Launching an app that is already in the foreground does nothing and still reports success.",
+     "To restart an app from a clean state, call terminate_app first and then this.",
+     "Succeeding means the app was activated, not that it finished drawing, so give it a moment and confirm before acting. An app that cannot be brought forward at all answers 400 rather than reporting success, and get_app_state reads 4 once it really is in front \u2014 sampled too early it can still report the home screen mid-switch.",
+     "The app must be installed \u2014 a package that is not there fails rather than installing it."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "values": [
+       "mobile: activateApp"
+      ],
+      "example": "mobile: activateApp"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object naming the app. The key differs by platform.",
+      "fields": [
+       {
+        "name": "appId",
+        "type": "string",
+        "description": "ANDROID ONLY: the package name. iOS rejects this name.",
+        "example": "com.example.app"
+       },
+       {
+        "name": "bundleId",
+        "type": "string",
+        "description": "iOS ONLY: the bundle id. Android rejects this name.",
+        "example": "com.example.App"
+       }
+      ],
+      "example": [
+       {
+        "appId": "com.example.app"
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "terminate_app",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Close an app and stop it running \u2014 use this to end a session inside the app, or as the first half of a restart.",
+    "guidance": [
+     "The app is named INSIDE `args`, which is the one object there: args [{\"appId\": \"com.example.app\"}] on Android, args [{\"bundleId\": \"com.example.app\"}] on iOS. Sending appId or bundleId as a top-level body field is refused here before anything is sent \u2014 \"unknown body: bundleId. accepted: args, script\" \u2014 and sending the wrong one for the platform is refused by the product with a 400 \"invalid argument\" naming the parameter it wanted, with no action taken.",
+     "Returns true when the app was running and false when it was not; false is not an error.",
+     "The app stays installed and keeps its data; only the running process is stopped.",
+     "This does not clear state between runs \u2014 relaunching shows the app where it was unless the app itself resets."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "values": [
+       "mobile: terminateApp"
+      ],
+      "example": "mobile: terminateApp"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object naming the app. The key differs by platform.",
+      "fields": [
+       {
+        "name": "appId",
+        "type": "string",
+        "description": "ANDROID ONLY: the package name. iOS rejects this name.",
+        "example": "com.example.app"
+       },
+       {
+        "name": "bundleId",
+        "type": "string",
+        "description": "iOS ONLY: the bundle id. Android rejects this name.",
+        "example": "com.example.App"
+       }
+      ],
+      "example": [
+       {
+        "appId": "com.example.app"
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "True when a running app was stopped.",
+      "schema": {
+       "$schema": "BooleanValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_app_state",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Check whether an app is installed, running or in the foreground \u2014 use this to confirm a launch or a close actually took effect.",
+    "guidance": [
+     "The app is named INSIDE `args`, which is the one object there: args [{\"appId\": \"com.example.app\"}] on Android, args [{\"bundleId\": \"com.example.app\"}] on iOS. Sending appId or bundleId as a top-level body field is refused here before anything is sent \u2014 \"unknown body: bundleId. accepted: args, script\" \u2014 and sending the wrong one for the platform is refused by the product with a 400 \"invalid argument\" naming the parameter it wanted, with no action taken.",
+     "The value is a number: 0 not installed, 1 installed but not running, 2 running in the background and suspended, 3 running in the background, 4 running in the foreground.",
+     "4 is the only state in which the app is on screen and can be driven.",
+     "The same scale applies on both platforms. Sending an app to the background leaves it at 3 or 2 \u2014 the system suspends it a moment after it stops being visible \u2014 so treat anything below 4 as not on screen rather than waiting for one number. Launching it again returns it to 4."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "values": [
+       "mobile: queryAppState"
+      ],
+      "example": "mobile: queryAppState"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object naming the app. The key differs by platform.",
+      "fields": [
+       {
+        "name": "appId",
+        "type": "string",
+        "description": "ANDROID ONLY: the package name. iOS rejects this name.",
+        "example": "com.example.app"
+       },
+       {
+        "name": "bundleId",
+        "type": "string",
+        "description": "iOS ONLY: the bundle id. Android rejects this name.",
+        "example": "com.example.App"
+       }
+      ],
+      "example": [
+       {
+        "appId": "com.example.app"
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The app's state as a number from 0 to 4.",
+      "schema": {
+       "$schema": "IntegerValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "is_app_installed",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Check whether an app is installed on the device \u2014 use this before launching one, or to confirm an uninstall.",
+    "guidance": [
+     "Android takes appId and iOS takes bundleId \u2014 send exactly the one for the platform. The wrong name is refused with a 400 \"invalid argument\" that names the parameter it wanted, and no action is taken.",
+     "get_app_state answers this and more in one call; prefer it when the running state also matters."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "values": [
+       "mobile: isAppInstalled"
+      ],
+      "example": "mobile: isAppInstalled"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object naming the app. The key differs by platform.",
+      "fields": [
+       {
+        "name": "appId",
+        "type": "string",
+        "description": "ANDROID ONLY: the package name. iOS rejects this name.",
+        "example": "com.example.app"
+       },
+       {
+        "name": "bundleId",
+        "type": "string",
+        "description": "iOS ONLY: the bundle id. Android rejects this name.",
+        "example": "com.example.App"
+       }
+      ],
+      "example": [
+       {
+        "appId": "com.example.app"
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "True when the app is installed.",
+      "schema": {
+       "$schema": "BooleanValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "uninstall_app",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Remove an app and its data from the device for the rest of the session \u2014 use this to test a first-run or upgrade path from a clean state.",
+    "guidance": [
+     "Android takes appId and iOS takes bundleId \u2014 send exactly the one for the platform. The wrong name is refused with a 400 \"invalid argument\" that names the parameter it wanted, and no action is taken.",
+     "The app and everything it stored are gone for the rest of the session and nothing here puts them back; confirm with the user before removing the app under test.",
+     "It is recoverable only in the sense that the device is wiped when the session ends and the next session installs the app fresh.",
+     "Returns true when an app was removed and false when it was not installed.",
+     "Removing the app under test leaves the session on the home screen with nothing to drive."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "values": [
+       "mobile: removeApp"
+      ],
+      "example": "mobile: removeApp"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object naming the app. The key differs by platform.",
+      "fields": [
+       {
+        "name": "appId",
+        "type": "string",
+        "description": "ANDROID ONLY: the package name. iOS rejects this name.",
+        "example": "com.example.app"
+       },
+       {
+        "name": "bundleId",
+        "type": "string",
+        "description": "iOS ONLY: the bundle id. Android rejects this name.",
+        "example": "com.example.App"
+       }
+      ],
+      "example": [
+       {
+        "appId": "com.example.app"
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "True when an app was removed.",
+      "schema": {
+       "$schema": "BooleanValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "simulate_biometric",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Answer a fingerprint, Touch ID or Face ID prompt with a success or a failure \u2014 use this to get past biometric authentication in the app.",
+    "guidance": [
+     "The session must have been started with enable_biometric true; it cannot be turned on once the session is running.",
+     "Call it only while the prompt is actually on screen \u2014 with no prompt showing it fails with BROWSERSTACK_COMMAND_EXECUTION_FAILED.",
+     "biometricMatch takes \"pass\" or \"fail\"; \"fail\" is how to exercise the app's rejection path.",
+     "Afterwards, find the element the app shows on success or on failure to see what it did with the answer.",
+     "Every failure seen so far reports the same BROWSERSTACK_COMMAND_EXECUTION_FAILED regardless of cause, so it does not distinguish 'no prompt on screen' from 'the session was not started with enable_biometric'. Check both."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "description": "The browserstack_executor line for the biometric action, built as: browserstack_executor: {\"action\":\"biometric\",\"arguments\":{\"biometricMatch\":\"<pass|fail>\"}}",
+      "example": "browserstack_executor: {\"action\":\"biometric\",\"arguments\":{\"biometricMatch\":\"pass\"}}"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Always an empty array for an executor command.",
+      "example": []
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Acknowledgement that the prompt was answered.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "inject_camera_image",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Make the app's camera see a chosen image instead of the device camera \u2014 use this to feed a QR code, barcode or document to a scanning flow.",
+    "guidance": [
+     "The session must have been started with enable_camera_image_injection true; it cannot be turned on later.",
+     "imageUrl must be a media:// URL of a file already uploaded to BrowserStack. This surface cannot upload media, because that endpoint takes a file from disk rather than a link \u2014 the URL has to come from elsewhere.",
+     "An unusable URL fails with BROWSERSTACK_INVALID_IMAGE_URL_PASSED rather than silently showing nothing.",
+     "Inject before the app opens its camera; a camera already running keeps the previous source."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "description": "The browserstack_executor line for the cameraImageInjection action, built as: browserstack_executor: {\"action\":\"cameraImageInjection\",\"arguments\":{\"imageUrl\":\"media://<id>\"}}",
+      "example": "browserstack_executor: {\"action\":\"cameraImageInjection\",\"arguments\":{\"imageUrl\":\"media://0123456789abcdef0123456789abcdef01234567\"}}"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Always an empty array for an executor command.",
+      "example": []
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Acknowledgement that the image was accepted.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "annotate_session",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Write a note into the session's timeline so it appears beside the video on the dashboard \u2014 use this to label what each step was doing for whoever reviews the run.",
+    "guidance": [
+     "The note is attached at the moment of the call, so it lines up with that point in the video.",
+     "level takes info, debug, warn or error and changes how the note is shown.",
+     "This records commentary only; it has no effect on the device or on the session's pass/fail status."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "description": "The browserstack_executor line for the annotate action, built as: browserstack_executor: {\"action\":\"annotate\",\"arguments\":{\"data\":\"<note>\",\"level\":\"<info|debug|warn|error>\"}}",
+      "example": "browserstack_executor: {\"action\":\"annotate\",\"arguments\":{\"data\":\"Tapped Add to cart\",\"level\":\"info\"}}"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Always an empty array for an executor command.",
+      "example": []
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The note that was recorded.",
+      "schema": {
+       "$schema": "AnyValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "is_keyboard_shown",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/appium/device/is_keyboard_shown",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Check whether the on-screen keyboard is up \u2014 use this before tapping something low on the screen, or to confirm a field really took focus.",
+    "guidance": [
+     "A keyboard covers the lower part of the screen, so a tap aimed at a control under it lands on the keyboard and still reports success. Check here first when the target sits low.",
+     "True right after typing means the field took focus; false means the tap that was meant to focus it did not land.",
+     "Use hide_keyboard to close it, then check again rather than assuming it closed."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "True when the keyboard is on screen.",
+      "schema": {
+       "$schema": "BooleanValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "press_button",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "write",
+    "entity": "app_session",
+    "intent": "Press a hardware button on an iPhone or iPad \u2014 use this for home and the volume keys, which have no on-screen control.",
+    "guidance": [
+     "iOS only; press_keycode is the Android equivalent and the two are not interchangeable.",
+     "The button names carry no separator: home, volumeup, volumedown.",
+     "Pressing home sends the app to the background \u2014 bring it back with launch_app, whose args object takes bundleId rather than appId on iOS, and confirm the app is in front again by finding one of its elements.",
+     "The response is null on success and says nothing about what the button did."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "values": [
+       "mobile: pressButton"
+      ],
+      "example": "mobile: pressButton"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Exactly one object naming the button.",
+      "fields": [
+       {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "values": [
+         "home",
+         "volumeup",
+         "volumedown"
+        ],
+        "example": "home"
+       }
+      ],
+      "example": [
+       {
+        "name": "home"
+       }
+      ]
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Null on success.",
+      "schema": {
+       "$schema": "NullValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_simulated_location",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Read the simulated GPS position on an iPhone or iPad \u2014 use this to confirm a location change took effect.",
+    "guidance": [
+     "iOS only; get_geo_location is the Android equivalent and is refused here.",
+     "Every field comes back null until a position has been set in this session, which means nothing has been simulated rather than that the device is at zero.",
+     "After set_geo_location this returns exactly the latitude, longitude and altitude that were sent, so it is the way to confirm what that call's own response does not.",
+     "altitude reads back as 0 whatever was sent; only latitude and longitude are meaningful."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "values": [
+       "mobile: getSimulatedLocation"
+      ],
+      "example": "mobile: getSimulatedLocation"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Always empty.",
+      "example": []
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The simulated position, with null fields when none has been set.",
+      "schema": {
+       "$schema": "LocationResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    },
+    "disabled": true
+   },
+   {
+    "name": "get_active_app_info",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Find out which app is in the foreground on an iPhone or iPad, with its bundle id \u2014 use this to confirm the app under test is showing rather than the home screen.",
+    "guidance": [
+     "iOS only; get_current_app is the Android equivalent and is refused here.",
+     "bundleId is the value the app lifecycle capabilities need on iOS, so this is how to learn it mid-session.",
+     "name is often empty; read bundleId rather than relying on it.",
+     "The answer is an object, where the Android equivalent returns a bare package-name string."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "values": [
+       "mobile: activeAppInfo"
+      ],
+      "example": "mobile: activeAppInfo"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Always empty.",
+      "example": []
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The foreground app.",
+      "schema": {
+       "$schema": "ActiveAppInfo"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "read_device_property",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/execute/sync",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Read one Android system property from the device, such as its OS build or manufacturer \u2014 use this for details the UI does not show.",
+    "guidance": [
+     "Android only. iOS has no adb and the call is rejected there.",
+     "Only `getprop <property>` can be expressed: the accepted form is fixed, and a command that lists apps or system state cannot be sent through this capability. A public phone is shared between customers, and commands such as `pm list packages` or `dumpsys` report what other people's sessions left behind.",
+     "BrowserStack applies its own allow-list on top of this one and accepts only some properties on a shared phone; ro.build.version.release and ro.product.manufacturer are accepted, while a bare getprop is not. A property it refuses comes back as an execution failure rather than an empty value.",
+     "The device name and OS version are already in the session record, so get_session answers those without this.",
+     "The whole line must be sent exactly as shown, with no extra spaces: it is matched against a fixed form.",
+     "The allowed property list is narrow and locale is not on it: getprop persist.sys.locale and getprop ro.product.locale both come back HTTP 500, \"BROWSERSTACK_UNSUPPORTED_ADB_SHELL_COMMAND ... is not supported on BrowserStack currently\". ro.build.version.release and ro.product.manufacturer do work, so treat the refusal as a per-property allow-list rather than a broken capability."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "script",
+      "type": "string",
+      "required": true,
+      "pattern": "^browserstack_executor: \\{\"action\":\"adbShell\",\"arguments\":\\{\"command\":\"getprop [A-Za-z0-9_.\\-]+\"\\}\\}$",
+      "description": "The executor line carrying a single `getprop <property>` command. Any other command, or any change to the surrounding form, is refused before the request is sent.",
+      "example": "browserstack_executor: {\"action\":\"adbShell\",\"arguments\":{\"command\":\"getprop ro.build.version.release\"}}"
+     },
+     {
+      "name": "args",
+      "type": "array",
+      "required": true,
+      "description": "Always empty.",
+      "example": []
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The property's value as a string.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "upload_app_build_from_file",
+    "method": "POST",
+    "path": "/app-automate/upload",
+    "host": "api",
+    "mode": "write",
+    "timeout_seconds": 600,
+    "entity": "app_build",
+    "encoding": "multipart",
+    "local_only": true,
+    "intent": "Upload an app build that is on this machine to the device-session store and get back the bs:// URL a session installs \u2014 use this when the .apk, .aab or .ipa is a local file rather than a download link.",
+    "guidance": {
+     "shared": [
+      "APP LIVE KEEPS A SEPARATE STORE. An app uploaded for App Live (manual, exploratory testing in a person's browser) is not available here, and one uploaded here does not appear in App Live \u2014 so when the app is going to be driven by you, tapped, typed into or scrolled by capability calls, upload it HERE, whatever the user calls the testing. The bs:// this returns is the one create_session installs.",
+      "Only .apk, .aab and .ipa are accepted.",
+      "A large build takes minutes, because the upload does not return until the whole file has been sent.",
+      "upload_app_build takes a public https link instead, and list_app_builds reuses a build already on the account \u2014 builds last 30 days."
+     ],
+     "local": [
+      "The file must sit inside the directory MCP_UPLOAD_BASE_DIR names. When that is not set the upload is refused and nothing is sent: tell the user to set it to the folder holding their builds and restart the server.",
+      "When it is set but the build is somewhere else, the refusal names the directory the file has to be inside. Tell the user to move it there rather than trying another path.",
+      "No part of the path may be a hidden folder, so a build under a dot-directory has to be moved out of it.",
+      "The path is checked before anything is uploaded and before the user is asked to approve, so a refusal costs nothing and means the file was never read."
+     ],
+     "remote": [
+      "Cheapest route first: list_app_builds or list_team_app_builds, if the build was uploaded before.",
+      "Then upload_app_build, if the build sits at a public https link \u2014 the only route that needs nothing from the user.",
+      "Otherwise the user uploads it themselves. The asset-upload helper PRINTS a curl command and nothing more \u2014 it reads no file and sends no request \u2014 so the user runs that command, and it answers with the bs:// url directly from /app-automate/upload. There is no intermediate storage and no second step.",
+      "Take the bs:// url back from them and pass it as the app for create_session."
+     ]
+    },
+    "body": [
+     {
+      "name": "file",
+      "type": "file",
+      "required": true,
+      "description": "Path to the build on this machine, inside MCP_UPLOAD_BASE_DIR.",
+      "example": "/Users/me/builds/app-release.apk"
+     },
+     {
+      "name": "custom_id",
+      "type": "string",
+      "maxLength": 100,
+      "description": "Stable name for the build, reusable in place of the bs:// URL.",
+      "example": "my-app-staging"
+     }
+    ],
+    "returns": [
+     "app_url",
+     "custom_id",
+     "shareable_id"
+    ],
+    "responses": {
+     "200": {
+      "description": "The uploaded build.",
+      "schema": {
+       "$schema": "AppUpload"
+      }
+     },
+     "401": {
+      "$response": "Unauthorized"
+     }
+    }
+   },
+   {
+    "name": "find_elements",
+    "method": "POST",
+    "path": "/wd/hub/session/{session_id}/elements",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Find every element matching a selector \u2014 use this to count matches, work through a list, or check whether something is present at all.",
+    "guidance": [
+     "No match is an EMPTY LIST and a 200, where find_element answers 404. That makes this the way to test whether something is there without handling an error.",
+     "An empty list can be trusted to mean absent: a strategy this surface does not accept is refused before the request is sent, and an iOS strategy aimed at an Android screen comes back as a 400 \"invalid selector\" rather than as nothing found.",
+     "Each entry carries the same element-6066-11e4-a52e-4f735466cecf key as find_element, and the ids go stale when the screen changes just as readily.",
+     "The order is the UI tree's own, so it follows the screen's layout rather than anything meaningful to the app.",
+     "Use find_element when exactly one match is expected: its 404 says plainly that the screen is not what you thought."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     }
+    ],
+    "body": [
+     {
+      "name": "using",
+      "type": "string",
+      "required": true,
+      "values": [
+       "id",
+       "accessibility id",
+       "xpath",
+       "class name",
+       "-android uiautomator",
+       "-ios predicate string",
+       "-ios class chain"
+      ],
+      "example": "accessibility id"
+     },
+     {
+      "name": "value",
+      "type": "string",
+      "required": true,
+      "description": "The selector itself, interpreted according to using.",
+      "example": "cart-button"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "Every matching element, possibly none.",
+      "schema": {
+       "$schema": "ElementListResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_element_text",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/text",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Read the visible text of an element on the screen \u2014 use this to check a label, a title, a price, a field's current contents or an error message without reading the whole screen.",
+    "guidance": [
+     "THIS IS HOW TO READ THE SCREEN: find_element gives the id, this gives what it says \u2014 one line per call, nothing to wade through.",
+     "On Android it is the text of the view; a container answers with an empty string, not its children's text, so aim at the TextView itself (class name android.widget.TextView, or the element by its own text).",
+     "On iOS it is the element's label or value \u2014 a text field answers with what it currently holds, or its placeholder when empty.",
+     "To confirm an action did something, read the same element before and after, or find the text you expect with find_element by text and treat \"no such element\" as the answer."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element or find_elements.",
+      "example": "00000000-0000-0001-ffff-ffff00000012"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The element's visible text.",
+      "schema": {
+       "$schema": "StringValueResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_element_rect",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/rect",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Get an element's position and size on the screen \u2014 use this to aim a swipe, drag or tap with perform_actions, or to tell whether something sits under the keyboard.",
+    "guidance": [
+     "The coordinates are in the same space perform_actions uses: device pixels on Android, points on iOS \u2014 so x + width / 2 and y + height / 2 is the element's centre, ready to press.",
+     "One call per element: the coordinates to aim at, without reading the whole screen.",
+     "An element that is off screen still has a rect \u2014 one outside get_window_rect's size \u2014 so compare the two before tapping; scroll_gesture or scroll_view brings it on."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element or find_elements.",
+      "example": "00000000-0000-0001-ffff-ffff00000012"
+     }
+    ],
+    "returns": [
+     "value.x",
+     "value.y",
+     "value.width",
+     "value.height"
+    ],
+    "responses": {
+     "200": {
+      "description": "The element's rectangle on screen.",
+      "schema": {
+       "$schema": "RectResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   },
+   {
+    "name": "get_element_attribute",
+    "method": "GET",
+    "path": "/wd/hub/session/{session_id}/element/{element_id}/attribute/{name}",
+    "mode": "read",
+    "entity": "app_session",
+    "intent": "Read one attribute of an element \u2014 use this for its resource id, content description, enabled, checked, selected or displayed state, or on iOS its name, label, value or visibility.",
+    "guidance": [
+     "The attribute names are the platform's own: on Android text, content-desc, resource-id, class, package, bounds, checked, checkable, clickable, enabled, focused, selected, displayed, scrollable, long-clickable, password; on iOS name, label, value, type, enabled, visible, accessible, focused, index, rect.",
+     "Booleans come back as the strings \"true\" and \"false\", not JSON booleans, so compare as text.",
+     "An attribute the element does not carry answers the STRING \"null\" on Android \u2014 not a JSON null and not an error \u2014 so compare as text; measured on an ImageView's resource-id.",
+     "For the element's text use get_element_text and for its position get_element_rect; this is for everything else."
+    ],
+    "path_params": [
+     {
+      "name": "session_id",
+      "type": "string",
+      "required": true,
+      "example": "0123456789abcdef0123456789abcdef01234567"
+     },
+     {
+      "name": "element_id",
+      "type": "string",
+      "required": true,
+      "description": "Element id from find_element or find_elements.",
+      "example": "00000000-0000-0001-ffff-ffff00000012"
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "description": "The attribute to read, as named in the UI tree.",
+      "example": "content-desc"
+     }
+    ],
+    "returns": [
+     "value"
+    ],
+    "responses": {
+     "200": {
+      "description": "The attribute's value as a string; an absent one is the string \"null\" on Android.",
+      "schema": {
+       "$schema": "NullableStringResponse"
+      }
+     },
+     "404": {
+      "$response": "WebDriverError"
+     }
+    }
+   }
+  ],
+  "schemas": {
+   "NewSessionResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "sessionId": {
+        "type": "string",
+        "description": "The session id every other app_session capability takes."
+       },
+       "capabilities": {
+        "type": "object",
+        "description": "Open map of the capabilities the device actually started with; keys are capability names."
+       }
+      }
+     }
+    }
+   },
+   "StringValueResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "string",
+      "description": "A string, or null where the platform returns no value - set_orientation answers null on iOS."
+     }
+    }
+   },
+   "ElementResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "element-6066-11e4-a52e-4f735466cecf": {
+        "type": "string",
+        "description": "The element id to pass as element_id."
+       }
+      }
+     }
+    }
+   },
+   "NullValueResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "null"
+     }
+    }
+   },
+   "AnyValueResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "description": "Command-specific result: null, a boolean, a string or an object."
+     }
+    }
+   },
+   "RectResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "x": {
+        "type": "integer"
+       },
+       "y": {
+        "type": "integer"
+       },
+       "width": {
+        "type": "integer"
+       },
+       "height": {
+        "type": "integer"
+       }
+      }
+     }
+    }
+   },
+   "WebDriverErrorBody": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "error": {
+        "type": "string",
+        "description": "W3C error code such as \"no such element\" or \"invalid session id\"."
+       },
+       "message": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   },
+   "BooleanValueResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "boolean"
+     }
+    }
+   },
+   "StringListResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "LocationResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "latitude": {
+        "type": "number"
+       },
+       "longitude": {
+        "type": "number"
+       },
+       "altitude": {
+        "type": "number",
+        "description": "Often a negligible non-zero value such as 5e-324 rather than exactly 0."
+       }
+      }
+     }
+    }
+   },
+   "DeviceList": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "properties": {
+      "device": {
+       "type": "string",
+       "description": "Device name, to be passed to create_session exactly as given."
+      },
+      "os": {
+       "type": "string",
+       "description": "android or ios."
+      },
+      "os_version": {
+       "type": "string"
+      },
+      "device_tier": {
+       "type": "string",
+       "description": "Tier 1 to Tier 4; tiers group devices by how widely used they are, not by capability."
+      },
+      "device_limit": {
+       "type": "integer",
+       "description": "How many sessions the account may run on this model at once."
+      },
+      "realMobile": {
+       "type": "boolean",
+       "description": "True for a physical device."
+      }
+     }
+    }
+   },
+   "DedicatedDeviceList": {
+    "type": "array",
+    "description": "Private devices, returned as the product sends them; rows carry more fields than the public catalogue.",
+    "items": {
+     "type": "object",
+     "properties": {
+      "device": {
+       "type": "string"
+      },
+      "os": {
+       "type": "string"
+      },
+      "os_version": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "Plan": {
+    "type": "object",
+    "properties": {
+     "automate_plan": {
+      "type": "string"
+     },
+     "parallel_sessions_running": {
+      "type": "integer",
+      "description": "Account-wide, including sessions other people and CI started."
+     },
+     "parallel_sessions_max_allowed": {
+      "type": "integer"
+     },
+     "team_parallel_sessions_max_allowed": {
+      "type": "integer",
+      "description": "Ceiling shared by the whole team; can be lower than the account maximum."
+     },
+     "queued_sessions": {
+      "type": "integer"
+     },
+     "queued_sessions_max_allowed": {
+      "type": "integer"
+     },
+     "terminal_access": {
+      "type": "string"
+     }
+    }
+   },
+   "AppUpload": {
+    "type": "object",
+    "properties": {
+     "app_url": {
+      "type": "string",
+      "description": "The bs:// URL create_session installs."
+     },
+     "custom_id": {
+      "type": "string"
+     },
+     "shareable_id": {
+      "type": "string",
+      "description": "username/custom_id form, usable by teammates."
+     }
+    }
+   },
+   "AppBuildList": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "properties": {
+      "app_name": {
+       "type": "string"
+      },
+      "app_version": {
+       "type": "string"
+      },
+      "app_url": {
+       "type": "string",
+       "description": "The bs:// URL create_session takes."
+      },
+      "app_id": {
+       "type": "string",
+       "description": "Internal identifier; not accepted by create_session."
+      },
+      "custom_id": {
+       "type": "string"
+      },
+      "shareable_id": {
+       "type": "string"
+      },
+      "uploaded_at": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "AppDetails": {
+    "type": "object",
+    "properties": {
+     "app_name": {
+      "type": "string"
+     },
+     "app_version": {
+      "type": "string"
+     },
+     "app_url": {
+      "type": "string"
+     },
+     "app_custom_id": {
+      "type": "string"
+     },
+     "app_filename": {
+      "type": "string"
+     },
+     "uploaded_at": {
+      "type": "string"
+     }
+    }
+   },
+   "SessionStatusUpdate": {
+    "type": "object",
+    "properties": {
+     "automation_session": {
+      "type": "object",
+      "properties": {
+       "hashed_id": {
+        "type": "string",
+        "description": "The session id."
+       },
+       "name": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string",
+        "description": "passed, failed, or absent when never set."
+       },
+       "reason": {
+        "type": "string"
+       },
+       "device": {
+        "type": "string"
+       },
+       "os": {
+        "type": "string"
+       },
+       "os_version": {
+        "type": "string"
+       },
+       "build_name": {
+        "type": "string"
+       },
+       "project_name": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "description": "The session record after the change, wrapped in automation_session."
+   },
+   "SessionDetails": {
+    "type": "object",
+    "properties": {
+     "automation_session": {
+      "type": "object",
+      "properties": {
+       "hashed_id": {
+        "type": "string",
+        "description": "The session id."
+       },
+       "name": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string",
+        "description": "passed, failed, or absent when never set."
+       },
+       "reason": {
+        "type": "string"
+       },
+       "device": {
+        "type": "string"
+       },
+       "os": {
+        "type": "string"
+       },
+       "os_version": {
+        "type": "string"
+       },
+       "build_name": {
+        "type": "string"
+       },
+       "project_name": {
+        "type": "string"
+       },
+       "duration": {
+        "type": "integer",
+        "description": "Seconds; null while the session is still running."
+       },
+       "created_at": {
+        "type": "string"
+       },
+       "public_url": {
+        "type": "string",
+        "description": "Shareable link that needs no login; it carries an auth token, so treat it as a secret."
+       },
+       "video_url": {
+        "type": "string",
+        "description": "Complete only once the session has ended."
+       },
+       "browserstack_status": {
+        "type": "string",
+        "description": "What BrowserStack observed, which can differ from the status that was set."
+       },
+       "app_details": {
+        "$schema": "AppDetails"
+       },
+       "browser_url": {
+        "type": "string",
+        "description": "The session on the dashboard; needs a BrowserStack login."
+       }
+      }
+     }
+    },
+    "description": "The session record, wrapped in automation_session."
+   },
+   "MessageResponse": {
+    "type": "object",
+    "properties": {
+     "message": {
+      "type": "string"
+     }
+    }
+   },
+   "IntegerValueResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "integer"
+     }
+    }
+   },
+   "ActiveAppInfo": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "object",
+      "properties": {
+       "bundleId": {
+        "type": "string"
+       },
+       "pid": {
+        "type": "integer",
+        "description": "Process id; a web view context name is built from it."
+       },
+       "name": {
+        "type": "string",
+        "description": "Often empty."
+       }
+      }
+     }
+    }
+   },
+   "ElementListResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "element-6066-11e4-a52e-4f735466cecf": {
+         "type": "string",
+         "description": "The element id to pass as element_id."
+        }
+       }
+      }
+     }
+    }
+   },
+   "SessionDeletedResponse": {
+    "type": "object",
+    "description": "What the hub returns when a session is closed. Not the W3C null: state says whether it closed and value is an empty string.",
+    "properties": {
+     "state": {
+      "type": "string",
+      "description": "\"success\" when the session was closed."
+     },
+     "status": {
+      "type": "integer",
+      "description": "The hub's own legacy status code; 0 on success."
+     },
+     "value": {
+      "type": "string",
+      "description": "Always empty on success."
+     }
+    }
+   },
+   "NullableStringResponse": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "string",
+      "description": "Null when the attribute is absent."
+     }
+    }
+   }
+  },
+  "responses": {
+   "WebDriverError": {
+    "description": "W3C WebDriver error; read value.error for the code.",
+    "schema": {
+     "$schema": "WebDriverErrorBody"
+    }
+   },
+   "Unauthorized": {
+    "description": "The BrowserStack username or access key was rejected."
+   }
+  },
+  "paging": {},
+  "entities": {
+   "app_session": {
+    "title": "App Session",
+    "description": "A live Appium session on one real device running one installed app, driven command by command until it ends.",
+    "aliases": [
+     "appium session",
+     "app automate session",
+     "device session",
+     "live session",
+     "webdriver session",
+     "mobile session",
+     "test session"
+    ],
+    "id_convention": "session_id is a 40-character hex string returned by create_session at value.sessionId; it cannot be listed or guessed. element_id is an opaque string from find_element, valid only until the screen changes.",
+    "key_facts": [
+     "A session holds a real device and consumes device minutes from start until it ends; it ends itself after the idle timeout with no command, or after 2 hours.",
+     "The app must already be uploaded before a session can start; a build is uploaded by giving a public download link, not by sending a file.",
+     "Actions are decided from the UI tree: read the page source, act, then read it again to confirm the effect.",
+     "Each session is recorded with video and logs on the session dashboard, including its passed or failed status.",
+     "A session's record outlives the session: its status, shareable link and video stay available on the account after the device is released.",
+     "Apps can be launched, closed and removed during a session, and anything removed comes back only when a later session installs it again."
+    ],
+    "capabilities": [
+     "create_session",
+     "get_page_source",
+     "find_element",
+     "click_element",
+     "send_keys",
+     "perform_actions",
+     "execute_script",
+     "get_window_rect",
+     "delete_session",
+     "take_screenshot",
+     "press_back",
+     "get_orientation",
+     "set_orientation",
+     "list_contexts",
+     "set_context",
+     "hide_keyboard",
+     "set_geo_location",
+     "get_geo_location",
+     "push_file",
+     "pull_file",
+     "press_keycode",
+     "get_session",
+     "set_session_status",
+     "set_session_network",
+     "get_current_app",
+     "launch_app",
+     "terminate_app",
+     "get_app_state",
+     "is_app_installed",
+     "uninstall_app",
+     "simulate_biometric",
+     "inject_camera_image",
+     "annotate_session",
+     "is_keyboard_shown",
+     "press_button",
+     "get_simulated_location",
+     "get_active_app_info",
+     "read_device_property",
+     "find_elements",
+     "get_element_text",
+     "get_element_rect",
+     "get_element_attribute",
+     "clear_element",
+     "scroll_gesture",
+     "dismiss_keyboard_key",
+     "scroll_view"
+    ]
+   },
+   "device": {
+    "title": "Device",
+    "description": "A real phone or tablet model in the BrowserStack cloud, identified by its name and OS version, that a session can run on.",
+    "aliases": [
+     "device",
+     "real device",
+     "phone",
+     "handset",
+     "mobile device",
+     "android device",
+     "ios device",
+     "iphone",
+     "tablet",
+     "private device",
+     "dedicated device",
+     "device cloud"
+    ],
+    "id_convention": "A device is addressed by its name and OS version as two strings, exactly as the device list spells them; there is no numeric id and no abbreviation is accepted.",
+    "key_facts": [
+     "Public devices are shared with other customers and are taken for the length of a session, so one can be busy even though the account is entitled to it.",
+     "Private (dedicated) devices are reserved for the team and are the only ones a device tunnel can be opened on.",
+     "A device's tier groups it by how widely used the model is, not by what it can do.",
+     "The catalogue changes as models are added and retired, so a device name held from an earlier run can stop being offered."
+    ],
+    "capabilities": [
+     "list_devices",
+     "list_dedicated_devices"
+    ]
+   },
+   "app_build": {
+    "title": "App Build",
+    "description": "An uploaded app binary stored on BrowserStack, addressed by a bs:// URL, that a session installs on the device.",
+    "aliases": [
+     "app",
+     "app build",
+     "build",
+     "binary",
+     "apk",
+     "aab",
+     "ipa",
+     "app upload",
+     "uploaded app",
+     "app url"
+    ],
+    "id_convention": "app_url is a bs:// URL of 40 hex characters. A build may also carry a custom_id, a name chosen at upload that always resolves to the newest build under it.",
+    "key_facts": [
+     "A build must be uploaded before any session can install it, either from a public download link or from a file on the machine running this server.",
+     "Builds expire 30 days after upload, so a bs:// URL kept from an earlier run can stop working.",
+     "Uploading under a custom id that already exists adds another build rather than replacing the old one, and both stay listed.",
+     "A build uploaded by one person is visible to the whole team."
+    ],
+    "capabilities": [
+     "upload_app_build",
+     "list_app_builds",
+     "list_team_app_builds",
+     "get_app_builds_by_custom_id",
+     "upload_app_build_from_file"
+    ]
+   },
+   "plan": {
+    "title": "Plan",
+    "description": "The account's device-session subscription and how much of its parallel-session allowance is in use.",
+    "aliases": [
+     "plan",
+     "subscription",
+     "parallel sessions",
+     "parallels",
+     "concurrency",
+     "quota",
+     "capacity",
+     "limits",
+     "usage"
+    ],
+    "id_convention": "There is one plan per account; it is not addressed by an id.",
+    "key_facts": [
+     "Parallel-session counts are account-wide and include sessions started by other people and by CI, not only the caller's.",
+     "A team can have a lower ceiling than the account as a whole.",
+     "Starting a session past the limit queues it rather than refusing it, which looks like a slow start."
+    ],
+    "capabilities": [
+     "get_plan"
+    ]
+   }
+  },
+  "hosts": {
+   "api": "https://api-cloud.browserstack.com"
+  }
+ }
+}

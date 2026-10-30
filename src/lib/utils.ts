@@ -13,6 +13,9 @@ export function sanitizeUrlParam(param: string): string {
 }
 
 const ONE_MB = 1048576;
+// sharp's default (~268M px) lets one image decode to ~1 GB of RGBA; 25M px caps it near 100 MB.
+const MAX_INPUT_PIXELS = 25_000_000;
+const MAX_IMAGE_DIMENSION = 1920;
 let sharpConfigured = false;
 
 //Compresses a base64 image intelligently to keep it under 1 MB if needed.
@@ -35,11 +38,19 @@ export async function maybeCompressBase64(base64: string): Promise<string> {
       sharp.concurrency(1);
       sharpConfigured = true;
     }
-    const compressedBuffer = await sharp(buffer).png({ quality }).toBuffer();
+    const image = globalConfig.REMOTE_MCP
+      ? sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).resize({
+          width: MAX_IMAGE_DIMENSION,
+          height: MAX_IMAGE_DIMENSION,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+      : sharp(buffer);
+    const compressedBuffer = await image.png({ quality }).toBuffer();
     return compressedBuffer.toString("base64");
   } catch (err) {
     logger.warn(
-      "Image compression unavailable (sharp failed to load); returning the uncompressed image. %s",
+      "Image compression failed; returning the uncompressed image. %s",
       err instanceof Error ? err.message : String(err),
     );
     return base64;

@@ -1604,6 +1604,90 @@ describe('updateTestCase — multi-select custom_fields', () => {
   });
 });
 
+// Error path of updateTestCase: the upstream message must reach the caller as text.
+describe('updateTestCase — upstream error messages', () => {
+  let updateTestCaseReal: typeof import('../../src/tools/testmanagement-utils/update-testcase').updateTestCase;
+  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
+  let AxiosErrorCtor: typeof import('axios').AxiosError;
+
+  const axiosError = (status: number, data: unknown) =>
+    Object.assign(Object.create(AxiosErrorCtor.prototype), {
+      message: `Request failed with status code ${status}`,
+      response: { status, data },
+    });
+
+  beforeAll(async () => {
+    const actual = await vi.importActual<
+      typeof import('../../src/tools/testmanagement-utils/update-testcase')
+    >('../../src/tools/testmanagement-utils/update-testcase');
+    updateTestCaseReal = actual.updateTestCase;
+    apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
+    AxiosErrorCtor = (await import('axios')).AxiosError;
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const args = { project_identifier: 'PR-1', test_case_identifier: 'TC-1', description: 'd' };
+
+  it('surfaces a string error from the response body with the HTTP status', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(
+      axiosError(422, { success: false, error: 'Priority is not valid for this project' }),
+    );
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toBe('Failed to update test case (HTTP 422): Priority is not valid for this project.');
+    expect(text).not.toContain('[object Object]');
+  });
+
+  it('serialises an object error body instead of printing [object Object]', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(
+      axiosError(400, { errors: { name: ['is too long'] } }),
+    );
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain('(HTTP 400)');
+    expect(text).toContain('{"name":["is too long"]}');
+    expect(text).not.toContain('[object Object]');
+  });
+
+  it('returns the whole body when it has no message, error or errors field', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(
+      axiosError(400, { detail: { hint: 'priority must be one of: low, medium, high' } }),
+    );
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    const text = (result.content[0] as any).text as string;
+    expect(text).toBe(
+      'Failed to update test case (HTTP 400): {"detail":{"hint":"priority must be one of: low, medium, high"}}.',
+    );
+  });
+
+  it('adds the credentials hint only on 401', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(axiosError(401, 'Unauthorized'));
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    const text = (result.content[0] as any).text as string;
+    expect(text).toBe('Failed to update test case (HTTP 401): Unauthorized. Check the BrowserStack credentials in use.');
+  });
+
+  it('falls back to the error message when there is no response', async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(new Error('read ECONNRESET'));
+
+    const result = await updateTestCaseReal(args, mockConfig as any);
+
+    expect((result.content[0] as any).text).toBe('Failed to update test case: read ECONNRESET.');
+  });
+});
+
 // listTestCaseTemplates resolves a template name to a template_id.
 describe('listTemplates', () => {
   let listTemplatesReal: typeof import('../../src/tools/testmanagement-utils/list-templates').listTemplates;

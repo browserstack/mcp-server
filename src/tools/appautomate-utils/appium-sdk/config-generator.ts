@@ -8,12 +8,23 @@ import {
 } from "./index.js";
 import { ValidatedEnvironment } from "../../sdk-utils/common/device-validator.js";
 
+/**
+ * The App Accessibility settings written when checks are on. Only the WCAG version is
+ * spelled out, as the one most often changed; the SDK's other defaults apply.
+ */
+const ACCESSIBILITY_OPTIONS = `accessibilityOptions:
+  wcagVersion: wcag22aa
+  includeIssueType:
+    bestPractice: true`;
+
 export function generateAppBrowserStackYMLInstructions(
   config: {
     validatedEnvironments?: ValidatedEnvironment[];
     platforms?: string[];
     testingFramework?: string;
     projectName?: string;
+    /** Run App Accessibility checks during the tests. */
+    accessibility?: boolean;
   },
   appPath: string = DEFAULT_APP_PATH,
 ): string {
@@ -34,6 +45,7 @@ export function generateAppBrowserStackYMLInstructions(
     ? `${config.projectName}-AppAutomate-Build`
     : "bstack-demo";
 
+  // A YAML comment, not "//": YAML reads a "//" line as a key.
   const configContent = `\`\`\`yaml
 userName: ${USERNAME_PLACEHOLDER}
 accessKey: ${ACCESS_KEY_PLACEHOLDER}
@@ -42,21 +54,27 @@ platforms:
 ${platformConfigs}
 parallelsPerPlatform: 1
 browserstackLocal: true
-// TODO: replace projectName and buildName according to actual project
+# Replace projectName and buildName according to the actual project
 projectName: ${projectName}
 buildName: ${buildName}
 debug: true
 networkLogs: true
 percy: false
 percyCaptureMode: auto
-accessibility: false
+accessibility: ${config.accessibility ? "true" : "false"}${
+    config.accessibility ? `\n${ACCESSIBILITY_OPTIONS}` : ""
+  }
 \`\`\`
 
 **Important notes:**
 - Replace \`app: ${appPath}\` with the path to your actual app file (e.g., \`./SampleApp.apk\` for Android or \`./SampleApp.ipa\` for iOS)
 - You can upload your app using BrowserStack's App Upload API or manually through the dashboard
 - Set \`browserstackLocal: true\` if you need to test with local/staging servers
-- Adjust \`parallelsPerPlatform\` based on your subscription limits`;
+${
+  config.accessibility
+    ? "- Keep `osVersion` unquoted: the SDK parses it as a number, and its App Accessibility module reads that key (not `platformVersion`)\n"
+    : ""
+}- Adjust \`parallelsPerPlatform\` based on your subscription limits`;
 
   const stepTitle =
     "Update browserstack.yml file with App Automate configuration:";
@@ -67,9 +85,20 @@ accessibility: false
   return createStep(stepTitle, stepDescription);
 }
 
+/**
+ * The device's OS version line. App Accessibility needs \`osVersion\` unquoted (observed on
+ * the Python SDK); without it the line stays as it always was.
+ */
+function versionLine(version: string, accessibility?: boolean): string {
+  return accessibility
+    ? `osVersion: ${version}`
+    : `platformVersion: "${version}"`;
+}
+
 function generatePlatformConfigs(config: {
   validatedEnvironments?: ValidatedEnvironment[];
   platforms?: string[];
+  accessibility?: boolean;
 }): string {
   if (config.validatedEnvironments && config.validatedEnvironments.length > 0) {
     return config.validatedEnvironments
@@ -77,7 +106,7 @@ function generatePlatformConfigs(config: {
       .map((env) => {
         return `  - platformName: ${env.platform}
     deviceName: "${env.deviceName}"
-    platformVersion: "${env.osVersion}"`;
+    ${versionLine(env.osVersion, config.accessibility)}`;
       })
       .join("\n");
   } else if (config.platforms && config.platforms.length > 0) {
@@ -91,7 +120,7 @@ function generatePlatformConfigs(config: {
           .map(
             (device) => `  - platformName: ${platform}
     deviceName: ${device.deviceName}
-    platformVersion: "${device.platformVersion}"`,
+    ${versionLine(device.platformVersion, config.accessibility)}`,
           )
           .join("\n");
       })

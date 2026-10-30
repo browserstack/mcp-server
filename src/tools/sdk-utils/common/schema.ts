@@ -90,6 +90,13 @@ export const RunTestsOnBrowserStackParamsShape = {
     .describe(
       "Only devices the user asked for, e.g. [{ platform: 'windows', osVersion: '11', browser: 'chrome', browserVersion: 'latest' }].",
     ),
+  accessibility: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Run Accessibility (WCAG) checks during the tests: writes accessibility: true in browserstack.yml.",
+    ),
 };
 
 export const SetUpPercySchema = z.object(SetUpPercyParamsShape);

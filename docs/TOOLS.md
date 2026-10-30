@@ -319,8 +319,8 @@ searchCapability  →  describeCapability  →  invokeCapability
 |---|---|
 | `takeAppScreenshot` | Launch the app on a specified device and capture a quick verification screenshot to confirm your app has launched. |
 | `listTestIds` | List the tests in a BrowserStack build (Automate or App Automate) with each test's `status` and `session_id`, optionally filtered by status (passed/failed/pending/skipped). The `session_id` feeds `getFailureLogs` and `fetchAutomationScreenshots` directly. |
-| `setupBrowserStackAppAutomateTests` | Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. |
-| `runAppTestsOnBrowserStack` | Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files. |
+| `setupBrowserStackAppAutomateTests` | Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. With `accessibility: true`, the run also performs App Accessibility (WCAG) checks on the screens the tests interact with, and the output says what makes a scan happen and how to read the issues. |
+| `runAppTestsOnBrowserStack` | Run pre-built native mobile test suites (Espresso/XCUITest) by direct upload of compiled .apk/.ipa test files. With `accessibility: true`, the build also performs App Accessibility (WCAG) checks, and the answer says how to read the issues once it finishes. The checks need a suite built with BrowserStack's instrumentation: for Espresso the Gradle plugin and Java SDK, for XCUITest the Swift SDK, embedded and initialized. |
 
 </details>
 
@@ -329,7 +329,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 | Tool | What it does |
 |---|---|
-| `setupBrowserStackAutomateTests` | Integrate BrowserStack SDK and run web tests on BrowserStack. For visual testing/Percy, use the dedicated Percy tools. |
+| `setupBrowserStackAutomateTests` | Integrate BrowserStack SDK and run web tests on BrowserStack. With `accessibility: true`, the run also performs Accessibility (WCAG) checks, turned on in `browserstack.yml` (Cypress: `browserstack.json`; WebdriverIO: the BrowserStack service's options), and the output says how to read the issues. For visual testing/Percy, use the dedicated Percy tools. |
 | `fetchAutomationScreenshots` | Fetch screenshots captured during a given Automate/App Automate session. |
 | `listSessions` | List the sessions in an Automate/App Automate build. Each record carries `sessionId`, `name`, `status`, `os`, `osVersion`, `browser`, `device`, `browserUrl` (dashboard link), and `videoUrl`, with optional `limit` / `offset` paging and a client-side `status` filter. Takes either the **hashed** build ID from the dashboard URL or the observability build id returned by `getBuildId` / `listBuildId` — an observability id is resolved to the hashed id automatically via the build's sessions. Returned `sessionId` values work with `getFailureLogs`, `fetchAutomationScreenshots`, and `fetchSelfHealedSelectors`. |
 
@@ -340,11 +340,20 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 | Tool | What it does |
 |---|---|
-| `startAccessibilityScan` | Start a web accessibility scan and retrieve a local CSV report path. |
+| `startAccessibilityScan` | Start a web accessibility scan of a page URL and retrieve a local CSV report path. Optional settings: `wcagVersion` (WCAG 2.0–2.2 at A/AA/AAA, or RGAA 4.1), `bestPractices`, `needsReview`, `advancedRules` and `experimentalRules`; the answer states the settings the scan ran with. Mobile apps are scanned through an App Automate run instead (`setupBrowserStackAppAutomateTests` with `accessibility: true`). |
 | `accessibilityExpert` | Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices). |
 | `createAccessibilityAuthConfig` | Create an authentication configuration (form-based or basic) for accessibility scans behind a login. |
 | `getAccessibilityAuthConfig` | Retrieve an existing accessibility authentication configuration by ID. |
-| `fetchAccessibilityIssues` | Fetch accessibility issues from a completed scan, with pagination support. |
+| `fetchAccessibilityIssues` | Fetch accessibility issues, with pagination, from a Website Scanner run, an Automated Tests build (web) or App Accessibility build (mobile app, by the build id the SDK prints), a Workflow Analyzer report, an App Accessibility manual report (`appReportId`), or a report's dashboard link. Once the tests or scan have finished, waits while the report is still processing; a run still in progress is read as it is, with a note. For an app build with no scans, lists the likely causes. |
+| `list_app_accessibility_builds` | List an App Accessibility project's builds newest first, with each build's id, status, app and issue counts - use this to find the latest run, a build by name, or one person's builds. |
+| `list_app_accessibility_projects` | List the account's App Accessibility projects newest first, or find one by name - use this to get the project id that lists its builds. |
+| `list_manual_app_accessibility_reports` | List manual App Accessibility reports (App Live sessions scanned with Workflow Analyzer) newest first, with each report's id, app, status and issue counts - use this to find a report QA shared or the latest manual scan of an app. |
+| `list_assisted_test_reports` | List the account's Assisted Test reports newest first, with each report's id, name, creator, status, test type and issue counts - use this to find a guided keyboard, forms or other assisted check someone ran. |
+| `list_automated_tests_builds` | List the account's Automated Tests builds newest first, or one project's, with each build's id, number, name, creator, status and issue counts - use this to find a suite's latest run, someone's builds, or the build id that reads its issues. |
+| `list_automated_tests_projects` | List the account's Automated Tests projects newest first, with each project's id, name and creation date - use this to find the project name that narrows its builds. |
+| `list_website_scanner_scan_runs` | List one Website Scanner scan's runs newest first, with each run's id, date, issue and component counts and how many pages loaded - use this to pick an earlier run or follow a site's issues over time. |
+| `list_website_scanner_scans` | List the account's Website Scanner scans, most recently run first, with each scan's id, name, creator, dashboard link and latest run - use this to find a scan by name or person, or the scan and run ids that read its issues. |
+| `list_workflow_analyzer_reports` | List the account's Workflow Analyzer reports newest first, with each report's id, name, creator, status, settings and issue counts - use this to find someone's latest reports, a report by name, or the id that reads its issues. |
 
 </details>
 

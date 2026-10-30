@@ -83,15 +83,21 @@ export const NEEDS_BUILD_ID = needsIdFrom(
 export const NEEDS_SESSION_ID =
   " Needs a session id: listSessions lists them; getBuildId or listBuildId finds the build.";
 
-/** A completed scan's ids come from startAccessibilityScan, or from the agent. */
+/**
+ * A scan run's ids come from startAccessibilityScan; a build's id is printed by the SDK at
+ * the end of its run. The tool takes a report's dashboard link, or an Automate link, and
+ * looks the ids up itself. For a past report, the web_accessibility capabilities list
+ * Workflow Analyzer reports, scans and their runs, and Automated Tests builds with the id
+ * each takes; App Accessibility's builds and manual reports are listed by its own
+ * capabilities, which the id arguments name, as this line has no room left within the
+ * description budget.
+ */
 export const NEEDS_A11Y_SCAN_ID =
-  " Needs a completed scan's ids from startAccessibilityScan; past scans are not " +
-  "listed, so start a new scan rather than guessing.";
+  " Ids: a link, startAccessibilityScan, or web_accessibility lists (searchCapability).";
 
-/** Auth-config ids are not listable by any tool here. */
+/** Auth-config ids are not listable by any tool here; Ask AI can find one. */
 export const NEEDS_A11Y_CONFIG_ID =
-  " Needs the id from createAccessibilityAuthConfig; configs are not listed, so create " +
-  "one rather than guessing.";
+  ' Id: from createAccessibilityAuthConfig, or askBrowserStackAI with product "a11y" to find one.';
 
 /** Test ids come from listTestIds, which itself needs a build id. */
 export const NEEDS_TEST_IDS = needsIdFrom("test ids", "listTestIds");

@@ -6,6 +6,7 @@ import { startSession } from "./applive-utils/start-session.js";
 import logger from "../logger.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
+import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
 
 /**
  * Launches an App Live Session on BrowserStack.
@@ -81,9 +82,19 @@ export default function addAppLiveTools(
 ) {
   const tools: Record<string, any> = {};
 
+  // A Live session is for a PERSON. The agent cannot tap, type, read the screen or take a
+  // screenshot in it, and every eval where an agent was asked to operate an app and chose
+  // this tool ended with "my tools can start it but can't tap anything in it". The
+  // description says so, and names the surface that can — only when that surface is on.
+  const description =
+    "Open a manual App Live session for the user to operate by hand; the agent cannot drive it." +
+    (capabilityRegistryEnabled()
+      ? " To tap, type or read the app yourself, use a mobiledevicecontrol session via invokeCapability."
+      : "");
+
   tools.runAppLiveSession = server.tool(
     "runAppLiveSession",
-    "Open an app on a real mobile device in App Live for a manual check or crash debugging.",
+    description,
     {
       desiredPhone: z
         .string()

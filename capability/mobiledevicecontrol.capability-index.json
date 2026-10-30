@@ -1450,9 +1450,9 @@
     "path": "/wd/hub/session/{session_id}/screenshot",
     "mode": "read",
     "entity": "app_session",
-    "intent": "Take a screenshot of what is on the device right now, as a base64 PNG \u2014 use this to see the screen as a user would, including anything the UI tree does not describe.",
+    "intent": "Take a screenshot of what is on the device right now \u2014 use this to see the screen as a user would, including anything the UI tree does not describe. The picture comes back as an image attached to the result.",
     "guidance": [
-     "The image is returned inline as base64 in value and a phone screen runs to hundreds of kilobytes, so fetch it only when the picture is needed and prefer find_element with get_element_text for deciding what to act on.",
+     "The image arrives as an attachment on the result, not as text: the base64 in value is replaced by a note. Still fetch it only when the picture is needed and prefer find_element with get_element_text for deciding what to act on.",
      "Screenshot pixels are the device's full resolution and can be taller than the rectangle get_window_rect reports, because that excludes the system bars; scale before reusing screenshot coordinates for gestures.",
      "A screen the app marks secure comes back black, which is the app's doing and not a failure."
     ],
@@ -1469,7 +1469,7 @@
     ],
     "responses": {
      "200": {
-      "description": "Base64-encoded PNG of the screen.",
+      "description": "The screenshot, attached to the result as an image; value carries a note in its place.",
       "schema": {
        "$schema": "StringValueResponse"
       }
@@ -1477,6 +1477,10 @@
      "404": {
       "$response": "WebDriverError"
      }
+    },
+    "media": {
+     "mime": "image/png",
+     "json_path": "/value"
     }
    },
    {

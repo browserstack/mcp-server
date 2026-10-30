@@ -43,7 +43,10 @@ describe("versionString schema", () => {
       desiredBrowserVersion: versionString().optional(),
     });
     expect(
-      shape.parse({ desiredOSVersion: "newest", desiredBrowserVersion: "earliest" }),
+      shape.parse({
+        desiredOSVersion: "newest",
+        desiredBrowserVersion: "earliest",
+      }),
     ).toEqual({ desiredOSVersion: "latest", desiredBrowserVersion: "oldest" });
     expect(shape.parse({ desiredOSVersion: "Sequoia" })).toEqual({
       desiredOSVersion: "Sequoia",

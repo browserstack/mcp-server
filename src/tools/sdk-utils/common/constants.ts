@@ -3,7 +3,7 @@ export const IMPORTANT_SETUP_WARNING =
   "If you cannot run commands or edit files in the user's project (e.g. a chat-only client), present every step below to the user in full — including each shell command, the package.json changes, and the complete browserstack.yml contents — instead of summarizing them.";
 
 export const SETUP_PERCY_DESCRIPTION =
-  "Set up or expand Percy visual testing coverage in a project, with or without existing Percy (Percy Web and Percy Automate).";
+  "Expand Percy visual testing coverage in a project that already has Percy (Percy Web and Percy Automate).";
 
 export const LIST_TEST_FILES_DESCRIPTION =
   "Lists all test files for a given set of directories.";

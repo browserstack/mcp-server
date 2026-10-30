@@ -25,7 +25,7 @@
 
 /** No tool lists projects, so this genuinely has to go to the agent. */
 export const NEEDS_PROJECT_ID =
-  " Needs a project id (PR-*); if you lack one, get it from the capability functions.";
+  " Needs a project id (PR-*); no tool lists projects, so get it from the capability functions.";
 
 /** A sibling tool can produce the id — prefer it over the agent. */
 export function needsIdFrom(idLabel: string, sourceTool: string): string {
@@ -40,7 +40,7 @@ export function needsIdFrom(idLabel: string, sourceTool: string): string {
  */
 export const PROJECT_ID_ONLY_FOR_FOLDER =
   " Creating a project needs no identifier; a folder inside an EXISTING project needs " +
-  "its id (PR-*), from the capability functions.";
+  "its id (PR-*); no tool lists projects, so use the capability functions.";
 
 /** A test plan id (TP-*) comes from listTestPlans. */
 export const NEEDS_TEST_PLAN_ID = needsIdFrom(

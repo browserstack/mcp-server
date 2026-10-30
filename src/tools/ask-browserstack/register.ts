@@ -138,7 +138,8 @@ const DESCRIPTION =
   "here fits, or when the ones you tried did not get you there. Prefer a specific tool " +
   "whenever one fits. Describe the task in plain language. A data change asks you to " +
   "confirm first: put it to the user, never decide for them; deletes are refused " +
-  "outright. One task per call.";
+  "outright. If no one can confirm, the run is read-only and changes come back in " +
+  "`needs_approval`. One task per call.";
 
 /**
  * `isError` marks a call that FAILED, not one that was refused.

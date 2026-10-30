@@ -14,42 +14,30 @@ vi.mock("../../src/logger.js", () => ({
 
 const CEILING = 200;
 
-/** The tools already over the ceiling, at their length on main (2.2.6). Lower only. */
+/** The tools already over the ceiling, at their trimmed length. Lower only. */
 const GRANDFATHERED: Record<string, number> = {
-  addTestResult: 293,
-  askBrowserStackAI: 1006,
-  createLCASteps: 340,
-  createProjectOrFolder: 264,
-  createTestCase: 283,
-  createTestRun: 265,
-  describeCapability: 753,
-  describeEntity: 219,
-  expandPercyVisualTesting: 266,
-  fetchRCA: 236,
-  fetchSelfHealedSelectors: 452,
-  getFailureLogs: 242,
-  getSubTestPlan: 649,
-  getTestPlan: 807,
-  invokeCapability: 852,
-  listFolders: 437,
-  listProducts: 856,
-  listSubTestPlans: 655,
-  listTestCases: 472,
-  listTestPlans: 652,
-  listTestRuns: 301,
-  percyVisualTestIntegrationAgent: 342,
-  prepareSelfHealingPlan: 806,
-  runAppTestsOnBrowserStack: 297,
-  searchCapability: 2019,
-  setupBrowserStackAppAutomateTests: 268,
-  setupBrowserStackAutomateTests: 328,
-  updateTestCase: 501,
-  updateTestRun: 272,
-  uploadProductRequirementFile: 429,
+  askBrowserStackAI: 532,
+  createProjectOrFolder: 217,
+  describeCapability: 201,
+  fetchSelfHealedSelectors: 226,
+  getSubTestPlan: 394,
+  getTestPlan: 422,
+  invokeCapability: 454,
+  listProducts: 252,
+  listSubTestPlans: 396,
+  listTestPlans: 325,
+  prepareSelfHealingPlan: 261,
+  searchCapability: 375,
+  uploadProductRequirementFile: 306,
 };
 
-/** Each tool's description as a client lists it at connect time. */
-async function descriptions(): Promise<[string, number][]> {
+// Tool and parameter descriptions across every tool, in characters. Kiro renders the hosted
+// subset of this text into one activation result capped at 30,000; at this total it is about
+// 29,600. Lower only.
+const TOTAL_CEILING = 21_500;
+
+/** Each tool as a client lists it at connect time. */
+async function listedTools() {
   const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
   const server = new BrowserStackMcpServer({
     "browserstack-username": "u",
@@ -63,7 +51,15 @@ async function descriptions(): Promise<[string, number][]> {
   ]);
   const { tools } = await client.listTools();
   await client.close();
-  return tools.map((t) => [t.name, (t.description ?? "").length]);
+  return tools;
+}
+
+/** Each tool's description length. */
+async function descriptions(): Promise<[string, number][]> {
+  return (await listedTools()).map((t) => [
+    t.name,
+    (t.description ?? "").length,
+  ]);
 }
 
 const budget = (name: string) => Math.max(CEILING, GRANDFATHERED[name] ?? 0);
@@ -78,5 +74,20 @@ describe("tool descriptions", () => {
       .filter(([name, length]) => length > budget(name))
       .map(([name, length]) => `${name}: ${length} > ${budget(name)}`);
     expect(over).toEqual([]);
+  });
+
+  it("keeps the total description text within its ceiling", async () => {
+    const total = (await listedTools()).reduce((sum, t) => {
+      const props = (t.inputSchema.properties ?? {}) as Record<
+        string,
+        { description?: string }
+      >;
+      const params = Object.values(props).reduce(
+        (s, p) => s + (p.description ?? "").length,
+        0,
+      );
+      return sum + (t.description ?? "").length + params;
+    }, 0);
+    expect(total).toBeLessThanOrEqual(TOTAL_CEILING);
   });
 });

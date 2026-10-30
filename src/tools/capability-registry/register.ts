@@ -522,7 +522,7 @@ export function addCapabilityRegistryTools(
 
   tools.searchCapability = server.tool(
     "searchCapability",
-    "Find capabilities in ONE product by plain language. CALL listProducts FIRST; `product` must be spelled exactly as listProducts spells it. If `weak_match` is true, search again with `suggested_vocabulary` before invoking. Results are a shortlist: call describeCapability for the contract, then invokeCapability. query='*' lists all; page with `next_offset`.",
+    "Find capabilities in ONE product by plain language. CALL listProducts FIRST; `product` must be spelled exactly as listProducts spells it. If `weak_match` is true, search again with `suggested_vocabulary` before invoking. Results are a shortlist: call describeCapability for the contract, then invokeCapability. query='*' lists all; page with `next_offset` until it is absent.",
     {
       query: z
         .string()
@@ -1042,7 +1042,7 @@ export function addCapabilityRegistryTools(
 
   tools.invokeCapability = server.tool(
     "invokeCapability",
-    "Run a capability after describeCapability, by `name` (or `method` + `path` if unnamed); args go in path_params / query / body. `select` narrows the response only where the contract carries `narrowable`. If `completed` is false, fetch the next page. Writes: ask the user first, then resend with user_permission='granted' and a change_summary. Deletes are refused; archive, close and merge are writes.",
+    "Run a capability after describeCapability, by `name` (or `method` + `path` if unnamed); args go in path_params / query / body. `select` narrows the response only where the contract carries `narrowable`. If `completed` is false, fetch the next page with the capability's own page parameter, not `offset`. Writes: ask the user first, then resend with user_permission='granted' and a change_summary. Deletes are refused; archive, close and merge are writes.",
     {
       name: z
         .string()

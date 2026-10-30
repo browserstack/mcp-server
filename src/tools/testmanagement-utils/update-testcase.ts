@@ -68,7 +68,7 @@ export const UpdateTestCaseSchema = z.object({
     .string()
     .optional()
     .describe(
-      "e.g. not_automated, automated, automation_not_required, obsolete.",
+      "e.g. not_automated, automated, automation_not_required, cannot_be_automated, obsolete.",
     ),
   status: z
     .string()

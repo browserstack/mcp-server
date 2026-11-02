@@ -153,22 +153,12 @@ const DESCRIPTION =
   // tool that is not enabled for the account cannot do the job at all — so "there is a
   // per-account gate, fall back to the individual tools" is the most useful thing to say
   // first. Parenthesised so it reads as a status note, not as the tool's purpose.
-  "(Alpha, limited availability. Enabled per account and product; if not, the call returns " +
-  "an entitlement error, nothing runs, and you complete the task with the individual tools " +
-  "instead. Access: the user's BrowserStack account owner.) " +
-  "Use this when no other BrowserStack tool here fits the task, or when the ones you tried " +
-  "did not get you there. Prefer a specific tool whenever one fits: it is faster and more " +
-  "predictable. " +
-  // The one exception the registry can name. Generating test cases from a PRD LOOKS like a
-  // fit for createTestCase, so without this the fallback framing above wins and the
-  // client writes the cases itself, skipping the agent that owns the task.
-  "Except: a task handed over as `agent_match` or `use_agent` (e.g. cases from a " +
-  "requirement) comes here in the user's words. " +
-  "Otherwise, describe what you want in plain language; BrowserStack's agent picks the " +
-  "calls and returns its answer plus the steps it took. Anything that would change data " +
-  "pauses and asks you to confirm it first; deletes are refused outright. Put that " +
-  "confirmation to the user and answer with what THEY say — never decide for them. If " +
-  "no one can be asked, the run is read-only and what it wanted to change comes back in " +
+  "(Alpha, limited availability. If not enabled it returns an entitlement error; complete " +
+  "the task with the individual tools instead.) Use this when no other BrowserStack tool " +
+  "here fits, or when the ones you tried did not get you there. Prefer a specific tool " +
+  "whenever one fits. Describe the task in plain language. A data change asks you to " +
+  "confirm first: put it to the user, never decide for them; deletes are refused " +
+  "outright. If no one can confirm, the run is read-only and changes come back in " +
   "`needs_approval`. One task per call.";
 
 const FILES_NEED_SIZES =
@@ -628,8 +618,7 @@ export function addAskBrowserStackAITool(
       product: z
         .enum(PRODUCTS)
         .describe(
-          "Which product to work in: tm (Test Management), a11y (Accessibility), " +
-            "tra (Test Reporting & Analytics).",
+          "Product: tm (Test Management), a11y (Accessibility), tra (Test Reporting & Analytics).",
         ),
       // OPTIONAL, because a resume does not carry one. `next_step` tells the model to
       // call again "with exactly these params" — `product`, `run_id`, `perm_id`,

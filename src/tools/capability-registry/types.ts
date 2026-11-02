@@ -326,6 +326,15 @@ export interface Capability {
    * take minutes says so here; everything else keeps the default.
    */
   timeout_seconds?: number;
+  /**
+   * The success body carries an image, base64-encoded, at this JSON pointer.
+   *
+   * It is detached on the way out and handed to the client as an MCP image block, with
+   * a short note left in the body where it sat. A screenshot inside a JSON text block is
+   * paid for as text and still invisible to the model; as an image block it is rendered,
+   * seen, and billed as a picture. `mime` is what the product sends (PNG for WebDriver).
+   */
+  media?: { mime: string; json_path: string };
   paginated?: boolean;
   /** The largest page the operation declares. */
   max_page_size?: number;

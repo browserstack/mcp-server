@@ -23,7 +23,7 @@ export const MacOSPlatformEnum = {
 } as const;
 
 export const SetUpPercyParamsShape = {
-  projectName: z.string().describe("A unique name for your Percy project."),
+  projectName: z.string().describe("Unique Percy project name."),
   detectedLanguage: z.nativeEnum(SDKSupportedLanguageEnum),
   detectedBrowserAutomationFramework: z.nativeEnum(
     SDKSupportedBrowserAutomationFrameworkEnum,
@@ -32,19 +32,19 @@ export const SetUpPercyParamsShape = {
   integrationType: z
     .nativeEnum(PercyIntegrationTypeEnum)
     .describe(
-      "Specify the Percy integration type: web (Percy Web) or automate (Percy Automate). If not provided, always prompt the user with: 'Please specify the Percy integration type.' Do not proceed without an explicit selection. Never use a default.",
+      "'web' (Percy Web) or 'automate' (Percy Automate). If unspecified, ask the user; never default.",
     ),
   folderPaths: z
     .array(z.string())
     .optional()
     .describe(
-      "An array of absolute folder paths containing UI test files. If not provided, analyze codebase for UI test folders by scanning for test patterns which contain UI test cases as per framework. Return empty array if none found.",
+      "Absolute paths of folders with UI tests. If omitted, scan the codebase for them; [] if none.",
     ),
   filePaths: z
     .array(z.string())
     .optional()
     .describe(
-      "An array of absolute file paths to specific UI test files. Use this when you want to target specific test files rather than entire folders. If not provided, will use folderPaths instead.",
+      "Absolute paths of specific UI test files, instead of folders. If omitted, folderPaths is used.",
     ),
 };
 
@@ -88,7 +88,7 @@ export const RunTestsOnBrowserStackParamsShape = {
     .max(3)
     .default([])
     .describe(
-      "Device objects array. Use the object format directly - no transformation needed. Add only when user explicitly requests devices. Examples: [{ platform: 'windows', osVersion: '11', browser: 'chrome', browserVersion: 'latest' }] or [{ platform: 'android', deviceName: 'Samsung Galaxy S24', osVersion: '14', browser: 'chrome' }].",
+      "Only devices the user asked for, e.g. [{ platform: 'windows', osVersion: '11', browser: 'chrome', browserVersion: 'latest' }].",
     ),
   accessibility: z
     .boolean()
@@ -116,13 +116,11 @@ export const RunPercyScanParamsShape = {
     .string()
     .optional()
     .describe(
-      "The test command to run with Percy. Optional — the LLM should try to infer it first from project context.",
+      "Test command to run with Percy; infer from project context first.",
     ),
   integrationType: z
     .nativeEnum(PercyIntegrationTypeEnum)
-    .describe(
-      "Specifies whether to integrate with Percy Web or Percy Automate. If not explicitly provided, prompt the user to select the desired integration type.",
-    ),
+    .describe("'web' or 'automate'. If unspecified, ask the user."),
 };
 
 export const FetchPercyChangesParamsShape = {

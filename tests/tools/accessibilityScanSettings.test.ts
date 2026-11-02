@@ -165,6 +165,7 @@ describe("startAccessibilityScan scan settings", () => {
         startScan = m.startScan;
         waitUntilComplete = m.waitUntilComplete;
         runSettings = m.runSettings;
+        dashboardLink = vi.fn().mockResolvedValue(undefined);
       },
     }));
     vi.doMock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
@@ -294,5 +295,49 @@ describe("startAccessibilityScan scan settings", () => {
     for (const bad of ["wcag22", "WCAG 2.2 AA", "wcag23aa"]) {
       expect(schema.wcagVersion.safeParse(bad).success).toBe(false);
     }
+  });
+});
+
+// A scan's dashboard page is named by its build, not its name: the scans list carries each
+// scan's own link (scanUrl). A link made from the name alone does not open the scan.
+describe("AccessibilityScanner.dashboardLink", () => {
+  const SCANS = "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans";
+  const LINK =
+    "https://accessibility.browserstack.com/site-scanner/projects/Home%20page/builds?thBuildId=k3v9q2m7x1c8b4n6z0w5r2t9y4p1s8d3f6g0h2ja&recurring=false&tunnel_vision=false";
+
+  beforeEach(() => {
+    vi.resetModules();
+    m.get.mockReset();
+  });
+
+  async function scanner() {
+    const { AccessibilityScanner } = await vi.importActual<
+      typeof import("../../src/tools/accessiblity-utils/scanner.js")
+    >("../../src/tools/accessiblity-utils/scanner.js");
+    const s = new AccessibilityScanner();
+    s.setAuth({ username: "u", password: "p" });
+    return s;
+  }
+
+  it("reads the scan's own dashboard link from the scans list", async () => {
+    m.get.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { data: { scans: [{ id: 7310043, scanUrl: "https://elsewhere" }, { id: 7310042, scanUrl: LINK }] } },
+    });
+
+    await expect((await scanner()).dashboardLink("7310042")).resolves.toBe(LINK);
+    expect(m.get.mock.calls[0][0].url).toBe(SCANS);
+  });
+
+  it("gives no link when the scan is not on the list, or the list cannot be read", async () => {
+    m.get.mockResolvedValueOnce({ ok: true, status: 200, data: { data: { scans: [{ id: 1, scanUrl: LINK }] } } });
+    await expect((await scanner()).dashboardLink("7310042")).resolves.toBeUndefined();
+
+    m.get.mockResolvedValueOnce({ ok: false, status: 500, data: {} });
+    await expect((await scanner()).dashboardLink("7310042")).resolves.toBeUndefined();
+
+    m.get.mockRejectedValueOnce(new Error("socket hang up"));
+    await expect((await scanner()).dashboardLink("7310042")).resolves.toBeUndefined();
   });
 });

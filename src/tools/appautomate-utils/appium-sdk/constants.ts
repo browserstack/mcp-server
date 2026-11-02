@@ -47,40 +47,34 @@ export const MobileDeviceSchema = z.object({
 
 // Tool description and schema for setupBrowserStackAppAutomateTests
 export const SETUP_APP_AUTOMATE_DESCRIPTION =
-  "Set up BrowserStack App Automate SDK integration for Appium-based mobile app testing. ONLY for Appium based framework . This tool configures SDK for various languages with appium. For pre-built Espresso or XCUITest test suites, use 'runAppTestsOnBrowserStack' instead.";
+  "Set up the App Automate SDK for Appium tests. For pre-built Espresso or XCUITest suites use runAppTestsOnBrowserStack.";
 
 export const SETUP_APP_AUTOMATE_SCHEMA = {
   detectedFramework: z
     .nativeEnum(AppSDKSupportedFrameworkEnum)
-    .describe(
-      "The mobile automation framework configured in the project. Example: 'appium'",
-    ),
+    .describe("Mobile automation framework, e.g. 'appium'."),
 
   detectedTestingFramework: z
     .nativeEnum(AppSDKSupportedTestingFrameworkEnum)
     .describe(
-      "The testing framework used in the project. Be precise with framework selection Example: 'testng', 'behave', 'pytest', 'robot'",
+      "Test framework in the project, e.g. testng, behave, pytest, robot.",
     ),
 
   detectedLanguage: z
     .nativeEnum(AppSDKSupportedLanguageEnum)
-    .describe(
-      "The programming language used in the project. Supports Java and C#. Example: 'java', 'csharp'",
-    ),
+    .describe("Project language, e.g. 'java', 'csharp'."),
 
   devices: z
     .array(MobileDeviceSchema)
     .max(3)
     .default([])
     .describe(
-      "Tuples describing target mobile devices. Add device only when user asks explicitly for it. Defaults to [] . Example: [['android', 'Samsung Galaxy S24', '14'], ['ios', 'iPhone 15', '17']]",
+      "Only devices the user asked for, e.g. [['android', 'Samsung Galaxy S24', '14']].",
     ),
 
   appPath: z
     .string()
-    .describe(
-      "Path to the mobile app file (.apk for Android, .ipa for iOS). Can be a local file path or a BrowserStack app URL (bs://)",
-    ),
+    .describe("Local .apk/.ipa path or a BrowserStack app URL (bs://)."),
   project: z
     .string()
     .optional()
@@ -90,7 +84,5 @@ export const SETUP_APP_AUTOMATE_SCHEMA = {
     .boolean()
     .optional()
     .default(false)
-    .describe(
-      "Run App Accessibility (WCAG) checks on the screens the tests touch; Android 11+ or iOS 14+.",
-    ),
+    .describe("Run App Accessibility (WCAG) checks; Android 11+ or iOS 14+."),
 };

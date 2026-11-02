@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "1.46",
-  "build_id": "35a5ad5a_2026-10-30T04:46:03Z",
+  "build_id": "2c898682_2026-11-02T06:31:39Z",
   "tm": {
     "routing_terms": [
       "team",
@@ -3667,6 +3667,18 @@
             "name": "parent_option_id",
             "type": "integer",
             "description": "nested_dropdown children only — the option id this one hangs under, from the dataset options listing. Forwarded only when non-empty; meaningless on a flat dropdown."
+          },
+          {
+            "name": "colour",
+            "type": "string",
+            "nullable": true,
+            "description": "Optional option colour as a 6-digit hex string such as #1A2B3C. null is accepted. Any other string, or a non-string, is a 400 'Invalid Params'."
+          },
+          {
+            "name": "icon",
+            "type": "string",
+            "nullable": true,
+            "description": "Optional icon key: lowercase letters, digits and hyphens only (for example `flag`). null is accepted. Any other value is a 400 'Invalid Params'."
           }
         ],
         "intent": "Add one more choice to a dropdown-style custom field — a new value in an existing dataset, for every project that dataset covers",
@@ -3705,6 +3717,7 @@
           "option_value",
           "is_default",
           "colour",
+          "icon",
           "parent_option_id"
         ]
       },
@@ -3843,10 +3856,11 @@
               "TestPlan",
               "ExploratorySession",
               "TestCaseStep",
+              "TestExecution",
               "BuildCustomFields"
             ],
             "default": "TestCase",
-            "description": "Which entity the field hangs off; a field belongs to exactly one and cannot be moved later. Any other value → 400 'Invalid Params'. TestCaseStep additionally requires the group's step-custom-fields flag. BuildCustomFields defines a field on test runs."
+            "description": "Which entity the field hangs off; a field belongs to exactly one and cannot be moved later. Any other value → 400 'Invalid Params'. TestCaseStep additionally requires the group's step-custom-fields flag. BuildCustomFields defines a field on test runs. TestExecution is the test-run test-case execution level and is refused with a 400 unless the group has Test Execution custom fields enabled. It allows every field_type except nested_dropdown and jira_lookup."
           },
           {
             "name": "is_required",
@@ -3883,7 +3897,7 @@
               {
                 "name": "options",
                 "type": "array",
-                "description": "Option values for dropdown-style types. Each needs option_value (non-blank) and a non-null is_default; nested_dropdown entries may carry a `children` array of the same shape."
+                "description": "Option values for dropdown-style types. Each needs option_value (non-blank) and a non-null is_default; nested_dropdown entries may carry a `children` array of the same shape. Each option may also carry `colour` (6-digit hex) and `icon` (lowercase letters, digits, hyphens), both optional."
               }
             ]
           },
@@ -14126,6 +14140,16 @@
             "minimum": 1,
             "default": 1,
             "description": "Page number. The only pagination control on this endpoint — the page size is fixed at 30."
+          },
+          {
+            "name": "category",
+            "type": "string",
+            "values": [
+              "test_execution",
+              "test_result",
+              "all_run_fields"
+            ],
+            "description": "Which catalogue of test-run fields to read. Absent returns the test-result fields only, with no `category` marker on each field. `test_result` and `test_execution` return that catalogue; `all_run_fields` returns both, each field marked with its `category`. The test_execution catalogue is empty unless the group has Test Execution custom fields enabled."
           }
         ],
         "intent": "List the custom fields a project shows on a test RESULT — the extra fields a tester fills when recording a pass or fail, with the ids and types needed to send values",
@@ -14203,6 +14227,7 @@
           "configuration_id",
           "custom_fields",
           "custom_fields_count",
+          "test_execution_custom_fields",
           "test_run_step_result",
           "attachments",
           "issues",
@@ -14854,6 +14879,16 @@
             "type": "boolean",
             "default": false,
             "description": "Include the project's custom result fields as well as the defaults. PRESENCE-checked, not value-checked: `all=false` and `all=0` behave exactly like `all=true`. The only way to get the compact shape is to omit the parameter entirely."
+          },
+          {
+            "name": "category",
+            "type": "string",
+            "values": [
+              "test_execution",
+              "test_result",
+              "all_run_fields"
+            ],
+            "description": "Which catalogue of test-run fields to read. Absent returns the test-result fields only, with no `category` marker on each field. `test_result` and `test_execution` return that catalogue; `all_run_fields` returns both, each field marked with its `category`. The test_execution catalogue is empty unless the group has Test Execution custom fields enabled."
           }
         ],
         "intent": "Discover the fields available when recording a test RESULT in this project — the built-in status options and, on request, the project's custom result fields — so a result can be submitted with valid values",
@@ -17046,10 +17081,11 @@
               "TestPlan",
               "ExploratorySession",
               "TestCaseStep",
+              "TestExecution",
               "BuildCustomFields"
             ],
             "default": "TestCase",
-            "description": "Which entity's fields to list. Any other value is a 400 'Invalid Params'. TestCaseStep returns an empty list when the group's step-custom-fields flag is off. BuildCustomFields lists test-run fields; it has no system fields."
+            "description": "Which entity's fields to list. Any other value is a 400 'Invalid Params'. TestCaseStep returns an empty list when the group's step-custom-fields flag is off. BuildCustomFields lists test-run fields; it has no system fields. TestExecution is the test-run test-case execution level and is refused with a 400 unless the group has Test Execution custom fields enabled; on this list it returns an empty list in that case."
           },
           {
             "name": "field_source",
@@ -19424,6 +19460,18 @@
             "type": "boolean",
             "required": true,
             "description": "REQUIRED even when unchanged — a missing or null value is a 400. Setting it true does not clear any other option's default."
+          },
+          {
+            "name": "colour",
+            "type": "string",
+            "nullable": true,
+            "description": "Optional option colour as a 6-digit hex string such as #1A2B3C. null is accepted. Any other string, or a non-string, is a 400 'Invalid Params'."
+          },
+          {
+            "name": "icon",
+            "type": "string",
+            "nullable": true,
+            "description": "Optional icon key: lowercase letters, digits and hyphens only (for example `flag`). null is accepted. Any other value is a 400 'Invalid Params'."
           }
         ],
         "intent": "Rename one dropdown choice, or make it the default — the option id stays the same, so cases already holding this value follow the new label",
@@ -19462,6 +19510,7 @@
           "option_value",
           "is_default",
           "colour",
+          "icon",
           "parent_option_id"
         ]
       },
@@ -19608,10 +19657,11 @@
               "TestPlan",
               "ExploratorySession",
               "TestCaseStep",
+              "TestExecution",
               "BuildCustomFields"
             ],
             "default": "TestCase",
-            "description": "Used only to select the valid field_type set and the reserved-name list; never sent upstream, so it cannot move the field to a different entity. Send the field's real entity_type. BuildCustomFields selects the test-run rules, where is_required is always stored as false."
+            "description": "Used only to select the valid field_type set and the reserved-name list; never sent upstream, so it cannot move the field to a different entity. Send the field's real entity_type. BuildCustomFields selects the test-run rules, where is_required is always stored as false. TestExecution is the test-run test-case execution level and is refused with a 400 unless the group has Test Execution custom fields enabled. It allows every field_type except nested_dropdown and jira_lookup."
           },
           {
             "name": "place_holder_text",
@@ -43291,6 +43341,10 @@
                 "example": "ing"
               }
             }
+          },
+          "test_execution_custom_fields": {
+            "type": "object",
+            "description": "Native Test Execution custom-field values for this result, separate from `custom_fields`. Present only when the group has Test Execution custom fields enabled and the result has values."
           }
         }
       },
@@ -48003,7 +48057,7 @@
         }
       },
       "CustomFieldAdminOptionResponse": {
-        "description": "One option value after a create or rename. Always the five serialised keys — keys the request did not set come back null rather than absent.",
+        "description": "One option value after a create or rename. Always the six serialised keys — keys the request did not set come back null rather than absent.",
         "schema": {
           "type": "object",
           "required": [
@@ -48036,6 +48090,10 @@
                   "type": "integer",
                   "nullable": true,
                   "description": "Null unless the option was created under a nested_dropdown parent. The update call cannot change it."
+                },
+                "icon": {
+                  "type": "string",
+                  "nullable": true
                 }
               }
             }
@@ -51244,6 +51302,6 @@
         ]
       }
     },
-    "version": "1.39"
+    "version": "1.40"
   }
 }

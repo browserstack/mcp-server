@@ -13,6 +13,7 @@ export async function retrieveDeviceLogs(
   sessionId: string,
   buildId: string,
   config: BrowserStackConfig,
+  filter?: string,
 ): Promise<string> {
   const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/devicelogs`;
   const authString = getBrowserStackAuth(config);
@@ -35,6 +36,15 @@ export async function retrieveDeviceLogs(
     typeof response.data === "string"
       ? response.data
       : JSON.stringify(response.data);
+
+  const keyword = filter?.trim();
+  if (keyword) {
+    const lines = filterLinesByKeywords(logText, [keyword.toLowerCase()]);
+    return lines.length > 0
+      ? `Device Logs matching "${keyword}" (${lines.length} found):\n${wrapUntrusted("device logs", JSON.stringify(lines, null, 2))}`
+      : `No device log lines matching "${keyword}"`;
+  }
+
   const logs = filterDeviceFailures(logText);
   return logs.length > 0
     ? `Device Failures (${logs.length} found):\n${wrapUntrusted("device logs", JSON.stringify(logs, null, 2))}`

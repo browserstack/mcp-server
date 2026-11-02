@@ -109,6 +109,7 @@ describe('BrowserStack Failure Logs', () => {
         'test-session',
         'resolved-build-id',
         mockServer,
+        undefined,
       );
       expect(result.isError).toBeFalsy();
     });
@@ -129,6 +130,7 @@ describe('BrowserStack Failure Logs', () => {
         'test-session',
         'explicit-build-id',
         mockServer,
+        undefined,
       );
     });
 
@@ -261,11 +263,24 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything());
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything(), undefined);
       if (result.content?.[0]?.type === 'text') {
         expect(result.content[0].text).toContain('Device Failures (1 found)');
         expect(result.content[0].text).toContain('Fatal Exception');
       }
+    });
+
+    it('forwards deviceLogFilter as the fourth argument to retrieveDeviceLogs', async () => {
+      const mockServer = { server: { getClientVersion: () => "test-version" } };
+      await getFailureLogs({
+        sessionId: mockSessionId,
+        buildId: mockBuildId,
+        logTypes: ['deviceLogs'],
+        sessionType: 'app-automate',
+        deviceLogFilter: 'analyticsInterceptor'
+      }, mockServer);
+
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, mockServer, 'analyticsInterceptor');
     });
 
     it('should fetch appium logs successfully', async () => {

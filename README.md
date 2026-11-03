@@ -43,6 +43,8 @@ Click on the buttons below to install MCP in your respective IDE or assistant:
 
 > **Note:** The hosted Remote MCP server (`mcp.browserstack.com`) is now fully stateless over Streamable HTTP — any Streamable-HTTP client (Claude, Cursor, VS Code, ChatGPT) connects with no configuration change.
 
+> **Kiro:** a Kiro power for this server lives in [`integrations/kiro-power`](integrations/kiro-power). In the Kiro IDE, open the Powers panel → Add Custom Power → Import power from GitHub and enter `https://github.com/browserstack/mcp-server/tree/main/integrations/kiro-power`, or clone this repository and use Import power from a folder with that directory.
+
 #### Prerequisites
 - A BrowserStack account. [Sign up](https://www.browserstack.com/users/sign_up) if you don't have one; open-source projects can get a [free plan](https://www.browserstack.com/open-source).
 - Your `username` and `access_key` from [Account Settings](https://www.browserstack.com/accounts/profile/details).
@@ -255,6 +257,8 @@ For support, please:
 
 - Open an issue in our [GitHub repository](https://github.com/browserstack/mcp-server) if you face any issues related to the MCP Server.
 - Contact our [support team](https://www.browserstack.com/contact) for any other queries.
+- Email [support@browserstack.com](mailto:support@browserstack.com).
+- Privacy policy: [browserstack.com/privacy](https://www.browserstack.com/privacy).
 
 ## 🚀 More Features Coming Soon
 

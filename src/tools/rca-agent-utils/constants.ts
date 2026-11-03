@@ -10,9 +10,7 @@ export const FETCH_RCA_PARAMS = {
   testId: z
     .array(z.number().int())
     .max(3)
-    .describe(
-      "Array of integer test IDs to fetch RCA data for (maximum 3 IDs). These must be numeric test IDs, not session IDs or strings. If not provided, use the listTestIds tool to get all failed testcases. If more than 3 IDs are provided, only the first 3 will be processed.",
-    ),
+    .describe("Up to 3 numeric test ids from listTestIds (not session ids)."),
 };
 
 export const GET_BUILD_ID_PARAMS = {
@@ -31,9 +29,7 @@ export const GET_BUILD_ID_PARAMS = {
 export const LIST_TEST_IDS_PARAMS = {
   buildId: z
     .string()
-    .describe(
-      "The Browserstack Build ID of the test run. If not known, use the getBuildId tool to fetch it using project and build name",
-    ),
+    .describe("Build id; get it with getBuildId or listBuildId."),
   status: z
     .nativeEnum(TestStatus)
     .describe(

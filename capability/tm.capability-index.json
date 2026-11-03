@@ -21600,7 +21600,7 @@
             "Answers 200 with {generic_attachment: [...]}. The entry's `id` is the blob id to carry forward — to attach a screenshot to one step of a test run, pass it as `attachments: [<id>]` to create_step_result. `url` and `download_url` are pre-signed and expire after 30 minutes, and `size` is a HUMAN-READABLE string ('300 KB') rather than a byte count.",
             "ONE BLOB, ONE ATTACHMENT. A blob already attached somewhere is refused with 422 ('referenced elsewhere'), so upload a fresh copy for every step or result, even when it is the same screenshot.",
             "A 200 whose generic_attachment list is EMPTY stored nothing — never report that as a successful upload.",
-            "Accepted: images (.png, .jpg, .jpeg, .gif), documents and logs (.pdf, .txt, .md, .doc, .docx, .csv, .xls, .xlsx, .json, .html, .zip), up to 50 MB. HTML is served as a forced download rather than inline.",
+            "Accepted: images (.png, .jpg, .jpeg, .gif, .webp), documents and logs (.log, .pdf, .txt, .md, .doc, .docx, .csv, .xls, .xlsx, .json, .html, .zip), up to 50 MB. HTML is served as a forced download rather than inline.",
             "A file that fails validation deletes every blob written by that request, and the 400 reports the error under errors.message."
           ],
           "local": [

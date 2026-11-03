@@ -184,6 +184,33 @@
      "hashed_id",
      "name"
     ],
+    "narrowable": {
+     "record": true,
+     "path": "automation_session",
+     "fields": [
+      "status",
+      "reason",
+      "browser",
+      "browser_version",
+      "os",
+      "os_version",
+      "device",
+      "duration",
+      "public_url",
+      "browser_url",
+      "video_url",
+      "har_logs_url",
+      "browser_console_logs_url",
+      "browser_profiling_url",
+      "build_name",
+      "project_name",
+      "created_at",
+      "browserstack_status",
+      "hashed_id",
+      "name"
+     ],
+     "note": "The record comes back whole and is large; `fields` keeps only the ones named, so `fields: [\"browser_url\"]` after create_session returns just the link. `where`, `distinct` and `limit` do not apply to one record."
+    },
     "responses": {
      "200": {
       "description": "The session record.",
@@ -794,6 +821,13 @@
     "returns": [
      "value"
     ],
+    "narrowable": {
+     "path": "value",
+     "fields": [
+      "element-6066-11e4-a52e-4f735466cecf"
+     ],
+     "note": "Each row is one element reference and has a single field; `limit` is the useful part, to take the first match or the first few."
+    },
     "responses": {
      "200": {
       "description": "Every matching element, possibly none.",

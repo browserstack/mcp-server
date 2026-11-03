@@ -1013,6 +1013,17 @@
      "device_limit",
      "realMobile"
     ],
+    "narrowable": {
+     "fields": [
+      "device",
+      "os",
+      "os_version",
+      "device_tier",
+      "device_limit",
+      "realMobile"
+     ],
+     "note": "The endpoint takes no filtering parameters, so this narrowing is applied to the response after the call. `where` on os and device, or `distinct` on device, answers the usual question in a few rows."
+    },
     "responses": {
      "200": {
       "description": "Every device the account can use.",
@@ -1176,6 +1187,18 @@
      "uploaded_at",
      "shareable_id"
     ],
+    "narrowable": {
+     "fields": [
+      "app_name",
+      "app_version",
+      "app_url",
+      "app_id",
+      "custom_id",
+      "uploaded_at",
+      "shareable_id"
+     ],
+     "note": "The endpoint takes no filtering parameters, so this narrowing is applied after the call. `where` on custom_id or app_name finds one build; `limit: 1` takes the newest."
+    },
     "responses": {
      "200": {
       "description": "Recently uploaded builds, newest first.",
@@ -1219,6 +1242,18 @@
      "uploaded_at",
      "shareable_id"
     ],
+    "narrowable": {
+     "fields": [
+      "app_name",
+      "app_version",
+      "app_url",
+      "app_id",
+      "custom_id",
+      "uploaded_at",
+      "shareable_id"
+     ],
+     "note": "The endpoint takes no filtering parameters, so this narrowing is applied after the call. `where` on custom_id or app_name finds one build; `limit: 1` takes the newest."
+    },
     "responses": {
      "200": {
       "description": "The team's recently uploaded builds.",
@@ -1315,6 +1350,29 @@
      "hashed_id",
      "name"
     ],
+    "narrowable": {
+     "record": true,
+     "path": "automation_session",
+     "fields": [
+      "status",
+      "reason",
+      "device",
+      "os",
+      "os_version",
+      "duration",
+      "browser_url",
+      "public_url",
+      "video_url",
+      "build_name",
+      "project_name",
+      "created_at",
+      "app_details",
+      "browserstack_status",
+      "hashed_id",
+      "name"
+     ],
+     "note": "The record comes back whole and is large; `fields` keeps only the ones named, so `fields: [\"browser_url\"]` after create_session returns just the link. `where`, `distinct` and `limit` do not apply to one record."
+    },
     "responses": {
      "200": {
       "description": "The session record.",
@@ -3007,6 +3065,13 @@
     "returns": [
      "value"
     ],
+    "narrowable": {
+     "path": "value",
+     "fields": [
+      "element-6066-11e4-a52e-4f735466cecf"
+     ],
+     "note": "Each row is one element reference and has a single field; `limit` is the useful part, to take the first match or the first few."
+    },
     "responses": {
      "200": {
       "description": "Every matching element, possibly none.",

@@ -300,6 +300,14 @@ export interface Capability {
      * Siblings of the array are preserved, so an envelope survives the narrowing.
      */
     path?: string;
+    /**
+     * The thing at `path` is ONE RECORD, not rows. Only `fields` applies — a session
+     * record has no rows to filter, deduplicate or cap — and `where`, `distinct` and
+     * `limit` are refused before anything is sent. Declared because an agent that wants
+     * `browser_url` out of a 30-field session record was reaching for `select` and being
+     * told the capability does not support it, 41 times in a fortnight.
+     */
+    record?: true;
     /** One line for the contract: why this is here rather than on the wire. */
     note?: string;
   };

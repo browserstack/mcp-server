@@ -11,10 +11,9 @@ import { resolve } from "node:path";
 // A required parameter that may take exactly one value is the server's to send.
 //
 // Fourteen device-control capabilities are `execute/sync` with `script` pinned to one
-// command, and the caller's only decision is `args`. In the first fortnight of customer
-// traffic, 98 invocations were refused because the agent left `script` out, wrote its own,
-// or sent `args` without the brackets — none of them carrying information the server did
-// not already hold. So bind fills a fixed parameter in, overwrites a paraphrase, wraps a
+// command, and the caller's only decision is `args`. Agents left `script` out, wrote their
+// own, or sent `args` without the brackets — none of which carries information the server
+// does not already hold. So bind fills a fixed parameter in, overwrites a paraphrase, wraps a
 // lone item as a list of one, and describeCapability stops publishing the parameter at all.
 
 const SCRIPT =
@@ -271,6 +270,48 @@ describe("through the registered tools", () => {
     expect(method).toBe("POST");
     expect(url).toBe("https://p.example/wd/hub/session/s1/execute/sync");
     expect(body).toEqual({ script: SCRIPT, args: ["bottom"] });
+    expect(out.note).toBeUndefined();
+  });
+
+  it("says so when it replaced a script the caller wrote", async () => {
+    const seen: any[] = [];
+    const handlers = tools(seen);
+    const out = text(
+      await handlers.invokeCapability(
+        {
+          name: "scroll_page",
+          product: "p",
+          path_params: { session_id: "s1" },
+          body: { script: "window.scrollTo(0, 99999)", args: ["bottom"] },
+          user_permission: "granted",
+          change_summary: "scroll to the bottom",
+        },
+        {} as never,
+      ),
+    );
+    expect(out.ok).toBe(true);
+    expect(seen[0][4]).toEqual({ script: SCRIPT, args: ["bottom"] });
+    expect(out.note).toMatch(/`script` was replaced by the server's own value/);
+  });
+
+  it("stays quiet when the caller sent the published value itself", async () => {
+    const seen: any[] = [];
+    const handlers = tools(seen);
+    const out = text(
+      await handlers.invokeCapability(
+        {
+          name: "scroll_page",
+          product: "p",
+          path_params: { session_id: "s1" },
+          body: { script: SCRIPT, args: ["bottom"] },
+          user_permission: "granted",
+          change_summary: "scroll to the bottom",
+        },
+        {} as never,
+      ),
+    );
+    expect(out.ok).toBe(true);
+    expect(out.note).toBeUndefined();
   });
 });
 

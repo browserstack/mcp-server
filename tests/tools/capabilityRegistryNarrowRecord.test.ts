@@ -10,9 +10,8 @@ import { addCapabilityRegistryTools } from "../../src/tools/capability-registry/
 
 // `select` on a single record, and on the device-control lists that lacked it.
 //
-// In the first fortnight of customer traffic, 73 invocations were refused for sending
-// `select` to a capability that had not opted in: get_session (41, agents wanting
-// `browser_url` out of a 30-field record), list_devices (26, the whole catalogue for one
+// Agents kept sending `select` to capabilities that had not opted in: get_session (wanting
+// `browser_url` out of a 30-field record), list_devices (the whole catalogue for one
 // Pixel), list_team_app_builds and find_elements. The lists just needed `narrowable`
 // declared. The record needed a shape the narrowing code did not have: one object, not
 // rows, where only `fields` can mean anything.
@@ -55,6 +54,15 @@ const GET_SESSION = {
 const cap = (c: unknown) => c as never;
 
 describe("a record narrows on fields only", () => {
+  it("an empty fields list is no selection, not an empty record", () => {
+    expect(narrowResponse(cap(GET_SESSION), SESSION, { fields: [] })).toBe(
+      undefined,
+    );
+    expect(() =>
+      assertSelectable(cap(GET_SESSION), { fields: [] }),
+    ).not.toThrow();
+  });
+
   it("keeps the named fields, in the order asked, inside the envelope", () => {
     const out = narrowResponse(cap(GET_SESSION), SESSION, {
       fields: ["browser_url", "status"],

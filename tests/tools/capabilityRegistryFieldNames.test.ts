@@ -9,7 +9,7 @@ import {
 
 // A name that resolves to exactly one declared parameter is that parameter.
 //
-// About 80 customer invocations in a fortnight were refused over the name alone:
+// Calls were refused over the name alone more than over anything else:
 // `sessionId` for `session_id`, `elementId` for `element_id`, a path parameter sent in
 // the body, `selector` and `strategy` for WebDriver's `value` and `using`. The refusal
 // quoted the right name back, so the retry was the same call with one word changed.
@@ -154,6 +154,15 @@ describe("what stays refused", () => {
     ).toThrow(/unknown body: wait\. accepted: url/);
   });
 
+  it("two misspellings of the same parameter, neither of them declared", () => {
+    // The first folds into place; the second must not overwrite it on the quiet.
+    expect(() =>
+      bind(NAVIGATE, {
+        body: { sessionId: "a", SessionID: "b", url: "https://x" },
+      }),
+    ).toThrow(/unknown body: SessionID/);
+  });
+
   it("the same parameter sent twice under two spellings", () => {
     // Folding would make one value silently win; the refusal names the stray.
     expect(() =>
@@ -181,7 +190,7 @@ describe("the shipped indexes", () => {
   const find = (product: string, name: string) =>
     load(product).capabilities.find((c: { name: string }) => c.name === name);
 
-  it("bind the refused calls from the report as they were sent", () => {
+  it("bind the shapes agents actually send against the shipped indexes", () => {
     for (const product of ["devicecontrol", "mobiledevicecontrol"]) {
       // "unknown body: selector, strategy. accepted: using, value"
       const strategy =
@@ -226,7 +235,7 @@ describe("the shipped indexes", () => {
 });
 
 describe("interactive debugging on a browser session", () => {
-  // A customer agent asked to "let me watch and interact" guessed the raw capability name
+  // An agent asked to "let me watch and interact" guessed the raw capability name
   // `interactiveDebugging` on the web create_session, was refused twice, and then told the
   // user the session would be "view-only". The mobile contract declared the field; the web
   // one did not, although Automate accepts it on a browser session. Now both declare it.

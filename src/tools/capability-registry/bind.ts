@@ -409,8 +409,8 @@ function coerceType(
  * THE SERVER SUPPLIES IT. Fourteen device-control capabilities are `execute/sync` with
  * `script` pinned to a single command — `mobile: activateApp`, a 300-character scroll
  * snippet — and the caller's only decision is `args`. Asking the caller to transcribe the
- * script anyway produced 98 refusals in a fortnight: left out, paraphrased, or copied with
- * one semicolon wrong. None of those calls carried information the server did not have.
+ * script anyway only produces refusals: left out, paraphrased, or copied with one
+ * semicolon wrong. None of those calls carry information the server does not have.
  *
  * So a fixed parameter is filled when absent and OVERWRITTEN when present: the published
  * value is the only one that can run, and a refusal that quotes the whole snippet back is
@@ -428,6 +428,34 @@ export function fixedValue(param: WireParam): unknown {
 
 function isFixed(param: WireParam): boolean {
   return fixedValue(param) !== undefined;
+}
+
+/**
+ * The fixed parameters the caller sent a DIFFERENT value for, which `bind` overwrote.
+ *
+ * Overwriting is right — the published value is the only one that can run — but doing it
+ * silently is not: an agent that wrote its own `script` and got a 200 believes its script
+ * ran. The invoke answer names what was replaced so the agent knows which version did.
+ */
+export function replacedFixed(
+  capability: Capability,
+  given: GroupedArguments,
+): string[] {
+  const args = normalise(capability, given);
+  const replaced: string[] = [];
+  for (const { group, declared } of GROUPS) {
+    const sent = args[group];
+    if (typeof sent !== "object" || sent === null || Array.isArray(sent))
+      continue;
+    for (const param of (capability[declared] as WireParam[] | undefined) ||
+      []) {
+      const fixed = fixedValue(param);
+      if (fixed === undefined || !(param.name in sent)) continue;
+      if (JSON.stringify(sent[param.name]) !== JSON.stringify(fixed))
+        replaced.push(param.name);
+    }
+  }
+  return replaced;
 }
 
 /**
@@ -501,7 +529,7 @@ function snake(name: string): string {
  * The caller's arguments with every name resolved to the one the contract declares, in
  * the group that declares it.
  *
- * A fortnight of customer traffic refused about 80 calls over names alone: `sessionId`
+ * Calls are refused over the name alone more often than anything else: `sessionId`
  * for `session_id`, `elementId` for `element_id`, a path parameter such as `name` or
  * `session_id` sent in the body, `selector` and `strategy` for `value` and `using`. None
  * of those was ambiguous — each resolved to exactly one declared parameter — and the
@@ -570,11 +598,13 @@ export function normalise(
       const target = resolve(name);
       if (!target) continue;
       if (target.group === group && target.name === name) continue;
-      if (name in (args[target.group] ?? {}) && target.group !== group) {
+      // Checked against what is being built, not what was sent: a second spelling of a
+      // parameter that an earlier one already moved into place must not overwrite it.
+      if (name in out[target.group] && target.group !== group) {
         // Sent under its own name in the right place as well: the move would collide.
         continue;
       }
-      if (target.name in (args[target.group] ?? {})) continue;
+      if (target.name in out[target.group]) continue;
       delete out[group][name];
       out[target.group][target.name] = value;
     }

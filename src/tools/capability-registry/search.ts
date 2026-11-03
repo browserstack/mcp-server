@@ -164,9 +164,14 @@ const BRAND = /\bbrowser\s*stack\b|\bbstack\b/g;
  * the tokenizer throws it away: the scheme is punctuation and `example com` is nobody's
  * vocabulary. So an address in the request counts as the term `url`, which a product
  * that drives pages claims and a product that drives installed apps does not.
+ *
+ * AN APP'S NAME IS NOT AN ADDRESS. `Calculator.app`, `com.acme.dev` and every other
+ * reverse-DNS bundle id look like domains and are exactly what a mobile request carries,
+ * so a bare name ending in `.app`, `.dev` or `.ai` does not count, and neither does one
+ * that starts with a top-level domain. A scheme or `www.` always counts.
  */
 const ADDRESS =
-  /https?:\/\/\S+|\bwww\.\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|dev|app|co|ai|in|uk|de|jp|edu|gov|me|xyz)\b/i;
+  /https?:\/\/\S+|\bwww\.\S+|\b(?!(?:com|org|net|io|co|dev|app|ai)\.)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|co|in|uk|de|jp|edu|gov|me|xyz)\b/i;
 
 export function impliedTerms(text: string | undefined): string[] {
   return text && ADDRESS.test(text) ? ["url"] : [];
@@ -638,7 +643,7 @@ const IDENTITY_WEIGHT = 6;
 
 /** Which products a query could plausibly be about, when more than one could. */
 /** Words too common in this domain to settle a product on their own. */
-// `check`, `filter` and `os` joined `test` from the first week of customer traffic: each
+// `check`, `filter` and `os` joined `test` for the same reason: each
 // is an entity alias somewhere (TRA's check_config, TM's filter, TM's configuration) and
 // each is also an everyday word — or, for `os`, the Portuguese article — so on its own it
 // put a product question to users whose request was about something else entirely. A

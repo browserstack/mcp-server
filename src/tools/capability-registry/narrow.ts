@@ -65,7 +65,7 @@ function isSelectionEmpty(selection: Selection): boolean {
   return (
     !selection.where &&
     !selection.distinct &&
-    !selection.fields &&
+    !selection.fields?.length &&
     selection.limit === undefined
   );
 }

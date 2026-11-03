@@ -25,7 +25,7 @@ import { z } from "zod";
 import logger from "../../logger.js";
 import { MCPEventExtras, trackMCP } from "../../lib/instrumentation.js";
 import { BrowserStackConfig } from "../../lib/types.js";
-import { GroupedArguments, withoutFixed } from "./bind.js";
+import { GroupedArguments, replacedFixed, withoutFixed } from "./bind.js";
 import { indexPaths, isEnabled, resolveBaseUrl } from "./config.js";
 import { redact } from "./redact.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
@@ -1345,7 +1345,20 @@ export function addCapabilityRegistryTools(
         const narrowed = result.ok
           ? narrowResponse(capability, result.http_response.body, input.select)
           : undefined;
+        // A REPLACED VALUE IS SAID OUT LOUD. `bind` overwrites a fixed parameter the caller
+        // sent its own value for; the answer names it, so a 200 is not read as "my
+        // version ran".
+        const replaced = replacedFixed(capability, args);
         const answer = {
+          ...(replaced.length > 0
+            ? {
+                note:
+                  `${replaced.map((name) => `\`${name}\``).join(", ")} ` +
+                  `${replaced.length > 1 ? "were" : "was"} replaced by the server's own ` +
+                  "value, which is the only one this capability can run; the value you " +
+                  "sent did not run. The contract withholds these parameters for that reason.",
+              }
+            : {}),
           ...(narrowed
             ? {
                 ...result,

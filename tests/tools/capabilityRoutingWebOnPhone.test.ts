@@ -13,8 +13,8 @@ import {
 import { CapabilityRegistry } from "../../src/tools/capability-registry/index-loader.js";
 import { addCapabilityRegistryTools } from "../../src/tools/capability-registry/register.js";
 
-// The first week of customer traffic put 32 routing reports on the board, and most were
-// one defect: a website task on a phone was sent to mobile device control. `iphone`,
+// Most routing complaints were one defect: a website task on a phone was sent to mobile
+// device control. `iphone`,
 // `phone` and `tablet` were mobile's words alone, `website` was shared with the
 // accessibility products, and a word only one product claims won outright — so the one
 // word that named the device beat the one that named the task. These pin the repair.
@@ -115,6 +115,28 @@ describe("a pasted address names `url`", () => {
 
   it("not for a sentence with no address in it", () =>
     expect(impliedTerms("open the login page")).toEqual([]));
+
+  // An app's name is not an address: `.app` bundles and reverse-DNS bundle ids are what a
+  // mobile request carries, and counting them as `url` sent those requests to web.
+  it.each([
+    "install Calculator.app on the iOS simulator",
+    "launch com.mycompany.app on my iPhone",
+    "open the app com.acme.dev on android",
+    "launch com.mycompany.myapp on my iPhone",
+    "start io.acme.shop on a Pixel",
+  ])("not for an app name: %s", (text) =>
+    expect(impliedTerms(text)).toEqual([]),
+  );
+
+  it("so a bundle id on a phone still routes to mobile", () => {
+    expect(
+      ambiguousProducts(shipped, "launch com.mycompany.app on my iPhone")
+        .settled,
+    ).toBe("mobiledevicecontrol");
+    expect(
+      productAnchors(shipped, "com.mycompany.app on my iPhone").products,
+    ).not.toContain("devicecontrol");
+  });
 
   it("anchors devicecontrol when the user quotes one", () =>
     expect(

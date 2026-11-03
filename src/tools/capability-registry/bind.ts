@@ -245,7 +245,13 @@ export function coerce(value: unknown, param: WireParam): unknown {
 
 function coerceType(
   value: unknown,
-  param: { name: string; type: string; values?: unknown[] },
+  param: {
+    name: string;
+    type: string;
+    values?: unknown[];
+    accept?: string[];
+    max_bytes?: number;
+  },
   label = param.name,
 ): unknown {
   const expected = param.type;
@@ -277,8 +283,8 @@ function coerceType(
       throw new InvocationError(`'${label}' must be a path to a file`);
     try {
       return validateUploadPath(given, {
-        allowedExtensions: APP_BINARY_EXTENSIONS,
-        maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+        allowedExtensions: param.accept ?? APP_BINARY_EXTENSIONS,
+        maxSizeBytes: param.max_bytes ?? MAX_APP_UPLOAD_BYTES,
         allowedBaseDir: appConfig.UPLOAD_BASE_DIR,
       });
     } catch (error) {

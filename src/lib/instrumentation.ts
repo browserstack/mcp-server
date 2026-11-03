@@ -88,6 +88,7 @@ const NON_US_REGION_FIELDS = new Set([
   "capability_method",
   "capability_path",
   "capability_mode",
+  "agent_match",
   "results_returned",
   "total_matched",
   "truncated",

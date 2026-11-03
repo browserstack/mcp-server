@@ -144,14 +144,6 @@ describe("accountRegion", () => {
     expect(mintCalls).toHaveLength(2);
   });
 
-  it("keeps an unrecognised region as an answer", async () => {
-    mintImpl = async () => tokenWith({ grr: { region: "apac" } });
-    const cfg = config();
-    expect(await accountRegion(cfg)).toBe("unknown");
-    expect(accountRegion(cfg)).toBe("unknown");
-    expect(mintCalls).toHaveLength(1);
-  });
-
   it("probes Test Management when auth can't answer, regional hosts first", async () => {
     failAuth();
     probeAccepts = new Set(["https://test-management-eu.browserstack.com"]);
@@ -238,6 +230,32 @@ describe("accountRegion", () => {
       await settleLookups();
       expect(accountRegion(cfg)).toBe("us");
       expect(mintCalls).toHaveLength(3);
+    });
+
+    it("retries an unrecognised region like a failure", async () => {
+      mintImpl = async () => tokenWith({ grr: { region: "apac" } });
+      const cfg = config();
+      expect(await accountRegion(cfg)).toBe("unknown");
+      vi.advanceTimersByTime(RETRY_AFTER_MS - 1);
+      expect(accountRegion(cfg)).toBe("unknown");
+      expect(mintCalls).toHaveLength(1);
+
+      mintImpl = async () => tokenWith({ grr: { region: "eu" } });
+      vi.advanceTimersByTime(1);
+      expect(await accountRegion(cfg)).toBe("eu");
+      expect(mintCalls).toHaveLength(2);
+    });
+
+    it("keeps the last known region when auth names an unrecognised one", async () => {
+      mintImpl = async () => tokenWith({ grr: { region: "eu" } });
+      const cfg = config();
+      expect(await accountRegion(cfg)).toBe("eu");
+
+      mintImpl = async () => tokenWith({ grr: { region: "apac" } });
+      vi.advanceTimersByTime(REGION_TTL_MS);
+      accountRegion(cfg);
+      await settleLookups();
+      expect(accountRegion(cfg)).toBe("eu");
     });
 
     it("looks up a known region again once it expires", async () => {

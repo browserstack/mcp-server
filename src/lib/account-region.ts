@@ -118,15 +118,14 @@ interface Answer {
   ttl: number;
 }
 
-/** BrowserStack auth's answer, else a probe's; null when neither can tell. */
+/** BrowserStack auth's answer, else a probe's; null when neither names a known region. */
 async function lookUp(config: BrowserStackConfig): Promise<Answer | null> {
   const region = await fromToken(config);
   if (region !== null && region !== "unknown") {
     return { region, ttl: REGION_TTL_MS };
   }
   const probed = await probe(config);
-  if (probed) return { region: probed, ttl: PROBED_TTL_MS };
-  return region === null ? null : { region, ttl: REGION_TTL_MS };
+  return probed ? { region: probed, ttl: PROBED_TTL_MS } : null;
 }
 
 /**

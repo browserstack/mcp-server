@@ -1051,6 +1051,12 @@ export function addCapabilityRegistryTools(
         void send_empty_body;
         void local_only;
         void disabled;
+        // `form_name` is plumbing on a parameter: the multipart field the file travels
+        // under. The caller still supplies the parameter by `name`.
+        const body = contract.body?.map(({ form_name, ...param }) => {
+          void form_name;
+          return param;
+        });
         return ok({
           // No build_id here either, same reason. `product` stays: describeCapability
           // resolves by NAME and its product argument is optional, so the answer has to
@@ -1068,6 +1074,7 @@ export function addCapabilityRegistryTools(
           // product is in that state today.
           ...(capability.name ? {} : { method, path }),
           ...contract,
+          ...(body ? { body } : {}),
           ...(responses ? { responses } : {}),
         });
       } catch (error) {

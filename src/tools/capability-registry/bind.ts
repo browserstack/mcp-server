@@ -245,13 +245,7 @@ export function coerce(value: unknown, param: WireParam): unknown {
 
 function coerceType(
   value: unknown,
-  param: {
-    name: string;
-    type: string;
-    values?: unknown[];
-    accept?: string[];
-    max_bytes?: number;
-  },
+  param: Pick<WireParam, "name" | "type" | "values" | "accept" | "max_bytes">,
   label = param.name,
 ): unknown {
   const expected = param.type;

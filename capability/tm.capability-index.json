@@ -21566,7 +21566,7 @@
             "type": "file",
             "required": true,
             "form_name": "attachments[]",
-            "accept": [".png", ".jpg", ".jpeg", ".gif", ".pdf", ".txt", ".md", ".doc", ".docx", ".csv", ".xls", ".xlsx", ".json", ".html", ".zip"],
+            "accept": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".log", ".pdf", ".txt", ".md", ".doc", ".docx", ".csv", ".xls", ".xlsx", ".json", ".html", ".zip"],
             "max_bytes": 52428800,
             "description": "Path to the file on this machine, inside MCP_UPLOAD_BASE_DIR. One file per call.",
             "example": "/Users/me/screenshots/login-step-3.png"
@@ -49293,11 +49293,11 @@
           "Each blob/attachment row carries an integer id and a url (the file's location) — read the file from that url; there is no dedicated download endpoint.",
           "A file is attached in TWO steps: upload it to the project to get a numeric blob id, then link that id to the test case, result or step. The link calls take ids, never file content or filenames.",
           "A blob can be linked ONCE. Attaching one that is already referenced elsewhere fails the whole request; upload a separate copy for each place the file should appear.",
-          "Putting a NEW file into the product cannot be done through this interface at all — an agent can link an already-uploaded file, remove one, and read attachment metadata, but the upload itself has to happen in the product UI.",
+          "Uploading a NEW file works only on a local server: upload_generic_attachments reads it from MCP_UPLOAD_BASE_DIR and returns its blob id. The hosted server cannot read files on the caller's machine, so there the upload has to happen in the product UI.",
           "Removing an attachment purges the stored file, not just the link. There is no recycle bin for attachments and no undo.",
           "The view and download URLs handed back on upload are pre-signed and expire after about 30 minutes — fetch the file promptly or re-read the attachment to get a fresh one.",
           "The older per-test-case attachment reads return metadata only (id, filename, type, size) with no URL; the newer entity-attachment listing is the one that hands back a readable URL per file.",
-          "A file cannot be attached to a test case through this surface at all. The call that does it works, but it takes the file itself as a form upload, which this transport cannot send — the same reason the upload capabilities here accept no file and quietly do nothing. Attaching is done in the product, not here.",
+          "A file cannot be attached directly to a test case through this surface. The call that does it takes the file itself as a form upload and is not published; attach to a test case in the product. A file uploaded with upload_generic_attachments can go on a test run step via create_step_result.",
           "An empty attachment list is not evidence that nothing is attached; it is the expected result whenever the attaching was done elsewhere."
         ]
       },

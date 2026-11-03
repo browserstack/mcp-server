@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   AccessibilityScanner,
+  ScanTimeoutError,
   type ScanSettings,
 } from "./accessiblity-utils/scanner.js";
 import {
@@ -1250,6 +1251,47 @@ const WCAG_VERSIONS = {
 } as const;
 
 /**
+ * Why advanced or experimental rules came back off when they were not asked off. Both are
+ * on unless turned off, and on an API scan a plan without them turns them off instead of
+ * refusing the scan, so the settings line alone reads as if the scan ran as asked. Asked
+ * off, or not read back, there is nothing to explain.
+ */
+function planDowngradeNote(asked: ScanSettings, applied: ScanSettings): string {
+  const off = [
+    {
+      name: "advanced rules",
+      asked: asked.advancedRules,
+      ran: applied.advancedRules,
+    },
+    {
+      name: "experimental rules",
+      asked: asked.experimentalRules,
+      ran: applied.experimentalRules,
+    },
+  ].filter((rules) => rules.asked !== false && rules.ran === false);
+  if (!off.length) return "";
+  const names = (wanted: boolean | undefined) =>
+    off
+      .filter((rules) => rules.asked === wanted)
+      .map((rules) => rules.name)
+      .join(" and ");
+  const askedFor = names(true);
+  const byDefault = names(undefined);
+  const expected = [
+    askedFor ? `${askedFor} were asked for` : "",
+    byDefault ? `${byDefault} are on by default` : "",
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  return (
+    `${expected[0].toUpperCase()}${expected.slice(1)}, but this scan ran without them, ` +
+    "most likely because this account's Accessibility plan does not include them: " +
+    "BrowserStack then runs the scan at the plan's level instead of refusing it. " +
+    "The issues found do not include those rules."
+  );
+}
+
+/**
  * What the scan ran with, read back from the run, since an unset setting takes the API's
  * default and the plan can turn advanced rules off. When it cannot be read, only what was
  * asked for is said: a guessed default would be stated as fact.
@@ -1280,7 +1322,12 @@ function scanSettingsNote(
       .filter(Boolean)
       .join(", ");
   if (applied && describe(applied)) {
-    return `Scan settings, as the scan ran: ${describe(applied)}.`;
+    return [
+      `Scan settings, as the scan ran: ${describe(applied)}.`,
+      planDowngradeNote(asked, applied),
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
   return describe(asked)
     ? `Scan settings asked for: ${describe(asked)}; anything not asked for takes the scan's default.`
@@ -1292,6 +1339,7 @@ async function executeAccessibilityScan(
     name: string;
     pageURL: string;
     authConfigId?: number;
+    localIdentifier?: string;
   } & ScanSettings,
   context: ScanProgressContext,
   server: McpServer,
@@ -1317,6 +1365,7 @@ async function executeAccessibilityScan(
         advancedRules: args.advancedRules,
         experimentalRules: args.experimentalRules,
       },
+      args.localIdentifier,
     );
   } catch (error) {
     return handleMCPError("startAccessibilityScan", server, config, error);
@@ -1465,6 +1514,25 @@ function createScanFailureResponse(
   );
 }
 
+/**
+ * The wait ran out, not the scan: it carries on server-side and its issues can be read once
+ * it finishes. Not an error, so an agent comes back for the results instead of reporting a
+ * failure, as it did when this read "Failed to start accessibility scan" with no ids.
+ */
+function createScanStillRunningResponse(
+  name: string,
+  scanId: string,
+  scanRunId: string,
+  dashboardLink: string | undefined,
+  waitedMs: number,
+): CallToolResult {
+  return createSuccessResponse([
+    `Accessibility scan "${name}" is still running after ${Math.round(waitedMs / 60000)} minutes, so this call stopped waiting for it. The scan was not cancelled: it carries on, and its issues can be read once it finishes. ${scanDashboardNote(dashboardLink, scanId)}`,
+    `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+    `To read its issues, call fetchAccessibilityIssues with scanId "${scanId}" and scanRunId "${scanRunId}" once it has finished. Do not start the scan again: that starts a second scan.`,
+  ]);
+}
+
 function createScanSuccessResponse(
   name: string,
   report: Awaited<ReturnType<typeof parseAccessibilityReportFromCSV>>,
@@ -1508,6 +1576,7 @@ async function runAccessibilityScan(
   config: BrowserStackConfig,
   authConfigId?: number,
   settings: ScanSettings = {},
+  localIdentifier?: string,
 ): Promise<CallToolResult> {
   const scanner = await initializeScanner(config);
 
@@ -1516,20 +1585,56 @@ async function runAccessibilityScan(
     [pageURL],
     authConfigId,
     settings,
+    localIdentifier,
   );
   const scanId = startResp.data!.id;
   const scanRunId = startResp.data!.scanRunId;
+  const scanName = startResp.scanName ?? name;
+  // Said first, so the name asked for is not taken for the scan's.
+  const withRenameNote = (result: CallToolResult): CallToolResult =>
+    scanName === name
+      ? result
+      : {
+          ...result,
+          content: [
+            {
+              type: "text" as const,
+              text: `A scan named "${name}" already exists on this account, so this one was started as "${scanName}".\n`,
+            },
+            ...result.content,
+          ],
+        };
 
-  await notifyScanProgress(context, `Accessibility scan "${name}" started`, 0);
+  await notifyScanProgress(
+    context,
+    `Accessibility scan "${scanName}" started`,
+    0,
+  );
 
-  const status = await scanner.waitUntilComplete(scanId, scanRunId, context);
+  let status: string;
+  try {
+    status = await scanner.waitUntilComplete(scanId, scanRunId, context);
+  } catch (error) {
+    if (!(error instanceof ScanTimeoutError)) throw error;
+    return withRenameNote(
+      createScanStillRunningResponse(
+        scanName,
+        scanId,
+        scanRunId,
+        await scanner.dashboardLink(scanId),
+        error.waitedMs,
+      ),
+    );
+  }
   if (status !== "completed") {
-    return createScanFailureResponse(
-      name,
-      status,
-      scanId,
-      scanRunId,
-      await scanner.dashboardLink(scanId),
+    return withRenameNote(
+      createScanFailureResponse(
+        scanName,
+        status,
+        scanId,
+        scanRunId,
+        await scanner.dashboardLink(scanId),
+      ),
     );
   }
 
@@ -1546,33 +1651,37 @@ async function runAccessibilityScan(
     );
   } catch (error) {
     if (error instanceof ExportPendingError) {
-      return createSuccessResponse([
-        `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
-        `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
-        scanSettingsNote(settings, applied),
-        ...exportPendingMessages(
-          {
-            kind: "scan",
-            scanId: String(scanId),
-            scanRunId: String(scanRunId),
-          },
-          error,
-          "",
-        ),
-      ]);
+      return withRenameNote(
+        createSuccessResponse([
+          `Accessibility scan "${scanName}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
+          `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+          scanSettingsNote(settings, applied),
+          ...exportPendingMessages(
+            {
+              kind: "scan",
+              scanId: String(scanId),
+              scanRunId: String(scanRunId),
+            },
+            error,
+            "",
+          ),
+        ]),
+      );
     }
     throw error;
   }
 
-  return createScanSuccessResponse(
-    name,
-    await parseAccessibilityReportFromCSV(reportLink),
-    scanId,
-    scanRunId,
-    reportLink,
-    dashboardLink,
-    settings,
-    applied,
+  return withRenameNote(
+    createScanSuccessResponse(
+      scanName,
+      await parseAccessibilityReportFromCSV(reportLink),
+      scanId,
+      scanRunId,
+      reportLink,
+      dashboardLink,
+      settings,
+      applied,
+    ),
   );
 }
 
@@ -1616,10 +1725,20 @@ export default function addAccessibilityTools(
         .number()
         .optional()
         .describe("Optional auth config ID for authenticated scans"),
+      localIdentifier: z
+        .string()
+        .trim()
+        .min(1)
+        .optional()
+        .describe(
+          "Identifier of a BrowserStack Local tunnel you started, for localhost or internal URLs.",
+        ),
       advancedRules: z
         .boolean()
         .optional()
-        .describe("Run the advanced accessibility rules (default true)."),
+        .describe(
+          "Run advanced rules (default true; off if the plan lacks them).",
+        ),
       wcagVersion: z
         .enum(Object.keys(WCAG_VERSIONS) as [keyof typeof WCAG_VERSIONS])
         .optional()
@@ -1639,7 +1758,9 @@ export default function addAccessibilityTools(
       experimentalRules: z
         .boolean()
         .optional()
-        .describe("Run the experimental accessibility rules (default true)."),
+        .describe(
+          "Run experimental rules (default true; off if the plan lacks them).",
+        ),
     },
     {
       title: "Start Accessibility Scan",

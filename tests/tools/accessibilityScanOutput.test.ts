@@ -25,6 +25,11 @@ vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
     runSettings = vi.fn().mockResolvedValue(undefined);
     dashboardLink = m.dashboardLink;
   },
+  ScanTimeoutError: class extends Error {
+    constructor(readonly waitedMs: number) {
+      super("still running");
+    }
+  },
 }));
 vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
   AccessibilityReportFetcher: class {
@@ -990,5 +995,29 @@ describe("what a web report's answer says about its issues", () => {
     expect(body).toContain("scan-42");
     expect(body).toContain("run-7");
     expect(body).not.toContain("scan-details");
+  });
+
+  // The wait ran out, not the scan. This used to read "Failed to start accessibility scan"
+  // with no ids, and an agent told the user no scan had been created.
+  it("hands back a scan that outlasts the wait as still running, with its ids", async () => {
+    const LINK = "https://accessibility.browserstack.com/site-scanner/projects/Home%20page/builds?thBuildId=abc";
+    const { ScanTimeoutError } = await import("../../src/tools/accessiblity-utils/scanner.js");
+    m.waitUntilComplete.mockRejectedValue(new ScanTimeoutError(5 * 60 * 1000));
+    m.dashboardLink.mockResolvedValue(LINK);
+
+    const result = await handlers.startAccessibilityScan(
+      { name: "Home page", pageURL: "https://site.example" },
+      CONTEXT,
+    );
+
+    expect(result.isError).toBeFalsy();
+    const body = text(result);
+    expect(body).toContain('Accessibility scan "Home page" is still running after 5 minutes');
+    expect(body).toContain("The scan was not cancelled");
+    expect(body).toContain("Scan ID: scan-42 and Scan Run ID: run-7");
+    expect(body).toContain('call fetchAccessibilityIssues with scanId "scan-42" and scanRunId "run-7"');
+    expect(body).toContain(LINK);
+    expect(body).not.toContain("Failed to start");
+    expect(m.getReportLink).not.toHaveBeenCalled();
   });
 });

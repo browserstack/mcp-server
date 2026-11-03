@@ -12,8 +12,16 @@ export interface AccessibilityScanResponse {
   success: boolean;
   data?: { id: string; scanRunId: string };
   errors?: string[];
-  /** The name the scan was started under, when the name asked for was already taken. */
+  /** The name the scan was started under, when it differs from the name asked for. */
   scanName?: string;
+  /** Why it differs: characters a scan name cannot hold, and/or a name already taken. */
+  nameChanges?: ("characters" | "taken")[];
+}
+
+/** Why a run failed, as far as the API says: the run's own reason and each page's log. */
+export interface ScanFailureDetails {
+  reason?: string;
+  pages: { pageUrl: string; status: string; reason: string }[];
 }
 
 /** How long startAccessibilityScan waits for a scan to finish before handing back its ids. */
@@ -39,6 +47,46 @@ const OWN_TUNNEL_HINT =
 
 /** The longest scan name the API takes. */
 const MAX_SCAN_NAME_LENGTH = 255;
+
+/**
+ * One character central-scanner takes in a scan name (lib/util.rb validate_project_name),
+ * which also refuses "--". It takes "(" but not ")", so both become square brackets.
+ */
+const NAME_CHARACTER = /[A-Za-z0-9_:*.@!$ '{}[\]-]/;
+
+/**
+ * The name with every character central-scanner refuses replaced, rather than the scan
+ * refused: agents name scans after page titles and paths, with "/", "|", "&" or ",". Accents
+ * are dropped first ("Café" becomes "Cafe"), and a run of replaced characters becomes one
+ * "-", or " - " where it stood between words. A name left with no letters or digits, as a
+ * name in another script is, falls back to the given one.
+ */
+export function cleanScanName(name: string, fallback: string): string {
+  const cleaned = Array.from(
+    name
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/\(/g, "[")
+      .replace(/\)/g, "]")
+      .replace(/\s+/g, " "),
+  )
+    .map((ch) => (NAME_CHARACTER.test(ch) ? ch : "-"))
+    .join("")
+    .replace(/[\s-]*-[\s-]*/g, (run) => (/\s/.test(run) ? " - " : "-"))
+    .replace(/^[\s-]+|[\s-]+$/g, "")
+    .slice(0, MAX_SCAN_NAME_LENGTH)
+    .replace(/[\s-]+$/, "");
+  return /[A-Za-z0-9]/.test(cleaned) ? cleaned : fallback;
+}
+
+/** A scan name to fall back on: the first page's host, which is always a valid name. */
+function hostName(urlList: string[]): string {
+  try {
+    return new URL(urlList[0]).hostname || "Accessibility scan";
+  } catch {
+    return "Accessibility scan";
+  }
+}
 
 /**
  * The name with the time appended, as "<name> 2026-11-03 07:45:12 UTC". Only digits,
@@ -176,8 +224,9 @@ export class AccessibilityScanner {
     const scanSettings = Object.fromEntries(
       Object.entries(settings).filter(([, value]) => value !== undefined),
     );
+    const cleanName = cleanScanName(name, hostName(urlList));
     const baseRequestBody = {
-      name,
+      name: cleanName,
       urlList: transformedUrlList,
       recurring: false,
       ...(authConfigId && { authConfigId }),
@@ -215,19 +264,24 @@ export class AccessibilityScanner {
       return data;
     };
 
+    const cleaned = cleanName !== name;
     try {
-      return await create(requestBody);
+      const data = await create(requestBody);
+      return cleaned
+        ? { ...data, scanName: cleanName, nameChanges: ["characters"] }
+        : data;
     } catch (err: any) {
       if (!nameIsTaken(err)) throw scanStartError(err);
     }
     // Scan names are unique per account, so an agent re-scanning a page under the name it
     // used before is refused. Starting it once more under a timestamped name is what the
     // user would do by hand.
-    const scanName = timestampedName(name);
+    const scanName = timestampedName(cleanName);
     try {
       return {
         ...(await create({ ...requestBody, name: scanName })),
         scanName,
+        nameChanges: cleaned ? ["characters", "taken"] : ["taken"],
       };
     } catch (err: any) {
       throw scanStartError(err);
@@ -311,6 +365,73 @@ export class AccessibilityScanner {
       (scan) => String(scan.id) === String(scanId),
     )?.scanUrl;
     return typeof link === "string" && link ? link : undefined;
+  }
+
+  /**
+   * Why a run failed. The run's own reason is only on the scans list (lastScanDetails.error,
+   * such as "The requested page is not reachable"), so it is taken only when the list's last
+   * run is this one; each page's reason is in the run's scan logs ("[HTTP 403] Forbidden",
+   * "Failed to start the test"). Either can be missing, and a read that fails gives nothing
+   * rather than an error on top of the failed scan.
+   */
+  async failureDetails(
+    scanId: string,
+    scanRunId: string,
+  ): Promise<ScanFailureDetails> {
+    const read = (url: string) =>
+      apiClient
+        .get({
+          url,
+          headers: {
+            Authorization:
+              "Basic " +
+              Buffer.from(
+                `${this.auth?.username}:${this.auth?.password}`,
+              ).toString("base64"),
+          },
+          raise_error: false,
+        })
+        .catch(() => undefined);
+    const base =
+      "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans";
+    const [list, logs] = await Promise.all([
+      read(base),
+      read(`${base}/${scanId}/scan_runs/${scanRunId}/scan_logs`),
+    ]);
+    const last = (
+      list?.ok
+        ? ((list.data?.data?.scans ?? []) as any[]).find(
+            (scan) => String(scan?.id) === String(scanId),
+          )
+        : undefined
+    )?.lastScanDetails;
+    const reason =
+      last &&
+      String(last.scanRunId) === String(scanRunId) &&
+      typeof last.error === "string" &&
+      last.error.trim()
+        ? last.error.trim()
+        : undefined;
+    const entries: any[] = logs?.ok ? (logs.data?.data?.scanLogs ?? []) : [];
+    const pages = entries
+      .filter((entry) => entry && entry.status !== "success")
+      .map((entry) => {
+        const said = [entry.description, entry.error]
+          .filter((part) => typeof part === "string" && part.trim())
+          .map((part: string) => part.trim());
+        const redirect =
+          typeof entry.finalRedirectUrl === "string" && entry.finalRedirectUrl
+            ? `redirected to ${entry.finalRedirectUrl}`
+            : "";
+        return {
+          pageUrl: String(entry.pageUrl ?? ""),
+          status: String(entry.status ?? ""),
+          reason:
+            [...new Set(said), redirect].filter(Boolean).join("; ") ||
+            String(entry.status ?? "unknown"),
+        };
+      });
+    return { ...(reason ? { reason } : {}), pages };
   }
 
   async pollStatus(

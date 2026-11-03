@@ -334,9 +334,25 @@ describe("startAccessibilityScan scan settings", () => {
     const result = await run({ name: "checkout", pageURL: "https://shop.example/" });
 
     expect(result.content[0].text).toBe(
-      'A scan named "checkout" already exists on this account, so this one was started as "checkout 2026-11-03 07:45:12 UTC".\n',
+      'A scan named "checkout" already exists on this account, so this scan was started as "checkout 2026-11-03 07:45:12 UTC".\n',
     );
     expect(text(result)).toContain('Accessibility scan "checkout 2026-11-03 07:45:12 UTC" completed.');
+  });
+
+  it("says the name was cleaned when it had characters scan names can't contain", async () => {
+    m.startScan.mockResolvedValue({
+      data: { id: "7310042", scanRunId: "5520318" },
+      scanName: "Checkout - Cart",
+      nameChanges: ["characters"],
+    });
+    m.runSettings.mockResolvedValue(undefined);
+    const { run } = await tool();
+
+    const result = await run({ name: "Checkout / Cart", pageURL: "https://shop.example/" });
+
+    expect(result.content[0].text).toBe(
+      'The name "Checkout / Cart" has characters scan names can\'t contain, so this scan was started as "Checkout - Cart".\n',
+    );
   });
 
   it("gives no reason when the rules were asked off, ran on, or could not be read", async () => {

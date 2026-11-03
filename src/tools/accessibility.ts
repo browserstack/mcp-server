@@ -4,6 +4,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   AccessibilityScanner,
   ScanTimeoutError,
+  type ScanFailureDetails,
   type ScanSettings,
 } from "./accessiblity-utils/scanner.js";
 import {
@@ -1502,15 +1503,55 @@ function scanDashboardNote(
     : `See it under Website Scanner in the Accessibility dashboard (scan ID ${scanId}).`;
 }
 
+/** Why the scan's name differs from the one asked for, as the start of a sentence. */
+function renameReason(
+  name: string,
+  changes: ("characters" | "taken")[],
+): string {
+  const characters = changes.includes("characters");
+  const taken = changes.includes("taken");
+  if (characters && taken)
+    return `The name "${name}" has characters scan names can't contain, and the cleaned name was already taken`;
+  if (characters)
+    return `The name "${name}" has characters scan names can't contain`;
+  return `A scan named "${name}" already exists on this account`;
+}
+
+/** How many failed pages a failure result lists before summing up the rest. */
+const FAILED_PAGES_LISTED = 10;
+
+/**
+ * A failed run, with the reason the API gives for it: the run's own and each page's. It used
+ * to say only "The dashboard says why", which left an agent nothing to tell the user.
+ */
 function createScanFailureResponse(
   name: string,
   status: string,
   scanId: string,
   scanRunId: string,
   dashboardLink: string | undefined,
+  details: ScanFailureDetails = { pages: [] },
 ): CallToolResult {
+  const { reason, pages } = details;
+  const listed = pages.slice(0, FAILED_PAGES_LISTED);
+  const why = [
+    reason ? `Why: ${reason}${/[.!?]$/.test(reason) ? "" : "."}` : "",
+    pages.length
+      ? [
+          `${pages.length} ${pages.length === 1 ? "page" : "pages"} could not be scanned:`,
+          ...listed.map((page) => `- ${page.pageUrl}: ${page.reason}`),
+          ...(pages.length > listed.length
+            ? [`- and ${pages.length - listed.length} more.`]
+            : []),
+        ].join("\n")
+      : "",
+  ].filter(Boolean);
   return createErrorResponse(
-    `❌ Accessibility scan "${name}" failed with status: ${status}. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}. The dashboard says why. ${scanDashboardNote(dashboardLink, scanId)}`,
+    [
+      `❌ Accessibility scan "${name}" failed with status: ${status}. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}.`,
+      ...(why.length ? why : ["The dashboard says why."]),
+      scanDashboardNote(dashboardLink, scanId),
+    ].join("\n"),
   );
 }
 
@@ -1599,7 +1640,7 @@ async function runAccessibilityScan(
           content: [
             {
               type: "text" as const,
-              text: `A scan named "${name}" already exists on this account, so this one was started as "${scanName}".\n`,
+              text: `${renameReason(name, startResp.nameChanges ?? ["taken"])}, so this scan was started as "${scanName}".\n`,
             },
             ...result.content,
           ],
@@ -1627,13 +1668,18 @@ async function runAccessibilityScan(
     );
   }
   if (status !== "completed") {
+    const [dashboardLink, details] = await Promise.all([
+      scanner.dashboardLink(scanId),
+      scanner.failureDetails(scanId, scanRunId),
+    ]);
     return withRenameNote(
       createScanFailureResponse(
         scanName,
         status,
         scanId,
         scanRunId,
-        await scanner.dashboardLink(scanId),
+        dashboardLink,
+        details,
       ),
     );
   }

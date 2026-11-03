@@ -15,6 +15,7 @@ const m = vi.hoisted(() => ({
   appReportIssues: vi.fn(),
   parse: vi.fn(),
   dashboardLink: vi.fn(),
+  failureDetails: vi.fn(async () => ({ pages: [] })),
 }));
 
 vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
@@ -24,6 +25,7 @@ vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
     waitUntilComplete = m.waitUntilComplete;
     runSettings = vi.fn().mockResolvedValue(undefined);
     dashboardLink = m.dashboardLink;
+    failureDetails = m.failureDetails;
   },
   ScanTimeoutError: class extends Error {
     constructor(readonly waitedMs: number) {
@@ -995,6 +997,59 @@ describe("what a web report's answer says about its issues", () => {
     expect(body).toContain("scan-42");
     expect(body).toContain("run-7");
     expect(body).not.toContain("scan-details");
+    // With no reason from the API, the dashboard is still where to look.
+    expect(body).toContain("The dashboard says why.");
+  });
+
+  // A failed run used to say only "The dashboard says why", which left an agent nothing to
+  // tell the user. The run's reason and each page's now come with it.
+  it("says why a scan failed, for the run and for each page", async () => {
+    m.waitUntilComplete.mockResolvedValue("failed");
+    m.dashboardLink.mockResolvedValue(undefined);
+    m.failureDetails.mockResolvedValueOnce({
+      reason: "The requested page is not reachable. Please ensure the domain is accessible",
+      pages: [
+        { pageUrl: "https://site.example/", status: "failure", reason: "[HTTP 403] Forbidden" },
+        { pageUrl: "https://site.example/old", status: "redirect", reason: "Redirected; redirected to https://site.example/new" },
+      ],
+    });
+
+    const result = await handlers.startAccessibilityScan(
+      { name: "Home page", pageURL: "https://site.example" },
+      CONTEXT,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(m.failureDetails).toHaveBeenCalledWith("scan-42", "run-7");
+    const body = text(result);
+    expect(body).toContain(
+      "Why: The requested page is not reachable. Please ensure the domain is accessible.",
+    );
+    expect(body).toContain("2 pages could not be scanned:\n- https://site.example/: [HTTP 403] Forbidden\n- https://site.example/old: Redirected; redirected to https://site.example/new");
+    expect(body).not.toContain("The dashboard says why");
+  });
+
+  it("lists at most 10 failed pages and counts the rest", async () => {
+    m.waitUntilComplete.mockResolvedValue("failed");
+    m.failureDetails.mockResolvedValueOnce({
+      pages: Array.from({ length: 13 }, (_, i) => ({
+        pageUrl: `https://site.example/${i}`,
+        status: "failure",
+        reason: "Failed to start the test",
+      })),
+    });
+
+    const body = text(
+      await handlers.startAccessibilityScan(
+        { name: "Home page", pageURL: "https://site.example" },
+        CONTEXT,
+      ),
+    );
+
+    expect(body).toContain("13 pages could not be scanned:");
+    expect(body).toContain("- https://site.example/9: Failed to start the test");
+    expect(body).not.toContain("https://site.example/10:");
+    expect(body).toContain("- and 3 more.");
   });
 
   // The wait ran out, not the scan. This used to read "Failed to start accessibility scan"

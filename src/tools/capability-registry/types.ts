@@ -86,6 +86,17 @@ export interface WireParam extends WireConstraints {
   values?: unknown[];
   example?: unknown;
   description?: string;
+  /**
+   * Other names a caller may send for this parameter, taken as this one.
+   *
+   * FORGIVENESS, NOT VOCABULARY: the contract still publishes one name, and these are
+   * withheld from it. They exist for the names an agent reaches for from the wider
+   * ecosystem — `selector` and `strategy` for WebDriver's `value` and `using`, `attribute`
+   * for the attribute's `name` — where a refusal teaches nothing the caller could not
+   * have been forgiven. Spelling variants (camelCase, kebab-case) need no alias; bind
+   * folds those itself.
+   */
+  aliases?: string[];
   /** Field names/types one level inside an array item or nested object. */
   fields?: WireField[];
   /**

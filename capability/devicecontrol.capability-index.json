@@ -751,14 +751,20 @@
        "partial link text",
        "tag name"
       ],
-      "example": "css selector"
+      "example": "css selector",
+      "aliases": [
+       "strategy"
+      ]
      },
      {
       "name": "value",
       "type": "string",
       "required": true,
       "description": "The selector itself, interpreted according to using.",
-      "example": "#add-to-cart"
+      "example": "#add-to-cart",
+      "aliases": [
+       "selector"
+      ]
      }
     ],
     "returns": [
@@ -808,14 +814,20 @@
        "partial link text",
        "tag name"
       ],
-      "example": "css selector"
+      "example": "css selector",
+      "aliases": [
+       "strategy"
+      ]
      },
      {
       "name": "value",
       "type": "string",
       "required": true,
       "description": "The selector itself, interpreted according to using.",
-      "example": ".product-card"
+      "example": ".product-card",
+      "aliases": [
+       "selector"
+      ]
      }
     ],
     "returns": [
@@ -1105,7 +1117,10 @@
       "type": "string",
       "required": true,
       "description": "The attribute to read.",
-      "example": "href"
+      "example": "href",
+      "aliases": [
+       "attribute"
+      ]
      }
     ],
     "returns": [

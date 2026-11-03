@@ -387,14 +387,20 @@
        "-ios predicate string",
        "-ios class chain"
       ],
-      "example": "accessibility id"
+      "example": "accessibility id",
+      "aliases": [
+       "strategy"
+      ]
      },
      {
       "name": "value",
       "type": "string",
       "required": true,
       "description": "The selector itself, interpreted according to using.",
-      "example": "cart-button"
+      "example": "cart-button",
+      "aliases": [
+       "selector"
+      ]
      }
     ],
     "returns": [
@@ -3052,14 +3058,20 @@
        "-ios predicate string",
        "-ios class chain"
       ],
-      "example": "accessibility id"
+      "example": "accessibility id",
+      "aliases": [
+       "strategy"
+      ]
      },
      {
       "name": "value",
       "type": "string",
       "required": true,
       "description": "The selector itself, interpreted according to using.",
-      "example": "cart-button"
+      "example": "cart-button",
+      "aliases": [
+       "selector"
+      ]
      }
     ],
     "returns": [
@@ -3204,7 +3216,10 @@
       "type": "string",
       "required": true,
       "description": "The attribute to read, as named in the UI tree.",
-      "example": "content-desc"
+      "example": "content-desc",
+      "aliases": [
+       "attribute"
+      ]
      }
     ],
     "returns": [

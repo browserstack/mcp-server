@@ -2068,6 +2068,9 @@
       "name": "args",
       "type": "array",
       "required": true,
+      "values": [
+       []
+      ],
       "description": "Always empty.",
       "example": []
      }
@@ -2753,6 +2756,9 @@
       "name": "args",
       "type": "array",
       "required": true,
+      "values": [
+       []
+      ],
       "description": "Always empty.",
       "example": []
      }
@@ -2808,6 +2814,9 @@
       "name": "args",
       "type": "array",
       "required": true,
+      "values": [
+       []
+      ],
       "description": "Always empty.",
       "example": []
      }
@@ -2863,6 +2872,9 @@
       "name": "args",
       "type": "array",
       "required": true,
+      "values": [
+       []
+      ],
       "description": "Always empty.",
       "example": []
      }

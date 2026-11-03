@@ -297,7 +297,14 @@ function coerceType(
       throw new InvocationError(`'${label}' must be an object`);
     }
     if (expected === "array" && !Array.isArray(value)) {
-      throw new InvocationError(`'${label}' must be a list`);
+      // A SINGLE ITEM IS A LIST OF ONE. `args: "bottom"` and `args: {appId: …}` were
+      // refused as "must be a list" five times a week by agents who had the value right
+      // and the brackets wrong, and the brackets carry no information the server lacks.
+      // `null` and `undefined` stay refused: wrapping them would send `[null]`, which is a
+      // list with the wrong content rather than a list of one.
+      if (value === null || value === undefined)
+        throw new InvocationError(`'${label}' must be a list`);
+      return [value];
     }
     return value;
   }
@@ -396,6 +403,50 @@ function coerceType(
   return text;
 }
 
+/**
+ * The one value a required parameter may take, when the contract allows exactly one.
+ *
+ * THE SERVER SUPPLIES IT. Fourteen device-control capabilities are `execute/sync` with
+ * `script` pinned to a single command — `mobile: activateApp`, a 300-character scroll
+ * snippet — and the caller's only decision is `args`. Asking the caller to transcribe the
+ * script anyway produced 98 refusals in a fortnight: left out, paraphrased, or copied with
+ * one semicolon wrong. None of those calls carried information the server did not have.
+ *
+ * So a fixed parameter is filled when absent and OVERWRITTEN when present: the published
+ * value is the only one that can run, and a refusal that quotes the whole snippet back is
+ * just a slower way of sending it. `describeCapability` withholds these parameters
+ * entirely, which is why a caller never knows to send them (see `withoutFixed`).
+ *
+ * Optional single-value parameters are not fixed. `real_mobile: true` is a toggle whose
+ * presence is the request; filling it would turn every desktop session into a device one.
+ */
+export function fixedValue(param: WireParam): unknown {
+  return param.required && param.values?.length === 1
+    ? param.values[0]
+    : undefined;
+}
+
+function isFixed(param: WireParam): boolean {
+  return fixedValue(param) !== undefined;
+}
+
+/**
+ * The capability's parameter groups with every fixed parameter removed, for the contract a
+ * caller reads. Every group is set, so spreading the result over the capability replaces
+ * each one; a group left empty is set undefined rather than published as `[]`.
+ */
+export function withoutFixed(
+  capability: Capability,
+): Pick<Capability, "path_params" | "query" | "body"> {
+  const view: Pick<Capability, "path_params" | "query" | "body"> = {};
+  for (const { group, declared } of GROUPS) {
+    const params = capability[declared] as WireParam[] | undefined;
+    const shown = (params ?? []).filter((param) => !isFixed(param));
+    view[group] = shown.length > 0 ? shown : undefined;
+  }
+  return view;
+}
+
 /** Place a value at a JSON-pointer-ish path, creating the objects on the way. */
 function place(
   root: Record<string, unknown>,
@@ -438,19 +489,29 @@ export function bind(
   let path = capability.path;
   const query: Record<string, unknown> = {};
   const body: Record<string, unknown> = {};
+  // What each group holds once the server has added its own fixed values: the loop binds
+  // from this, and the required check below reads it, so a fixed parameter is never
+  // reported missing and never has to be sent.
+  const given: Record<keyof GroupedArguments, Record<string, unknown>> = {
+    path_params: {},
+    query: {},
+    body: {},
+  };
 
   for (const { group, declared } of GROUPS) {
-    const supplied = args[group] || {};
-    if (
-      typeof supplied !== "object" ||
-      supplied === null ||
-      Array.isArray(supplied)
-    ) {
+    const sent = args[group] || {};
+    if (typeof sent !== "object" || sent === null || Array.isArray(sent)) {
       throw new InvocationError(`${group} must be an object of name -> value`);
     }
     const params = (capability[declared] as WireParam[] | undefined) || [];
     const byName = new Map(params.map((param) => [param.name, param]));
     const keyed = keyedParam(group, params);
+    const supplied: Record<string, unknown> = { ...sent };
+    for (const param of params) {
+      const fixed = fixedValue(param);
+      if (fixed !== undefined) supplied[param.name] = fixed;
+    }
+    given[group] = supplied;
 
     // Unknown arguments are an error rather than being dropped: silently ignoring a
     // misspelled filter would return a larger result set that looks like a correct answer.
@@ -527,7 +588,7 @@ export function bind(
   const missing: string[] = [];
   for (const { group, declared } of GROUPS) {
     if (group === "query") continue;
-    const supplied = args[group] || {};
+    const supplied = given[group];
     const params = (capability[declared] as WireParam[] | undefined) || [];
     const keyed = keyedParam(group, params);
     const declaredNames = new Set(params.map((param) => param.name));

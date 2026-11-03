@@ -25,7 +25,7 @@ import { z } from "zod";
 import logger from "../../logger.js";
 import { MCPEventExtras, trackMCP } from "../../lib/instrumentation.js";
 import { BrowserStackConfig } from "../../lib/types.js";
-import { GroupedArguments } from "./bind.js";
+import { GroupedArguments, withoutFixed } from "./bind.js";
 import { indexPaths, isEnabled, resolveBaseUrl } from "./config.js";
 import { redact } from "./redact.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
@@ -1095,6 +1095,11 @@ export function addCapabilityRegistryTools(
           // product is in that state today.
           ...(capability.name ? {} : { method, path }),
           ...contract,
+          // A FIXED PARAMETER IS NOT THE CALLER'S TO SEND. Where the contract allows a
+          // required parameter exactly one value, bind fills it in, so the view drops it:
+          // a caller who never sees `script` cannot leave it out or paraphrase it, which
+          // were the two commonest refusals on the device-control surface.
+          ...withoutFixed(capability),
           ...(responses ? { responses } : {}),
         });
       } catch (error) {

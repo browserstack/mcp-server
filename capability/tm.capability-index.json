@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "1.46",
-  "build_id": "2c898682_2026-11-02T06:31:39Z",
+  "build_id": "27c8c46c_2026-11-03T05:35:05Z",
   "tm": {
     "routing_terms": [
       "team",
@@ -8789,7 +8789,7 @@
             "name": "owner",
             "type": "integer",
             "example": 2,
-            "description": "Run owner as a TM user id (a BrowserStack user id is also accepted and resolved). An id that matches nobody in the group is silently treated as unassigned — the run's owner is cleared rather than the call failing.",
+            "description": "Run owner as a TM user id (the TM user's own id, not a BrowserStack user id). An id that matches nobody in the group is silently treated as unassigned — the run's owner is cleared rather than the call failing.",
             "json_path": "/test_run/owner"
           },
           {
@@ -51302,6 +51302,6 @@
         ]
       }
     },
-    "version": "1.40"
+    "version": "1.41"
   }
 }

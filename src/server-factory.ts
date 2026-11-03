@@ -26,10 +26,8 @@ import {
   bindAccountRegion,
   instrumentToolLatency,
 } from "./lib/tool-latency.js";
-import { accountRegion } from "./lib/account-region.js";
-import { withAccountRegion } from "./lib/region-context.js";
 import { nodeUpgradeNotice } from "./lib/node-version-notice.js";
-import { FEEDBACK_INSTRUCTION, feedbackListed } from "./lib/feedback-hint.js";
+import { FEEDBACK_INSTRUCTION } from "./lib/feedback-hint.js";
 import addFeedbackTools from "./tools/feedback.js";
 
 /**
@@ -39,18 +37,6 @@ import addFeedbackTools from "./tools/feedback.js";
 export class BrowserStackMcpServer {
   public server: McpServer;
   public tools: Record<string, RegisteredTool> = {};
-
-  /**
-   * Looks up the account's region first, so the tool list and instructions match it.
-   * The constructor alone still routes each call by region, but lists tools as for a
-   * US account.
-   */
-  static async create(
-    config: BrowserStackConfig,
-  ): Promise<BrowserStackMcpServer> {
-    const account = await accountRegion(config);
-    return withAccountRegion(account, () => new BrowserStackMcpServer(config));
-  }
 
   constructor(private config: BrowserStackConfig) {
     logger.info(
@@ -64,10 +50,7 @@ export class BrowserStackMcpServer {
         version: packageJson.version,
       },
       {
-        instructions: [
-          nodeUpgradeNotice(),
-          feedbackListed() ? FEEDBACK_INSTRUCTION : undefined,
-        ]
+        instructions: [nodeUpgradeNotice(), FEEDBACK_INSTRUCTION]
           .filter(Boolean)
           .join("\n"),
       },
@@ -102,7 +85,7 @@ export class BrowserStackMcpServer {
       // nothing (and logs why) when the artifact is absent, so a packaging problem cannot
       // take the other products' tools down with it.
       addCapabilityRegistryTools,
-      ...(feedbackListed() ? [addFeedbackTools] : []),
+      addFeedbackTools,
     ];
 
     toolAdders.forEach((adder) => {
@@ -120,7 +103,7 @@ export class BrowserStackMcpServer {
       () => this.server.server.getClientVersion() ?? {},
       this.config,
     );
-    // Outermost, so telemetry and error hints also see the account's region.
+    // Outermost, so every handler runs in the account's region.
     bindAccountRegion(this.tools, this.config);
   }
 

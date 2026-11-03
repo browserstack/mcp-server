@@ -132,8 +132,8 @@ async function lookUp(config: BrowserStackConfig): Promise<Answer | null> {
 /**
  * The account's region, looked up once per account and refreshed after REGION_TTL_MS
  * (PROBED_TTL_MS when it was found by probing).
- * Returned directly once known so callers that cannot wait (telemetry) stay synchronous;
- * undefined without credentials. When auth can't answer, the account's region is found by
+ * Returned directly once known, so a known region costs a call no wait; undefined without
+ * credentials. When auth can't answer, the account's region is found by
  * probing the Test Management hosts. A refresh keeps answering the last known region, and
  * keeps it if the refresh fails. With no region known, a failure answers "unknown" for
  * RETRY_AFTER_MS, and the next call after that looks up again.

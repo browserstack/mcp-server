@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import logger from "../logger.js";
-import { apiClient } from "./apiClient.js";
 import { BrowserStackConfig } from "./types.js";
 import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
 import { AccountRegion, GRR_REGIONS, GrrRegion } from "./region-context.js";
@@ -12,22 +11,11 @@ const LOOKUP_TIMEOUT_MS = 5_000;
 export const RETRY_AFTER_MS = 5_000;
 /** How long a looked-up region is reused before it is looked up again. */
 export const REGION_TTL_MS = 60 * 60_000;
-/** How long a region found by probing is reused, so BrowserStack auth is asked again soon. */
-export const PROBED_TTL_MS = 5 * 60_000;
-
-// Tried when BrowserStack auth can't answer: the first host that accepts the account's
-// credentials is its region. Regional hosts first, so a GRR account is found there.
-const PROBE_HOSTS: ReadonlyArray<[GrrRegion, string]> = [
-  ["eu", "https://test-management-eu.browserstack.com"],
-  ["in", "https://test-management-in.browserstack.com"],
-  ["us", "https://test-management.browserstack.com"],
-];
 const MAX_ENTRIES = 1_000;
 
 interface Lookup {
   settled?: AccountRegion;
   settledAt?: number;
-  ttl?: number;
   pending?: Promise<AccountRegion>;
   failedAt?: number;
 }
@@ -65,10 +53,8 @@ export function regionFromToken(token: string): AccountRegion {
     : "unknown";
 }
 
-/** The account's region from BrowserStack auth, or null when auth could not answer. */
-async function fromToken(
-  config: BrowserStackConfig,
-): Promise<AccountRegion | null> {
+/** The account's region from BrowserStack auth, or null when auth names none we know. */
+async function lookUp(config: BrowserStackConfig): Promise<GrrRegion | null> {
   try {
     const token = await mintCentralToken({
       url: AUTH_TOKEN_URL,
@@ -81,7 +67,8 @@ async function fromToken(
       refreshSkewMs: 0,
       cacheEnabled: false,
     });
-    return regionFromToken(token);
+    const region = regionFromToken(token);
+    return region === "unknown" ? null : region;
   } catch (error) {
     logger.warn(
       `Could not look up the account's region: ${(error as Error)?.message}`,
@@ -90,52 +77,12 @@ async function fromToken(
   }
 }
 
-/** The region whose Test Management host accepts the account, or null when none does. */
-async function probe(config: BrowserStackConfig): Promise<GrrRegion | null> {
-  const authorization =
-    "Basic " +
-    Buffer.from(
-      `${config["browserstack-username"]}:${config["browserstack-access-key"]}`,
-    ).toString("base64");
-  for (const [region, host] of PROBE_HOSTS) {
-    try {
-      const res = await apiClient.get({
-        url: `${host}/api/v2/projects/`,
-        headers: { Authorization: authorization },
-        timeout: LOOKUP_TIMEOUT_MS,
-        raise_error: false,
-      });
-      if (res.ok) return region;
-    } catch (error) {
-      logger.debug(`Region probe failed for ${host}: ${error}`);
-    }
-  }
-  return null;
-}
-
-interface Answer {
-  region: AccountRegion;
-  ttl: number;
-}
-
-/** BrowserStack auth's answer, else a probe's; null when neither names a known region. */
-async function lookUp(config: BrowserStackConfig): Promise<Answer | null> {
-  const region = await fromToken(config);
-  if (region !== null && region !== "unknown") {
-    return { region, ttl: REGION_TTL_MS };
-  }
-  const probed = await probe(config);
-  return probed ? { region: probed, ttl: PROBED_TTL_MS } : null;
-}
-
 /**
- * The account's region, looked up once per account and refreshed after REGION_TTL_MS
- * (PROBED_TTL_MS when it was found by probing).
+ * The account's region, looked up once per account and refreshed after REGION_TTL_MS.
  * Returned directly once known, so a known region costs a call no wait; undefined without
- * credentials. When auth can't answer, the account's region is found by
- * probing the Test Management hosts. A refresh keeps answering the last known region, and
- * keeps it if the refresh fails. With no region known, a failure answers "unknown" for
- * RETRY_AFTER_MS, and the next call after that looks up again.
+ * credentials. A refresh keeps answering the last known region, and keeps it if the
+ * refresh fails. With no region known, a failure answers "unknown" for RETRY_AFTER_MS,
+ * and the next call after that looks up again.
  */
 export function accountRegion(
   config: BrowserStackConfig | undefined,
@@ -149,7 +96,7 @@ export function accountRegion(
   const now = Date.now();
   const key = keyFor(config);
   const lookup = lookups.get(key);
-  if (lookup?.settled && now - lookup.settledAt! < lookup.ttl!) {
+  if (lookup?.settled && now - lookup.settledAt! < REGION_TTL_MS) {
     return lookup.settled;
   }
   if (lookup?.pending) return lookup.settled ?? lookup.pending;
@@ -163,19 +110,17 @@ export function accountRegion(
   const entry: Lookup = {
     settled: lookup?.settled,
     settledAt: lookup?.settledAt,
-    ttl: lookup?.ttl,
   };
-  entry.pending = lookUp(config).then((answer) => {
+  entry.pending = lookUp(config).then((region) => {
     entry.pending = undefined;
-    if (answer === null) {
+    if (region === null) {
       entry.failedAt = Date.now();
       return entry.settled ?? "unknown";
     }
-    entry.settled = answer.region;
+    entry.settled = region;
     entry.settledAt = Date.now();
-    entry.ttl = answer.ttl;
     entry.failedAt = undefined;
-    return answer.region;
+    return region;
   });
   remember(key, entry);
   return entry.settled ?? entry.pending;

@@ -224,3 +224,57 @@ describe("the shipped indexes", () => {
     }
   });
 });
+
+describe("interactive debugging on a browser session", () => {
+  // A customer agent asked to "let me watch and interact" guessed the raw capability name
+  // `interactiveDebugging` on the web create_session, was refused twice, and then told the
+  // user the session would be "view-only". The mobile contract declared the field; the web
+  // one did not, although Automate accepts it on a browser session. Now both declare it.
+  const load = (product: string) =>
+    JSON.parse(
+      readFileSync(
+        resolve(__dirname, `../../capability/${product}.capability-index.json`),
+        "utf8",
+      ),
+    )[product];
+  const create = (product: string) =>
+    load(product).capabilities.find(
+      (c: { name: string }) => c.name === "create_session",
+    );
+
+  it("is declared on both products, at the same wire position", () => {
+    for (const product of ["devicecontrol", "mobiledevicecontrol"]) {
+      const param = create(product).body.find(
+        (p: { name: string }) => p.name === "interactive_debugging",
+      );
+      expect(param, product).toMatchObject({
+        type: "boolean",
+        json_path:
+          "/capabilities/alwaysMatch/bstack:options/interactiveDebugging",
+      });
+    }
+  });
+
+  it("binds under its own name and under the raw capability name", () => {
+    for (const sent of [
+      { interactive_debugging: true },
+      { interactiveDebugging: true },
+    ]) {
+      const bound = bind(create("devicecontrol"), {
+        body: {
+          browser_name: "chrome",
+          os: "Windows",
+          os_version: "11",
+          ...sent,
+        },
+      });
+      const options = (bound.body as any).capabilities.alwaysMatch[
+        "bstack:options"
+      ];
+      expect(options, JSON.stringify(sent)).toMatchObject({
+        interactiveDebugging: true,
+        os: "Windows",
+      });
+    }
+  });
+});

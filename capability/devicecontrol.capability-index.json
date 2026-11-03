@@ -1289,9 +1289,9 @@
     "path": "/wd/hub/session/{session_id}/screenshot",
     "mode": "read",
     "entity": "browser_session",
-    "intent": "Take a screenshot of the browser's viewport, as a base64 PNG \u2014 use this to see the page as a user would.",
+    "intent": "Take a screenshot of the browser's viewport \u2014 use this to see the page as a user would. The picture comes back as an image attached to the result.",
     "guidance": [
-     "Returned inline as base64 and typically tens of kilobytes, so take one when the picture is needed rather than after every step.",
+     "The image arrives as an attachment on the result, not as text: the base64 in value is replaced by a note. Still take one when the picture is needed rather than after every step.",
      "The VIEWPORT only, not the whole page: anything below the fold needs scrolling into view first with scroll_to_element.",
      "get_title and get_element_property answer most checks far more cheaply than reading an image."
     ],
@@ -1308,7 +1308,7 @@
     ],
     "responses": {
      "200": {
-      "description": "Base64-encoded PNG of the viewport.",
+      "description": "The screenshot, attached to the result as an image; value carries a note in its place.",
       "schema": {
        "$schema": "StringValueResponse"
       }
@@ -1316,6 +1316,10 @@
      "404": {
       "$response": "WebDriverError"
      }
+    },
+    "media": {
+     "mime": "image/png",
+     "json_path": "/value"
     }
    },
    {

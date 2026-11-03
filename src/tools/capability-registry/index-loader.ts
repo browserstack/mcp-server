@@ -8,6 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import appConfig from "../../config.js";
+import { MEDIA_TYPES } from "./media.js";
 import { basename, dirname } from "node:path";
 import {
   Capability,
@@ -184,6 +185,28 @@ function checkFallbacks(product: string, capabilities: Capability[]): void {
             "than the call that triggered it",
         );
     }
+  }
+}
+
+/**
+ * Refuse a `media` declaration the runtime could not honour, at load rather than at the
+ * call: a type the attached block would not actually be (see MEDIA_TYPES), or a path that
+ * is not a JSON pointer and so would never find the image.
+ */
+function checkMedia(product: string, capabilities: Capability[]): void {
+  for (const capability of capabilities) {
+    const media = capability.media;
+    if (!media) continue;
+    if (!(MEDIA_TYPES as readonly string[]).includes(media.mime))
+      throw new IndexError(
+        `${product}.${capability.name}: media.mime '${media.mime}' is not a type the ` +
+          `attached image can be (${MEDIA_TYPES.join(", ")})`,
+      );
+    if (!media.json_path.startsWith("/"))
+      throw new IndexError(
+        `${product}.${capability.name}: media.json_path '${media.json_path}' must be a ` +
+          "JSON pointer, starting with '/'",
+      );
   }
 }
 
@@ -419,6 +442,7 @@ export class CapabilityRegistry {
       this.byName.set(product, names);
       this.withheld.set(product, withheld);
       checkFallbacks(product, bundle.capabilities);
+      checkMedia(product, bundle.capabilities);
       // ALWAYS THE PROCESSED PRODUCT. This used to fall back to the raw bundle when nothing
       // was disabled, which quietly dropped the per-surface guidance (`withSurfaceGuidance`
       // runs on the way into `enabled`) and the reference-only form from search,

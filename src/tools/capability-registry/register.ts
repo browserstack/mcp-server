@@ -50,6 +50,7 @@ import {
   searchCapabilities,
   singular,
   terms,
+  unreadable,
   vocabularyOf,
 } from "./search.js";
 import { Mode, guidanceLines } from "./types.js";
@@ -364,7 +365,11 @@ export function addCapabilityRegistryTools(
       const listingToken = query
         ? signRouting(
             ambiguity.products.length > 1
-              ? { verdict: "clash", terms: ambiguity.terms }
+              ? {
+                  verdict: "clash",
+                  terms: ambiguity.terms,
+                  products: ambiguity.products,
+                }
               : ambiguity.unknown
                 ? { verdict: "blank" }
                 : { verdict: "settled", product: ambiguity.settled },
@@ -680,6 +685,8 @@ export function addCapabilityRegistryTools(
           { product },
         );
       }
+      /** The product was taken on the caller's word, for a quote the index cannot read. */
+      let routingUnverified = false;
       if (!isBrowseQuery(query)) {
         // JUDGE THE USER'S WORDS, NOT THE AGENT'S REWRITE.
         //
@@ -706,10 +713,25 @@ export function addCapabilityRegistryTools(
         // A clash the routing step already reported is only cleared by the user's own
         // words: the token shows the question was put, `user_words` says what came back.
         // Neither works alone — a token on its own is just proof of having been refused.
+        // AN ANSWER THE INDEX CANNOT READ. Its vocabulary is English and so is the
+        // tokenizer, so a user who answered the question in German or Japanese quoted
+        // words that anchor nothing here and was refused for it — the user's own choice
+        // rejected, which is the one outcome a gate that exists to ask the user must not
+        // produce. The token proves the clash was put and names the products it was
+        // between; the quote is in a script the index could never have matched; so the
+        // caller's product is taken at its word, and the row says so, which is what
+        // keeps this path countable. A quote the index CAN read is still judged.
+        const unverifiable =
+          routed?.verdict === "clash" &&
+          (routed.products ?? []).includes(product) &&
+          anchor.products.length === 0 &&
+          unreadable(user_words);
+        routingUnverified = unverifiable;
         const answered =
-          routed?.verdict !== "settled" &&
-          anchor.products.length === 1 &&
-          anchor.products[0] === product;
+          (routed?.verdict !== "settled" &&
+            anchor.products.length === 1 &&
+            anchor.products[0] === product) ||
+          unverifiable;
         // One product anchored, and it is the one being searched: the user settled it.
         // A routing step that already settled on this product counts the same way — it
         // read the user's whole request, which is more than the fragment quoted here.
@@ -753,7 +775,11 @@ export function addCapabilityRegistryTools(
         ) {
           const token = signRouting(
             ambiguity.products.length > 1
-              ? { verdict: "clash", terms: ambiguity.terms }
+              ? {
+                  verdict: "clash",
+                  terms: ambiguity.terms,
+                  products: ambiguity.products,
+                }
               : mismatch
                 ? { verdict: "settled", product: ambiguity.settled }
                 : { verdict: "blank" },
@@ -871,6 +897,7 @@ export function addCapabilityRegistryTools(
         truncated: rest.truncated,
         weak_match: weak,
         coverage: Math.round(rest.coverage * 100) / 100,
+        ...(routingUnverified ? { routing_unverified: true } : {}),
       });
       return ok({
         ...(agentMatches.length

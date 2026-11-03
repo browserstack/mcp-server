@@ -157,6 +157,35 @@ export function isBrowseQuery(query?: string): boolean {
  */
 const BRAND = /\bbrowser\s*stack\b|\bbstack\b/g;
 
+/**
+ * A pasted address names `url` without saying it.
+ *
+ * "open https://example.com on a phone" carries the one word that would settle it, and
+ * the tokenizer throws it away: the scheme is punctuation and `example com` is nobody's
+ * vocabulary. So an address in the request counts as the term `url`, which a product
+ * that drives pages claims and a product that drives installed apps does not.
+ */
+const ADDRESS =
+  /https?:\/\/\S+|\bwww\.\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|dev|app|co|ai|in|uk|de|jp|edu|gov|me|xyz)\b/i;
+
+export function impliedTerms(text: string | undefined): string[] {
+  return text && ADDRESS.test(text) ? ["url"] : [];
+}
+
+/**
+ * Whether the text carries letters the tokenizer cannot read.
+ *
+ * `terms` keeps ASCII letters and digits and nothing else, which is the index's own
+ * alphabet. A sentence in Japanese, or a German word with an umlaut in it, has words the
+ * index could never have matched — so an empty anchor from such a text is not evidence
+ * that nothing was named, only that it was named in a language this file does not speak.
+ */
+export function unreadable(text: string | undefined): boolean {
+  return [...(text ?? "")].some(
+    (ch) => ch.charCodeAt(0) > 127 && /\p{L}/u.test(ch),
+  );
+}
+
 export function terms(text: string | undefined): string[] {
   return [
     ...(text || "")
@@ -609,7 +638,22 @@ const IDENTITY_WEIGHT = 6;
 
 /** Which products a query could plausibly be about, when more than one could. */
 /** Words too common in this domain to settle a product on their own. */
-const GENERIC_ANCHORS = new Set(["test", "tests", "testing"]);
+// `check`, `filter` and `os` joined `test` from the first week of customer traffic: each
+// is an entity alias somewhere (TRA's check_config, TM's filter, TM's configuration) and
+// each is also an everyday word — or, for `os`, the Portuguese article — so on its own it
+// put a product question to users whose request was about something else entirely. A
+// product that wants them to route can still claim the longer phrase (`quality gate`,
+// `saved filter`, `os version`).
+const GENERIC_ANCHORS = new Set([
+  "test",
+  "tests",
+  "testing",
+  "check",
+  "checks",
+  "filter",
+  "filters",
+  "os",
+]);
 
 export interface ProductAmbiguity {
   /** The products that claim the query's words. Empty when the query settles itself. */
@@ -651,7 +695,7 @@ export interface ProductAmbiguity {
  * discarding prose that claims.
  */
 const DISCLAIMS =
-  /\b(?:not|never|neither|nor|unlike|rather than|instead of|except)\b/i;
+  /\b(?:not|never|neither|nor|unlike|rather than|instead of|except|separate product|another product|different product)\b/i;
 
 /** A summary with its disclaiming sentences removed, for the claimant pass only. */
 function claimingSentences(summary: string | undefined): string {
@@ -679,7 +723,7 @@ export function ambiguousProducts(
    */
   const fold = (text: string): string => terms(text).map(singular).join(" ");
 
-  const asked_ = ` ${fold(query || "")} `;
+  const asked_ = ` ${[fold(query || ""), ...impliedTerms(query)].join(" ")} `;
 
   const owners = new Map<string, Set<string>>();
   for (const [product, entries] of Object.entries(vocabularyOf(products))) {
@@ -795,9 +839,30 @@ export function ambiguousProducts(
       because: (decidedBy.get([...decided][0]) ?? []).sort(),
     };
 
-  const claimed = new Set<string>();
+  // EVERY SHARED WORD, CLAIMED BY ONE PRODUCT, IS THAT PRODUCT'S REQUEST. "test my
+  // website on a tablet" has `website` shared with the accessibility products and
+  // `tablet` shared with mobile device control; no single word settles it, and reporting
+  // the union put four products to the user for a request exactly one of them answers.
+  // The product that claims ALL the shared words is the one the sentence is about — and
+  // when several do, the question is between those, not between everyone who claimed any
+  // one word: a product that answers `screenshot` but not `iphone` is not a candidate.
+  // With one shared word this is what it always was: the word's claimants.
+  let common: Set<string> | undefined;
   for (const claimants of shared.values())
-    for (const product of claimants) claimed.add(product);
+    common = common
+      ? new Set([...common].filter((product) => claimants.has(product)))
+      : new Set(claimants);
+  if (common?.size === 1)
+    return {
+      ...none,
+      settled: [...common][0],
+      because: [...shared.keys()].sort(),
+    };
+  const claimed = new Set<string>();
+  if (common?.size) for (const product of common) claimed.add(product);
+  else
+    for (const claimants of shared.values())
+      for (const product of claimants) claimed.add(product);
   return { products: [...claimed].sort(), terms: [...shared.keys()].sort() };
 }
 
@@ -1034,7 +1099,7 @@ export function productAnchors(
   if (terms(text).length === 0) return none;
 
   const fold = (s: string): string => terms(s).map(singular).join(" ");
-  const said = ` ${fold(text || "")} `;
+  const said = ` ${[fold(text || ""), ...impliedTerms(text)].join(" ")} `;
   const found = new Map<string, Set<string>>();
 
   const claim = (product: string, term: string) => {

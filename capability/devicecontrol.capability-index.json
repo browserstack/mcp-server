@@ -33,7 +33,22 @@
    "browser session",
    "cross browser",
    "device control",
-   "browser control"
+   "browser control",
+   "phone",
+   "iphone",
+   "ipad",
+   "tablet",
+   "android",
+   "ios",
+   "mobile",
+   "mobile device",
+   "real device",
+   "page",
+   "web app",
+   "site",
+   "login page",
+   "responsive",
+   "viewport"
   ],
   "base_url": "https://hub.browserstack.com",
   "hosts": {

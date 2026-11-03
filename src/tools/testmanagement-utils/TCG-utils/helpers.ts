@@ -42,7 +42,6 @@ export function createTestCasePayload(
   const pri = tc.priority ?? "Medium";
   const stat = fieldMaps.status["active"];
   const ct = fieldMaps.caseType["functional"];
-  // Generated test cases carry the generator's ID as id / test_case_id.
   const aiTestCaseId = tc.id ?? tc.test_case_id;
   const hasDetails = Array.isArray(tc.steps) && tc.steps.length > 0;
 
@@ -55,8 +54,6 @@ export function createTestCasePayload(
     status: stat,
     case_type: ct,
     automation_status: "not_automated",
-    // Steps were already fetched during generation; only ask for them again
-    // when they are missing.
     fetch_ai_test_case_details: !hasDetails,
     template: "test_case_steps",
     metadata: JSON.stringify({

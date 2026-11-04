@@ -1,7 +1,10 @@
 # BrowserStack MCP Server
 
 <div align="center">
-<img src="assets/browserstack-logo.png" alt="BrowserStack Logo" height="100"> <img src="assets/mcp-logo.png" alt="MCP Server Logo" width="100">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/browserstack-logo-dark.png">
+  <img src="assets/browserstack-logo.png" alt="BrowserStack Logo" height="70">
+</picture> <img src="assets/mcp-logo.png" alt="MCP Server Logo" width="100">
 </div>
 
 

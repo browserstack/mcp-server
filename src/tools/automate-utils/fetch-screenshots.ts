@@ -46,7 +46,7 @@ async function extractScreenshotUrls(
   return parseScreenshotUrls(text);
 }
 
-const LOG_PREFIX = String.raw`^\d{4}-\d{2}-\d{2} \d{1,2}:\d{1,2}:\d{1,2}:\d{1,3} `;
+const LOG_PREFIX = String.raw`^\d{4}-\d{1,2}-\d{1,2} \d{1,2}:\d{1,2}:\d{1,2}:\d{1,3} `;
 const LINE_TYPE_PATTERN = new RegExp(`${LOG_PREFIX}([A-Z_]+) `);
 const SCREENSHOT_REQUEST_PATTERN = new RegExp(
   String.raw`${LOG_PREFIX}REQUEST \[[^\]]+\] GET /session/[^/\s]+/screenshot(\s|$)`,

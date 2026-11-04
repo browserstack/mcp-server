@@ -7,7 +7,7 @@ import {
 } from "../../src/tools/capability-registry/narrow.js";
 import { CapabilityRegistry } from "../../src/tools/capability-registry/index-loader.js";
 import { addCapabilityRegistryTools } from "../../src/tools/capability-registry/register.js";
-import { parseResult } from "../untrusted.js";
+import { readAnswer } from "../../src/tools/capability-registry/answer.js";
 
 // `select` on a single record, and on the device-control lists that lacked it.
 //
@@ -157,7 +157,7 @@ function tools(body: unknown) {
   return handlers;
 }
 
-const text = (result: any) => parseResult(result.content[0].text);
+const text = (result: any) => readAnswer(result);
 
 describe("through the registered tool", () => {
   it("get_session with fields returns the links and says so", async () => {

@@ -7,7 +7,7 @@ import { CapabilityRegistry } from "../../src/tools/capability-registry/index-lo
 import { addCapabilityRegistryTools } from "../../src/tools/capability-registry/register.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseResult } from "../untrusted.js";
+import { readAnswer } from "../../src/tools/capability-registry/answer.js";
 
 // A required parameter that may take exactly one value is the server's to send.
 //
@@ -221,7 +221,7 @@ function tools(seen: unknown[]) {
   return handlers;
 }
 
-const text = (result: any) => parseResult(result.content[0].text);
+const text = (result: any) => readAnswer(result);
 
 describe("through the registered tools", () => {
   it("describeCapability does not publish `script`", async () => {

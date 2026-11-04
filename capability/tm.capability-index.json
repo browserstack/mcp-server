@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "1.46",
-  "build_id": "27c8c46c_2026-11-03T05:35:05Z",
+  "build_id": "69f67856_2026-11-04T06:39:09Z",
   "tm": {
     "routing_terms": [
       "team",
@@ -3771,6 +3771,80 @@
                 "description": "For nested_dropdown children only — the option this one hangs under."
               }
             ]
+          },
+          {
+            "name": "jira_binding",
+            "type": "object",
+            "description": "Optional; for a dataset of a jira_lookup field. Names the Jira field this dataset reads from and is forwarded as given; null or omitted sends no binding. All keys except options_path, search_path, board_id and board_name are mandatory and non-empty; ticket_type_id or a non-empty board_id must be present.",
+            "fields": [
+              {
+                "name": "integration_key",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Key of the Jira integration the lookup reads from."
+              },
+              {
+                "name": "organisation_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira organisation the integration belongs to."
+              },
+              {
+                "name": "project_id",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Jira project the lookup is scoped to."
+              },
+              {
+                "name": "ticket_type_id",
+                "type": "string",
+                "minLength": 1,
+                "description": "Jira ticket (issue) type the lookup is scoped to. Required unless a non-empty board_id is sent."
+              },
+              {
+                "name": "jira_field_key",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Key of the Jira field whose values are offered."
+              },
+              {
+                "name": "jira_field_schema",
+                "type": "string",
+                "required": true,
+                "minLength": 1,
+                "description": "Schema type of that Jira field."
+              },
+              {
+                "name": "options_path",
+                "type": "string",
+                "description": "Optional path used to read the field's options; may be null."
+              },
+              {
+                "name": "search_path",
+                "type": "string",
+                "description": "Optional path used to search the field's options; may be null."
+              },
+              {
+                "name": "is_multi",
+                "type": "boolean",
+                "required": true,
+                "description": "Whether the Jira field accepts several values."
+              },
+              {
+                "name": "board_id",
+                "type": "string",
+                "description": "Optional Jira board id; may be null. A non-empty value satisfies the ticket_type_id-or-board_id requirement."
+              },
+              {
+                "name": "board_name",
+                "type": "string",
+                "description": "Optional Jira board name; may be null."
+              }
+            ]
           }
         ],
         "intent": "Attach another option set and project scope to an existing custom field — the way to give one field different dropdown values in different projects",
@@ -3801,7 +3875,8 @@
           "A project can belong to only one dataset per field. Linking a project that is already on another dataset of the same field fails upstream, and this endpoint does NOT relay the reason — you get 400 {success:false, message:'The API request is invalid or improperly formed'}. Read the field's existing datasets first.",
           "Options are only meaningful for dropdown / multi_dropdown / nested_dropdown fields, but nothing rejects them on other types. Each option needs option_value and a non-null is_default; for a multi_dropdown every is_default must be false, and for a dropdown at most one may be true.",
           "The response is the created dataset under `data`; take `data.id` — it is the dataset_id every option and project-mapping call needs.",
-          "This is additive and reversible by deleting the dataset, but deleting it later destroys the values stored against its options."
+          "This is additive and reversible by deleting the dataset, but deleting it later destroys the values stored against its options.",
+          "`jira_binding` belongs on a dataset of a `jira_lookup` field, where each dataset may bind a different Jira field. A binding that omits a mandatory key, or has neither `ticket_type_id` nor a non-empty `board_id`, does not match the contract."
         ],
         "returns": [
           "success",
@@ -3845,7 +3920,7 @@
               "nested_dropdown",
               "jira_lookup"
             ],
-            "description": "Data type. Use THIS vocabulary — the legacy `field_*` spellings that the project form-fields read returns (field_dropdown, field_string, …) are rejected here. `nested_dropdown` is valid only for TestCase and `url` is not valid for TestCaseStep. `jira_lookup` needs `jira_binding`, is not valid for TestCaseStep or BuildCustomFields, and is refused unless the workspace has Jira lookup fields enabled."
+            "description": "Data type. Use THIS vocabulary — the legacy `field_*` spellings that the project form-fields read returns (field_dropdown, field_string, …) are rejected here. `nested_dropdown` is valid only for TestCase and `url` is not valid for TestCaseStep. `jira_lookup` needs `datasets[].jira_binding`, is not valid for TestCaseStep or BuildCustomFields, and needs Jira lookup fields enabled for the workspace."
           },
           {
             "name": "entity_type",
@@ -3872,7 +3947,7 @@
             "name": "datasets",
             "type": "array",
             "required": true,
-            "description": "REQUIRED for every field type except jira_lookup (which is not checked against it) — omitting it (or sending a non-array) is a 400. Carries the option values and the project scope. An empty array passes validation but leaves the field linked to nothing.",
+            "description": "REQUIRED for every field type. For jira_lookup at least one entry must carry a valid `jira_binding`; for other types omitting it (or sending a non-array) is a 400. Carries the option values and the project scope. An empty array passes validation for other types but leaves the field linked to nothing.",
             "fields": [
               {
                 "name": "linked_projects",
@@ -3898,6 +3973,11 @@
                 "name": "options",
                 "type": "array",
                 "description": "Option values for dropdown-style types. Each needs option_value (non-blank) and a non-null is_default; nested_dropdown entries may carry a `children` array of the same shape. Each option may also carry `colour` (6-digit hex) and `icon` (lowercase letters, digits, hyphens), both optional."
+              },
+              {
+                "name": "jira_binding",
+                "type": "object",
+                "description": "jira_lookup only; optional, may be null. Names the Jira field this dataset reads from; datasets of one field may bind different Jira fields. All keys except options_path, search_path, board_id and board_name are mandatory and non-empty; ticket_type_id or a non-empty board_id must be present. Keys as in the top-level jira_binding."
               }
             ]
           },
@@ -3937,7 +4017,7 @@
           {
             "name": "jira_binding",
             "type": "object",
-            "description": "Required when field_type is `jira_lookup`; omit for every other type. Names the Jira field the lookup reads from. All keys except options_path and search_path are mandatory and non-empty.",
+            "description": "Optional; for jira_lookup, bind per dataset through `datasets[].jira_binding` instead. If supplied it is still forwarded and shape-checked; a malformed value is a 400. All keys except options_path, search_path, board_id and board_name are mandatory and non-empty; ticket_type_id or a non-empty board_id must be present.",
             "fields": [
               {
                 "name": "integration_key",
@@ -3963,9 +4043,8 @@
               {
                 "name": "ticket_type_id",
                 "type": "string",
-                "required": true,
                 "minLength": 1,
-                "description": "Jira ticket (issue) type the lookup is scoped to."
+                "description": "Jira ticket (issue) type the lookup is scoped to. Required unless a non-empty board_id is sent."
               },
               {
                 "name": "jira_field_key",
@@ -3996,6 +4075,16 @@
                 "type": "boolean",
                 "required": true,
                 "description": "Whether the Jira field accepts several values."
+              },
+              {
+                "name": "board_id",
+                "type": "string",
+                "description": "Optional Jira board id; may be null. A non-empty value satisfies the ticket_type_id-or-board_id requirement."
+              },
+              {
+                "name": "board_name",
+                "type": "string",
+                "description": "Optional Jira board name; may be null."
               }
             ]
           }
@@ -4019,7 +4108,7 @@
           }
         },
         "guidance": [
-          "`datasets` is required for EVERY field type except jira_lookup, dropdown or not. The validator only checks it is an array, so `datasets: []` passes — and creates a field linked to no project, invisible everywhere. Send one entry carrying `linked_projects` if you want the field to appear.",
+          "`datasets` is required for EVERY field type, dropdown or not. For types other than jira_lookup the validator only checks it is an array, so `datasets: []` passes — and creates a field linked to no project, invisible everywhere. Send one entry carrying `linked_projects` if you want the field to appear.",
           "`is_required` must be a literal JSON boolean. The string \"true\" fails the check and the whole call comes back 400 {success:false, error:'Invalid Params'} with no indication of which field was wrong — that one error covers field_type, field_name, is_required, place_holder_text, default_value, levels and datasets alike.",
           "`default_value` is read ONLY when field_type is `boolean`; for every other type the handler forces it to null before sending upstream. Setting a default on a string/int/date field through this call is impossible.",
           "field_name is stripped before both the duplicate check and storage, so \" Priority \" is stored as \"Priority\" and collides with the reserved name. Reserved names (Title, Description, Preconditions, Steps, Result, Attachments, State, Owner, Priority, Type of Test Case, Automation Status, Tags, Jira Issues, Asana Issues, Review Status) return 400 'Field with same name already exists. Use a unique name.'; TestPlan and ExploratorySession fields may reuse 'Automation Status' and 'Type of Test Case'.",
@@ -4028,7 +4117,7 @@
           "entity_type `TestCaseStep` is accepted only when the group has step custom fields enabled; otherwise 400 'Step custom fields are not enabled for this group.'. Step fields also cannot be `url` or `nested_dropdown`.",
           "The response echoes only the stored field attributes — no options, no project links. Read the field back, or read the project's form fields, to confirm what the datasets actually produced.",
           "Nothing here is project-scoped: the definition is created for the whole workspace and the datasets decide where it shows up. Name the projects you are about to affect before creating.",
-          "A `jira_lookup` field takes a `jira_binding` instead of options and datasets. Without a valid binding the call is 400 'A valid jira_binding is required for jira_lookup custom fields.', and a workspace without Jira lookup fields enabled gets 400 'Jira Lookup custom fields are not enabled for this group.'.",
+          "A `jira_lookup` field takes its Jira binding per dataset: at least one `datasets` entry must carry a valid `jira_binding`, otherwise 400 'At least one dataset with a valid Jira field is required for jira_lookup custom fields.'. A field-level `jira_binding` is optional. A workspace without Jira lookup fields enabled gets 400 'Jira Lookup custom fields are not enabled for this group.'.",
           "entity_type `BuildCustomFields` defines a test-run field: it can never be mandatory (is_required is stored as false whatever you send), and it has its own reserved names (Name, Title, Description, Owner, State, Tags, Configurations, Test Plan, Attachments, Jira Issues, Asana Issues) in place of the list above."
         ],
         "returns": [
@@ -19675,9 +19764,31 @@
             "description": "Applied only when field_type is `boolean`. For any other type the handler sends null regardless of what you pass, clearing any stored default."
           },
           {
+            "name": "datasets",
+            "type": "array",
+            "description": "Only read when field_type is `jira_lookup`, where it is forwarded upstream and each entry's jira_binding and project links are acted on; for every other field type it is not sent. Datasets of one field may bind different Jira fields.",
+            "fields": [
+              {
+                "name": "jira_binding",
+                "type": "object",
+                "description": "Optional, may be null. Names the Jira field this dataset reads from. All keys except options_path, search_path, board_id and board_name are mandatory and non-empty; ticket_type_id or a non-empty board_id must be present. Keys as in the top-level jira_binding."
+              },
+              {
+                "name": "linked_projects",
+                "type": "array",
+                "description": "Integer project ids to link to the dataset."
+              },
+              {
+                "name": "unlinked_projects",
+                "type": "array",
+                "description": "Integer project ids to unlink from the dataset."
+              }
+            ]
+          },
+          {
             "name": "jira_binding",
             "type": "object",
-            "description": "Only for a `jira_lookup` field. Supplying it re-binds the field, so send the complete binding; omitting it leaves the stored binding unchanged. A malformed binding is 400 'Invalid Params'. All keys except options_path and search_path are mandatory and non-empty.",
+            "description": "Only for a `jira_lookup` field. Supplying it re-binds the field, so send the complete binding; omitting it leaves the stored binding unchanged. A malformed binding is 400 'Invalid Params'. All keys except options_path, search_path, board_id and board_name are mandatory and non-empty; ticket_type_id or a non-empty board_id must be present.",
             "fields": [
               {
                 "name": "integration_key",
@@ -19703,9 +19814,8 @@
               {
                 "name": "ticket_type_id",
                 "type": "string",
-                "required": true,
                 "minLength": 1,
-                "description": "Jira ticket (issue) type the lookup is scoped to."
+                "description": "Jira ticket (issue) type the lookup is scoped to. Required unless a non-empty board_id is sent."
               },
               {
                 "name": "jira_field_key",
@@ -19736,6 +19846,16 @@
                 "type": "boolean",
                 "required": true,
                 "description": "Whether the Jira field accepts several values."
+              },
+              {
+                "name": "board_id",
+                "type": "string",
+                "description": "Optional Jira board id; may be null. A non-empty value satisfies the ticket_type_id-or-board_id requirement."
+              },
+              {
+                "name": "board_name",
+                "type": "string",
+                "description": "Optional Jira board name; may be null."
               }
             ]
           }
@@ -19766,7 +19886,7 @@
           "Omitting place_holder_text sends null and clears the stored hint text. Likewise, for any non-boolean field the handler always sends default_value as null, so a stored default on a string/int/date field does not survive this call. Resend every value you want to keep.",
           "field_type must be sent and must be valid for the entity_type, but this surface does NOT compare it against the stored type — it is forwarded upstream. Send the field's CURRENT type. (Its sibling on the v2 custom-fields surface rejects a changed type outright with 400 'Field type cannot be changed'.)",
           "entity_type is used only to pick the valid field_type list and the reserved-name list; it is never sent upstream, so a field cannot be moved between TestCase / TestResult / TestPlan. Send the field's real entity_type or the validation applies the wrong rules.",
-          "Datasets, options and project links are NOT touched here — this call carries no `datasets` key upstream. Change option values through the dataset option calls and project scope through the dataset project-mapping call.",
+          "For every field type except `jira_lookup`, datasets, options and project links are NOT touched here — no `datasets` key goes upstream; change option values through the dataset option calls and project scope through the dataset project-mapping call. For a `jira_lookup` field, `datasets` is forwarded and per-dataset `jira_binding` and project links are acted on.",
           "Renaming onto a reserved name (Title, Description, Priority, State, Owner, Tags, …) is a 400, except when the field already carries that name — an import-created field keeps its name and stays editable.",
           "There is no version history for a field definition: an overwritten label, placeholder or default cannot be restored. A rename is workspace-wide and lands in every project the field's datasets link to.",
           "Upstream duplicate-name errors come back verbatim; every other upstream failure is masked as 400 {success:false, message:'The API request is invalid or improperly formed'}, and a field id that does not exist comes back as a bare 404 {success:false} with no message.",
@@ -51302,6 +51422,6 @@
         ]
       }
     },
-    "version": "1.41"
+    "version": "1.42"
   }
 }

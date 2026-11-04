@@ -1,8 +1,13 @@
 import { RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ClientInfo, withToolCall } from "./instrumentation.js";
 import { withFeedbackHint } from "./feedback-hint.js";
+import { accountRegion } from "./account-region.js";
+import { withAccountRegion } from "./region-context.js";
+import { assertUsAccount } from "./regional-host.js";
+import { BrowserStackConfig } from "./types.js";
 
 const WRAPPED = Symbol.for("browserstack.mcp.latencyWrapped");
+const REGION_BOUND = Symbol.for("browserstack.mcp.regionBound");
 
 type AnyHandler = (...args: unknown[]) => unknown;
 
@@ -25,5 +30,49 @@ export function instrumentToolLatency(
 
     // Direct assignment: tool.update() would also fire tools/list_changed.
     (tool as { handler: unknown }).handler = wrapped;
+  }
+}
+
+/** Refuses every call to `tools` from an account outside the US: `product` is US-only. */
+export function limitToUsAccounts(
+  tools: Record<string, RegisteredTool>,
+  product: string,
+): void {
+  for (const tool of Object.values(tools)) {
+    const inner = tool.handler as unknown;
+    if (typeof inner !== "function") continue;
+    (tool as { handler: unknown }).handler = (...args: unknown[]) => {
+      try {
+        assertUsAccount(product);
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: (error as Error).message }],
+          isError: true,
+        };
+      }
+      return (inner as AnyHandler)(...args);
+    };
+  }
+}
+
+/** Runs every handler in the account's region, looked up once for `config`. Idempotent. */
+export function bindAccountRegion(
+  tools: Record<string, RegisteredTool>,
+  config: BrowserStackConfig,
+): void {
+  for (const tool of Object.values(tools)) {
+    const inner = tool.handler as unknown;
+    if (typeof inner !== "function") continue;
+    if ((inner as AnyHandler & { [REGION_BOUND]?: true })[REGION_BOUND])
+      continue;
+
+    const bound: AnyHandler & { [REGION_BOUND]?: true } = async (
+      ...args: unknown[]
+    ) => {
+      const account = await accountRegion(config);
+      return withAccountRegion(account, () => (inner as AnyHandler)(...args));
+    };
+    bound[REGION_BOUND] = true;
+    (tool as { handler: unknown }).handler = bound;
   }
 }

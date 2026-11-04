@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 // default host would fail every EU and IN account on every call, so this asserts the
 // registry defers to that resolver rather than to a constant of its own.
 vi.mock("../../src/lib/tm-base-url.js", () => ({
-  getTMBaseURL: vi.fn(async () => "https://test-management-eu.browserstack.com"),
+  getTMBaseURL: vi.fn(
+    async () => "https://test-management-eu.browserstack.com",
+  ),
 }));
 
 const FIXTURE = fileURLToPath(
@@ -36,20 +38,29 @@ describe("base URL resolution", () => {
       return {
         status: 200,
         headers: { get: () => "application/json" },
-        json: async () => ({ projects: [{ id: 1, name: "P" }], info: { count: 1 } }),
+        json: async () => ({
+          projects: [{ id: 1, name: "P" }],
+          info: { count: 1 },
+        }),
         text: async () =>
-          JSON.stringify({ projects: [{ id: 1, name: "P" }], info: { count: 1 } }),
+          JSON.stringify({
+            projects: [{ id: 1, name: "P" }],
+            info: { count: 1 },
+          }),
       };
     });
 
-    const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
+    const { BrowserStackMcpServer } =
+      await import("../../src/server-factory.js");
     const server = new BrowserStackMcpServer(CONFIG);
-    const result: any = await (server.getTools().invokeCapability as any).handler(
-      { method: "GET", path: "/api/v1/projects/basic" }, {} as any,
-    );
+    const result: any = await (
+      server.getTools().invokeCapability as any
+    ).handler({ method: "GET", path: "/api/v1/projects/basic" }, {} as any);
 
     expect(JSON.parse(result.content[0].text).ok).toBe(true);
-    expect(calls[0].startsWith("https://test-management-eu.browserstack.com/")).toBe(true);
+    expect(
+      calls[0].startsWith("https://test-management-eu.browserstack.com/"),
+    ).toBe(true);
   });
 
   it("an explicit override still wins, which is how a non-prod environment is reached", async () => {
@@ -65,18 +76,23 @@ describe("base URL resolution", () => {
       };
     });
 
-    const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
+    const { BrowserStackMcpServer } =
+      await import("../../src/server-factory.js");
     const server = new BrowserStackMcpServer(CONFIG);
     await (server.getTools().invokeCapability as any).handler(
-      { method: "GET", path: "/api/v1/projects/basic" }, {} as any,
+      { method: "GET", path: "/api/v1/projects/basic" },
+      {} as any,
     );
     expect(calls[0].startsWith("https://tm-preprod.example/")).toBe(true);
   });
 
   it("refuses a product whose host is unknown instead of guessing one", async () => {
     // A guessed host fails as a DNS error or a 404 that reads like the caller's problem.
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
-    await expect(resolveBaseUrl("a11y", CONFIG)).rejects.toThrow(/no host is configured/);
+    const { resolveBaseUrl } =
+      await import("../../src/tools/capability-registry/config.js");
+    await expect(resolveBaseUrl("a11y", CONFIG)).rejects.toThrow(
+      /no host is configured/,
+    );
   });
 });
 
@@ -88,13 +104,19 @@ describe("the host declared in the product's own index file", () => {
       await import("../../src/tools/capability-registry/config.js");
     expect(isRegionSharded("a11y")).toBe(false);
     // Trailing slash trimmed, so the caller can author it either way.
-    expect(await resolveBaseUrl("a11y", CONFIG, { base_url: `${DECLARED}/` })).toBe(DECLARED);
+    expect(
+      await resolveBaseUrl("a11y", CONFIG, { base_url: `${DECLARED}/` }),
+    ).toBe(DECLARED);
   });
 
   it("lets config override it", async () => {
-    process.env.CAPABILITY_REGISTRY_BASE_URL_A11Y = "https://a11y-preprod.example";
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
-    expect(await resolveBaseUrl("a11y", CONFIG, { base_url: DECLARED })).toBe("https://a11y-preprod.example");
+    process.env.CAPABILITY_REGISTRY_BASE_URL_A11Y =
+      "https://a11y-preprod.example";
+    const { resolveBaseUrl } =
+      await import("../../src/tools/capability-registry/config.js");
+    expect(await resolveBaseUrl("a11y", CONFIG, { base_url: DECLARED })).toBe(
+      "https://a11y-preprod.example",
+    );
     delete process.env.CAPABILITY_REGISTRY_BASE_URL_A11Y;
   });
 
@@ -105,29 +127,42 @@ describe("the host declared in the product's own index file", () => {
     const { resolveBaseUrl, isRegionSharded } =
       await import("../../src/tools/capability-registry/config.js");
     expect(isRegionSharded("tm")).toBe(true);
-    expect(await resolveBaseUrl("tm", CONFIG, { base_url: DECLARED }))
-      .toBe("https://test-management-eu.browserstack.com");
+    expect(await resolveBaseUrl("tm", CONFIG, { base_url: DECLARED })).toBe(
+      "https://test-management-eu.browserstack.com",
+    );
   });
 
   it("uses it as the fallback when discovery cannot answer", async () => {
     const { getTMBaseURL } = await import("../../src/lib/tm-base-url.js");
-    vi.mocked(getTMBaseURL).mockRejectedValueOnce(new Error("all regions unreachable"));
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
-    expect(await resolveBaseUrl("tm", CONFIG, { base_url: DECLARED })).toBe(DECLARED);
+    vi.mocked(getTMBaseURL).mockRejectedValueOnce(
+      new Error("all regions unreachable"),
+    );
+    const { resolveBaseUrl } =
+      await import("../../src/tools/capability-registry/config.js");
+    expect(await resolveBaseUrl("tm", CONFIG, { base_url: DECLARED })).toBe(
+      DECLARED,
+    );
   });
 
   it("surfaces the discovery failure when there is nothing to fall back to", async () => {
     const { getTMBaseURL } = await import("../../src/lib/tm-base-url.js");
-    vi.mocked(getTMBaseURL).mockRejectedValueOnce(new Error("all regions unreachable"));
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
-    await expect(resolveBaseUrl("tm", CONFIG, undefined)).rejects.toThrow(/all regions unreachable/);
+    vi.mocked(getTMBaseURL).mockRejectedValueOnce(
+      new Error("all regions unreachable"),
+    );
+    const { resolveBaseUrl } =
+      await import("../../src/tools/capability-registry/config.js");
+    await expect(resolveBaseUrl("tm", CONFIG, undefined)).rejects.toThrow(
+      /all regions unreachable/,
+    );
   });
 
   it("discovers when nothing is declared, which is tm's situation today", async () => {
     delete process.env.CAPABILITY_REGISTRY_BASE_URL_TM;
-    const { resolveBaseUrl } = await import("../../src/tools/capability-registry/config.js");
-    expect(await resolveBaseUrl("tm", CONFIG, undefined))
-      .toBe("https://test-management-eu.browserstack.com");
+    const { resolveBaseUrl } =
+      await import("../../src/tools/capability-registry/config.js");
+    expect(await resolveBaseUrl("tm", CONFIG, undefined)).toBe(
+      "https://test-management-eu.browserstack.com",
+    );
   });
 });
 
@@ -135,7 +170,8 @@ describe("multiple environments, the way Atlas defines them", () => {
   const HARNESS_HOST = "https://tm.harness-declared.example";
 
   async function resolver() {
-    return (await import("../../src/tools/capability-registry/config.js")).resolveBaseUrl;
+    return (await import("../../src/tools/capability-registry/config.js"))
+      .resolveBaseUrl;
   }
 
   afterEach(() => {
@@ -146,9 +182,13 @@ describe("multiple environments, the way Atlas defines them", () => {
 
   it("picks this environment's host from a per-env variable", async () => {
     process.env.CAPABILITY_REGISTRY_ENV = "preprod";
-    process.env.CAPABILITY_REGISTRY_BASE_URL_TM_PREPROD = "https://tm-preprod.example/";
-    expect(await (await resolver())("tm", CONFIG, { base_url: HARNESS_HOST }))
-      .toBe("https://tm-preprod.example");
+    process.env.CAPABILITY_REGISTRY_BASE_URL_TM_PREPROD =
+      "https://tm-preprod.example/";
+    expect(
+      await (
+        await resolver()
+      )("tm", CONFIG, { base_url: HARNESS_HOST }),
+    ).toBe("https://tm-preprod.example");
   });
 
   it("picks it from one map, the analogue of harness.extra_environments", async () => {
@@ -156,15 +196,23 @@ describe("multiple environments, the way Atlas defines them", () => {
     process.env.CAPABILITY_REGISTRY_BASE_URLS = JSON.stringify({
       tm: { preprod: "https://tm-preprod.example", prod: "https://tm.example" },
     });
-    expect(await (await resolver())("tm", CONFIG, { base_url: HARNESS_HOST }))
-      .toBe("https://tm-preprod.example");
+    expect(
+      await (
+        await resolver()
+      )("tm", CONFIG, { base_url: HARNESS_HOST }),
+    ).toBe("https://tm-preprod.example");
   });
 
   it("lets the environment-agnostic override win, as Atlas's session seam does", async () => {
     process.env.CAPABILITY_REGISTRY_ENV = "preprod";
     process.env.CAPABILITY_REGISTRY_BASE_URL_TM = "https://seam.example";
-    process.env.CAPABILITY_REGISTRY_BASE_URL_TM_PREPROD = "https://tm-preprod.example";
-    expect(await (await resolver())("tm", CONFIG, { base_url: HARNESS_HOST })).toBe("https://seam.example");
+    process.env.CAPABILITY_REGISTRY_BASE_URL_TM_PREPROD =
+      "https://tm-preprod.example";
+    expect(
+      await (
+        await resolver()
+      )("tm", CONFIG, { base_url: HARNESS_HOST }),
+    ).toBe("https://seam.example");
     delete process.env.CAPABILITY_REGISTRY_BASE_URL_TM;
   });
 
@@ -172,15 +220,17 @@ describe("multiple environments, the way Atlas defines them", () => {
     // Falling through to the harness default here would point a preprod deployment at
     // production, silently — the worst available outcome.
     process.env.CAPABILITY_REGISTRY_ENV = "preprod";
-    await expect((await resolver())("tm", CONFIG, { base_url: HARNESS_HOST }))
-      .rejects.toThrow(/environment 'preprod' has no host/);
+    await expect(
+      (await resolver())("tm", CONFIG, { base_url: HARNESS_HOST }),
+    ).rejects.toThrow(/environment 'preprod' has no host/);
   });
 
   it("refuses a malformed map instead of reading it as 'no override'", async () => {
     process.env.CAPABILITY_REGISTRY_ENV = "preprod";
     process.env.CAPABILITY_REGISTRY_BASE_URLS = "{not json";
-    await expect((await resolver())("tm", CONFIG, { base_url: HARNESS_HOST }))
-      .rejects.toThrow(/not valid JSON/);
+    await expect(
+      (await resolver())("tm", CONFIG, { base_url: HARNESS_HOST }),
+    ).rejects.toThrow(/not valid JSON/);
   });
 
   it("ignores the environment entirely when none is selected", async () => {
@@ -189,14 +239,185 @@ describe("multiple environments, the way Atlas defines them", () => {
     process.env.CAPABILITY_REGISTRY_BASE_URLS = JSON.stringify({
       a11y: { preprod: "https://a11y-preprod.example" },
     });
-    expect(await (await resolver())("a11y", CONFIG, { base_url: HARNESS_HOST })).toBe(HARNESS_HOST);
+    expect(
+      await (
+        await resolver()
+      )("a11y", CONFIG, { base_url: HARNESS_HOST }),
+    ).toBe(HARNESS_HOST);
   });
 
   it("still refuses a named environment with no host for a region-sharded product", async () => {
     // Discovery must NOT rescue a misconfigured environment: it would answer with the
     // account's PRODUCTION region while the deployment believes it is on preprod.
     process.env.CAPABILITY_REGISTRY_ENV = "preprod";
-    await expect((await resolver())("tm", CONFIG, undefined))
-      .rejects.toThrow(/environment 'preprod' has no host/);
+    await expect((await resolver())("tm", CONFIG, undefined)).rejects.toThrow(
+      /environment 'preprod' has no host/,
+    );
+  });
+});
+
+describe("products follow the account's region", () => {
+  const DECLARED = "https://api-observability.browserstack.com";
+
+  // resolveBaseUrl as called inside a tool call for an account in `region`.
+  async function resolveIn(region: string | undefined) {
+    const { resolveBaseUrl } =
+      await import("../../src/tools/capability-registry/config.js");
+    const { withAccountRegion } =
+      await import("../../src/lib/region-context.js");
+    return (...args: Parameters<typeof resolveBaseUrl>) =>
+      withAccountRegion(region as any, () => resolveBaseUrl(...args));
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_TRA;
+  });
+
+  afterEach(() => {
+    delete process.env.CAPABILITY_REGISTRY_BASE_URL_TRA;
+  });
+
+  it("sends an EU account to the EU host, though the index declares the US one", async () => {
+    const resolveBaseUrl = await resolveIn("eu");
+    expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(
+      "https://api-observability-eu.browserstack.com",
+    );
+  });
+
+  it.each([undefined, "us"])(
+    "keeps the US host when the region is %s",
+    async (region) => {
+      const resolveBaseUrl = await resolveIn(region);
+      expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(
+        DECLARED,
+      );
+    },
+  );
+
+  it("refuses a regional product when the region is unknown", async () => {
+    const resolveBaseUrl = await resolveIn("unknown");
+    await expect(
+      resolveBaseUrl("tra", CONFIG, { base_url: DECLARED }),
+    ).rejects.toThrow(/Could not confirm your BrowserStack account's region/);
+  });
+
+  it.each(["eu", "in"])(
+    "refuses load testing for a %s account",
+    async (region) => {
+      const resolveBaseUrl = await resolveIn(region);
+      await expect(
+        resolveBaseUrl("loadtesting", CONFIG, { base_url: DECLARED }),
+      ).rejects.toThrow(
+        /Load Testing isn't available for your BrowserStack account's region/,
+      );
+    },
+  );
+
+  it.each([undefined, "us"])(
+    "keeps load testing on its host when the region is %s",
+    async (region) => {
+      const resolveBaseUrl = await resolveIn(region);
+      expect(
+        await resolveBaseUrl("loadtesting", CONFIG, { base_url: DECLARED }),
+      ).toBe(DECLARED);
+    },
+  );
+
+  it("refuses load testing when the region is unknown", async () => {
+    const resolveBaseUrl = await resolveIn("unknown");
+    await expect(
+      resolveBaseUrl("loadtesting", CONFIG, { base_url: DECLARED }),
+    ).rejects.toThrow(/Could not confirm your BrowserStack account's region/);
+  });
+
+  it("still probes Test Management when the region is unknown", async () => {
+    const resolveBaseUrl = await resolveIn("unknown");
+    expect(await resolveBaseUrl("tm", CONFIG)).toBe(
+      "https://test-management-eu.browserstack.com",
+    );
+  });
+
+  it("sends app_accessibility to its EU host too", async () => {
+    const resolveBaseUrl = await resolveIn("eu");
+    expect(
+      await resolveBaseUrl("app_accessibility", CONFIG, {
+        base_url: "https://api-app-accessibility.browserstack.com",
+      }),
+    ).toBe("https://api-app-accessibility-eu.browserstack.com");
+  });
+
+  it("sends web_accessibility to its regional host", async () => {
+    const resolveBaseUrl = await resolveIn("eu");
+    expect(
+      await resolveBaseUrl("web_accessibility", CONFIG, {
+        base_url: "https://api-accessibility.browserstack.com",
+      }),
+    ).toBe("https://api-accessibility-eu.browserstack.com");
+  });
+
+  const TRA_SOURCE = {
+    base_urls: [
+      DECLARED,
+      "https://api-observability-eu.browserstack.com",
+      "https://api-observability-in.browserstack.com",
+    ],
+    probe_path: "/api/v1/access",
+  };
+
+  it("does not probe the tra base_urls for an EU account", async () => {
+    const resolveBaseUrl = await resolveIn("eu");
+    const transport = vi.fn();
+    expect(
+      await resolveBaseUrl("tra", CONFIG, TRA_SOURCE, transport as any),
+    ).toBe("https://api-observability-eu.browserstack.com");
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("sends tra to the IN host for an IN account without probing", async () => {
+    const resolveBaseUrl = await resolveIn("in");
+    const transport = vi.fn(async () => ({ status: 401 }));
+    expect(
+      await resolveBaseUrl("tra", CONFIG, TRA_SOURCE, transport as any),
+    ).toBe("https://api-observability-in.browserstack.com");
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "devicecontrol",
+      "https://hub.browserstack.com",
+      "https://api.browserstack.com",
+      "https://hub-eu-only.browserstack.com",
+      "https://api-eu-only.browserstack.com",
+    ],
+    [
+      "mobiledevicecontrol",
+      "https://hub-cloud.browserstack.com",
+      "https://api-cloud.browserstack.com",
+      "https://hub-eu-only.browserstack.com",
+      "https://api-eu-only.browserstack.com",
+    ],
+  ])(
+    "routes %s and its api host for an EU account, and keeps the declared hosts otherwise",
+    async (product, hub, api, euHub, euApi) => {
+      const source = { base_url: hub, hosts: { api } };
+      const inEu = await resolveIn("eu");
+      expect(await inEu(product, CONFIG, source)).toBe(euHub);
+      expect(await inEu(product, CONFIG, source, undefined, "api")).toBe(euApi);
+
+      const inUs = await resolveIn("us");
+      expect(await inUs(product, CONFIG, source)).toBe(hub);
+      expect(await inUs(product, CONFIG, source, undefined, "api")).toBe(api);
+    },
+  );
+
+  it("lets an explicit override win over the region", async () => {
+    process.env.CAPABILITY_REGISTRY_BASE_URL_TRA =
+      "https://tra-preprod.example";
+    const resolveBaseUrl = await resolveIn("eu");
+    expect(await resolveBaseUrl("tra", CONFIG, { base_url: DECLARED })).toBe(
+      "https://tra-preprod.example",
+    );
   });
 });

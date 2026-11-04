@@ -11,6 +11,7 @@ import {
 import { SessionType } from "../../lib/constants.js";
 import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 export { MAX_APP_BUILD_LIST_PAGES } from "./app-report-fetcher.js";
 
@@ -37,7 +38,7 @@ export type IssueSource =
   | { kind: "appBuild"; buildId: string }
   | { kind: "appReport"; reportId: string };
 
-const API_BASE = "https://api-accessibility.browserstack.com/api";
+const apiBase = () => `${getRegionalHost("accessibilityApi")}/api`;
 
 /**
  * How far a report link's scan is searched for. The scan list has no name or link filter and
@@ -157,21 +158,21 @@ function exportUrls(source: IssueSource): {
   const q = encodeURIComponent;
   switch (source.kind) {
     case "scan": {
-      const route = `${API_BASE}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/issues`;
+      const route = `${apiBase()}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/issues`;
       return {
         start: `${route}?scan_run_id=${q(source.scanRunId)}`,
         poll: (taskId) => `${route}?task_id=${q(taskId)}`,
       };
     }
     case "build": {
-      const route = `${API_BASE}/automated-tests/v1/builds/issues`;
+      const route = `${apiBase()}/automated-tests/v1/builds/issues`;
       return {
         start: `${route}?buildUuid=${q(source.buildId)}`,
         poll: (taskId) => `${route}?taskId=${q(taskId)}`,
       };
     }
     case "workflow": {
-      const route = `${API_BASE}/workflow-analyzer/v1/reports/issues`;
+      const route = `${apiBase()}/workflow-analyzer/v1/reports/issues`;
       return {
         start: `${route}?reportId=${q(source.reportId)}`,
         poll: (taskId) => `${route}?taskId=${q(taskId)}`,
@@ -292,7 +293,7 @@ export class AccessibilityReportFetcher {
     // Only a 404 means the web API does not know the id: any other failure is not an
     // answer about the build, and asking the app API next would hide it.
     const resp = await apiClient.get({
-      url: `${API_BASE}/automated-tests/v1/builds/${encodeURIComponent(source.buildId)}`,
+      url: `${apiBase()}/automated-tests/v1/builds/${encodeURIComponent(source.buildId)}`,
       headers: this.authHeaders(),
       raise_error: false,
     });
@@ -394,7 +395,7 @@ export class AccessibilityReportFetcher {
       );
     }
     const build = await apiClient.get({
-      url: `${API_BASE}/automated-tests/v1/builds/${encodeURIComponent(buildId)}`,
+      url: `${apiBase()}/automated-tests/v1/builds/${encodeURIComponent(buildId)}`,
       headers: this.authHeaders(),
       raise_error: false,
     });
@@ -420,7 +421,7 @@ export class AccessibilityReportFetcher {
     let sameName: number | undefined;
     for (let page = 0; page < MAX_SCAN_LIST_PAGES; page++) {
       const resp = await apiClient.get({
-        url: `${API_BASE}/website-scanner/v1/scans${
+        url: `${apiBase()}/website-scanner/v1/scans${
           nextPage ? `?nextPage=${encodeURIComponent(nextPage)}` : ""
         }`,
         headers: this.authHeaders(),
@@ -542,7 +543,7 @@ export class AccessibilityReportFetcher {
   ): Promise<ScanRun | undefined> {
     // The runs come a page at a time; the one before may be on a later page.
     const runs: ScanRun[] = [];
-    const base = `${API_BASE}/website-scanner/v1/scans/${encodeURIComponent(scanId)}/scan_runs`;
+    const base = `${apiBase()}/website-scanner/v1/scans/${encodeURIComponent(scanId)}/scan_runs`;
     let nextPage: string | undefined;
     for (let page = 0; page < MAX_SCAN_RUN_PAGES; page++) {
       const data = await this.getData(
@@ -567,7 +568,7 @@ export class AccessibilityReportFetcher {
     const q = encodeURIComponent;
     const changes = (
       await this.getData(
-        `${API_BASE}/website-scanner/v1/scans/${q(scanId)}/scan_runs/${q(scanRunId)}`,
+        `${apiBase()}/website-scanner/v1/scans/${q(scanId)}/scan_runs/${q(scanRunId)}`,
       )
     )?.changesSinceLastRun;
     return changes ?? undefined;
@@ -587,13 +588,13 @@ export class AccessibilityReportFetcher {
         case "scan":
           return (
             await this.getData(
-              `${API_BASE}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/${q(source.scanRunId)}/status`,
+              `${apiBase()}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/${q(source.scanRunId)}/status`,
             )
           )?.status;
         case "workflow":
           return (
             await this.getData(
-              `${API_BASE}/workflow-analyzer/v1/reports/${q(source.reportId)}`,
+              `${apiBase()}/workflow-analyzer/v1/reports/${q(source.reportId)}`,
             )
           )?.summary?.status;
         case "build":
@@ -616,14 +617,14 @@ export class AccessibilityReportFetcher {
       this.webBuildProjects.get(buildId) ??
       (
         await this.getData(
-          `${API_BASE}/automated-tests/v1/builds/${q(buildId)}`,
+          `${apiBase()}/automated-tests/v1/builds/${q(buildId)}`,
         )
       )?.projectName;
     if (!project) return undefined;
     let nextPage: string | undefined;
     for (let page = 0; page < MAX_BUILD_LIST_PAGES; page++) {
       const data = await this.getData(
-        `${API_BASE}/automated-tests/v1/builds?project_name=${q(project)}&limit=100${
+        `${apiBase()}/automated-tests/v1/builds?project_name=${q(project)}&limit=100${
           nextPage ? `&next_page=${q(nextPage)}` : ""
         }`,
       );

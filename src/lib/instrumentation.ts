@@ -7,6 +7,7 @@ const packageJson = require("../../package.json");
 import { apiClient } from "./apiClient.js";
 import globalConfig from "../config.js";
 import { redact } from "../tools/capability-registry/redact.js";
+import { isKnownProduct } from "../tools/capability-registry/config.js";
 import { accountRegion } from "./account-region.js";
 import {
   AccountRegion,
@@ -82,7 +83,6 @@ const USAGE_FIELDS = new Set([
   "error_type",
   "refusal_reason",
   "product",
-  "entity",
   "capability",
   "capability_method",
   "capability_path",
@@ -103,7 +103,11 @@ function forDataRegion(
 ): MCPEventPayload["event_properties"] {
   if (!isRestrictedRegion(account)) return props;
   return Object.fromEntries(
-    Object.entries(props).filter(([key]) => USAGE_FIELDS.has(key)),
+    Object.entries(props).filter(
+      // A product name the agent typed is free text, so only a known product is kept.
+      ([key, value]) =>
+        USAGE_FIELDS.has(key) && (key !== "product" || isKnownProduct(value)),
+    ),
   ) as MCPEventPayload["event_properties"];
 }
 

@@ -497,7 +497,7 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
     expect(text(result)).toMatch(/itself/);
   });
 
-  it("compares scan runs and app builds only, not web builds", async () => {
+  it("says to read both web builds and compare them, as there is no built-in compare for them yet", async () => {
     m.resolveBuild.mockImplementation(async (source: unknown) => source);
     m.reportStatus.mockResolvedValue("completed");
 
@@ -506,7 +506,28 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
       compareWith: "previous",
     });
 
-    expect(result.isError).toBe(true);
-    expect(text(result)).toMatch(/Website Scanner runs and App Accessibility builds/);
+    expect(result.isError).toBeFalsy();
+    expect(text(result)).toMatch(
+      /^Automated Tests builds can't be compared here yet\. Read both reports with fetchAccessibilityIssues/,
+    );
+  });
+
+  it("says to read both when compareWith names a report that is not an app build", async () => {
+    m.sourceFromReportUrl.mockResolvedValue({
+      kind: "appReport",
+      reportId: "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+    });
+
+    const result = await fetchIssues()({
+      buildId: BUILD_ID,
+      compareWith:
+        "https://app-accessibility.browserstack.com/report/6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(text(result).trim()).toBe(
+      'compareWith names App Accessibility manual report 6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b, which is not an App Accessibility build; an app build is compared here only with another ("previous", or an earlier build\'s id or link). Read both reports with fetchAccessibilityIssues and match issues by rule and component (the element\'s id or class); an issue in the later report only is new, in the earlier only is fixed, in both is still open.',
+    );
+    expect(m.appBuildIssues).not.toHaveBeenCalled();
   });
 });

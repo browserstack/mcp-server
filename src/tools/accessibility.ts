@@ -653,19 +653,43 @@ function issueList(
   return `${label} (${rows.length})${range}: ${wrapUntrusted("accessibility scan results", JSON.stringify(shown, null, 2))}`;
 }
 
-/** The build to compare with, or why there is none. */
+/** What a report compareWith has no compare for says first. */
+const NO_BUILT_IN_COMPARE = {
+  workflow: "Workflow Analyzer reports have no built-in compare.",
+  build: "Automated Tests builds can't be compared here yet.",
+  appReport: "App Accessibility manual reports have no built-in compare.",
+} as const;
+
+/**
+ * Two reports compareWith has no compare for are compared by reading both. This is said as
+ * guidance, not as an error, so the agent goes straight to the two reads. An app issue is
+ * matched by its element, not its screen, as a fix can renumber the screens.
+ */
+function readBothToCompare(lead: string, app: boolean): CallToolResult {
+  const match = app
+    ? "rule and component (the element's id or class)"
+    : "rule and CSS selector on each page";
+  return createSuccessResponse([
+    `${lead} Read both reports with fetchAccessibilityIssues and match issues by ${match}; an issue in the later report only is new, in the earlier only is fixed, in both is still open.`,
+  ]);
+}
+
+/** The build to compare with, or the answer to give when there is none. */
 async function baselineAppBuild(
   reportFetcher: AccessibilityReportFetcher,
   buildId: string,
   compareWith: string,
 ): Promise<
-  { buildId: string; sameName?: boolean; searchedAll?: boolean } | string
+  | { buildId: string; sameName?: boolean; searchedAll?: boolean }
+  | CallToolResult
 > {
   let baseline: { buildId: string; sameName?: boolean; searchedAll?: boolean };
   if (compareWith === "previous") {
     const previous = await reportFetcher.previousAppBuild(buildId);
     if (!previous) {
-      return "This is its project's first build, so there is nothing earlier to compare it with. Pass an earlier build's id or link as compareWith instead.";
+      return createErrorResponse(
+        "This is its project's first build, so there is nothing earlier to compare it with. Pass an earlier build's id or link as compareWith instead.",
+      );
     }
     baseline = {
       buildId: previous.buildId,
@@ -678,12 +702,17 @@ async function baselineAppBuild(
       : { kind: "build", buildId: compareWith };
     const source = await reportFetcher.resolveBuild(named);
     if (source.kind !== "appBuild") {
-      return `compareWith names ${describeSource(source)}, which is not an App Accessibility build. Pass an earlier app build's id or link, or "previous".`;
+      return readBothToCompare(
+        `compareWith names ${describeSource(source)}, which is not an App Accessibility build; an app build is compared here only with another ("previous", or an earlier build's id or link).`,
+        true,
+      );
     }
     baseline = { buildId: source.buildId };
   }
   if (baseline.buildId === buildId) {
-    return `compareWith names this build itself. Pass an earlier build's id or link, or "previous".`;
+    return createErrorResponse(
+      `compareWith names this build itself. Pass an earlier build's id or link, or "previous".`,
+    );
   }
   return baseline;
 }
@@ -707,7 +736,7 @@ async function compareAppBuilds(
     source.buildId,
     compareWith,
   );
-  if (typeof baseline === "string") return createErrorResponse(baseline);
+  if ("content" in baseline) return baseline;
   const [named, current] = await Promise.all([
     reportFetcher.appBuildIssues(baseline.buildId),
     reportFetcher.appBuildIssues(source.buildId),
@@ -969,13 +998,16 @@ async function fetchAccessibilityIssues(
   // A build id names a web build or a mobile app build; the APIs tell which.
   const source = await reportFetcher.resolveBuild(named);
   // Two scan runs are compared through their CSV exports; two app builds, here below.
-  if (compareWith !== undefined && source.kind === "scan") {
-    return compareScanRuns(source, compareWith, config, context);
-  }
-  if (compareWith !== undefined && source.kind !== "appBuild") {
-    return createErrorResponse(
-      `compareWith compares Website Scanner runs and App Accessibility builds; ${describeSource(source)} is neither.`,
-    );
+  if (compareWith !== undefined) {
+    if (source.kind === "scan") {
+      return compareScanRuns(source, compareWith, config, context);
+    }
+    if (source.kind !== "appBuild") {
+      return readBothToCompare(
+        NO_BUILT_IN_COMPARE[source.kind],
+        source.kind === "appReport",
+      );
+    }
   }
   const processing = await waitForProcessing(
     reportFetcher,
@@ -2179,7 +2211,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          '"previous", an older scanRunId, or an earlier app build id/link; lists new and resolved issues.',
+          'Scanner runs of one scan, app builds: "previous", older scanRunId, build id/link. Others: read both.',
         ),
       exportTaskId: z
         .string()

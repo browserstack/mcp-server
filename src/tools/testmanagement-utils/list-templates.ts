@@ -5,6 +5,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /**
  * Schema for listing test-case templates in BrowserStack Test Management.
@@ -89,21 +90,24 @@ export async function listTemplates(
       content: [
         {
           type: "text",
-          text: `Found ${templates.length} template(s):\n\n${summary}`,
+          text: `Found ${templates.length} template(s):\n\n${wrapUntrusted("template list", summary)}`,
         },
         {
           type: "text",
-          text: JSON.stringify(
-            templates.map((t) => ({
-              template_id: t.id,
-              name: t.name,
-              step_type: t.step_type,
-              is_system: t.is_system,
-              is_default: t.is_default,
-              enabled: t.enabled,
-            })),
-            null,
-            2,
+          text: wrapUntrusted(
+            "templates (structured data)",
+            JSON.stringify(
+              templates.map((t) => ({
+                template_id: t.id,
+                name: t.name,
+                step_type: t.step_type,
+                is_system: t.is_system,
+                is_default: t.is_default,
+                enabled: t.enabled,
+              })),
+              null,
+              2,
+            ),
           ),
         },
       ],

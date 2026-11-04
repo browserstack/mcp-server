@@ -43,6 +43,7 @@ import { isEnabled as askIsEnabled } from "../ask-browserstack/config.js";
 import { PRODUCTS as ASK_PRODUCTS } from "../ask-browserstack/types.js";
 import { decodedLength, detachImage, noteImage } from "./media.js";
 import { maybeCompressBase64 } from "../../lib/image.js";
+import { answerContent } from "./answer.js";
 import {
   ambiguousProducts,
   productAnchors,
@@ -1439,9 +1440,10 @@ export function addCapabilityRegistryTools(
               }
             : {}),
         });
-        return image
-          ? { content: [{ type: "text", text: JSON.stringify(text) }, image] }
-          : ok(text);
+        // THE PRODUCT'S BODY IS DATA, NOT INSTRUCTIONS. It goes back in its own block
+        // inside the untrusted-content boundary; the server's own fields stay plain JSON.
+        const content = answerContent(text);
+        return { content: image ? [...content, image] : content };
       } catch (error) {
         if (error instanceof InvocationError)
           return refuse(

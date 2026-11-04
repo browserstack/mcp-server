@@ -28,6 +28,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { BrowserStackMcpServer } from "../src/server-factory.js";
+import { readAnswer } from "../src/tools/capability-registry/answer.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const POOL = `${ROOT}tests/live/.id-pool-tra.json`;
@@ -384,7 +385,7 @@ async function call(
     { name, product: "tra", ...args },
     {} as any,
   );
-  const payload = JSON.parse(result.content[0].text);
+  const payload = readAnswer(result);
   const status = payload.http_response?.status ?? 0;
   if (status === 0 && attempt < 3) {
     await new Promise((r) => setTimeout(r, 500 * attempt));

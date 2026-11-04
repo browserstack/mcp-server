@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fileURLToPath } from "node:url";
+import { readAnswer } from "../../src/tools/capability-registry/answer.js";
 
 // The package discovers which region an account's Test Management lives on. Hardcoding the
 // default host would fail every EU and IN account on every call, so this asserts the
@@ -57,7 +58,7 @@ describe("base URL resolution", () => {
       server.getTools().invokeCapability as any
     ).handler({ method: "GET", path: "/api/v1/projects/basic" }, {} as any);
 
-    expect(JSON.parse(result.content[0].text).ok).toBe(true);
+    expect(readAnswer(result).ok).toBe(true);
     expect(
       calls[0].startsWith("https://test-management-eu.browserstack.com/"),
     ).toBe(true);

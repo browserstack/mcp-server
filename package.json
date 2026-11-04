@@ -42,7 +42,7 @@
   "author": "",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@types/form-data": "^2.5.2",
     "axios": "^1.21.0",
     "browserstack-local": "^1.5.12",

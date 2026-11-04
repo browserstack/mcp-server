@@ -24,55 +24,60 @@ const lastRow = () =>
 describe("telemetry by the account's region", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it.each(["eu", "unknown"])(
+  it.each(["eu", "in", "unknown"])(
     "drops free text but keeps usage fields for a %s account",
     (region) => {
-    withAccountRegion(region as any, () =>
-      trackMCP("invokeCapability", clientInfo, new Error("boom"), config, {
+      withAccountRegion(region as any, () =>
+        trackMCP("invokeCapability", clientInfo, new Error("boom"), config, {
+          capability: "listTestRuns",
+          upstream_status: 200,
+          change_summary: "close the checkout regression run",
+          search_query: "checkout runs",
+          feedback_message: "it failed",
+          feedback_category: "tool_error",
+        }),
+      );
+      const row = lastRow();
+      expect(row).toMatchObject({
+        tool_name: "invokeCapability",
+        mcp_client: "claude-code",
+        success: false,
+        error_type: "Error",
         capability: "listTestRuns",
         upstream_status: 200,
-        change_summary: "close the checkout regression run",
-        search_query: "checkout runs",
-        feedback_message: "it failed",
-        feedback_category: "tool_error",
-      }),
-    );
-    const row = lastRow();
-    expect(row).toMatchObject({
-      tool_name: "invokeCapability",
-      mcp_client: "claude-code",
-      success: false,
-      error_type: "Error",
-      capability: "listTestRuns",
-      upstream_status: 200,
-    });
-    for (const field of [
-      "error_message",
-      "change_summary",
-      "search_query",
-      "feedback_message",
-      "feedback_category",
-    ])
-      expect(row).not.toHaveProperty(field);
-  },
+      });
+      for (const field of [
+        "error_message",
+        "change_summary",
+        "search_query",
+        "feedback_message",
+        "feedback_category",
+      ])
+        expect(row).not.toHaveProperty(field);
+    },
   );
 
-  it.each(["eu", "unknown"])(
+  it.each(["eu", "in", "unknown"])(
     "drops the error text of a returned failure for a %s account",
     async (region) => {
-    await withAccountRegion(region as any, () =>
-      withToolCall("listTestCases", () => clientInfo, config, async () => ({
-        content: [{ type: "text", text: "Project PR-1 not found" }],
-        isError: true,
-      })),
-    );
-    const row = lastRow();
-    expect(row).toMatchObject({ outcome: "error_result", success: true });
-    expect(row).not.toHaveProperty("error_message");
-  },
+      await withAccountRegion(region as any, () =>
+        withToolCall(
+          "listTestCases",
+          () => clientInfo,
+          config,
+          async () => ({
+            content: [{ type: "text", text: "Project PR-1 not found" }],
+            isError: true,
+          }),
+        ),
+      );
+      const row = lastRow();
+      expect(row).toMatchObject({ outcome: "error_result", success: true });
+      expect(row).not.toHaveProperty("error_message");
+    },
   );
 
-  it.each([undefined, "us", "in"])(
+  it.each([undefined, "us"])(
     "sends every field when the region is %s",
     (region) => {
       withAccountRegion(region as any, () =>

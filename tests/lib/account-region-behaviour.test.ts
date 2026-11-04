@@ -56,7 +56,7 @@ describe("the account's region", () => {
     expect(hosts).toEqual([
       "https://test-management-eu.browserstack.com",
       "https://test-management.browserstack.com",
-      "https://test-management.browserstack.com",
+      "https://test-management-in.browserstack.com",
     ]);
   });
 
@@ -96,7 +96,7 @@ describe("the account's region", () => {
     ["eu", true],
     ["unknown", true],
     ["us", false],
-    ["in", false],
+    ["in", true],
   ])(
     "limits telemetry outside a tool call for a %s account: %s",
     async (region, limited) => {
@@ -132,16 +132,19 @@ describe("the account's region", () => {
     expect(row).not.toHaveProperty("error_message");
   });
 
-  it("leaves feedback out of a server created for an EU account", async () => {
-    regions.set("user", "eu");
-    const server = await BrowserStackMcpServer.create(configFor("user"));
-    expect(server.getTool("submitFeedback")).toBeUndefined();
-    expect(
-      (server.getInstance().server as any)._instructions ?? "",
-    ).not.toContain("submitFeedback");
-  });
+  it.each(["eu", "in"])(
+    "leaves feedback out of a server created for a %s account",
+    async (region) => {
+      regions.set("user", region);
+      const server = await BrowserStackMcpServer.create(configFor("user"));
+      expect(server.getTool("submitFeedback")).toBeUndefined();
+      expect(
+        (server.getInstance().server as any)._instructions ?? "",
+      ).not.toContain("submitFeedback");
+    },
+  );
 
-  it.each(["us", "in"])("keeps feedback for a %s account", async (region) => {
+  it.each(["us"])("keeps feedback for a %s account", async (region) => {
     regions.set("user", region);
     const server = await BrowserStackMcpServer.create(configFor("user"));
     expect(server.getTool("submitFeedback")).toBeDefined();

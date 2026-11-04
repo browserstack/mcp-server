@@ -11,32 +11,38 @@ async function load(region: string | undefined) {
     accountRegion: () => region,
   }));
   const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
-  const { withFeedbackHint, FEEDBACK_HINT } = await import(
-    "../../src/lib/feedback-hint.js"
-  );
+  const { withFeedbackHint, FEEDBACK_HINT } =
+    await import("../../src/lib/feedback-hint.js");
   const { withAccountRegion } = await import("../../src/lib/region-context.js");
   const server = await BrowserStackMcpServer.create(CONFIG);
   const instructions: string =
     (server.getInstance().server as any)._instructions ?? "";
   const hinted = (result: unknown) =>
     JSON.stringify(
-      withAccountRegion(region as any, () => withFeedbackHint("listBuildId", result)),
+      withAccountRegion(region as any, () =>
+        withFeedbackHint("listBuildId", result),
+      ),
     ).includes(FEEDBACK_HINT);
   return { server, instructions, hinted };
 }
 
 const failure = () => ({
-  content: [{ type: "text", text: "Failed: Request failed with status code 502" }],
+  content: [
+    { type: "text", text: "Failed: Request failed with status code 502" },
+  ],
   isError: true,
 });
 
 describe("submitFeedback by the account's region", () => {
-  it("is not registered, instructed or hinted for an EU account", async () => {
-    const { server, instructions, hinted } = await load("eu");
-    expect(server.getTool("submitFeedback")).toBeUndefined();
-    expect(instructions).not.toContain("submitFeedback");
-    expect(hinted(failure())).toBe(false);
-  });
+  it.each(["eu", "in"])(
+    "is not registered, instructed or hinted when the region is %s",
+    async (region) => {
+      const { server, instructions, hinted } = await load(region);
+      expect(server.getTool("submitFeedback")).toBeUndefined();
+      expect(instructions).not.toContain("submitFeedback");
+      expect(hinted(failure())).toBe(false);
+    },
+  );
 
   it("stays listed but is not hinted when the region is unknown", async () => {
     const { server, instructions, hinted } = await load("unknown");
@@ -45,7 +51,7 @@ describe("submitFeedback by the account's region", () => {
     expect(hinted(failure())).toBe(false);
   });
 
-  it.each([undefined, "us", "in"])(
+  it.each([undefined, "us"])(
     "is registered, instructed and hinted when the region is %s",
     async (region) => {
       const { server, instructions, hinted } = await load(region);

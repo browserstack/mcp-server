@@ -6,7 +6,8 @@ vi.unmock("../../src/lib/account-region.js");
 // rejected promise, even when the code under test handles it.
 let mintImpl: () => Promise<string> = async () => "";
 const mintCalls: unknown[] = [];
-vi.mock("../../src/lib/central-oauth.js", () => ({
+vi.mock("../../src/lib/central-oauth.js", async (importOriginal) => ({
+  CentralAuthError: (await importOriginal<any>()).CentralAuthError,
   mintCentralToken: (options: unknown) => {
     mintCalls.push(options);
     return mintImpl();
@@ -170,6 +171,31 @@ describe("accountRegion", () => {
 
   it("probes when auth names a region it does not know", async () => {
     mintImpl = async () => tokenWith({ grr: { region: "apac" } });
+    probeAccepts = new Set([EU_TM]);
+    expect(await accountRegion(config())).toBe("eu");
+  });
+
+  it.each([
+    ["refused_scope", 400],
+    ["refused_credentials", 401],
+  ] as const)(
+    "lets credentials every host rejects reach the product (%s)",
+    async (kind, status) => {
+      const { CentralAuthError } =
+        await import("../../src/lib/central-oauth.js");
+      mintImpl = async () => {
+        throw new CentralAuthError(kind, status, "oauth_user_profile");
+      };
+      expect(await accountRegion(config())).toBe("us");
+      expect(probedUrls).toHaveLength(3);
+    },
+  );
+
+  it("still finds the region by probing when auth refuses", async () => {
+    const { CentralAuthError } = await import("../../src/lib/central-oauth.js");
+    mintImpl = async () => {
+      throw new CentralAuthError("refused_scope", 400, "oauth_user_profile");
+    };
     probeAccepts = new Set([EU_TM]);
     expect(await accountRegion(config())).toBe("eu");
   });

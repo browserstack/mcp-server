@@ -245,7 +245,7 @@ export function coerce(value: unknown, param: WireParam): unknown {
 
 function coerceType(
   value: unknown,
-  param: { name: string; type: string; values?: unknown[] },
+  param: Pick<WireParam, "name" | "type" | "values" | "accept" | "max_bytes">,
   label = param.name,
 ): unknown {
   const expected = param.type;
@@ -277,8 +277,8 @@ function coerceType(
       throw new InvocationError(`'${label}' must be a path to a file`);
     try {
       return validateUploadPath(given, {
-        allowedExtensions: APP_BINARY_EXTENSIONS,
-        maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+        allowedExtensions: param.accept ?? APP_BINARY_EXTENSIONS,
+        maxSizeBytes: param.max_bytes ?? MAX_APP_UPLOAD_BYTES,
         allowedBaseDir: appConfig.UPLOAD_BASE_DIR,
       });
     } catch (error) {
@@ -472,8 +472,11 @@ export function withoutFixed(
     const shown = (params ?? [])
       .filter((param) => !isFixed(param))
       // Aliases are forgiveness, not vocabulary: the contract publishes one name.
-      .map(({ aliases, ...param }) => {
+      // `form_name` is the multipart field a file travels under; the caller still
+      // supplies the parameter by `name`.
+      .map(({ aliases, form_name, ...param }) => {
         void aliases;
+        void form_name;
         return param;
       });
     view[group] = shown.length > 0 ? shown : undefined;

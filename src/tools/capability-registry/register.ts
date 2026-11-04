@@ -1098,7 +1098,9 @@ export function addCapabilityRegistryTools(
           // A FIXED PARAMETER IS NOT THE CALLER'S TO SEND. Where the contract allows a
           // required parameter exactly one value, bind fills it in, so the view drops it:
           // a caller who never sees `script` cannot leave it out or paraphrase it, which
-          // were the two commonest refusals on the device-control surface.
+          // were the two commonest refusals on the device-control surface. The same view
+          // strips `form_name`, the multipart field a file travels under: plumbing, not
+          // something the caller supplies.
           ...withoutFixed(capability),
           ...(responses ? { responses } : {}),
         });

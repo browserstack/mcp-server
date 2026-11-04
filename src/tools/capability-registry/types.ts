@@ -106,6 +106,11 @@ export interface WireParam extends WireConstraints {
    * would assume.
    */
   json_path?: string;
+  /** `file` parameters only. Absent means app builds and the app-build size limit. */
+  accept?: string[];
+  max_bytes?: number;
+  /** `file` parameters only: the multipart field name, when it differs from `name`. */
+  form_name?: string;
 }
 
 /**

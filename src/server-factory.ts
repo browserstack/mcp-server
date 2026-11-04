@@ -25,6 +25,7 @@ import addCapabilityRegistryTools from "./tools/capability-registry/register.js"
 import {
   bindAccountRegion,
   instrumentToolLatency,
+  limitToUsAccounts,
 } from "./lib/tool-latency.js";
 import { accountRegion } from "./lib/account-region.js";
 import { withAccountRegion } from "./lib/region-context.js";
@@ -105,12 +106,20 @@ export class BrowserStackMcpServer {
       ...(feedbackListed() ? [addFeedbackTools] : []),
     ];
 
+    // Served from US hosts only, so refused for accounts in other regions.
+    const usOnly = new Map<(typeof toolAdders)[number], string>([
+      [addPercyTools, "Percy"],
+      [addAskBrowserStackAITool, "BrowserStack AI"],
+    ]);
+
     toolAdders.forEach((adder) => {
       // Each adder now returns a Record<string, Tool>
       const added: Record<string, RegisteredTool> = adder(
         this.server,
         this.config,
       );
+      const product = usOnly.get(adder);
+      if (product) limitToUsAccounts(added, product);
       Object.assign(this.tools, added);
     });
 

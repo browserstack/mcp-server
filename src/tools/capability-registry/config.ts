@@ -20,6 +20,7 @@ import { Credentials, Transport, fetchTransport } from "./egress.js";
 import { FLAT_SUFFIX, INDEX_FILE, InvocationError } from "./index-loader.js";
 import {
   assertRegionKnown,
+  assertUsAccount,
   getRegionalHost,
   usesRegionalHosts,
   RegionalHostKind,
@@ -87,7 +88,16 @@ const REGIONAL_HOSTS: Record<
   },
 };
 
+/** Products served from US hosts only, refused for accounts in other regions. */
+const US_ONLY_PRODUCTS: Record<string, string> = {
+  loadtesting: "Load Testing",
+};
+
 function regionalHost(product: string, host?: string): string | undefined {
+  if (US_ONLY_PRODUCTS[product]) {
+    assertUsAccount(US_ONLY_PRODUCTS[product]);
+    return undefined;
+  }
   const entry = REGIONAL_HOSTS[product];
   const kind = host ? entry?.hosts?.[host] : entry?.base;
   if (!kind) return undefined;

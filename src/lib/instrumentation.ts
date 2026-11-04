@@ -71,7 +71,7 @@ function errorProperties(error: unknown) {
   };
 }
 
-const NON_US_REGION_FIELDS = new Set([
+const USAGE_FIELDS = new Set([
   "mcp_version",
   "tool_name",
   "mcp_client",
@@ -104,7 +104,7 @@ function forDataRegion(
 ): MCPEventPayload["event_properties"] {
   if (!isRestrictedRegion(account)) return props;
   return Object.fromEntries(
-    Object.entries(props).filter(([key]) => NON_US_REGION_FIELDS.has(key)),
+    Object.entries(props).filter(([key]) => USAGE_FIELDS.has(key)),
   ) as MCPEventPayload["event_properties"];
 }
 

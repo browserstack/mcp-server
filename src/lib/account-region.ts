@@ -106,13 +106,19 @@ async function fromToken(
   }
 }
 
-/** The region whose Test Management host accepts the account, or null when none does. */
-async function probe(config: BrowserStackConfig): Promise<GrrRegion | null> {
+/**
+ * The region whose Test Management host accepts the account; "rejected" when every host
+ * answers 401, null when none accepts it for any other reason.
+ */
+async function probe(
+  config: BrowserStackConfig,
+): Promise<GrrRegion | "rejected" | null> {
   const authorization =
     "Basic " +
     Buffer.from(
       `${config["browserstack-username"]}:${config["browserstack-access-key"]}`,
     ).toString("base64");
+  let rejected = 0;
   for (const [region, host] of PROBE_HOSTS) {
     try {
       const res = await apiClient.get({
@@ -122,11 +128,12 @@ async function probe(config: BrowserStackConfig): Promise<GrrRegion | null> {
         raise_error: false,
       });
       if (res.ok) return region;
+      if (res.status === 401) rejected++;
     } catch (error) {
       logger.debug(`Region probe failed for ${host}: ${error}`);
     }
   }
-  return null;
+  return rejected === PROBE_HOSTS.length ? "rejected" : null;
 }
 
 interface Answer {
@@ -139,10 +146,15 @@ async function lookUp(config: BrowserStackConfig): Promise<Answer | null> {
   const region = await fromToken(config);
   if (region && region !== "refused") return { region, ttl: REGION_TTL_MS };
   const probed = await probe(config);
-  if (probed) return { region: probed, ttl: PROBED_TTL_MS };
-  // Credentials that auth and every host reject are wrong, not unlucky: send the call to
-  // the default host so the product reports them, rather than telling the user to retry.
-  return region === "refused" ? { region: "us", ttl: PROBED_TTL_MS } : null;
+  if (probed && probed !== "rejected") {
+    return { region: probed, ttl: PROBED_TTL_MS };
+  }
+  // Credentials that auth refuses and every host answers 401 to are wrong, not unlucky:
+  // send the call to the default host so the product reports them, rather than telling
+  // the user to retry. Any other answer keeps the region unknown.
+  return region === "refused" && probed === "rejected"
+    ? { region: "us", ttl: PROBED_TTL_MS }
+    : null;
 }
 
 /**

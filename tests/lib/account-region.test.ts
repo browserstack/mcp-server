@@ -14,14 +14,17 @@ vi.mock("../../src/lib/central-oauth.js", async (importOriginal) => ({
   },
   fetchTokenTransport: () => "transport",
 }));
-// Hosts whose probe accepts the account; none unless a test says otherwise.
+// Hosts whose probe accepts the account; none unless a test says otherwise. Others
+// answer probeStatus.
 let probeAccepts = new Set<string>();
+let probeStatus = 401;
 const probedUrls: string[] = [];
 vi.mock("../../src/lib/apiClient.js", () => ({
   apiClient: {
     get: async ({ url }: { url: string }) => {
       probedUrls.push(url);
-      return { ok: [...probeAccepts].some((host) => url.startsWith(host)) };
+      const ok = [...probeAccepts].some((host) => url.startsWith(host));
+      return { ok, status: ok ? 200 : probeStatus };
     },
   },
 }));
@@ -90,6 +93,7 @@ describe("accountRegion", () => {
     mintCalls.length = 0;
     probedUrls.length = 0;
     probeAccepts = new Set();
+    probeStatus = 401;
   });
 
   it("looks up nothing without credentials", () => {
@@ -188,6 +192,19 @@ describe("accountRegion", () => {
       };
       expect(await accountRegion(config())).toBe("us");
       expect(probedUrls).toHaveLength(3);
+    },
+  );
+
+  it.each([403, 500])(
+    "keeps the region unknown when auth refuses and a host answers %s",
+    async (status) => {
+      const { CentralAuthError } =
+        await import("../../src/lib/central-oauth.js");
+      mintImpl = async () => {
+        throw new CentralAuthError("refused_scope", 400, "oauth_user_profile");
+      };
+      probeStatus = status;
+      expect(await accountRegion(config())).toBe("unknown");
     },
   );
 

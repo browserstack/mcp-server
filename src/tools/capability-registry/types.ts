@@ -86,6 +86,17 @@ export interface WireParam extends WireConstraints {
   values?: unknown[];
   example?: unknown;
   description?: string;
+  /**
+   * Other names a caller may send for this parameter, taken as this one.
+   *
+   * FORGIVENESS, NOT VOCABULARY: the contract still publishes one name, and these are
+   * withheld from it. They exist for the names an agent reaches for from the wider
+   * ecosystem — `selector` and `strategy` for WebDriver's `value` and `using`, `attribute`
+   * for the attribute's `name` — where a refusal teaches nothing the caller could not
+   * have been forgiven. Spelling variants (camelCase, kebab-case) need no alias; bind
+   * folds those itself.
+   */
+  aliases?: string[];
   /** Field names/types one level inside an array item or nested object. */
   fields?: WireField[];
   /**
@@ -305,6 +316,14 @@ export interface Capability {
      * Siblings of the array are preserved, so an envelope survives the narrowing.
      */
     path?: string;
+    /**
+     * The thing at `path` is ONE RECORD, not rows. Only `fields` applies — a session
+     * record has no rows to filter, deduplicate or cap — and `where`, `distinct` and
+     * `limit` are refused before anything is sent. Declared because an agent that wants
+     * `browser_url` out of a 30-field session record was reaching for `select` and being
+     * told the capability does not support it.
+     */
+    record?: true;
     /** One line for the contract: why this is here rather than on the wire. */
     note?: string;
   };

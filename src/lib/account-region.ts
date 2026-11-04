@@ -10,7 +10,7 @@ const LOOKUP_TIMEOUT_MS = 5_000;
 /** How long a failed lookup answers "unknown" before the next call tries again. */
 export const RETRY_AFTER_MS = 5_000;
 /** How long a looked-up region is reused before it is looked up again. */
-export const REGION_TTL_MS = 60 * 60_000;
+export const REGION_TTL_MS = 6 * 60 * 60_000;
 const MAX_ENTRIES = 1_000;
 
 interface Lookup {

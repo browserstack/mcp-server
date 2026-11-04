@@ -87,9 +87,15 @@ export async function createTestRun(
 
     const data = response.data;
     if (!data.success) {
-      throw new Error(
-        `API returned unsuccessful response: ${wrapUntrusted("API response", JSON.stringify(data))}`,
-      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `API returned unsuccessful response: ${wrapUntrusted("API response", JSON.stringify(data))}`,
+          },
+        ],
+        isError: true,
+      };
     }
 
     // Assume data.test_run contains created run info

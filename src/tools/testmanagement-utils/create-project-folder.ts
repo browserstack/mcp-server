@@ -82,9 +82,15 @@ export async function createProjectOrFolder(
       });
 
       if (!res.data.success) {
-        throw new Error(
-          `Failed to create project: ${wrapUntrusted("API response", JSON.stringify(res.data))}`,
-        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to create project: ${wrapUntrusted("API response", JSON.stringify(res.data))}`,
+            },
+          ],
+          isError: true,
+        };
       }
       // Project created successfully
 
@@ -119,9 +125,15 @@ export async function createProjectOrFolder(
       });
 
       if (!res.data.success) {
-        throw new Error(
-          `Failed to create folder: ${wrapUntrusted("API response", JSON.stringify(res.data))}`,
-        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to create folder: ${wrapUntrusted("API response", JSON.stringify(res.data))}`,
+            },
+          ],
+          isError: true,
+        };
       }
       // Folder created successfully
 

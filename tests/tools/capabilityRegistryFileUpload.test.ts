@@ -182,8 +182,9 @@ describe("a file parameter that declares its own rules", () => {
     vi.doMock("../../src/config.js", () => ({
       default: { UPLOAD_BASE_DIR: base, REMOTE_MCP: false },
     }));
-    const { invoke } =
-      await import("../../src/tools/capability-registry/resolve.js");
+    const { invoke } = await import(
+      "../../src/tools/capability-registry/resolve.js"
+    );
     let sent: { url: string; headers: Record<string, string>; body: unknown } =
       { url: "", headers: {}, body: undefined };
     const transport = async (
@@ -240,8 +241,9 @@ describe("tm's upload_generic_attachments in the shipped index", () => {
 
   it("accepts at least every extension the uploadFile tool accepts for tm", async () => {
     const { readFileSync } = await import("node:fs");
-    const { TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS } =
-      await import("../../src/lib/upload-validator.js");
+    const { TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS } = await import(
+      "../../src/lib/upload-validator.js"
+    );
     const index = JSON.parse(
       readFileSync(
         join(__dirname, "../../capability/tm.capability-index.json"),

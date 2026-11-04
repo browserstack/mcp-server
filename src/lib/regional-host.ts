@@ -100,6 +100,23 @@ export function assertRegionKnown(): void {
   }
 }
 
+/** Thrown when a product served only from US hosts is called for an account elsewhere. */
+export class RegionNotSupportedError extends Error {
+  constructor(product: string) {
+    super(
+      `${product} isn't available for your BrowserStack account's region yet.`,
+    );
+    this.name = "RegionNotSupportedError";
+  }
+}
+
+/** Throws unless this call's account can use `product`, which is served from US hosts only. */
+export function assertUsAccount(product: string): void {
+  assertRegionKnown();
+  const region = currentRegion();
+  if (region && region !== "us") throw new RegionNotSupportedError(product);
+}
+
 /** The region whose hosts this call uses; throws when the region is unknown. */
 export function routedRegion(): RoutedRegion {
   assertRegionKnown();

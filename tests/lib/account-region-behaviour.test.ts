@@ -24,7 +24,9 @@ const configFor = (username: string) => ({
 });
 const clientInfo = { name: "claude-code", version: "1" };
 const rows = () =>
-  (apiClient.post as any).mock.calls.map((c: any) => c[0].body.event_properties);
+  (apiClient.post as any).mock.calls.map(
+    (c: any) => c[0].body.event_properties,
+  );
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function tmHostTool(config: ReturnType<typeof configFor>) {
@@ -58,6 +60,31 @@ describe("the account's region", () => {
     ]);
   });
 
+  it.each([
+    ["eu", true],
+    ["in", true],
+    ["unknown", true],
+    ["us", false],
+  ])(
+    "limits Percy and BrowserStack AI for a %s account: %s",
+    async (region, refused) => {
+      regions.set("user", region);
+      const server = new BrowserStackMcpServer(configFor("user"));
+      for (const tool of ["runPercyScan", "askBrowserStackAI"]) {
+        const result: any = await server
+          .getTool(tool)!
+          .handler({} as any, {} as any)
+          .catch((error: unknown) => ({ thrown: error }));
+        const text = result?.content?.[0]?.text ?? "";
+        expect(
+          /isn't available for your BrowserStack account's region|Could not confirm/.test(
+            text,
+          ),
+        ).toBe(refused);
+      }
+    },
+  );
+
   it("refuses to pick a host when the lookup failed", async () => {
     regions.set("someone", "unknown");
     await expect(tmHostTool(configFor("someone"))()).rejects.toThrow(
@@ -87,13 +114,21 @@ describe("the account's region", () => {
 
   it("sends usage but no error text inside a tool call for an EU account", async () => {
     await withAccountRegion("eu", () =>
-      withToolCall("listTestCases", () => clientInfo, configFor("x"), async () => ({
-        content: [{ type: "text", text: "Project PR-1 not found" }],
-        isError: true,
-      })),
+      withToolCall(
+        "listTestCases",
+        () => clientInfo,
+        configFor("x"),
+        async () => ({
+          content: [{ type: "text", text: "Project PR-1 not found" }],
+          isError: true,
+        }),
+      ),
     );
     const row = rows().at(-1);
-    expect(row).toMatchObject({ tool_name: "listTestCases", outcome: "error_result" });
+    expect(row).toMatchObject({
+      tool_name: "listTestCases",
+      outcome: "error_result",
+    });
     expect(row).not.toHaveProperty("error_message");
   });
 
@@ -101,9 +136,9 @@ describe("the account's region", () => {
     regions.set("user", "eu");
     const server = await BrowserStackMcpServer.create(configFor("user"));
     expect(server.getTool("submitFeedback")).toBeUndefined();
-    expect((server.getInstance().server as any)._instructions ?? "").not.toContain(
-      "submitFeedback",
-    );
+    expect(
+      (server.getInstance().server as any)._instructions ?? "",
+    ).not.toContain("submitFeedback");
   });
 
   it.each(["us", "in"])("keeps feedback for a %s account", async (region) => {
@@ -115,10 +150,12 @@ describe("the account's region", () => {
   it("declines feedback at call time when the server was built before the lookup", async () => {
     regions.set("user", "eu");
     const server = new BrowserStackMcpServer(configFor("user"));
-    const result: any = await server.getTool("submitFeedback")!.handler(
-      { message: "the tool did not work", category: "tool_error" } as any,
-      {} as any,
-    );
+    const result: any = await server
+      .getTool("submitFeedback")!
+      .handler(
+        { message: "the tool did not work", category: "tool_error" } as any,
+        {} as any,
+      );
     expect(result.content[0].text).toBe(FEEDBACK_UNAVAILABLE);
     await settle();
     expect(rows().some((r: any) => "feedback_message" in r)).toBe(false);

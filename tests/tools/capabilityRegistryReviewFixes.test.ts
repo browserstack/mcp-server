@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CapabilityRegistry } from "../../src/tools/capability-registry/index-loader.js";
 import { addCapabilityRegistryTools } from "../../src/tools/capability-registry/register.js";
 import { fetchTransport } from "../../src/tools/capability-registry/egress.js";
+import { parseResult } from "../untrusted.js";
 
 // The five findings from the review of PR #491, each pinned so it cannot come back.
 
@@ -41,7 +42,7 @@ function harness(index: unknown) {
     } as never,
   );
   const call = async (tool: string, input: unknown) =>
-    JSON.parse((await handlers[tool](input, {} as never)).content[0].text);
+    parseResult((await handlers[tool](input, {} as never)).content[0].text);
   return { sent, call };
 }
 

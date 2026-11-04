@@ -3,29 +3,48 @@ import { describe, expect, it } from "vitest";
 import { bind, coerce } from "../../src/tools/capability-registry/bind.js";
 import { authHeaders } from "../../src/tools/capability-registry/egress.js";
 import {
-  CapabilityRegistry, InvocationError, IndexError, readIndexFile, resolveComponent,
+  CapabilityRegistry,
+  InvocationError,
+  IndexError,
+  readIndexFile,
+  resolveComponent,
 } from "../../src/tools/capability-registry/index-loader.js";
 import { invoke } from "../../src/tools/capability-registry/resolve.js";
-import { isCollection, searchCapabilities, terms } from "../../src/tools/capability-registry/search.js";
 import {
-  Capability, ProductIndex, RegistryIndex,
+  isCollection,
+  searchCapabilities,
+  terms,
+} from "../../src/tools/capability-registry/search.js";
+import {
+  Capability,
+  ProductIndex,
+  RegistryIndex,
 } from "../../src/tools/capability-registry/types.js";
 
 const LIST_CASES: Capability = {
-  method: "GET", path: "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
-  mode: "read", entity: "test_case", paginated: true, max_page_size: 300,
+  method: "GET",
+  path: "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
+  mode: "read",
+  entity: "test_case",
+  paginated: true,
+  max_page_size: 300,
   intent: "List the test cases in one folder",
   path_params: [
     { name: "project_id", type: "integer", required: true },
     { name: "folder_id", type: "integer", required: true },
   ],
-  query: [{ name: "p", type: "integer" }, { name: "count", type: "integer" }],
+  query: [
+    { name: "p", type: "integer" },
+    { name: "count", type: "integer" },
+  ],
   returns: ["id", "identifier", "title"],
 };
 
 const CREATE_FOLDER: Capability = {
-  method: "POST", path: "/api/v1/projects/{project_id}/folders",
-  mode: "write", entity: "folder",
+  method: "POST",
+  path: "/api/v1/projects/{project_id}/folders",
+  mode: "write",
+  entity: "folder",
   path_params: [{ name: "project_id", type: "integer", required: true }],
   // the nesting the product really wants, which a reader of the flat spec would miss
   body: [
@@ -36,8 +55,10 @@ const CREATE_FOLDER: Capability = {
 };
 
 const DELETE_PLAN: Capability = {
-  method: "POST", path: "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
-  mode: "destructive", entity: "test_plan",
+  method: "POST",
+  path: "/api/v1/projects/{project_id}/test-plans/{test_plan_id}/delete",
+  mode: "destructive",
+  entity: "test_plan",
   path_params: [
     { name: "project_id", type: "integer", required: true },
     { name: "test_plan_id", type: "integer", required: true },
@@ -45,20 +66,27 @@ const DELETE_PLAN: Capability = {
 };
 
 const BULK_MOVE: Capability = {
-  method: "POST", path: "/api/v1/projects/{project_id}/test-cases/bulk-move",
-  mode: "write", entity: "test_case",
+  method: "POST",
+  path: "/api/v1/projects/{project_id}/test-cases/bulk-move",
+  mode: "write",
+  entity: "test_case",
   path_params: [{ name: "project_id", type: "integer", required: true }],
   // the collision that makes a flat argument map ambiguous
   body: [{ name: "folder_id", type: "integer" }],
 };
 
 const INDEX: RegistryIndex = {
-  schema_version: 1, build_id: "abc123-173caps",
+  schema_version: 1,
+  build_id: "abc123-173caps",
   products: {
     tm: {
       summary: "Test Management",
       capabilities: [LIST_CASES, CREATE_FOLDER, DELETE_PLAN, BULK_MOVE],
-      entities: { test_case: { aliases: ["tc", "case"] }, folder: {}, test_plan: {} },
+      entities: {
+        test_case: { aliases: ["tc", "case"] },
+        folder: {},
+        test_plan: {},
+      },
     },
   },
 };
@@ -77,7 +105,8 @@ describe("reading the released envelope", () => {
     expect(loaded.name).toBe("tm");
     expect(loaded.product.capabilities).toHaveLength(4);
     expect(loaded.provenance).toEqual({
-      build_id: "050a1860_2026-09-02T08:36:09Z", version: "1.2",
+      build_id: "050a1860_2026-09-02T08:36:09Z",
+      version: "1.2",
     });
   });
 
@@ -85,8 +114,9 @@ describe("reading the released envelope", () => {
     // Both envelopes declare schema_version 1, so the number cannot tell them apart.
     expect(readIndexFile(INDEX as unknown).name).toBe("tm");
     expect(readIndexFile(RELEASED).name).toBe("tm");
-    expect((INDEX as { schema_version: number }).schema_version)
-      .toBe((RELEASED as { schema_version: number }).schema_version);
+    expect((INDEX as { schema_version: number }).schema_version).toBe(
+      (RELEASED as { schema_version: number }).schema_version,
+    );
   });
 
   it("carries `version` when the file has one, and copes when it does not", () => {
@@ -97,17 +127,21 @@ describe("reading the released envelope", () => {
 
   it("refuses a file carrying more than one product", () => {
     // One file describes one product; guessing which is meant decides what exists.
-    expect(() => readIndexFile({ ...RELEASED, a11y: INDEX.products.tm }))
-      .toThrow(/one file describes one product/);
+    expect(() =>
+      readIndexFile({ ...RELEASED, a11y: INDEX.products.tm }),
+    ).toThrow(/one file describes one product/);
   });
 
   it("refuses a file carrying none", () => {
-    expect(() => readIndexFile({ schema_version: 1, build_id: "x" }))
-      .toThrow(/no product object found/);
+    expect(() => readIndexFile({ schema_version: 1, build_id: "x" })).toThrow(
+      /no product object found/,
+    );
   });
 
   it("refuses a schema version it does not read", () => {
-    expect(() => readIndexFile({ ...RELEASED, schema_version: 2 })).toThrow(IndexError);
+    expect(() => readIndexFile({ ...RELEASED, schema_version: 2 })).toThrow(
+      IndexError,
+    );
   });
 });
 
@@ -117,7 +151,9 @@ describe("the product name, stated by the path and by the file", () => {
       await import("../../src/tools/capability-registry/index-loader.js");
     // How they are stored here, and the flat name the export publishes.
     expect(productFromPath("/pkg/capability/tm/index.json")).toBe("tm");
-    expect(productFromPath("/pkg/exported/a11y.capability-index.json")).toBe("a11y");
+    expect(productFromPath("/pkg/exported/a11y.capability-index.json")).toBe(
+      "a11y",
+    );
     expect(productFromPath("/pkg/something-else.json")).toBeUndefined();
   });
 });
@@ -133,17 +169,22 @@ describe("merging one file per product", () => {
     mkdirSync(join(root, "a11y"));
     writeFileSync(
       join(root, "a11y", "index.json"),
-      JSON.stringify({ schema_version: 1, build_id: "x", tm: INDEX.products.tm }),
+      JSON.stringify({
+        schema_version: 1,
+        build_id: "x",
+        tm: INDEX.products.tm,
+      }),
     );
-    expect(() => CapabilityRegistry.fromFiles([join(root, "a11y", "index.json")]))
-      .toThrow(/stored as product 'a11y' but declares 'tm'/);
+    expect(() =>
+      CapabilityRegistry.fromFiles([join(root, "a11y", "index.json")]),
+    ).toThrow(/stored as product 'a11y' but declares 'tm'/);
   });
-
 
   it("ranks across products loaded from separate files", () => {
     const registry = new CapabilityRegistry(
       {
-        schema_version: 1, build_id: "tm:a a11y:b",
+        schema_version: 1,
+        build_id: "tm:a a11y:b",
         products: { tm: INDEX.products.tm, a11y: INDEX.products.tm },
       },
       { tm: { build_id: "a", version: "1.0" }, a11y: { build_id: "b" } },
@@ -151,9 +192,12 @@ describe("merging one file per product", () => {
     expect(registry.productNames()).toEqual(["a11y", "tm"]);
     expect(registry.buildInfo().tm.version).toBe("1.0");
     // The same endpoint in two products is ambiguous until one is named.
-    expect(() => registry.byEndpointLookup("POST", CREATE_FOLDER.path))
-      .toThrow(/exists in several products/);
-    expect(registry.byEndpointLookup("POST", CREATE_FOLDER.path, "tm").product).toBe("tm");
+    expect(() => registry.byEndpointLookup("POST", CREATE_FOLDER.path)).toThrow(
+      /exists in several products/,
+    );
+    expect(
+      registry.byEndpointLookup("POST", CREATE_FOLDER.path, "tm").product,
+    ).toBe("tm");
   });
 });
 
@@ -168,15 +212,30 @@ describe("rarity across products", () => {
    * scored as gold. The word that identifies a product was worth least inside it.
    */
   const read = (path: string, entity: string): Capability => ({
-    method: "GET", path, mode: "read", entity, paginated: true,
+    method: "GET",
+    path,
+    mode: "read",
+    entity,
+    paginated: true,
   });
   const PRODUCTS = {
     tcm: {
       summary: "Test management",
       capabilities: [
-        ...["test-cases", "test-runs", "test-plans", "folders", "tags", "users",
-          "reports", "datasets", "filters", "activities"].map((seg) =>
-          read(`/api/v1/projects/{project_id}/${seg}`, "test_case")),
+        ...[
+          "test-cases",
+          "test-runs",
+          "test-plans",
+          "folders",
+          "tags",
+          "users",
+          "reports",
+          "datasets",
+          "filters",
+          "activities",
+        ].map((seg) =>
+          read(`/api/v1/projects/{project_id}/${seg}`, "test_case"),
+        ),
         read("/api/v1/projects/{project_id}/uploads", "attachment"),
         read("/api/v1/projects/{project_id}/downloads", "attachment"),
       ],
@@ -200,7 +259,9 @@ describe("rarity across products", () => {
   });
 
   it("still ranks within a single product when only one is searched", () => {
-    const hits = searchCapabilities(PRODUCTS, "list load tests", { product: "tcm" });
+    const hits = searchCapabilities(PRODUCTS, "list load tests", {
+      product: "tcm",
+    });
     expect(hits.hits.every((hit) => hit.product === "tcm")).toBe(true);
   });
 });
@@ -209,14 +270,22 @@ describe("response component tables", () => {
   // Additive and not yet emitted; absence must read as "no schema available", not an error.
   const product = {
     ...INDEX.products.tm,
-    responses: { NotFound: { description: "missing", schema: { $schema: "ErrorResponse" } } },
+    responses: {
+      NotFound: {
+        description: "missing",
+        schema: { $schema: "ErrorResponse" },
+      },
+    },
     schemas: { ErrorResponse: { type: "object" }, Folder: { type: "object" } },
   };
 
   it("resolves a named reference in one hop", () => {
-    expect(resolveComponent(product, { $response: "NotFound" }))
-      .toEqual(product.responses.NotFound);
-    expect(resolveComponent(product, { $schema: "Folder" })).toEqual(product.schemas.Folder);
+    expect(resolveComponent(product, { $response: "NotFound" })).toEqual(
+      product.responses.NotFound,
+    );
+    expect(resolveComponent(product, { $schema: "Folder" })).toEqual(
+      product.schemas.Folder,
+    );
   });
 
   it("returns an inline node untouched", () => {
@@ -225,7 +294,9 @@ describe("response component tables", () => {
   });
 
   it("yields undefined rather than throwing when the tables are absent", () => {
-    expect(resolveComponent(INDEX.products.tm, { $schema: "Folder" })).toBeUndefined();
+    expect(
+      resolveComponent(INDEX.products.tm, { $schema: "Folder" }),
+    ).toBeUndefined();
     expect(resolveComponent(product, undefined)).toBeUndefined();
   });
 });
@@ -234,28 +305,35 @@ describe("index loader", () => {
   it("refuses an index whose schema it does not understand", () => {
     // Guessing at a shape the generator announced is exactly where silently wrong tool
     // output comes from.
-    expect(() => new CapabilityRegistry({ ...INDEX, schema_version: 99 }))
-      .toThrow(IndexError);
+    expect(
+      () => new CapabilityRegistry({ ...INDEX, schema_version: 99 }),
+    ).toThrow(IndexError);
   });
 
   it("finds a capability by endpoint, and says so when it cannot", () => {
     const registry = new CapabilityRegistry(INDEX);
-    expect(registry.byEndpointLookup("get", LIST_CASES.path).capability).toBe(LIST_CASES);
-    expect(() => registry.byEndpointLookup("GET", "/api/v1/nope"))
-      .toThrow(/unknown_endpoint/);
+    expect(registry.byEndpointLookup("get", LIST_CASES.path).capability).toBe(
+      LIST_CASES,
+    );
+    expect(() => registry.byEndpointLookup("GET", "/api/v1/nope")).toThrow(
+      /unknown_endpoint/,
+    );
   });
 });
 
 describe("binding", () => {
   it("substitutes path params and keeps query separate", () => {
-    const bound = bind(LIST_CASES, { path_params: { project_id: 2, folder_id: 7 } });
+    const bound = bind(LIST_CASES, {
+      path_params: { project_id: 2, folder_id: 7 },
+    });
     expect(bound.path).toBe("/api/v1/projects/2/folder/7/test-cases");
     expect(bound.body).toBeUndefined();
   });
 
   it("builds the nested body the product expects, not the flat one", () => {
     const bound = bind(CREATE_FOLDER, {
-      path_params: { project_id: 2 }, body: { name: "New", notes: "d" },
+      path_params: { project_id: 2 },
+      body: { name: "New", notes: "d" },
     });
     expect(bound.body).toEqual({ folder: { name: "New", notes: "d" } });
   });
@@ -263,38 +341,54 @@ describe("binding", () => {
   it("keeps a name declared in two places unambiguous", () => {
     // `folder_id` is a body field here while `project_id` is a path one; grouping is what
     // makes that expressible at all.
-    const bound = bind(BULK_MOVE, { path_params: { project_id: 2 }, body: { folder_id: 9 } });
+    const bound = bind(BULK_MOVE, {
+      path_params: { project_id: 2 },
+      body: { folder_id: 9 },
+    });
     expect(bound.path).toBe("/api/v1/projects/2/test-cases/bulk-move");
     expect(bound.body).toEqual({ folder_id: 9 });
   });
 
   it("refuses an unknown argument instead of dropping it", () => {
     // Silently ignoring a misspelled filter returns a larger result set that looks correct.
-    expect(() => bind(LIST_CASES, { path_params: { project_id: 1, folder_id: 1 }, query: { pp: 1 } }))
-      .toThrow(/unknown query: pp/);
+    expect(() =>
+      bind(LIST_CASES, {
+        path_params: { project_id: 1, folder_id: 1 },
+        query: { pp: 1 },
+      }),
+    ).toThrow(/unknown query: pp/);
   });
 
   it("enforces required body fields, not just path ones", () => {
-    expect(() => bind(CREATE_FOLDER, { path_params: { project_id: 2 }, body: {} }))
-      .toThrow(/missing required parameter\(s\): name/);
+    expect(() =>
+      bind(CREATE_FOLDER, { path_params: { project_id: 2 }, body: {} }),
+    ).toThrow(/missing required parameter\(s\): name/);
   });
 
   it("stops a traversal attempt at the declared type", () => {
-    expect(() => bind(LIST_CASES, { path_params: { project_id: "../../admin-v2", folder_id: 1 } }))
-      .toThrow(/must be a number/);
+    expect(() =>
+      bind(LIST_CASES, {
+        path_params: { project_id: "../../admin-v2", folder_id: 1 },
+      }),
+    ).toThrow(/must be a number/);
   });
 
   it("encodes a string path value so it cannot rewrite the route", () => {
     const capability: Capability = {
-      ...LIST_CASES, path: "/api/v1/x/{slug}",
-      path_params: [{ name: "slug", type: "string", required: true }], query: [],
+      ...LIST_CASES,
+      path: "/api/v1/x/{slug}",
+      path_params: [{ name: "slug", type: "string", required: true }],
+      query: [],
     };
-    expect(bind(capability, { path_params: { slug: "a/b" } }).path).toBe("/api/v1/x/a%2Fb");
+    expect(bind(capability, { path_params: { slug: "a/b" } }).path).toBe(
+      "/api/v1/x/a%2Fb",
+    );
   });
 
   it("checks enums", () => {
-    expect(() => coerce("nope", { name: "s", type: "string", values: ["low", "high"] }))
-      .toThrow(/must be one of: low, high/);
+    expect(() =>
+      coerce("nope", { name: "s", type: "string", values: ["low", "high"] }),
+    ).toThrow(/must be one of: low, high/);
   });
 });
 
@@ -331,13 +425,18 @@ describe("auth", () => {
   // string-building schemes below never await anything real.
   it("forwards the caller's credentials as Api-Token", async () => {
     // HTTP Basic is not usable on /api/v1; Api-Token is what the whole surface accepts.
-    const headers = await authHeaders({ username: "ing_Xx", accessKey: "SECRET" });
+    const headers = await authHeaders({
+      username: "ing_Xx",
+      accessKey: "SECRET",
+    });
     expect(headers["Api-Token"]).toBe("ing_Xx:SECRET");
     expect(headers["request-source"]).toBe("ai-chatbot");
   });
 
   it("refuses rather than sending unauthenticated", async () => {
-    await expect(authHeaders({ username: "u", accessKey: "" })).rejects.toThrow(InvocationError);
+    await expect(authHeaders({ username: "u", accessKey: "" })).rejects.toThrow(
+      InvocationError,
+    );
   });
 });
 
@@ -351,7 +450,9 @@ describe("auth schemes", () => {
 
   it("honours a declared header name and template", async () => {
     const headers = await authHeaders(CREDS, {
-      type: "apiKey", in: "header", name: "X-Agent-Key",
+      type: "apiKey",
+      in: "header",
+      name: "X-Agent-Key",
       template: "{username}_{access_key}",
     });
     // The separator is the product's to choose, not ours to hardcode.
@@ -367,41 +468,63 @@ describe("auth schemes", () => {
   });
 
   it("keeps the attribution headers whatever the scheme", async () => {
-    for (const auth of [undefined, { type: "http" as const, scheme: "basic" }]) {
-      expect((await authHeaders(CREDS, auth))["request-source"]).toBe("ai-chatbot");
+    for (const auth of [
+      undefined,
+      { type: "http" as const, scheme: "basic" },
+    ]) {
+      expect((await authHeaders(CREDS, auth))["request-source"]).toBe(
+        "ai-chatbot",
+      );
     }
   });
 
   it("refuses a placeholder it cannot fill instead of sending it literally", async () => {
     // The harness really carries `{user_id}_{group_id}`. Emitting that verbatim would be a
     // well-formed header that 401s, indistinguishable from bad credentials.
-    await expect(authHeaders(CREDS, {
-      type: "apiKey", in: "header", name: "X-Auth-Override",
-      template: "{user_id}_{group_id}",
-    })).rejects.toThrow(/cannot fill: group_id, user_id/);
+    await expect(
+      authHeaders(CREDS, {
+        type: "apiKey",
+        in: "header",
+        name: "X-Auth-Override",
+        template: "{user_id}_{group_id}",
+      }),
+    ).rejects.toThrow(/cannot fill: group_id, user_id/);
   });
 
   it("refuses to put a credential anywhere but a header", async () => {
     // A query parameter would leave the credential in access logs and proxies.
-    await expect(authHeaders(CREDS, {
-      type: "apiKey", in: "query", name: "token",
-    })).rejects.toThrow(/can only send credentials in a header/);
-    await expect(authHeaders(CREDS, {
-      type: "apiKey", in: "cookie", name: "session",
-    })).rejects.toThrow(/unsupported auth location/);
+    await expect(
+      authHeaders(CREDS, {
+        type: "apiKey",
+        in: "query",
+        name: "token",
+      }),
+    ).rejects.toThrow(/can only send credentials in a header/);
+    await expect(
+      authHeaders(CREDS, {
+        type: "apiKey",
+        in: "cookie",
+        name: "session",
+      }),
+    ).rejects.toThrow(/unsupported auth location/);
   });
 
   it("refuses a scheme it does not implement, by name", async () => {
     // `oauth2` used to be in this list and is now implemented — its own refusals and its
     // bearer presentation live in capabilityRegistryOAuth.test.ts, which can inject a
     // token transport. Asserting it here would reach the real auth endpoint.
-    await expect(authHeaders(CREDS, { type: "http", scheme: "bearer" }))
-      .rejects.toThrow(/unsupported auth scheme/);
+    await expect(
+      authHeaders(CREDS, { type: "http", scheme: "bearer" }),
+    ).rejects.toThrow(/unsupported auth scheme/);
   });
 
   it("still refuses to send anything unauthenticated", async () => {
-    await expect(authHeaders({ username: "", accessKey: "" }, { type: "http", scheme: "basic" }))
-      .rejects.toThrow(/not authenticated/);
+    await expect(
+      authHeaders(
+        { username: "", accessKey: "" },
+        { type: "http", scheme: "basic" },
+      ),
+    ).rejects.toThrow(/not authenticated/);
   });
 });
 
@@ -414,20 +537,29 @@ describe("invoke — one request, response returned untouched", () => {
       calls += 1;
       return {
         status: 200,
-        body: { test_cases: [{ id: 1, leaked: "kept" }], info: { count: 880, next: null } },
+        body: {
+          test_cases: [{ id: 1, leaked: "kept" }],
+          info: { count: 880, next: null },
+        },
       };
     };
     const result = await invoke(
-      LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://tm.example", credentials, transport,
+      LIST_CASES,
+      { path_params: { project_id: 1, folder_id: 2 } },
+      "https://tm.example",
+      credentials,
+      transport,
     );
-    expect(calls).toBe(1);                       // paging is the caller's now
+    expect(calls).toBe(1); // paging is the caller's now
     expect(result.ok).toBe(true);
-    expect(result.completed).toBe(true);         // the envelope says next: null
+    expect(result.completed).toBe(true); // the envelope says next: null
     // No extraction, no counting, no projection — the body as sent, `leaked` included.
     expect(result.http_response).toEqual({
       status: 200,
-      body: { test_cases: [{ id: 1, leaked: "kept" }], info: { count: 880, next: null } },
+      body: {
+        test_cases: [{ id: 1, leaked: "kept" }],
+        info: { count: 880, next: null },
+      },
     });
   });
 
@@ -435,24 +567,39 @@ describe("invoke — one request, response returned untouched", () => {
     // The whole point: a product that wants Basic gets Basic, without the server knowing
     // anything about that product by name.
     const seen: Record<string, string>[] = [];
-    const transport = async (_m: string, _u: string, headers: Record<string, string>) => {
+    const transport = async (
+      _m: string,
+      _u: string,
+      headers: Record<string, string>,
+    ) => {
       seen.push(headers);
       return { status: 200, body: {} };
     };
-    await invoke(LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://x.example", { username: "u", accessKey: "k" }, transport,
-      { type: "http", scheme: "basic" });
-    expect(seen[0].Authorization).toBe(`Basic ${Buffer.from("u:k").toString("base64")}`);
+    await invoke(
+      LIST_CASES,
+      { path_params: { project_id: 1, folder_id: 2 } },
+      "https://x.example",
+      { username: "u", accessKey: "k" },
+      transport,
+      { type: "http", scheme: "basic" },
+    );
+    expect(seen[0].Authorization).toBe(
+      `Basic ${Buffer.from("u:k").toString("base64")}`,
+    );
     expect(seen[0]["Api-Token"]).toBeUndefined();
   });
 
   it("says the answer is incomplete when the envelope declares another page", async () => {
     const transport = async () => ({
-      status: 200, body: { test_cases: [{ id: 1 }], info: { count: 880, next: 2 } },
+      status: 200,
+      body: { test_cases: [{ id: 1 }], info: { count: 880, next: 2 } },
     });
     const result = await invoke(
-      LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://tm.example", credentials, transport,
+      LIST_CASES,
+      { path_params: { project_id: 1, folder_id: 2 } },
+      "https://tm.example",
+      credentials,
+      transport,
     );
     expect(result.ok).toBe(true);
     expect(result.completed).toBe(false);
@@ -462,45 +609,80 @@ describe("invoke — one request, response returned untouched", () => {
   // snake_case on others) rather than info.next. Read as complete, an agent would stop at
   // the first 20 reports and answer "the last report Priya ran" from the wrong page.
   it.each([
-    [{ success: true, data: { reports: [], pagination: { hasNext: true, nextPage: "t" } } }, false],
-    [{ success: true, data: { builds: [], pagination: { has_next: true, next_page: "t" } } }, false],
-    [{ success: true, data: { scans: [], pagination: { hasNext: false, nextPage: null } } }, true],
+    [
+      {
+        success: true,
+        data: { reports: [], pagination: { hasNext: true, nextPage: "t" } },
+      },
+      false,
+    ],
+    [
+      {
+        success: true,
+        data: { builds: [], pagination: { has_next: true, next_page: "t" } },
+      },
+      false,
+    ],
+    [
+      {
+        success: true,
+        data: { scans: [], pagination: { hasNext: false, nextPage: null } },
+      },
+      true,
+    ],
     [{ success: true, data: null, info: ["No Projects found"] }, true],
-  ])("reads another page from a data.pagination envelope (%#)", async (body, completed) => {
-    const result = await invoke(
-      LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://a11y.example", credentials, async () => ({ status: 200, body }),
-    );
-    expect(result.completed).toBe(completed);
-  });
+  ])(
+    "reads another page from a data.pagination envelope (%#)",
+    async (body, completed) => {
+      const result = await invoke(
+        LIST_CASES,
+        { path_params: { project_id: 1, folder_id: 2 } },
+        "https://a11y.example",
+        credentials,
+        async () => ({ status: 200, body }),
+      );
+      expect(result.completed).toBe(completed);
+    },
+  );
 
   it("mirrors a non-2xx and lets the product's own body explain it", async () => {
     const transport = async () => ({
       status: 422,
-      body: { success: false, error: "Drill-down is only available for User Workload Reports" },
+      body: {
+        success: false,
+        error: "Drill-down is only available for User Workload Reports",
+      },
     });
     const result = await invoke(
-      LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://tm.example", credentials, transport,
+      LIST_CASES,
+      { path_params: { project_id: 1, folder_id: 2 } },
+      "https://tm.example",
+      credentials,
+      transport,
     );
     expect(result.ok).toBe(false);
     expect(result.completed).toBe(false);
     expect(result.http_response.status).toBe(422);
-    expect((result.http_response.body as Record<string, unknown>).error)
-      .toMatch(/User Workload Reports/);
+    expect(
+      (result.http_response.body as Record<string, unknown>).error,
+    ).toMatch(/User Workload Reports/);
   });
 
   it("reports an unreachable product as status 0", async () => {
     const transport = async () => ({
-      status: 0, body: null, error: "the product could not be reached",
+      status: 0,
+      body: null,
+      error: "the product could not be reached",
     });
     const result = await invoke(
-      LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://tm.example", credentials, transport,
+      LIST_CASES,
+      { path_params: { project_id: 1, folder_id: 2 } },
+      "https://tm.example",
+      credentials,
+      transport,
     );
     expect(result.ok).toBe(false);
     expect(result.http_response.status).toBe(0);
     expect(result.http_response.error).toMatch(/could not be reached/);
   });
 });
-

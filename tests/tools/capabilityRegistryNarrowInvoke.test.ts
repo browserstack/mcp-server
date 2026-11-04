@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CapabilityRegistry } from "../../src/tools/capability-registry/index-loader.js";
 import { addCapabilityRegistryTools } from "../../src/tools/capability-registry/register.js";
+import { parseResult } from "../untrusted.js";
 
 // `select` reaching the response, through the registered tool rather than the module it
 // calls. The unit tests next door pin the narrowing itself; these pin the wiring — that a
@@ -94,7 +95,7 @@ function tools(body: unknown, status = 200) {
 }
 
 const call = async (handlers: Record<string, any>, input: unknown) =>
-  JSON.parse(
+  parseResult(
     (await handlers.invokeCapability(input, {} as never)).content[0].text,
   );
 
@@ -217,7 +218,7 @@ describe("invokeCapability applies a selection", () => {
 describe("the contract advertises it", () => {
   it("describeCapability publishes `narrowable`, which is the caller's business", async () => {
     const handlers = tools(ROWS);
-    const doc = JSON.parse(
+    const doc = parseResult(
       (
         await handlers.describeCapability(
           { name: "list_browsers", product: "p" },
@@ -231,7 +232,7 @@ describe("the contract advertises it", () => {
 
   it("says nothing about it on a capability that has none", async () => {
     const handlers = tools(ROWS);
-    const doc = JSON.parse(
+    const doc = parseResult(
       (
         await handlers.describeCapability(
           { name: "list_plain", product: "p" },

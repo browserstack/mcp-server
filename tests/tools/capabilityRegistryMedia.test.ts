@@ -6,6 +6,7 @@ import {
   detachImage,
   noteImage,
 } from "../../src/tools/capability-registry/media.js";
+import { parseResult } from "../untrusted.js";
 
 // A WebDriver screenshot is `{"value": "<base64 png>"}` and a phone screen runs to hundreds
 // of kilobytes. Inside the JSON text block it is paid for as text and still invisible to the
@@ -102,7 +103,7 @@ describe("a capability whose body carries an image", () => {
       data: PNG,
       mimeType: "image/png",
     });
-    const text = JSON.parse(out.content[0].text);
+    const text = parseResult(out.content[0].text);
     expect(text.ok).toBe(true);
     // no base64 anywhere in the text block
     expect(out.content[0].text).not.toContain(PNG);
@@ -115,7 +116,7 @@ describe("a capability whose body carries an image", () => {
   it("reports the size of the block attached, not the size received, when it was compressed", async () => {
     const out = await one(200, { value: BIG }, { media: MEDIA });
     expect(out.content[1].data).toBe(SMALLER);
-    const text = JSON.parse(out.content[0].text);
+    const text = parseResult(out.content[0].text);
     // SMALLER decodes to 8 bytes; the note and the field say so, not 3000
     expect(text.image).toEqual({ mime: "image/png", bytes: 8 });
     expect(text.http_response.body.value).toBe(
@@ -127,13 +128,13 @@ describe("a capability whose body carries an image", () => {
     const error = { value: { error: "invalid session id", message: "gone" } };
     const out = await one(404, error, { media: MEDIA });
     expect(out.content).toHaveLength(1);
-    expect(JSON.parse(out.content[0].text).http_response.body).toEqual(error);
+    expect(parseResult(out.content[0].text).http_response.body).toEqual(error);
   });
 
   it("hands a success with nothing at the path back unchanged", async () => {
     const out = await one(200, { value: null }, { media: MEDIA });
     expect(out.content).toHaveLength(1);
-    expect(JSON.parse(out.content[0].text).http_response.body).toEqual({
+    expect(parseResult(out.content[0].text).http_response.body).toEqual({
       value: null,
     });
   });
@@ -141,7 +142,7 @@ describe("a capability whose body carries an image", () => {
   it("changes nothing for a capability that declares no media", async () => {
     const out = await one(200, { value: PNG });
     expect(out.content).toHaveLength(1);
-    expect(JSON.parse(out.content[0].text).http_response.body.value).toBe(PNG);
+    expect(parseResult(out.content[0].text).http_response.body.value).toBe(PNG);
   });
 });
 
@@ -162,7 +163,7 @@ describe("after a fallback, the capability that answered decides", () => {
     ])("plain");
     expect(out.content).toHaveLength(2);
     expect(out.content[1].mimeType).toBe("image/png");
-    const text = JSON.parse(out.content[0].text);
+    const text = parseResult(out.content[0].text);
     expect(text.fallback.attempts).toHaveLength(2);
     expect(text.http_response.body.value).toMatch(/attached to this result/);
   });
@@ -180,7 +181,7 @@ describe("after a fallback, the capability that answered decides", () => {
       { status: 200, body: { value: PNG } },
     ])("plain");
     expect(out.content).toHaveLength(1);
-    expect(JSON.parse(out.content[0].text).http_response.body.value).toBe(PNG);
+    expect(parseResult(out.content[0].text).http_response.body.value).toBe(PNG);
   });
 });
 

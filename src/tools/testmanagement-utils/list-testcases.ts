@@ -5,6 +5,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /**
  * Schema for listing test cases with optional filters.
@@ -98,11 +99,14 @@ export async function listTestCases(
       content: [
         {
           type: "text",
-          text: `Found ${count} test case(s):\n\n${summary}`,
+          text: `Found ${count} test case(s):\n\n${wrapUntrusted("test case list", summary)}`,
         },
         {
           type: "text",
-          text: JSON.stringify(test_cases, null, 2),
+          text: wrapUntrusted(
+            "test cases (structured data)",
+            JSON.stringify(test_cases, null, 2),
+          ),
         },
       ],
     };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CapabilityRegistry } from "../../src/tools/capability-registry/index-loader.js";
 import { addCapabilityRegistryTools } from "../../src/tools/capability-registry/register.js";
+import { parseResult } from "../untrusted.js";
 
 // A capability may declare `fallbacks`: when its own call answers a named status, a sibling
 // is called with an authored body, and the chain stops at the first 2xx. hide_keyboard on an
@@ -130,7 +131,7 @@ function harness(statuses: number[], fallbacks?: unknown[]) {
     } as never,
   );
   const call = async (input: Record<string, unknown>) =>
-    JSON.parse(
+    parseResult(
       (
         await handlers.invokeCapability(
           {
@@ -263,7 +264,7 @@ describe("a capability with fallbacks", () => {
 describe("the contract shows the chain", () => {
   it("describeCapability publishes `fallbacks`, so a caller knows what may be pressed", async () => {
     const { handlers } = harness([], CHAIN);
-    const doc = JSON.parse(
+    const doc = parseResult(
       (
         await handlers.describeCapability(
           { name: "hide_keyboard", product: "p" },

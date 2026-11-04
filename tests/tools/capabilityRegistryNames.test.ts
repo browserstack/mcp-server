@@ -6,6 +6,7 @@ import {
   IndexError,
   InvocationError,
 } from "../../src/tools/capability-registry/index-loader.js";
+import { parseResult } from "../untrusted.js";
 
 const FIXTURE = fileURLToPath(
   new URL("../fixtures/capability/tm.capability-index.json", import.meta.url),
@@ -225,7 +226,7 @@ describe("invokeCapability", () => {
       { name: "get_projects_basic" },
       {} as any,
     );
-    expect(JSON.parse(result.content[0].text).ok).toBe(true);
+    expect(parseResult(result.content[0].text).ok).toBe(true);
     expect(calls[0]).toContain("/api/v1/projects/basic");
   });
 
@@ -242,7 +243,7 @@ describe("invokeCapability", () => {
       },
       {} as any,
     );
-    expect(JSON.parse(result.content[0].text).ok).toBe(true);
+    expect(parseResult(result.content[0].text).ok).toBe(true);
     expect(calls[0]).toContain("/api/v1/projects/basic");
   });
 
@@ -253,7 +254,7 @@ describe("invokeCapability", () => {
       { method: "GET", path: "/api/v1/projects/basic" },
       {} as any,
     );
-    expect(JSON.parse(result.content[0].text).ok).toBe(true);
+    expect(parseResult(result.content[0].text).ok).toBe(true);
     expect(calls[0]).toContain("/api/v1/projects/basic");
   });
 
@@ -308,7 +309,7 @@ describe("invokeCapability", () => {
       { ...args, user_permission: "granted", change_summary: "create a run" },
       {} as any,
     );
-    expect(JSON.parse(granted.content[0].text).ok).toBe(true);
+    expect(parseResult(granted.content[0].text).ok).toBe(true);
     expect(calls).toHaveLength(1);
     expect(calls[0]).toContain("/api/v1/projects/1/test-runs");
   });

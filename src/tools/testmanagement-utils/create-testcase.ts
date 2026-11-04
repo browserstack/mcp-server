@@ -9,6 +9,7 @@ import {
 } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import { wrapRichText, wrapTestCaseSteps } from "./rich-text.js";
 import logger from "../../logger.js";
 
@@ -446,11 +447,17 @@ export async function createTestCase(
       type: "text",
       text: `Test case successfully created:
             - Identifier: ${tc.identifier}
-            - Title: ${tc.title}
+            - Title: ${wrapUntrusted("test case title", tc.title)}
 
           You can view it here: ${tmBaseUrl}/projects/${projectId}/folder/search?q=${tc.identifier}`,
     });
-    content.push({ type: "text", text: JSON.stringify(tc, null, 2) });
+    content.push({
+      type: "text",
+      text: wrapUntrusted(
+        "test case (structured data)",
+        JSON.stringify(tc, null, 2),
+      ),
+    });
 
     return { content };
   } catch (err) {

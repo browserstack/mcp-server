@@ -5,6 +5,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /**
  * Schema for creating a test run.
@@ -99,7 +100,13 @@ export async function createTestRun(
     return {
       content: [
         { type: "text", text: summary },
-        { type: "text", text: JSON.stringify(created, null, 2) },
+        {
+          type: "text",
+          text: wrapUntrusted(
+            "test run (structured data)",
+            JSON.stringify(created, null, 2),
+          ),
+        },
       ],
     };
   } catch (err) {

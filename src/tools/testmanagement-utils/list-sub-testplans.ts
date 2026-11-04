@@ -5,6 +5,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /**
  * Schema for listing sub-test-plans under a parent test plan in a BrowserStack
@@ -103,9 +104,15 @@ export async function listSubTestPlans(
       content: [
         {
           type: "text",
-          text: `Found ${count} sub-test-plan(s) under ${args.parent_test_plan_identifier} in project ${args.project_identifier}:\n\n${summary}`,
+          text: `Found ${count} sub-test-plan(s) under ${args.parent_test_plan_identifier} in project ${args.project_identifier}:\n\n${wrapUntrusted("sub-test-plan list", summary)}`,
         },
-        { type: "text", text: JSON.stringify(plans, null, 2) },
+        {
+          type: "text",
+          text: wrapUntrusted(
+            "sub-test-plans (structured data)",
+            JSON.stringify(plans, null, 2),
+          ),
+        },
       ],
     };
   } catch (err) {

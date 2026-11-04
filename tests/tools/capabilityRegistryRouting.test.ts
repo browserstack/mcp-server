@@ -86,7 +86,9 @@ describe("routing between products", () => {
     // carries 9 entities and 0 descriptions on purpose, so this reads as "unwritten"
     // rather than as a build that produced nothing — the case of a product onboarded
     // before its vocabulary is written.
-    expect(vocab[second.name].every((e) => e.description === undefined)).toBe(true);
+    expect(vocab[second.name].every((e) => e.description === undefined)).toBe(
+      true,
+    );
   });
 
   it("answers within one product, so size cannot decide the answer", () => {
@@ -129,7 +131,11 @@ describe("weakness is judged relative to the corpus, not absolutely", () => {
   const SECOND_ONLY = { [second.name]: second.product } as any;
 
   it("does not call a good query weak just because its corpus is small", () => {
-    const alone = searchCapabilities(SECOND_ONLY, "list widgets in my catalogue", {});
+    const alone = searchCapabilities(
+      SECOND_ONLY,
+      "list widgets in my catalogue",
+      {},
+    );
     const mixed = searchCapabilities(BOTH, "list widgets in my catalogue", {});
     expect(alone.top_matched).toBeLessThan(mixed.top_matched); // raw score is not portable
     expect(alone.weak).toBe(false); // the judgement is

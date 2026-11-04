@@ -3,7 +3,9 @@ import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 
 import {
-  CapabilityRegistry, resolveDeep, resolveResponses,
+  CapabilityRegistry,
+  resolveDeep,
+  resolveResponses,
 } from "../../src/tools/capability-registry/index-loader.js";
 import { searchCapabilities } from "../../src/tools/capability-registry/search.js";
 import { bind } from "../../src/tools/capability-registry/bind.js";
@@ -13,7 +15,9 @@ const RELEASED = fileURLToPath(
   new URL("../fixtures/capability/tm.capability-index.json", import.meta.url),
 );
 /** The pre-release shape. Never deployed; kept so the defensive branch stays covered. */
-const PRE_RELEASE = fileURLToPath(new URL("../fixtures/registry-index.json", import.meta.url));
+const PRE_RELEASE = fileURLToPath(
+  new URL("../fixtures/registry-index.json", import.meta.url),
+);
 
 const registry = CapabilityRegistry.fromFile(RELEASED);
 
@@ -44,7 +48,9 @@ describe("the released artifact", () => {
   it("carries provenance in the released format, and nothing depends on it", () => {
     // `<commit>_<UTC timestamp>`, replacing the content-derived hash. Logging and
     // cache-busting only — capability resolution must not read it.
-    expect(registry.buildId).toMatch(/^[0-9a-f]{7,}_\d{4}-\d{2}-\d{2}T[\d:]+Z$/);
+    expect(registry.buildId).toMatch(
+      /^[0-9a-f]{7,}_\d{4}-\d{2}-\d{2}T[\d:]+Z$/,
+    );
     expect(registry.buildInfo().tm.version).toMatch(/^\d+\.\d+$/);
   });
 
@@ -69,8 +75,15 @@ describe("the released artifact", () => {
     // `key_facts` was on this list until the build started publishing it. It is no longer
     // machinery: it is the entity-wide half of guidance, gated on the way out. What it must
     // never become is a hole in the boundary, which the next test asserts directly.
-    for (const forbidden of ["x-atlas-permission", '"target"', '"pointer"',
-      '"operations"', "strip_prefix", "page_param", "count_param"]) {
+    for (const forbidden of [
+      "x-atlas-permission",
+      '"target"',
+      '"pointer"',
+      '"operations"',
+      "strip_prefix",
+      "page_param",
+      "count_param",
+    ]) {
       expect(blob).not.toContain(forbidden);
     }
   });
@@ -90,10 +103,14 @@ describe("the released artifact", () => {
       [/-v\d\b/, "endpoint nickname"],
       [/\bq\.[a-z_]+|\b[a-z_]+\[\]/, "wire-shaped parameter"],
       [/TMPD-\d+/, "internal ticket"],
-      [/\b(?!example\.com)[a-z0-9][a-z0-9-]*\.(?:com|net|org|io|dev)\b/, "hostname"],
+      [
+        /\b(?!example\.com)[a-z0-9][a-z0-9-]*\.(?:com|net|org|io|dev)\b/,
+        "hostname",
+      ],
     ];
     const offenders = facts.flatMap((fact) =>
-      forbidden.filter(([pattern]) => pattern.test(fact))
+      forbidden
+        .filter(([pattern]) => pattern.test(fact))
         .map(([, label]) => `${label}: ${fact.slice(0, 70)}`),
     );
     expect(offenders).toEqual([]);
@@ -124,7 +141,10 @@ describe("the released artifact", () => {
   });
 
   it("answers a real query with a usable endpoint", () => {
-    const hits = searchCapabilities(registry.index.products, "list the test cases in a folder");
+    const hits = searchCapabilities(
+      registry.index.products,
+      "list the test cases in a folder",
+    );
     expect(hits.hits.length).toBeGreaterThan(0);
     const top = hits.hits[0].capability;
     expect(top.method).toBeTruthy();
@@ -149,24 +169,32 @@ describe("the released artifact", () => {
     expect(guided.length).toBe(capabilities.length);
 
     // The right answer still wins on identity, not on how much guidance it carries.
-    const hits = searchCapabilities(registry.index.products, "create a folder in a project");
+    const hits = searchCapabilities(
+      registry.index.products,
+      "create a folder in a project",
+    );
     expect(hits.hits[0].capability.mode).toBe("write");
     expect(hits.hits[0].capability.entity).toBe("folder");
   });
 
   it("publishes the page ceiling under the name the artifact uses", () => {
     // `max_page_size`, not `max_items` — the latter was only ever in our type.
-    const paged = registry.index.products.tm.capabilities.filter((c) => c.paginated);
+    const paged = registry.index.products.tm.capabilities.filter(
+      (c) => c.paginated,
+    );
     expect(paged.length).toBeGreaterThan(0);
     // Bounded, not pinned. What matters is that a paginated capability CAN declare its
     // ceiling and that some do — the count moves with every export. Coverage is thin and
     // is a product-authoring gap, not a format one.
-    expect(paged.filter((c) => c.max_page_size !== undefined).length).toBeGreaterThan(0);
+    expect(
+      paged.filter((c) => c.max_page_size !== undefined).length,
+    ).toBeGreaterThan(0);
   });
 
   it("refuses every destructive endpoint before binding", () => {
-    const destructive = registry.index.products.tm.capabilities
-      .filter((capability) => capability.mode === "destructive");
+    const destructive = registry.index.products.tm.capabilities.filter(
+      (capability) => capability.mode === "destructive",
+    );
     // tm spells most deletes as `POST .../delete`, so this is populated by the path rule
     // as well as the method. Asserted as non-empty rather than counted: the number grows
     // with every onboarding batch, and what the test is for is that the classification
@@ -176,15 +204,21 @@ describe("the released artifact", () => {
 
   it("binds a real endpoint end to end from what search returned", () => {
     const { capability } = registry.byEndpointLookup(
-      "GET", "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
+      "GET",
+      "/api/v1/projects/{project_id}/folder/{folder_id}/test-cases",
     );
-    const bound = bind(capability, { path_params: { project_id: 379320413, folder_id: 750414 } });
-    expect(bound.path).toBe("/api/v1/projects/379320413/folder/750414/test-cases");
+    const bound = bind(capability, {
+      path_params: { project_id: 379320413, folder_id: 750414 },
+    });
+    expect(bound.path).toBe(
+      "/api/v1/projects/379320413/folder/750414/test-cases",
+    );
   });
 
   it("marks the endpoints whose response the product never declared", () => {
-    const discovered = registry.index.products.tm.capabilities
-      .filter((capability) => capability.shape === "discovered");
+    const discovered = registry.index.products.tm.capabilities.filter(
+      (capability) => capability.shape === "discovered",
+    );
     // A minority, and bounded rather than pinned: a product declaring response schemas
     // for everything would make this 0, which is the direction we want it to move.
     expect(discovered.length).toBeLessThan(
@@ -207,7 +241,8 @@ describe("the released artifact", () => {
   it("resolves a capability's responses through every hop", () => {
     const tm = registry.index.products.tm;
     const { capability } = registry.byEndpointLookup(
-      "POST", "/api/v1/projects/{project_id}/folders",
+      "POST",
+      "/api/v1/projects/{project_id}/folders",
     );
     // "all", because the second hop this checks is on an error entry.
     const resolved = resolveResponses(tm, capability, "all")!;
@@ -229,8 +264,12 @@ describe("the released artifact", () => {
     const tm = registry.index.products.tm;
     for (const capability of tm.capabilities) {
       const blob = JSON.stringify(resolveResponses(tm, capability, "all"));
-      expect(blob, `${capability.method} ${capability.path}`).not.toContain('"$schema"');
-      expect(blob, `${capability.method} ${capability.path}`).not.toContain('"$response"');
+      expect(blob, `${capability.method} ${capability.path}`).not.toContain(
+        '"$schema"',
+      );
+      expect(blob, `${capability.method} ${capability.path}`).not.toContain(
+        '"$response"',
+      );
     }
   });
 
@@ -240,19 +279,24 @@ describe("the released artifact", () => {
     const cyclic = {
       ...registry.index.products.tm,
       schemas: {
-        Folder: { type: "object", properties: { children: { $schema: "Folder" } } },
+        Folder: {
+          type: "object",
+          properties: { children: { $schema: "Folder" } },
+        },
       },
     };
-    const resolved: any = resolveDeep(cyclic, { schema: { $schema: "Folder" } });
+    const resolved: any = resolveDeep(cyclic, {
+      schema: { $schema: "Folder" },
+    });
     expect(resolved.schema.type).toBe("object");
     // The second visit stops and shows the reference rather than recursing forever.
     expect(resolved.schema.properties.children).toEqual({ $schema: "Folder" });
   });
 
   it("leaves a dangling reference visible rather than dropping it", () => {
-    const resolved: any = resolveDeep(
-      registry.index.products.tm, { schema: { $schema: "NoSuchSchema" } },
-    );
+    const resolved: any = resolveDeep(registry.index.products.tm, {
+      schema: { $schema: "NoSuchSchema" },
+    });
     expect(resolved.schema).toEqual({ $schema: "NoSuchSchema" });
   });
 });

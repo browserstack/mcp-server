@@ -115,14 +115,21 @@ describe("a caller who hand-builds the wrapper is told what happened", () => {
   } as any;
 
   it("names the wrapper and says to send the fields directly", async () => {
-    const { bind } = await import("../../src/tools/capability-registry/bind.js");
+    const { bind } =
+      await import("../../src/tools/capability-registry/bind.js");
     expect(() =>
-      bind(capability, { path_params: { id: "1" }, body: { thing: { name: "x" } } }),
-    ).toThrow(/wrapper this surface builds for you|builds for you from each field/);
+      bind(capability, {
+        path_params: { id: "1" },
+        body: { thing: { name: "x" } },
+      }),
+    ).toThrow(
+      /wrapper this surface builds for you|builds for you from each field/,
+    );
   });
 
   it("still reports an ordinary typo as an ordinary unknown field", async () => {
-    const { bind } = await import("../../src/tools/capability-registry/bind.js");
+    const { bind } =
+      await import("../../src/tools/capability-registry/bind.js");
     // `nmae` is not a wrapper — the hint must not fire and mislead.
     expect(() =>
       bind(capability, { path_params: { id: "1" }, body: { nmae: "x" } }),
@@ -130,8 +137,12 @@ describe("a caller who hand-builds the wrapper is told what happened", () => {
   });
 
   it("accepts the flat body it asked for", async () => {
-    const { bind } = await import("../../src/tools/capability-registry/bind.js");
-    const bound = bind(capability, { path_params: { id: "1" }, body: { name: "x" } });
+    const { bind } =
+      await import("../../src/tools/capability-registry/bind.js");
+    const bound = bind(capability, {
+      path_params: { id: "1" },
+      body: { name: "x" },
+    });
     expect(bound.body).toEqual({ thing: { name: "x" } });
   });
 });
@@ -165,9 +176,8 @@ describe("a description written beside a $ref survives resolution", () => {
   };
 
   it("keeps the sibling description and nullable flag", async () => {
-    const { resolveDeep } = await import(
-      "../../src/tools/capability-registry/index-loader.js"
-    );
+    const { resolveDeep } =
+      await import("../../src/tools/capability-registry/index-loader.js");
     const out: any = resolveDeep(product, product.responses.Search);
     const info = out.schema.properties.info;
     expect(info.description).toBe("NULL when the search failed.");
@@ -177,13 +187,14 @@ describe("a description written beside a $ref survives resolution", () => {
   });
 
   it("lets the sibling win, because it describes THAT usage", async () => {
-    const { resolveDeep } = await import(
-      "../../src/tools/capability-registry/index-loader.js"
-    );
+    const { resolveDeep } =
+      await import("../../src/tools/capability-registry/index-loader.js");
     const local = JSON.parse(JSON.stringify(product));
     local.schemas.PageInfo.description = "generic paging";
     const out: any = resolveDeep(local, local.responses.Search);
-    expect(out.schema.properties.info.description).toBe("NULL when the search failed.");
+    expect(out.schema.properties.info.description).toBe(
+      "NULL when the search failed.",
+    );
   });
 });
 
@@ -207,7 +218,8 @@ describe("a parameter the spec leaves untyped is passed through, not stringified
   } as any;
 
   it("keeps an object intact", async () => {
-    const { bind } = await import("../../src/tools/capability-registry/bind.js");
+    const { bind } =
+      await import("../../src/tools/capability-registry/bind.js");
     const bound = bind(capability, {
       body: { opaque: { users: [], external_mails: [] }, label: "x" },
     });
@@ -218,7 +230,8 @@ describe("a parameter the spec leaves untyped is passed through, not stringified
   });
 
   it("still stringifies a declared string", async () => {
-    const { bind } = await import("../../src/tools/capability-registry/bind.js");
+    const { bind } =
+      await import("../../src/tools/capability-registry/bind.js");
     const bound = bind(capability, { body: { label: 42 } });
     expect(bound.body).toEqual({ label: "42" });
   });
@@ -257,7 +270,13 @@ describe("credentials are not sent over a plaintext transport", () => {
   });
 
   it("allows https", async () => {
-    await invoke(capability, {}, "https://tm.example.com", creds, transport as any);
+    await invoke(
+      capability,
+      {},
+      "https://tm.example.com",
+      creds,
+      transport as any,
+    );
     expect(transport).toHaveBeenCalledOnce();
   });
 

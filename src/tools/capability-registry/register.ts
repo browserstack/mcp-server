@@ -43,6 +43,7 @@ import { isEnabled as askIsEnabled } from "../ask-browserstack/config.js";
 import { PRODUCTS as ASK_PRODUCTS } from "../ask-browserstack/types.js";
 import { decodedLength, detachImage, noteImage } from "./media.js";
 import { maybeCompressBase64 } from "../../lib/image.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import {
   ambiguousProducts,
   productAnchors,
@@ -1439,9 +1440,14 @@ export function addCapabilityRegistryTools(
               }
             : {}),
         });
-        return image
-          ? { content: [{ type: "text", text: JSON.stringify(text) }, image] }
-          : ok(text);
+        // THE PRODUCT'S ANSWER IS DATA, NOT INSTRUCTIONS. Its body carries whatever users
+        // wrote — case preconditions, step text, run names, history — so it goes back
+        // inside the untrusted-content boundary, the same as the dedicated tools' output.
+        const wrapped: CallToolResult["content"][number] = {
+          type: "text",
+          text: wrapUntrusted("product API response", JSON.stringify(text)),
+        };
+        return { content: image ? [wrapped, image] : [wrapped] };
       } catch (error) {
         if (error instanceof InvocationError)
           return refuse(

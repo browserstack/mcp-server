@@ -9,6 +9,7 @@ import {
 } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { wrapRichText, wrapTestCaseSteps } from "./rich-text.js";
 import logger from "../../logger.js";
@@ -232,8 +233,8 @@ export async function updateTestCase(
 
 **Test Case Details:**
 - **ID**: ${tc.identifier}
-- **Name**: ${tc.title}
-- **Description**: ${tc.description || "N/A"}
+- **Name**: ${wrapUntrusted("test case name", tc.title)}
+- **Description**: ${tc.description ? wrapUntrusted("test case description", tc.description) : "N/A"}
 - **Case Type**: ${tc.case_type}
 - **Priority**: ${tc.priority}
 - **Status**: ${tc.status}

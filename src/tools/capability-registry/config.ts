@@ -93,6 +93,15 @@ const US_ONLY_PRODUCTS: Record<string, string> = {
   loadtesting: "Load Testing",
 };
 
+/** True for a product this package knows by name, as opposed to a name the agent typed. */
+export function isKnownProduct(name: unknown): boolean {
+  return (
+    typeof name === "string" &&
+    (Object.hasOwn(REGIONAL_HOSTS, name) ||
+      Object.hasOwn(US_ONLY_PRODUCTS, name))
+  );
+}
+
 function regionalHost(product: string, host?: string): string | undefined {
   if (US_ONLY_PRODUCTS[product]) {
     assertUsAccount(US_ONLY_PRODUCTS[product]);

@@ -82,6 +82,28 @@ describe("telemetry by the account's region", () => {
     expect(row).not.toHaveProperty("error_message");
   });
 
+  it.each(["eu", "in", "unknown"])(
+    "keeps only a known product and no entity for a %s account",
+    (region) => {
+      withAccountRegion(region as any, () => {
+        trackMCP("searchCapability", clientInfo, undefined, config, {
+          product: "tm",
+          entity: "Acme release 4.2",
+        });
+        trackMCP("searchCapability", clientInfo, undefined, config, {
+          product: "Acme release 4.2",
+        });
+      });
+      const calls = (apiClient.post as any).mock.calls;
+      const [known, typed] = calls
+        .slice(-2)
+        .map((c: any) => c[0].body.event_properties);
+      expect(known.product).toBe("tm");
+      expect(known).not.toHaveProperty("entity");
+      expect(typed).not.toHaveProperty("product");
+    },
+  );
+
   it.each([undefined, "us"])(
     "sends every field when the region is %s",
     (region) => {

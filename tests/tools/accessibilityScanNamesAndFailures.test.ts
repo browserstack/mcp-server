@@ -159,4 +159,22 @@ describe("AccessibilityScanner.failureDetails", () => {
     route({ ok: false, data: {} }, { ok: false, data: {} });
     await expect((await scanner()).failureDetails("7", "2")).resolves.toEqual({ pages: [] });
   });
+
+  it("reads only the run's scan logs for the pages a completed run did not scan", async () => {
+    route(list({ scanRunId: 2, error: "unused" }), logs);
+
+    const pages = await (await scanner()).unscannedPages("7", "2");
+
+    expect(pages.map((p) => p.pageUrl)).toEqual(["https://site.example/a", "https://site.example/b"]);
+    expect(m.get).toHaveBeenCalledTimes(1);
+    expect(m.get.mock.calls[0][0].url).toMatch(/\/scans\/7\/scan_runs\/2\/scan_logs$/);
+  });
+
+  it("gives no pages, rather than an error, when the logs cannot be read or are not a list", async () => {
+    m.get.mockRejectedValue(new Error("network down"));
+    await expect((await scanner()).unscannedPages("7", "2")).resolves.toEqual([]);
+
+    m.get.mockResolvedValue({ ok: true, data: { success: true, data: { scanLogs: { not: "a list" } } } });
+    await expect((await scanner()).unscannedPages("7", "2")).resolves.toEqual([]);
+  });
 });

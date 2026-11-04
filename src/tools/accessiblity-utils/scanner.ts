@@ -24,6 +24,9 @@ export interface ScanFailureDetails {
   pages: { pageUrl: string; status: string; reason: string }[];
 }
 
+const SCANS_API =
+  "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans";
+
 /** How long startAccessibilityScan waits for a scan to finish before handing back its ids. */
 export const SCAN_WAIT_MS = 5 * 60 * 1000;
 
@@ -378,25 +381,9 @@ export class AccessibilityScanner {
     scanId: string,
     scanRunId: string,
   ): Promise<ScanFailureDetails> {
-    const read = (url: string) =>
-      apiClient
-        .get({
-          url,
-          headers: {
-            Authorization:
-              "Basic " +
-              Buffer.from(
-                `${this.auth?.username}:${this.auth?.password}`,
-              ).toString("base64"),
-          },
-          raise_error: false,
-        })
-        .catch(() => undefined);
-    const base =
-      "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans";
-    const [list, logs] = await Promise.all([
-      read(base),
-      read(`${base}/${scanId}/scan_runs/${scanRunId}/scan_logs`),
+    const [list, pages] = await Promise.all([
+      this.readQuietly(SCANS_API),
+      this.unscannedPages(scanId, scanRunId),
     ]);
     const last = (
       list?.ok
@@ -412,8 +399,25 @@ export class AccessibilityScanner {
       last.error.trim()
         ? last.error.trim()
         : undefined;
-    const entries: any[] = logs?.ok ? (logs.data?.data?.scanLogs ?? []) : [];
-    const pages = entries
+    return { ...(reason ? { reason } : {}), pages };
+  }
+
+  /**
+   * The pages of a run whose scan log is not a success, each with the log's reason. Only
+   * the run's logs are read, not the scans list failureDetails also reads: a completed run
+   * names the pages it could not scan here too, and they are otherwise simply absent from
+   * its report. A read that fails gives none.
+   */
+  async unscannedPages(
+    scanId: string,
+    scanRunId: string,
+  ): Promise<ScanFailureDetails["pages"]> {
+    const logs = await this.readQuietly(
+      `${SCANS_API}/${encodeURIComponent(scanId)}/scan_runs/${encodeURIComponent(scanRunId)}/scan_logs`,
+    );
+    const entries: unknown = logs?.ok ? logs.data?.data?.scanLogs : undefined;
+    if (!Array.isArray(entries)) return [];
+    return entries
       .filter((entry) => entry && entry.status !== "success")
       .map((entry) => {
         const said = [entry.description, entry.error]
@@ -431,7 +435,28 @@ export class AccessibilityScanner {
             String(entry.status ?? "unknown"),
         };
       });
-    return { ...(reason ? { reason } : {}), pages };
+  }
+
+  /**
+   * A GET of the scanner API, or undefined when it fails: for reads that only add detail to
+   * an answer, so their failure must not become the answer.
+   */
+  private async readQuietly(url: string) {
+    try {
+      return await apiClient.get({
+        url,
+        headers: {
+          Authorization:
+            "Basic " +
+            Buffer.from(
+              `${this.auth?.username}:${this.auth?.password}`,
+            ).toString("base64"),
+        },
+        raise_error: false,
+      });
+    } catch {
+      return undefined;
+    }
   }
 
   async pollStatus(

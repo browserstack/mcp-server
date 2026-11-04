@@ -28,6 +28,14 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     previousAppBuild = m.previousAppBuild;
   },
 }));
+// A completed scan's read also reads its scan logs, for the pages it could not scan.
+vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
+  AccessibilityScanner: class {
+    setAuth = vi.fn();
+    unscannedPages = vi.fn(async () => []);
+  },
+  ScanTimeoutError: class extends Error {},
+}));
 vi.mock("../../src/tools/accessiblity-utils/report-parser.js", () => ({
   parseAccessibilityReportFromCSV: m.parse,
 }));

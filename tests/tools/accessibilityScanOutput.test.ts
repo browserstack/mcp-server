@@ -141,6 +141,25 @@ describe("accessibility issue counts", () => {
     expect(body).not.toContain("could not be matched");
   });
 
+  it("startAccessibilityScan says a page did not load, as its error page's issues are left out of the count", async () => {
+    m.parse.mockResolvedValue({
+      ...GROUPED,
+      error_pages: [{ url: "http://bs-local.com:8799/", issues: 3 }],
+    });
+    const result = await handlers.startAccessibilityScan(
+      { name: "dead port", pageURL: "http://localhost:8799/" },
+      CONTEXT,
+    );
+
+    const body = text(result);
+    expect(body).toContain(
+      "⚠️ 1 page did not load; an error page was scanned in its place. The 3 issues found there are from the error page, not your page, so they are left out of the issues and the total below. Check the page is reachable (and the Local tunnel, for localhost), then scan again.",
+    );
+    expect(body.indexOf("did not load")).toBeLessThan(
+      body.indexOf("We found 79 issues."),
+    );
+  });
+
   it("fetchAccessibilityIssues says folded only for the duplicates it could match", async () => {
     m.parse.mockResolvedValue({ ...GROUPED, unlinked_duplicates: 2 });
     const result = await handlers.fetchAccessibilityIssues(

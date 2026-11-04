@@ -29,6 +29,8 @@ import {
   compareIssues,
   loadMainIssues,
   parseAccessibilityReportFromCSV,
+  samePage,
+  type ErrorPage,
   type IssueSummary as WebIssueSummary,
 } from "./accessiblity-utils/report-parser.js";
 import { wrapUntrusted } from "../lib/untrusted-content.js";
@@ -397,19 +399,26 @@ function processingNote({
   return [];
 }
 
-/** The last line: how to get the next page, or that there is none. */
+/**
+ * The last line: how to get the next page, or that there is none. With pages that were not
+ * scanned, the issues are all there are of the pages that were, not of the run's pages.
+ */
 function closingMessage(
   next_page: number | null,
   remaining: number,
   source: IssueSource,
   stillProcessing: boolean,
   extraArgs = "",
+  pagesSkipped = false,
 ): string {
   if (next_page !== null) {
     return `${remaining} more issues available. Use fetchAccessibilityIssues with ${sourceArgs(source)}${extraArgs} and cursor: ${next_page} to get the next batch.`;
   }
   if (stillProcessing) {
     return `All issues found so far retrieved; the report is still processing.`;
+  }
+  if (pagesSkipped) {
+    return `All issues retrieved for the pages that were scanned.`;
   }
   return `✅ All issues retrieved.`;
 }
@@ -982,6 +991,13 @@ async function fetchAccessibilityIssues(
       ? [`Resolved the report link to ${describeSource(source)}.`]
       : [];
 
+  // A failed run has nothing to read, and its export said so badly: an empty report for a
+  // scan ("0 issues ✅"), "Failed to fetch report: null" for a build. Neither is exported.
+  if (processing.status === "failed") {
+    const failed = await failedRunResponse(source, config, preface);
+    if (failed) return failed;
+  }
+
   if (source.kind === "appBuild" && compareWith !== undefined) {
     return compareAppBuilds(
       reportFetcher,
@@ -1018,6 +1034,15 @@ async function fetchAccessibilityIssues(
   }
 
   const pageArg = pageUrl ? `, pageUrl: "${pageUrl}"` : "";
+  // The pages a completed run could not scan are simply absent from its report; its scan
+  // logs say which, read alongside the export. A run still going has not logged them all.
+  const unscanned =
+    source.kind === "scan" && processing.status === "completed"
+      ? (await initializeScanner(config)).unscannedPages(
+          source.scanId,
+          source.scanRunId,
+        )
+      : Promise.resolve([]);
   let reportLink: string;
   try {
     reportLink = await reportFetcher.getReportLink(source, {
@@ -1046,15 +1071,37 @@ async function fetchAccessibilityIssues(
     unlinked_duplicates,
     hidden_issues,
     page,
+    error_pages = [],
   } = await parseAccessibilityReportFromCSV(reportLink, {
     nextPage: cursor,
     pageUrl,
   });
+  // A redirected page was scanned, where it redirected to; a page that showed an error page
+  // is said once, with the error page's issues.
+  const errorPageUrls = new Set(error_pages.map((p) => samePage(p.url)));
+  const notScanned = (await unscanned).filter(
+    (p) => p.status !== "redirect" && !errorPageUrls.has(samePage(p.pageUrl)),
+  );
 
   return createSuccessResponse([
     ...preface,
     ...processingNote(processing),
-    ...(page ? pageNote(page) : []),
+    // What the run did not check, said on the first page with the whole report's counts.
+    ...(cursor
+      ? []
+      : [
+          ...errorPagesNote(
+            error_pages,
+            source.kind === "build" ? "run the tests again" : "scan again",
+          ),
+          ...(notScanned.length
+            ? [
+                `⚠️ ${pageReasons(notScanned, ["was not scanned, so its issues are not in this report", "were not scanned, so their issues are not in this report"])}`,
+              ]
+            : []),
+        ]),
+    // A page that did not load has no issues of its own to count.
+    ...(page && error_pages.length === 0 ? pageNote(page) : []),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
     // The whole report's counts, said on its first page.
     ...(cursor ? [] : webSummaryNote(summary, total_issues)),
@@ -1062,8 +1109,76 @@ async function fetchAccessibilityIssues(
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
-    closingMessage(next_page, remaining, source, stillProcessing, pageArg),
+    closingMessage(
+      next_page,
+      remaining,
+      source,
+      stillProcessing,
+      pageArg,
+      error_pages.length > 0 || notScanned.length > 0,
+    ),
   ]);
+}
+
+/**
+ * Pages that did not load: an error page (Chrome's, or BrowserStack Local's when the tunnel
+ * is not connected) was scanned in their place, and its issues came back as theirs. The
+ * report parser leaves them out of the issues and the total; this says so.
+ */
+function errorPagesNote(pages: ErrorPage[], again: string): string[] {
+  if (pages.length === 0) return [];
+  const one = (n: number, singular: string, plural: string) =>
+    n === 1 ? singular : plural;
+  const n = pages.length;
+  const issues = pages.reduce((sum, p) => sum + p.issues, 0);
+  const counted =
+    issues > 0
+      ? ` The ${one(issues, "1 issue", `${issues} issues`)} found there ${one(issues, "is", "are")} from the error ${one(n, "page", "pages")}, not your ${one(n, "page", "pages")}, so ${one(issues, "it is", "they are")} left out of the issues and the total below.`
+      : "";
+  return [
+    `⚠️ ${one(n, "1 page", `${n} pages`)} did not load; ${one(n, "an error page was", "error pages were")} scanned in ${one(n, "its", "their")} place.${counted} Check the ${one(n, "page is", "pages are")} reachable (and the Local tunnel, for localhost), then ${again}. ${wrapUntrusted("report page addresses", JSON.stringify(pages.map((p) => p.url)))}`,
+  ];
+}
+
+/**
+ * Why a run that failed has nothing to read, or undefined where "failed" is not about the
+ * report: an app build's status is its tests' result, and its scans are read either way.
+ */
+async function failedRunResponse(
+  source: IssueSource,
+  config: BrowserStackConfig,
+  preface: string[],
+): Promise<CallToolResult | undefined> {
+  switch (source.kind) {
+    case "scan":
+      return failedScanRunResponse(
+        config,
+        source.scanId,
+        source.scanRunId,
+        preface,
+        (pages) =>
+          `0 issues does not mean the ${pages > 1 ? "pages are" : "page is"} clean.`,
+        "Fix the cause and scan again.",
+      );
+    // The API reads a build that completed with no test cases as failed.
+    case "build":
+      return createErrorResponse(
+        [
+          ...preface,
+          `Build ${source.buildId} has no accessibility results (status: failed). This usually means no test ran through the BrowserStack SDK: a plain script instead of a test framework, or a session that failed to start. Run the tests again through the SDK and read the new build's testhub id.`,
+        ].join("\n"),
+      );
+    // A report fails only when BrowserStack stops processing it.
+    case "workflow":
+      return createErrorResponse(
+        [
+          ...preface,
+          `Workflow Analyzer report ${source.reportId} has no accessibility results (status: failed): its processing did not complete, so 0 issues would not mean the pages are clean. Scan the workflow again with Workflow Analyzer and read the new report.`,
+        ].join("\n"),
+      );
+    default:
+      return undefined;
+  }
 }
 
 /** What one page of a report holds, in the dashboard's page-view terms. */
@@ -1181,6 +1296,32 @@ async function compareScanRuns(
   const base: IssueSource = { ...source, scanRunId: baseRunId };
   const againstPrevious =
     previous !== undefined && String(previous.id) === baseRunId;
+  const preface =
+    requested.kind === "link"
+      ? [`Resolved the report link to ${describeSource(source)}.`]
+      : [];
+
+  // A failed run scanned no page and exports an empty report: compared with it, every issue
+  // of the other run would read as resolved (or new).
+  const [status, baseStatus] = await Promise.all([
+    reportFetcher.reportStatus(source),
+    reportFetcher.reportStatus(base),
+  ]);
+  if (status === "failed" || baseStatus === "failed") {
+    const [failedRun, otherRun] =
+      status === "failed"
+        ? [source.scanRunId, baseRunId]
+        : [baseRunId, source.scanRunId];
+    return failedScanRunResponse(
+      config,
+      source.scanId,
+      failedRun,
+      preface,
+      () =>
+        `compared with it, every issue of run ${otherRun} would read as ${failedRun === source.scanRunId ? "resolved" : "new"}, so the runs were not compared.`,
+      "Compare two runs that completed, or fix the cause and scan again.",
+    );
+  }
 
   let links: [string, string];
   try {
@@ -1215,9 +1356,7 @@ async function compareScanRuns(
       ? `\n(${issues.length - COMPARE_LIST_LIMIT} more not listed; see the CSV links.)`
       : "");
   return createSuccessResponse([
-    ...(requested.kind === "link"
-      ? [`Resolved the report link to ${describeSource(source)}.`]
-      : []),
+    ...preface,
     `Compared Website Scanner scan ${source.scanId}: run ${source.scanRunId} with ${baseLabel}.`,
     changes
       ? `The dashboard's comparison: ${changes.newIssues} new, ${changes.resolvedIssues} resolved, ${changes.retainedIssues} still open. Matching the issues by rule, element and page gives ${matched}.`
@@ -1520,6 +1659,32 @@ function renameReason(
 /** How many failed pages a failure result lists before summing up the rest. */
 const FAILED_PAGES_LISTED = 10;
 
+/** "N pages <what>:" and a line per page with its reason, the first FAILED_PAGES_LISTED of them. */
+function pageReasons(
+  pages: ScanFailureDetails["pages"],
+  what: [one: string, several: string],
+): string {
+  const listed = pages.slice(0, FAILED_PAGES_LISTED);
+  return [
+    `${pages.length} ${pages.length === 1 ? `page ${what[0]}` : `pages ${what[1]}`}:`,
+    ...listed.map((page) => `- ${page.pageUrl}: ${page.reason}`),
+    ...(pages.length > listed.length
+      ? [`- and ${pages.length - listed.length} more.`]
+      : []),
+  ].join("\n");
+}
+
+/** Why a run failed, in the API's words: the run's own reason and each page's. */
+function failureReasons({ reason, pages }: ScanFailureDetails): string[] {
+  const why = [
+    reason ? `Why: ${reason}${/[.!?]$/.test(reason) ? "" : "."}` : "",
+    pages.length
+      ? pageReasons(pages, ["could not be scanned", "could not be scanned"])
+      : "",
+  ].filter(Boolean);
+  return why.length ? why : ["The dashboard says why."];
+}
+
 /**
  * A failed run, with the reason the API gives for it: the run's own and each page's. It used
  * to say only "The dashboard says why", which left an agent nothing to tell the user.
@@ -1532,24 +1697,40 @@ function createScanFailureResponse(
   dashboardLink: string | undefined,
   details: ScanFailureDetails = { pages: [] },
 ): CallToolResult {
-  const { reason, pages } = details;
-  const listed = pages.slice(0, FAILED_PAGES_LISTED);
-  const why = [
-    reason ? `Why: ${reason}${/[.!?]$/.test(reason) ? "" : "."}` : "",
-    pages.length
-      ? [
-          `${pages.length} ${pages.length === 1 ? "page" : "pages"} could not be scanned:`,
-          ...listed.map((page) => `- ${page.pageUrl}: ${page.reason}`),
-          ...(pages.length > listed.length
-            ? [`- and ${pages.length - listed.length} more.`]
-            : []),
-        ].join("\n")
-      : "",
-  ].filter(Boolean);
   return createErrorResponse(
     [
       `❌ Accessibility scan "${name}" failed with status: ${status}. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}.`,
-      ...(why.length ? why : ["The dashboard says why."]),
+      ...failureReasons(details),
+      scanDashboardNote(dashboardLink, scanId),
+    ].join("\n"),
+  );
+}
+
+/**
+ * A scan run that failed, read or compared. A run fails only when it scanned no page (or
+ * the plan refused it), and its export is then an empty report: read as one, it said "0
+ * issues ✅ All issues retrieved", and compared, every issue of the other run read as
+ * resolved or new.
+ */
+async function failedScanRunResponse(
+  config: BrowserStackConfig,
+  scanId: string,
+  scanRunId: string,
+  preface: string[],
+  meaning: (pages: number) => string,
+  next: string,
+): Promise<CallToolResult> {
+  const scanner = await initializeScanner(config);
+  const [dashboardLink, details] = await Promise.all([
+    scanner.dashboardLink(scanId),
+    scanner.failureDetails(scanId, scanRunId),
+  ]);
+  return createErrorResponse(
+    [
+      ...preface,
+      `Scan run ${scanRunId} of scan ${scanId} failed, so no pages were checked: ${meaning(details.pages.length)}`,
+      ...failureReasons(details),
+      next,
       scanDashboardNote(dashboardLink, scanId),
     ].join("\n"),
   );
@@ -1588,6 +1769,8 @@ function createScanSuccessResponse(
   const messages = [
     `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+    // The parser leaves an error page's rows out of the count; this says why.
+    ...errorPagesNote(report.error_pages ?? [], "scan again"),
     scanSettingsNote(settings, applied),
     fullReportLine(reportUrl),
     `We found ${report.total_issues} issues. Below are the details of the ${report.page_length} most critical issues.`,

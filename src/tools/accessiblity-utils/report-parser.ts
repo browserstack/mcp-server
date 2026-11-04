@@ -113,7 +113,15 @@ type PaginatedResult = {
   hidden_issues: number | null;
   /** Set when the report was read for one page. */
   page?: PageSummary;
+  /**
+   * Set when pages did not load: an error page was scanned in their place. Their rows are
+   * left out of everything above, as they are the error page's issues, not the page's.
+   */
+  error_pages?: ErrorPage[];
 };
+
+/** A page that did not load, and how many issues the error page in its place would have added. */
+export type ErrorPage = { url: string; issues: number };
 
 const DUPLICATE_COLUMN = "Duplicate Issue of";
 const NEEDS_REVIEW_COLUMN = "Needs review";
@@ -134,7 +142,7 @@ function isMainIssue(row: Record<string, string>): boolean {
 }
 
 /** A page address as the report writes it, give or take host case, trailing slash and hash. */
-function samePage(url: string): string {
+export function samePage(url: string): string {
   try {
     const u = new URL(url.trim());
     return `${u.protocol}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, "")}${u.search}`;
@@ -441,6 +449,33 @@ export type RunIssue = {
 const ERROR_PAGE_SNIPPET =
   /dashboard-privoxy-page|id="main-frame-error"|chrome-error:\/\/|class="neterror[" ]/i;
 
+/**
+ * The report's rows without those of pages that did not load, and those pages. A page is one
+ * when any row under its address shows an error page (as compareIssues decides it), and all
+ * its rows are then the error page's: counted as the page's issues, they would say the page
+ * was checked. `issues` is how many of them the total would have counted.
+ */
+function setApartErrorPages(
+  rows: Record<string, string>[],
+  grouped: boolean,
+): { rows: Record<string, string>[]; error_pages: ErrorPage[] } {
+  const failed = new Map<string, ErrorPage>();
+  for (const row of rows) {
+    if (!ERROR_PAGE_SNIPPET.test(row["HTML snippet"] ?? "")) continue;
+    const url = row["Affected page"] ?? "";
+    const key = samePage(url);
+    if (!failed.has(key)) failed.set(key, { url, issues: 0 });
+  }
+  if (failed.size === 0) return { rows, error_pages: [] };
+  const kept: Record<string, string>[] = [];
+  for (const row of rows) {
+    const page = failed.get(samePage(row["Affected page"] ?? ""));
+    if (!page) kept.push(row);
+    else if ((!grouped || isMainIssue(row)) && !isHidden(row)) page.issues++;
+  }
+  return { rows: kept, error_pages: [...failed.values()] };
+}
+
 /** A page whose earlier issues are all gone and new ones appeared: worth a second look. */
 const CHANGED_PAGE_MIN_ISSUES = 2;
 
@@ -574,12 +609,21 @@ export async function parseAccessibilityReportFromCSV(
     pageUrl,
   }: PaginationOptions = {},
 ): Promise<PaginatedResult> {
-  // 1) Download & parse
-  const { parsed, columns } = await loadReport(reportLink);
+  // 1) Download & parse, setting apart the pages that did not load
+  const loaded = await loadReport(reportLink);
+  const { columns } = loaded;
+  const { rows: parsed, error_pages } = setApartErrorPages(
+    loaded.parsed,
+    columns.includes(DUPLICATE_COLUMN),
+  );
 
   if (pageUrl) {
     const { all, page } = pageIssues(parsed, columns, pageUrl);
     const slice = pageWithRules(all, parsed, { maxCharacterLength, nextPage });
+    // Read for one page, only that page not loading matters.
+    const notLoaded = error_pages.filter(
+      (p) => samePage(p.url) === samePage(pageUrl),
+    );
     return {
       ...slice,
       total_issues: all.length,
@@ -587,6 +631,7 @@ export async function parseAccessibilityReportFromCSV(
       unlinked_duplicates: 0,
       hidden_issues: null,
       page,
+      ...(notLoaded.length ? { error_pages: notLoaded } : {}),
     };
   }
 
@@ -656,5 +701,6 @@ export async function parseAccessibilityReportFromCSV(
     hidden_issues: columns.includes(STATUS_COLUMN)
       ? mainRows.length - visibleMainRows.length
       : null,
+    ...(error_pages.length ? { error_pages } : {}),
   };
 }

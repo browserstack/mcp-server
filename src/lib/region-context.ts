@@ -31,3 +31,15 @@ export function regionOf(
 ): GrrRegion | undefined {
   return account && account !== "unknown" ? account : undefined;
 }
+
+/** True for an EU account: telemetry sends usage fields only and feedback is off. */
+export function isUsageOnly(account: AccountRegion | undefined): boolean {
+  return account === "eu";
+}
+
+/** True when telemetry must be limited to usage fields; an unknown account counts. */
+export function isRestrictedRegion(
+  account: AccountRegion | undefined,
+): boolean {
+  return account === "unknown" || isUsageOnly(account);
+}

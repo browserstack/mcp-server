@@ -7,13 +7,24 @@ vi.mock("../../src/lib/account-region.js", () => ({
     return region === undefined ? undefined : Promise.resolve(region);
   },
 }));
+vi.mock("../../src/lib/apiClient.js", () => ({
+  apiClient: { post: vi.fn().mockResolvedValue({ status: 200, data: {} }) },
+}));
+import { apiClient } from "../../src/lib/apiClient.js";
 import { getRegionalHost } from "../../src/lib/regional-host.js";
 import { bindAccountRegion } from "../../src/lib/tool-latency.js";
+import { trackMCP, withToolCall } from "../../src/lib/instrumentation.js";
+import { withAccountRegion } from "../../src/lib/region-context.js";
+import { BrowserStackMcpServer } from "../../src/server-factory.js";
+import { FEEDBACK_UNAVAILABLE } from "../../src/tools/feedback.js";
 
 const configFor = (username: string) => ({
   "browserstack-username": username,
   "browserstack-access-key": "key",
 });
+const clientInfo = { name: "claude-code", version: "1" };
+const rows = () =>
+  (apiClient.post as any).mock.calls.map((c: any) => c[0].body.event_properties);
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function tmHostTool(config: ReturnType<typeof configFor>) {
@@ -32,6 +43,7 @@ function tmHostTool(config: ReturnType<typeof configFor>) {
 describe("the account's region", () => {
   beforeEach(() => {
     regions.clear();
+    (apiClient.post as any).mockClear();
   });
 
   it("routes concurrent calls for different accounts to their own region", async () => {
@@ -51,5 +63,64 @@ describe("the account's region", () => {
     await expect(tmHostTool(configFor("someone"))()).rejects.toThrow(
       /Could not confirm your BrowserStack account's region/,
     );
+  });
+
+  it.each([
+    ["eu", true],
+    ["unknown", true],
+    ["us", false],
+    ["in", false],
+  ])(
+    "limits telemetry outside a tool call for a %s account: %s",
+    async (region, limited) => {
+      regions.set("user", region);
+      trackMCP("started", clientInfo, new Error("boom"), configFor("user"), {
+        search_query: "checkout runs",
+      });
+      await settle();
+      const row = rows().at(-1);
+      expect(row.tool_name).toBe("started");
+      expect("error_message" in row).toBe(!limited);
+      expect("search_query" in row).toBe(!limited);
+    },
+  );
+
+  it("sends usage but no error text inside a tool call for an EU account", async () => {
+    await withAccountRegion("eu", () =>
+      withToolCall("listTestCases", () => clientInfo, configFor("x"), async () => ({
+        content: [{ type: "text", text: "Project PR-1 not found" }],
+        isError: true,
+      })),
+    );
+    const row = rows().at(-1);
+    expect(row).toMatchObject({ tool_name: "listTestCases", outcome: "error_result" });
+    expect(row).not.toHaveProperty("error_message");
+  });
+
+  it("leaves feedback out of a server created for an EU account", async () => {
+    regions.set("user", "eu");
+    const server = await BrowserStackMcpServer.create(configFor("user"));
+    expect(server.getTool("submitFeedback")).toBeUndefined();
+    expect((server.getInstance().server as any)._instructions ?? "").not.toContain(
+      "submitFeedback",
+    );
+  });
+
+  it.each(["us", "in"])("keeps feedback for a %s account", async (region) => {
+    regions.set("user", region);
+    const server = await BrowserStackMcpServer.create(configFor("user"));
+    expect(server.getTool("submitFeedback")).toBeDefined();
+  });
+
+  it("declines feedback at call time when the server was built before the lookup", async () => {
+    regions.set("user", "eu");
+    const server = new BrowserStackMcpServer(configFor("user"));
+    const result: any = await server.getTool("submitFeedback")!.handler(
+      { message: "the tool did not work", category: "tool_error" } as any,
+      {} as any,
+    );
+    expect(result.content[0].text).toBe(FEEDBACK_UNAVAILABLE);
+    await settle();
+    expect(rows().some((r: any) => "feedback_message" in r)).toBe(false);
   });
 });

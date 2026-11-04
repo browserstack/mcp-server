@@ -68,7 +68,7 @@ export async function listSubTestPlans(
         content: [
           {
             type: "text",
-            text: `Failed to list sub-test-plans: ${JSON.stringify(data)}`,
+            text: `Failed to list sub-test-plans: ${wrapUntrusted("API response", JSON.stringify(data))}`,
           },
         ],
         isError: true,

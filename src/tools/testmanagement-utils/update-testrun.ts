@@ -150,7 +150,7 @@ async function updateTestRunMetadata(
         content: [
           {
             type: "text",
-            text: `Failed to update test run: ${JSON.stringify(data)}`,
+            text: `Failed to update test run: ${wrapUntrusted("API response", JSON.stringify(data))}`,
           },
         ],
         isError: true,
@@ -215,7 +215,7 @@ async function updateTestRunTestCases(
         content: [
           {
             type: "text",
-            text: `Failed to update test run test cases: ${JSON.stringify(data)}`,
+            text: `Failed to update test run test cases: ${wrapUntrusted("API response", JSON.stringify(data))}`,
           },
         ],
         isError: true,

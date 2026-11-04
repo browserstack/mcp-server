@@ -65,7 +65,7 @@ export async function addTestResult(
     const data = response.data;
     if (!data.success) {
       throw new Error(
-        `API returned unsuccessful response: ${JSON.stringify(data)}`,
+        `API returned unsuccessful response: ${wrapUntrusted("API response", JSON.stringify(data))}`,
       );
     }
 

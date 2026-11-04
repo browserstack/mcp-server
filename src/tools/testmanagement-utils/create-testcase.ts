@@ -392,8 +392,9 @@ export async function createTestCase(
         content: [
           {
             type: "text",
-            text: `Failed to create test case: ${JSON.stringify(
-              response.data,
+            text: `Failed to create test case: ${wrapUntrusted(
+              "API response",
+              JSON.stringify(response.data),
             )}`,
           },
         ],

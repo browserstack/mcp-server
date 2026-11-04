@@ -208,8 +208,9 @@ export async function updateTestCase(
         content: [
           {
             type: "text",
-            text: `Failed to update test case: ${JSON.stringify(
-              response.data,
+            text: `Failed to update test case: ${wrapUntrusted(
+              "API response",
+              JSON.stringify(response.data),
             )}`,
           },
         ],
@@ -261,7 +262,7 @@ The test case has been updated successfully and is now available in your Browser
             type: "text",
             text: `Test case not found. Please verify the project_identifier ("${params.project_identifier}") and test_case_identifier ("${params.test_case_identifier}") are correct. Make sure to use actual values, not placeholders like "your_project_id".
 
-Error details: ${JSON.stringify(err.response?.data || err.message)}`,
+Error details: ${wrapUntrusted("API response", JSON.stringify(err.response?.data || err.message))}`,
           },
         ],
         isError: true,

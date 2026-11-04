@@ -72,7 +72,7 @@ export async function listTestCases(
         content: [
           {
             type: "text",
-            text: `Failed to list test cases: ${JSON.stringify(resp_data)}`,
+            text: `Failed to list test cases: ${wrapUntrusted("API response", JSON.stringify(resp_data))}`,
           },
         ],
         isError: true,

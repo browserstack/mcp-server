@@ -6,9 +6,8 @@ async function baseUrl(region: string | undefined, o11yBaseUrl: string) {
     __esModule: true,
     default: { O11Y_TFA_RCA_BASE_URL: o11yBaseUrl },
   }));
-  const { getO11yBaseUrl } = await import(
-    "../../src/tools/tfa-rca-utils/constants"
-  );
+  const { getO11yBaseUrl } =
+    await import("../../src/tools/tfa-rca-utils/constants");
   const { withAccountRegion } = await import("../../src/lib/region-context");
   return withAccountRegion(region as any, () => getO11yBaseUrl());
 }
@@ -16,7 +15,13 @@ async function baseUrl(region: string | undefined, o11yBaseUrl: string) {
 const DEFAULT = "https://api-automation.browserstack.com";
 
 describe("getO11yBaseUrl", () => {
-  it.each([undefined, "us", "in"])(
+  it("uses the IN host for an IN account", async () => {
+    expect(await baseUrl("in", DEFAULT)).toBe(
+      "https://api-automation-in.browserstack.com",
+    );
+  });
+
+  it.each([undefined, "us"])(
     "keeps the US host when the region is %s",
     async (region) => {
       expect(await baseUrl(region, DEFAULT)).toBe(DEFAULT);

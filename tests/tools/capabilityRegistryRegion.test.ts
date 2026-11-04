@@ -374,13 +374,13 @@ describe("products follow the account's region", () => {
     expect(transport).not.toHaveBeenCalled();
   });
 
-  it("probes the tra base_urls for an account in a region not routed here", async () => {
+  it("sends tra to the IN host for an IN account without probing", async () => {
     const resolveBaseUrl = await resolveIn("in");
     const transport = vi.fn(async () => ({ status: 401 }));
-    await resolveBaseUrl("tra", CONFIG, TRA_SOURCE, transport as any).catch(
-      () => {},
-    );
-    expect(transport).toHaveBeenCalledTimes(TRA_SOURCE.base_urls.length);
+    expect(
+      await resolveBaseUrl("tra", CONFIG, TRA_SOURCE, transport as any),
+    ).toBe("https://api-observability-in.browserstack.com");
+    expect(transport).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -2,68 +2,77 @@ import appConfig from "../config.js";
 import { SessionType } from "./constants.js";
 import { currentRegionScope, GrrRegion, regionOf } from "./region-context.js";
 
-/** Regions with their own hosts here. Other regions use the default (US) hosts. */
-type RoutedRegion = "us" | "eu";
-
-type Hosts = Record<RoutedRegion, string>;
+type Hosts = Record<GrrRegion, string>;
 
 const AUTOMATE_API: Hosts = {
   us: "https://api.browserstack.com",
   eu: "https://api-eu-only.browserstack.com",
+  in: "https://api-aps-only.browserstack.com",
 };
 
 const HOSTS = {
   testManagement: {
     us: "https://test-management.browserstack.com",
     eu: "https://test-management-eu.browserstack.com",
+    in: "https://test-management-in.browserstack.com",
   },
   automateApi: AUTOMATE_API,
   appAutomateApi: AUTOMATE_API,
   appAutomateCloud: {
     us: "https://api-cloud.browserstack.com",
     eu: AUTOMATE_API.eu,
+    in: AUTOMATE_API.in,
   },
   appAutomateHub: {
     us: "hub.browserstack.com",
     eu: "hub-eu-only.browserstack.com",
+    in: "hub-aps-only.browserstack.com",
   },
   automateHubUrl: {
     us: "https://hub.browserstack.com",
     eu: "https://hub-eu-only.browserstack.com",
+    in: "https://hub-aps-only.browserstack.com",
   },
   appAutomateHubUrl: {
     us: "https://hub-cloud.browserstack.com",
     eu: "https://hub-eu-only.browserstack.com",
+    in: "https://hub-aps-only.browserstack.com",
   },
   accessibilityApi: {
     us: "https://api-accessibility.browserstack.com",
     eu: "https://api-accessibility-eu.browserstack.com",
+    in: "https://api-accessibility-in.browserstack.com",
   },
   accessibilityDashboard: {
     us: "https://accessibility.browserstack.com",
     eu: "https://accessibility-eu.browserstack.com",
+    in: "https://accessibility-in.browserstack.com",
   },
   appAccessibilityApi: {
     us: "https://api-app-accessibility.browserstack.com",
     eu: "https://api-app-accessibility-eu.browserstack.com",
+    in: "https://api-app-accessibility-in.browserstack.com",
   },
   appAccessibilityDashboard: {
     us: "https://app-accessibility.browserstack.com",
     eu: "https://app-accessibility-eu.browserstack.com",
+    in: "https://app-accessibility-in.browserstack.com",
   },
   observabilityApi: {
     us: "https://api-observability.browserstack.com",
     eu: "https://api-observability-eu.browserstack.com",
+    in: "https://api-observability-in.browserstack.com",
   },
   automationApi: {
     us: "https://api-automation.browserstack.com",
     eu: "https://api-automation-eu.browserstack.com",
+    in: "https://api-automation-in.browserstack.com",
   },
 } as const satisfies Record<string, Hosts>;
 
 export type RegionalHostKind = keyof typeof HOSTS;
 
-export function hostFor(kind: RegionalHostKind, region: RoutedRegion): string {
+export function hostFor(kind: RegionalHostKind, region: GrrRegion): string {
   return HOSTS[kind][region];
 }
 
@@ -118,14 +127,15 @@ export function assertUsAccount(product: string): void {
 }
 
 /** The region whose hosts this call uses; throws when the region is unknown. */
-export function routedRegion(): RoutedRegion {
+export function routedRegion(): GrrRegion {
   assertRegionKnown();
-  return currentRegion() === "eu" ? "eu" : "us";
+  return currentRegion() ?? "us";
 }
 
 /** True when this call goes to regional hosts rather than the defaults. */
 export function usesRegionalHosts(): boolean {
-  return currentRegion() === "eu";
+  const region = currentRegion();
+  return region !== undefined && region !== "us";
 }
 
 /** REST host for a session's product: App Automate or Automate. */

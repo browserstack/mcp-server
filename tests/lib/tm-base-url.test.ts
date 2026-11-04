@@ -21,7 +21,10 @@ async function loadModule(remoteMcp: boolean) {
   }));
   const apiClientMod = await import("../../src/lib/apiClient");
   const tmMod = await import("../../src/lib/tm-base-url");
-  return { apiClient: apiClientMod.apiClient, getTMBaseURL: tmMod.getTMBaseURL };
+  return {
+    apiClient: apiClientMod.apiClient,
+    getTMBaseURL: tmMod.getTMBaseURL,
+  };
 }
 
 const mockConfig = {
@@ -137,16 +140,32 @@ describe("getTMBaseURL — account region", () => {
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
-  it.each([undefined, "us", "in", "unknown"])("%s keeps the US → EU → IN probe", async (region) => {
-    const { apiClient, getTMBaseURL } = await loadWithRegion(region);
-    (apiClient.get as any)
-      .mockResolvedValueOnce({ ok: false, status: 401 })
-      .mockResolvedValueOnce({ ok: true });
+  it("uses the IN host as given for an IN account", async () => {
+    const { apiClient, getTMBaseURL } = await loadWithRegion("in");
     await expect(getTMBaseURL(mockConfig)).resolves.toBe(
-      "https://test-management-eu.browserstack.com",
+      "https://test-management-in.browserstack.com",
     );
-    expect(
-      (apiClient.get as any).mock.calls.map((c: any[]) => new URL(c[0].url).host),
-    ).toEqual(["test-management.browserstack.com", "test-management-eu.browserstack.com"]);
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
+
+  it.each([undefined, "us", "unknown"])(
+    "%s keeps the US → EU → IN probe",
+    async (region) => {
+      const { apiClient, getTMBaseURL } = await loadWithRegion(region);
+      (apiClient.get as any)
+        .mockResolvedValueOnce({ ok: false, status: 401 })
+        .mockResolvedValueOnce({ ok: true });
+      await expect(getTMBaseURL(mockConfig)).resolves.toBe(
+        "https://test-management-eu.browserstack.com",
+      );
+      expect(
+        (apiClient.get as any).mock.calls.map(
+          (c: any[]) => new URL(c[0].url).host,
+        ),
+      ).toEqual([
+        "test-management.browserstack.com",
+        "test-management-eu.browserstack.com",
+      ]);
+    },
+  );
 });

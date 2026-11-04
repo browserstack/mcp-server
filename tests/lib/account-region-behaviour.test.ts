@@ -56,7 +56,7 @@ describe("the account's region", () => {
     expect(hosts).toEqual([
       "https://test-management-eu.browserstack.com",
       "https://test-management.browserstack.com",
-      "https://test-management.browserstack.com",
+      "https://test-management-in.browserstack.com",
     ]);
   });
 

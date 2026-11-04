@@ -90,12 +90,34 @@ describe("getRegionalHost", () => {
     );
   });
 
-  it("keeps the default hosts for a region it does not route", async () => {
+  it("routes an IN account to the IN hosts", async () => {
     const { getRegionalHost } = await loadModule("in");
-    expect(getRegionalHost("automateApi")).toBe("https://api.browserstack.com");
-    expect(getRegionalHost("appAutomateHub")).toBe("hub.browserstack.com");
+    expect(getRegionalHost("automateApi")).toBe(
+      "https://api-aps-only.browserstack.com",
+    );
+    expect(getRegionalHost("appAutomateCloud")).toBe(
+      "https://api-aps-only.browserstack.com",
+    );
+    expect(getRegionalHost("appAutomateHub")).toBe(
+      "hub-aps-only.browserstack.com",
+    );
+    expect(getRegionalHost("automateHubUrl")).toBe(
+      "https://hub-aps-only.browserstack.com",
+    );
     expect(getRegionalHost("testManagement")).toBe(
-      "https://test-management.browserstack.com",
+      "https://test-management-in.browserstack.com",
+    );
+    expect(getRegionalHost("accessibilityApi")).toBe(
+      "https://api-accessibility-in.browserstack.com",
+    );
+    expect(getRegionalHost("appAccessibilityApi")).toBe(
+      "https://api-app-accessibility-in.browserstack.com",
+    );
+    expect(getRegionalHost("observabilityApi")).toBe(
+      "https://api-observability-in.browserstack.com",
+    );
+    expect(getRegionalHost("automationApi")).toBe(
+      "https://api-automation-in.browserstack.com",
     );
   });
 

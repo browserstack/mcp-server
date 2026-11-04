@@ -11,22 +11,25 @@ async function load(region: string | undefined) {
     accountRegion: () => region,
   }));
   const { BrowserStackMcpServer } = await import("../../src/server-factory.js");
-  const { withFeedbackHint, FEEDBACK_HINT } = await import(
-    "../../src/lib/feedback-hint.js"
-  );
+  const { withFeedbackHint, FEEDBACK_HINT } =
+    await import("../../src/lib/feedback-hint.js");
   const { withAccountRegion } = await import("../../src/lib/region-context.js");
   const server = await BrowserStackMcpServer.create(CONFIG);
   const instructions: string =
     (server.getInstance().server as any)._instructions ?? "";
   const hinted = (result: unknown) =>
     JSON.stringify(
-      withAccountRegion(region as any, () => withFeedbackHint("listBuildId", result)),
+      withAccountRegion(region as any, () =>
+        withFeedbackHint("listBuildId", result),
+      ),
     ).includes(FEEDBACK_HINT);
   return { server, instructions, hinted };
 }
 
 const failure = () => ({
-  content: [{ type: "text", text: "Failed: Request failed with status code 502" }],
+  content: [
+    { type: "text", text: "Failed: Request failed with status code 502" },
+  ],
   isError: true,
 });
 

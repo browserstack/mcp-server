@@ -13,6 +13,7 @@ import {
   AccountRegion,
   currentRegionScope,
   isRestrictedRegion,
+  isTelemetryOff,
 } from "./region-context.js";
 
 const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
@@ -127,6 +128,7 @@ function post(
   config: any,
   account: AccountRegion | undefined,
 ): void {
+  if (isTelemetryOff(account)) return;
   event = {
     ...event,
     event_properties: forDataRegion(event.event_properties, account),

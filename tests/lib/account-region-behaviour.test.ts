@@ -92,11 +92,19 @@ describe("the account's region", () => {
     );
   });
 
+  it.each(["eu", "in"])(
+    "sends no telemetry outside a tool call for a %s account",
+    async (region) => {
+      regions.set("user", region);
+      trackMCP("started", clientInfo, undefined, configFor("user"));
+      await settle();
+      expect(rows()).toHaveLength(0);
+    },
+  );
+
   it.each([
-    ["eu", true],
     ["unknown", true],
     ["us", false],
-    ["in", true],
   ])(
     "limits telemetry outside a tool call for a %s account: %s",
     async (region, limited) => {
@@ -112,7 +120,7 @@ describe("the account's region", () => {
     },
   );
 
-  it("sends usage but no error text inside a tool call for an EU account", async () => {
+  it("sends no telemetry inside a tool call for an EU account", async () => {
     await withAccountRegion("eu", () =>
       withToolCall(
         "listTestCases",
@@ -124,12 +132,7 @@ describe("the account's region", () => {
         }),
       ),
     );
-    const row = rows().at(-1);
-    expect(row).toMatchObject({
-      tool_name: "listTestCases",
-      outcome: "error_result",
-    });
-    expect(row).not.toHaveProperty("error_message");
+    expect(rows()).toHaveLength(0);
   });
 
   it.each(["eu", "in"])(
@@ -144,8 +147,8 @@ describe("the account's region", () => {
     },
   );
 
-  it.each(["us"])("keeps feedback for a %s account", async (region) => {
-    regions.set("user", region);
+  it("keeps feedback for a US account", async () => {
+    regions.set("user", "us");
     const server = await BrowserStackMcpServer.create(configFor("user"));
     expect(server.getTool("submitFeedback")).toBeDefined();
   });

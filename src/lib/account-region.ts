@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import logger from "../logger.js";
 import { apiClient } from "./apiClient.js";
 import { BrowserStackConfig } from "./types.js";
-import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
+import {
+  CentralAuthError,
+  fetchTokenTransport,
+  mintCentralToken,
+} from "./central-oauth.js";
 import { AccountRegion, GRR_REGIONS, GrrRegion } from "./region-context.js";
 
 const AUTH_TOKEN_URL = "https://auth.browserstack.com/oauth2/v2/token";
@@ -66,10 +70,13 @@ export function regionFromToken(token: string): AccountRegion {
     : "unknown";
 }
 
-/** The account's region from BrowserStack auth, or null when auth names none we know. */
+/**
+ * The account's region from BrowserStack auth; "refused" when auth rejects the
+ * credentials, null when it can't answer or names a region not known here.
+ */
 async function fromToken(
   config: BrowserStackConfig,
-): Promise<GrrRegion | null> {
+): Promise<GrrRegion | "refused" | null> {
   try {
     const token = await mintCentralToken({
       url: AUTH_TOKEN_URL,
@@ -88,6 +95,13 @@ async function fromToken(
     logger.warn(
       `Could not look up the account's region: ${(error as Error)?.message}`,
     );
+    // Auth answers a wrong key with a refusal (400 or 401), not a failure to answer.
+    if (
+      error instanceof CentralAuthError &&
+      (error.kind === "refused_credentials" || error.kind === "refused_scope")
+    ) {
+      return "refused";
+    }
     return null;
   }
 }
@@ -123,9 +137,12 @@ interface Answer {
 /** BrowserStack auth's answer, else a probe's; null when neither names a known region. */
 async function lookUp(config: BrowserStackConfig): Promise<Answer | null> {
   const region = await fromToken(config);
-  if (region) return { region, ttl: REGION_TTL_MS };
+  if (region && region !== "refused") return { region, ttl: REGION_TTL_MS };
   const probed = await probe(config);
-  return probed ? { region: probed, ttl: PROBED_TTL_MS } : null;
+  if (probed) return { region: probed, ttl: PROBED_TTL_MS };
+  // Credentials that auth and every host reject are wrong, not unlucky: send the call to
+  // the default host so the product reports them, rather than telling the user to retry.
+  return region === "refused" ? { region: "us", ttl: PROBED_TTL_MS } : null;
 }
 
 /**

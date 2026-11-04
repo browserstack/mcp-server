@@ -1659,25 +1659,31 @@ function renameReason(
 /** How many failed pages a failure result lists before summing up the rest. */
 const FAILED_PAGES_LISTED = 10;
 
-/** "N pages <what>:" and a line per page with its reason, the first FAILED_PAGES_LISTED of them. */
+/**
+ * "N pages <what>:" and a line per page with its reason, the first FAILED_PAGES_LISTED of
+ * them. The lines are the scan logs' (the page's address, the site's HTTP status, where it
+ * redirected), so they are quoted as data.
+ */
 function pageReasons(
   pages: ScanFailureDetails["pages"],
   what: [one: string, several: string],
 ): string {
   const listed = pages.slice(0, FAILED_PAGES_LISTED);
+  const more = pages.length - listed.length;
   return [
     `${pages.length} ${pages.length === 1 ? `page ${what[0]}` : `pages ${what[1]}`}:`,
-    ...listed.map((page) => `- ${page.pageUrl}: ${page.reason}`),
-    ...(pages.length > listed.length
-      ? [`- and ${pages.length - listed.length} more.`]
-      : []),
+    wrapUntrusted(
+      "page scan log",
+      listed.map((page) => `- ${page.pageUrl}: ${page.reason}`).join("\n"),
+    ),
+    ...(more > 0 ? [`And ${more} more ${more === 1 ? "page" : "pages"}.`] : []),
   ].join("\n");
 }
 
-/** Why a run failed, in the API's words: the run's own reason and each page's. */
+/** Why a run failed, in the API's words (quoted as data): the run's own reason and each page's. */
 function failureReasons({ reason, pages }: ScanFailureDetails): string[] {
   const why = [
-    reason ? `Why: ${reason}${/[.!?]$/.test(reason) ? "" : "."}` : "",
+    reason ? `Why: ${wrapUntrusted("scan failure reason", reason)}` : "",
     pages.length
       ? pageReasons(pages, ["could not be scanned", "could not be scanned"])
       : "",

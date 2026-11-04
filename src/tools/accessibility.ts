@@ -3,7 +3,11 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   AccessibilityScanner,
+  ScanRefusedError,
   ScanTimeoutError,
+  cleanScanName,
+  samePage as sameScanPage,
+  type SavedScan,
   type ScanFailureDetails,
   type ScanSettings,
 } from "./accessiblity-utils/scanner.js";
@@ -1814,6 +1818,10 @@ const WCAG_VERSIONS = {
   rgaa41: "RGAA 4.1",
 } as const;
 
+const wcagName = (value: string) =>
+  WCAG_VERSIONS[value as keyof typeof WCAG_VERSIONS] ?? value;
+const onOff = (value: boolean) => (value ? "on" : "off");
+
 /**
  * Why advanced or experimental rules came back off when they were not asked off. Both are
  * on unless turned off, and on an API scan a plan without them turns them off instead of
@@ -1864,9 +1872,6 @@ function scanSettingsNote(
   asked: ScanSettings,
   applied: ScanSettings | undefined,
 ): string {
-  const wcagName = (value: string) =>
-    WCAG_VERSIONS[value as keyof typeof WCAG_VERSIONS] ?? value;
-  const onOff = (value: boolean) => (value ? "on" : "off");
   const describe = (settings: ScanSettings) =>
     [
       settings.wcagVersion !== undefined ? wcagName(settings.wcagVersion) : "",
@@ -1898,13 +1903,17 @@ function scanSettingsNote(
     : "No scan settings were asked for, so the scan's defaults apply.";
 }
 
+/** startAccessibilityScan's arguments, as the call passed them: a setting left out is undefined. */
+type ScanArgs = {
+  name: string;
+  pageURL: string;
+  scanId?: string;
+  authConfigId?: number;
+  localIdentifier?: string;
+} & ScanSettings;
+
 async function executeAccessibilityScan(
-  args: {
-    name: string;
-    pageURL: string;
-    authConfigId?: number;
-    localIdentifier?: string;
-  } & ScanSettings,
+  args: ScanArgs,
   context: ScanProgressContext,
   server: McpServer,
   config: BrowserStackConfig,
@@ -1916,24 +1925,48 @@ async function executeAccessibilityScan(
       undefined,
       config,
     );
-    return await runAccessibilityScan(
-      args.name,
-      args.pageURL,
-      context,
-      config,
-      args.authConfigId,
-      {
-        wcagVersion: args.wcagVersion,
-        bestPractices: args.bestPractices,
-        needsReview: args.needsReview,
-        advancedRules: args.advancedRules,
-        experimentalRules: args.experimentalRules,
-      },
-      args.localIdentifier,
-    );
+    if (args.scanId !== undefined) {
+      return await rerunAccessibilityScan(
+        { ...args, scanId: args.scanId },
+        context,
+        config,
+      );
+    }
+    return await startNewScan(args, context, config);
   } catch (error) {
+    if (error instanceof ScanRefusedError) {
+      trackMCP(
+        "startAccessibilityScan",
+        server.server.getClientVersion()!,
+        error,
+        config,
+      );
+      return { content: [{ type: "text", text: error.message }] };
+    }
     return handleMCPError("startAccessibilityScan", server, config, error);
   }
+}
+
+function startNewScan(
+  args: ScanArgs,
+  context: ScanProgressContext,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  return runAccessibilityScan(
+    args.name,
+    args.pageURL,
+    context,
+    config,
+    args.authConfigId,
+    {
+      wcagVersion: args.wcagVersion,
+      bestPractices: args.bestPractices,
+      needsReview: args.needsReview,
+      advancedRules: args.advancedRules,
+      experimentalRules: args.experimentalRules,
+    },
+    args.localIdentifier,
+  );
 }
 
 function validateFormAuthArgs(args: AuthConfigArgs): args is FormAuthArgs {
@@ -2177,11 +2210,12 @@ function createScanStillRunningResponse(
   scanRunId: string,
   dashboardLink: string | undefined,
   waitedMs: number,
+  rerun = false,
 ): CallToolResult {
   return createSuccessResponse([
     `Accessibility scan "${name}" is still running after ${Math.round(waitedMs / 60000)} minutes, so this call stopped waiting for it. The scan was not cancelled: it carries on, and its issues can be read once it finishes. ${scanDashboardNote(dashboardLink, scanId)}`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
-    `To read its issues, call fetchAccessibilityIssues with scanId "${scanId}" and scanRunId "${scanRunId}" once it has finished. Do not start the scan again: that starts a second scan.`,
+    `To read its issues, call fetchAccessibilityIssues with scanId "${scanId}" and scanRunId "${scanRunId}" once it has finished. ${rerun ? "Do not re-run the scan before this run finishes." : "Do not start the scan again: that starts a second scan."}`,
   ]);
 }
 
@@ -2223,6 +2257,147 @@ function createScanSuccessResponse(
   return createSuccessResponse(messages);
 }
 
+/**
+ * The result with lines said before and after it. Each text block is made to end in a
+ * newline, as createSuccessResponse's do, so a link that ends one block is not run into
+ * the next by a client that joins blocks with no separator.
+ */
+function withNotes(
+  result: CallToolResult,
+  lead: string[],
+  tail: string[] = [],
+): CallToolResult {
+  if (!lead.length && !tail.length) return result;
+  const block = (text: string) => ({
+    type: "text" as const,
+    text: text.endsWith("\n") ? text : `${text}\n`,
+  });
+  return {
+    ...result,
+    content: [
+      ...lead.map(block),
+      ...result.content.map((c) => (c.type === "text" ? block(c.text) : c)),
+      ...tail.map(block),
+    ],
+  };
+}
+
+/**
+ * Said with every new scan. Re-scanning a page used to start another scan, and runs of two
+ * scans cannot be compared; a run added to this scan can.
+ */
+function rescanHint(scanId: string): string {
+  return `To scan this same page again later (e.g. after a fix), call startAccessibilityScan with scanId "${scanId}"; that adds a run to this scan so the runs can be compared with compareWith "previous".`;
+}
+
+function compareHint(scanId: string, scanRunId: string): string {
+  return `To see what changed since the previous run, call fetchAccessibilityIssues with scanId "${scanId}", scanRunId "${scanRunId}" and compareWith "previous".`;
+}
+
+type ScanOutcome = "completed" | "still running" | "failed";
+
+/**
+ * Waits for a run that has started and gives its result: its issues, a failure with the
+ * reasons the API gives, or its ids once the wait runs out. The same for a new scan and a
+ * re-run, so a re-run reads like the scan it repeats.
+ */
+async function scanOutcome(
+  scanner: AccessibilityScanner,
+  config: BrowserStackConfig,
+  context: ScanProgressContext,
+  scan: {
+    name: string;
+    scanId: string;
+    scanRunId: string;
+    settings: ScanSettings;
+    rerun?: boolean;
+  },
+): Promise<[CallToolResult, ScanOutcome]> {
+  const { name: scanName, scanId, scanRunId, settings } = scan;
+  let status: string;
+  try {
+    status = await scanner.waitUntilComplete(scanId, scanRunId, context);
+  } catch (error) {
+    if (!(error instanceof ScanTimeoutError)) throw error;
+    return [
+      createScanStillRunningResponse(
+        scanName,
+        scanId,
+        scanRunId,
+        await scanner.dashboardLink(scanId),
+        error.waitedMs,
+        scan.rerun,
+      ),
+      "still running",
+    ];
+  }
+  if (status !== "completed") {
+    const [dashboardLink, details] = await Promise.all([
+      scanner.dashboardLink(scanId),
+      scanner.failureDetails(scanId, scanRunId),
+    ]);
+    return [
+      createScanFailureResponse(
+        scanName,
+        status,
+        scanId,
+        scanRunId,
+        dashboardLink,
+        details,
+      ),
+      "failed",
+    ];
+  }
+
+  const [applied, dashboardLink] = await Promise.all([
+    scanner.runSettings(scanId, scanRunId),
+    scanner.dashboardLink(scanId),
+  ]);
+  const reportFetcher = await initializeReportFetcher(config);
+  let reportLink: string;
+  try {
+    reportLink = await reportFetcher.getReportLink(
+      { kind: "scan", scanId, scanRunId },
+      { onWait: exportProgress(context) },
+    );
+  } catch (error) {
+    if (error instanceof ExportPendingError) {
+      return [
+        createSuccessResponse([
+          `Accessibility scan "${scanName}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
+          `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+          scanSettingsNote(settings, applied),
+          ...exportPendingMessages(
+            {
+              kind: "scan",
+              scanId: String(scanId),
+              scanRunId: String(scanRunId),
+            },
+            error,
+            "",
+          ),
+        ]),
+        "completed",
+      ];
+    }
+    throw error;
+  }
+
+  return [
+    createScanSuccessResponse(
+      scanName,
+      await parseAccessibilityReportFromCSV(reportLink),
+      scanId,
+      scanRunId,
+      reportLink,
+      dashboardLink,
+      settings,
+      applied,
+    ),
+    "completed",
+  ];
+}
+
 async function runAccessibilityScan(
   name: string,
   pageURL: string,
@@ -2244,20 +2419,6 @@ async function runAccessibilityScan(
   const scanId = startResp.data!.id;
   const scanRunId = startResp.data!.scanRunId;
   const scanName = startResp.scanName ?? name;
-  // Said first, so the name asked for is not taken for the scan's.
-  const withRenameNote = (result: CallToolResult): CallToolResult =>
-    scanName === name
-      ? result
-      : {
-          ...result,
-          content: [
-            {
-              type: "text" as const,
-              text: `${renameReason(name, startResp.nameChanges ?? ["taken"])}, so this scan was started as "${scanName}".\n`,
-            },
-            ...result.content,
-          ],
-        };
 
   await notifyScanProgress(
     context,
@@ -2265,82 +2426,215 @@ async function runAccessibilityScan(
     0,
   );
 
-  let status: string;
-  try {
-    status = await scanner.waitUntilComplete(scanId, scanRunId, context);
-  } catch (error) {
-    if (!(error instanceof ScanTimeoutError)) throw error;
-    return withRenameNote(
-      createScanStillRunningResponse(
-        scanName,
-        scanId,
-        scanRunId,
-        await scanner.dashboardLink(scanId),
-        error.waitedMs,
-      ),
-    );
-  }
-  if (status !== "completed") {
-    const [dashboardLink, details] = await Promise.all([
-      scanner.dashboardLink(scanId),
-      scanner.failureDetails(scanId, scanRunId),
-    ]);
-    return withRenameNote(
-      createScanFailureResponse(
-        scanName,
-        status,
-        scanId,
-        scanRunId,
-        dashboardLink,
-        details,
-      ),
-    );
-  }
+  const [result] = await scanOutcome(scanner, config, context, {
+    name: scanName,
+    scanId,
+    scanRunId,
+    settings,
+  });
+  // The rename is said first, so the name asked for is not taken for the scan's.
+  return withNotes(
+    result,
+    scanName === name
+      ? []
+      : [
+          `${renameReason(name, startResp.nameChanges ?? ["taken"])}, so this scan was started as "${scanName}".`,
+        ],
+    [rescanHint(String(scanId))],
+  );
+}
 
-  const [applied, dashboardLink] = await Promise.all([
-    scanner.runSettings(scanId, scanRunId),
-    scanner.dashboardLink(scanId),
-  ]);
-  const reportFetcher = await initializeReportFetcher(config);
-  let reportLink: string;
-  try {
-    reportLink = await reportFetcher.getReportLink(
-      { kind: "scan", scanId, scanRunId },
-      { onWait: exportProgress(context) },
-    );
-  } catch (error) {
-    if (error instanceof ExportPendingError) {
-      return withRenameNote(
-        createSuccessResponse([
-          `Accessibility scan "${scanName}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
-          `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
-          scanSettingsNote(settings, applied),
-          ...exportPendingMessages(
-            {
-              kind: "scan",
-              scanId: String(scanId),
-              scanRunId: String(scanRunId),
-            },
-            error,
-            "",
-          ),
-        ]),
-      );
-    }
-    throw error;
+/** Why a scan given by id is not re-run for this page: it was saved for another. */
+function otherPageNote(
+  scanId: string,
+  urlList: string[],
+  pageURL: string,
+): string {
+  if (!urlList.length) {
+    return `Scan ${scanId}'s pages could not be read, so it could not be checked to be for ${pageURL}; a new scan was started.`;
   }
+  if (urlList.length === 1) {
+    return `Scan ${scanId} is for ${urlList[0]}, not ${pageURL}, so a new scan was started.`;
+  }
+  const shown = urlList.slice(0, 3).join(", ");
+  const more = urlList.length > 3 ? `, and ${urlList.length - 3} more` : "";
+  return `Scan ${scanId} is for ${urlList.length} pages (${shown}${more}), not just ${pageURL}, so a new scan was started.`;
+}
 
-  return withRenameNote(
-    createScanSuccessResponse(
-      scanName,
-      await parseAccessibilityReportFromCSV(reportLink),
-      scanId,
-      scanRunId,
-      reportLink,
-      dashboardLink,
-      settings,
-      applied,
+/**
+ * The settings a call passed that differ from the scan's saved ones. A re-run takes no
+ * settings, so running it anyway would quietly drop what was asked for. Only settings the
+ * call passed are compared (none has a default in the schema), and only against a saved
+ * value the overview gives: it gives whether a login or Local is saved, not which one.
+ */
+function savedSettingDifferences(args: ScanArgs, saved: SavedScan): string[] {
+  const differ = <T>(
+    label: string,
+    passed: T | undefined,
+    savedValue: T | undefined,
+    show: (value: T) => string,
+  ) =>
+    passed !== undefined && savedValue !== undefined && passed !== savedValue
+      ? [`${label}: saved ${show(savedValue)}, passed ${show(passed)}`]
+      : [];
+  const { settings } = saved;
+  return [
+    ...differ("WCAG version", args.wcagVersion, settings.wcagVersion, wcagName),
+    ...differ(
+      "advanced rules",
+      args.advancedRules,
+      settings.advancedRules,
+      onOff,
     ),
+    ...differ(
+      "experimental rules",
+      args.experimentalRules,
+      settings.experimentalRules,
+      onOff,
+    ),
+    ...differ(
+      "best practices",
+      args.bestPractices,
+      settings.bestPractices,
+      onOff,
+    ),
+    ...differ("needs review", args.needsReview, settings.needsReview, onOff),
+    ...(args.authConfigId !== undefined && saved.authEnabled === false
+      ? [
+          `login: the scan has no auth config saved, passed authConfigId ${args.authConfigId}`,
+        ]
+      : []),
+    ...(args.localIdentifier !== undefined &&
+    saved.localTestingEnabled === false
+      ? [
+          `BrowserStack Local: the scan is saved without a tunnel, passed localIdentifier "${args.localIdentifier}"`,
+        ]
+      : []),
+  ];
+}
+
+/** Settings a call passed that the overview gives no saved value to check them against. */
+function uncheckedSettings(args: ScanArgs, saved: SavedScan): string[] {
+  const { settings } = saved;
+  return [
+    args.wcagVersion !== undefined && settings.wcagVersion === undefined
+      ? "wcagVersion"
+      : "",
+    args.advancedRules !== undefined && settings.advancedRules === undefined
+      ? "advancedRules"
+      : "",
+    args.experimentalRules !== undefined &&
+    settings.experimentalRules === undefined
+      ? "experimentalRules"
+      : "",
+    args.bestPractices !== undefined && settings.bestPractices === undefined
+      ? "bestPractices"
+      : "",
+    args.needsReview !== undefined && settings.needsReview === undefined
+      ? "needsReview"
+      : "",
+    // Which login is saved is not given: only whether one is.
+    args.authConfigId !== undefined && saved.authEnabled !== false
+      ? `authConfigId ${args.authConfigId}`
+      : "",
+    // Said in the Local note when the scan is saved with a tunnel.
+    args.localIdentifier !== undefined &&
+    saved.localTestingEnabled === undefined
+      ? `localIdentifier "${args.localIdentifier}"`
+      : "",
+  ].filter(Boolean);
+}
+
+/**
+ * A re-run reaches a local page through the tunnel the scan was saved with, by its
+ * identifier, which the overview does not give back: the tunnel has to be running under
+ * that identifier, or the run cannot reach the page.
+ */
+function localRerunNote(localIdentifier: string | undefined): string {
+  return `This scan reaches its page through BrowserStack Local, and the run uses the scan's saved Local settings: a tunnel must be running with the same local identifier the scan was created with${
+    localIdentifier
+      ? ` (the API does not give the saved identifier back, so it could not be checked against "${localIdentifier}")`
+      : " (the API does not give the saved identifier back)"
+  }. If the run cannot reach the page, start that tunnel and re-run.`;
+}
+
+/**
+ * A re-run of the scan the caller names, when it is for this same page: a new run of that
+ * scan, with its saved settings, which can be compared with its earlier runs. A scan for
+ * another page gets a new scan, as without scanId, and settings passed that the saved ones
+ * do not match stop the run, since a re-run cannot take them.
+ */
+async function rerunAccessibilityScan(
+  args: ScanArgs & { scanId: string },
+  context: ScanProgressContext,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  const scanner = await initializeScanner(config);
+  const { scanId, pageURL } = args;
+  const saved = await scanner.savedScan(scanId);
+  if (saved.urlList.length !== 1 || !sameScanPage(saved.urlList[0], pageURL)) {
+    return withNotes(await startNewScan(args, context, config), [
+      otherPageNote(scanId, saved.urlList, pageURL),
+    ]);
+  }
+
+  const name = saved.name ?? args.name;
+  const differences = savedSettingDifferences(args, saved);
+  if (differences.length) {
+    const one = differences.length === 1;
+    // A plain result: nothing failed, and the call only has to be made again one way or
+    // the other.
+    return createSuccessResponse([
+      [
+        `Scan ${scanId} "${name}" was not re-run: a re-run uses the scan's saved settings, and ${one ? "this one differs" : "these differ"} from what was passed:`,
+        ...differences.map((difference) => `- ${difference}`),
+        `To re-run it with its saved settings, call startAccessibilityScan again with scanId "${scanId}" and without ${one ? "that setting" : "those settings"}. To scan with the settings passed, call it without scanId: that starts a new scan, whose runs can't be compared with this scan's.`,
+      ].join("\n"),
+    ]);
+  }
+
+  const { scanRunId } = await scanner.rerunScan(scanId);
+  const passedName = args.name.trim();
+  const unchecked = uncheckedSettings(args, saved);
+  const lead = [
+    `Started a new run (${scanRunId}) of scan ${scanId} "${name}" with its saved settings.`,
+    ...(passedName &&
+    passedName !== name &&
+    cleanScanName(passedName, "") !== name
+      ? [
+          `The scan keeps its name "${name}"; the name "${passedName}" was not used.`,
+        ]
+      : []),
+    ...(saved.localTestingEnabled
+      ? [localRerunNote(args.localIdentifier)]
+      : []),
+    ...(unchecked.length
+      ? [
+          `${unchecked.join(", ")} could not be checked against the scan's saved settings, which the API does not give back; the run uses the saved ones.`,
+        ]
+      : []),
+  ];
+  await notifyScanProgress(
+    context,
+    `Run ${scanRunId} of accessibility scan "${name}" started`,
+    0,
+  );
+  const [result, outcome] = await scanOutcome(scanner, config, context, {
+    name,
+    scanId,
+    scanRunId,
+    settings: saved.settings,
+    rerun: true,
+  });
+  const compare = compareHint(scanId, scanRunId);
+  return withNotes(
+    result,
+    lead,
+    outcome === "completed"
+      ? [compare]
+      : outcome === "still running"
+        ? [`Once it finishes: ${compare[0].toLowerCase()}${compare.slice(1)}`]
+        : [],
   );
 }
 
@@ -2376,21 +2670,27 @@ export default function addAccessibilityTools(
     "startAccessibilityScan",
     "Scan a web page URL for accessibility issues and get a CSV report. For a mobile app, run it on App Automate with accessibility on (setupBrowserStackAppAutomateTests), then fetchAccessibilityIssues.",
     {
-      name: z.string().describe("Name of the accessibility scan"),
-      pageURL: z
+      name: z.string().describe("Name of the scan"),
+      pageURL: z.string().describe("URL of the page to scan"),
+      scanId: z
         .string()
-        .describe("The web page URL to scan for accessibility issues"),
+        .trim()
+        .min(1)
+        .optional()
+        .describe(
+          "Only to re-run an earlier scan of this same page (e.g. after a fix), with its saved settings, so runs can be compared.",
+        ),
       authConfigId: z
         .number()
         .optional()
-        .describe("Optional auth config ID for authenticated scans"),
+        .describe("Auth config ID, for a page behind a login"),
       localIdentifier: z
         .string()
         .trim()
         .min(1)
         .optional()
         .describe(
-          "Identifier of a BrowserStack Local tunnel you started, for localhost or internal URLs.",
+          "ID of a BrowserStack Local tunnel you started, for localhost or internal URLs.",
         ),
       advancedRules: z
         .boolean()
@@ -2437,13 +2737,11 @@ export default function addAccessibilityTools(
     "createAccessibilityAuthConfig",
     "Create an authentication configuration for accessibility scans. Supports both form-based and basic authentication.",
     {
-      name: z.string().describe("Name for the auth configuration"),
+      name: z.string().describe("Name for the auth config"),
       type: z
         .enum(["form", "basic"])
-        .describe(
-          "Authentication type: 'form' for form-based auth, 'basic' for HTTP basic auth",
-        ),
-      url: z.string().describe("URL of the authentication page"),
+        .describe("'form' for a login form, 'basic' for HTTP basic auth"),
+      url: z.string().describe("URL of the login page"),
       username: z
         .string()
         .optional()
@@ -2529,7 +2827,7 @@ export default function addAccessibilityTools(
     "getAccessibilityAuthConfig",
     "Get an accessibility auth config by ID." + NEEDS_A11Y_CONFIG_ID,
     {
-      configId: z.number().describe("ID of the auth configuration to retrieve"),
+      configId: z.number().describe("ID of the auth config"),
     },
     {
       title: "Get Accessibility Auth Config",

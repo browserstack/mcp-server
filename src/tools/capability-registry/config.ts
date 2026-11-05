@@ -18,6 +18,13 @@ import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { discoverBaseUrl, HostSource } from "./discovery.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
 import { FLAT_SUFFIX, INDEX_FILE, InvocationError } from "./index-loader.js";
+import {
+  assertRegionKnown,
+  assertUsAccount,
+  getRegionalHost,
+  usesRegionalHosts,
+  RegionalHostKind,
+} from "../../lib/regional-host.js";
 
 /**
  * The environment this DEPLOYMENT points at, e.g. "preprod".
@@ -52,8 +59,8 @@ function environmentMap(): Record<string, Record<string, string>> {
  *
  * The general mechanism lives in `discovery.ts` and is driven by the index's `base_urls`.
  * This map is the bridge for products that predate that: tm's hosts are still hardcoded in
- * `lib/tm-base-url.ts` and shared with the hand-written Test Management tools. Once tm's
- * product.yaml declares `base_urls`, this entry can go and nothing else changes.
+ * `lib/tm-base-url.ts` and shared with the hand-written Test Management tools. Once a
+ * product.yaml declares `base_urls`, its entry can go and nothing else changes.
  */
 const BUILTIN_DISCOVERY: Record<
   string,
@@ -61,6 +68,52 @@ const BUILTIN_DISCOVERY: Record<
 > = {
   tm: getTMBaseURL,
 };
+
+/**
+ * Hosts used when the account's region is routed here, ahead of discovery and the
+ * index's declared hosts. `hosts` covers the capabilities that name a host.
+ */
+const REGIONAL_HOSTS: Record<
+  string,
+  { base: RegionalHostKind; hosts?: Record<string, RegionalHostKind> }
+> = {
+  tm: { base: "testManagement" },
+  tra: { base: "observabilityApi" },
+  app_accessibility: { base: "appAccessibilityApi" },
+  web_accessibility: { base: "accessibilityApi" },
+  devicecontrol: { base: "automateHubUrl", hosts: { api: "automateApi" } },
+  mobiledevicecontrol: {
+    base: "appAutomateHubUrl",
+    hosts: { api: "appAutomateCloud" },
+  },
+};
+
+/** Products served from US hosts only, refused for accounts in other regions. */
+const US_ONLY_PRODUCTS: Record<string, string> = {
+  loadtesting: "Load Testing",
+};
+
+/** True for a product this package knows by name, as opposed to a name the agent typed. */
+export function isKnownProduct(name: unknown): boolean {
+  return (
+    typeof name === "string" &&
+    (Object.hasOwn(REGIONAL_HOSTS, name) ||
+      Object.hasOwn(US_ONLY_PRODUCTS, name))
+  );
+}
+
+function regionalHost(product: string, host?: string): string | undefined {
+  if (US_ONLY_PRODUCTS[product]) {
+    assertUsAccount(US_ONLY_PRODUCTS[product]);
+    return undefined;
+  }
+  const entry = REGIONAL_HOSTS[product];
+  const kind = host ? entry?.hosts?.[host] : entry?.base;
+  if (!kind) return undefined;
+  // Test Management finds the account's region by probing; the others need it known.
+  if (kind !== "testManagement") assertRegionKnown();
+  return usesRegionalHosts() ? getRegionalHost(kind) : undefined;
+}
 
 /** True when this product's host is account-specific and must be discovered per call. */
 export function isRegionSharded(product: string, source?: HostSource): boolean {
@@ -130,6 +183,9 @@ function resolveNamedHost(
     );
   }
 
+  const regional = regionalHost(product, host);
+  if (regional) return regional;
+
   const declared = source?.hosts?.[host];
   if (declared) return trim(declared);
 
@@ -192,6 +248,9 @@ export async function resolveBaseUrl(
     );
     return trim(source.base_url);
   };
+
+  const regional = regionalHost(product);
+  if (regional) return regional;
 
   if ((source?.base_urls?.length ?? 0) > 0) {
     try {

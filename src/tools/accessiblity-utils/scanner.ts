@@ -6,6 +6,7 @@ import {
   otherBrowserStackLocalPids,
 } from "../../lib/local.js";
 import config from "../../config.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 export interface AccessibilityScanResponse {
   success: boolean;
@@ -23,8 +24,9 @@ export interface ScanFailureDetails {
   pages: { pageUrl: string; status: string; reason: string }[];
 }
 
-const SCANS_API =
-  "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans";
+/** The scans API on the account's region (GRR). */
+const scansApi = () =>
+  `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans`;
 
 /** How long startAccessibilityScan waits for a scan to finish before handing back its ids. */
 export const SCAN_WAIT_MS = 5 * 60 * 1000;
@@ -308,7 +310,7 @@ export class AccessibilityScanner {
     const { username, password } = this.auth;
     const create = async (body: typeof requestBody) => {
       const response = await apiClient.post<AccessibilityScanResponse>({
-        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans",
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans`,
         headers: {
           Authorization:
             "Basic " +
@@ -384,7 +386,7 @@ export class AccessibilityScanner {
     const read = (path: string) =>
       apiClient
         .get({
-          url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${path}`,
+          url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans/${path}`,
           headers: {
             Authorization:
               "Basic " +
@@ -429,7 +431,7 @@ export class AccessibilityScanner {
   async dashboardLink(scanId: string): Promise<string | undefined> {
     const resp = await apiClient
       .get({
-        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans",
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans`,
         headers: {
           Authorization:
             "Basic " +
@@ -461,7 +463,7 @@ export class AccessibilityScanner {
     scanRunId: string,
   ): Promise<ScanFailureDetails> {
     const [list, pages] = await Promise.all([
-      this.readQuietly(SCANS_API),
+      this.readQuietly(scansApi()),
       this.unscannedPages(scanId, scanRunId),
     ]);
     const last = (
@@ -492,7 +494,7 @@ export class AccessibilityScanner {
     scanRunId: string,
   ): Promise<ScanFailureDetails["pages"]> {
     const logs = await this.readQuietly(
-      `${SCANS_API}/${encodeURIComponent(scanId)}/scan_runs/${encodeURIComponent(scanRunId)}/scan_logs`,
+      `${scansApi()}/${encodeURIComponent(scanId)}/scan_runs/${encodeURIComponent(scanRunId)}/scan_logs`,
     );
     const entries: unknown = logs?.ok ? logs.data?.data?.scanLogs : undefined;
     if (!Array.isArray(entries)) return [];
@@ -555,7 +557,7 @@ export class AccessibilityScanner {
   async savedScan(scanId: string): Promise<SavedScan> {
     if (!/^\d+$/.test(scanId)) throw new ScanRefusedError(notVisible(scanId));
     const resp = await apiClient.get({
-      url: `${SCANS_API}/${scanId}/overview`,
+      url: `${scansApi()}/${scanId}/overview`,
       headers: this.authHeaders(),
       raise_error: false,
     });
@@ -606,7 +608,7 @@ export class AccessibilityScanner {
     let data: any;
     try {
       const response = await apiClient.post({
-        url: `${SCANS_API}/${scanId}/new_scan`,
+        url: `${scansApi()}/${scanId}/new_scan`,
         headers: {
           ...this.authHeaders(),
           "Content-Type": "application/json",
@@ -670,8 +672,8 @@ export class AccessibilityScanner {
     const going = (status: unknown): status is string =>
       typeof status === "string" && !FINAL_SCAN_STATUSES.has(status);
     const [list, runs] = await Promise.all([
-      read(SCANS_API),
-      read(`${SCANS_API}/${scanId}/scan_runs`),
+      read(scansApi()),
+      read(`${scansApi()}/${scanId}/scan_runs`),
     ]);
     const last = (
       list?.ok
@@ -690,7 +692,7 @@ export class AccessibilityScanner {
       .sort((a, b) => String(b.scanDate).localeCompare(String(a.scanDate)))[0];
     if (!newest) return undefined;
     const status = (
-      await read(`${SCANS_API}/${scanId}/scan_runs/${newest.id}/status`)
+      await read(`${scansApi()}/${scanId}/scan_runs/${newest.id}/status`)
     )?.data?.data?.status;
     return going(status) ? { id: String(newest.id), status } : undefined;
   }
@@ -701,7 +703,7 @@ export class AccessibilityScanner {
   ): Promise<AccessibilityScanStatus> {
     try {
       const response = await apiClient.get<AccessibilityScanStatus>({
-        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
         headers: {
           Authorization:
             "Basic " +

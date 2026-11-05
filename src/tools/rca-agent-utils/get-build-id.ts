@@ -1,12 +1,13 @@
+import { getRegionalHost } from "../../lib/regional-host.js";
+
 export async function getBuildId(
   projectName: string,
   buildName: string,
   username: string,
   accessKey: string,
 ): Promise<string> {
-  const url = new URL(
-    "https://api-automation.browserstack.com/ext/v1/builds/latest",
-  );
+  const host = getRegionalHost("automationApi");
+  const url = new URL(`${host}/ext/v1/builds/latest`);
   url.searchParams.append("project_name", projectName);
   url.searchParams.append("build_name", buildName);
   url.searchParams.append("user_name", username);

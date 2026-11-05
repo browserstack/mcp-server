@@ -72,8 +72,10 @@ export async function startAppLiveSession(
     { config },
   );
 
+  // Short on purpose: the capabilities describe themselves. This only says that the
+  // session can be driven, and which call turns the reference into a session.
   const handoff = mcpRef
-    ? `\n\nLaunch reference (mcp_ref): ${mcpRef}. To drive this session yourself once the user's browser has opened it, call invokeCapability on applive list_sessions with query mcp_ref=${mcpRef} — it waits for the device to come up and returns the session_id — then use the applive session capabilities (find_element, click_element, send_keys, take_screenshot, …) with that session_id, and stop_session when done.`
+    ? `\n\nActions on this session (tap, type, scroll, screenshot, app control) are supported through the applive capabilities: invokeCapability applive get_session with mcp_ref=${mcpRef} once the device is up, then the session capabilities, and stop_session when done.`
     : "";
 
   return {
@@ -99,7 +101,7 @@ export default function addAppLiveTools(
   const description =
     "Open a manual App Live session for the user to operate by hand; the agent cannot drive it." +
     (capabilityRegistryEnabled()
-      ? " applive capabilities (invokeCapability) drive it via the returned mcp_ref; unwatched: mobiledevicecontrol."
+      ? " Actions (tap, type, scroll) via invokeCapability on applive with the mcp_ref; unwatched: mobiledevicecontrol."
       : "");
 
   tools.runAppLiveSession = server.tool(

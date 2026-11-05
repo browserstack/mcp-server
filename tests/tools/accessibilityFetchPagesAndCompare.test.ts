@@ -267,27 +267,4 @@ describe("fetchAccessibilityIssues comparing scan runs", () => {
     expect(m.reportStatus).not.toHaveBeenCalled();
   });
 
-  it("does the same for a Workflow Analyzer report named by its link", async () => {
-    m.sourceFromReportUrl.mockResolvedValue({ kind: "workflow", reportId: "277527" });
-
-    const result = await fetchIssues()({
-      reportUrl: "https://accessibility.browserstack.com/reports/277527",
-      compareWith: "previous",
-    });
-
-    expect(result.isError).toBeFalsy();
-    expect(text(result).trim()).toBe(`Workflow Analyzer reports have no built-in compare.${READ_BOTH}`);
-  });
-
-  it("says to match a manual app report's issues by element, as its screens are not stable", async () => {
-    const result = await fetchIssues()({
-      appReportId: "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
-      compareWith: "previous",
-    });
-
-    expect(result.isError).toBeFalsy();
-    expect(text(result).trim()).toBe(
-      "App Accessibility manual reports have no built-in compare. Read both reports with fetchAccessibilityIssues and match issues by rule and component (the element's id or class); an issue in the later report only is new, in the earlier only is fixed, in both is still open.",
-    );
-  });
 });

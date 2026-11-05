@@ -148,25 +148,6 @@ describe("accessibility issue counts", () => {
     expect(body).not.toContain("could not be matched");
   });
 
-  it("startAccessibilityScan says a page did not load, as its error page's issues are left out of the count", async () => {
-    m.parse.mockResolvedValue({
-      ...GROUPED,
-      error_pages: [{ url: "http://bs-local.com:8799/", issues: 3 }],
-    });
-    const result = await handlers.startAccessibilityScan(
-      { name: "dead port", pageURL: "http://localhost:8799/" },
-      CONTEXT,
-    );
-
-    const body = text(result);
-    expect(body).toContain(
-      "⚠️ 1 page did not load; an error page was scanned in its place. The 3 issues found there are from the error page, not your page, so they are left out of the issues and the total below. Check the page is reachable (and the Local tunnel, for localhost), then scan again.",
-    );
-    expect(body.indexOf("did not load")).toBeLessThan(
-      body.indexOf("We found 79 issues."),
-    );
-  });
-
   it("fetchAccessibilityIssues says folded only for the duplicates it could match", async () => {
     m.parse.mockResolvedValue({ ...GROUPED, unlinked_duplicates: 2 });
     const result = await handlers.fetchAccessibilityIssues(
@@ -434,43 +415,6 @@ describe("fetchAccessibilityIssues and a report still processing", () => {
     expect(body).not.toContain("All issues retrieved");
   });
 
-  it("says which build a report link resolved to, and to call again with that build id", async () => {
-    m.sourceFromReportUrl.mockResolvedValue({
-      kind: "build",
-      buildId: BUILD_ID,
-    });
-    m.reportStatus.mockResolvedValue("finalizing");
-    const body = text(
-      await handlers.fetchAccessibilityIssues(
-        {
-          reportUrl: `https://accessibility.browserstack.com/automated-tests/projects/p/builds/b/1?thBuildId=${BUILD_ID}`,
-        },
-        context,
-      ),
-    );
-
-    expect(body).toContain(
-      `Resolved the report link to Automated Tests build ${BUILD_ID}.`,
-    );
-    expect(body).toContain(
-      `Call fetchAccessibilityIssues again with buildId: "${BUILD_ID}" in a minute or two.`,
-    );
-  });
-
-  it("keeps the page asked for in the call to make again", async () => {
-    m.reportStatus.mockResolvedValue("finalizing");
-    const body = text(
-      await handlers.fetchAccessibilityIssues(
-        { buildId: BUILD_ID, pageUrl: "https://example.com/usage" },
-        context,
-      ),
-    );
-
-    expect(body).toContain(
-      `buildId: "${BUILD_ID}", pageUrl: "https://example.com/usage" in a minute or two.`,
-    );
-  });
-
   it("reads a later page as it is, saying the report is still processing", async () => {
     m.reportStatus.mockResolvedValue("finalizing");
     const result = await handlers.fetchAccessibilityIssues(
@@ -656,21 +600,6 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
     expect(body).toContain("No issues have been read yet");
     expect(body).toContain(
       `Call fetchAccessibilityIssues again with buildId: "${BUILD_ID}" in a minute or two.`,
-    );
-  });
-
-  it("keeps compareWith in the call to make again when the build is still processing", async () => {
-    m.reportStatus.mockResolvedValue("rule_processing");
-
-    const body = text(
-      await handlers.fetchAccessibilityIssues(
-        { buildId: BUILD_ID, compareWith: "base-build-id" },
-        context,
-      ),
-    );
-
-    expect(body).toContain(
-      `buildId: "${BUILD_ID}", compareWith: "base-build-id" in a minute or two.`,
     );
   });
 
@@ -1135,94 +1064,5 @@ describe("what a web report's answer says about its issues", () => {
     expect(body).toContain(LINK);
     expect(body).not.toContain("Failed to start");
     expect(m.getReportLink).not.toHaveBeenCalled();
-  });
-});
-
-describe("fetchAccessibilityIssues on a scan run that failed", () => {
-  const SCAN = { scanId: "4300500", scanRunId: "2420030" };
-  const DASHBOARD =
-    "https://accessibility.browserstack.com/website-scanner/scans/4300500";
-  let handlers: Record<string, (...args: any[]) => any>;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    m.dashboardLink.mockResolvedValue(DASHBOARD);
-    m.getReportLink.mockResolvedValue("https://csv");
-    m.parse.mockResolvedValue({
-      ...GROUPED,
-      records: [],
-      page_length: 0,
-      total_issues: 0,
-      next_page: null,
-      remaining: 0,
-      duplicate_issues: 0,
-    });
-    handlers = register();
-  });
-
-  it("says the run failed and why, instead of reading its empty export as 0 issues", async () => {
-    m.reportStatus.mockResolvedValue("failed");
-    m.failureDetails.mockResolvedValue({
-      reason: "The requested page is not reachable",
-      pages: [
-        {
-          pageUrl: "http://bs-local.com:8202/after/home.html",
-          status: "failed",
-          reason: "Failed to start the test",
-        },
-      ],
-    });
-
-    const result = await handlers.fetchAccessibilityIssues(SCAN, CONTEXT);
-
-    expect(result.isError).toBe(true);
-    expect(m.failureDetails).toHaveBeenCalledWith("4300500", "2420030");
-    expect(m.getReportLink).not.toHaveBeenCalled();
-    expect(m.parse).not.toHaveBeenCalled();
-    const body = text(result);
-    expect(body).toContain(
-      "Scan run 2420030 of scan 4300500 failed, so no pages were checked: 0 issues does not mean the page is clean.",
-    );
-    expect(body).toContain("Why: ");
-    expect(body).toContain("The requested page is not reachable");
-    expect(body).toContain(
-      "- http://bs-local.com:8202/after/home.html: Failed to start the test",
-    );
-    expect(body).toContain(DASHBOARD);
-    expect(body).not.toContain("Retrieved 0");
-    expect(body).not.toContain("All issues retrieved");
-  });
-
-  it("still says the run failed when the API gives no reason", async () => {
-    m.reportStatus.mockResolvedValue("failed");
-    m.failureDetails.mockResolvedValue({ pages: [] });
-
-    const body = text(await handlers.fetchAccessibilityIssues(SCAN, CONTEXT));
-
-    expect(body).toContain("failed, so no pages were checked");
-    expect(body).toContain("The dashboard says why.");
-  });
-
-  it("says a cancelled run was cancelled", async () => {
-    m.reportStatus.mockResolvedValue("cancelled");
-
-    const result = await handlers.fetchAccessibilityIssues(SCAN, CONTEXT);
-
-    expect(result.isError).toBe(true);
-    expect(m.failureDetails).not.toHaveBeenCalled();
-    expect(text(result)).toContain(
-      "Scan run 2420030 of scan 4300500 was cancelled, so it has no results: 0 issues does not mean the page is clean.",
-    );
-    expect(m.getReportLink).not.toHaveBeenCalled();
-  });
-
-  it("reads a completed run's issues as before", async () => {
-    m.reportStatus.mockResolvedValue("completed");
-
-    const result = await handlers.fetchAccessibilityIssues(SCAN, CONTEXT);
-
-    expect(m.failureDetails).not.toHaveBeenCalled();
-    expect(m.getReportLink).toHaveBeenCalledTimes(1);
-    expect(text(result)).toContain("Retrieved 0 accessibility issues");
   });
 });

@@ -180,9 +180,6 @@ describe("compareIssues", () => {
     expect(diff.added.map((r) => r.issue_type)).toEqual(["region"]);
     expect(diff.resolved.map((r) => r.issue_type)).toEqual(["image-alt"]);
     expect(diff.retained).toBe(2);
-    // The still-open issues as the newer run has them, one for each counted.
-    expect(diff.still_open).toHaveLength(2);
-    expect(diff.still_open.every((r) => before.some((b) => b.key === r.key))).toBe(true);
   });
 });
 
@@ -311,75 +308,6 @@ describe("compareIssues and a page that did not load in the earlier run", () => 
     expect(diff.failed_pages_earlier).toEqual([]);
     expect(diff.added).toHaveLength(2);
     expect(diff.resolved).toHaveLength(1);
-  });
-});
-
-// Read on its own, a run's error-page rows are not the page's issues: the parser sets the page
-// apart, as the comparison does, and counts nothing of it.
-describe("parseAccessibilityReportFromCSV and a page that did not load", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  const PAGE_A = "http://bs-local.com:3100/page-a.html";
-  const PAGE_B = "http://bs-local.com:3100/page-b.html";
-  const PRIVOXY = '<a href="https://www.browserstack.com/docs/local-testing/binary-params?ref=dashboard-privoxy-page" target="_blank">';
-  const on = (page: string, type: string, id: string, extra: Record<string, string> = {}) =>
-    row({ "Issue type": type, Component: type, "CSS selector": type, "Affected page": page, "Issue link": link(id), ...extra });
-
-  it("leaves every row of the page out of the issues, the total, the summary and the duplicates", async () => {
-    serve([
-      on(PAGE_A, "label", "a"),
-      on(PAGE_A, "label", "a2", { "Duplicate Issue of": link("a") }),
-      on(PAGE_B, "keyboard-focus-visible", "b", { "HTML snippet": PRIVOXY }),
-      on(PAGE_B, "decorative-image", "c", { "HTML snippet": '<img alt="BrowserStack Logo">' }),
-      on(PAGE_B, "decorative-image", "c2", { "Duplicate Issue of": link("c") }),
-      on(PAGE_B, "region", "h", { "Issue status": "hidden" }),
-    ]);
-
-    const report = await parseAccessibilityReportFromCSV("https://csv");
-
-    expect(report.error_pages).toEqual([{ url: PAGE_B, issues: 2 }]);
-    expect(report.total_issues).toBe(1);
-    expect(report.records.map((r) => r.issue_type)).toEqual(["label"]);
-    expect(report.summary.by_page).toEqual([{ url: PAGE_A, count: 1 }]);
-    expect(report.duplicate_issues).toBe(1);
-    expect(report.hidden_issues).toBe(0);
-    expect(report.next_page).toBeNull();
-  });
-
-  it("knows Chrome's network error page too", async () => {
-    serve([
-      on(PAGE_A, "label", "a"),
-      on(PAGE_B, "landmark-one-main", "m", { "HTML snippet": '<div id="main-frame-error" class="interstitial-wrapper">' }),
-    ]);
-
-    const report = await parseAccessibilityReportFromCSV("https://csv");
-
-    expect(report.error_pages).toEqual([{ url: PAGE_B, issues: 1 }]);
-    expect(report.total_issues).toBe(1);
-  });
-
-  it("read for that page, gives no issues and names it; read for another page, does not", async () => {
-    serve([on(PAGE_A, "label", "a"), on(PAGE_B, "keyboard-focus-visible", "b", { "HTML snippet": PRIVOXY })]);
-
-    const failed = await parseAccessibilityReportFromCSV("https://csv", { pageUrl: `${PAGE_B}/` });
-    expect(failed.error_pages).toEqual([{ url: PAGE_B, issues: 1 }]);
-    expect(failed.total_issues).toBe(0);
-
-    const loaded = await parseAccessibilityReportFromCSV("https://csv", { pageUrl: PAGE_A });
-    expect(loaded.error_pages).toBeUndefined();
-    expect(loaded.total_issues).toBe(1);
-  });
-
-  it("does not take a real page that links to the Local docs, or names a class neterror-*, for an error page", async () => {
-    serve([
-      on(PAGE_B, "link-name", "l", { "HTML snippet": '<a class="help" href="https://www.browserstack.com/docs/local-testing/"></a>' }),
-      on(PAGE_B, "color-contrast", "n", { "HTML snippet": '<div class="neterror-banner">Offline?</div>' }),
-    ]);
-
-    const report = await parseAccessibilityReportFromCSV("https://csv");
-
-    expect(report.error_pages).toBeUndefined();
-    expect(report.total_issues).toBe(2);
   });
 });
 

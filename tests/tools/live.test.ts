@@ -9,7 +9,7 @@ vi.mock('../../src/tools/live-utils/start-session', () => ({
 }));
 vi.mock('../../src/lib/local', () => ({
   isLocalURL: vi.fn(),
-  ensureLocalBinarySetup: vi.fn(),
+  killExistingBrowserStackLocalProcesses: vi.fn(),
 }));
 
 vi.mock('../../src/logger', () => {
@@ -45,6 +45,7 @@ describe('startBrowserLiveSession', () => {
 
     (startBrowserSession as Mock).mockResolvedValue('https://live.browserstack.com/123456');
     (local.isLocalURL as Mock).mockReturnValue(false);
+    (local.killExistingBrowserStackLocalProcesses as Mock).mockResolvedValue(undefined);
   });
 
   const validDesktopArgs = {

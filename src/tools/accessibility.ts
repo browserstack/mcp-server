@@ -768,6 +768,34 @@ function notReadyToCompare(
   ]);
 }
 
+/**
+ * compareWith "previous" on a Workflow Analyzer report: the report before it is found here,
+ * on the same page or else the same site, and named with the call that reads it. Agents left
+ * to find it searched for a way to list reports, and one gave no answer.
+ */
+async function previousWorkflowToCompare(
+  reportFetcher: AccessibilityReportFetcher,
+  source: { kind: "workflow"; reportId: string },
+): Promise<CallToolResult> {
+  const earlier = await reportFetcher
+    .previousWorkflowReport(source.reportId)
+    .catch(() => undefined);
+  if (!earlier) {
+    return readBothToCompare(
+      `${NO_BUILT_IN_COMPARE.workflow} No earlier Workflow Analyzer report of the same page or site is among the account's newest reports, so ask the user which report to compare it with.`,
+      false,
+    );
+  }
+  const which = earlier.samePage
+    ? "of the same page"
+    : "of the same site (no earlier one scanned the same page)";
+  return readBothToCompare(
+    `${NO_BUILT_IN_COMPARE.workflow} The newest report before it ${which} is report ${earlier.reportId}${earlier.time ? `, started ${earlier.time}` : ""}: ${earlier.link}`,
+    false,
+    [sourceArgs(source), `workflowReportId: "${earlier.reportId}"`],
+  );
+}
+
 /** The build to compare with, or the answer to give when there is none. */
 async function baselineAppBuild(
   reportFetcher: AccessibilityReportFetcher,
@@ -1183,6 +1211,9 @@ async function fetchAccessibilityIssues(
           : mapped,
         context,
       );
+    }
+    if (source.kind === "workflow" && compareWith === "previous") {
+      return previousWorkflowToCompare(reportFetcher, source);
     }
     if (source.kind !== "appBuild") {
       return readBothToCompare(

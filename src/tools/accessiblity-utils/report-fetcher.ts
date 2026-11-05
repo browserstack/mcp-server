@@ -8,7 +8,7 @@ import {
   type AppBuildReport,
   type AppManualReport,
 } from "./app-report-fetcher.js";
-import { onErrorPage, type RunIssue } from "./report-parser.js";
+import { onErrorPage, samePage, type RunIssue } from "./report-parser.js";
 import { sortBySeverity } from "./paginate.js";
 import { SessionType } from "../../lib/constants.js";
 import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
@@ -105,6 +105,34 @@ const MAX_SCAN_RUN_PAGES = 10;
 
 /** A build whose status is checked is one just run, so it sits at the top of its project's list. */
 const MAX_BUILD_LIST_PAGES = 3;
+
+/**
+ * The Workflow Analyzer report list holds the whole account's reports, newest first, with no
+ * page or date: a report is found in its newest pages, at the list's largest page size, and
+ * the pages of the earlier ones after it are read from their summaries, a batch at a time.
+ */
+const MAX_WORKFLOW_LIST_PAGES = 3;
+const WORKFLOW_LIST_PAGE_SIZE = 99;
+const MAX_WORKFLOW_CANDIDATES = 30;
+const WORKFLOW_SUMMARY_BATCH = 10;
+
+/** An earlier Workflow Analyzer report: of the same page, or else of the same site. */
+export interface EarlierWorkflowReport {
+  reportId: string;
+  /** When it started, as the API writes it. */
+  time?: string;
+  samePage: boolean;
+  link: string;
+}
+
+/** A page's site: its host, without a leading "www.". */
+function siteOf(url: string): string | undefined {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
 
 interface ScanListPage {
   scans?: {
@@ -807,6 +835,86 @@ export class AccessibilityReportFetcher {
     } catch {
       return undefined;
     }
+  }
+
+  /** A Workflow Analyzer report's start and the pages it scanned, from its summary. */
+  private async workflowReportPages(
+    reportId: string,
+  ): Promise<{ time?: string; pages: string[] } | undefined> {
+    const summary = (
+      await this.getData(
+        `${apiBase()}/workflow-analyzer/v1/reports/${encodeURIComponent(reportId)}`,
+      )
+    )?.summary;
+    if (!summary) return undefined;
+    const rows: { url?: unknown }[] = summary.issueCount?.issueCountByUrl ?? [];
+    return {
+      time: summary.time,
+      pages: rows
+        .map((row) => row?.url)
+        .filter((url): url is string => typeof url === "string"),
+    };
+  }
+
+  /**
+   * The newest Workflow Analyzer report before this one that scanned one of its pages, or
+   * else one on its site; undefined when none is among the account's newest reports.
+   */
+  async previousWorkflowReport(
+    reportId: string,
+  ): Promise<EarlierWorkflowReport | undefined> {
+    const own = await this.workflowReportPages(reportId);
+    if (!own?.pages.length) return undefined;
+    // Newest first: the completed reports listed after this one are earlier.
+    const earlier: string[] = [];
+    let reached = false;
+    let nextPage: string | undefined;
+    for (
+      let page = 0;
+      page < MAX_WORKFLOW_LIST_PAGES &&
+      earlier.length < MAX_WORKFLOW_CANDIDATES;
+      page++
+    ) {
+      const data = await this.getData(
+        `${apiBase()}/workflow-analyzer/v1/reports?limit=${WORKFLOW_LIST_PAGE_SIZE}${
+          nextPage ? `&next_page=${encodeURIComponent(nextPage)}` : ""
+        }`,
+      );
+      for (const row of data?.reports ?? []) {
+        if (String(row.id) === reportId) reached = true;
+        else if (reached && row.status === "completed") {
+          earlier.push(String(row.id));
+        }
+      }
+      if (!data?.pagination?.hasNext || !data.pagination.nextPage) break;
+      nextPage = data.pagination.nextPage;
+    }
+    const pages = new Set(own.pages.map(samePage));
+    const sites = new Set(own.pages.map(siteOf));
+    const started = (time?: string) => Date.parse(time ?? "");
+    let sameSite: EarlierWorkflowReport | undefined;
+    const candidates = earlier.slice(0, MAX_WORKFLOW_CANDIDATES);
+    for (let i = 0; i < candidates.length; i += WORKFLOW_SUMMARY_BATCH) {
+      const batch = candidates.slice(i, i + WORKFLOW_SUMMARY_BATCH);
+      const summaries = await Promise.all(
+        batch.map((id) => this.workflowReportPages(id)),
+      );
+      for (const [j, summary] of summaries.entries()) {
+        if (!summary || started(summary.time) >= started(own.time)) continue;
+        const report = {
+          reportId: batch[j],
+          time: summary.time,
+          link: `${dashboard()}/workflow-analyzer/report?ids=${encodeURIComponent(batch[j])}`,
+        };
+        if (summary.pages.some((url) => pages.has(samePage(url)))) {
+          return { ...report, samePage: true };
+        }
+        if (!sameSite && summary.pages.some((url) => sites.has(siteOf(url)))) {
+          sameSite = { ...report, samePage: false };
+        }
+      }
+    }
+    return sameSite;
   }
 
   /**

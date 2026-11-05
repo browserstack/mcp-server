@@ -16,6 +16,7 @@ const m = vi.hoisted(() => ({
   parse: vi.fn(),
   dashboardLink: vi.fn(),
   failureDetails: vi.fn(async () => ({ pages: [] })),
+  unscannedPages: vi.fn(async () => []),
 }));
 
 vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
@@ -26,6 +27,7 @@ vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
     runSettings = vi.fn().mockResolvedValue(undefined);
     dashboardLink = m.dashboardLink;
     failureDetails = m.failureDetails;
+    unscannedPages = m.unscannedPages;
   },
   ScanTimeoutError: class extends Error {
     constructor(readonly waitedMs: number) {
@@ -69,10 +71,7 @@ vi.mock("../../src/index.js", () => ({
   PackageJsonVersion: "0.0.0",
 }));
 
-import addAccessibilityTools, {
-  REPORT_STATUS_POLL_MS,
-  REPORT_STATUS_WAIT_MS,
-} from "../../src/tools/accessibility.js";
+import addAccessibilityTools from "../../src/tools/accessibility.js";
 import { ExportPendingError } from "../../src/tools/accessiblity-utils/report-fetcher.js";
 
 const CONFIG = {
@@ -411,55 +410,68 @@ describe("fetchAccessibilityIssues and a report still processing", () => {
     expect(body).not.toContain("still processing");
   });
 
-  it("waits while the report is finalizing, then reads the complete issues", async () => {
-    m.reportStatus
-      .mockResolvedValueOnce("finalizing")
-      .mockResolvedValueOnce("finalizing")
-      .mockResolvedValueOnce("completed");
-    const pending = handlers.fetchAccessibilityIssues(
-      { buildId: BUILD_ID },
-      context,
-    );
-    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_MS * 2);
-    const result = await pending;
-
-    expect(m.reportStatus).toHaveBeenCalledTimes(3);
-    expect(m.getReportLink).toHaveBeenCalledTimes(1);
-    expect(sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        method: "notifications/progress",
-        params: expect.objectContaining({
-          message: expect.stringContaining("still finalizing"),
-        }),
-      }),
-    );
-    const body = text(result);
-    expect(body).toContain(
-      "The report was still processing (status: finalizing); waited 20s for it to complete",
-    );
-    expect(body).toContain("✅ All issues retrieved.");
-  });
-
-  it("says the issues are only those found so far when processing outlasts the wait", async () => {
+  it("does not wait while the report is finalizing: says to call again, without reading any issues", async () => {
     m.reportStatus.mockResolvedValue("finalizing");
-    const pending = handlers.fetchAccessibilityIssues(
+    const result = await handlers.fetchAccessibilityIssues(
       { buildId: BUILD_ID },
       context,
     );
-    await vi.advanceTimersByTimeAsync(
-      REPORT_STATUS_WAIT_MS + REPORT_STATUS_POLL_MS,
-    );
-    const result = await pending;
 
+    expect(m.reportStatus).toHaveBeenCalledTimes(1);
+    expect(m.getReportLink).not.toHaveBeenCalled();
+    expect(m.parse).not.toHaveBeenCalled();
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(result.isError).toBeFalsy();
     const body = text(result);
     expect(body).toContain(
-      "This report is still processing (status: finalizing",
+      `The report for Automated Tests build ${BUILD_ID} is still finalizing (status: finalizing)`,
     );
-    expect(body).toContain("only those found so far");
-    expect(body).not.toContain("✅ All issues retrieved.");
+    expect(body).toContain("No issues have been read yet");
+    expect(body).toContain(
+      `Call fetchAccessibilityIssues again with buildId: "${BUILD_ID}" in a minute or two.`,
+    );
+    expect(body).not.toContain("Retrieved");
+    expect(body).not.toContain("All issues retrieved");
   });
 
-  it("does not wait again for a later page, but still says the report is processing", async () => {
+  it("says which build a report link resolved to, and to call again with that build id", async () => {
+    m.sourceFromReportUrl.mockResolvedValue({
+      kind: "build",
+      buildId: BUILD_ID,
+    });
+    m.reportStatus.mockResolvedValue("finalizing");
+    const body = text(
+      await handlers.fetchAccessibilityIssues(
+        {
+          reportUrl: `https://accessibility.browserstack.com/automated-tests/projects/p/builds/b/1?thBuildId=${BUILD_ID}`,
+        },
+        context,
+      ),
+    );
+
+    expect(body).toContain(
+      `Resolved the report link to Automated Tests build ${BUILD_ID}.`,
+    );
+    expect(body).toContain(
+      `Call fetchAccessibilityIssues again with buildId: "${BUILD_ID}" in a minute or two.`,
+    );
+  });
+
+  it("keeps the page asked for in the call to make again", async () => {
+    m.reportStatus.mockResolvedValue("finalizing");
+    const body = text(
+      await handlers.fetchAccessibilityIssues(
+        { buildId: BUILD_ID, pageUrl: "https://example.com/usage" },
+        context,
+      ),
+    );
+
+    expect(body).toContain(
+      `buildId: "${BUILD_ID}", pageUrl: "https://example.com/usage" in a minute or two.`,
+    );
+  });
+
+  it("reads a later page as it is, saying the report is still processing", async () => {
     m.reportStatus.mockResolvedValue("finalizing");
     const result = await handlers.fetchAccessibilityIssues(
       { buildId: BUILD_ID, cursor: 4400 },
@@ -471,8 +483,7 @@ describe("fetchAccessibilityIssues and a report still processing", () => {
   });
 
   it("does not wait while the tests are still running, and says the issues are those found so far", async () => {
-    // A long suite can run for an hour; blocking the first read for five minutes and then
-    // returning partial results anyway serves nobody. Only post-run processing is waited on.
+    // A long suite can run for an hour, so a running report is read as it is, with a note.
     m.reportStatus.mockResolvedValue("running");
 
     const result = await handlers.fetchAccessibilityIssues(
@@ -627,22 +638,39 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
     expect(body.indexOf(LINK)).toBeGreaterThan(block);
   });
 
-  it("waits while an app build's rules are still processing", async () => {
-    m.reportStatus
-      .mockResolvedValueOnce("rule_processing")
-      .mockResolvedValueOnce("failed");
+  it("does not wait while an app build's rules are still processing: says to call again", async () => {
+    m.reportStatus.mockResolvedValue("rule_processing");
 
-    const pending = handlers.fetchAccessibilityIssues(
+    const result = await handlers.fetchAccessibilityIssues(
       { buildId: BUILD_ID },
       context,
     );
-    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_MS);
-    const result = await pending;
 
-    expect(m.reportStatus).toHaveBeenCalledTimes(2);
-    expect(m.appBuildReport).toHaveBeenCalledTimes(1);
-    expect(text(result)).toContain(
-      "The report was still processing (status: rule_processing); waited",
+    expect(m.reportStatus).toHaveBeenCalledTimes(1);
+    expect(m.appBuildReport).not.toHaveBeenCalled();
+    expect(result.isError).toBeFalsy();
+    const body = text(result);
+    expect(body).toContain(
+      "is still running its accessibility rules (status: rule_processing)",
+    );
+    expect(body).toContain("No issues have been read yet");
+    expect(body).toContain(
+      `Call fetchAccessibilityIssues again with buildId: "${BUILD_ID}" in a minute or two.`,
+    );
+  });
+
+  it("keeps compareWith in the call to make again when the build is still processing", async () => {
+    m.reportStatus.mockResolvedValue("rule_processing");
+
+    const body = text(
+      await handlers.fetchAccessibilityIssues(
+        { buildId: BUILD_ID, compareWith: "base-build-id" },
+        context,
+      ),
+    );
+
+    expect(body).toContain(
+      `buildId: "${BUILD_ID}", compareWith: "base-build-id" in a minute or two.`,
     );
   });
 
@@ -1107,5 +1135,94 @@ describe("what a web report's answer says about its issues", () => {
     expect(body).toContain(LINK);
     expect(body).not.toContain("Failed to start");
     expect(m.getReportLink).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchAccessibilityIssues on a scan run that failed", () => {
+  const SCAN = { scanId: "4300500", scanRunId: "2420030" };
+  const DASHBOARD =
+    "https://accessibility.browserstack.com/website-scanner/scans/4300500";
+  let handlers: Record<string, (...args: any[]) => any>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.dashboardLink.mockResolvedValue(DASHBOARD);
+    m.getReportLink.mockResolvedValue("https://csv");
+    m.parse.mockResolvedValue({
+      ...GROUPED,
+      records: [],
+      page_length: 0,
+      total_issues: 0,
+      next_page: null,
+      remaining: 0,
+      duplicate_issues: 0,
+    });
+    handlers = register();
+  });
+
+  it("says the run failed and why, instead of reading its empty export as 0 issues", async () => {
+    m.reportStatus.mockResolvedValue("failed");
+    m.failureDetails.mockResolvedValue({
+      reason: "The requested page is not reachable",
+      pages: [
+        {
+          pageUrl: "http://bs-local.com:8202/after/home.html",
+          status: "failed",
+          reason: "Failed to start the test",
+        },
+      ],
+    });
+
+    const result = await handlers.fetchAccessibilityIssues(SCAN, CONTEXT);
+
+    expect(result.isError).toBe(true);
+    expect(m.failureDetails).toHaveBeenCalledWith("4300500", "2420030");
+    expect(m.getReportLink).not.toHaveBeenCalled();
+    expect(m.parse).not.toHaveBeenCalled();
+    const body = text(result);
+    expect(body).toContain(
+      "Scan run 2420030 of scan 4300500 failed, so no pages were checked: 0 issues does not mean the page is clean.",
+    );
+    expect(body).toContain("Why: ");
+    expect(body).toContain("The requested page is not reachable");
+    expect(body).toContain(
+      "- http://bs-local.com:8202/after/home.html: Failed to start the test",
+    );
+    expect(body).toContain(DASHBOARD);
+    expect(body).not.toContain("Retrieved 0");
+    expect(body).not.toContain("All issues retrieved");
+  });
+
+  it("still says the run failed when the API gives no reason", async () => {
+    m.reportStatus.mockResolvedValue("failed");
+    m.failureDetails.mockResolvedValue({ pages: [] });
+
+    const body = text(await handlers.fetchAccessibilityIssues(SCAN, CONTEXT));
+
+    expect(body).toContain("failed, so no pages were checked");
+    expect(body).toContain("The dashboard says why.");
+  });
+
+  it("says a cancelled run was cancelled", async () => {
+    m.reportStatus.mockResolvedValue("cancelled");
+
+    const result = await handlers.fetchAccessibilityIssues(SCAN, CONTEXT);
+
+    expect(result.isError).toBe(true);
+    expect(m.failureDetails).not.toHaveBeenCalled();
+    expect(text(result)).toContain(
+      "Scan run 2420030 of scan 4300500 was cancelled, so it has no results: 0 issues does not mean the page is clean.",
+    );
+    expect(m.getReportLink).not.toHaveBeenCalled();
+  });
+
+  it("reads a completed run's issues as before", async () => {
+    m.reportStatus.mockResolvedValue("completed");
+
+    const result = await handlers.fetchAccessibilityIssues(SCAN, CONTEXT);
+
+    expect(m.failureDetails).not.toHaveBeenCalled();
+    expect(m.getReportLink).toHaveBeenCalledTimes(1);
+    expect(text(result)).toContain("Retrieved 0 accessibility issues");
   });
 });

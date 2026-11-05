@@ -30,6 +30,7 @@ import {
   AccessibilityAuthConfig,
   safeAuthConfigData,
 } from "./accessiblity-utils/auth-config.js";
+import { NO_FEEDBACK_HINT } from "../lib/feedback-hint.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import {
   compareIssues,
@@ -122,6 +123,26 @@ function asSentence(message: string): string {
   return /[.!?…]["'”’)\]]*$/.test(text) ? text : `${text}.`;
 }
 
+/**
+ * Refusals the user resolves on their own account, with what to tell them. The API's own
+ * words ("You do not have access to External APIs", "user info missing") read like faults,
+ * so agents retried, renamed the scan, or reported them with submitFeedback. Each pattern
+ * is the API's message as logged in telemetry.
+ */
+function accountRefusal(message: string): string | undefined {
+  const scanLimit = message.match(/make over (\d+) scans/i);
+  if (scanLimit) {
+    return `This account has reached its plan's limit of ${scanLimit[1]} saved Website Scanner scans, so no new scan can be started. To scan again, delete scans that are no longer needed under Website Scanner in the Accessibility dashboard (https://accessibility.browserstack.com/site-scanner), or upgrade the plan. This is a plan limit, not a fault: tell the user, and do not retry or start the scan under another name.`;
+  }
+  if (/access to External APIs/i.test(message)) {
+    return "This account's BrowserStack plan does not include the External APIs add-on, which the MCP's accessibility tools need: they work through the Accessibility API. Scans can still be run and read in the Accessibility dashboard (https://accessibility.browserstack.com). To use them from here, the account admin can add External APIs to the plan through BrowserStack sales. This is a plan limit, not a fault: tell the user, and do not retry.";
+  }
+  if (/user info missing/i.test(message)) {
+    return "Website Scanner has not set this user up yet: it does that the first time they open Website Scanner in the Accessibility dashboard, and refuses its API until then. Ask the user to open https://accessibility.browserstack.com/site-scanner once while signed in to BrowserStack, then start the scan again.";
+  }
+  return undefined;
+}
+
 function handleMCPError(
   toolName: string,
   server: McpServer,
@@ -131,6 +152,13 @@ function handleMCPError(
   trackMCP(toolName, server.server.getClientVersion()!, error, config);
   const errorMessage =
     (error instanceof Error && error.message.trim()) || "Unknown error";
+  const refusal = accountRefusal(errorMessage);
+  if (refusal) {
+    return Object.assign(
+      createErrorResponse(`${refusal}\nBrowserStack said: ${errorMessage}`),
+      { [NO_FEEDBACK_HINT]: true },
+    );
+  }
   return createErrorResponse(
     `Failed to ${toolName.replace(/([A-Z])/g, " $1").toLowerCase()}: ${asSentence(errorMessage)} Please open an issue on GitHub if the problem persists`,
   );
@@ -170,6 +198,38 @@ async function initializeReportFetcher(
   return reportFetcher;
 }
 
+/** The longest question the accessibility knowledge base takes; longer ones are refused. */
+export const EXPERT_QUERY_MAX_CHARS = 500;
+
+/** The opening of `text` within `max` characters, cut at a word break when one is near. */
+function cutAtWord(text: string, max: number): string {
+  if (text.length <= max) return text.trimEnd();
+  const head = text.slice(0, max);
+  const lastBreak = head.search(/\s\S*$/);
+  return (lastBreak > max * 0.6 ? head.slice(0, lastBreak) : head).trimEnd();
+}
+
+/**
+ * A question the knowledge base will take. It refuses anything over 500 characters
+ * ("Query is too long"), and agents writing a detailed question hit that: two refusals on
+ * 4 Nov alone. Agents put the question itself last, after the context, so a longer one
+ * keeps its last sentence and as much of its opening as fits around it.
+ */
+function fitExpertQuery(query: string): { query: string; shortened: boolean } {
+  if (query.length <= EXPERT_QUERY_MAX_CHARS)
+    return { query, shortened: false };
+  const text = query.trim();
+  const sentences = text.match(/[^.?!]+(?:[.?!]+["')\]]*\s*|$)/g) ?? [text];
+  const last = sentences[sentences.length - 1].trim();
+  const gap = " … ";
+  if (sentences.length < 2 || last.length > EXPERT_QUERY_MAX_CHARS * 0.6) {
+    return { query: cutAtWord(text, EXPERT_QUERY_MAX_CHARS), shortened: true };
+  }
+  const opening = text.slice(0, text.length - last.length);
+  const room = EXPERT_QUERY_MAX_CHARS - last.length - gap.length;
+  return { query: `${cutAtWord(opening, room)}${gap}${last}`, shortened: true };
+}
+
 async function executeAccessibilityRAG(
   args: { query: string },
   server: McpServer,
@@ -182,7 +242,19 @@ async function executeAccessibilityRAG(
       undefined,
       config,
     );
-    return await queryAccessibilityRAG(args.query, config);
+    const { query, shortened } = fitExpertQuery(args.query);
+    const answer = await queryAccessibilityRAG(query, config);
+    if (!shortened) return answer;
+    return {
+      ...answer,
+      content: [
+        {
+          type: "text",
+          text: `The question was ${args.query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${query.length} were sent: its opening and its last sentence. If the answer misses the point, ask again more briefly.`,
+        },
+        ...(answer.content ?? []),
+      ],
+    };
   } catch (error) {
     return handleMCPError("accessibilityExpert", server, config, error);
   }
@@ -322,10 +394,6 @@ function excludedIssuesNote(
   return notes;
 }
 
-/** How often, and for how long, a first read waits on a report that is still processing. */
-export const REPORT_STATUS_POLL_MS = 10_000;
-export const REPORT_STATUS_WAIT_MS = 5 * 60 * 1000;
-
 /** Statuses during which a report's issues are still being added (`rule_processing`: an app build's). */
 const PROCESSING_STATUSES = new Set([
   "queued",
@@ -337,54 +405,19 @@ const PROCESSING_STATUSES = new Set([
 ]);
 
 /**
- * Of those, the ones worth waiting on: the processing after the run (a web scan's advanced
- * issues, an app build's rules), which ends within minutes. A report whose scan or tests are still running is read as it is,
- * with a note, since that can last as long as the suite does.
+ * Of those, the processing after the run: a web report's advanced issues while "finalizing",
+ * an app build's rules while "rule_processing". It usually ends within a few minutes, but a
+ * first read no longer waits for it inside the call. It used to wait up to five minutes and
+ * then read the export, and a client cuts off a call that long: the claude.ai connector
+ * aborts a tool call silent for 305 s, progress notifications or not. Every such call left
+ * the agent with nothing, and one reported a fix as verified that had added 26 issues. So
+ * the read says the report is not ready, and to call again, which any client handles.
  */
-const WAIT_STATUSES = new Set(["finalizing", "rule_processing"]);
+const FINALIZING_STATUSES = new Set(["finalizing", "rule_processing"]);
 
 interface ProcessingState {
-  /** The status when the issues were read; undefined when it could not be read. */
+  /** The report's status when its issues were read; undefined when it could not be read. */
   status?: string;
-  /** The status first seen, before any waiting. */
-  firstStatus?: string;
-  waitedMs: number;
-}
-
-/**
- * Where a report is in its processing before its issues are read. Issues keep being added
- * until it completes; an advanced scan adds its advanced-rule issues while "finalizing", for
- * minutes after the tests end, so a first read waits for that, reporting progress, for up to
- * REPORT_STATUS_WAIT_MS. A run still in progress is not waited on (it can take as long as
- * the suite), nor is a later page, nor a status that cannot be read.
- */
-async function waitForProcessing(
-  reportFetcher: AccessibilityReportFetcher,
-  source: IssueSource,
-  wait: boolean,
-  context: ScanProgressContext | undefined,
-): Promise<ProcessingState> {
-  const started = Date.now();
-  const firstStatus = await reportFetcher.reportStatus(source);
-  let status = firstStatus;
-  while (
-    wait &&
-    status &&
-    WAIT_STATUSES.has(status) &&
-    Date.now() - started < REPORT_STATUS_WAIT_MS
-  ) {
-    const waited = Date.now() - started;
-    if (context) {
-      await notifyScanProgress(
-        context,
-        `The report is still ${status}; waiting for it to complete (${formatDuration(waited)} of up to ${formatDuration(REPORT_STATUS_WAIT_MS)}).`,
-        Math.min(99, Math.round((waited / REPORT_STATUS_WAIT_MS) * 100)),
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, REPORT_STATUS_POLL_MS));
-    status = await reportFetcher.reportStatus(source);
-  }
-  return { status, firstStatus, waitedMs: Date.now() - started };
 }
 
 function formatDuration(ms: number): string {
@@ -394,27 +427,38 @@ function formatDuration(ms: number): string {
     : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
-/** What the answer says about the report's processing, if anything. */
-function processingNote({
-  status,
-  firstStatus,
-  waitedMs,
-}: ProcessingState): string[] {
-  if (status && PROCESSING_STATUSES.has(status)) {
-    const meaning =
-      status === "finalizing"
-        ? ", which on an advanced scan means advanced issue processing"
-        : "";
-    return [
-      `⚠️ This report is still processing (status: ${status}${meaning}). The issues below are only those found so far: more will be added and the total will grow. Call fetchAccessibilityIssues again in a few minutes for the complete list.`,
-    ];
-  }
-  if (firstStatus && PROCESSING_STATUSES.has(firstStatus)) {
-    return [
-      `The report was still processing (status: ${firstStatus}); waited ${formatDuration(waitedMs)} for it to complete before reading its issues.`,
-    ];
-  }
-  return [];
+/** What the answer says about a report read while it is still processing, if anything. */
+function processingNote({ status }: ProcessingState): string[] {
+  if (!status || !PROCESSING_STATUSES.has(status)) return [];
+  const meaning =
+    status === "finalizing"
+      ? ", which on an advanced scan means advanced issue processing"
+      : "";
+  return [
+    `⚠️ This report is still processing (status: ${status}${meaning}). The issues below are only those found so far: more will be added and the total will grow. Call fetchAccessibilityIssues again in a few minutes for the complete list.`,
+  ];
+}
+
+/**
+ * The answer for a first read of a report still finalizing: not ready yet, and when to come
+ * back. Not an error, since nothing failed, but it says outright that no issues were read,
+ * so an empty answer cannot be taken for a clean page.
+ */
+function stillFinalizingResponse(
+  source: IssueSource,
+  status: string,
+  preface: string[],
+  extraArgs: string,
+): CallToolResult {
+  const state =
+    status === "rule_processing"
+      ? "is still running its accessibility rules (status: rule_processing)"
+      : "is still finalizing (status: finalizing): BrowserStack is still adding its issues";
+  return createSuccessResponse([
+    ...preface,
+    `⏳ The report for ${describeSource(source)} ${state}. This usually takes a few minutes after the run ends. No issues have been read yet, so this is not a result: do not tell the user the page is clean or the fix is verified.`,
+    `Call fetchAccessibilityIssues again with ${sourceArgs(source)}${extraArgs} in a minute or two. If it still says this after about 10 minutes, tell the user the report is stuck instead of calling again.`,
+  ]);
 }
 
 /**
@@ -1038,12 +1082,9 @@ async function fetchAccessibilityIssues(
       );
     }
   }
-  const processing = await waitForProcessing(
-    reportFetcher,
-    source,
-    cursor === 0,
-    context,
-  );
+  const processing: ProcessingState = {
+    status: await reportFetcher.reportStatus(source),
+  };
   const stillProcessing =
     processing.status !== undefined &&
     PROCESSING_STATUSES.has(processing.status);
@@ -1051,12 +1092,36 @@ async function fetchAccessibilityIssues(
     requested.kind === "link"
       ? [`Resolved the report link to ${describeSource(source)}.`]
       : [];
+  const pageArg = pageUrl ? `, pageUrl: "${pageUrl}"` : "";
 
   // A failed run has nothing to read, and its export said so badly: an empty report for a
   // scan ("0 issues ✅"), "Failed to fetch report: null" for a build. Neither is exported.
-  if (processing.status === "failed") {
-    const failed = await failedRunResponse(source, config, preface);
+  // A cancelled scan run leaves the same empty report.
+  if (
+    processing.status === "failed" ||
+    (source.kind === "scan" && processing.status === "cancelled")
+  ) {
+    const failed = await failedRunResponse(
+      source,
+      processing.status,
+      config,
+      preface,
+    );
     if (failed) return failed;
+  }
+  if (
+    cursor === 0 &&
+    processing.status &&
+    FINALIZING_STATUSES.has(processing.status)
+  ) {
+    const compareArg =
+      compareWith !== undefined ? `, compareWith: "${compareWith}"` : "";
+    return stillFinalizingResponse(
+      source,
+      processing.status,
+      preface,
+      `${pageArg}${compareArg}`,
+    );
   }
 
   if (source.kind === "appBuild" && compareWith !== undefined) {
@@ -1094,7 +1159,6 @@ async function fetchAccessibilityIssues(
     );
   }
 
-  const pageArg = pageUrl ? `, pageUrl: "${pageUrl}"` : "";
   // The pages a completed run could not scan are simply absent from its report; its scan
   // logs say which, read alongside the export. A run still going has not logged them all.
   const unscanned =
@@ -1207,6 +1271,7 @@ function errorPagesNote(pages: ErrorPage[], again: string): string[] {
  */
 async function failedRunResponse(
   source: IssueSource,
+  status: "failed" | "cancelled",
   config: BrowserStackConfig,
   preface: string[],
 ): Promise<CallToolResult | undefined> {
@@ -1219,7 +1284,10 @@ async function failedRunResponse(
         preface,
         (pages) =>
           `0 issues does not mean the ${pages > 1 ? "pages are" : "page is"} clean.`,
-        "Fix the cause and scan again.",
+        status === "cancelled"
+          ? "Scan again and read the new run."
+          : "Fix the cause and scan again.",
+        status,
       );
     // The API reads a build that completed with no test cases as failed.
     case "build":
@@ -2196,17 +2264,24 @@ async function failedScanRunResponse(
   preface: string[],
   meaning: (pages: number) => string,
   next: string,
+  status: "failed" | "cancelled" = "failed",
 ): Promise<CallToolResult> {
   const scanner = await initializeScanner(config);
+  const cancelled = status === "cancelled";
+  // A cancelled run has no failure to explain.
   const [dashboardLink, details] = await Promise.all([
     scanner.dashboardLink(scanId),
-    scanner.failureDetails(scanId, scanRunId),
+    cancelled
+      ? Promise.resolve<ScanFailureDetails>({ pages: [] })
+      : scanner.failureDetails(scanId, scanRunId),
   ]);
   return createErrorResponse(
     [
       ...preface,
-      `Scan run ${scanRunId} of scan ${scanId} failed, so no pages were checked: ${meaning(details.pages.length)}`,
-      ...failureReasons(details),
+      cancelled
+        ? `Scan run ${scanRunId} of scan ${scanId} was cancelled, so it has no results: ${meaning(details.pages.length)}`
+        : `Scan run ${scanRunId} of scan ${scanId} failed, so no pages were checked: ${meaning(details.pages.length)}`,
+      ...(cancelled ? [] : failureReasons(details)),
       next,
       scanDashboardNote(dashboardLink, scanId),
     ].join("\n"),

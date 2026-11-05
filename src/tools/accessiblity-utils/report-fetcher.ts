@@ -72,6 +72,22 @@ export class ScanRunNotFoundError extends Error {
   }
 }
 
+/**
+ * No scan the scan list was searched across has a run with this build id; `capped` when
+ * the search stopped at the page limit rather than at the end of the list.
+ */
+export class ScanNotInListError extends Error {
+  constructor(
+    readonly capped: boolean,
+    readonly pages: number,
+  ) {
+    super(
+      `No Website Scanner scan${capped ? ` among the most recent scans (${pages} pages)` : ""} matches this link. Pass scanId and scanRunId instead`,
+    );
+    this.name = "ScanNotInListError";
+  }
+}
+
 /** The dashboard link of a run named by its build id, without the extra query a copied link carries. */
 export function scanRunLink(source: ScanBuildSource): string {
   return `${dashboard()}/site-scanner/projects/${encodeURIComponent(source.scanName ?? "")}/builds?thBuildId=${encodeURIComponent(source.thBuildId)}`;
@@ -604,12 +620,7 @@ export class AccessibilityReportFetcher {
       );
     }
     // nextPage is still set only when the walk stopped at the page cap, not at the end.
-    const searched = nextPage
-      ? ` among the most recent scans (${MAX_SCAN_LIST_PAGES} pages)`
-      : "";
-    throw new Error(
-      `No Website Scanner scan${searched} matches this link. Pass scanId and scanRunId instead`,
-    );
+    throw new ScanNotInListError(nextPage !== undefined, MAX_SCAN_LIST_PAGES);
   }
 
   /**

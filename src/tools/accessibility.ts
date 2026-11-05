@@ -15,6 +15,7 @@ import {
   AccessibilityReportFetcher,
   EXPORT_WAIT_MS,
   ExportPendingError,
+  ScanNotInListError,
   ScanRunNotFoundError,
   scanRunLink,
   type IssueSource,
@@ -1072,6 +1073,23 @@ function exportProgress(
   };
 }
 
+/**
+ * A build id no API knows, after the scan list was searched for it (`scanList`) or the API
+ * that reads runs by build id said it has none. The id is the user's to check, so this is a
+ * plain answer naming what to pass instead, not a fault to report.
+ */
+function buildIdNotFound(
+  buildId: string,
+  scanList?: ScanNotInListError,
+): CallToolResult {
+  const where = scanList
+    ? `No Automated Tests (web) or App Accessibility build has id "${buildId}", and no Website Scanner run ${scanList.capped ? `among the most recent scans (${scanList.pages} pages)` : "in the scan list"} has it as its build id.`
+    : `No Automated Tests (web), App Accessibility or Website Scanner build with id "${buildId}" is visible to this account.`;
+  return createSuccessResponse([
+    `${where} Check the id, or pass instead the report's dashboard link as reportUrl, a Website Scanner run's scanId and scanRunId, or the id the BrowserStack SDK printed as "testhub id" at the end of the run.`,
+  ]);
+}
+
 /** What to say of an export still being generated: how to continue it, not an error. */
 function exportPendingMessages(
   source: IssueSource,
@@ -1156,25 +1174,31 @@ async function fetchAccessibilityIssues(
         );
       }
       if (!(error instanceof ScanRunNotFoundError)) throw error;
-      if (source.scanName === undefined) {
-        throw new Error(
-          error.routeMissing
-            ? `No Automated Tests (web) or App Accessibility build with id "${source.thBuildId}". If it is a Website Scanner run's build id, this API cannot read a run by it yet: pass the scan's report link as reportUrl instead`
-            : `No Automated Tests (web), App Accessibility or Website Scanner build with id "${source.thBuildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl`,
-        );
-      }
+      // A bare build id (no link) that no build API knows: where the API reads runs by build
+      // id, it knows no such run; where it cannot yet, the scan list is searched, as for a link.
+      const bare = source.scanName === undefined;
+      const thBuildId = source.thBuildId;
+      if (bare && !error.routeMissing) return buildIdNotFound(thBuildId);
       const why = error.routeMissing
         ? "This API does not read a run by its build id yet"
         : "The API could not read this run by the link's build id (not found, or not visible to this account)";
       try {
         source = await reportFetcher.findScanRun(source);
       } catch (searchError) {
+        if (bare && searchError instanceof ScanNotInListError) {
+          return buildIdNotFound(thBuildId, searchError);
+        }
         throw new Error(
           `${why}, and searching the scan list found nothing either: ${
             searchError instanceof Error
               ? searchError.message
               : String(searchError)
           }`,
+        );
+      }
+      if (bare) {
+        notes.push(
+          `Build id ${thBuildId} is the build id of ${describeSource(source)}.`,
         );
       }
       notes.push(`${why}, so it was found in the scan list instead.`);

@@ -79,6 +79,7 @@ vi.mock("../../src/index.js", () => ({
 import addAccessibilityTools from "../../src/tools/accessibility.js";
 import {
   ExportPendingError,
+  ScanNotInListError,
   ScanRunNotFoundError,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
 
@@ -930,14 +931,17 @@ describe("fetchAccessibilityIssues and a report link read by its build id", () =
     expect(body).toContain(`Use fetchAccessibilityIssues with buildId: "${TH}" and cursor: 140`);
   });
 
-  it("points at the report link when the API cannot read a run by its build id yet", async () => {
+  it("searches the scan list when the API cannot read a run by its build id yet, and says plainly what to pass when it is not there", async () => {
     m.resolveBuild.mockResolvedValue({ kind: "scanBuild", thBuildId: TH });
     m.getReportLink.mockRejectedValue(new ScanRunNotFoundError(TH, true));
+    m.findScanRun.mockRejectedValue(new ScanNotInListError(true, 25));
 
     const result = await handlers.fetchAccessibilityIssues({ buildId: TH }, CONTEXT);
 
-    expect(result.isError).toBe(true);
-    expect(text(result)).toMatch(/cannot read a run by it yet: pass the scan's report link as reportUrl/);
+    expect(m.findScanRun).toHaveBeenCalledWith({ kind: "scanBuild", thBuildId: TH });
+    expect(result.isError).toBeFalsy();
+    expect(text(result)).toMatch(/no Website Scanner run among the most recent scans \(25 pages\) has it.*pass instead the report's dashboard link as reportUrl/s);
+    expect(text(result)).not.toMatch(/GitHub/);
   });
 
   it("names every API it asked when none knows the build id", async () => {
@@ -946,7 +950,7 @@ describe("fetchAccessibilityIssues and a report link read by its build id", () =
 
     const result = await handlers.fetchAccessibilityIssues({ buildId: TH }, CONTEXT);
 
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBeFalsy();
     expect(text(result)).toMatch(
       /No Automated Tests \(web\), App Accessibility or Website Scanner build with id/,
     );

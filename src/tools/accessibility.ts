@@ -112,6 +112,16 @@ function createSuccessResponse(messages: string[]): CallToolResult {
   };
 }
 
+/**
+ * The message as a sentence: a full stop is added only when it does not already end in
+ * one (or in "!", "?" or "…", before any closing quote or bracket), so a message that
+ * ends in a full stop does not end in "..".
+ */
+function asSentence(message: string): string {
+  const text = message.trim();
+  return /[.!?…]["'”’)\]]*$/.test(text) ? text : `${text}.`;
+}
+
 function handleMCPError(
   toolName: string,
   server: McpServer,
@@ -119,9 +129,10 @@ function handleMCPError(
   error: unknown,
 ): CallToolResult {
   trackMCP(toolName, server.server.getClientVersion()!, error, config);
-  const errorMessage = error instanceof Error ? error.message : "Unknown error";
+  const errorMessage =
+    (error instanceof Error && error.message.trim()) || "Unknown error";
   return createErrorResponse(
-    `Failed to ${toolName.replace(/([A-Z])/g, " $1").toLowerCase()}: ${errorMessage}. Please open an issue on GitHub if the problem persists`,
+    `Failed to ${toolName.replace(/([A-Z])/g, " $1").toLowerCase()}: ${asSentence(errorMessage)} Please open an issue on GitHub if the problem persists`,
   );
 }
 
@@ -1934,6 +1945,9 @@ async function executeAccessibilityScan(
     }
     return await startNewScan(args, context, config);
   } catch (error) {
+    // An expected limit, such as a local URL the hosted MCP cannot reach, the plan's scan
+    // limit, or a re-run that cannot start: its message says what to do instead, so it is a
+    // plain result, not an error to report.
     if (error instanceof ScanRefusedError) {
       trackMCP(
         "startAccessibilityScan",

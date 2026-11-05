@@ -1,10 +1,9 @@
 import { apiClient } from "../../lib/apiClient.js";
-import { randomUUID } from "node:crypto";
 import logger from "../../logger.js";
 import {
   isLocalURL,
-  ensureLocalBinarySetup,
-  killExistingBrowserStackLocalProcesses,
+  ensureOwnTunnel,
+  otherBrowserStackLocalPids,
 } from "../../lib/local.js";
 import config from "../../config.js";
 
@@ -261,34 +260,24 @@ export class AccessibilityScanner {
     }
     // Check if any URL is local
     const hasLocal = urlList.some(isLocalURL);
-    const localIdentifier = ownTunnel ?? randomUUID();
 
-    // A tunnel the user started is theirs to run: none is started here, and none is killed,
-    // as killing every BrowserStackLocal process would take theirs down with it.
-    if (!ownTunnel) {
-      if (config.USE_OWN_LOCAL_BINARY_PROCESS && hasLocal) {
-        throw new Error(
-          `Cannot start scan with local URLs when using own BrowserStack Local binary process. ${OWN_TUNNEL_HINT}`,
+    // A tunnel the user started is theirs to run: none is started here. A public URL needs
+    // no tunnel. Either way no BrowserStack Local already running is stopped.
+    let localIdentifier = ownTunnel;
+    if (!ownTunnel && hasLocal) {
+      // Both are limits of how this MCP runs, not failures: the scan API takes the
+      // identifier of a tunnel the user started.
+      if (config.USE_OWN_LOCAL_BINARY_PROCESS) {
+        throw new ScanRefusedError(
+          `This BrowserStack MCP is set to use your own BrowserStack Local (USE_OWN_LOCAL_BINARY_PROCESS), so it starts no tunnel for a local URL. ${OWN_TUNNEL_HINT} Or scan a public URL.`,
         );
       }
-
-      // The hosted server cannot start a tunnel on the user's machine, but the scan API
-      // takes the identifier of one the user started.
-      if (config.REMOTE_MCP && hasLocal) {
-        throw new Error(
+      if (config.REMOTE_MCP) {
+        throw new ScanRefusedError(
           `This hosted BrowserStack MCP runs on BrowserStack's servers, so it cannot open a tunnel to a local URL on your machine. ${OWN_TUNNEL_HINT} Or scan a public URL.`,
         );
       }
-
-      if (hasLocal) {
-        await ensureLocalBinarySetup(
-          this.auth.username,
-          this.auth.password,
-          localIdentifier,
-        );
-      } else {
-        await killExistingBrowserStackLocalProcesses();
-      }
+      localIdentifier = await this.mcpTunnel();
     }
 
     const transformedUrlList = urlList.map(scanUrl);
@@ -306,7 +295,7 @@ export class AccessibilityScanner {
     };
 
     let requestBody = baseRequestBody;
-    if (hasLocal || ownTunnel) {
+    if (localIdentifier) {
       const localConfig = {
         localTestingInfo: {
           localIdentifier,
@@ -357,6 +346,27 @@ export class AccessibilityScanner {
       };
     } catch (err: any) {
       throw scanStartError(err);
+    }
+  }
+
+  /**
+   * This MCP's own tunnel, started or reused, under its own identifier. It runs alongside
+   * any tunnel the user has up. Should it fail to start while another is running, the way
+   * forward is to scan through theirs, which is left running.
+   */
+  private async mcpTunnel(): Promise<string> {
+    const { username, password } = this.auth!;
+    try {
+      return await ensureOwnTunnel(username, password);
+    } catch (error) {
+      const others = otherBrowserStackLocalPids();
+      if (!others.length) throw error;
+      const reason = (error instanceof Error ? error.message : String(error))
+        .trim()
+        .replace(/[.\s]+$/, "");
+      throw new Error(
+        `${reason}. Another BrowserStack Local is running on this machine (pid ${others.join(", ")}), and this MCP leaves it running. If it is your tunnel, pass the name it runs under (its --local-identifier) as localIdentifier to scan through it`,
+      );
     }
   }
 

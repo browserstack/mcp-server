@@ -17,8 +17,8 @@ const m = vi.hoisted(() => ({
 vi.mock("../../src/lib/apiClient.js", () => ({ apiClient: { post: m.post, get: m.get } }));
 vi.mock("../../src/lib/local.js", () => ({
   isLocalURL: () => false,
-  ensureLocalBinarySetup: vi.fn(),
-  killExistingBrowserStackLocalProcesses: vi.fn(),
+  ensureOwnTunnel: vi.fn(),
+  otherBrowserStackLocalPids: () => [],
 }));
 vi.mock("../../src/logger.js", () => ({
   default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },

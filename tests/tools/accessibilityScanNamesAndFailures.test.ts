@@ -9,8 +9,8 @@ const m = vi.hoisted(() => ({ post: vi.fn(), get: vi.fn() }));
 vi.mock("../../src/lib/apiClient.js", () => ({ apiClient: { post: m.post, get: m.get } }));
 vi.mock("../../src/lib/local.js", () => ({
   isLocalURL: () => false,
-  ensureLocalBinarySetup: vi.fn(),
-  killExistingBrowserStackLocalProcesses: vi.fn(),
+  ensureOwnTunnel: vi.fn(),
+  otherBrowserStackLocalPids: () => [],
 }));
 vi.mock("../../src/config.js", () => ({
   default: { REMOTE_MCP: false, USE_OWN_LOCAL_BINARY_PROCESS: false },

@@ -8,18 +8,15 @@ import {
   MobileEntry,
   PlatformType,
 } from "./types.js";
-import {
-  isLocalURL,
-  ensureLocalBinarySetup,
-  killExistingBrowserStackLocalProcesses,
-} from "../../lib/local.js";
+import { isLocalURL, ensureLocalBinarySetup } from "../../lib/local.js";
 
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import envConfig from "../../config.js";
 
 /**
- * Prepares local tunnel setup based on URL type
+ * Prepares a local tunnel for a local URL. A public URL needs none, and no tunnel already
+ * running on the machine is stopped either way.
  */
 async function prepareLocalTunnel(
   url: string,
@@ -34,8 +31,6 @@ async function prepareLocalTunnel(
   }
   if (isLocal) {
     await ensureLocalBinarySetup(username, password);
-  } else {
-    await killExistingBrowserStackLocalProcesses();
   }
   return isLocal;
 }

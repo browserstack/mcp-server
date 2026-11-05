@@ -118,6 +118,11 @@ async function multipartBody(
       const path = String(value);
       const blob = await openAsBlob(path);
       form.append(param.form_name ?? param.name, blob, basename(path));
+    } else if (typeof value === "object") {
+      // A structured field travels as its JSON text. App Live's upload reads one `data`
+      // field holding a JSON document and refuses the same keys sent flat; the contract
+      // declares the object and the caller never sees the quoting.
+      form.append(param.name, JSON.stringify(value));
     } else {
       form.append(param.name, String(value));
     }
@@ -133,6 +138,16 @@ export async function invoke(
   transport: Transport,
   auth?: AuthScheme,
   product?: string,
+  options: {
+    /**
+     * Send no credentials. For an origin the index never named — one resolved through
+     * `base_from` from a sibling's answer — the caller's access key stays home; the
+     * product's own API told us where the session is, and the session id authorises it.
+     */
+    anonymous?: boolean;
+    /** Cap this one attempt, overriding the capability's own `timeout_seconds`. */
+    timeoutMs?: number;
+  } = {},
 ): Promise<InvokeResult> {
   if (!baseUrl)
     throw new InvocationError("no base URL is configured for that product");
@@ -146,7 +161,9 @@ export async function invoke(
       ? await multipartBody(capability, bound.body)
       : undefined;
   const send = async () => {
-    const headers = await authHeaders(credentials, auth, product);
+    const headers: Record<string, string> = options.anonymous
+      ? { "request-source": "ai-chatbot", "Content-Type": "application/json" }
+      : await authHeaders(credentials, auth, product);
     if (multipart) {
       // fetch writes its own Content-Type with the boundary. Leaving the JSON one on sends
       // a body the product cannot parse, under a header that says it should be able to.
@@ -158,9 +175,11 @@ export async function invoke(
         ? {}
         : bound.body);
     return transport(capability.method, url, headers, bound.query, payload, {
-      timeoutMs: capability.timeout_seconds
-        ? capability.timeout_seconds * 1000
-        : undefined,
+      timeoutMs:
+        options.timeoutMs ??
+        (capability.timeout_seconds
+          ? capability.timeout_seconds * 1000
+          : undefined),
     });
   };
 
@@ -178,7 +197,11 @@ export async function invoke(
    * fails identically, and a loop here would hammer the token endpoint on every wrong
    * password.
    */
-  if (response.status === 401 && auth?.type === "oauth2") {
+  if (
+    response.status === 401 &&
+    auth?.type === "oauth2" &&
+    !options.anonymous
+  ) {
     invalidateToken(
       resolveTokenUrl(product ?? "this product", auth),
       resolveScope(auth),

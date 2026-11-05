@@ -18,6 +18,12 @@ interface StartSessionArgs {
   desiredPhone: string;
   desiredPlatformVersion: string;
   browserstackAppUrl?: string;
+  /**
+   * A reference the dashboard tags the session with, so the capability side can find it:
+   * `list_sessions` with this value waits for the launch to produce a session. Letters,
+   * digits, '-' and '_', 8 to 64 of them; the dashboard ignores anything else.
+   */
+  mcpRef?: string;
 }
 
 interface StartSessionOptions {
@@ -37,6 +43,7 @@ export async function startSession(
     desiredPhone,
     desiredPlatformVersion,
     browserstackAppUrl,
+    mcpRef,
   } = args;
   const { config } = options;
 
@@ -110,6 +117,17 @@ export async function startSession(
     speed: "1",
     start: "true",
   });
+  if (mcpRef) {
+    // Both flags, as the dashboard reads them: `mcp=true` makes it tag the session and
+    // `mcp_ref` is the tag. Only the shape the dashboard accepts is sent, so a malformed
+    // reference is dropped here rather than silently ignored there.
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(mcpRef)) {
+      params.set("mcp", "true");
+      params.set("mcp_ref", mcpRef);
+    } else {
+      logger.warn(`Ignoring malformed App Live launch reference: ${mcpRef}`);
+    }
+  }
   const launchUrl = `https://app-live.browserstack.com/dashboard#${params.toString()}&device=${deviceParam}`;
 
   if (!envConfig.REMOTE_MCP) {

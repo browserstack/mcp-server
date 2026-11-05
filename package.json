@@ -21,7 +21,8 @@
     "seed:live": "tsx scripts/seed-live.mts",
     "seed:live:tra": "tsx scripts/seed-live-tra.mts",
     "plan:tests": "tsx scripts/plan-capability-tests.mts",
-    "replay:live": "tsx scripts/replay-live.mts"
+    "replay:live": "tsx scripts/replay-live.mts",
+    "start:http": "node dist/http-server.js"
   },
   "bin": {
     "browserstack-mcp-server": "dist/index.js"

@@ -77,6 +77,23 @@ export class Config {
      * "deferred" | "elicit". Anything else is ignored.
      */
     public readonly ASK_BROWSERSTACK_RELAY_TRANSPORT: string | undefined,
+    /**
+     * Agent-drivable device sessions (startDeviceSession, tapOnDevice, ...). They hold
+     * real devices and spend plan minutes, so a deployment can switch the whole group
+     * off with BROWSERSTACK_DEVICE_SESSION_TOOLS=false without touching other tools.
+     */
+    public readonly DEVICE_SESSION_TOOLS_ENABLED: boolean = true,
+    /** How many device sessions one MCP process may hold open at once. */
+    public readonly DEVICE_SESSION_MAX_CONCURRENT: number = 2,
+    /**
+     * A team-shared JSON list of default devices (no BrowserStack API
+     * exists for this). Read on every call so edits apply without a restart.
+     */
+    public readonly TEAM_DEVICES_FILE: string | undefined = undefined,
+    /** Device + browser session starts allowed per user per hour (0 = no limit). */
+    public readonly SESSION_STARTS_PER_HOUR: number = 30,
+    /** Open each new session's live view in the local browser (local server only). */
+    public readonly OPEN_LIVE_VIEW: boolean = true,
   ) {}
 }
 
@@ -110,6 +127,24 @@ const config = new Config(
     : undefined,
   (process.env.ASK_BROWSERSTACK_RELAY_TRANSPORT || "").trim().toLowerCase() ||
     undefined,
+  !["false", "0", "off", "no"].includes(
+    (process.env.BROWSERSTACK_DEVICE_SESSION_TOOLS || "").trim().toLowerCase(),
+  ),
+  (() => {
+    const n = parseInt(process.env.BROWSERSTACK_DEVICE_SESSION_MAX || "", 10);
+    return Number.isFinite(n) && n > 0 ? Math.min(n, 10) : 2;
+  })(),
+  process.env.BROWSERSTACK_TEAM_DEVICES_FILE?.trim() || undefined,
+  (() => {
+    const n = parseInt(
+      process.env.BROWSERSTACK_SESSION_STARTS_PER_HOUR || "",
+      10,
+    );
+    return Number.isFinite(n) && n >= 0 ? n : 30;
+  })(),
+  !["false", "0", "off", "no"].includes(
+    (process.env.BROWSERSTACK_OPEN_LIVE_VIEW || "").trim().toLowerCase(),
+  ),
 );
 
 export default config;

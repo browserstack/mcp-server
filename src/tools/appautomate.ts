@@ -44,6 +44,7 @@ import {
   RUN_APP_AUTOMATE_DESCRIPTION,
   RUN_APP_AUTOMATE_SCHEMA,
 } from "./appautomate-utils/native-execution/constants.js";
+import { getRegionalHost } from "../lib/regional-host.js";
 
 /**
  * Launches an app on a selected BrowserStack device and takes a screenshot.
@@ -134,7 +135,7 @@ async function takeAppScreenshot(args: {
     try {
       driver = await remote({
         protocol: "https",
-        hostname: "hub.browserstack.com",
+        hostname: getRegionalHost("appAutomateHub"),
         port: 443,
         path: "/wd/hub",
         capabilities,

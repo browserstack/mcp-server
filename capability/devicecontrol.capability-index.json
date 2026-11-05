@@ -33,7 +33,22 @@
    "browser session",
    "cross browser",
    "device control",
-   "browser control"
+   "browser control",
+   "phone",
+   "iphone",
+   "ipad",
+   "tablet",
+   "android",
+   "ios",
+   "mobile",
+   "mobile device",
+   "real device",
+   "page",
+   "web app",
+   "site",
+   "login page",
+   "responsive",
+   "viewport"
   ],
   "base_url": "https://hub.browserstack.com",
   "hosts": {
@@ -169,6 +184,33 @@
      "hashed_id",
      "name"
     ],
+    "narrowable": {
+     "record": true,
+     "path": "automation_session",
+     "fields": [
+      "status",
+      "reason",
+      "browser",
+      "browser_version",
+      "os",
+      "os_version",
+      "device",
+      "duration",
+      "public_url",
+      "browser_url",
+      "video_url",
+      "har_logs_url",
+      "browser_console_logs_url",
+      "browser_profiling_url",
+      "build_name",
+      "project_name",
+      "created_at",
+      "browserstack_status",
+      "hashed_id",
+      "name"
+     ],
+     "note": "The record comes back whole and is large; `fields` keeps only the ones named, so `fields: [\"browser_url\"]` after create_session returns just the link. `where`, `distinct` and `limit` do not apply to one record."
+    },
     "responses": {
      "200": {
       "description": "The session record.",
@@ -263,6 +305,7 @@
       "A session starts in seconds rather than the tens of seconds a device session takes, but it still holds a browser and consumes browser minutes until it ends: always finish with set_session_status and then delete_session.",
       "The session ends itself after idle_timeout seconds without a command, and after 2 hours in total.",
       "console_logs and network_logs must be asked for here; they cannot be turned on once the session is running, and get_session only links to them when they were.",
+      "Someone can only INTERACT with the browser if interactive_debugging was set true in this call \u2014 it cannot be turned on once the session is running, and it needs video left on. Without it the dashboard view is watch-only, which is enough for following along. Ask for it up front when a person will take over, because the alternative is restarting the session; and when they do, their clicks land on the page you are driving, so find the element you are about to act on again before every action.",
       "Credentials belong in the Authorization header, never inside bstack:options: capabilities are echoed back in session-not-created errors.",
       "resolution takes one of a fixed set of values per operating system, not any width and height: an unsupported pair is refused outright rather than rounded to the nearest one. The browser window is well short of the screen it sits on \u2014 1920x1080 gives a viewport around 930x860 \u2014 so measure it rather than assuming the request was honoured."
      ],
@@ -359,7 +402,14 @@
       "name": "video",
       "type": "boolean",
       "json_path": "/capabilities/alwaysMatch/bstack:options/video",
-      "description": "Record a video of the session. On by default; set false for a page showing sensitive data.",
+      "description": "Record a video of the session. On by default; set false for a page showing sensitive data. interactive_debugging stops working if this is false.",
+      "example": true
+     },
+     {
+      "name": "interactive_debugging",
+      "type": "boolean",
+      "json_path": "/capabilities/alwaysMatch/bstack:options/interactiveDebugging",
+      "description": "Let a person take control of the browser from the dashboard while the session runs \u2014 click, type and scroll on the same page the agent is driving. Off by default; needs video left on.",
       "example": true
      },
      {
@@ -709,14 +759,20 @@
        "partial link text",
        "tag name"
       ],
-      "example": "css selector"
+      "example": "css selector",
+      "aliases": [
+       "strategy"
+      ]
      },
      {
       "name": "value",
       "type": "string",
       "required": true,
       "description": "The selector itself, interpreted according to using.",
-      "example": "#add-to-cart"
+      "example": "#add-to-cart",
+      "aliases": [
+       "selector"
+      ]
      }
     ],
     "returns": [
@@ -766,19 +822,32 @@
        "partial link text",
        "tag name"
       ],
-      "example": "css selector"
+      "example": "css selector",
+      "aliases": [
+       "strategy"
+      ]
      },
      {
       "name": "value",
       "type": "string",
       "required": true,
       "description": "The selector itself, interpreted according to using.",
-      "example": ".product-card"
+      "example": ".product-card",
+      "aliases": [
+       "selector"
+      ]
      }
     ],
     "returns": [
      "value"
     ],
+    "narrowable": {
+     "path": "value",
+     "fields": [
+      "element-6066-11e4-a52e-4f735466cecf"
+     ],
+     "note": "Each row is one element reference and has a single field; `limit` is the useful part, to take the first match or the first few."
+    },
     "responses": {
      "200": {
       "description": "Every matching element, possibly none.",
@@ -1056,7 +1125,10 @@
       "type": "string",
       "required": true,
       "description": "The attribute to read.",
-      "example": "href"
+      "example": "href",
+      "aliases": [
+       "attribute"
+      ]
      }
     ],
     "returns": [

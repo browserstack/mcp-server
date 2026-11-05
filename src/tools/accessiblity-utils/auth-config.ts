@@ -1,5 +1,6 @@
 import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 export interface AuthConfigResponse {
   success: boolean;
@@ -110,7 +111,7 @@ export class AccessibilityAuthConfig {
 
     try {
       const response = await apiClient.post<AuthConfigResponse>({
-        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/auth_configs",
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/auth_configs`,
         headers: {
           Authorization:
             "Basic " +
@@ -168,7 +169,7 @@ export class AccessibilityAuthConfig {
 
     try {
       const response = await apiClient.post<AuthConfigResponse>({
-        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/auth_configs",
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/auth_configs`,
         headers: {
           Authorization:
             "Basic " +
@@ -207,7 +208,7 @@ export class AccessibilityAuthConfig {
     try {
       // No GET-by-id route exists; list and select.
       const response = await apiClient.get<AuthConfigListResponse>({
-        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/auth_configs",
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/auth_configs`,
         headers: {
           Authorization:
             "Basic " +

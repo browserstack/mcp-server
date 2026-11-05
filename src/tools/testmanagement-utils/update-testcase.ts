@@ -9,6 +9,7 @@ import {
 } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { wrapRichText, wrapTestCaseSteps } from "./rich-text.js";
 import logger from "../../logger.js";
@@ -207,8 +208,9 @@ export async function updateTestCase(
         content: [
           {
             type: "text",
-            text: `Failed to update test case: ${JSON.stringify(
-              response.data,
+            text: `Failed to update test case: ${wrapUntrusted(
+              "API response",
+              JSON.stringify(response.data),
             )}`,
           },
         ],
@@ -232,15 +234,15 @@ export async function updateTestCase(
 
 **Test Case Details:**
 - **ID**: ${tc.identifier}
-- **Name**: ${tc.title}
-- **Description**: ${tc.description || "N/A"}
+- **Name**: ${wrapUntrusted("test case name", tc.title)}
+- **Description**: ${tc.description ? wrapUntrusted("test case description", tc.description) : "N/A"}
 - **Case Type**: ${tc.case_type}
 - **Priority**: ${tc.priority}
 - **Status**: ${tc.status}
 - **Automation Status**: ${tc.automation_status ?? "N/A"}
 
 **View on BrowserStack Dashboard:**
-https://test-management.browserstack.com/projects/${projectId}/folders/${tc.folder_id}/test-cases/${tc.identifier}
+${tmBaseUrl}/projects/${projectId}/folders/${tc.folder_id}/test-cases/${tc.identifier}
 
 The test case has been updated successfully and is now available in your BrowserStack Test Management project.`,
         },
@@ -260,7 +262,7 @@ The test case has been updated successfully and is now available in your Browser
             type: "text",
             text: `Test case not found. Please verify the project_identifier ("${params.project_identifier}") and test_case_identifier ("${params.test_case_identifier}") are correct. Make sure to use actual values, not placeholders like "your_project_id".
 
-Error details: ${JSON.stringify(err.response?.data || err.message)}`,
+Error details: ${wrapUntrusted("API response", JSON.stringify(err.response?.data || err.message))}`,
           },
         ],
         isError: true,

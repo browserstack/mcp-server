@@ -1,9 +1,9 @@
 import { z } from "zod";
-import appConfig from "../../config.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 import { TestStatus } from "./types.js";
 
 export function getAutomationBaseUrl(): string {
-  return appConfig.BROWSERSTACK_AUTOMATION_BASE_URL;
+  return getRegionalHost("automationApi");
 }
 
 export const FETCH_RCA_PARAMS = {

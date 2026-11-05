@@ -119,7 +119,7 @@ export async function getSubTestPlan(
         content: [
           {
             type: "text",
-            text: `Failed to fetch sub-test-plan: ${JSON.stringify(planResp.data)}`,
+            text: `Failed to fetch sub-test-plan: ${wrapUntrusted("API response", JSON.stringify(planResp.data))}`,
           },
         ],
         isError: true,
@@ -157,15 +157,15 @@ export async function getSubTestPlan(
 
     const tagsLine =
       Array.isArray(plan.tags) && plan.tags.length > 0
-        ? `Tags: ${plan.tags.join(", ")}`
+        ? `Tags: ${wrapUntrusted("sub-test-plan tags", plan.tags.join(", "))}`
         : null;
     const issuesLine =
       Array.isArray(plan.issues) && plan.issues.length > 0
-        ? `Issues: ${plan.issues.join(", ")}`
+        ? `Issues: ${wrapUntrusted("sub-test-plan issues", plan.issues.join(", "))}`
         : null;
 
     const header = [
-      `Sub-Test-Plan ${plan.identifier}: ${plan.name}`,
+      `Sub-Test-Plan ${plan.identifier}: ${wrapUntrusted("sub-test-plan name", plan.name)}`,
       `Parent plan: ${plan.parent_plan_id}`,
       `Status: ${plan.active_state}`,
       plan.description
@@ -189,12 +189,15 @@ export async function getSubTestPlan(
 
     const runsBlock = runs.length
       ? "\n\nLinked test runs:\n" +
-        runs
-          .map(
-            (r) =>
-              `• ${r.identifier}: ${r.name} [${r.run_state}] — ${r.test_cases_count} case(s)${r.assignee ? ` (assignee: ${r.assignee})` : ""}`,
-          )
-          .join("\n")
+        wrapUntrusted(
+          "linked test run list",
+          runs
+            .map(
+              (r) =>
+                `• ${r.identifier}: ${r.name} [${r.run_state}] — ${r.test_cases_count} case(s)${r.assignee ? ` (assignee: ${r.assignee})` : ""}`,
+            )
+            .join("\n"),
+        )
       : "\n\nNo test runs linked to this sub-plan.";
 
     return {

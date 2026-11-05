@@ -12,6 +12,7 @@ const m = vi.hoisted(() => ({
   parse: vi.fn(),
   loadMainIssues: vi.fn(),
   compareIssues: vi.fn(),
+  findScanRun: vi.fn(),
 }));
 
 vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
@@ -23,6 +24,7 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     resolveBuild = vi.fn(async (source: unknown) => source);
     previousScanRun = m.previousScanRun;
     changesSinceLastRun = m.changesSinceLastRun;
+    findScanRun = m.findScanRun;
   },
   EXPORT_WAIT_MS: 45_000,
   ExportPendingError: class extends Error {
@@ -175,6 +177,21 @@ describe("fetchAccessibilityIssues comparing scan runs", () => {
     expect(out).toMatch(/1 new, 1 resolved, 146 still open/);
     expect(out).toMatch(/region/);
     expect(out).toMatch(/image-alt/);
+  });
+
+  it("compares a scanner link's run through its scan's ids, which only the scan list has", async () => {
+    const link = "https://accessibility.browserstack.com/site-scanner/projects/shop/builds?thBuildId=k3v9q2m7x1c8b4n6z0w5r2t9y4p1s8d3f6g0h2ja";
+    const byBuild = { kind: "scanBuild", thBuildId: "k3v9q2m7x1c8b4n6z0w5r2t9y4p1s8d3f6g0h2ja", scanName: "shop" };
+    m.sourceFromReportUrl.mockResolvedValue(byBuild);
+    m.findScanRun.mockResolvedValue({ kind: "scan", scanId: "7310042", scanRunId: "5520318" });
+    m.previousScanRun.mockResolvedValue({ id: 5520296, scanDate: "2026-10-21T11:31:00.584Z" });
+    m.changesSinceLastRun.mockResolvedValue({ newIssues: 1, retainedIssues: 146, resolvedIssues: 1 });
+
+    const result = await fetchIssues()({ reportUrl: link, compareWith: "previous" });
+
+    expect(m.findScanRun).toHaveBeenCalledWith(byBuild);
+    expect(m.previousScanRun).toHaveBeenCalledWith("7310042", "5520318");
+    expect(text(result)).toMatch(/1 new, 1 resolved, 146 still open/);
   });
 
   it("compares with a run it is given, counting by matching the issues", async () => {

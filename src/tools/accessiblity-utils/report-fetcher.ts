@@ -809,6 +809,33 @@ export class AccessibilityReportFetcher {
     }
   }
 
+  /**
+   * When the run or build behind a report started, as its API writes it (ISO 8601), or
+   * undefined when it cannot be read.
+   */
+  async reportStartedAt(source: IssueSource): Promise<string | undefined> {
+    try {
+      switch (source.kind) {
+        case "build":
+          return (await this.webBuild(source.buildId))?.startedAt;
+        case "scan":
+          return (await this.scanRuns(source.scanId)).runs.find(
+            (run) => String(run.id) === source.scanRunId,
+          )?.scanDate;
+        case "workflow":
+          return (
+            await this.getData(
+              `${apiBase()}/workflow-analyzer/v1/reports/${encodeURIComponent(source.reportId)}`,
+            )
+          )?.summary?.time;
+        default:
+          return undefined;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
   private async buildStatus(buildId: string): Promise<string | undefined> {
     const q = encodeURIComponent;
     const project = (await this.webBuild(buildId))?.projectName;

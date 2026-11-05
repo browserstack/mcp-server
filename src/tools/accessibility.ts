@@ -1094,6 +1094,38 @@ function buildIdNotFound(
   ]);
 }
 
+/** How long a run can stay "running" before it is taken for stuck rather than slow. */
+const STUCK_AFTER_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A run or build still processing whose report could not be exported: it has no report yet.
+ * Not an error, since nothing failed; one that started over a day ago is probably stuck, and
+ * calling again will not change that.
+ */
+async function noReportYetResponse(
+  reportFetcher: AccessibilityReportFetcher,
+  source: IssueSource,
+  status: string,
+  preface: string[],
+): Promise<CallToolResult> {
+  const started = await reportFetcher.reportStartedAt(source);
+  const stuck =
+    started !== undefined && Date.now() - Date.parse(started) > STUCK_AFTER_MS;
+  const again =
+    source.kind === "scan" || source.kind === "scanBuild"
+      ? "scan the page again"
+      : source.kind === "workflow"
+        ? "run Workflow Analyzer again"
+        : "run the tests again";
+  return createSuccessResponse([
+    ...preface,
+    `⏳ ${describeSource(source)} is still running (status: ${status}${started ? `, started ${started}` : ""}) and has no report yet, so no issues were read: this is not a result.`,
+    stuck
+      ? `It started more than 24 hours ago, so it is probably stuck rather than still running: tell the user, and that they should ${again} and read the new one, instead of calling fetchAccessibilityIssues again for this one.`
+      : "Tell the user it is still running and to ask again in a few minutes, once it finishes; do not call fetchAccessibilityIssues again in this turn.",
+  ]);
+}
+
 /** What to say of an export still being generated: how to continue it, not an error. */
 function exportPendingMessages(
   source: IssueSource,
@@ -1307,6 +1339,16 @@ async function fetchAccessibilityIssues(
     if (error instanceof ExportPendingError) {
       return createSuccessResponse(
         exportPendingMessages(source, error, pageArg),
+      );
+    }
+    // A run or build still going may have no report to export yet: the export fails, which
+    // its words ("Failed to fetch report: null") make read like a fault.
+    if (stillProcessing) {
+      return noReportYetResponse(
+        reportFetcher,
+        source,
+        processing.status ?? "processing",
+        preface,
       );
     }
     throw error;

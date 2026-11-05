@@ -751,6 +751,22 @@ function readBothToCompare(
   ]);
 }
 
+/**
+ * The answer when a run or build to compare is still processing: its issues are still being
+ * added, so a comparison would count the ones not added yet as resolved or new, and read as
+ * a clean result. Calling again at once gets the same answer, so it hands back to the user.
+ */
+function notReadyToCompare(
+  which: string,
+  status: string,
+  preface: string[] = [],
+): CallToolResult {
+  return createSuccessResponse([
+    ...preface,
+    `⏳ ${which} has not finished yet (status: ${status}), so nothing was compared: its issues are still being added, and a comparison now would count the ones not added yet as resolved or new. Tell the user it is still processing and to ask again in a few minutes; do not call fetchAccessibilityIssues again in this turn.`,
+  ]);
+}
+
 /** The build to compare with, or the answer to give when there is none. */
 async function baselineAppBuild(
   reportFetcher: AccessibilityReportFetcher,
@@ -798,7 +814,8 @@ async function baselineAppBuild(
  * What changed between an earlier app build and this one: issues new in this build,
  * issues the earlier one had that this one does not, and how many it kept. An issue on a
  * screen this build did not reach also reads as resolved, so a build that scanned other
- * screens or ran other tests is called out.
+ * screens or ran other tests is called out. A build still running its tests or rules is not
+ * compared.
  */
 async function compareAppBuilds(
   reportFetcher: AccessibilityReportFetcher,
@@ -806,7 +823,6 @@ async function compareAppBuilds(
   compareWith: string,
   cursor: number,
   preface: string[],
-  processing: ProcessingState,
 ): Promise<CallToolResult> {
   const baseline = await baselineAppBuild(
     reportFetcher,
@@ -818,6 +834,16 @@ async function compareAppBuilds(
     reportFetcher.appBuildIssues(baseline.buildId),
     reportFetcher.appBuildIssues(source.buildId),
   ]);
+  const unfinished = [current, named].find((b) =>
+    PROCESSING_STATUSES.has(b.status),
+  );
+  if (unfinished) {
+    return notReadyToCompare(
+      `App Accessibility build #${unfinished.build_number} (${unfinished.buildId})`,
+      unfinished.status,
+      preface,
+    );
+  }
   // Issues on screens past the read limit would read as resolved or new.
   const partial = [current, named].find((b) => b.screens_read !== undefined);
   if (partial) {
@@ -888,7 +914,6 @@ async function compareAppBuilds(
   );
   return createSuccessResponse([
     ...preface,
-    ...processingNote(processing),
     ...(reversed
       ? [
           "compareWith names a build newer than this one, so the comparison runs from this build (the earlier) to that one (the later).",
@@ -1155,18 +1180,28 @@ async function fetchAccessibilityIssues(
       notes.push(`${why}, so it was found in the scan list instead.`);
     }
   }
-  const processing: ProcessingState = {
-    status: await reportFetcher.reportStatus(source),
-  };
-  const stillProcessing =
-    processing.status !== undefined &&
-    PROCESSING_STATUSES.has(processing.status);
   const preface = [
     ...(requested.kind === "link"
       ? [`Resolved the report link to ${describeSource(source)}.`]
       : []),
     ...notes,
   ];
+  // Two app builds are compared once both have finished; the comparison reads their statuses.
+  if (source.kind === "appBuild" && compareWith !== undefined) {
+    return compareAppBuilds(
+      reportFetcher,
+      source,
+      compareWith,
+      cursor,
+      preface,
+    );
+  }
+  const processing: ProcessingState = {
+    status: await reportFetcher.reportStatus(source),
+  };
+  const stillProcessing =
+    processing.status !== undefined &&
+    PROCESSING_STATUSES.has(processing.status);
 
   // A failed run has nothing to read, and its export said so badly: an empty report for a
   // scan ("0 issues ✅"), "Failed to fetch report: null" for a build. Neither is exported.
@@ -1188,26 +1223,9 @@ async function fetchAccessibilityIssues(
     processing.status &&
     FINALIZING_STATUSES.has(processing.status)
   ) {
-    const compareArg =
-      compareWith !== undefined ? `, compareWith: "${compareWith}"` : "";
-    return stillFinalizingResponse(
-      source,
-      processing.status,
-      preface,
-      `${pageArg}${compareArg}`,
-    );
+    return stillFinalizingResponse(source, processing.status, preface, pageArg);
   }
 
-  if (source.kind === "appBuild" && compareWith !== undefined) {
-    return compareAppBuilds(
-      reportFetcher,
-      source,
-      compareWith,
-      cursor,
-      preface,
-      processing,
-    );
-  }
   if (source.kind === "appBuild") {
     return createSuccessResponse(
       await appBuildMessages(
@@ -1663,6 +1681,18 @@ async function compareScanRuns(
       "Compare two runs that completed, or fix the cause and scan again.",
     );
   }
+  for (const [id, runStatus] of [
+    [after, status],
+    [before, beforeStatus],
+  ] as const) {
+    if (runStatus && PROCESSING_STATUSES.has(runStatus)) {
+      return notReadyToCompare(
+        `Run ${id} of Website Scanner scan ${source.scanId}`,
+        runStatus,
+        preface,
+      );
+    }
+  }
 
   const read = await diffExports(
     reportFetcher,
@@ -1941,10 +1971,17 @@ async function compareWebBuilds(
       return noResultsToCompare(build, pair(before));
     }
   }
-  const statusOf = new Map([
-    [self.buildId, selfStatus],
-    ...(other ? [[other.buildId, otherStatus] as const] : []),
-  ]);
+  const notReady = (build: WebBuild, status: string | undefined) =>
+    status && PROCESSING_STATUSES.has(status)
+      ? notReadyToCompare(
+          `Automated Tests ${webBuildRef(build)}`,
+          status,
+          preface,
+        )
+      : undefined;
+  const unfinished =
+    notReady(self, selfStatus) ?? (other && notReady(other, otherStatus));
+  if (unfinished) return unfinished;
 
   const head = (base: WebBuild, lines: string[]) => [
     ...preface,
@@ -1954,12 +1991,6 @@ async function compareWebBuilds(
       : []),
     ...lines,
     webBuildsData({ before: base, after }),
-    ...[base, after]
-      .filter((b) => PROCESSING_STATUSES.has(statusOf.get(b.buildId) ?? ""))
-      .map(
-        (b) =>
-          `⚠️ ${webBuildRef(b)} is still processing (status: ${statusOf.get(b.buildId)}): only the issues found so far are compared. Compare again once it completes.`,
-      ),
   ];
 
   let method: string;
@@ -1987,7 +2018,8 @@ async function compareWebBuilds(
         if (baseStatus === "failed") {
           return noResultsToCompare(base, pair(base), true);
         }
-        statusOf.set(base.buildId, baseStatus);
+        const baseUnfinished = notReady(base, baseStatus);
+        if (baseUnfinished) return baseUnfinished;
       }
       return webComparisonMessages(
         head(base, [
@@ -2016,7 +2048,6 @@ async function compareWebBuilds(
       if (previous.status === "failed") {
         return noResultsToCompare(previous, pair(previous), true);
       }
-      statusOf.set(previous.buildId, previous.status);
       before = previous;
     }
     method = `The compare API gave no comparison (${compared.refused}), ${MATCHED_BY_ELEMENT}`;

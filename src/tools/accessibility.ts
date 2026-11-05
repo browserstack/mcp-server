@@ -33,7 +33,6 @@ import {
   AccessibilityAuthConfig,
   safeAuthConfigData,
 } from "./accessiblity-utils/auth-config.js";
-import { NO_FEEDBACK_HINT } from "../lib/feedback-hint.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import {
   compareIssues,
@@ -157,9 +156,8 @@ function handleMCPError(
     (error instanceof Error && error.message.trim()) || "Unknown error";
   const refusal = accountRefusal(errorMessage);
   if (refusal) {
-    return Object.assign(
-      createErrorResponse(`${refusal}\nBrowserStack said: ${errorMessage}`),
-      { [NO_FEEDBACK_HINT]: true },
+    return createErrorResponse(
+      `${refusal}\nBrowserStack said: ${errorMessage}`,
     );
   }
   return createErrorResponse(

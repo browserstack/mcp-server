@@ -43,18 +43,10 @@ export const NO_HINT_TOOLS: ReadonlySet<string> = new Set([
   "getAccessibilityAuthConfig",
 ]);
 
-/**
- * Set (as a symbol-keyed property, so it is never serialised to the client) on an error
- * result that the user resolves on their own account, such as a plan limit. Asking the
- * agent to report those with submitFeedback only sends it the wrong way.
- */
-export const NO_FEEDBACK_HINT = Symbol.for("browserstack.mcp.noFeedbackHint");
-
 export function withFeedbackHint<T>(toolName: string, result: T): T {
   if (!feedbackEnabled() || NO_HINT_TOOLS.has(toolName)) return result;
   const r = result as { isError?: unknown; content?: unknown } | null;
   if (typeof r !== "object" || r === null || r.isError !== true) return result;
-  if ((r as Record<symbol, unknown>)[NO_FEEDBACK_HINT] === true) return result;
   if (!Array.isArray(r.content) || SELF_FIXABLE.test(textOf(r))) return result;
   return {
     ...r,

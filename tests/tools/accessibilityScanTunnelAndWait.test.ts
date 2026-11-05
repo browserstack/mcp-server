@@ -8,15 +8,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({
   post: vi.fn(),
   get: vi.fn(),
-  ensureOwnTunnel: vi.fn(),
+  ensureLocalBinarySetup: vi.fn(),
+  killExistingBrowserStackLocalProcesses: vi.fn(),
   config: { REMOTE_MCP: false, USE_OWN_LOCAL_BINARY_PROCESS: false },
 }));
 
 vi.mock("../../src/lib/apiClient.js", () => ({ apiClient: { post: m.post, get: m.get } }));
 vi.mock("../../src/lib/local.js", () => ({
   isLocalURL: (url: string) => new URL(url).hostname === "localhost",
-  ensureOwnTunnel: m.ensureOwnTunnel,
-  otherBrowserStackLocalPids: () => [],
+  ensureLocalBinarySetup: m.ensureLocalBinarySetup,
+  killExistingBrowserStackLocalProcesses: m.killExistingBrowserStackLocalProcesses,
 }));
 vi.mock("../../src/config.js", () => ({ default: m.config }));
 vi.mock("../../src/logger.js", () => ({
@@ -45,7 +46,7 @@ describe("AccessibilityScanner.startScan through a tunnel the user started", () 
     m.post.mockResolvedValue({ data: { success: true, data: { id: "1", scanRunId: "2" } } });
   });
 
-  it("sends the user's tunnel and starts no tunnel of its own", async () => {
+  it("sends the user's tunnel and starts or kills no tunnel of its own", async () => {
     m.config.REMOTE_MCP = true;
 
     await (await scanner()).startScan("dev", ["http://localhost:3000/cart"], undefined, {}, "my-tunnel");
@@ -53,7 +54,8 @@ describe("AccessibilityScanner.startScan through a tunnel the user started", () 
     const body = m.post.mock.calls[0][0].body;
     expect(body.localTestingInfo).toEqual({ localIdentifier: "my-tunnel", localEnabled: true });
     expect(body.urlList).toEqual(["http://bs-local.com:3000/cart"]);
-    expect(m.ensureOwnTunnel).not.toHaveBeenCalled();
+    expect(m.ensureLocalBinarySetup).not.toHaveBeenCalled();
+    expect(m.killExistingBrowserStackLocalProcesses).not.toHaveBeenCalled();
   });
 
   it("sends an internal host through the user's tunnel unchanged", async () => {
@@ -62,7 +64,7 @@ describe("AccessibilityScanner.startScan through a tunnel the user started", () 
     const body = m.post.mock.calls[0][0].body;
     expect(body.urlList).toEqual(["https://staging.internal.example/"]);
     expect(body.localTestingInfo).toEqual({ localIdentifier: "my-tunnel", localEnabled: true });
-    expect(m.ensureOwnTunnel).not.toHaveBeenCalled();
+    expect(m.killExistingBrowserStackLocalProcesses).not.toHaveBeenCalled();
   });
 
   it("on the hosted server, refuses a local URL without a tunnel and says how to start one", async () => {
@@ -89,12 +91,10 @@ describe("AccessibilityScanner.startScan through a tunnel the user started", () 
   });
 
   it("without a tunnel, still starts its own for a local URL on a local server", async () => {
-    m.ensureOwnTunnel.mockResolvedValue("mcp-own");
-
     await (await scanner()).startScan("dev", ["http://localhost:3000/"]);
 
-    expect(m.ensureOwnTunnel).toHaveBeenCalledWith("u", "p");
-    expect(m.post.mock.calls[0][0].body.localTestingInfo.localIdentifier).toBe("mcp-own");
+    const identifier = m.post.mock.calls[0][0].body.localTestingInfo.localIdentifier;
+    expect(m.ensureLocalBinarySetup).toHaveBeenCalledWith("u", "p", identifier);
   });
 });
 

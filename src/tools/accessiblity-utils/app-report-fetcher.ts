@@ -768,6 +768,19 @@ export class AppAccessibilityApi {
       : this.buildOfNativeBuild(ids.buildId!);
   }
 
+  /**
+   * The accessibility build of an App Automate build named by its own id (its hashed_id), as
+   * for its link; undefined when App Automate knows no build by that id.
+   */
+  async buildIdOfAppAutomateBuild(
+    buildId: string,
+  ): Promise<string | undefined> {
+    const session = await this.anySdkSession(buildId);
+    if (session) return this.buildOfSdkSession(session);
+    const native = await this.nativeBuild(buildId);
+    return native ? this.buildOfNativeBuild(buildId, native) : undefined;
+  }
+
   private async buildOfSdkSession(sessionId: string): Promise<string> {
     const resp = await apiClient.get({
       url: `${getAutomationBaseUrl()}/ext/v1/sessions/${encodeURIComponent(sessionId)}/testCode`,
@@ -815,8 +828,11 @@ export class AppAccessibilityApi {
    * builds; the name, read from the account's build list, tells runs that started together
    * apart, and finds a run older than those.
    */
-  private async buildOfNativeBuild(buildId: string): Promise<string> {
-    const native = await this.nativeBuild(buildId);
+  private async buildOfNativeBuild(
+    buildId: string,
+    known?: { project?: string; startedAt?: number },
+  ): Promise<string> {
+    const native = known ?? (await this.nativeBuild(buildId));
     if (!native?.project) {
       throw new Error(
         `No session found for App Automate build ${buildId}, and it is not an Espresso or XCUITest build with a project, so it cannot be mapped to its accessibility report. Pass the build id the BrowserStack SDK printed as "testhub id" as buildId, or the build's App Accessibility dashboard link as reportUrl`,

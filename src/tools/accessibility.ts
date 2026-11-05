@@ -1082,9 +1082,13 @@ function buildIdNotFound(
   buildId: string,
   scanList?: ScanNotInListError,
 ): CallToolResult {
+  // A hashed_id's shape was also asked of Automate and App Automate.
+  const builds = /^[0-9a-f]{40}$/.test(buildId)
+    ? "Automated Tests (web), App Accessibility, Automate, App Automate"
+    : "Automated Tests (web), App Accessibility";
   const where = scanList
-    ? `No Automated Tests (web) or App Accessibility build has id "${buildId}", and no Website Scanner run ${scanList.capped ? `among the most recent scans (${scanList.pages} pages)` : "in the scan list"} has it as its build id.`
-    : `No Automated Tests (web), App Accessibility or Website Scanner build with id "${buildId}" is visible to this account.`;
+    ? `No ${builds.replace(/, (?=[^,]*$)/, " or ")} build has id "${buildId}", and no Website Scanner run ${scanList.capped ? `among the most recent scans (${scanList.pages} pages)` : "in the scan list"} has it as its build id.`
+    : `No ${builds} or Website Scanner build with id "${buildId}" is visible to this account.`;
   return createSuccessResponse([
     `${where} Check the id, or pass instead the report's dashboard link as reportUrl, a Website Scanner run's scanId and scanRunId, or the id the BrowserStack SDK printed as "testhub id" at the end of the run.`,
   ]);
@@ -1116,8 +1120,17 @@ async function fetchAccessibilityIssues(
       ? await reportFetcher.sourceFromReportUrl(requested.reportUrl)
       : requested;
   // A build id names a web build, a mobile app build, or a Website Scanner run (a scanner
-  // link's thBuildId); the APIs tell which.
+  // link's thBuildId); the APIs tell which. An Automate or App Automate build's own id
+  // (hashed_id) resolves to the accessibility build its sessions ran in.
   let source = await reportFetcher.resolveBuild(named, { orScanRun: true });
+  const mapped =
+    named.kind === "build" &&
+    (source.kind === "build" || source.kind === "appBuild") &&
+    source.buildId !== named.buildId
+      ? [
+          `Build id ${named.buildId} is ${source.kind === "build" ? "an Automate" : "an App Automate"} build's own id (hashed_id); its accessibility results are in ${describeSource(source)}.`,
+        ]
+      : [];
   // Two scan runs are compared through their CSV exports; two web builds through the compare
   // API or their exports; two app builds, here below.
   if (compareWith !== undefined) {
@@ -1135,7 +1148,7 @@ async function fetchAccessibilityIssues(
         compareWith,
         requested.kind === "link"
           ? [`Resolved the report link to ${describeSource(source)}.`]
-          : [],
+          : mapped,
         context,
       );
     }
@@ -1147,7 +1160,7 @@ async function fetchAccessibilityIssues(
     }
   }
   const pageArg = pageUrl ? `, pageUrl: "${pageUrl}"` : "";
-  const notes: string[] = [];
+  const notes: string[] = [...mapped];
   // A run named by its build id is read by it, which works however old the scan is. If the
   // API does not know it by that id, the scan list is searched as before.
   let reportLink: string | undefined;

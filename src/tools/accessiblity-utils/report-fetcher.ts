@@ -413,9 +413,11 @@ export class AccessibilityReportFetcher {
       return this.buildOfAutomateSession(automate.sessionId);
     }
     if (automate?.buildId) {
-      return this.buildOfAutomateSession(
-        await this.anyAutomateSession(automate.buildId),
-      );
+      const session = await this.automateSession(automate.buildId);
+      if (!session) {
+        throw new Error(`No Automate build with id ${automate.buildId}`);
+      }
+      return this.buildOfAutomateSession(session);
     }
     const thBuildId = url?.searchParams.get("thBuildId");
     if (url && thBuildId && url.pathname.includes("/automated-tests/")) {
@@ -466,6 +468,17 @@ export class AccessibilityReportFetcher {
     }
     const meta = await this.app.buildMeta(source.buildId);
     if (meta) return { kind: "appBuild", buildId: source.buildId };
+    // An Automate or App Automate build's own id, its hashed_id (40 hex characters; a TestHub
+    // id has other letters too), as the SDK prints it at the end of a run: its sessions name
+    // the accessibility build they ran in, as for the build's link. Asked before the scan list.
+    if (/^[0-9a-f]{40}$/.test(source.buildId)) {
+      const session = await this.automateSession(source.buildId);
+      if (session) return this.buildOfAutomateSession(session);
+      const appBuildId = await this.app.buildIdOfAppAutomateBuild(
+        source.buildId,
+      );
+      if (appBuildId) return { kind: "appBuild", buildId: appBuildId };
+    }
     // A Website Scanner run's build id (a scanner link's thBuildId) is a TestHub id too, which
     // only the scanner's issues route knows: the caller reads it there, and says so if not.
     if (orScanRun) return { kind: "scanBuild", thBuildId: source.buildId };
@@ -502,16 +515,19 @@ export class AccessibilityReportFetcher {
     return this.app.appReportIssues(reportId, cursor, maxCharacterLength);
   }
 
-  /** Any one session of an Automate build; every session of an SDK run names the same build. */
-  private async anyAutomateSession(automateBuildId: string): Promise<string> {
+  /**
+   * Any one session of an Automate build; every session of an SDK run names the same build.
+   * Undefined when Automate does not know the build (its 404).
+   */
+  private async automateSession(
+    automateBuildId: string,
+  ): Promise<string | undefined> {
     const resp = await apiClient.get({
       url: `${sessionsListUrl(SessionType.Automate, automateBuildId)}?limit=1`,
       headers: this.authHeaders(),
       raise_error: false,
     });
-    if (resp.status === 404) {
-      throw new Error(`No Automate build with id ${automateBuildId}`);
-    }
+    if (resp.status === 404) return undefined;
     if (!resp.ok) {
       throw new Error(
         `Could not list the sessions of Automate build ${automateBuildId}: HTTP ${resp.status}`,

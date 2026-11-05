@@ -9,6 +9,8 @@
 import { readFileSync } from "node:fs";
 import appConfig from "../../config.js";
 import { MEDIA_TYPES } from "./media.js";
+import { builderParams, templateFields } from "./origin.js";
+import { stepPlaceholders } from "./chain.js";
 import { basename, dirname } from "node:path";
 import {
   Capability,
@@ -193,6 +195,185 @@ function checkFallbacks(product: string, capabilities: Capability[]): void {
  * call: a type the attached block would not actually be (see MEDIA_TYPES), or a path that
  * is not a JSON pointer and so would never find the image.
  */
+/**
+ * Refuse an `origin` the runtime could not honour, at load rather than on the first call
+ * of a session the user has already started: a template that is not https, one naming a
+ * field no builder parameter supplies, a builder parameter the template never reads, an
+ * empty host allowlist (which would make every call a refusal), a builder parameter that
+ * is not required (an origin cannot be half built), or a readiness window that could
+ * never retry.
+ */
+function checkOrigin(product: string, capabilities: Capability[]): void {
+  for (const capability of capabilities) {
+    const spec = capability.origin;
+    const builders = builderParams(capability);
+    const where = `${product}.${capability.name}`;
+    if (!spec) {
+      if (builders.length > 0)
+        throw new IndexError(
+          `${where} flags '${builders[0].param.name}' as base_url_builder but declares no origin`,
+        );
+      continue;
+    }
+    if (!/^https:\/\//.test(spec.url))
+      throw new IndexError(
+        `${where}: origin.url '${spec.url}' must start with https://`,
+      );
+    if (capability.host)
+      throw new IndexError(
+        `${where} declares both host and origin; an origin is fixed or supplied, not both`,
+      );
+    if (!Array.isArray(spec.hosts) || spec.hosts.length === 0)
+      throw new IndexError(
+        `${where}: origin.hosts must name at least one host the origin may land on`,
+      );
+    const names = new Set(builders.map((b) => b.param.name));
+    for (const field of templateFields(spec.url))
+      if (!names.has(field))
+        throw new IndexError(
+          `${where}: origin.url names '${field}', which no base_url_builder parameter supplies`,
+        );
+    const fields = new Set(templateFields(spec.url));
+    for (const { param } of builders) {
+      if (!fields.has(param.name))
+        throw new IndexError(
+          `${where}: '${param.name}' is flagged base_url_builder but origin.url never reads it`,
+        );
+      if (!param.required)
+        throw new IndexError(
+          `${where}: base_url_builder parameter '${param.name}' must be required`,
+        );
+    }
+    const ready = spec.ready;
+    if (ready) {
+      const positive = (n: unknown) => typeof n === "number" && n > 0;
+      if (!positive(ready.timeout_seconds))
+        throw new IndexError(
+          `${where}: origin.ready.timeout_seconds must be a positive number`,
+        );
+      if (ready.probe_seconds !== undefined && !positive(ready.probe_seconds))
+        throw new IndexError(
+          `${where}: origin.ready.probe_seconds must be a positive number`,
+        );
+      if ((ready.probe_seconds ?? 0) > ready.timeout_seconds)
+        throw new IndexError(
+          `${where}: origin.ready.probe_seconds exceeds timeout_seconds, so it could never retry`,
+        );
+      if (
+        ready.probe_path !== undefined &&
+        (typeof ready.probe_path !== "string" ||
+          !ready.probe_path.startsWith("/"))
+      )
+        throw new IndexError(
+          `${where}: origin.ready.probe_path must be a path starting with '/'`,
+        );
+    }
+  }
+}
+
+/**
+ * Refuse a chain the runtime could not run: an unknown or nested step, a step needing
+ * more consent than the chain declares (consent is asked once, for the chain's mode), a
+ * destructive step, a placeholder nothing supplies, or a `take` that is not a pointer.
+ */
+function checkSteps(product: string, capabilities: Capability[]): void {
+  const byName = new Map(capabilities.map((c) => [c.name, c]));
+  for (const capability of capabilities) {
+    const steps = capability.steps;
+    if (!steps) continue;
+    const where = `${product}.${capability.name}`;
+    if (steps.length === 0)
+      throw new IndexError(`${where}: steps must name at least one capability`);
+    const supplied = new Set(
+      [
+        ...(capability.path_params ?? []),
+        ...(capability.query ?? []),
+        ...(capability.body ?? []),
+      ].map((p) => p.name),
+    );
+    for (const step of steps) {
+      const target = byName.get(step.capability);
+      if (!target)
+        throw new IndexError(
+          `${where} calls '${step.capability}', which the index does not define`,
+        );
+      if (target.steps)
+        throw new IndexError(
+          `${where} calls '${step.capability}', which is itself a chain; steps do not nest`,
+        );
+      if (target.mode === "destructive")
+        throw new IndexError(
+          `${where} calls '${step.capability}', which is destructive`,
+        );
+      if (modeRank(target.mode) > modeRank(capability.mode))
+        throw new IndexError(
+          `${where} (${capability.mode}) calls '${step.capability}' (${target.mode}): ` +
+            "a chain may not need less consent than a step in it",
+        );
+      for (const name of stepPlaceholders(step))
+        if (!supplied.has(name))
+          throw new IndexError(
+            `${where}: step ${step.capability} names '{${name}}', which neither the ` +
+              "chain's parameters nor an earlier step's take supplies",
+          );
+      for (const [name, path] of Object.entries(step.take ?? {})) {
+        if (typeof path !== "string" || !path.startsWith("/"))
+          throw new IndexError(
+            `${where}: take '${name}' must be a JSON pointer starting with '/'`,
+          );
+        supplied.add(name);
+      }
+    }
+  }
+}
+
+/**
+ * Refuse a `poll` the runtime would misread: a wait that cannot end, an interval longer
+ * than the timeout, a condition in no shape `satisfied` knows, or a `when_given` that
+ * names a parameter the capability does not take and so could never be supplied.
+ */
+function checkPoll(product: string, capabilities: Capability[]): void {
+  for (const capability of capabilities) {
+    const spec = capability.poll;
+    if (!spec) continue;
+    const where = `${product}.${capability.name}`;
+    const positive = (n: unknown) => typeof n === "number" && n > 0;
+    if (!positive(spec.interval_seconds) || !positive(spec.timeout_seconds))
+      throw new IndexError(
+        `${where}: poll.interval_seconds and poll.timeout_seconds must be positive numbers`,
+      );
+    if (spec.interval_seconds > spec.timeout_seconds)
+      throw new IndexError(
+        `${where}: poll.interval_seconds exceeds poll.timeout_seconds, so it could never poll`,
+      );
+    const until = spec.until as unknown;
+    const shaped =
+      until === "non_empty" ||
+      (typeof until === "object" &&
+        until !== null &&
+        ((typeof (until as { field?: unknown }).field === "string" &&
+          Array.isArray((until as { values?: unknown }).values)) ||
+          (typeof (until as { path?: unknown }).path === "string" &&
+            (until as { non_empty?: unknown }).non_empty === true)));
+    if (!shaped)
+      throw new IndexError(
+        `${where}: poll.until must be "non_empty", {field, values} or {path, non_empty: true}`,
+      );
+    const declared = new Set(
+      [
+        ...(capability.path_params ?? []),
+        ...(capability.query ?? []),
+        ...(capability.body ?? []),
+      ].map((p) => p.name),
+    );
+    for (const name of spec.when_given ?? [])
+      if (!declared.has(name))
+        throw new IndexError(
+          `${where}: poll.when_given names '${name}', which the capability does not take`,
+        );
+  }
+}
+
 function checkMedia(product: string, capabilities: Capability[]): void {
   for (const capability of capabilities) {
     const media = capability.media;
@@ -443,6 +624,9 @@ export class CapabilityRegistry {
       this.withheld.set(product, withheld);
       checkFallbacks(product, bundle.capabilities);
       checkMedia(product, bundle.capabilities);
+      checkOrigin(product, bundle.capabilities);
+      checkPoll(product, bundle.capabilities);
+      checkSteps(product, bundle.capabilities);
       // ALWAYS THE PROCESSED PRODUCT. This used to fall back to the raw bundle when nothing
       // was disabled, which quietly dropped the per-surface guidance (`withSurfaceGuidance`
       // runs on the way into `enabled`) and the reference-only form from search,

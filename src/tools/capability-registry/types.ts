@@ -111,6 +111,15 @@ export interface WireParam extends WireConstraints {
   max_bytes?: number;
   /** `file` parameters only: the multipart field name, when it differs from `name`. */
   form_name?: string;
+  /**
+   * This parameter builds the request's ORIGIN rather than travelling on the wire.
+   *
+   * It is declared in a normal group — `query`, so the caller passes it where every
+   * other parameter goes — and the capability's `origin.url` names it. It is taken out
+   * before binding, so it never reaches the query string; the route template is
+   * substituted from the rest. Required by construction: an origin cannot be half built.
+   */
+  base_url_builder?: true;
 }
 
 /**
@@ -169,6 +178,18 @@ export type Guidance =
 export function guidanceLines(guidance?: Guidance): string[] {
   if (!guidance) return [];
   return Array.isArray(guidance) ? guidance : (guidance.shared ?? []);
+}
+
+/** One step of a capability's `steps` chain. */
+export interface ChainStep {
+  /** The sibling capability to call, by published name, in the same product. */
+  capability: string;
+  /** Arguments to send it; a string value may be a `{name}` placeholder. */
+  path_params?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+  /** name -> JSON pointer into the step's 2xx body; the values join the chain's answer. */
+  take?: Record<string, string>;
 }
 
 /** One step of a capability's `fallbacks` chain. */
@@ -342,6 +363,88 @@ export interface Capability {
    * the capability's guidance to state. Every attempt is reported with its status.
    */
   fallbacks?: Fallback[];
+  /**
+   * The origin this capability is served from is supplied by the CALLER, per call.
+   *
+   * An App Live session is driven at a proxy that exists per session. The product's
+   * endpoint capability answers with a hostname, port and path for one session id, and
+   * the agent passes those, with the session id, into every session command. Nothing is
+   * looked up or remembered here: the caller holds the endpoint as it holds the id, which
+   * is what a hosted server with many instances and many callers needs.
+   *
+   * The parameters are ordinary `query` entries flagged `base_url_builder`; `url` is
+   * rendered from them and the capability's own `path` is appended. `hosts` is the allowlist the rendered origin must land on — these requests carry no
+   * credentials and their destination is typed by an agent, so without it a hosted server
+   * would be an open proxy. The origin must be https.
+   *
+   * `ready` says how a freshly supplied origin is brought up and how long that may take.
+   * With `probe_path`, the first call on an origin first GETs that path there — for App
+   * Live, `/sessions`, which is what makes the device create its Appium session and then
+   * lists it — every `probe_seconds` until it answers 2xx with a non-empty `value`, for
+   * up to `timeout_seconds`; the command is then sent once. Without `probe_path`, a READ
+   * that times out or is told "not found" is itself re-sent on the same schedule, and a
+   * write never is — a request the proxy was holding may still be forwarded later.
+   */
+  origin?: {
+    url: string;
+    hosts: string[];
+    /** The capability whose answer carries these parameters, for the refusal text. */
+    from?: string;
+    ready?: {
+      timeout_seconds: number;
+      probe_seconds?: number;
+      /** GET this path on the origin until it answers; relative to the rendered origin. */
+      probe_path?: string;
+    };
+  };
+  /**
+   * Repeat this call until its answer says the thing being waited for has happened.
+   *
+   * ONE REQUEST, ONE RESPONSE still holds for the caller: it gets the last answer, with
+   * `polled` saying how many were made and whether the condition was met. The exception
+   * exists for an answer that is correct and useless on the first call — an App Live
+   * session launched a moment ago is listed only once the device has started, and an
+   * agent asked to wait for it would otherwise re-invoke in a loop of its own.
+   *
+   * `until` is what "happened" means: `non_empty` for a list or object that fills in, or
+   * a top-level `field` taking one of `values`. `when_given` limits the waiting to calls
+   * that supplied those parameters, so the same capability answers at once when asked
+   * for everything and waits only when asked for one thing. The timeout is the
+   * contract's, not the caller's — it is published so the caller knows how long a call
+   * can take, and a polled call that times out answers with what it last saw rather than
+   * an error, because "not yet" is an answer.
+   */
+  poll?: {
+    interval_seconds: number;
+    timeout_seconds: number;
+    until:
+      | "non_empty"
+      | { field: string; values: unknown[] }
+      | { path: string; non_empty: true };
+    when_given?: string[];
+    /**
+     * Statuses that also mean "not yet" rather than a refusal. A proxy that answers 404
+     * for a session it has not learned of is the case; a 401 never belongs here.
+     */
+    keep_on?: number[];
+  };
+  /**
+   * A chain: this capability is answered by calling these siblings in order and
+   * assembling the answer from what they return.
+   *
+   * THE ONE AUTHORED EXCEPTION to one-request-one-response beyond fallbacks and polling.
+   * It exists for App Live's `get_session`: three calls an agent would otherwise make in
+   * sequence, each needing a value from the last, collapsed into one with one consent.
+   * Each step names a sibling and the arguments to send it, where a `{name}` is filled
+   * from the chain's own parameters or from a value an earlier step `take`s by JSON
+   * pointer out of its 2xx body. The answer is the map of everything taken. A step that
+   * is refused ends the chain with that refusal and the step named. Steps run through
+   * the same path as a direct call — polling, fallbacks and origins included.
+   *
+   * The chain's `mode` must be at least every step's, so consent is asked once for the
+   * whole; a destructive step is refused at load. Steps do not nest.
+   */
+  steps?: ChainStep[];
   /**
    * How long to wait for this one capability's answer, in seconds.
    *

@@ -7,20 +7,15 @@ import {
   ScanTimeoutError,
   cleanScanName,
   samePage as sameScanPage,
-  type SavedScan,
   type ScanFailureDetails,
   type ScanSettings,
 } from "./accessiblity-utils/scanner.js";
 import {
   AccessibilityReportFetcher,
-  EXPORT_WAIT_MS,
   ExportPendingError,
   ScanNotInListError,
   ScanRunNotFoundError,
-  scanRunLink,
   type IssueSource,
-  type WebBuild,
-  type WebBuildComparison,
 } from "./accessiblity-utils/report-fetcher.js";
 import {
   compareAppIssues,
@@ -35,33 +30,78 @@ import {
 } from "./accessiblity-utils/auth-config.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import {
-  compareIssues,
-  loadMainIssues,
   parseAccessibilityReportFromCSV,
   samePage,
-  type ErrorPage,
   type IssueSummary as WebIssueSummary,
   type RunIssue,
 } from "./accessiblity-utils/report-parser.js";
 import { wrapUntrusted } from "../lib/untrusted-content.js";
 import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
-import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
+import {
+  createErrorResponse,
+  createSuccessResponse,
+  describeSource,
+  exportProgress,
+  formatDuration,
+  initializeScanner,
+  notifyScanProgress,
+  onOff,
+  PROCESSING_STATUSES,
+  scanDashboardNote,
+  setupAuth,
+  sourceArgs,
+  wcagName,
+  WCAG_VERSIONS,
+  type ScanProgressContext,
+} from "./accessiblity-utils/shared.js";
+import {
+  accountRefusal,
+  asSentence,
+} from "./accessiblity-utils/error-messages.js";
+import {
+  EXPERT_QUERY_MAX_CHARS,
+  fitExpertQuery,
+} from "./accessiblity-utils/expert-query.js";
+import {
+  buildIdNotFound,
+  errorPagesNote,
+  failedRunResponse,
+  failedScanRunResponse,
+  failureReasons,
+  FINALIZING_STATUSES,
+  noReportYetResponse,
+  pageReasons,
+  stillFinalizingResponse,
+} from "./accessiblity-utils/report-answers.js";
+import {
+  NO_BUILT_IN_COMPARE,
+  notReadyToCompare,
+  previousReportToCompare,
+  readBothToCompare,
+  scanRunToCompare,
+} from "./accessiblity-utils/compare-with.js";
+import {
+  comparedList,
+  diffExports,
+  pagesNotLoadedNote,
+} from "./accessiblity-utils/compare-lists.js";
+import { compareWebBuilds } from "./accessiblity-utils/web-build-compare.js";
+import {
+  compareHint,
+  localRerunNote,
+  otherPageNote,
+  rescanHint,
+  savedSettingDifferences,
+  uncheckedSettings,
+  withNotes,
+  type ScanArgs,
+} from "./accessiblity-utils/scan-rerun.js";
 
-interface AuthCredentials {
-  username: string;
-  password: string;
-}
-
-interface ScanProgressContext {
-  sendNotification: (notification: any) => Promise<void>;
-  _meta?: {
-    progressToken?: string | number;
-  };
-}
+export { EXPERT_QUERY_MAX_CHARS };
 
 interface FormAuthArgs {
   name: string;
@@ -84,67 +124,6 @@ interface BasicAuthArgs {
 
 type AuthConfigArgs = FormAuthArgs | BasicAuthArgs;
 
-function setupAuth(config: BrowserStackConfig): AuthCredentials {
-  const authString = getBrowserStackAuth(config);
-  const [username, password] = authString.split(":");
-  return { username, password };
-}
-
-function createErrorResponse(message: string): CallToolResult {
-  return {
-    content: [
-      {
-        type: "text",
-        text: message,
-      },
-    ],
-    isError: true,
-  };
-}
-
-/**
- * Each message ends with a newline: clients that join text blocks with no separator
- * would otherwise run a link at the end of one block into the next block's first word.
- */
-function createSuccessResponse(messages: string[]): CallToolResult {
-  return {
-    content: messages.map((text) => ({
-      type: "text" as const,
-      text: `${text}\n`,
-    })),
-  };
-}
-
-/**
- * The message as a sentence: a full stop is added only when it does not already end in
- * one (or in "!", "?" or "…", before any closing quote or bracket), so a message that
- * ends in a full stop does not end in "..".
- */
-function asSentence(message: string): string {
-  const text = message.trim();
-  return /[.!?…]["'”’)\]]*$/.test(text) ? text : `${text}.`;
-}
-
-/**
- * Refusals the user resolves on their own account, with what to tell them. The API's own
- * words ("You do not have access to External APIs", "user info missing") read like faults,
- * so agents retried, renamed the scan, or reported them with submitFeedback. Each pattern
- * is the API's message as logged in telemetry.
- */
-function accountRefusal(message: string): string | undefined {
-  const scanLimit = message.match(/make over (\d+) scans/i);
-  if (scanLimit) {
-    return `This account has reached its plan's limit of ${scanLimit[1]} saved Website Scanner scans, so no new scan can be started. To scan again, delete scans that are no longer needed under Website Scanner in the Accessibility dashboard (https://accessibility.browserstack.com/site-scanner), or upgrade the plan. This is a plan limit, not a fault: tell the user, and do not retry or start the scan under another name.`;
-  }
-  if (/access to External APIs/i.test(message)) {
-    return "This account's BrowserStack plan does not include the External APIs add-on, which the MCP's accessibility tools need: they work through the Accessibility API. Scans can still be run and read in the Accessibility dashboard (https://accessibility.browserstack.com). To use them from here, the account admin can add External APIs to the plan through BrowserStack sales. This is a plan limit, not a fault: tell the user, and do not retry.";
-  }
-  if (/user info missing/i.test(message)) {
-    return "Website Scanner has not set this user up yet: it does that the first time they open Website Scanner in the Accessibility dashboard, and refuses its API until then. Ask the user to open https://accessibility.browserstack.com/site-scanner once while signed in to BrowserStack, then start the scan again.";
-  }
-  return undefined;
-}
-
 function handleMCPError(
   toolName: string,
   server: McpServer,
@@ -165,31 +144,6 @@ function handleMCPError(
   );
 }
 
-async function notifyScanProgress(
-  context: ScanProgressContext,
-  message: string,
-  progress = 0,
-): Promise<void> {
-  await context.sendNotification({
-    method: "notifications/progress",
-    params: {
-      progressToken: context._meta?.progressToken?.toString() ?? "NOT_FOUND",
-      message,
-      progress,
-      total: 100,
-    },
-  });
-}
-
-async function initializeScanner(
-  config: BrowserStackConfig,
-): Promise<AccessibilityScanner> {
-  const scanner = new AccessibilityScanner();
-  const auth = setupAuth(config);
-  scanner.setAuth(auth);
-  return scanner;
-}
-
 async function initializeReportFetcher(
   config: BrowserStackConfig,
 ): Promise<AccessibilityReportFetcher> {
@@ -197,38 +151,6 @@ async function initializeReportFetcher(
   const auth = setupAuth(config);
   reportFetcher.setAuth(auth);
   return reportFetcher;
-}
-
-/** The longest question the accessibility knowledge base takes; longer ones are refused. */
-export const EXPERT_QUERY_MAX_CHARS = 500;
-
-/** The opening of `text` within `max` characters, cut at a word break when one is near. */
-function cutAtWord(text: string, max: number): string {
-  if (text.length <= max) return text.trimEnd();
-  const head = text.slice(0, max);
-  const lastBreak = head.search(/\s\S*$/);
-  return (lastBreak > max * 0.6 ? head.slice(0, lastBreak) : head).trimEnd();
-}
-
-/**
- * A question the knowledge base will take. It refuses anything over 500 characters
- * ("Query is too long"), and agents writing a detailed question hit that: two refusals on
- * 4 Nov alone. Agents put the question itself last, after the context, so a longer one
- * keeps its last sentence and as much of its opening as fits around it.
- */
-function fitExpertQuery(query: string): { query: string; shortened: boolean } {
-  if (query.length <= EXPERT_QUERY_MAX_CHARS)
-    return { query, shortened: false };
-  const text = query.trim();
-  const sentences = text.match(/[^.?!]+(?:[.?!]+["')\]]*\s*|$)/g) ?? [text];
-  const last = sentences[sentences.length - 1].trim();
-  const gap = " … ";
-  if (sentences.length < 2 || last.length > EXPERT_QUERY_MAX_CHARS * 0.6) {
-    return { query: cutAtWord(text, EXPERT_QUERY_MAX_CHARS), shortened: true };
-  }
-  const opening = text.slice(0, text.length - last.length);
-  const room = EXPERT_QUERY_MAX_CHARS - last.length - gap.length;
-  return { query: `${cutAtWord(opening, room)}${gap}${last}`, shortened: true };
 }
 
 async function executeAccessibilityRAG(
@@ -303,44 +225,6 @@ function issueSourceFrom(args: FetchIssuesArgs): RequestedSource | string {
   return { kind: "scan", scanId: args.scanId, scanRunId: args.scanRunId };
 }
 
-/** The arguments that name the same source again, for the next-page hint. */
-function sourceArgs(source: IssueSource): string {
-  switch (source.kind) {
-    case "scan":
-      return `scanId: "${source.scanId}", scanRunId: "${source.scanRunId}"`;
-    // A run read by its build id is named by its link again, or, given as a build id, by that.
-    case "scanBuild":
-      return source.scanName !== undefined
-        ? `reportUrl: "${scanRunLink(source)}"`
-        : `buildId: "${source.thBuildId}"`;
-    case "build":
-    case "appBuild":
-      return `buildId: "${source.buildId}"`;
-    case "workflow":
-      return `workflowReportId: "${source.reportId}"`;
-    case "appReport":
-      return `appReportId: "${source.reportId}"`;
-  }
-}
-
-/** What a dashboard link resolved to, in words. */
-function describeSource(source: IssueSource): string {
-  switch (source.kind) {
-    case "scan":
-      return `Website Scanner scan ${source.scanId}, run ${source.scanRunId}`;
-    case "scanBuild":
-      return `Website Scanner run with build id ${source.thBuildId}`;
-    case "build":
-      return `Automated Tests build ${source.buildId}`;
-    case "workflow":
-      return `Workflow Analyzer report ${source.reportId}`;
-    case "appBuild":
-      return `App Accessibility build ${source.buildId}`;
-    case "appReport":
-      return `App Accessibility manual report ${source.reportId}`;
-  }
-}
-
 async function executeFetchAccessibilityIssues(
   args: FetchIssuesArgs,
   context: ScanProgressContext | undefined,
@@ -402,37 +286,9 @@ function excludedIssuesNote(
   return notes;
 }
 
-/** Statuses during which a report's issues are still being added (`rule_processing`: an app build's). */
-const PROCESSING_STATUSES = new Set([
-  "queued",
-  "running",
-  "processing",
-  "finalizing",
-  "rule_processing",
-  "in_progress",
-]);
-
-/**
- * Of those, the processing after the run: a web report's advanced issues while "finalizing",
- * an app build's rules while "rule_processing". It usually ends within a few minutes, but a
- * first read no longer waits for it inside the call. It used to wait up to five minutes and
- * then read the export, and a client cuts off a call that long: the claude.ai connector
- * aborts a tool call silent for 305 s, progress notifications or not. Every such call left
- * the agent with nothing, and one reported a fix as verified that had added 26 issues. So
- * the read says the report is not ready, and to call again, which any client handles.
- */
-const FINALIZING_STATUSES = new Set(["finalizing", "rule_processing"]);
-
 interface ProcessingState {
   /** The report's status when its issues were read; undefined when it could not be read. */
   status?: string;
-}
-
-function formatDuration(ms: number): string {
-  const seconds = Math.round(ms / 1000);
-  return seconds < 60
-    ? `${seconds}s`
-    : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
 /** What the answer says about a report read while it is still processing, if anything. */
@@ -445,28 +301,6 @@ function processingNote({ status }: ProcessingState): string[] {
   return [
     `⚠️ This report is still processing (status: ${status}${meaning}). The issues below are only those found so far: more will be added and the total will grow. Call fetchAccessibilityIssues again in a few minutes for the complete list.`,
   ];
-}
-
-/**
- * The answer for a first read of a report still finalizing: not ready yet, and when to come
- * back. Not an error, since nothing failed, but it says outright that no issues were read,
- * so an empty answer cannot be taken for a clean page.
- */
-function stillFinalizingResponse(
-  source: IssueSource,
-  status: string,
-  preface: string[],
-  extraArgs: string,
-): CallToolResult {
-  const state =
-    status === "rule_processing"
-      ? "is still running its accessibility rules (status: rule_processing)"
-      : "is still finalizing (status: finalizing): BrowserStack is still adding its issues";
-  return createSuccessResponse([
-    ...preface,
-    `⏳ The report for ${describeSource(source)} ${state}. This usually takes a few minutes after the run ends. No issues have been read yet, so this is not a result: do not tell the user the page is clean or the fix is verified.`,
-    `Call fetchAccessibilityIssues again with ${sourceArgs(source)}${extraArgs} in a minute or two. If it still says this after about 10 minutes, tell the user the report is stuck instead of calling again.`,
-  ]);
 }
 
 /**
@@ -721,89 +555,6 @@ function issueList(
       ? `, ${cursor + 1} to ${cursor + shown.length}`
       : "";
   return `${label} (${rows.length})${range}: ${wrapUntrusted("accessibility scan results", JSON.stringify(shown, null, 2))}`;
-}
-
-/** What a report compareWith has no compare for says first. */
-const NO_BUILT_IN_COMPARE = {
-  workflow: "Workflow Analyzer reports have no built-in compare.",
-  appReport: "App Accessibility manual reports have no built-in compare.",
-} as const;
-
-/**
- * Two reports compareWith has no compare for are compared by reading both. This is said as
- * guidance, not as an error, so the agent goes straight to the two reads. An app issue is
- * matched by its element, not its screen, as a fix can renumber the screens.
- */
-function readBothToCompare(
-  lead: string,
-  app: boolean,
-  reads?: [string, string],
-): CallToolResult {
-  const match = app
-    ? "rule and component (the element's id or class)"
-    : "rule and CSS selector on each page";
-  const calls = reads
-    ? ` (one call with ${reads[0]}; the other with ${reads[1]})`
-    : "";
-  return createSuccessResponse([
-    `${lead} Read both reports with fetchAccessibilityIssues${calls} and match issues by ${match}; an issue in the later report only is new, in the earlier only is fixed, in both is still open.`,
-  ]);
-}
-
-/**
- * The answer when a run or build to compare is still processing: its issues are still being
- * added, so a comparison would count the ones not added yet as resolved or new, and read as
- * a clean result. Calling again at once gets the same answer, so it hands back to the user.
- */
-function notReadyToCompare(
-  which: string,
-  status: string,
-  preface: string[] = [],
-): CallToolResult {
-  return createSuccessResponse([
-    ...preface,
-    `⏳ ${which} has not finished yet (status: ${status}), so nothing was compared: its issues are still being added, and a comparison now would count the ones not added yet as resolved or new. Tell the user it is still processing and to ask again in a few minutes; do not call fetchAccessibilityIssues again in this turn.`,
-  ]);
-}
-
-/**
- * compareWith "previous" on a report with no built-in compare: the report before it is found
- * here (a Workflow Analyzer report's of the same page, or else the same site; a manual app
- * report's of the same app) and named with the call that reads it. Agents left to find it
- * searched for a way to list reports, and one gave no answer.
- */
-async function previousReportToCompare(
-  reportFetcher: AccessibilityReportFetcher,
-  source: { kind: "workflow" | "appReport"; reportId: string },
-): Promise<CallToolResult> {
-  const app = source.kind === "appReport";
-  const earlier:
-    | { reportId: string; time?: string; link: string; samePage?: boolean }
-    | undefined = await (
-    app
-      ? reportFetcher.previousManualReport(source.reportId)
-      : reportFetcher.previousWorkflowReport(source.reportId)
-  ).catch(() => undefined);
-  const lead = NO_BUILT_IN_COMPARE[source.kind];
-  if (!earlier) {
-    return readBothToCompare(
-      `${lead} No earlier ${app ? "manual report of the same app" : "Workflow Analyzer report of the same page or site"} is among the account's newest reports, so ask the user which report to compare it with.`,
-      app,
-    );
-  }
-  const which = app
-    ? "manual report of the same app"
-    : earlier.samePage
-      ? "report of the same page"
-      : "report of the same site (no earlier one scanned the same page)";
-  return readBothToCompare(
-    `${lead} The newest ${which} before it is ${earlier.reportId}${earlier.time ? `, ${app ? "recorded" : "started"} ${earlier.time}` : ""}: ${earlier.link}`,
-    app,
-    [
-      sourceArgs(source),
-      sourceArgs({ kind: source.kind, reportId: earlier.reportId }),
-    ],
-  );
 }
 
 /** The build to compare with, or the answer to give when there is none. */
@@ -1095,73 +846,6 @@ async function appReportMessages(
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules: report.rules, screens: report.screens }, null, 2))}`,
     closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
-}
-
-/** Progress while a report's CSV export is generated, so clients see the call is alive. */
-function exportProgress(
-  context: ScanProgressContext | undefined,
-): (waitedMs: number) => Promise<void> {
-  return async (waitedMs) => {
-    if (!context) return;
-    await notifyScanProgress(
-      context,
-      `Generating the report's CSV export (large reports take longer): ${formatDuration(waitedMs)} so far.`,
-      Math.min(99, Math.round((waitedMs / EXPORT_WAIT_MS) * 100)),
-    );
-  };
-}
-
-/**
- * A build id no API knows, after the scan list was searched for it (`scanList`) or the API
- * that reads runs by build id said it has none. The id is the user's to check, so this is a
- * plain answer naming what to pass instead, not a fault to report.
- */
-function buildIdNotFound(
-  buildId: string,
-  scanList?: ScanNotInListError,
-): CallToolResult {
-  // A hashed_id's shape was also asked of Automate and App Automate.
-  const builds = /^[0-9a-f]{40}$/.test(buildId)
-    ? "Automated Tests (web), App Accessibility, Automate, App Automate"
-    : "Automated Tests (web), App Accessibility";
-  const where = scanList
-    ? `No ${builds.replace(/, (?=[^,]*$)/, " or ")} build has id "${buildId}", and no Website Scanner run ${scanList.capped ? `among the most recent scans (${scanList.pages} pages)` : "in the scan list"} has it as its build id.`
-    : `No ${builds} or Website Scanner build with id "${buildId}" is visible to this account.`;
-  return createSuccessResponse([
-    `${where} Check the id, or pass instead the report's dashboard link as reportUrl, a Website Scanner run's scanId and scanRunId, or the id the BrowserStack SDK printed as "testhub id" at the end of the run.`,
-  ]);
-}
-
-/** How long a run can stay "running" before it is taken for stuck rather than slow. */
-const STUCK_AFTER_MS = 24 * 60 * 60 * 1000;
-
-/**
- * A run or build still processing whose report could not be exported: it has no report yet.
- * Not an error, since nothing failed; one that started over a day ago is probably stuck, and
- * calling again will not change that.
- */
-async function noReportYetResponse(
-  reportFetcher: AccessibilityReportFetcher,
-  source: IssueSource,
-  status: string,
-  preface: string[],
-): Promise<CallToolResult> {
-  const started = await reportFetcher.reportStartedAt(source);
-  const stuck =
-    started !== undefined && Date.now() - Date.parse(started) > STUCK_AFTER_MS;
-  const again =
-    source.kind === "scan" || source.kind === "scanBuild"
-      ? "scan the page again"
-      : source.kind === "workflow"
-        ? "run Workflow Analyzer again"
-        : "run the tests again";
-  return createSuccessResponse([
-    ...preface,
-    `⏳ ${describeSource(source)} is still running (status: ${status}${started ? `, started ${started}` : ""}) and has no report yet, so no issues were read: this is not a result.`,
-    stuck
-      ? `It started more than 24 hours ago, so it is probably stuck rather than still running: tell the user, and that they should ${again} and read the new one, instead of calling fetchAccessibilityIssues again for this one.`
-      : "Tell the user it is still running and to ask again in a few minutes, once it finishes; do not call fetchAccessibilityIssues again in this turn.",
-  ]);
 }
 
 /** What to say of an export still being generated: how to continue it, not an error. */
@@ -1459,71 +1143,6 @@ async function fetchAccessibilityIssues(
   ]);
 }
 
-/**
- * Pages that did not load: an error page (Chrome's, or BrowserStack Local's when the tunnel
- * is not connected) was scanned in their place, and its issues came back as theirs. The
- * report parser leaves them out of the issues and the total; this says so.
- */
-function errorPagesNote(pages: ErrorPage[], again: string): string[] {
-  if (pages.length === 0) return [];
-  const one = (n: number, singular: string, plural: string) =>
-    n === 1 ? singular : plural;
-  const n = pages.length;
-  const issues = pages.reduce((sum, p) => sum + p.issues, 0);
-  const counted =
-    issues > 0
-      ? ` The ${one(issues, "1 issue", `${issues} issues`)} found there ${one(issues, "is", "are")} from the error ${one(n, "page", "pages")}, not your ${one(n, "page", "pages")}, so ${one(issues, "it is", "they are")} left out of the issues and the total below.`
-      : "";
-  return [
-    `⚠️ ${one(n, "1 page", `${n} pages`)} did not load; ${one(n, "an error page was", "error pages were")} scanned in ${one(n, "its", "their")} place.${counted} Check the ${one(n, "page is", "pages are")} reachable (and the Local tunnel, for localhost), then ${again}. ${wrapUntrusted("report page addresses", JSON.stringify(pages.map((p) => p.url)))}`,
-  ];
-}
-
-/**
- * Why a run that failed has nothing to read, or undefined where "failed" is not about the
- * report: an app build's status is its tests' result, and its scans are read either way.
- */
-async function failedRunResponse(
-  source: IssueSource,
-  status: "failed" | "cancelled",
-  config: BrowserStackConfig,
-  preface: string[],
-): Promise<CallToolResult | undefined> {
-  switch (source.kind) {
-    case "scan":
-      return failedScanRunResponse(
-        config,
-        source.scanId,
-        source.scanRunId,
-        preface,
-        (pages) =>
-          `0 issues does not mean the ${pages > 1 ? "pages are" : "page is"} clean.`,
-        status === "cancelled"
-          ? "Scan again and read the new run."
-          : "Fix the cause and scan again.",
-        status,
-      );
-    // The API reads a build that completed with no test cases as failed.
-    case "build":
-      return createErrorResponse(
-        [
-          ...preface,
-          `Build ${source.buildId} has no accessibility results (status: failed). This usually means no test ran through the BrowserStack SDK: a plain script instead of a test framework, or a session that failed to start. Run the tests again through the SDK and read the new build's testhub id.`,
-        ].join("\n"),
-      );
-    // A report fails only when BrowserStack stops processing it.
-    case "workflow":
-      return createErrorResponse(
-        [
-          ...preface,
-          `Workflow Analyzer report ${source.reportId} has no accessibility results (status: failed): its processing did not complete, so 0 issues would not mean the pages are clean. Scan the workflow again with Workflow Analyzer and read the new report.`,
-        ].join("\n"),
-      );
-    default:
-      return undefined;
-  }
-}
-
 /** What one page of a report holds, in the dashboard's page-view terms. */
 function pageNote(page: {
   url: string;
@@ -1546,158 +1165,6 @@ function pageNote(page: {
   return [
     `${page.occurrences} issue occurrences on ${page.url} (${severities}), as the dashboard's page view counts them: ${page.distinct_issues} distinct issues, ${page.first_found_here} of them first found on this page. Each issue below is listed once, with occurrences_on_page; first_found_on names the page an issue was first found on when it is another one.`,
   ];
-}
-
-/**
- * The pages of the newer run that did not load (an error page was scanned in their place),
- * or whose earlier issues all gave way to new ones. Neither the scan nor the dashboard says
- * so, and their real issues would otherwise read as fixed.
- */
-function pagesNotLoadedNote(
-  diff: {
-    not_checked?: unknown[];
-    failed_pages?: string[];
-    not_checked_earlier?: unknown[];
-    failed_pages_earlier?: string[];
-    changed_pages?: string[];
-  },
-  later: string,
-  earlier: string,
-  noun: "run" | "build",
-): string[] {
-  const pages = (urls: string[]) =>
-    wrapUntrusted("report page addresses", JSON.stringify(urls));
-  // Worded for one page or several, one issue or several.
-  const one = (count: number, singular: string, plural: string) =>
-    count === 1 ? singular : plural;
-  const they = (n: number) => one(n, "it", "they");
-  const didNotLoad = (urls: string[], run: string) => {
-    const n = urls.length;
-    return `⚠️ ${one(n, "1 page", `${n} pages`)} did not load in ${run}: ${one(n, "an error page was", "error pages were")} scanned in ${one(n, "its", "their")} place. The ${one(n, "error page's", "error pages'")} issues are not counted as`;
-  };
-  // A page that failed in both runs has no issues of its own in either.
-  const foundThere = (count: number, run: string, notCountedAs: string) =>
-    count > 0
-      ? `, and the ${one(count, "1 issue", `${count} issues`)} found there in ${run} ${one(count, "is", "are")} not counted as ${notCountedAs}`
-      : "";
-  const failed = diff.failed_pages ?? [];
-  const failedEarlier = diff.failed_pages_earlier ?? [];
-  const changed = diff.changed_pages ?? [];
-  return [
-    ...(failed.length > 0
-      ? [
-          `${didNotLoad(failed, later)} new${foundThere(diff.not_checked?.length ?? 0, earlier, "resolved (listed as not checked)")}. ${noun === "run" ? "Scan" : "Run the tests"} again once ${they(failed.length)} ${one(failed.length, "loads", "load")}. ${pages(failed)}`,
-        ]
-      : []),
-    ...(failedEarlier.length > 0
-      ? [
-          `${didNotLoad(failedEarlier, earlier)} resolved${foundThere(diff.not_checked_earlier?.length ?? 0, later, `new (listed as not checked against the earlier ${noun})`)}. Compare with a ${noun} in which ${they(failedEarlier.length)} loaded. ${pages(failedEarlier)}`,
-        ]
-      : []),
-    ...(changed.length > 0
-      ? [
-          `⚠️ None of the earlier issues on ${one(changed.length, "1 page remain, and it has", `${changed.length} pages remain, and they have`)} new ones: ${they(changed.length)} may not have loaded, or loaded something else, in ${later}. Check ${one(changed.length, "it", "them")} before calling those issues fixed. ${pages(changed)}`,
-        ]
-      : []),
-  ];
-}
-
-/** At most this many issues of each list are listed in a comparison. */
-const COMPARE_LIST_LIMIT = 50;
-
-/**
- * One list of a comparison, at most COMPARE_LIST_LIMIT of it, quoted as data: its rows come
- * from the reports. `total` counts the whole list where only its first issues were read;
- * `rest` says where the ones not listed are.
- */
-function comparedList(
-  issues: RunIssue[],
-  total = issues.length,
-  rest = "",
-): string {
-  const shown = issues.slice(0, COMPARE_LIST_LIMIT);
-  const more = total - shown.length;
-  return (
-    wrapUntrusted("accessibility comparison", JSON.stringify(shown, null, 2)) +
-    (more > 0 ? `\n(${more} more not listed${rest}.)` : "")
-  );
-}
-
-/**
- * Two reports' CSV exports, read and matched by rule, element and page; or, while an export
- * is still being generated, the answer to give instead.
- */
-async function diffExports(
-  reportFetcher: AccessibilityReportFetcher,
-  later: IssueSource,
-  earlier: IssueSource,
-  what: "runs" | "builds",
-  context?: ScanProgressContext,
-): Promise<
-  | { links: [string, string]; diff: ReturnType<typeof compareIssues> }
-  | CallToolResult
-> {
-  let links: [string, string];
-  try {
-    links = await Promise.all([
-      reportFetcher.getReportLink(later, { onWait: exportProgress(context) }),
-      reportFetcher.getReportLink(earlier, {}),
-    ]);
-  } catch (error) {
-    if (error instanceof ExportPendingError) {
-      return createSuccessResponse([
-        `The CSV exports of these ${what} are still being generated (waited ${formatDuration(error.waitedMs)}). Call fetchAccessibilityIssues again with the same arguments in about a minute; the exports continue where they are.`,
-      ]);
-    }
-    throw error;
-  }
-  const [after, before] = await Promise.all(links.map(loadMainIssues));
-  return { links, diff: compareIssues(before, after) };
-}
-
-type ScanRunSource = { kind: "scan"; scanId: string; scanRunId: string };
-
-/**
- * The run of this scan that compareWith names: its scanRunId, or its report link or build id,
- * which are resolved as a source is. A link or id that names anything else (another scan's
- * run, a build, a report) has no built-in compare with a Scanner run: that is answered with
- * how to compare them by reading both, naming each read's arguments.
- */
-async function scanRunToCompare(
-  reportFetcher: AccessibilityReportFetcher,
-  source: ScanRunSource,
-  compareWith: string,
-): Promise<{ scanRunId: string } | CallToolResult> {
-  const link = /^https?:\/\//i.test(compareWith);
-  if (!link && !/^[a-z0-9]{40}$/i.test(compareWith)) {
-    return { scanRunId: compareWith };
-  }
-  let other: IssueSource;
-  try {
-    other = await reportFetcher.resolveBuild(
-      link
-        ? await reportFetcher.sourceFromReportUrl(compareWith)
-        : { kind: "build", buildId: compareWith },
-      { orScanRun: true },
-    );
-    // A run is compared by its scan's ids, which only the scan list maps a build id to.
-    if (other.kind === "scanBuild") {
-      other = await reportFetcher.findScanRun(other);
-    }
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return createSuccessResponse([
-      `compareWith could not be matched to a Website Scanner run: ${asSentence(reason)} To compare with another run of scan ${source.scanId}, pass its scanRunId or "previous". To compare with another scan's run, read both reports with fetchAccessibilityIssues and match issues by rule and CSS selector on each page; an issue in the later report only is new, in the earlier only is fixed, in both is still open.`,
-    ]);
-  }
-  if (other.kind === "scan" && other.scanId === source.scanId) {
-    return { scanRunId: other.scanRunId };
-  }
-  return readBothToCompare(
-    `compareWith names ${describeSource(other)}, not a run of scan ${source.scanId}: only runs of one scan are compared here.`,
-    false,
-    [sourceArgs(source), sourceArgs(other)],
-  );
 }
 
 /**
@@ -1860,366 +1327,6 @@ async function compareScanRuns(
   ]);
 }
 
-/** A web build in prose: its number and id. Its name is the user's own, so it goes in data. */
-function webBuildRef(build: WebBuild): string {
-  return `build ${build.buildNumber !== undefined ? `#${build.buildNumber} ` : ""}(${build.buildId}${build.startedAt ? `, started ${build.startedAt}` : ""})`;
-}
-
-/** Web builds' names, projects, numbers, ids and starts, quoted as data. */
-function webBuildsData(builds: Record<string, WebBuild>): string {
-  const data = Object.fromEntries(
-    Object.entries(builds).map(([role, b]) => [
-      role,
-      {
-        name: b.name,
-        project: b.projectName,
-        build_number: b.buildNumber,
-        id: b.buildId,
-        started: b.startedAt,
-      },
-    ]),
-  );
-  return `Builds: ${wrapUntrusted("Automated Tests builds", JSON.stringify(data, null, 2))}`;
-}
-
-/**
- * A build the build list calls `failed` completed with no test cases, so it has no
- * accessibility results: there is nothing to compare it with, which is said as guidance.
- */
-function noResultsToCompare(
-  build: WebBuild,
-  builds: Record<string, WebBuild>,
-  previous = false,
-): CallToolResult {
-  const ref = webBuildRef(build);
-  const which = previous
-    ? `The run before this build with the same build name and project ("previous") is ${ref}, which`
-    : `${ref[0].toUpperCase()}${ref.slice(1)}`;
-  return createSuccessResponse([
-    `${which} has no accessibility results: its status is failed, which Automated Tests gives a build that completed with no test cases. There is nothing to compare; compare with another build, or run the tests again with accessibility on.`,
-    webBuildsData(builds),
-  ]);
-}
-
-/** The three lists of a web build comparison, and what is set apart from them. */
-interface WebCompareLists {
-  counts: { new: number; fixed: number; open: number };
-  new: RunIssue[];
-  fixed: RunIssue[];
-  open: RunIssue[];
-  /** Where only the first issues of a list were read: its count, to say how many more. */
-  totals?: { new: number; fixed: number; open: number };
-  /** What did not load, said before the lists. */
-  warnings: string[];
-  /** The issues set apart because their page did not load, listed after them. */
-  setApart: string[];
-  /** Where the issues not listed are. */
-  rest: string;
-  closing: string[];
-}
-
-function webComparisonMessages(
-  head: string[],
-  lists: WebCompareLists,
-): CallToolResult {
-  const { counts, totals = lists.counts } = lists;
-  return createSuccessResponse([
-    ...head,
-    `${counts.new} new, ${counts.fixed} fixed, ${counts.open} still open.`,
-    ...lists.warnings,
-    `New (only in the later build) (${counts.new}): ${comparedList(lists.new, totals.new, lists.rest)}`,
-    `Fixed (only in the earlier build) (${counts.fixed}): ${comparedList(lists.fixed, totals.fixed, lists.rest)}`,
-    `Still open (in both) (${counts.open}): ${comparedList(lists.open, totals.open, lists.rest)}`,
-    ...lists.setApart,
-    ...lists.closing,
-  ]);
-}
-
-/**
- * The compare API's comparison as lists. Issues found on an error page are set apart: the
- * page did not load, so they say nothing about the page. The API counts them in its lists.
- */
-function apiComparisonLists(comparison: WebBuildComparison): WebCompareLists {
-  const { counts, issues } = comparison;
-  const loaded = (rows: RunIssue[]) => rows.filter((r) => !r.on_error_page);
-  // A list's issues not read count as more; those set apart are listed below.
-  const more = (rows: RunIssue[], count: number) =>
-    loaded(rows).length + Math.max(0, count - rows.length);
-  const apart = [
-    ...issues.new.map((r) => ({ ...r, list: "new" })),
-    ...issues.resolved.map((r) => ({ ...r, list: "fixed" })),
-    ...issues.retained.map((r) => ({ ...r, list: "still open" })),
-  ].filter((r) => r.on_error_page);
-  return {
-    counts: {
-      new: counts.new,
-      fixed: counts.resolved,
-      open: counts.retained,
-    },
-    new: loaded(issues.new),
-    fixed: loaded(issues.resolved),
-    open: loaded(issues.retained),
-    totals: {
-      new: more(issues.new, counts.new),
-      fixed: more(issues.resolved, counts.resolved),
-      open: more(issues.retained, counts.retained),
-    },
-    warnings:
-      apart.length > 0
-        ? [
-            `⚠️ ${apart.length === 1 ? "1 issue listed was" : `${apart.length} issues listed were`} found on an error page (BrowserStack Local's connection page or Chrome's network error page) scanned in place of a page that did not load. ${apart.length === 1 ? "It is" : "They are"} set apart below as "page did not load", not listed as new, fixed or still open; the counts above include ${apart.length === 1 ? "it" : "them"}. Run the tests again once the page loads.`,
-          ]
-        : [],
-    setApart:
-      apart.length > 0
-        ? [`Page did not load (${apart.length}): ${comparedList(apart)}`]
-        : [],
-    rest: "",
-    closing: [],
-  };
-}
-
-/** Two web builds' CSV exports matched by rule, element and page, as lists. */
-function diffComparisonLists(
-  {
-    links,
-    diff,
-  }: { links: [string, string]; diff: ReturnType<typeof compareIssues> },
-  before: WebBuild,
-  after: WebBuild,
-): WebCompareLists {
-  // Two builds of different names can share a number, so the id is said too.
-  const label = (b: WebBuild) =>
-    `build ${b.buildNumber !== undefined ? `#${b.buildNumber} ` : ""}(${b.buildId})`;
-  return {
-    counts: {
-      new: diff.added.length,
-      fixed: diff.resolved.length,
-      open: diff.still_open.length,
-    },
-    new: diff.added,
-    fixed: diff.resolved,
-    open: diff.still_open,
-    warnings: pagesNotLoadedNote(diff, label(after), label(before), "build"),
-    setApart: [
-      ...(diff.not_checked.length
-        ? [
-            `Not checked (page did not load in ${label(after)}): ${comparedList(diff.not_checked)}`,
-          ]
-        : []),
-      ...(diff.not_checked_earlier.length
-        ? [
-            `Not checked against the earlier build (page did not load in ${label(before)}): ${comparedList(diff.not_checked_earlier)}`,
-          ]
-        : []),
-    ],
-    rest: "; see the CSV links",
-    closing: [
-      `CSV of each build, valid for about 12 hours: later ${links[0]} , earlier ${links[1]}`,
-    ],
-  };
-}
-
-/** How an issue list is matched when the compare API does not compare the two builds. */
-const MATCHED_BY_ELEMENT =
-  "so the issue lists were matched by rule, element and page.";
-
-/**
- * An Automated Tests build against another (its id or report link) or "previous", from the
- * older build ("before") to the newer ("after"), whichever order they were passed in. Two
- * builds of one build name and project are compared by the Automated Tests compare API, as
- * the dashboard compares them; any other pair, or one the API refuses or does not answer in
- * time, by matching their issue exports by rule, element and page, as Scanner runs are.
- */
-async function compareWebBuilds(
-  reportFetcher: AccessibilityReportFetcher,
-  source: { kind: "build"; buildId: string },
-  compareWith: string,
-  preface: string[],
-  context?: ScanProgressContext,
-): Promise<CallToolResult> {
-  const self = await reportFetcher.webBuild(source.buildId);
-  if (!self) {
-    throw new Error(`Could not read Automated Tests build ${source.buildId}`);
-  }
-  let other: WebBuild | undefined;
-  if (compareWith !== "previous") {
-    let named: IssueSource;
-    try {
-      named = await reportFetcher.resolveBuild(
-        /^https?:\/\//i.test(compareWith)
-          ? await reportFetcher.sourceFromReportUrl(compareWith)
-          : { kind: "build", buildId: compareWith },
-      );
-    } catch (error) {
-      return createErrorResponse(
-        `compareWith: ${error instanceof Error ? error.message : String(error)}.`,
-      );
-    }
-    if (named.kind !== "build") {
-      return readBothToCompare(
-        `compareWith names ${describeSource(named)}, which is not an Automated Tests build; an Automated Tests build is compared here only with another ("previous", or another build's id or link).`,
-        false,
-      );
-    }
-    if (named.buildId === source.buildId) {
-      return createErrorResponse(
-        `compareWith names this build itself. Pass another build's id or link, or "previous".`,
-      );
-    }
-    other = await reportFetcher.webBuild(named.buildId);
-    if (!other) {
-      throw new Error(`Could not read Automated Tests build ${named.buildId}`);
-    }
-  }
-
-  const [selfStatus, otherStatus] = await Promise.all([
-    reportFetcher.reportStatus(source),
-    other
-      ? reportFetcher.reportStatus({ kind: "build", buildId: other.buildId })
-      : undefined,
-  ]);
-  // The older build is "before": by start, whichever was passed as compareWith.
-  const started = (b: WebBuild) => Date.parse(b.startedAt ?? "");
-  const reversed = other !== undefined && started(other) > started(self);
-  let before = reversed ? self : other;
-  const after = reversed ? other! : self;
-  const pair = (b: WebBuild | undefined): Record<string, WebBuild> =>
-    b ? { before: b, after } : { after };
-  for (const [build, status] of [
-    [self, selfStatus],
-    [other, otherStatus],
-  ] as const) {
-    if (build && status === "failed") {
-      return noResultsToCompare(build, pair(before));
-    }
-  }
-  const notReady = (build: WebBuild, status: string | undefined) =>
-    status && PROCESSING_STATUSES.has(status)
-      ? notReadyToCompare(
-          `Automated Tests ${webBuildRef(build)}`,
-          status,
-          preface,
-        )
-      : undefined;
-  const unfinished =
-    notReady(self, selfStatus) ?? (other && notReady(other, otherStatus));
-  if (unfinished) return unfinished;
-
-  const head = (base: WebBuild, lines: string[]) => [
-    ...preface,
-    `Compared Automated Tests builds: before ${webBuildRef(base)}, after ${webBuildRef(after)}.`,
-    ...(reversed
-      ? ["compareWith was the newer build, so it is used as 'after'."]
-      : []),
-    ...lines,
-    webBuildsData({ before: base, after }),
-  ];
-
-  let method: string;
-  if (
-    !before ||
-    (before.name === after.name && before.projectName === after.projectName)
-  ) {
-    const compared = await reportFetcher.compareWebBuilds(
-      after.buildId,
-      before?.buildId,
-      COMPARE_LIST_LIMIT,
-    );
-    if (!("refused" in compared)) {
-      // The API's summary leaves the project out; the overview has it, and the status check
-      // below reads the overview anyway.
-      const base: WebBuild =
-        before ??
-        (await reportFetcher.webBuild(compared.base.buildId)) ??
-        compared.base;
-      if (!before) {
-        const baseStatus = await reportFetcher.reportStatus({
-          kind: "build",
-          buildId: base.buildId,
-        });
-        if (baseStatus === "failed") {
-          return noResultsToCompare(base, pair(base), true);
-        }
-        const baseUnfinished = notReady(base, baseStatus);
-        if (baseUnfinished) return baseUnfinished;
-      }
-      return webComparisonMessages(
-        head(base, [
-          ...(before
-            ? []
-            : [
-                `compareWith "previous": the compare API used the run before it with the same build name and project, ${webBuildRef(base)}.`,
-              ]),
-          "Same build name and project, so this is the Automated Tests compare API's comparison, as the dashboard shows it: issues are matched by the dashboard's own issue key (key below), not by rule, element and page alone.",
-        ]),
-        apiComparisonLists(compared),
-      );
-    }
-    if (compared.noPrevious) {
-      return createErrorResponse(
-        `${webBuildRef(after)} is the first completed run of its build name in its project, so there is nothing earlier to compare it with. Pass another build's id or link as compareWith instead.`,
-      );
-    }
-    if (!before) {
-      const previous = await reportFetcher.previousWebBuild(after);
-      if (!previous) {
-        return createErrorResponse(
-          `The compare API gave no comparison (${compared.refused}), and no earlier completed run of this build's name is among its project's newest builds. Pass the earlier build's id or link as compareWith instead.`,
-        );
-      }
-      if (previous.status === "failed") {
-        return noResultsToCompare(previous, pair(previous), true);
-      }
-      before = previous;
-    }
-    method = `The compare API gave no comparison (${compared.refused}), ${MATCHED_BY_ELEMENT}`;
-  } else {
-    method =
-      before.name !== after.name
-        ? `Different build names, ${MATCHED_BY_ELEMENT}`
-        : `Different projects, ${MATCHED_BY_ELEMENT}`;
-  }
-
-  const read = await diffExports(
-    reportFetcher,
-    { kind: "build", buildId: after.buildId },
-    { kind: "build", buildId: before.buildId },
-    "builds",
-    context,
-  );
-  if ("content" in read) return read;
-  return webComparisonMessages(
-    head(before, [
-      ...(compareWith === "previous"
-        ? [
-            `compareWith "previous": the run before it with the same build name and project, ${webBuildRef(before)}.`,
-          ]
-        : []),
-      method,
-    ]),
-    diffComparisonLists(read, before, after),
-  );
-}
-
-/** The WCAG versions and levels Website Scanner checks against, and RGAA 4.1, by name. */
-const WCAG_VERSIONS = {
-  wcag2a: "WCAG 2.0 A",
-  wcag2aa: "WCAG 2.0 AA",
-  wcag2aaa: "WCAG 2.0 AAA",
-  wcag21a: "WCAG 2.1 A",
-  wcag21aa: "WCAG 2.1 AA",
-  wcag21aaa: "WCAG 2.1 AAA",
-  wcag22a: "WCAG 2.2 A",
-  wcag22aa: "WCAG 2.2 AA",
-  wcag22aaa: "WCAG 2.2 AAA",
-  rgaa41: "RGAA 4.1",
-} as const;
-
-const wcagName = (value: string) =>
-  WCAG_VERSIONS[value as keyof typeof WCAG_VERSIONS] ?? value;
-const onOff = (value: boolean) => (value ? "on" : "off");
-
 /**
  * Why advanced or experimental rules came back off when they were not asked off. Both are
  * on unless turned off, and on an API scan a plan without them turns them off instead of
@@ -2300,15 +1407,6 @@ function scanSettingsNote(
     ? `Scan settings asked for: ${describe(asked)}; anything not asked for takes the scan's default.`
     : "No scan settings were asked for, so the scan's defaults apply.";
 }
-
-/** startAccessibilityScan's arguments, as the call passed them: a setting left out is undefined. */
-type ScanArgs = {
-  name: string;
-  pageURL: string;
-  scanId?: string;
-  authConfigId?: number;
-  localIdentifier?: string;
-} & ScanSettings;
 
 async function executeAccessibilityScan(
   args: ScanArgs,
@@ -2487,19 +1585,6 @@ async function executeGetAuthConfig(
   }
 }
 
-/**
- * Where to see a scan in the dashboard: its own page, as the scans list links it. A scan's
- * page is named by its build, so a link made from the scan's name does not open it.
- */
-function scanDashboardNote(
-  dashboardLink: string | undefined,
-  scanId: string,
-): string {
-  return dashboardLink
-    ? `Its page in the Accessibility dashboard: ${dashboardLink}`
-    : `See it under Website Scanner in the Accessibility dashboard (scan ID ${scanId}).`;
-}
-
 /** Why the scan's name differs from the one asked for, as the start of a sentence. */
 function renameReason(
   name: string,
@@ -2512,41 +1597,6 @@ function renameReason(
   if (characters)
     return `The name "${name}" has characters scan names can't contain`;
   return `A scan named "${name}" already exists on this account`;
-}
-
-/** How many failed pages a failure result lists before summing up the rest. */
-const FAILED_PAGES_LISTED = 10;
-
-/**
- * "N pages <what>:" and a line per page with its reason, the first FAILED_PAGES_LISTED of
- * them. The lines are the scan logs' (the page's address, the site's HTTP status, where it
- * redirected), so they are quoted as data.
- */
-function pageReasons(
-  pages: ScanFailureDetails["pages"],
-  what: [one: string, several: string],
-): string {
-  const listed = pages.slice(0, FAILED_PAGES_LISTED);
-  const more = pages.length - listed.length;
-  return [
-    `${pages.length} ${pages.length === 1 ? `page ${what[0]}` : `pages ${what[1]}`}:`,
-    wrapUntrusted(
-      "page scan log",
-      listed.map((page) => `- ${page.pageUrl}: ${page.reason}`).join("\n"),
-    ),
-    ...(more > 0 ? [`And ${more} more ${more === 1 ? "page" : "pages"}.`] : []),
-  ].join("\n");
-}
-
-/** Why a run failed, in the API's words (quoted as data): the run's own reason and each page's. */
-function failureReasons({ reason, pages }: ScanFailureDetails): string[] {
-  const why = [
-    reason ? `Why: ${wrapUntrusted("scan failure reason", reason)}` : "",
-    pages.length
-      ? pageReasons(pages, ["could not be scanned", "could not be scanned"])
-      : "",
-  ].filter(Boolean);
-  return why.length ? why : ["The dashboard says why."];
 }
 
 /**
@@ -2565,43 +1615,6 @@ function createScanFailureResponse(
     [
       `❌ Accessibility scan "${name}" failed with status: ${status}. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}.`,
       ...failureReasons(details),
-      scanDashboardNote(dashboardLink, scanId),
-    ].join("\n"),
-  );
-}
-
-/**
- * A scan run that failed, read or compared. A run fails only when it scanned no page (or
- * the plan refused it), and its export is then an empty report: read as one, it said "0
- * issues ✅ All issues retrieved", and compared, every issue of the other run read as
- * resolved or new.
- */
-async function failedScanRunResponse(
-  config: BrowserStackConfig,
-  scanId: string,
-  scanRunId: string,
-  preface: string[],
-  meaning: (pages: number) => string,
-  next: string,
-  status: "failed" | "cancelled" = "failed",
-): Promise<CallToolResult> {
-  const scanner = await initializeScanner(config);
-  const cancelled = status === "cancelled";
-  // A cancelled run has no failure to explain.
-  const [dashboardLink, details] = await Promise.all([
-    scanner.dashboardLink(scanId),
-    cancelled
-      ? Promise.resolve<ScanFailureDetails>({ pages: [] })
-      : scanner.failureDetails(scanId, scanRunId),
-  ]);
-  return createErrorResponse(
-    [
-      ...preface,
-      cancelled
-        ? `Scan run ${scanRunId} of scan ${scanId} was cancelled, so it has no results: ${meaning(details.pages.length)}`
-        : `Scan run ${scanRunId} of scan ${scanId} failed, so no pages were checked: ${meaning(details.pages.length)}`,
-      ...(cancelled ? [] : failureReasons(details)),
-      next,
       scanDashboardNote(dashboardLink, scanId),
     ].join("\n"),
   );
@@ -2663,43 +1676,6 @@ function createScanSuccessResponse(
   }
 
   return createSuccessResponse(messages);
-}
-
-/**
- * The result with lines said before and after it. Each text block is made to end in a
- * newline, as createSuccessResponse's do, so a link that ends one block is not run into
- * the next by a client that joins blocks with no separator.
- */
-function withNotes(
-  result: CallToolResult,
-  lead: string[],
-  tail: string[] = [],
-): CallToolResult {
-  if (!lead.length && !tail.length) return result;
-  const block = (text: string) => ({
-    type: "text" as const,
-    text: text.endsWith("\n") ? text : `${text}\n`,
-  });
-  return {
-    ...result,
-    content: [
-      ...lead.map(block),
-      ...result.content.map((c) => (c.type === "text" ? block(c.text) : c)),
-      ...tail.map(block),
-    ],
-  };
-}
-
-/**
- * Said with every new scan. Re-scanning a page used to start another scan, and runs of two
- * scans cannot be compared; a run added to this scan can.
- */
-function rescanHint(scanId: string): string {
-  return `To scan this same page again later (e.g. after a fix), call startAccessibilityScan with scanId "${scanId}"; that adds a run to this scan so the runs can be compared with compareWith "previous".`;
-}
-
-function compareHint(scanId: string, scanRunId: string): string {
-  return `To see what changed since the previous run, call fetchAccessibilityIssues with scanId "${scanId}", scanRunId "${scanRunId}" and compareWith "previous".`;
 }
 
 type ScanOutcome = "completed" | "still running" | "failed";
@@ -2850,120 +1826,6 @@ async function runAccessibilityScan(
         ],
     [rescanHint(String(scanId))],
   );
-}
-
-/** Why a scan given by id is not re-run for this page: it was saved for another. */
-function otherPageNote(
-  scanId: string,
-  urlList: string[],
-  pageURL: string,
-): string {
-  if (!urlList.length) {
-    return `Scan ${scanId}'s pages could not be read, so it could not be checked to be for ${pageURL}; a new scan was started.`;
-  }
-  if (urlList.length === 1) {
-    return `Scan ${scanId} is for ${urlList[0]}, not ${pageURL}, so a new scan was started.`;
-  }
-  const shown = urlList.slice(0, 3).join(", ");
-  const more = urlList.length > 3 ? `, and ${urlList.length - 3} more` : "";
-  return `Scan ${scanId} is for ${urlList.length} pages (${shown}${more}), not just ${pageURL}, so a new scan was started.`;
-}
-
-/**
- * The settings a call passed that differ from the scan's saved ones. A re-run takes no
- * settings, so running it anyway would quietly drop what was asked for. Only settings the
- * call passed are compared (none has a default in the schema), and only against a saved
- * value the overview gives: it gives whether a login or Local is saved, not which one.
- */
-function savedSettingDifferences(args: ScanArgs, saved: SavedScan): string[] {
-  const differ = <T>(
-    label: string,
-    passed: T | undefined,
-    savedValue: T | undefined,
-    show: (value: T) => string,
-  ) =>
-    passed !== undefined && savedValue !== undefined && passed !== savedValue
-      ? [`${label}: saved ${show(savedValue)}, passed ${show(passed)}`]
-      : [];
-  const { settings } = saved;
-  return [
-    ...differ("WCAG version", args.wcagVersion, settings.wcagVersion, wcagName),
-    ...differ(
-      "advanced rules",
-      args.advancedRules,
-      settings.advancedRules,
-      onOff,
-    ),
-    ...differ(
-      "experimental rules",
-      args.experimentalRules,
-      settings.experimentalRules,
-      onOff,
-    ),
-    ...differ(
-      "best practices",
-      args.bestPractices,
-      settings.bestPractices,
-      onOff,
-    ),
-    ...differ("needs review", args.needsReview, settings.needsReview, onOff),
-    ...(args.authConfigId !== undefined && saved.authEnabled === false
-      ? [
-          `login: the scan has no auth config saved, passed authConfigId ${args.authConfigId}`,
-        ]
-      : []),
-    ...(args.localIdentifier !== undefined &&
-    saved.localTestingEnabled === false
-      ? [
-          `BrowserStack Local: the scan is saved without a tunnel, passed localIdentifier "${args.localIdentifier}"`,
-        ]
-      : []),
-  ];
-}
-
-/** Settings a call passed that the overview gives no saved value to check them against. */
-function uncheckedSettings(args: ScanArgs, saved: SavedScan): string[] {
-  const { settings } = saved;
-  return [
-    args.wcagVersion !== undefined && settings.wcagVersion === undefined
-      ? "wcagVersion"
-      : "",
-    args.advancedRules !== undefined && settings.advancedRules === undefined
-      ? "advancedRules"
-      : "",
-    args.experimentalRules !== undefined &&
-    settings.experimentalRules === undefined
-      ? "experimentalRules"
-      : "",
-    args.bestPractices !== undefined && settings.bestPractices === undefined
-      ? "bestPractices"
-      : "",
-    args.needsReview !== undefined && settings.needsReview === undefined
-      ? "needsReview"
-      : "",
-    // Which login is saved is not given: only whether one is.
-    args.authConfigId !== undefined && saved.authEnabled !== false
-      ? `authConfigId ${args.authConfigId}`
-      : "",
-    // Said in the Local note when the scan is saved with a tunnel.
-    args.localIdentifier !== undefined &&
-    saved.localTestingEnabled === undefined
-      ? `localIdentifier "${args.localIdentifier}"`
-      : "",
-  ].filter(Boolean);
-}
-
-/**
- * A re-run reaches a local page through the tunnel the scan was saved with, by its
- * identifier, which the overview does not give back: the tunnel has to be running under
- * that identifier, or the run cannot reach the page.
- */
-function localRerunNote(localIdentifier: string | undefined): string {
-  return `This scan reaches its page through BrowserStack Local, and the run uses the scan's saved Local settings: a tunnel must be running with the same local identifier the scan was created with${
-    localIdentifier
-      ? ` (the API does not give the saved identifier back, so it could not be checked against "${localIdentifier}")`
-      : " (the API does not give the saved identifier back)"
-  }. If the run cannot reach the page, start that tunnel and re-run.`;
 }
 
 /**

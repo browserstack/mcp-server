@@ -689,28 +689,43 @@ export class AccessibilityReportFetcher {
     }
   }
 
-  /** The run before `scanRunId` in its scan's history, or undefined for the first run. */
-  async previousScanRun(
+  /**
+   * A scan's runs, newest first, and whether the whole list was read: a list cut short at
+   * the page limit, or by a page that could not be read, may not hold a run that is the scan's.
+   */
+  async scanRuns(
     scanId: string,
-    scanRunId: string,
-  ): Promise<ScanRun | undefined> {
-    // The runs come a page at a time; the one before may be on a later page.
+  ): Promise<{ runs: ScanRun[]; complete: boolean }> {
+    // The runs come a page at a time.
     const runs: ScanRun[] = [];
     const base = `${apiBase()}/website-scanner/v1/scans/${encodeURIComponent(scanId)}/scan_runs`;
     let nextPage: string | undefined;
+    let complete = false;
     for (let page = 0; page < MAX_SCAN_RUN_PAGES; page++) {
       const data = await this.getData(
         nextPage ? `${base}?nextPage=${encodeURIComponent(nextPage)}` : base,
       );
       runs.push(...(data?.scanRuns ?? []));
-      if (!data?.pagination?.hasNext || !data.pagination.nextPage) break;
+      if (!data?.pagination?.hasNext || !data.pagination.nextPage) {
+        complete = data !== undefined;
+        break;
+      }
       nextPage = data.pagination.nextPage;
     }
-    const newestFirst = [...runs].sort((a, b) =>
-      b.scanDate.localeCompare(a.scanDate),
-    );
-    const at = newestFirst.findIndex((run) => String(run.id) === scanRunId);
-    return at >= 0 ? newestFirst[at + 1] : undefined;
+    return {
+      runs: runs.sort((a, b) => b.scanDate.localeCompare(a.scanDate)),
+      complete,
+    };
+  }
+
+  /** The run before `scanRunId` in its scan's history, or undefined for the first run. */
+  async previousScanRun(
+    scanId: string,
+    scanRunId: string,
+  ): Promise<ScanRun | undefined> {
+    const { runs } = await this.scanRuns(scanId);
+    const at = runs.findIndex((run) => String(run.id) === scanRunId);
+    return at >= 0 ? runs[at + 1] : undefined;
   }
 
   /** The dashboard's new / retained / resolved counts against the run before this one. */

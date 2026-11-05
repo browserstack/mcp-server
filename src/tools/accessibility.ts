@@ -735,12 +735,19 @@ const NO_BUILT_IN_COMPARE = {
  * guidance, not as an error, so the agent goes straight to the two reads. An app issue is
  * matched by its element, not its screen, as a fix can renumber the screens.
  */
-function readBothToCompare(lead: string, app: boolean): CallToolResult {
+function readBothToCompare(
+  lead: string,
+  app: boolean,
+  reads?: [string, string],
+): CallToolResult {
   const match = app
     ? "rule and component (the element's id or class)"
     : "rule and CSS selector on each page";
+  const calls = reads
+    ? ` (one call with ${reads[0]}; the other with ${reads[1]})`
+    : "";
   return createSuccessResponse([
-    `${lead} Read both reports with fetchAccessibilityIssues and match issues by ${match}; an issue in the later report only is new, in the earlier only is fixed, in both is still open.`,
+    `${lead} Read both reports with fetchAccessibilityIssues${calls} and match issues by ${match}; an issue in the later report only is new, in the earlier only is fixed, in both is still open.`,
   ]);
 }
 
@@ -1507,10 +1514,57 @@ async function diffExports(
   return { links, diff: compareIssues(before, after) };
 }
 
+type ScanRunSource = { kind: "scan"; scanId: string; scanRunId: string };
+
 /**
- * A Website Scanner run against an earlier run of the same scan: the run before it
- * ("previous") or a given scanRunId. Issues are matched by rule, element and page; against
- * the previous run, the dashboard's own counts (the run's changesSinceLastRun) are given too.
+ * The run of this scan that compareWith names: its scanRunId, or its report link or build id,
+ * which are resolved as a source is. A link or id that names anything else (another scan's
+ * run, a build, a report) has no built-in compare with a Scanner run: that is answered with
+ * how to compare them by reading both, naming each read's arguments.
+ */
+async function scanRunToCompare(
+  reportFetcher: AccessibilityReportFetcher,
+  source: ScanRunSource,
+  compareWith: string,
+): Promise<{ scanRunId: string } | CallToolResult> {
+  const link = /^https?:\/\//i.test(compareWith);
+  if (!link && !/^[a-z0-9]{40}$/i.test(compareWith)) {
+    return { scanRunId: compareWith };
+  }
+  let other: IssueSource;
+  try {
+    other = await reportFetcher.resolveBuild(
+      link
+        ? await reportFetcher.sourceFromReportUrl(compareWith)
+        : { kind: "build", buildId: compareWith },
+      { orScanRun: true },
+    );
+    // A run is compared by its scan's ids, which only the scan list maps a build id to.
+    if (other.kind === "scanBuild") {
+      other = await reportFetcher.findScanRun(other);
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return createSuccessResponse([
+      `compareWith could not be matched to a Website Scanner run: ${asSentence(reason)} To compare with another run of scan ${source.scanId}, pass its scanRunId or "previous". To compare with another scan's run, read both reports with fetchAccessibilityIssues and match issues by rule and CSS selector on each page; an issue in the later report only is new, in the earlier only is fixed, in both is still open.`,
+    ]);
+  }
+  if (other.kind === "scan" && other.scanId === source.scanId) {
+    return { scanRunId: other.scanRunId };
+  }
+  return readBothToCompare(
+    `compareWith names ${describeSource(other)}, not a run of scan ${source.scanId}: only runs of one scan are compared here.`,
+    false,
+    [sourceArgs(source), sourceArgs(other)],
+  );
+}
+
+/**
+ * A Website Scanner run against another run of the same scan: the run before it
+ * ("previous"), or one named by its scanRunId, report link or build id. The older run is
+ * "before", whichever was passed as compareWith. Issues are matched by rule, element and
+ * page; against the run just before, the dashboard's own counts (the run's
+ * changesSinceLastRun) are given too.
  */
 async function compareScanRuns(
   requested: RequestedSource,
@@ -1531,72 +1585,114 @@ async function compareScanRuns(
       'compareWith compares Website Scanner runs: pass the newer run (scanId and scanRunId, or its report link) and compareWith: "previous" or the older run\'s scanRunId.',
     );
   }
-  const previous = await reportFetcher.previousScanRun(
-    source.scanId,
-    source.scanRunId,
-  );
-  const baseRunId =
-    compareWith === "previous" ? previous && String(previous.id) : compareWith;
-  if (!baseRunId) {
-    return createErrorResponse(
-      `Run ${source.scanRunId} is the first run of scan ${source.scanId}; there is no earlier run to compare it with.`,
-    );
-  }
-  const base: IssueSource = { ...source, scanRunId: baseRunId };
-  const againstPrevious =
-    previous !== undefined && String(previous.id) === baseRunId;
   const preface =
     requested.kind === "link"
       ? [`Resolved the report link to ${describeSource(source)}.`]
       : [];
 
+  let after = source.scanRunId;
+  let before: string;
+  let beforeDate: string | undefined;
+  let againstPrevious: boolean;
+  let reversed = false;
+  if (compareWith === "previous") {
+    const previous = await reportFetcher.previousScanRun(
+      source.scanId,
+      source.scanRunId,
+    );
+    if (!previous) {
+      return createErrorResponse(
+        `Run ${source.scanRunId} is the first run of scan ${source.scanId}; there is no earlier run to compare it with.`,
+      );
+    }
+    before = String(previous.id);
+    beforeDate = previous.scanDate;
+    againstPrevious = true;
+  } else {
+    const other = await scanRunToCompare(reportFetcher, source, compareWith);
+    if ("content" in other) return other;
+    if (other.scanRunId === source.scanRunId) {
+      return createErrorResponse(
+        `compareWith names this run itself. Pass another run's scanRunId or link, or "previous".`,
+      );
+    }
+    const { runs, complete } = await reportFetcher.scanRuns(source.scanId);
+    const at = (id: string) => runs.findIndex((run) => String(run.id) === id);
+    // A run id the scan's whole run list does not hold is another scan's run: the API would
+    // refuse it with "Scan logs not found", which reads like a fault.
+    if (complete && at(other.scanRunId) < 0) {
+      return readBothToCompare(
+        `Run ${other.scanRunId} is not a run of scan ${source.scanId}, so it is another scan's run: only runs of one scan are compared here.`,
+        false,
+        [
+          sourceArgs(source),
+          `scanRunId: "${other.scanRunId}" and its own scan's scanId`,
+        ],
+      );
+    }
+    // The older run is "before": by the run list's order, or by id when either is not in it.
+    const [selfAt, otherAt] = [at(source.scanRunId), at(other.scanRunId)];
+    reversed =
+      selfAt >= 0 && otherAt >= 0
+        ? otherAt < selfAt
+        : Number(other.scanRunId) > Number(source.scanRunId);
+    [after, before] = reversed
+      ? [other.scanRunId, source.scanRunId]
+      : [source.scanRunId, other.scanRunId];
+    againstPrevious = at(after) >= 0 && at(before) === at(after) + 1;
+    beforeDate = runs[at(before)]?.scanDate;
+  }
+  const run = (scanRunId: string): IssueSource => ({ ...source, scanRunId });
+
   // A failed run scanned no page and exports an empty report: compared with it, every issue
   // of the other run would read as resolved (or new).
-  const [status, baseStatus] = await Promise.all([
-    reportFetcher.reportStatus(source),
-    reportFetcher.reportStatus(base),
+  const [status, beforeStatus] = await Promise.all([
+    reportFetcher.reportStatus(run(after)),
+    reportFetcher.reportStatus(run(before)),
   ]);
-  if (status === "failed" || baseStatus === "failed") {
+  if (status === "failed" || beforeStatus === "failed") {
     const [failedRun, otherRun] =
-      status === "failed"
-        ? [source.scanRunId, baseRunId]
-        : [baseRunId, source.scanRunId];
+      status === "failed" ? [after, before] : [before, after];
     return failedScanRunResponse(
       config,
       source.scanId,
       failedRun,
       preface,
       () =>
-        `compared with it, every issue of run ${otherRun} would read as ${failedRun === source.scanRunId ? "resolved" : "new"}, so the runs were not compared.`,
+        `compared with it, every issue of run ${otherRun} would read as ${failedRun === after ? "resolved" : "new"}, so the runs were not compared.`,
       "Compare two runs that completed, or fix the cause and scan again.",
     );
   }
 
-  const read = await diffExports(reportFetcher, source, base, "runs", context);
+  const read = await diffExports(
+    reportFetcher,
+    run(after),
+    run(before),
+    "runs",
+    context,
+  );
   if ("content" in read) return read;
   const { links, diff } = read;
   const changes = againstPrevious
-    ? await reportFetcher.changesSinceLastRun(source.scanId, source.scanRunId)
+    ? await reportFetcher.changesSinceLastRun(source.scanId, after)
     : undefined;
 
   const baseLabel = againstPrevious
-    ? `the run before it, run ${baseRunId}${previous?.scanDate ? ` (${previous.scanDate})` : ""}`
-    : `run ${baseRunId}`;
+    ? `the run before it, run ${before}${beforeDate ? ` (${beforeDate})` : ""}`
+    : `run ${before}`;
   const matched = `${diff.added.length} new, ${diff.resolved.length} resolved, ${diff.retained} still open`;
   const listed = (issues: RunIssue[]) =>
     comparedList(issues, issues.length, "; see the CSV links");
   return createSuccessResponse([
     ...preface,
-    `Compared Website Scanner scan ${source.scanId}: run ${source.scanRunId} with ${baseLabel}.`,
+    `Compared Website Scanner scan ${source.scanId}: run ${after} with ${baseLabel}.`,
+    ...(reversed
+      ? ["compareWith was the newer run, so it is used as 'after'."]
+      : []),
     changes
       ? `The dashboard's comparison: ${changes.newIssues} new, ${changes.resolvedIssues} resolved, ${changes.retainedIssues} still open. Matching the issues by rule, element and page gives ${matched}.`
       : `Matching the issues by rule, element and page: ${matched}.`,
-    ...pagesNotLoadedNote(
-      diff,
-      `run ${source.scanRunId}`,
-      `run ${baseRunId}`,
-      "run",
-    ),
+    ...pagesNotLoadedNote(diff, `run ${after}`, `run ${before}`, "run"),
     `New issues: ${listed(diff.added)}`,
     `Resolved issues: ${listed(diff.resolved)}`,
     ...(diff.not_checked?.length
@@ -1604,7 +1700,7 @@ async function compareScanRuns(
       : []),
     ...(diff.not_checked_earlier?.length
       ? [
-          `Not checked against the earlier run (page did not load in run ${baseRunId}): ${listed(diff.not_checked_earlier)}`,
+          `Not checked against the earlier run (page did not load in run ${before}): ${listed(diff.not_checked_earlier)}`,
         ]
       : []),
     `CSV of each run, valid for about 12 hours: newer ${links[0]} , older ${links[1]}`,
@@ -3059,7 +3155,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          'Runs of one scan, web/app builds: "previous", older scanRunId, build id/link. Others: read both.',
+          'Runs of one scan, web/app builds: "previous", scanRunId, build id/link. Others: read both.',
         ),
       exportTaskId: z
         .string()

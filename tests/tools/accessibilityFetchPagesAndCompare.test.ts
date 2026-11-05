@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   sourceFromReportUrl: vi.fn(),
   reportStatus: vi.fn(),
   previousScanRun: vi.fn(),
+  scanRuns: vi.fn(),
   changesSinceLastRun: vi.fn(),
   parse: vi.fn(),
   loadMainIssues: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     reportStatus = m.reportStatus;
     resolveBuild = vi.fn(async (source: unknown) => source);
     previousScanRun = m.previousScanRun;
+    scanRuns = m.scanRuns;
     changesSinceLastRun = m.changesSinceLastRun;
     findScanRun = m.findScanRun;
   },
@@ -204,6 +206,14 @@ describe("fetchAccessibilityIssues comparing scan runs", () => {
 
   it("compares with a run it is given, counting by matching the issues", async () => {
     m.previousScanRun.mockResolvedValue({ id: 5520296, scanDate: "2026-10-21T11:31:00.584Z" });
+    m.scanRuns.mockResolvedValue({
+      runs: [
+        { id: 5520318, scanDate: "2026-10-22T09:00:00.000Z" },
+        { id: 5520296, scanDate: "2026-10-21T11:31:00.584Z" },
+        { id: 5520281, scanDate: "2026-10-20T08:00:00.000Z" },
+      ],
+      complete: true,
+    });
 
     const result = await fetchIssues()({ ...RUN, compareWith: "5520281" });
 

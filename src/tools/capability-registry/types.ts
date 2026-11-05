@@ -446,6 +446,17 @@ export interface Capability {
    */
   steps?: ChainStep[];
   /**
+   * Callable only as a step of a chain, never on its own.
+   *
+   * A chain's plumbing — the call that fetches an endpoint, the probe that brings a
+   * device up — is a capability so that the chain can declare it, not so that an agent
+   * can pick it: shown in search beside the chain it serves, it is the wrong thing to
+   * choose and the wrong thing to explain. Internal capabilities are absent from
+   * search, describe, describeEntity and listProducts, and a direct invoke by name or
+   * route is refused as `capability_internal`. The loader refuses one no chain uses.
+   */
+  internal?: true;
+  /**
    * How long to wait for this one capability's answer, in seconds.
    *
    * The transport's default (45 s) fits a JSON API and not a build upload or a device

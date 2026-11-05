@@ -59,6 +59,7 @@ function index(chainOverrides: Record<string, unknown> = {}) {
             mode: "read",
             entity: "session",
             intent: "Where the session is driven.",
+            internal: true,
             path_params: [
               { name: "session_id", type: "string", required: true },
             ],
@@ -290,6 +291,76 @@ describe("a capability declared as a chain of steps", () => {
     );
     expect(contract.steps).toBeUndefined();
     expect(contract.query[0].name).toBe("mcp_ref");
+  });
+});
+
+describe("a capability marked internal", () => {
+  beforeEach(() => clearOrigins());
+
+  it("is reached by the chain, and by nothing else", async () => {
+    const { sent, get, handlers } = harness({
+      sessions: [[ROW]],
+      endpoint: [ENDPOINT],
+      proxy: [{ value: [{ sessionId: SESSION }] }],
+    });
+    const out = await get();
+    expect(out.ok).toBe(true);
+    expect(sent[1].url).toMatch(/\/appium$/);
+    const direct = readAnswer(
+      await handlers.invokeCapability(
+        {
+          name: "get_endpoint",
+          product: "p",
+          path_params: { session_id: SESSION },
+        },
+        {} as never,
+      ),
+    );
+    expect(direct.ok).toBe(false);
+    expect(JSON.stringify(direct)).toMatch(/step of a chain/);
+    const described = readAnswer(
+      await handlers.describeCapability(
+        { name: "get_endpoint", product: "p" },
+        {} as never,
+      ),
+    );
+    expect(JSON.stringify(described)).toMatch(/step of a chain/);
+  });
+
+  it("is absent from search and from its entity's list", async () => {
+    const { handlers } = harness({});
+    const found = readAnswer(
+      await handlers.searchCapability(
+        { product: "p", query: "*" },
+        {} as never,
+      ),
+    );
+    const names = JSON.stringify(found);
+    expect(names).toMatch(/get_session/);
+    expect(names).not.toMatch(/get_endpoint/);
+    const entity = readAnswer(
+      await handlers.describeEntity(
+        { product: "p", entity: "session" },
+        {} as never,
+      ),
+    );
+    expect(JSON.stringify(entity)).not.toMatch(/get_endpoint/);
+  });
+
+  it("is refused at load when no chain calls it", () => {
+    const bad = index();
+    bad.products.p.capabilities.push({
+      name: "orphan_probe",
+      method: "GET",
+      path: "/orphan",
+      mode: "read",
+      entity: "session",
+      intent: "Nobody's step.",
+      internal: true,
+    } as never);
+    expect(() => new CapabilityRegistry(bad as never)).toThrow(
+      /no chain calls it/,
+    );
   });
 });
 

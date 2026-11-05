@@ -325,6 +325,15 @@ function checkSteps(product: string, capabilities: Capability[]): void {
       }
     }
   }
+  // Checked last, so a chain that is broken in a more specific way says so first.
+  const used = new Set(
+    capabilities.flatMap((c) => (c.steps ?? []).map((s) => s.capability)),
+  );
+  for (const capability of capabilities)
+    if (capability.internal && !used.has(capability.name ?? ""))
+      throw new IndexError(
+        `${product}.${capability.name} is internal but no chain calls it, so nothing could ever reach it`,
+      );
 }
 
 /**
@@ -568,6 +577,7 @@ export class CapabilityRegistry {
       const lookup = new Map<string, Capability>();
       const names = new Map<string, Capability>();
       const withheld = new Map<string, Capability>();
+      const internal = new Map<string, Capability>();
       const enabled: Capability[] = [];
 
       for (let capability of bundle.capabilities) {
@@ -597,7 +607,10 @@ export class CapabilityRegistry {
           );
           if (capability.name) withheld.set(capability.name, capability);
         } else {
-          enabled.push(capability);
+          // INTERNAL STAYS RESOLVABLE AND OUT OF THE CATALOGUE: a chain finds it by name,
+          // nothing else lists it, and a direct call is refused at the handler.
+          if (!capability.internal) enabled.push(capability);
+          else if (capability.name) internal.set(capability.name, capability);
           lookup.set(
             endpointKey(capability.method, capability.path),
             capability,
@@ -632,11 +645,12 @@ export class CapabilityRegistry {
       // runs on the way into `enabled`) and the reference-only form from search,
       // listProducts and describeEntity for any product with no `disabled` entry — exactly
       // the first tm/tra export to use `local_only`.
+      const hidden = new Map([...withheld, ...internal]);
       products[product] = {
         ...bundle,
         capabilities: enabled,
-        entities: withheld.size
-          ? stripDisabledFromEntities(bundle, withheld)
+        entities: hidden.size
+          ? stripDisabledFromEntities(bundle, hidden)
           : bundle.entities,
       };
     }

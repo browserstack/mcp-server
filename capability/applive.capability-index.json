@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "1.0",
-  "build_id": "cd4989a_2026-11-05T12:14:42Z",
+  "build_id": "1a03f78_2026-11-05T12:56:06Z",
   "applive": {
     "title": "App Live",
     "summary": "App Live: a session a person opens on a real Android or iOS device in their browser, which an agent takes over and drives step by step while they watch. The account side lists the devices the account can use, says which private devices are free, uploads and lists the apps App Live installs, and lists the sessions launched with a reference — waiting for a just-launched one to come up. The session side is the same surface as mobile device control: find elements and read their text, position and attributes, tap, type, swipe, screenshot, press keys, rotate, switch between the native app and a web view. Apps are opened and closed by the user from the dashboard: the device's own Appium is older than App Automate's and lacks the app lifecycle commands. Sessions are started by the USER, not here: the launch tool opens the dashboard with a reference, list_sessions waits for the device, and the session is driven until it is stopped. For a session no person needs to watch, mobile device control starts one on its own. App Live keeps its own app store, separate from App Automate's. Browsers are device control, not here.",
@@ -118,7 +118,7 @@
         "path": "/app-live/sessions",
         "mode": "read",
         "entity": "app_live_session",
-        "intent": "List the running App Live sessions this user launched with a reference, or wait for the one a just-opened launch produces — get_session does this and the endpoint lookup in one call; use this on its own to see what is running.",
+        "intent": "List the running App Live sessions this user launched with a reference — get_session is the call to make after a launch; use this on its own to see what is running.",
         "guidance": [
           "With mcp_ref the call WAITS: it is repeated every few seconds for up to four minutes until the launch has produced a session, then answers with at most one row, the newest under that reference. `polled.satisfied` false means the device had not started in time or the launch failed in the user's browser: say so, check the device with list_dedicated_devices or pick another from list_devices, and launch again rather than polling further.",
           "Without mcp_ref every running session launched with a reference is listed at once. Sessions the user opened from the dashboard without a reference are never listed here.",
@@ -171,6 +171,7 @@
         "path": "/app-live/sessions/{session_id}/appium",
         "mode": "read",
         "entity": "app_live_session",
+        "internal": true,
         "intent": "Get the WebDriver endpoint that drives one running App Live session — get_session includes this; call it on its own only when you already hold a session_id.",
         "guidance": [
           "Every session capability (find_element, take_screenshot, click_element, …) takes hostname, port and path from this answer alongside session_id; it builds https://{hostname}:{port}{path} from them and sends nothing else there. Pass them exactly as returned — path keeps its trailing slash. For another Appium client the base is that same URL and the Appium session id is the App Live session id.",
@@ -572,10 +573,11 @@
         "mode": "read",
         "entity": "app_live_session",
         "timeout_seconds": 40,
+        "internal": true,
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint"
+          "from": "get_session"
         },
         "intent": "Bring up and list the Appium session behind one App Live session — reading this is what makes the device create it; get_session does this for you.",
         "guidance": [
@@ -589,7 +591,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -599,7 +601,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -608,7 +610,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -645,7 +647,7 @@
           "Pass the mcp_ref the launch was opened with. The call waits up to four minutes for the session to be listed and up to five more for the device's Appium session; `chain` says what each step answered and `polled` how long it waited.",
           "The answer carries session_id, hostname, port and path: pass all four to every session capability (find_element, take_screenshot, click_element, …) exactly as returned.",
           "If the chain stops at list_sessions with an empty wait, the launch failed in the user's browser, usually a busy device: say so, pick another device from list_devices, and launch again.",
-          "A session that has already ended answers 404 from get_session_appium_endpoint."
+          "A session that has already ended is not listed, so the wait runs out; one that ends mid-chain stops the chain with a 404 at the endpoint step."
         ],
         "query": [
           {
@@ -762,7 +764,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -775,7 +777,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -785,7 +787,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -794,7 +796,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -865,7 +867,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -878,7 +880,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -888,7 +890,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -897,7 +899,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -947,7 +949,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -960,7 +962,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -970,7 +972,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -979,7 +981,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1039,7 +1041,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1052,7 +1054,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1062,7 +1064,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1071,7 +1073,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1123,7 +1125,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1136,7 +1138,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1146,7 +1148,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1155,7 +1157,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1261,7 +1263,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1274,7 +1276,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1284,7 +1286,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1293,7 +1295,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1364,7 +1366,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1377,7 +1379,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1387,7 +1389,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1396,7 +1398,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1463,7 +1465,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1476,7 +1478,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1486,7 +1488,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1495,7 +1497,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1562,7 +1564,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1575,7 +1577,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1585,7 +1587,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1594,7 +1596,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1665,7 +1667,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1678,7 +1680,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1688,7 +1690,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1697,7 +1699,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1738,7 +1740,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1751,7 +1753,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1761,7 +1763,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1770,7 +1772,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1817,7 +1819,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1830,7 +1832,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1840,7 +1842,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1849,7 +1851,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1893,7 +1895,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1906,7 +1908,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1916,7 +1918,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1925,7 +1927,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -1963,7 +1965,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -1976,7 +1978,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -1986,7 +1988,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -1995,7 +1997,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2047,7 +2049,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2060,7 +2062,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2070,7 +2072,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2079,7 +2081,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2120,7 +2122,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2133,7 +2135,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2143,7 +2145,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2152,7 +2154,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2204,7 +2206,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2217,7 +2219,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2227,7 +2229,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2236,7 +2238,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2322,7 +2324,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2335,7 +2337,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2345,7 +2347,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2354,7 +2356,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2431,7 +2433,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2444,7 +2446,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2454,7 +2456,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2463,7 +2465,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2505,7 +2507,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2518,7 +2520,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2528,7 +2530,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2537,7 +2539,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2598,7 +2600,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2611,7 +2613,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2621,7 +2623,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2630,7 +2632,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2683,7 +2685,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2696,7 +2698,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2706,7 +2708,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2715,7 +2717,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2781,7 +2783,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2794,7 +2796,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2804,7 +2806,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2813,7 +2815,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2855,7 +2857,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2868,7 +2870,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2878,7 +2880,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2887,7 +2889,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -2966,7 +2968,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -2979,7 +2981,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -2989,7 +2991,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -2998,7 +3000,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -3076,7 +3078,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -3089,7 +3091,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -3099,7 +3101,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -3108,7 +3110,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -3186,7 +3188,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -3199,7 +3201,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -3209,7 +3211,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -3218,7 +3220,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -3294,7 +3296,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -3307,7 +3309,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -3317,7 +3319,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -3326,7 +3328,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -3405,7 +3407,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -3418,7 +3420,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -3428,7 +3430,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -3437,7 +3439,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -3498,7 +3500,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -3511,7 +3513,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -3521,7 +3523,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -3530,7 +3532,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -3590,7 +3592,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -3603,7 +3605,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -3613,7 +3615,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -3622,7 +3624,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -3681,7 +3683,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -3694,7 +3696,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -3704,7 +3706,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -3713,7 +3715,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -3755,7 +3757,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -3768,7 +3770,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -3778,7 +3780,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -3787,7 +3789,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -3859,7 +3861,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -3872,7 +3874,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -3882,7 +3884,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -3891,7 +3893,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -3952,7 +3954,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -3965,7 +3967,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -3975,7 +3977,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -3984,7 +3986,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -4044,7 +4046,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -4057,7 +4059,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -4067,7 +4069,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -4076,7 +4078,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -4140,7 +4142,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -4153,7 +4155,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -4163,7 +4165,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -4172,7 +4174,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -4249,7 +4251,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -4262,7 +4264,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -4272,7 +4274,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -4281,7 +4283,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -4331,7 +4333,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -4344,7 +4346,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -4354,7 +4356,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -4363,7 +4365,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -4412,7 +4414,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -4425,7 +4427,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -4435,7 +4437,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -4444,7 +4446,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -4502,7 +4504,7 @@
         "origin": {
           "url": "https://{hostname}:{port}{path}",
           "hosts": ["*.browserstack.com"],
-          "from": "get_session_appium_endpoint",
+          "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
             "probe_seconds": 30,
@@ -4515,7 +4517,7 @@
             "type": "string",
             "required": true,
             "base_url_builder": true,
-            "description": "hostname from get_session_appium_endpoint: the proxy the session is driven at.",
+            "description": "hostname from get_session: the proxy the session is driven at.",
             "example": "devtools-mobile.browserstack.com"
           },
           {
@@ -4525,7 +4527,7 @@
             "base_url_builder": true,
             "minimum": 1,
             "maximum": 65535,
-            "description": "port from get_session_appium_endpoint.",
+            "description": "port from get_session.",
             "example": 443
           },
           {
@@ -4534,7 +4536,7 @@
             "required": true,
             "base_url_builder": true,
             "pattern": "^/[^?#]*/$",
-            "description": "path from get_session_appium_endpoint, exactly as returned, ending in a slash.",
+            "description": "path from get_session, exactly as returned, ending in a slash.",
             "example": "/wd/device.browserstack.com/0123456789abcdef0123456789abcdef01234567/hub/"
           }
         ],
@@ -5052,8 +5054,6 @@
         "capabilities": [
           "get_session",
           "list_sessions",
-          "get_session_appium_endpoint",
-          "list_appium_sessions",
           "stop_session",
           "get_page_source",
           "find_element",

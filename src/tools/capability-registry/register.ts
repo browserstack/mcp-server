@@ -1039,6 +1039,15 @@ export function addCapabilityRegistryTools(
               input.path as string,
               input.product,
             );
+        if (capability.internal)
+          return refuse(
+            "describeCapability",
+            "capability_internal",
+            `${capability.name} is a step of a chain and is not called on its own; ` +
+              "describe the chain that uses it instead",
+            undefined,
+            identity,
+          );
 
         identity = {
           capability: capability.name,
@@ -1279,6 +1288,16 @@ export function addCapabilityRegistryTools(
           body: input.body,
         };
 
+        if (capability.internal) {
+          return refuse(
+            "invokeCapability",
+            "capability_internal",
+            `${handle} is a step of a chain and is not called on its own; ` +
+              "invoke the chain that uses it instead",
+            undefined,
+            identity,
+          );
+        }
         if (capability.invocable === false) {
           // THE ONE PLACE describe AND invoke DIVERGE, deliberately. Everywhere else a name
           // that describes is a name that invokes, and breaking that is its own bug class —

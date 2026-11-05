@@ -769,30 +769,42 @@ function notReadyToCompare(
 }
 
 /**
- * compareWith "previous" on a Workflow Analyzer report: the report before it is found here,
- * on the same page or else the same site, and named with the call that reads it. Agents left
- * to find it searched for a way to list reports, and one gave no answer.
+ * compareWith "previous" on a report with no built-in compare: the report before it is found
+ * here (a Workflow Analyzer report's of the same page, or else the same site; a manual app
+ * report's of the same app) and named with the call that reads it. Agents left to find it
+ * searched for a way to list reports, and one gave no answer.
  */
-async function previousWorkflowToCompare(
+async function previousReportToCompare(
   reportFetcher: AccessibilityReportFetcher,
-  source: { kind: "workflow"; reportId: string },
+  source: { kind: "workflow" | "appReport"; reportId: string },
 ): Promise<CallToolResult> {
-  const earlier = await reportFetcher
-    .previousWorkflowReport(source.reportId)
-    .catch(() => undefined);
+  const app = source.kind === "appReport";
+  const earlier:
+    | { reportId: string; time?: string; link: string; samePage?: boolean }
+    | undefined = await (
+    app
+      ? reportFetcher.previousManualReport(source.reportId)
+      : reportFetcher.previousWorkflowReport(source.reportId)
+  ).catch(() => undefined);
+  const lead = NO_BUILT_IN_COMPARE[source.kind];
   if (!earlier) {
     return readBothToCompare(
-      `${NO_BUILT_IN_COMPARE.workflow} No earlier Workflow Analyzer report of the same page or site is among the account's newest reports, so ask the user which report to compare it with.`,
-      false,
+      `${lead} No earlier ${app ? "manual report of the same app" : "Workflow Analyzer report of the same page or site"} is among the account's newest reports, so ask the user which report to compare it with.`,
+      app,
     );
   }
-  const which = earlier.samePage
-    ? "of the same page"
-    : "of the same site (no earlier one scanned the same page)";
+  const which = app
+    ? "manual report of the same app"
+    : earlier.samePage
+      ? "report of the same page"
+      : "report of the same site (no earlier one scanned the same page)";
   return readBothToCompare(
-    `${NO_BUILT_IN_COMPARE.workflow} The newest report before it ${which} is report ${earlier.reportId}${earlier.time ? `, started ${earlier.time}` : ""}: ${earlier.link}`,
-    false,
-    [sourceArgs(source), `workflowReportId: "${earlier.reportId}"`],
+    `${lead} The newest ${which} before it is ${earlier.reportId}${earlier.time ? `, ${app ? "recorded" : "started"} ${earlier.time}` : ""}: ${earlier.link}`,
+    app,
+    [
+      sourceArgs(source),
+      sourceArgs({ kind: source.kind, reportId: earlier.reportId }),
+    ],
   );
 }
 
@@ -1212,8 +1224,11 @@ async function fetchAccessibilityIssues(
         context,
       );
     }
-    if (source.kind === "workflow" && compareWith === "previous") {
-      return previousWorkflowToCompare(reportFetcher, source);
+    if (
+      (source.kind === "workflow" || source.kind === "appReport") &&
+      compareWith === "previous"
+    ) {
+      return previousReportToCompare(reportFetcher, source);
     }
     if (source.kind !== "appBuild") {
       return readBothToCompare(
@@ -3286,7 +3301,7 @@ export default function addAccessibilityTools(
         .number()
         .optional()
         .describe(
-          "Pagination offset (default 0); with compareWith, issues already listed.",
+          "The next_page value from the previous answer (default 0), not an issue index.",
         ),
       pageUrl: z
         .string()

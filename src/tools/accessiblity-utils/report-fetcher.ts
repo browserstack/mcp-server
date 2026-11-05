@@ -7,6 +7,7 @@ import {
   type AppBuildRef,
   type AppBuildReport,
   type AppManualReport,
+  type EarlierManualReport,
 } from "./app-report-fetcher.js";
 import { onErrorPage, samePage, type RunIssue } from "./report-parser.js";
 import { sortBySeverity } from "./paginate.js";
@@ -541,6 +542,13 @@ export class AccessibilityReportFetcher {
     maxCharacterLength?: number,
   ): Promise<AppManualReport> {
     return this.app.appReportIssues(reportId, cursor, maxCharacterLength);
+  }
+
+  /** The newest manual report of the same app recorded before this one, if any. */
+  previousManualReport(
+    reportId: string,
+  ): Promise<EarlierManualReport | undefined> {
+    return this.app.previousManualReport(reportId);
   }
 
   /**

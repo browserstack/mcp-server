@@ -2,7 +2,7 @@ import { apiClient } from "../../lib/apiClient.js";
 import { SessionType } from "../../lib/constants.js";
 import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
-import { mostCommon, pageOf, sortBySeverity } from "./paginate.js";
+import { mostCommon, pageOf, sortBySeverity, type Page } from "./paginate.js";
 import {
   getRegionalHost,
   isRegionalHostname,
@@ -23,6 +23,30 @@ export const manualApiBase = () =>
 /** Screens per API page, and how many pages a build or report is read across (1,000 screens). */
 const SNAPSHOT_PAGE_SIZE = 50;
 export const MAX_SNAPSHOT_PAGES = 20;
+
+/**
+ * Manual reports are listed newest first, 100 a page; a report and the one before it are
+ * found among the newest pages. The list's search matches a report's name, app or package.
+ */
+const MAX_MANUAL_REPORT_PAGES = 3;
+const MANUAL_REPORT_PAGE_SIZE = 100;
+
+/** A manual report as the report list gives it. */
+interface ManualReportRow {
+  id: string;
+  created_at?: string;
+  /** complete | in_progress */
+  status?: string;
+  app_details?: { name?: string; package_name?: string };
+}
+
+/** An earlier manual report of the same app. */
+export interface EarlierManualReport {
+  reportId: string;
+  /** When it was recorded, as the API writes it. */
+  time?: string;
+  link: string;
+}
 
 /** A dashboard link names a build by number; a build someone just opened is among the newest. */
 export const MAX_APP_BUILD_LIST_PAGES = 3;
@@ -440,6 +464,58 @@ export function compactAppIssues(all: AppAccessibilityIssue[]): {
     };
   });
   return { rows, context: { rules, screens } };
+}
+
+/**
+ * A value's length as an answer prints it: indented JSON one level inside its list (an
+ * issue in `issues`, a rule in `rules`, a screenshot in `screens`), after its key in an
+ * object, with the separator after it.
+ */
+function printedLength(value: unknown, key?: string): number {
+  const text = JSON.stringify(value, null, 2) ?? "";
+  const keyed = key === undefined ? 0 : JSON.stringify(key).length + 2;
+  return keyed + text.length + 4 * text.split("\n").length + 2;
+}
+
+/**
+ * How many characters of an app page's issues, rules and screens, as printed, one answer
+ * holds by default. The rest of the answer (its summary, notes and the untrusted-data
+ * wrappers) adds about 2,000 to 4,000, so the whole stays under about 40,000: within Claude
+ * Code's 50,000-character limit on a tool's answer, above which it saves the answer to a
+ * file instead of showing it.
+ */
+export const APP_PAGE_CHARACTERS = 35_000;
+
+/**
+ * One page of an app build's or manual report's issues. The answer prints them as indented
+ * JSON with the rules and screens they name, so each issue counts against the page as it is
+ * printed, with its rule's text and its screen's screenshot the first time the page names
+ * them. Counting the bare issues alone let a 70-issue report's page reach 51,000 characters.
+ * The cursor still counts the bare issues.
+ */
+function appIssuePage(
+  rows: AppIssueRow[],
+  { rules, screens }: AppIssuePageContext,
+  cursor: number,
+  maxCharacterLength = APP_PAGE_CHARACTERS,
+): Page<AppIssueRow> {
+  const named = new Set<string>();
+  return pageOf(rows, {
+    nextPage: cursor,
+    maxCharacterLength,
+    extraLength: (row) => {
+      let more = printedLength(row) - JSON.stringify(row).length;
+      if (!named.has(`rule:${row.rule_id}`)) {
+        named.add(`rule:${row.rule_id}`);
+        more += printedLength(rules[row.rule_id], row.rule_id);
+      }
+      if (screens[row.screen] && !named.has(`screen:${row.screen}`)) {
+        named.add(`screen:${row.screen}`);
+        more += printedLength(screens[row.screen], row.screen);
+      }
+      return more;
+    },
+  });
 }
 
 /** The rules and screens a page's issues name, and nothing else. */
@@ -995,6 +1071,64 @@ export class AppAccessibilityApi {
     return resp.data;
   }
 
+  /** The manual reports whose name, app or package contains `search`, newest first, a page at a time. */
+  private async *manualReports(
+    search: string,
+  ): AsyncGenerator<ManualReportRow[]> {
+    for (let page = 1; page <= MAX_MANUAL_REPORT_PAGES; page++) {
+      const data = await this.listing(
+        `${manualApiBase()}/reports?report_name=${encodeURIComponent(search)}&page_size=${MANUAL_REPORT_PAGE_SIZE}&page=${page}`,
+        `page ${page} of the manual App Accessibility reports`,
+      );
+      yield data.reports ?? [];
+      if (!data.info?.next) return;
+    }
+  }
+
+  /**
+   * The newest finished manual report of the same app recorded before this one, or
+   * undefined when none is among the newest. The report's details do not name its app: the
+   * report list does, where the report is found by its name; the app's reports are then
+   * listed by its package (or, without one, its name).
+   */
+  async previousManualReport(
+    reportId: string,
+  ): Promise<EarlierManualReport | undefined> {
+    const name: string | undefined = (await this.manualReport(reportId))
+      ?.meta_data?.name;
+    if (!name) return undefined;
+    let own: ManualReportRow | undefined;
+    for await (const rows of this.manualReports(name)) {
+      own = rows.find((row) => row.id === reportId);
+      if (own) break;
+    }
+    const pkg = own?.app_details?.package_name;
+    const app = pkg ?? own?.app_details?.name;
+    if (!own || !app) return undefined;
+    const sameApp = (row: ManualReportRow) =>
+      pkg
+        ? row.app_details?.package_name === pkg
+        : row.app_details?.name === app;
+    const recorded = (row: ManualReportRow) => Date.parse(row.created_at ?? "");
+    for await (const rows of this.manualReports(app)) {
+      const earlier = rows.find(
+        (row) =>
+          row.id !== reportId &&
+          sameApp(row) &&
+          row.status !== "in_progress" &&
+          recorded(row) < recorded(own),
+      );
+      if (earlier) {
+        return {
+          reportId: earlier.id,
+          time: earlier.created_at,
+          link: `${appDashboard()}/report/${earlier.id}`,
+        };
+      }
+    }
+    return undefined;
+  }
+
   /**
    * A manual report's screens as the dashboard reads them, duplicates left out and each
    * issue with its element, fix and measurements; undefined while that route answers an
@@ -1079,7 +1213,7 @@ export class AppAccessibilityApi {
     const summary = detail.data?.issue_summary ?? {};
     const all = flattenAppSnapshots(details);
     const { rows, context } = compactAppIssues(all);
-    const page = pageOf(rows, { nextPage: cursor, maxCharacterLength });
+    const page = appIssuePage(rows, context, cursor, maxCharacterLength);
     return {
       ...page,
       ...contextOf(page.records, context),
@@ -1298,7 +1432,7 @@ export class AppAccessibilityApi {
       await this.readBuild(buildId);
     const all = flattenAppSnapshots(details);
     const { rows, context } = compactAppIssues(all);
-    const page = pageOf(rows, { nextPage: cursor, maxCharacterLength });
+    const page = appIssuePage(rows, context, cursor, maxCharacterLength);
     return {
       ...page,
       ...contextOf(page.records, context),

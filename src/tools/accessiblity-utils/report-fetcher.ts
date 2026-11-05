@@ -898,7 +898,13 @@ export class AccessibilityReportFetcher {
       nextPage = data.pagination.nextPage;
     }
     const pages = new Set(own.pages.map(samePage));
-    const sites = new Set(own.pages.map(siteOf));
+    const sites = new Set(
+      own.pages.map(siteOf).filter((site) => site !== undefined),
+    );
+    const onSite = (url: string) => {
+      const site = siteOf(url);
+      return site !== undefined && sites.has(site);
+    };
     const started = (time?: string) => Date.parse(time ?? "");
     let sameSite: EarlierWorkflowReport | undefined;
     const candidates = earlier.slice(0, MAX_WORKFLOW_CANDIDATES);
@@ -917,7 +923,7 @@ export class AccessibilityReportFetcher {
         if (summary.pages.some((url) => pages.has(samePage(url)))) {
           return { ...report, samePage: true };
         }
-        if (!sameSite && summary.pages.some((url) => sites.has(siteOf(url)))) {
+        if (!sameSite && summary.pages.some(onSite)) {
           sameSite = { ...report, samePage: false };
         }
       }
